@@ -6,7 +6,7 @@
 # makefile fragment that defines the creation of onie images
 #
 
-ROOTCONFDIR	= $(CONFDIR)/onie
+ROOTCONFDIR	= $(CONFDIR)
 SYSROOT_CPIO	= $(MBUILDDIR)/sysroot.cpio
 SYSROOT_CPIO_XZ	= $(SYSROOT_CPIO).xz
 UIMAGE		= $(IMAGEDIR)/$(MACHINE).uImage
