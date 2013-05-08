@@ -1,0 +1,111 @@
+============================
+ONIE Source Code Description
+============================
+
+Source Code Layout
+==================
+
+The ONIE source code is laid out as follows::
+
+  onie
+  ├── build
+  │   ├── images
+  ├── build-config
+  │   ├── conf
+  │   ├── make
+  │   └── scripts
+  ├── docs
+  ├── machine
+  ├── patches
+  │   ├── busybox
+  │   ├── kernel
+  │   └── u-boot
+  ├── rootconf
+  │   └── onie
+  └── upstream
+
+====================  =======
+Directory             Purpose
+====================  =======
+build/images          The final binary images are placed here.
+build-config          Builds are launched from this directory.  The main Makefile is here.
+build-config/conf     Contains configuration common to all platforms.
+build-config/make     Contains makefile fragments included by the main Makefile.
+build-config/scripts  Scripts used by the build process.
+docs                  What you are reading now.
+machine               Contains platform specific machine definition files.  More on that below.
+patches               Patch sets applied to upstream projects, common to all platforms.
+rootconf              Files copied into the final sysroot image. The main ONIE discovery
+                      and execution application lives here.  More on that below.
+upstream              Local cache of upstream project tarballs.
+====================  =======
+
+
+Machine Definition Directory
+============================
+
+The layout of the ``machine`` directory follows::
+
+  onie/machine
+  └── <platform>
+      ├── INSTALL
+      ├── kernel
+      │   ├── config
+      │   ├── platform-<platform>.patch
+      │   └── series
+      ├── onie-<platform>-rom.conf
+      └── u-boot
+          ├── platform-<platform>.patch
+          └── series
+
+================================   =======
+File                               Purpose
+================================   =======
+INSTALL                            Platform specific ONIE installation instructions
+kernel/config                      Additional kernel config appended to the core kernel config
+kernel/platform-<platform>.patch   Kernel platform specific patch(es)
+kernel/series                      List of kernel platform specific patch(es) in order
+onie-<platform>-rom.conf           Layout of the ONIE binary image(s)
+u-boot/platform-<platform>.patch   U-Boot platform specific patch(es)
+u-boot/series                      List of U-Boot platform specific patch(es) in order
+================================   =======
+
+
+``rootconf`` Directory
+======================
+
+The layout of the ``rootconf`` directory follows::
+
+  onie/rootconf
+  └── default
+      ├── bin
+      │   ├── discover
+      │   ├── exec_installer
+      │   └── uninstaller
+      ├── etc
+      │   ├── rcS.d
+      │   │   ├── S01makedev.sh -> ../init.d/makedev.sh
+      │   │   ├── S05networking.sh -> ../init.d/networking.sh
+      │   │   └── S20syslogd.sh -> ../init.d/syslogd.sh
+      │   ├── rc3.d
+      │   │   ├── S10telnetd.sh -> ../init.d/telnetd.sh
+      │   │   └── S50discover.sh -> ../init.d/discover.sh
+      └── scripts
+
+The contents of the ``default`` directory are copied to the sysroot
+verbatim during the build process.
+
+==========================  =======
+File                        Purpose
+==========================  =======
+bin/discover                Image discovery script.  Feeds into exec_installer.
+bin/exec_installer          Downloads and executes an installer image.
+bin/uninstaller             Executed during uninstall operations.
+etc/rcS.d/S01makedev.sh     Creates usual Linux kernel devices and filesystems.
+etc/rcS.d/S05networking.sh  Brings up Ethernet management interface.
+etc/rcS.d/S20syslogd.sh     Starts the syslogd service.
+etc/rc3.d/S10telnetd.sh     Starts the telnet service.
+etc/rc3.d/S50discover.sh    Starts the ONIE discovery service.
+scripts                     General helper scripts, sourced by other scripts.
+==========================  =======
+
