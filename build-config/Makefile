@@ -168,7 +168,7 @@ MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
 ifeq (,$(filter help clean-all dist, $(MAKECMDGOALS)))
-  ifeq ($(MACHINEDIR),)
+  ifeq ($(shell ls $(MACHINEDIR)),)
     $(warning Unable to find machine directory '$(MACHINE)' in $(realpath ../machine))
     $(error You must set the MACHINE= variable when invoking make.)
   endif

@@ -65,6 +65,7 @@ $(UBOOT_PATCH_STAMP): $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOUR
 	$(Q) cp $(MACHINEDIR)/u-boot/*.patch $(UBOOT_PATCHDIR)
 	$(Q) cat $(MACHINEDIR)/u-boot/series >> $(UBOOT_PATCHDIR)/series
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(UBOOT_PATCHDIR)/series $(UBOOT_DIR)
+	$(Q) echo "#define ONIE_VERSION \"onie_version=$(LSB_RELEASE_TAG)\\0\"" > $(UBOOT_DIR)/include/configs/onie_version.h
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
