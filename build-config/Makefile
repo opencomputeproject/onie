@@ -164,9 +164,10 @@ UPSTREAMDIR  = $(realpath ../upstream)
 CONFDIR	     = $(realpath ../rootconf)
 SCRIPTDIR    = $(realpath ./scripts)
 PLATFORMDIR  = $(realpath ./platform)
-MACHINEDIR   = $(realpath ../machine/$(MACHINE))
+MACHINEROOT ?= $(realpath ../machine)
+MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
-ifeq (,$(filter help clean dist, $(MAKECMDGOALS)))
+ifeq (,$(filter help clean-all dist, $(MAKECMDGOALS)))
   ifeq ($(MACHINEDIR),)
     $(warning Unable to find machine directory '$(MACHINE)' in $(realpath ../machine))
     $(error You must set the MACHINE= variable when invoking make.)
@@ -215,17 +216,22 @@ include make/images.make
 # top level targets
 #
 
-PHONY += all source clean 
+PHONY += all source clean clean-all
 
 source: $(SOURCE)
-	$(Q) echo "=== Finished making $@"
+	$(Q) echo "=== Finished making $@ ==="
 
 all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE)
-	$(Q) echo "=== Finished making onie-$(PLATFORM) $(LSB_RELEASE_TAG)"
+	$(Q) echo "=== Finished making onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
 
 clean: 	$(CLEAN)
+	$(Q) sudo rm -rf $(BUILDDIR)/images/*$(MACHINE)*
+	$(Q) sudo rm -rf $(MBUILDDIR)
+	$(Q) echo "=== Finished making $@ for $(PLATFORM) ==="
+
+clean-all:
 	$(Q) sudo rm -rf $(BUILDDIR)/*
-	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+	$(Q) echo "=== Finished making $@ ==="
 
 PHONY += dist
 DIST_DIR = $(BUILDDIR)/dist
@@ -252,10 +258,6 @@ dist:
 		tar -C $(PROJECTDIR) -cJf $(DIST_MACHINE_DIR)/onie-$${m}.tar.xz machine/$${m} ; \
 	done
 	$(Q) echo "=== Finished making distribution $(DIST_CORE_TARBALL)"
-
-CLEAN += dist-clean
-dist-clean:
-	rm -rf $(DIST_DIR)
 
 .PHONY: $(PHONY)
 
