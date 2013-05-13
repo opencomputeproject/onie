@@ -196,27 +196,27 @@ local_fs_run()
     while [ ${#onie_local_parts} -gt 0 ] ; do
         p=${onie_local_parts%%,*}
         onie_local_parts=${onie_local_parts#*,}
-        mount /dev/$p $mp > /dev/null 2>&1 && {
+        mount $p $mp > /dev/null 2>&1 && {
             if [ -r $mp/$onie_default_filename ] ; then
                 # copy to /tmp, which is a tmpfs -- installer needs to
                 # run with everything unmounted.
                 tmp_copy=$(mktemp -p /tmp)
                 cp $mp/$onie_default_filename $tmp_copy || {
-                    log_failure_msg "local_fs_run():/dev/$p Unable to copy $onie_default_filename to tmpfs"
+                    log_failure_msg "local_fs_run():$p Unable to copy $onie_default_filename to tmpfs"
                     rm -f $tmp_copy
                     return 1
                 }
                 sync ; sync
-                umount /dev/$p
+                umount $p
                 ln -sf $tmp_copy $onie_installer || {
-                    log_failure_msg "local_fs_run():/dev/$p Unable to make symlink to $onie_installer in tmpfs"
+                    log_failure_msg "local_fs_run():$p Unable to make symlink to $onie_installer in tmpfs"
                     rm -f $tmp_copy
                     return 1
                 }
-                run_installer "file://dev/$p/$onie_default_filename" && return 0
+                run_installer "file:/$p/$onie_default_filename" && return 0
                 rm -f $tmp_copy $onie_installer
             else
-                umount /dev/$p
+                umount $p
             fi
         }
     done

@@ -61,16 +61,15 @@ sd_static()
 # Check locally attached filesystems
 sd_localfs()
 {
-    # skip mtdblock partitions
-    part_list=$(tail -n +3 /proc/partitions | sed -e '/mtd/d' | awk '{ print $4 }')
+    part_list=$(blkid | sed -e 's/:.*$//')
     mp=$(mktemp -d)
     local_parts=
     for p in $part_list ; do
-        mount /dev/$p $mp > /dev/null 2>&1 && {
+        mount $p $mp > /dev/null 2>&1 && {
             if [ -r $mp/$onie_default_filename ] ; then
                 local_parts="${p},$local_parts"
             fi
-            umount /dev/$p > /dev/null 2>&1
+            umount $p > /dev/null 2>&1
         }
     done
     rm -rf $mp
