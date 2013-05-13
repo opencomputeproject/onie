@@ -53,7 +53,7 @@ $(KERNEL_SOURCE_STAMP): $(TREE_STAMP)
 	$(Q) rm -rf $(KERNELDIR)
 	$(Q) mkdir -p $(KERNELDIR)
 	$(Q) cd $(KERNELDIR) && tar xJf $(LINUX_TARBALL)
-	$(Q) ln -s $(KERNELDIR)/linux-$(LINUX_SUBVERSION)/ $(LINUXDIR)
+	$(Q) cd $(KERNELDIR) && ln -s linux-$(LINUX_SUBVERSION) linux
 	$(Q) touch $@
 
 #
