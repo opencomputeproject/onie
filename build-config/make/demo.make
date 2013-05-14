@@ -35,7 +35,7 @@ DEMO_TRIM = \
    etc/rc3.d/S50discover.sh	\
    etc/init.d/discover.sh	\
    bin/rescue			\
-   bin/exec_installer		\
+   bin/discover			\
    bin/uninstaller		\
    scripts/udhcp4_sd		
 
@@ -66,7 +66,7 @@ $(IMAGEDIR)/demo-%.uImage : $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
 		-d $(LINUXDIR)/vmlinux.bin.gz:$(DEMO_SYSROOT_CPIO_XZ):$*.dtb $@
 
 ifndef MAKE_CLEAN
-DEMO_INSTALLER_FILES = $(shell test -d $(IMAGEDIR) && \
+DEMO_INSTALLER_FILES = $(shell test -d $(IMAGEDIR) && test -f $(DEMO_UIMAGE) && \
 	              find -L $(DEMO_INSTALLER_DIR) -mindepth 1 -newer $(DEMO_BIN) \
 			-type f -print -quit 2>/dev/null)
 endif

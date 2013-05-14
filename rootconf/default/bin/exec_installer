@@ -14,7 +14,7 @@ run_installer()
     # escape any % characters for printing with printf
     print_exec_url=$(echo -n $onie_exec_url | sed -e 's/%/%%/g')
     log_info_msg "Executing installer: $print_exec_url"
-    $onie_installer 2>&1 | logger -t os-install -p ${syslog_onie}.info
+    $onie_installer 2>&1 | logger $log_stderr -t os-install -p ${syslog_onie}.info
 
     # installer should not return
     return 1
@@ -232,7 +232,15 @@ local_fs_run()
 import_parms "$1"
 rm -f $onie_installer
 
-# First try static URL
+# First try static URL from CLI
+if [ -n "$onie_cli_static_url" ] ; then
+    log_stderr=-s
+    url_run "$onie_cli_static_url" && exit 0
+    # stop here if it didn't work
+    exit 1
+fi
+
+# Next try static URL from u-boot
 if [ -n "$onie_static_url" ] ; then
     url_run "$onie_static_url" && exit 0
 fi
