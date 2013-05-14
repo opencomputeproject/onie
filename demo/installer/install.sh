@@ -27,7 +27,7 @@ echo "Updating U-Boot environment variables"
 (cat <<EOF
 hw_load $hw_load_str
 copy_img echo "Loading Demo $machine image..." && run hw_load
-nos_bootcmd run copy_img && setenv bootargs console=\$consoledev,\$baudrate && bootm \$loadaddr
+nos_bootcmd run copy_img && setenv bootargs quiet console=\$consoledev,\$baudrate && bootm \$loadaddr
 EOF
 ) > /tmp/env.txt
 
