@@ -108,9 +108,9 @@ help:
 #
 
 ARCH        ?= powerpc
-TARGET      ?= $(ARCH)-linux-gnuspe
+TARGET      ?= $(ARCH)-linux
 CROSSPREFIX ?= $(TARGET)-
-CROSSBIN    ?= /opt/eldk-5.3/powerpc-e500v2/sysroots/i686-eldk-linux/usr/bin/ppce500v2-linux-gnuspe
+CROSSBIN    ?= /opt/eldk-5.3/powerpc-softfloat/sysroots/i686-eldk-linux/usr/bin/powerpc-nf-linux
 
 # Determine the location of the compiler libraries and start files.
 # These are needed later for linking user space binaries with uClibc.
