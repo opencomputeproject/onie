@@ -73,7 +73,7 @@ endif
 
 $(IMAGEDIR)/demo-installer-%.bin : $(IMAGEDIR)/demo-%.uImage $(DEMO_INSTALLER_FILES) $(MACHINE_DEMO_DIR)/*
 	$(Q) echo "==== Create demo $* self-extracting archive ===="
-	$(Q) ./scripts/mkdemo.sh $(MACHINE) $(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf \
+	$(Q) ./scripts/onie-mk-demo.sh $(MACHINE) $(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf \
 		$(DEMO_UIMAGE) $(DEMO_BIN)
 
 PHONY += demo-image-complete
