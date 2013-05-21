@@ -1,5 +1,10 @@
 #!/bin/sh
 
+#
+# Script to create the raw ONIE binaries, suitable for flashing
+# directly from u-boot.
+#
+
 machine=$1
 image_dir=$2
 conf_dir=$3
