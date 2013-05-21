@@ -57,7 +57,7 @@ busybox-config: $(BUSYBOX_DIR)/.config
 ifndef MAKE_CLEAN
 BUSYBOX_NEW_FILES = $(shell test -d $(BUSYBOX_DIR) && test -f $(BUSYBOX_BUILD_STAMP) && \
 	              find -L $(BUSYBOX_DIR) -newer $(BUSYBOX_BUILD_STAMP) \! -name .kernelrelease  \
-			-type f -print -quit )
+			\! -name busybox.links -type f -print -quit )
 endif
 
 busybox-build: $(BUSYBOX_BUILD_STAMP)
