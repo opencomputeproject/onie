@@ -31,9 +31,15 @@ do_start() {
                 /bin/uninstaller
                 exit 0
                 ;;
+            update)
+                # pass through to discover
+                echo "$daemon: ONIE update mode detected.  Running updater." > /dev/console
+                echo "** ONIE Update Mode Enabled **" >> /etc/issue
+                ;;
             install)
-            # pass through to discover
-                true
+                # pass through to discover
+                echo "$daemon: installer mode detected.  Running installer." > /dev/console
+                echo "** Installer Mode Enabled **" >> /etc/issue
                 ;;
             *)
                 log_failure_msg "$daemon: Unknown reboot command: $onie_boot_reason"
@@ -42,7 +48,6 @@ do_start() {
 
     fi
 
-    echo "** Installer Mode Enabled **" >> /etc/issue
     log_begin_msg "Starting: $daemon"
     start-stop-daemon -S -b -m -p /var/run/${daemon}.pid -x $daemon
     log_end_msg

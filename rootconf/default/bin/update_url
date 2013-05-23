@@ -1,0 +1,31 @@
+#!/bin/sh
+
+##
+## Try to update ONIE using the URL given on the command line
+##
+
+. /scripts/functions
+
+cli_static_update_url=$1
+
+[ -n "$cli_static_update_url" ] || {
+    echo "Error: ONIE updater URL not specified."
+    echo "Usage: $0 <URL>"
+    echo "  URL types:   http, ftp, tftp"
+    exit 1
+}
+
+onie_disco=
+onie_disco=$(add_parm "$onie_disco" onie_cli_static_update_url $cli_static_update_url)
+
+# stop discovery engine
+/etc/init.d/discover.sh stop > /dev/null 2>&1
+sleep 1
+
+export onie_boot_reason="update"
+exec_installer "$onie_disco"
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

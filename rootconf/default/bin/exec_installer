@@ -5,16 +5,25 @@ syslog_tag=onie-exec
 
 run_installer()
 {
-    [ -f $onie_installer ] || {
+    [ -r $onie_installer ] || {
         log_failure_msg "Unable to find installer: $onie_installer"
         return 1
     }
-    chmod +x $onie_installer
+
     export onie_exec_url="$1"
     # escape any % characters for printing with printf
     print_exec_url=$(echo -n $onie_exec_url | sed -e 's/%/%%/g')
     log_info_msg "Executing installer: $print_exec_url"
-    $onie_installer 2>&1 | logger $log_stderr -t os-install -p ${syslog_onie}.info
+    if [ "$onie_boot_reason" = "update" ] ; then
+        grep -q ONIE-UPDATER-COOKIE $onie_installer || {
+            log_failure_msg "ONIE Updater:  Invalid ONIE update image format."
+            return 1
+        }
+    fi
+
+    chmod +x $onie_installer
+    { $onie_installer; echo "$?" > /var/run/install.rc; } 2>&1 | tee $tee_log_file | logger $log_stderr -t os-install -p ${syslog_onie}.info
+    [ "$(cat /var/run/install.rc)" = "0" ] && reboot && return 0
 
     # installer should not return
     return 1
@@ -41,15 +50,17 @@ wget_run()
 ONIE-SERIAL-NUMBER:$onie_serial_num
 ONIE-ETH-ADDR:$onie_eth_addr
 ONIE-VENDOR-ID:$onie_vendor_id
-ONIE-PLATFORM:$onie_platform
+ONIE-MACHINE:$onie_machine
+ONIE-ARCH:$onie_arch
 ONIE-SECURITY-KEY:$onie_sec_key
+ONIE-OPERATION:$onie_operation
 EOF
         )
         for h in $wget_headers ; do
             wget_args="$wget_args --header $h"
         done
     fi
-    log_debug "Running wget with: $user_agent $wget_args $URL"
+    log_debug "Running wget with: $user_agent $wget_args $URL\n"
     echo "Info: Fetching $URL ..."
     if [ "$onie_verbose" = "y" ]; then
         wget "$user_agent" $wget_args "$URL" && run_installer "$URL" && return 0
@@ -87,6 +98,7 @@ tftp_run()
 url_run()
 {
     URL="$1"
+    quiet=$2
     url_type=${URL%%:*}
     url_path=${URL##*://}
     rm -f $onie_installer
@@ -100,7 +112,7 @@ url_run()
             tftp_run $server $path && return 0
             ;;
         *)
-            log_failure_msg "Unknown URL type: $URL"
+            [ -n "$quiet" ] || log_failure_msg "Unknown URL type: $URL"
             ;;
     esac
 
@@ -117,6 +129,11 @@ http_download()
         tmp=$(echo $n | sed -e 's/-/%/g');
         url_run "http://$tmp/$onie_default_filename" && return 0
     done
+
+    # Try bootfile as a URL, supress warnings
+    if [ -n "$onie_disco_boot_file" ] ; then
+        url_run "$onie_disco_boot_file" quiet && return 0
+    fi
 
     # HTTP server IP only
     if [ -n "$onie_disco_wwwsrv" ] ; then
@@ -232,10 +249,20 @@ local_fs_run()
 import_parms "$1"
 rm -f $onie_installer
 
-# First try static URL from CLI
+# Try static installer URL from CLI
 if [ -n "$onie_cli_static_url" ] ; then
-    log_stderr=-s
+    # also send to stdout of current process
+    tee_log_file=/proc/$$/fd/1
     url_run "$onie_cli_static_url" && exit 0
+    # stop here if it didn't work
+    exit 1
+fi
+
+# Try static updater URL from CLI
+if [ -n "$onie_cli_static_update_url" ] ; then
+    # also send to stdout of current process
+    tee_log_file=/proc/$$/fd/1
+    url_run "$onie_cli_static_update_url" && exit 0
     # stop here if it didn't work
     exit 1
 fi
@@ -272,9 +299,12 @@ tftp_download && {
 }
 
 # Finally try TFTP waterfall method
-tftp_waterfall
+tftp_waterfall  && {
+    echo "tftp waterfall success, exiting..."
+    exit 0
+}
 
-exit 0
+exit 1
 
 # Local Variables:
 # mode: shell-script

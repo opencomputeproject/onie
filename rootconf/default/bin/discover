@@ -10,13 +10,6 @@
 syslog_tag=onie-discover
 onie_disco=
 
-sig_int_trap()
-{
-    # On ctrl-C drop to a shell
-    /bin/rescue 0
-}
-trap sig_int_trap INT
-
 # Neighbor table service discovery
 neigh_discovery()
 {
@@ -96,7 +89,7 @@ sd_dhcp4()
     udhcp_args="$(udhcpc_args) -t 2 -T 2 -n"
 
     udhcp_request_opts=
-    for o in 7 43 54 66 67 72 114 ; do
+    for o in 7 43 54 66 67 72 114 125 ; do
         udhcp_request_opts="$udhcp_request_opts -O $o"
     done
 
@@ -148,13 +141,15 @@ service_discovery()
 
 delay=20
 
-# Download and run installer entry point -- never return
+# Download and run installer entry point
 while true ; do
     /etc/init.d/networking.sh discover
     service_discovery
     log_debug_msg "onie_disco: $onie_disco"
     neigh_discovery
-    exec_installer "onie_neighs@@${onie_neighs}##${onie_disco}" 2>&1 | logger -t onie-exec -p ${syslog_onie}.info
+    rm -f /var/run/install.rc
+    exec_installer "onie_neighs@@${onie_neighs}##${onie_disco}" 2>&1 | tee $tee_log_file | logger -t onie-exec -p ${syslog_onie}.info
+    [ -r /var/run/install.rc ] && [ "$(cat /var/run/install.rc)" = "0" ] && exit 0
     # pause to avoid DoSing someone
     log_begin_msg "Sleeping for $delay seconds "
     cnt=0
