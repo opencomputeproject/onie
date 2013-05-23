@@ -14,6 +14,7 @@ DEMO_UIMAGE		= $(IMAGEDIR)/demo-$(MACHINE).uImage
 DEMO_BIN		= $(IMAGEDIR)/demo-installer-$(MACHINE).bin
 
 DEMO_SYSROOT_COMPLETE_STAMP	= $(STAMPDIR)/demo-sysroot-complete
+DEMO_UIMAGE_COMPLETE_STAMP	= $(STAMPDIR)/demo-uimage-complete
 DEMO_IMAGE_COMPLETE_STAMP	= $(STAMPDIR)/demo-image-complete
 DEMO_IMAGE		= $(DEMO_IMAGE_COMPLETE_STAMP)
 
@@ -25,9 +26,12 @@ MACHINE_DEMO_DIR	= $(MACHINEDIR)/demo
 ifndef MAKE_CLEAN
 DEMO_SYSROOT_NEW_FILES = $(shell \
 			test -d $(DEMO_OS_DIR)/default && \
-			test -f $(SYSROOT_COMPLETE_STAMP) &&  \
-			find -L $(DEMO_OS_DIR)/default -mindepth 1 -newer $(DEMO_SYSROOT_COMPLETE_STAMP) \
+			test -f $(DEMO_SYSROOT_COMPLETE_STAMP) &&  \
+			find -L $(DEMO_OS_DIR)/default -mindepth 1 -cnewer $(DEMO_SYSROOT_COMPLETE_STAMP) \
 			  -print -quit 2>/dev/null)
+  ifneq ($(DEMO_SYSROOT_NEW_FILES),)
+    $(shell rm -f $(DEMO_SYSROOT_COMPLETE_STAMP))
+  endif
 endif
 
 # List of files to remove from base ONIE image for the demo.
@@ -41,7 +45,7 @@ DEMO_TRIM = \
 
 PHONY += demo-sysroot-complete
 demo-sysroot-complete: $(DEMO_SYSROOT_COMPLETE_STAMP)
-$(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_COMPLETE_STAMP) $(DEMO_SYSROOT_NEW_FILES)
+$(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_COMPLETE_STAMP)
 	$(Q) sudo rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) echo "==== Copying existing ONIE sysroot ===="
 	$(Q) sudo cp -a $(SYSROOTDIR) $(DEMO_SYSROOTDIR)
@@ -60,18 +64,22 @@ $(DEMO_SYSROOT_CPIO_XZ) : $(DEMO_SYSROOT_COMPLETE_STAMP)
 		sudo find . | sudo cpio --create -H newc > $(DEMO_SYSROOT_CPIO) )
 	$(Q) xz --compress --force --check=crc32 -8 $(DEMO_SYSROOT_CPIO)
 
-$(IMAGEDIR)/demo-%.uImage : $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
-	$(Q) echo "==== Create demo $* u-boot multi-file initramfs uImage ===="
-	$(Q) cd $(IMAGEDIR) && mkimage -T multi -C gzip -a 0 -e 0 -n "$*" \
-		-d $(LINUXDIR)/vmlinux.bin.gz:$(DEMO_SYSROOT_CPIO_XZ):$*.dtb $@
+$(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
+	$(Q) echo "==== Create demo $(MACHINE) u-boot multi-file initramfs uImage ===="
+	$(Q) cd $(IMAGEDIR) && mkimage -T multi -C gzip -a 0 -e 0 -n "Demo $(MACHINE)" \
+		-d $(LINUXDIR)/vmlinux.bin.gz:$(DEMO_SYSROOT_CPIO_XZ):$(MACHINE).dtb $(DEMO_UIMAGE)
+	$(Q) touch $@
 
 ifndef MAKE_CLEAN
 DEMO_INSTALLER_FILES = $(shell test -d $(IMAGEDIR) && test -f $(DEMO_UIMAGE) && \
-	              find -L $(DEMO_INSTALLER_DIR) -mindepth 1 -newer $(DEMO_BIN) \
+	              find -L $(DEMO_INSTALLER_DIR) -mindepth 1 -cnewer $(DEMO_BIN) \
 			-type f -print -quit 2>/dev/null)
+  ifneq ($(DEMO_INSTALLER_FILES),)
+    $(shell rm -f $(DEMO_IMAGE_COMPLETE_STAMP))
+  endif
 endif
 
-$(IMAGEDIR)/demo-installer-%.bin : $(IMAGEDIR)/demo-%.uImage $(DEMO_INSTALLER_FILES) $(MACHINE_DEMO_DIR)/*
+$(IMAGEDIR)/demo-installer-%.bin : $(DEMO_UIMAGE_COMPLETE_STAMP) $(MACHINE_DEMO_DIR)/*
 	$(Q) echo "==== Create demo $* self-extracting archive ===="
 	$(Q) ./scripts/onie-mk-demo.sh $(MACHINE) $(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf \
 		$(DEMO_UIMAGE) $(DEMO_BIN)
@@ -86,6 +94,7 @@ demo-clean:
 	$(Q) sudo rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) rm -f $(MBUILDDIR)/demo-* $(DEMO_UIMAGE) $(DEMO_BIN)
 	$(Q) rm -f $(DEMO_SYSROOT_COMPLETE_STAMP) $(DEMO_IMAGE_COMPLETE_STAMP)
+	$(Q) rm -f $(DEMO_UIMAGE_COMPLETE_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
 #
