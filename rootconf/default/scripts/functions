@@ -4,37 +4,47 @@
 ## This assumes the shell is ash/dash.
 ##
 
+. /etc/machine.conf
+
 export onie_installer="/installer"
-onie_default_filename="onie-installer"
+
+tee_log_file=/dev/null
+if [ "$onie_boot_reason" = "update" ] ; then
+    onie_default_filename="onie-updater-${onie_machine}-${onie_arch}"
+    onie_operation="onie-update"
+    tee_log_file=/dev/console
+else
+    onie_default_filename="onie-installer"
+    onie_operation="os-install"
+fi
 
 syslog_onie="local0"
 syslog_tag="onie"
-log_stderr=
 
 _log_msg()
 {
-	printf "$@" | logger $log_stderr -t $syslog_tag -p ${syslog_onie}.info
+	printf "$@" | tee $tee_log_file | logger -t $syslog_tag -p ${syslog_onie}.info
 }
 
 _log_info_msg()
 {
-	printf "$@" | logger $log_stderr -t $syslog_tag -p ${syslog_onie}.info
+	printf "$@" | tee $tee_log_file | logger -t $syslog_tag -p ${syslog_onie}.info
 }
 
 _log_warn_msg()
 {
-	printf "$@" | logger $log_stderr -t ${syslog_tag}-warn -p ${syslog_onie}.warn
+	printf "$@" | tee $tee_log_file | logger -t ${syslog_tag}-warn -p ${syslog_onie}.warn
 }
 
 _log_err_msg()
 {
-	printf "$@" | logger $log_stderr -t ${syslog_tag}-error -p ${syslog_onie}.err
+	printf "$@" | tee $tee_log_file | logger -t ${syslog_tag}-error -p ${syslog_onie}.err
 }
 
 log_debug()
 {
 	if [ "$onie_verbose" = "y" ]; then 
-	    printf "$@" | logger $log_stderr -t ${syslog_tag}-debug -p ${syslog_onie}.debug
+	    printf "$@" | tee $tee_log_file | logger -t ${syslog_tag}-debug -p ${syslog_onie}.debug
         fi
 }
 
@@ -185,46 +195,90 @@ mounttmpfs()
     cmd_run touch $dir/.ramfs
 }
 
-# Decode onie specific DHCP vendor options (RFC 2132, option 43)
+# IANA Enterprise Number used for ONIE vendor specific DHCP options.
+onie_iana_enterprise=40310
+
+# Decode onie specific DHCP vendor options (RFC 2132, option 125)
 # The input is an ASCII encoded binary string
 #
 # The onie vendor option format is specified in isc-dhcp config speak
 # as:
 #
-#  option space onie code width 1 length width 1 hash size 3;
-#  option onie.url code 1 = text;
+#  option space onie code width 1 length width 1;
+#  option onie.installer_url code 1 = text;
+#  option onie.updater_url code 2 = text;
+#
+# Skip IANA numbers that are not ours
 #
 import_vendoropts()
 {
-    opts="$1"
+    local opts="$1"
+
     # consume opts string as TLV:
     #   type - 1 byte
     #   len  - 1 byte, num bytes in val
 
+    local cnt=0
     while [ ${#opts} -gt 0 ] ; do
-        type=$(printf %d 0x$(echo $opts | head -c 2))
-        len=$(printf %d 0x$(echo $opts | head -c 4 | tail -c 2))
-        tot_len=$(( ( $len * 2 ) + 4 ))
-        val=$(echo -n $opts | head -c $tot_len | tail -c $(( $len * 2 )))
+        local type=$(printf %d 0x$(echo $opts | head -c 2))
+        local len=$(printf %d 0x$(echo $opts | head -c 4 | tail -c 2))
+        local tot_len=$(( ( $len * 2 ) + 4 ))
+        local val=$(echo -n $opts | head -c $tot_len | tail -c $(( $len * 2 )))
         # echo "Looking at type: $type, len: $len, val: $val"
+        local tmpstr=
         case "$type" in
-            1)
-                # ONIE URL
-                tmp=
+            1|2)
+                # String data types
+                # 1 - ONIE INSTALLER URL
+                # 2 - ONIE UPDATER URL
                 while [ ${#val} -gt 0 ] ; do
                     byte=$(echo -n $val | head -c 2)
                     char=$(printf %b \\x"$byte")
-                    tmp="${tmp}${char}"
+                    tmpstr="${tmpstr}${char}"
                     val=$(echo -n $val | tail -c $(( ${#val} - 2 )))
                 done
-                export onie_disco_onie_url="$tmp"
                 ;;
             *)
                 log_warning_msg "Unknown onie vendor option type: $type"
         esac
-        opts=$(echo $opts | tail -c $(( ${#opts} - $tot_len )))
+        if [ "$type" = "2" ] && [ "$onie_boot_reason" = "update" ] ; then
+            export onie_disco_onie_url="$tmpstr"
+        elif [ "$type" = "1" ] ; then
+            export onie_disco_onie_url="$tmpstr"
+        fi
+        opts=$(echo -n $opts | tail -c $(( ${#opts} - $tot_len )))
+        cnt=$(( $cnt + 1 ))
+        [ $cnt -gt 100 ] && {
+            log_failure_msg "Malformed ONIE VIVSO option, looping detected."
+            break
+        }
     done
 
+}
+
+import_vivso()
+{
+    local opts="$1"
+    # consume opts per RFC 3925, option 125.  The first two bytes,
+    # code=125 and length are already removed.
+    
+    local cnt=0
+    while [ ${#opts} -gt 0 ] ; do
+        local enterprise_num=$(printf %d 0x$(echo $opts | head -c 8))
+        local len=$(printf %d 0x$(echo $opts | head -c 10 | tail -c 2))
+        local tot_len=$(( ( $len * 2 ) + 10 ))
+        local val=$(echo -n $opts | head -c $tot_len | tail -c $(( $len * 2 )))
+        #echo "Looking at enterprise_num: $enterprise_num, len: $len, val: $val"
+        if [ "$enterprise_num" = "$onie_iana_enterprise" ] ; then
+            import_vendoropts "$val"
+        fi
+        opts=$(echo -n $opts | tail -c $(( ${#opts} - $tot_len )))
+        cnt=$(( $cnt + 1 ))
+        [ $cnt -gt 100 ] && {
+            log_failure_msg "Malformed DHCP option 125, looping detected."
+            break
+        }
+    done
 }
 
 # Import encoded name/val pairs into environment
@@ -242,7 +296,7 @@ import_parms()
         eval "export $name"="$val"
     done
 
-    [ -n "$onie_disco_vendoropts" ] && import_vendoropts "$onie_disco_vendoropts"
+    [ -n "$onie_disco_vivso" ] && import_vivso "$onie_disco_vivso"
 }
 
 # remove parm
@@ -285,14 +339,33 @@ net_intf()
     echo $intf_list
 }
 
+str2hex()
+{
+    echo -n "$1" | hexdump -ve '1/1 "%.2x"'
+}
+
+make_str_opt()
+{
+    local code="$1"
+    local str="$2"
+    printf %02X%02X%s $code ${#str} $(str2hex $str)
+}
+
 # generic udhcpc args
 udhcpc_args()
 {
-    udhcp_args="-q -S -V onie_dhcp_vendor_${onie_platform}"
+    local udhcp_args="-q -S -V onie_vendor:${onie_platform}:${onie_arch}"
     # user_class - option 77 - string in hex
-    udhcp_user_class="-x 77:$(echo -n onie_dhcp_user_class | hexdump -ve '1/1 "%.2x"')"
-
-    echo "$udhcp_args" "$udhcp_user_class"
+    local udhcp_user_class="-x 77:$(str2hex onie_dhcp_user_class)"
+    # vendor specific options - option 125 - string in hex
+    # code 3 - machine
+    # code 4 - CPU architecture
+    local udhcp_vivso_machine="$(make_str_opt 3 $onie_platform)"
+    local udhcp_vivso_arch="$(make_str_opt 4 $onie_arch)"
+    local payload="${udhcp_vivso_machine}${udhcp_vivso_arch}"
+    local len=$(( ${#payload} / 2 ))
+    local udhcp_vivso="-x 125:$(printf %08X%02X%s $onie_iana_enterprise $len $payload)"
+    echo "$udhcp_args" "$udhcp_user_class" "$udhcp_vivso"
 }
 
 # Local Variables:
