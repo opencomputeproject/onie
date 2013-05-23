@@ -249,7 +249,9 @@ DIST_CORE_STAGE_DIR = $(DIST_DIR)/$(DIST_CORE_RELEASE)
 DIST_CORE_TARBALL = $(DIST_CORE_STAGE_DIR).tar.xz
 DIST_CORE_DIRS = 	\
 	build-config 	\
+	demo		\
 	docs	 	\
+	installer	\
 	patches 	\
 	rootconf 	\
 	upstream
