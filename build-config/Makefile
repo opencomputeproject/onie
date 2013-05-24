@@ -243,7 +243,7 @@ clean-all:
 
 PHONY += dist
 DIST_DIR		= $(BUILDDIR)/dist
-DIST_MACHINE_DIR	= $(BUILDDIR)/dist/machine
+DIST_MACHINE_DIR	= $(DIST_DIR)/machine
 DIST_CORE_RELEASE	= onie-core-$(LSB_RELEASE_TAG)
 DIST_CORE_STAGE_DIR	= $(DIST_DIR)/$(DIST_CORE_RELEASE)
 DIST_CORE_TARBALL	= $(DIST_CORE_STAGE_DIR).tar.xz
@@ -259,6 +259,7 @@ DIST_CORE_DIRS = 	\
 
 dist:
 	$(Q) echo "=== Making source distriution ==="
+	$(Q) rm -rf $(DIST_DIR)
 	$(Q) mkdir -p $(DIST_DIR) $(DIST_MACHINE_DIR) $(DIST_CORE_STAGE_DIR)
 	$(Q) cd $(PROJECTDIR); cp -a $(DIST_CORE_DIRS) $(DIST_CORE_STAGE_DIR)
 	$(Q) echo $(LSB_RELEASE_TAG) > $(DIST_CORE_STAGE_DIR)/build-config/conf/lsb-release
@@ -266,8 +267,9 @@ dist:
 	$(Q) rm -rf $(DIST_CORE_STAGE_DIR)
 	$(Q) cd $(PROJECTDIR)/machine; for m in $$(ls) ; do \
 		echo "   === Adding machine: $$m ==="; \
-		tar $(DIST_TAR_OPTIONS) -C $(PROJECTDIR) -cJf $(DIST_MACHINE_DIR)/onie-$${m}.tar.xz machine/$${m} ; \
+		tar $(DIST_TAR_OPTIONS) -C $(PROJECTDIR) -cJf $(DIST_MACHINE_DIR)/onie-$${m}-$(LSB_RELEASE_TAG).tar.xz machine/$${m} ; \
 	done
+	$(Q) echo $(LSB_RELEASE_TAG) > $(DIST_DIR)/VERSION
 	$(Q) echo "=== Finished making distribution $(DIST_CORE_TARBALL)"
 
 .PHONY: $(PHONY)
