@@ -9,6 +9,10 @@ Open Network Install Environment Documentation
 
    faq/index
    user-guide/index
-   for-developers/index
-   
+   design-spec/index
+   hw-vendors/index
+   os-vendors/index
+   developers/index
+   glossary/index
+
 This documentation is current as of |release| for version |version|.

@@ -169,7 +169,7 @@ MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter help clean-all dist doc% html pdf, $(MAKECMDGOALS)))
+  ifeq (,$(filter help clean-all dist doc% %html %pdf, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINE)' in $(MACHINEROOT))
       $(warning You must set the MACHINE= variable when invoking make.)

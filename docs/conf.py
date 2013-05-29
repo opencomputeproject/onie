@@ -22,7 +22,13 @@ import sys, os
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc','rst2pdf.pdfbuilder']
+extensions = [
+    'sphinx.ext.autodoc',
+    'rst2pdf.pdfbuilder',
+    'sphinx.ext.todo',
+    ]
+
+todo_include_todos=True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -260,3 +266,170 @@ pdf_use_numbered_links = False
 
 # Background images fitting mode
 pdf_fit_background_mode = 'scale'
+
+# --- Options for Latex Output ---
+
+# latex_documents
+#This value determines how to group the document tree into LaTeX
+#source files. It must be a list of tuples (startdocname, targetname,
+#title, author, documentclass, toctree_only), where the items are:
+#
+#  startdocname: document name that is the “root” of the LaTeX file. All
+#  documents referenced by it in TOC trees will be included in the LaTeX
+#  file too. (If you want only one LaTeX file, use your master_doc
+#  here.)
+#
+#  targetname: file name of the LaTeX file in the output directory.
+#
+#  title: LaTeX document title. Can be empty to use the title of the
+#  startdoc. This is inserted as LaTeX markup, so special characters
+#  like a backslash or ampersand must be represented by the proper LaTeX
+#  commands if they are to be inserted literally.
+#
+#  author: Author for the LaTeX document. The same LaTeX markup caveat
+#  as for title applies. Use \and to separate multiple authors, as in:
+#  'John \and Sarah'.
+#
+#  documentclass: Normally, one of 'manual' or 'howto' (provided by
+#  Sphinx). Other document classes can be given, but they must include
+#  the “sphinx” package in order to define Sphinx’ custom LaTeX
+#  commands. “howto” documents will not get appendices. Also, howtos
+#  will have a simpler title page.
+#
+#  toctree_only: Must be True or False. If True, the startdoc document
+#  itself is not included in the output, only the documents referenced
+#  by it via TOC trees. With this option, you can put extra stuff in the
+#  master document that shows up in the HTML, but not the LaTeX output.
+#
+#New in version 0.3: The 6th item toctree_only. Tuples with 5 items are still accepted.
+
+latex_documents = [
+    ('index', u'Open_Network_Install_Environment.tex',
+     u'Open Network Install Environment', u'Author Name',
+     'howto', False),
+]
+
+# latex_logo
+#If given, this must be the name of an image file (relative to the
+#configuration directory) that is the logo of the docs. It is placed
+#at the top of the title page. Default: None.
+
+# latex_use_parts
+#If true, the topmost sectioning unit is parts, else it is
+#chapters. Default: False.
+
+# latex_appendices
+# A list of document names to append as an appendix to all manuals.
+
+# latex_domain_indices
+#If true, generate domain-specific indices in addition to the general
+#index. For e.g. the Python domain, this is the global module
+#index. Default is True.
+#
+#This value can be a bool or a list of index names that should be
+#generated, like for html_domain_indices.
+
+# latex_show_pagerefs
+#If true, add page references after internal references. This is very
+#useful for printed copies of the manual. Default is False.
+
+# latex_show_urls
+
+#Control whether to display URL addresses. This is very useful for
+#printed copies of the manual. The setting can have the following
+#values:
+#
+#  'no' – do not display URLs (default)
+#  'footnote' – display URLs in footnotes
+#  'inline' – display URLs inline in parentheses
+#
+# Changed in version 1.1: This value is now a string; previously it
+# was a boolean value, and a true value selected the 'inline'
+# display. For backwards compatibility, True is still accepted.
+
+# latex_elements
+#New in version 0.5.
+#
+#A dictionary that contains LaTeX snippets that override those Sphinx
+#usually puts into the generated .tex files.
+#
+#Keep in mind that backslashes must be doubled in Python string
+#literals to avoid interpretation as escape sequences.
+#
+#Keys that you may want to override include:
+#
+#'papersize'
+#Paper size option of the document class ('a4paper' or 'letterpaper'),
+#default 'letterpaper'.
+#
+#'pointsize'
+#Point size option of the document class ('10pt', '11pt' or '12pt'),
+#default '10pt'.
+#
+#'babel'
+#“babel” package inclusion, default '\\usepackage{babel}'.
+#
+#'fontpkg'
+#Font package inclusion, default '\\usepackage{times}' (which uses
+#Times and Helvetica). You can set this to '' to use the Computer
+#Modern fonts.
+#
+#'fncychap'
+#Inclusion of the “fncychap” package (which makes fancy chapter
+#titles), default '\\usepackage[Bjarne]{fncychap}' for English
+#documentation, '\\usepackage[Sonny]{fncychap}' for internationalized
+#docs (because the “Bjarne” style uses numbers spelled out in
+#English). Other “fncychap” styles you can try include “Lenny”,
+#“Glenn”, “Conny” and “Rejne”. You can also set this to '' to disable
+#fncychap.
+#
+#'preamble'
+#Additional preamble content, default empty.
+#
+#'footer'`
+#Additional footer content (before the indices), default empty.
+#
+#Keys that don’t need be overridden unless in special cases are:
+#
+#'inputenc'
+#“inputenc” package inclusion, default '\\usepackage[utf8]{inputenc}'.
+#
+#'fontenc'
+#“fontenc” package inclusion, default '\\usepackage[T1]{fontenc}'.
+#
+#'maketitle'
+#“maketitle” call, default '\\maketitle'. Override if you want to
+#generate a differently-styled title page.
+#
+#'tableofcontents'
+#“tableofcontents” call, default '\\tableofcontents'. Override if you
+#want to generate a different table of contents or put content between
+#the title page and the TOC.
+#
+#'printindex'
+#“printindex” call, the last thing in the file, default
+#'\\printindex'. Override if you want to generate the index
+#differently or append some content after the index.
+#
+#Keys that are set by other options and therefore should not be
+#overridden are:
+#
+#  'docclass' 'classoptions' 'title' 'date' 'release' 'author' 'logo'
+#  'releasename' 'makeindex' 'shorthandoff'
+
+# latex_docclass
+#A dictionary mapping 'howto' and 'manual' to names of real document
+#classes that will be used as the base for the two Sphinx
+#classes. Default is to use 'article' for 'howto' and 'report' for
+#'manual'.
+
+# latex_additional_files
+#A list of file names, relative to the configuration directory, to
+#copy to the build directory when building LaTeX output. This is
+#useful to copy files that Sphinx doesn’t copy automatically, e.g. if
+#they are referenced in custom LaTeX added in latex_elements. Image
+#files that are referenced in source files (e.g. via .. image::) are
+#copied automatically.
+#
+#You have to make sure yourself that the filenames don’t collide with
+#those of any automatically copied files.

@@ -1,6 +1,16 @@
-*************************************
-ONIE FAQ (Frequently Asked Questions)
-*************************************
+***
+FAQ
+***
+
+.. Add questions as sections headings and the answers as the section
+   body.  For really long questions, abbreviate them in the heading
+   and put the entire question in the section body.
+
+What is ONIE?
+=============
+
+ONIE is a small operating system for bare metal network switches that
+provides an environment for automated provisioning.
 
 TODO
 ====
@@ -129,4 +139,3 @@ Type Code  Length      Description       Format
 
 Maintanence of this EEPROM format specification and allocation of the TLV type
 codes is handled by the ONIE Foundation (http://www.onie.org).
-

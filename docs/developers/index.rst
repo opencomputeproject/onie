@@ -1,6 +1,6 @@
-****************************
-ONIE Developer Documentation
-****************************
+***********************
+Developer Documentation
+***********************
 
 ONIE Build Instructions
 =======================
