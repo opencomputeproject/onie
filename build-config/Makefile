@@ -35,6 +35,7 @@
 #   │   ├── sysroot
 #   │   ├── u-boot
 #   │   └── uclibc
+#   ├── docs
 #   └── images
 #
 #<
@@ -168,7 +169,7 @@ MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter help clean-all dist, $(MAKECMDGOALS)))
+  ifeq (,$(filter help clean-all dist doc% html pdf, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINE)' in $(MACHINEROOT))
       $(warning You must set the MACHINE= variable when invoking make.)
@@ -215,13 +216,14 @@ include make/uclibc.make
 include make/busybox.make
 include make/images.make
 include make/demo.make
+include make/docs.make
 
 #-------------------------------------------------------------------------------
 #
 # top level targets
 #
 
-PHONY += all source demo clean clean-all
+PHONY += all source demo clean clean-all docs
 
 source: $(SOURCE)
 	$(Q) echo "=== Finished making $@ ==="
@@ -231,6 +233,8 @@ all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE)
 
 demo: $(KERNEL) $(DEMO_IMAGE)
 	$(Q) echo "=== Finished making demo onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
+
+docs: html pdf
 
 clean: 	$(CLEAN)
 	$(Q) sudo rm -rf $(BUILDDIR)/images/*$(MACHINE)*
@@ -244,6 +248,7 @@ clean-all:
 PHONY += dist
 DIST_DIR		= $(BUILDDIR)/dist
 DIST_MACHINE_DIR	= $(DIST_DIR)/machine
+DIST_DOCS_DIR		= $(DIST_DIR)/docs
 DIST_CORE_RELEASE	= onie-core-$(LSB_RELEASE_TAG)
 DIST_CORE_STAGE_DIR	= $(DIST_DIR)/$(DIST_CORE_RELEASE)
 DIST_CORE_TARBALL	= $(DIST_CORE_STAGE_DIR).tar.xz
@@ -251,16 +256,15 @@ DIST_TAR_OPTIONS	= --exclude-backups --exclude=*~
 DIST_CORE_DIRS = 	\
 	build-config 	\
 	demo		\
-	docs	 	\
 	installer	\
 	patches 	\
 	rootconf 	\
 	upstream
 
-dist:
+dist: html pdf
 	$(Q) echo "=== Making source distriution ==="
 	$(Q) rm -rf $(DIST_DIR)
-	$(Q) mkdir -p $(DIST_DIR) $(DIST_MACHINE_DIR) $(DIST_CORE_STAGE_DIR)
+	$(Q) mkdir -p $(DIST_DIR) $(DIST_MACHINE_DIR) $(DIST_CORE_STAGE_DIR) $(DIST_DOCS_DIR)
 	$(Q) cd $(PROJECTDIR); cp -a $(DIST_CORE_DIRS) $(DIST_CORE_STAGE_DIR)
 	$(Q) echo $(LSB_RELEASE_TAG) > $(DIST_CORE_STAGE_DIR)/build-config/conf/lsb-release
 	$(Q) tar $(DIST_TAR_OPTIONS) -C $(DIST_DIR) -cJf $(DIST_CORE_TARBALL) $(DIST_CORE_RELEASE)
@@ -270,6 +274,7 @@ dist:
 		tar $(DIST_TAR_OPTIONS) -C $(PROJECTDIR) -cJf $(DIST_MACHINE_DIR)/onie-$${m}-$(LSB_RELEASE_TAG).tar.xz machine/$${m} ; \
 	done
 	$(Q) echo $(LSB_RELEASE_TAG) > $(DIST_DIR)/VERSION
+	$(Q) cp -a $(DOCBUILDDIR)/{html,pdf} $(DIST_DOCS_DIR)
 	$(Q) echo "=== Finished making distribution $(DIST_CORE_TARBALL)"
 
 .PHONY: $(PHONY)
