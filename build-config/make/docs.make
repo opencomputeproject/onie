@@ -12,7 +12,7 @@ DOCBUILDDIR   ?= $(BUILDDIR)/docs
 PAPEROPT_a4     = -D latex_paper_size=a4
 PAPEROPT_letter = -D latex_paper_size=letter
 DOCVERSIONOPTS  = -D version=$(RELEASE_VERSION) -D release=$(LSB_RELEASE_TAG)
-ALLSPHINXOPTS   = -W -n -d $(DOCBUILDDIR)/doctrees $(DOCVERSIONOPTS) $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) $(DOCSRCDIR)
+ALLSPHINXOPTS   = -W -n -E -d $(DOCBUILDDIR)/doctrees $(DOCVERSIONOPTS) $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) $(DOCSRCDIR)
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) $(DOCSRCDIR)
 
