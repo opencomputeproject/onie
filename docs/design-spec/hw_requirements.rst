@@ -135,10 +135,21 @@ Type Code  Length      Description       Format
 0x0B       Variable    Manufacturer      An ASCII string containing the name of the entity
                                          who manufactured the device.
 0x0C       2 bytes     Country Code      A two-byte ASCII string containing the ISO 3166-1
-                                         alpha-2 code of the country where the device was
-                                         manufactured.
+                                         alpha-2 code [#ISOCountry]_ of the country where
+                                         the device was manufactured.
 0x0D       Variable    Vendor            The name of the vendor who contracted with the
                                          manufacturer for the production of this device.
+0xFD       Variable    Vendor Extension  This type code allows vendors to include extra
+                                         information which is specific to the vendor and
+                                         cannot be specified using the other type codes.
+                                         The format of this value field is a four byte
+                                         IANA enterprise number, followed by a vendor
+                                         defined string of bytes. The format of the string
+                                         of bytes is entirely up to the vendor, except
+                                         that it can be, at most, 255 bytes long, including
+                                         the IANA enterprise number [#IANAEnt]_. If more space
+                                         is needed, then multiple TLVs with this type code
+                                         can be used.
 0xFE       4 bytes     CRC-32            A four-byte CRC which covers the EEPROM contents
                                          from the first byte of the EEPROM (the "T" in the
                                          "TlvInfo" identification string) to the length
@@ -149,9 +160,12 @@ Type Code  Length      Description       Format
 =========  ==========  ================  ==================================================
 
 Maintanence of this EEPROM format specification and allocation of the TLV type
-codes is handled by the ONIE Foundation (http://www.onie.org).
+codes is handled by the ONIE Foundation [#ONIE]_.
 
 .. rubric:: Footnotes
 
 .. [#powerpc] `QorIQ PowerPC <http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME>`_
 .. [#uboot]   `U-Boot <http://www.denx.de/wiki/U-Boot>`_
+.. [#ISOCountry] `ISO 3166-1 alpha-2 codes <http://www.iso.org/iso/country_codes/iso_3166_code_lists/country_names_and_code_elements.htm>`_
+.. [#IANAEnt] `IANA Enterprise Numbers <http://www.iana.org/assignments/enterprise-numbers>`_
+.. [#ONIE]    `ONIE Foundation <http://www.onie.org>`_
