@@ -1,5 +1,6 @@
+********
 Overview
-========
+********
 
 The Open Network Install Environment (ONIE) is a small operating
 system for bare metal network switches that provides an environment
@@ -28,7 +29,7 @@ Once the installer is found, the ODE executes the installer, which
 then proceeds to provision the machine in an NOS specific way.
 
 Initial Boot
-------------
+============
 
 The first time the switch boots the following steps happen:
 
@@ -43,7 +44,7 @@ On subsequent boots the system boots straight into the installed NOS,
 bypassing the ONIE kernel and ODE application.
 
 Subsequent Boots
-----------------
+================
 
 One subsequent boots the start up sequence is:
 

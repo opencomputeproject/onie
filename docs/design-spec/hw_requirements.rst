@@ -1,5 +1,6 @@
+*********************
 Hardware Requirements
-=====================
+*********************
 
 ONIE has modest hardware requirements.  Undoubtedly the NOS has
 additional hardware requirements.
@@ -29,7 +30,7 @@ Ethernet management port	Required to download an operating system installer.
 .. _non_volatile_board_info:
 
 Board Information EEPROM Format
--------------------------------
+===============================
 
 Each ONIE system must include an EEPROM which contains various system parameters
 assigned by the manufacturer.  This EEPROM includes information such as the MAC
@@ -39,7 +40,7 @@ because the information contained in the EEPROM is found in TLVs, or **T**\ ype
 **L**\ ength and **V**\ alue fields.
 
 Definition of the TlvInfo EEPROM Format
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------------
 
 The first eight bytes in the EERPOM are the NULL-terminated ASCII string
 "TlvInfo".  This identification string can be used as a simple, preliminary
@@ -99,7 +100,7 @@ identification string to the last byte of the CRC TLV, must be less than or
 equal to 2048 bytes.
 
 Type Code Values
-^^^^^^^^^^^^^^^^
+----------------
 
 The following type codes are defined.
 

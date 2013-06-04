@@ -1,5 +1,6 @@
+***********************************
 Linux Kernel and Device Tree Source
-===================================
+***********************************
 
 ONIE provides an environment in which a NOS installer can run.  As
 such the kernel must provide features and services useful for an
@@ -30,7 +31,7 @@ File                                                         Purpose
 ======================================================       =======
 
 Device Tree Source
-------------------
+==================
 
 The device tree is a simple tree structure of nodes and properties
 that describe the hardware platform. Properties are key-value pairs,
@@ -49,7 +50,7 @@ Node                Property         Purpose
 
 
 ``model`` and ``compatible`` properties
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------------
 
 The ``model`` and ``compatible`` properties are used by the kernel at
 boot time to invoke the correct platform initialization routines.
@@ -66,7 +67,7 @@ See how the ``compatible`` property is used in the
 :ref:`platform_support_c_file` section below.
 
 NOR Flash Partitioning
-^^^^^^^^^^^^^^^^^^^^^^
+----------------------
 
 The NOR flash partitioning scheme is very important for U-Boot and
 ONIE.  For the QorIQ platform the ``/localbus/nor`` node defines how the
@@ -135,7 +136,7 @@ Compare this partitioning scheme to the picture in the
              installer.
 
 Kconfig and Makefile
---------------------
+====================
 
 The ``Kconfig`` file must contain an additional stanza for the new
 platform.  Here is an example::
@@ -154,7 +155,7 @@ platform.  Here is an example::
 .. _platform_support_c_file:
 
 Platform Support C File
------------------------
+=======================
 
 The platform support C file performs any boot time initializations
 necessary for a particular platform.  Most of these initialization
@@ -211,7 +212,7 @@ need this as they can simply use the ``HRESET_REQ`` signal provided by
 the P2020.
 
 Generic Kernel Configuration
-----------------------------
+============================
 
 In addition to the platform specific kernel code, ONIE requires a
 number of other configuration options to support an effective

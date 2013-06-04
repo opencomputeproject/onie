@@ -1,5 +1,6 @@
+***********
 Boot Loader
-===========
+***********
 
 .. note:: ONIE has no specific CPU architecture requirements -- it is
   Linux.
@@ -26,7 +27,7 @@ responsibilities as well as platform independent features.
 .. _nor_flash_memory_layout:
 
 NOR Flash Memory Layout
------------------------
+=======================
 
 The typical layout of a 32MB NOR flash for an ONIE system looks like
 (Not to Scale)::
@@ -60,7 +61,7 @@ The typical layout of a 32MB NOR flash for an ONIE system looks like
   +---------------------------+  Low Memory Address
 
 Platform Dependent Hardware Initialization
-------------------------------------------
+==========================================
 
 ONIE expects the platform U-Boot to provide a number of services at
 boot time, including:
@@ -94,6 +95,8 @@ See the :ref:`non_volatile_board_info` section.
 
 The following variables must be set by the platform:
 
+.. _u_boot_platform_vars:
+
 .. csv-table::  Platform Dependent Environment Variables
    :header: "Variable", "Use / Meaning", "Example", "Compiled In or Non-Volatile Storage"
 
@@ -106,7 +109,7 @@ The following variables must be set by the platform:
     ``eth_addr``, MAC address for ethernet management port, ``00:11:22:33:44:55``, non-volatile storage
 
 Environment Variables: ``consoledev, oniestart and oniesz.b``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------------------------------------------
 
 These variables are compiled into U-Boot using the platform's U-Boot
 configuration header file ``include/configs/VENDOR_MACHINE.h``.
@@ -121,7 +124,7 @@ The definition of the CONFIG_PLATFORM_ENV macro would look like:
           "onie_sz.b=0x00400000\0"
 
 Environment Variables: ``platform and vendor_id``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------------------------------
 
 These variables are compiled into U-Boot using the platform's U-Boot
 configuration header file ``include/configs/VENDOR_MACHINE.h``.
@@ -140,7 +143,7 @@ In this example the vendor_id is "12345" and the platform is
                                        vendor_model)
 
 Environment Variable: ``serial#``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------
 
 The serial number must reside in non-volatile storage, such as an
 EEPROM or a NOR-flash sector dedicated to storing manufacturing data.
@@ -181,7 +184,7 @@ An example implementation looks like:
   }
 
 Environment Variable: ``eth_addr``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+----------------------------------
 
 The MAC address for the Ethernet management interface must reside in
 non-volatile storage, such as an EEPROM or a NOR-flash sector
@@ -240,7 +243,7 @@ An example implementation looks like:
   }
 
 Platform Independent U-Boot Features
-------------------------------------
+====================================
 
 ONIE relies on two fundamental features of U-Boot:
 
@@ -255,7 +258,7 @@ Much more interesting is the use of U-Boot environment variables in an
 ONIE enabled system.
 
 Platform Independent Environment Variables
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------------
 
 ONIE uses a number of different U-Boot variables to manage the system.
 
