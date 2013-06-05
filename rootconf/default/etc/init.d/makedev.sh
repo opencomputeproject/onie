@@ -41,7 +41,7 @@ mount_kernelfs()
 
     cmd_run mount -o nodev,noexec,nosuid -t sysfs sysfs /sys || {
         log_failure_msg "Could not mount sysfs on /sys"
-        /bin/rescue 1
+        /sbin/boot-failure 1
     }
 
     # take care of mountdevsubfs.sh duties also
@@ -59,7 +59,7 @@ mount_kernelfs()
     fi
     cmd_run mount -o "noexec,nosuid,gid=$TTYGRP,mode=$TTYMODE" -t devpts  devpts $d || {
         log_failure_msg "Could not mount devpts on $d"
-        /bin/rescue 1
+        /sbin/boot-failure 1
     }
 }
 
@@ -110,7 +110,7 @@ for x in $mtds ; do
     if [ -n "$dev" ] ; then
         [ -c $dev ] || {
             log_failure_msg "$dev is not a valid MTD device."
-            /bin/rescue 1
+            /sbin/boot-failure 1
         }
         ln -sf $dev /dev/mtd-$name
     fi
