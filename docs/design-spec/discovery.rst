@@ -85,10 +85,10 @@ The following options are set during the request:
   :widths: 1, 3, 3, 1
   :delim: |
 
-  55 | Parameter Request List | dhcp-parameter-request-list | [#2132]_
-  60 | Vendor Class Identifier | vendor-class-identifier | [#2132]_
-  77 | User Class | user-class | [#2132]_
+  60  | Vendor Class Identifier | vendor-class-identifier | [#2132]_
+  77  | User Class | user-class | [#2132]_
   125 | Vendor-Identifying Vendor-Specific Information | vivso | [#3925]_
+  55  | Parameter Request List | dhcp-parameter-request-list | [#2132]_
 
 Vendor Class Identifier -- Option 60
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -117,6 +117,8 @@ User Class -- Option 77
 The user class option is set to the static string::
 
   onie_dhcp_user_class
+
+.. _dhcp_vivso:
 
 Vendor-Identifying Vendor-Specific Information (VIVSO)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -167,12 +169,186 @@ ONIE requests the following options:
   54 | DHCP Server Identifier | dhcp-server-identifier | dotted quad | [#2132]_ | 10.0.1.2
   66 | TFTP Server Name | tftp-server-name | string | [#2132]_ | behemoth01 (requires DNS)
   67 | TFTP Bootfile Name | bootfile-name or filename | string | [#2132]_ | tftp/installer.sh
-  72 | HTTP Server | www-server | dotted quad | [#2132]_ | 10.0.1.251
+  72 | HTTP Server IP | www-server | dotted quad | [#2132]_ | 10.0.1.251
   114 | Default URL | default-url | string | [#3679]_ | \http://server/path/installer
   150 | TFTP Server IP Address | next-server | dotted quad | [#5859]_ | 10.50.1.200
 
+Exact Installer URLs From DHCPv4
+--------------------------------
+
+The DHCP options discussed previously provide a number of ways to
+express the **exact** URL of the NOS installer.  When interpreting URLs,
+ONIE accepts the following URI schemes:
+
+- \http://server/path/....
+- \https://server/path/....
+- \ftp://server/path/....
+- \tftp://server/path/....
+
+The following options can be used to form an exact URL.
+
+.. csv-table:: Exact DHCP URLs
+  :header: "Option", "Name", "Comments"
+  :widths: 1, 1, 3
+  :delim: |
+
+  125 | VIVSO | "The *installer URL* option (code = 1) specified in the ONIE VIVSO
+  options yields an exact URL.  See the :ref:`dhcp_vivso` section above"
+  114 | Default URL | Intended for http, but other URLs accepted
+  150 + 67 | TFTP Server IP and TFTP Bootfile |  Both options required for an exact URL
+  66 + 67 | TFTP Server Name and TFTP Bootfile |  Both options required for an exact URL.  Requires DNS
+
+Partial Installer URLs
+----------------------
+
+Configuring a DHCP server for exact URLs may be impractical in certain
+situations.
+
+For example consider an enterprise scenario where the corporate IT
+department that controls the DHCP server is separate from the
+application development department trying to prototype new web
+services.  The application department wants to move quickly and
+prototype their new solution as soon as possible.  In this case
+waiting for the IT department to make DHCP server changes takes too
+much time.
+
+To allow for flexibility in the administration of the DHCP server ONIE
+can find an installer using partial DHCP information.  ONIE uses a
+default sequence of URL paths and default file names in conjunction
+with partial DHCP information to find an installer.
+
+The default installer name that ONIE looks for is::
+
+  onie-installer-${onie_machine}-${onie_arch}
+
+For our hypothetical PowerPC machine the default installer name would
+be::
+
+  onie-installer-VENDOR_MACHINE-powerpc
+
+The default methods using partial DHCP information to locate an
+installer are:
+
+.. csv-table:: Partial DHCP URLs
+  :header: "DHCP Options", "Name", "URL"
+  :widths: 1, 1, 3
+  :delim: |
+
+  67 | TFTP Bootfile | Contents of bootfile [#bootfile_url]_
+  72 | HTTP Server IP | \http://$http_server_ip/$onie_default_installer_name
+  66 | TFTP Server IP | \http://$tftp_server_ip/$onie_default_installer_name
+  66 | DHCP Server IP | \http://$dhcp_server_ip/$onie_default_installer_name
+
+TFTP Waterfall
+^^^^^^^^^^^^^^
+
+A classic PXE-like TFTP waterfall is also provided for.  Given a TFTP
+server address ONIE attempts to download the installer using a
+sequence of TFTP paths with decreasing levels of specificity.
+
+The TFTP URL name has this format::
+
+  tftp://$tftp_server_ip/$path_prefix/$onie_default_installer_name
+
+The ``$tftp_server_ip`` comes from DHCP option 66.
+
+The ``$path_prefix`` is determined in the following manner:
+
+- First the path_prefix is built using the Ethernet management
+  interface's MAC address using lower case hexadecimal with a dash
+  separator. For example with address ``55:66:AA:BB:CC:DD`` the
+  path_prefix would be ``55-66-aa-bb-cc-dd``.
+
+- Next, the path_prefix is built using the Ethernet management
+  interface's IP address in upper case hexadecimal,
+  e.g. ``192.168.1.178 -> C0A801B2``.  If the installer is not found
+  at that location remove the least significant hex digit and try
+  again.
+
+- Ultimately try without a path_prefix, i.e. look at the root of the
+  TFTP server.
+
+Here is a complete list of the bootfile paths attempted using the
+example MAC address, IP address and the ficticious PowerPC platform::
+
+  55-66-aa-bb-cc-dd/$onie_default_installer_name
+  C0A801B2/$onie_default_installer_name
+  C0A801B/$onie_default_installer_name
+  C0A801/$onie_default_installer_name
+  C0A80/$onie_default_installer_name
+  C0A8/$onie_default_installer_name
+  C0A/$onie_default_installer_name
+  C0/$onie_default_installer_name
+  C/$onie_default_installer_name
+  $onie_default_installer_name
+
+HTTP IPv6 Neighbors
+^^^^^^^^^^^^^^^^^^^
+
+ONIE also queries it is IPv6 link-local neighbors via HTTP for an
+installer.  The general algorithm follows:
+
+#. ping6 the "all nodes" link local IPv6 multicast address, ``ff02::1``.
+#. for each responding neighbor try to download the
+   $onie_default_installer_name from the root of the web server.
+
+Here is an example the URLs used by this method::
+
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE-powerpc
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-VENDOR_MACHINE-powerpc
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-VENDOR_MACHINE-powerpc
+  http://fe80::4638:39ff:fe00:1c0%eth0/onie-installer-VENDOR_MACHINE-powerpc
+
+This makes it very simple to walk up to a switch and directly connect
+a laptop to the Ethernet management port and install from a local
+HTTP server.
+
 Execution Environment
 =====================
+
+After ONIE locates and downloads an installer the next step is to run
+the installer.
+
+Prior to execution ONIE prepares an execution environment:
+
+- chmod +x on the downloaded installer
+- export a number of environment variables, usable by the installer
+- run the installer
+
+ONIE exports the following environment variables:
+
+.. csv-table:: Installer Core Environment Variables
+  :header: "Variable Name", "Meaning"
+  :widths: 1, 1
+  :delim: |
+
+  onie_exec_url | Currently executing URL
+  onie_platform | Vendor and Machine name
+  onie_vendor_id | 32-bit IANA Private Enterprise Number in decimal
+  onie_serial_num | Device serial number
+  onie_eth_addr | MAC address for Ethernet management port
+
+In addition, any and all DHCP response options are exported, in the
+style of busybox's udhcpc.  A sample of those variables follows:
+
+.. csv-table:: Installer DHCP Environment Variables
+  :header: "Variable Name", "Meaning"
+  :widths: 1, 1
+  :delim: |
+
+  onie_disco_dns | DNS Server
+  onie_disco_domain | Domain name fro DNS
+  onie_disco_hostname | Switch hostname
+  onie_disco_interface | Ethernet management interface, e.g. eth0
+  onie_disco_ip | Ethernet management IP address
+  onie_disco_router | Gateway
+  onie_disco_serverid | DHCP server IP
+  onie_disco_siaddr | TFTP server IP
+  onie_disco_subnet | IP netmask
+  onie_disco_vivso | VIVSO option data
+
+ONIE makes no assumptions about what the installer will do, save one:
+if the installer runs successfully it will reboot the system.
 
 .. rubric:: Footnotes
 
@@ -180,3 +356,8 @@ Execution Environment
 .. [#3925] `RFC 3925 <http://www.ietf.org/rfc/rfc3925.txt>`_
 .. [#3679] `RFC 3679 <http://www.ietf.org/rfc/rfc3679.txt>`_
 .. [#5859] `RFC 5859 <http://www.ietf.org/rfc/rfc5859.txt>`_
+
+.. [#bootfile_url] Try to intrepret the bootfile as a URL.  This is a
+                   small abuse of the TFTP bootfile option, which has
+                   a precedent in other loading schemes such as `iPXE
+                   <http://ipxe.org/howto/dhcpd>`_.
