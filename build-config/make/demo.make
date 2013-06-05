@@ -38,7 +38,6 @@ endif
 DEMO_TRIM = \
    etc/rc3.d/S50discover.sh	\
    etc/init.d/discover.sh	\
-   bin/rescue			\
    bin/discover			\
    bin/uninstaller		\
    scripts/udhcp4_sd		
