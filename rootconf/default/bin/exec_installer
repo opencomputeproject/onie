@@ -13,7 +13,7 @@ run_installer()
     export onie_exec_url="$1"
     # escape any % characters for printing with printf
     print_exec_url=$(echo -n $onie_exec_url | sed -e 's/%/%%/g')
-    log_info_msg "Executing installer: $print_exec_url"
+    log_console_msg "Executing installer: $print_exec_url"
     if [ "$onie_boot_reason" = "update" ] ; then
         grep -q ONIE-UPDATER-COOKIE $onie_installer || {
             log_failure_msg "ONIE Updater:  Invalid ONIE update image format."
@@ -22,7 +22,8 @@ run_installer()
     fi
 
     chmod +x $onie_installer
-    { $onie_installer; echo "$?" > /var/run/install.rc; } 2>&1 | tee $tee_log_file | logger $log_stderr -t os-install -p ${syslog_onie}.info
+    # Send installer execution output to the console
+    { $onie_installer; echo "$?" > /var/run/install.rc; } 2>&1 | tee /dev/console | logger $log_stderr -t os-install -p ${syslog_onie}.info
     [ "$(cat /var/run/install.rc)" = "0" ] && reboot && return 0
 
     # installer should not return
@@ -35,14 +36,12 @@ wget_run()
     type=$1
     URL="$2"
 
-    wget_args="-T 2 -O $onie_installer"
-    if [ -n "$onie_quiet" ] || [ -z "$onie_verbose" ] ; then
-        wget_args="$wget_args -q"
-    fi
+    wget_args="-T 3 -O $onie_installer"
 
     if [ "$onie_verbose" = "y" ]; then
         out_file="/proc/$$/fd/1"
     else
+        wget_args="$wget_args -q"
         out_file="/dev/null"
     fi
 
@@ -60,7 +59,7 @@ wget_run()
     header_security_key="ONIE-SECURITY-KEY: $onie_sec_key"
     header_operation="ONIE-OPERATION: $onie_operation"
 
-    log_debug "Running wget with: $user_agent $wget_args $URL\n"
+    log_debug_msg "Running wget with: $user_agent $wget_args $URL\n"
     echo "Info: Fetching $URL ..."
     wget "$user_agent" $wget_args       \
         --header "$header_serial_num"   \
@@ -82,7 +81,7 @@ tftp_run()
     BOOTFILE=$2
 
     URL="tftp://$SERVER/$BOOTFILE"
-    log_debug "Running tftp get with: server: $SERVER, bootfile: $BOOTFILE"
+    log_debug_msg "Running tftp get with: server: $SERVER, bootfile: $BOOTFILE"
     log_info_msg "Fetching $URL ..."
     if [ "$onie_verbose" = "y" ]; then
         tftp -g -l $onie_installer -r $BOOTFILE $SERVER && run_installer "$URL" && return 0
@@ -244,7 +243,15 @@ local_fs_run()
 ## Script starts here
 ##
 
-import_parms "$1"
+parm_file="$1"
+[ -r $parm_file ] || {
+    log_failure_msg "Unable to read parameter file: $parm_file"
+    log_console_msg "FATAL: Unable to read parameter file: $parm_file"
+    exit 1
+}
+parms="$(cat $parm_file)"
+
+import_parms "$parms"
 rm -f $onie_installer
 
 # Try static installer URL from CLI

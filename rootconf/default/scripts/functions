@@ -26,6 +26,11 @@ _log_msg()
 	printf "$@" | tee $tee_log_file | logger -t $syslog_tag -p ${syslog_onie}.info
 }
 
+_log_console_msg()
+{
+	printf "$@" | tee /dev/console | logger -t $syslog_tag -p ${syslog_onie}.info
+}
+
 _log_info_msg()
 {
 	printf "$@" | tee $tee_log_file | logger -t $syslog_tag -p ${syslog_onie}.info
@@ -41,7 +46,7 @@ _log_err_msg()
 	printf "$@" | tee $tee_log_file | logger -t ${syslog_tag}-error -p ${syslog_onie}.err
 }
 
-log_debug()
+log_debug_msg()
 {
 	if [ "$onie_verbose" = "y" ]; then 
 	    printf "$@" | tee $tee_log_file | logger -t ${syslog_tag}-debug -p ${syslog_onie}.debug
@@ -51,6 +56,11 @@ log_debug()
 log_success_msg()
 {
 	_log_info_msg "Success: $@\n"
+}
+
+log_console_msg()
+{
+	_log_console_msg "ONIE: $@\n"
 }
 
 log_info_msg()
@@ -92,7 +102,6 @@ EOF
     )
 
     ONIE_OPTIONAL_ARGS=$(cat <<EOF
-quiet
 verbose
 boot_reason
 testing
@@ -103,11 +112,6 @@ dhcp
 EOF
     )
 
-    for p in $ONIE_REQUIRED_ARGS $ONIE_OPTIONAL_ARGS ; do
-        unset $p
-        eval export onie_$p=
-    done
-
     # Parse kernel command line options
     for x in $(cat /proc/cmdline); do
         parm=${x%%=*}
@@ -115,56 +119,60 @@ EOF
         case $parm in
             # onie required args
 	    serial_num)
-		onie_serial_num="$val"
+		true ${onie_serial_num="$val"}
 		;;
 	    eth_addr|eth_addr0)
-		onie_eth_addr="$val"
+		true ${onie_eth_addr="$val"}
 		;;
 	    vendor_id)
-		onie_vendor_id="$val"
+		true ${onie_vendor_id="$val"}
 		;;
 	    platform)
-		onie_platform="$val"
+		true ${onie_platform="$val"}
 		;;
 	    fw_env)
-		onie_fw_env="$val"
+		true ${onie_fw_env="$val"}
 		;;
 	    sec_key)
-		onie_sec_key="$val"
+		true ${onie_sec_key="$val"}
 		;;
 
             # onie optional args
             ip)
-		onie_ip="$val"
+		true ${onie_ip="$val"}
                 ;;
             serverip)
-		onie_serverip="$val"
+		true ${onie_serverip="$val"}
                 ;;
             bootfile)
-		onie_bootfile="$val"
+		true ${onie_bootfile="$val"}
                 ;;
             dhcp)
-		onie_dhcp="$val"
+		true ${onie_dhcp="$val"}
                 ;;
 	    init)
-		onie_init="$val"
-		;;
-	    quiet)
-		onie_quiet=y
+		true ${onie_init="$val"}
 		;;
 	    verbose)
-		onie_verbose=y
+		true ${onie_verbose=y}
 		;;
             boot_reason)
-		onie_boot_reason="$val"
+		true ${onie_boot_reason="$val"}
                 ;;
             install_url)
-		onie_install_url="$val"
+		true ${onie_install_url="$val"}
                 ;;
 	    testing)
-		onie_testing=y
+		true ${onie_testing=y}
 		;;
 	esac
+    done
+
+    # default to install mode if none specified
+    true ${onie_boot_reason="install"}
+
+    for p in $ONIE_REQUIRED_ARGS $ONIE_OPTIONAL_ARGS ; do
+        eval export onie_$p
     done
 
 }

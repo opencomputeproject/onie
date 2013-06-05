@@ -12,41 +12,37 @@ daemon="discover"
 
 do_start() {
 
-    # Check for any one time boot commands
-    if [ -n "$onie_boot_reason" ] ; then
+    # Check for one time boot commands.  Delete the one time env
+    # variable.
+    fw_setenv -f onie_boot_reason > /dev/null 2>&1
 
-        # delete one time env variable
-        fw_setenv -f onie_boot_reason > /dev/null 2>&1
-
-        # Further parse boot_reason
-        case "$onie_boot_reason" in
-            rescue)
-                echo "$daemon: Rescue mode detected.  Installer disabled." > /dev/console
-                echo "** Rescue Mode Enabled **" >> /etc/issue
-                exit 0
-                ;;
-            uninstall)
-                echo "$daemon: Uninstall mode detected.  Running uninstaller." > /dev/console
-                echo "** Uninstall Mode Enabled **" >> /etc/issue
-                /bin/uninstaller
-                exit 0
-                ;;
-            update)
-                # pass through to discover
-                echo "$daemon: ONIE update mode detected.  Running updater." > /dev/console
-                echo "** ONIE Update Mode Enabled **" >> /etc/issue
-                ;;
-            install)
-                # pass through to discover
-                echo "$daemon: installer mode detected.  Running installer." > /dev/console
-                echo "** Installer Mode Enabled **" >> /etc/issue
-                ;;
-            *)
-                log_failure_msg "$daemon: Unknown reboot command: $onie_boot_reason"
-                reboot
-        esac
-
-    fi
+    # parse boot_reason
+    case "$onie_boot_reason" in
+        rescue)
+            echo "$daemon: Rescue mode detected.  Installer disabled." > /dev/console
+            echo "** Rescue Mode Enabled **" >> /etc/issue
+            exit 0
+            ;;
+        uninstall)
+            echo "$daemon: Uninstall mode detected.  Running uninstaller." > /dev/console
+            echo "** Uninstall Mode Enabled **" >> /etc/issue
+            /bin/uninstaller
+            exit 0
+            ;;
+        update)
+            # pass through to discover
+            echo "$daemon: ONIE update mode detected.  Running updater." > /dev/console
+            echo "** ONIE Update Mode Enabled **" >> /etc/issue
+            ;;
+        install)
+            # pass through to discover
+            echo "$daemon: installer mode detected.  Running installer." > /dev/console
+            echo "** Installer Mode Enabled **" >> /etc/issue
+            ;;
+        *)
+            log_failure_msg "$daemon: Unknown reboot command: $onie_boot_reason"
+            exit 1
+    esac
 
     log_begin_msg "Starting: $daemon"
     start-stop-daemon -S -b -m -p /var/run/${daemon}.pid -x $daemon
