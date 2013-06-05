@@ -169,7 +169,7 @@ MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter help clean-all dist doc% %html %pdf, $(MAKECMDGOALS)))
+  ifeq (,$(filter help clean-all dist %build-host doc% %html %pdf, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINE)' in $(MACHINEROOT))
       $(warning You must set the MACHINE= variable when invoking make.)
@@ -277,5 +277,11 @@ dist: html pdf
 	$(Q) cp -a $(DOCBUILDDIR)/{html,pdf} $(DIST_DOCS_DIR)
 	$(Q) echo "=== Finished making distribution $(DIST_CORE_TARBALL)"
 
-.PHONY: $(PHONY)
+# Install required build packages for a debian based build host
+DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf
+PHONY += debian-prepare-build-host
+debian-prepare-build-host:
+	$(Q) sudo apt-get update
+	$(Q) sudo apt-get install $(DEBIAN_BUILD_HOST_PACKAGES)
 
+.PHONY: $(PHONY)

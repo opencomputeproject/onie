@@ -21,24 +21,69 @@ untar it in the $ONIE_ROOT directory.  For example::
 See the README file in ``machine/<platform>`` for additional information
 about a particular platform.
 
-Cross-Compiling ONIE
---------------------
+Preparing a New Build Machine
+-----------------------------
 
+To prepare a new build machine for compiling ONIE first install a
+number of standard development packages.
+
+For a `Debian <http://www.debian.org/>`_ based system a Makefile
+target exists that installs the required packages on your build
+machine.  This target requires the use of sudo(8)1, since package
+installation requires root privileges::
+
+  $ cd build-config
+  $ sudo apt-get update
+  $ sudo apt-get install build-essential
+  $ make debian-prepare-build-host
+
+For a different Linux distribution look at the Makefile and the
+``$(DEBIAN_BUILD_HOST_PACKAGES)`` variable.  Then install packages for
+your distribution that provide the same tools.
+
+Optional: Install the ELDK version 5.3
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Compiling ONIE requires a cross-compiling toolchain.
 
-Compiling ONIE has been qualified using ELDK version 5.3, installed
-into /opt/eldk-5.3 on the build host.
+Compiling ONIE has been qualified using the `ELDK 5.3
+<http://www.denx.de/wiki/ELDK-5>`_ ``powerpc-softfloat`` toolchain,
+installed into /opt/eldk-5.3 on the build host.
+
+If you want to use a different toolchain then skip this section.
+
+Frist read the `ELDK download
+<http://www.denx.de/wiki/view/ELDK-5/WebHome#Section_1.6.>`_
+instructions all the way through to understand the procedure.
+
+Next download the following files, maintaining the directory
+structure::
+
+  $ mkdir eldk-download
+  $ cd eldk-download
+  $ mkdir -p targets/powerpc-softfloat
+  $ wget ftp://ftp.denx.de/pub/eldk/5.3/install.sh
+  $ cd targets/powerpc-softfloat
+  $ wget ftp://ftp.denx.de/pub/eldk/5.3/targets/powerpc-softfloat/target.conf
+  $ wget ftp://ftp.denx.de/pub/eldk/5.3/targets/powerpc-softfloat/eldk-eglibc-i686-powerpc-toolchain-gmae-5.3.sh
+
+Finally install the toolchain into /opt/eldk-5.3.  This requires sudo
+root privileges::
+
+  $ cd eldk-download
+  $ ./install.sh -s gmae -r - powerpc-softfloat
+
+Cross-Compiling ONIE
+--------------------
 
 The primary Makefile, ``build-config/Makefile``, defaults to using the
-ELDK-v5.3 ppce500v2-linux-gnuspe toolchain.  To use a different
-toolchain change the following variables in ``build-config/Makefile``::
+`ELDK 5.3 <http://www.denx.de/wiki/ELDK-5>`_ ``powerpc-softfloat``
+toolchain.  To use a different toolchain change the following
+variables in ``build-config/Makefile``::
 
   ARCH        ?= powerpc
-  TARGET      ?= $(ARCH)-linux-gnuspe
-  CROSSBIN    ?= /opt/eldk-5.3/powerpc-e500v2/sysroots/i686-eldk-linux/usr/bin/ppce500v2-linux-gnuspe
-
-Change directories to ``build-config`` to compile ONIE.
+  TARGET      ?= $(ARCH)-linux
+  CROSSBIN    ?= /opt/eldk-5.3/powerpc-softfloat/sysroots/i686-eldk-linux/usr/bin/powerpc-nf-linux
 
 To compile ONIE first change directories to ``build-config`` and then
 type ``"make MACHINE=<platform> all"``, specifying the target machine.
@@ -73,6 +118,7 @@ The ONIE source code is laid out as follows::
   │   └── scripts
   ├── demo
   ├── docs
+  ├── installer
   ├── machine
   ├── patches
   │   ├── busybox
@@ -85,18 +131,19 @@ The ONIE source code is laid out as follows::
 ====================  =======
 Directory             Purpose
 ====================  =======
-build/images          The final binary images are placed here.
-build-config          Builds are launched from this directory.  The main Makefile is here.
-build-config/conf     Contains configuration common to all platforms.
-build-config/make     Contains makefile fragments included by the main Makefile.
-build-config/scripts  Scripts used by the build process.
-demo                  A sample ONIE compliant installer and OS.  See README.demo for details.
-docs                  What you are reading now.
-machine               Contains platform specific machine definition files.  More on that below.
-patches               Patch sets applied to upstream projects, common to all platforms.
+build/images          The final binary images are placed here
+build-config          Builds are launched from this directory.  The main Makefile is here
+build-config/conf     Contains configuration common to all platforms
+build-config/make     Contains makefile fragments included by the main Makefile
+build-config/scripts  Scripts used by the build process
+demo                  A sample ONIE compliant installer and OS.  See README.demo for details
+docs                  What you are reading now
+installer             Files for building an ONIE update installer
+machine               Contains platform specific machine definition files.  More on that below
+patches               Patch sets applied to upstream projects, common to all platforms
 rootconf              Files copied into the final sysroot image. The main ONIE discovery
-                      and execution application lives here.  More on that below.
-upstream              Local cache of upstream project tarballs.
+                      and execution application lives here.  More on that below
+upstream              Local cache of upstream project tarballs
 ====================  =======
 
 
@@ -107,6 +154,8 @@ The layout of the ``machine`` directory follows::
 
   onie/machine
   └── <platform>
+      ├── demo
+      │   └── platform.conf
       ├── INSTALL
       ├── kernel
       │   ├── config
@@ -120,6 +169,7 @@ The layout of the ``machine`` directory follows::
 ================================   =======
 File                               Purpose
 ================================   =======
+demo/platform.conf                 Platform specific codes for creating the demo OS
 INSTALL                            Platform specific ONIE installation instructions
 kernel/config                      Additional kernel config appended to the core kernel config
 kernel/platform-<platform>.patch   Kernel platform specific patch(es)
@@ -140,7 +190,10 @@ The layout of the ``rootconf`` directory follows::
       ├── bin
       │   ├── discover
       │   ├── exec_installer
-      │   └── uninstaller
+      │   ├── install_url
+      │   ├── support
+      │   ├── uninstaller
+      │   └── update_url
       ├── etc
       │   ├── rcS.d
       │   │   ├── S01makedev.sh -> ../init.d/makedev.sh
@@ -157,15 +210,18 @@ verbatim during the build process.
 ==========================  =======
 File                        Purpose
 ==========================  =======
-bin/discover                Image discovery script.  Feeds into exec_installer.
-bin/exec_installer          Downloads and executes an installer image.
-bin/uninstaller             Executed during uninstall operations.
-etc/rcS.d/S01makedev.sh     Creates usual Linux kernel devices and filesystems.
-etc/rcS.d/S05networking.sh  Brings up Ethernet management interface.
-etc/rcS.d/S20syslogd.sh     Starts the syslogd service.
-etc/rc3.d/S10telnetd.sh     Starts the telnet service.
-etc/rc3.d/S50discover.sh    Starts the ONIE discovery service.
-scripts                     General helper scripts, sourced by other scripts.
+bin/discover                Image discovery script.  Feeds into exec_installer
+bin/exec_installer          Downloads and executes an installer image
+bin/install_url             CLI for explicity specifying a NOS URL to install
+bin/support                 CLI that generates a tarball of useful system information
+bin/uninstaller             Executed during uninstall operations
+bin/update_url              CLI for explicity specifying an ONIE update URL to install
+etc/rcS.d/S01makedev.sh     Creates usual Linux kernel devices and filesystems
+etc/rcS.d/S05networking.sh  Brings up Ethernet management interface
+etc/rcS.d/S20syslogd.sh     Starts the syslogd service
+etc/rc3.d/S10telnetd.sh     Starts the telnet service
+etc/rc3.d/S50discover.sh    Starts the ONIE discovery service
+scripts                     General helper scripts, sourced by other scripts
 ==========================  =======
 
 ONIE Demo Installer and Operating System
