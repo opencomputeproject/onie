@@ -82,8 +82,12 @@ ifeq ($(LSB_RELEASE_TAG),)
     LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(RELEASE)
   else
     GIT_HEAD = $(shell git show --abbrev-commit HEAD | sed -ne "/^commit [0-9a-f]*/s/^commit //p")
-    BUILD_DATE = $(shell date +%Y%m%d)
+    BUILD_DATE = $(shell date +%Y%m%d%H%M)
     LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(BUILD_DATE)-$(RELEASE)
+  endif
+  DIRTY  = $(shell git status | egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo dirty)
+  ifneq ($(DIRTY),)
+    LSB_RELEASE_TAG := $(LSB_RELEASE_TAG)-$(DIRTY)
   endif
 endif
 
