@@ -76,12 +76,12 @@ RELEASE_VERSION = $(shell cat $(VERSION_FILE) | grep VERSION | sed -e 's/.*=//')
 RELEASE ?= "NB"
 LSB_RELEASE_TAG	?= $(shell [ -r ./conf/lsb-release ] && cat ./conf/lsb-release)
 ifeq ($(LSB_RELEASE_TAG),)
+  GIT_HEAD = $(shell git show --abbrev-commit HEAD | sed -ne "/^commit [0-9a-f]*/s/^commit //p")
   ifeq (1, $(RELEASE))
     LSB_RELEASE_TAG = $(RELEASE_VERSION)
-  else ifeq ($(findstring RC,$(RELEASE)),RC)
-    LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(RELEASE)
+  else ifneq ($(RELEASE),NB)
+    LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(RELEASE)
   else
-    GIT_HEAD = $(shell git show --abbrev-commit HEAD | sed -ne "/^commit [0-9a-f]*/s/^commit //p")
     BUILD_DATE = $(shell date +%Y%m%d%H%M)
     LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(BUILD_DATE)-$(RELEASE)
   endif
@@ -265,8 +265,12 @@ DIST_CORE_DIRS = 	\
 	rootconf 	\
 	upstream
 
-dist: html pdf
-	$(Q) echo "=== Making source distriution ==="
+source_is_clean:
+	$(Q) [ "$(RELEASE)" != "NB" ] || ( echo "Error: Lame distribution RELEASE tag: $(RELEASE)" && false )
+	$(Q) [ "$(DIRTY)" = "" ] || ( echo "Error: Dirty Source -- uncommited files" && git status && false )
+
+dist: source_is_clean html pdf
+	$(Q) echo "=== Making $(LSB_RELEASE_TAG) source distriution ==="
 	$(Q) rm -rf $(DIST_DIR)
 	$(Q) mkdir -p $(DIST_DIR) $(DIST_MACHINE_DIR) $(DIST_CORE_STAGE_DIR) $(DIST_DOCS_DIR)
 	$(Q) cd $(PROJECTDIR); cp -a $(DIST_CORE_DIRS) $(DIST_CORE_STAGE_DIR)
