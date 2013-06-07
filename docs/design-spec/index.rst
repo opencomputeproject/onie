@@ -11,5 +11,5 @@ Design Specification
    boot_loader
    kernel
    discovery
-   installer
+   nos_interface
    updater

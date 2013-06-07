@@ -29,7 +29,7 @@ number of standard development packages.
 
 For a `Debian <http://www.debian.org/>`_ based system a Makefile
 target exists that installs the required packages on your build
-machine.  This target requires the use of sudo(8)1, since package
+machine.  This target requires the use of sudo(8), since package
 installation requires root privileges::
 
   $ cd build-config
@@ -63,6 +63,7 @@ structure::
   $ cd eldk-download
   $ mkdir -p targets/powerpc-softfloat
   $ wget ftp://ftp.denx.de/pub/eldk/5.3/install.sh
+  $ chmod +x ./install.sh
   $ cd targets/powerpc-softfloat
   $ wget ftp://ftp.denx.de/pub/eldk/5.3/targets/powerpc-softfloat/target.conf
   $ wget ftp://ftp.denx.de/pub/eldk/5.3/targets/powerpc-softfloat/eldk-eglibc-i686-powerpc-toolchain-gmae-5.3.sh

@@ -1,3 +1,5 @@
+.. _updating_onie:
+
 *************
 Updating ONIE
 *************

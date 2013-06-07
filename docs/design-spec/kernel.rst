@@ -220,7 +220,8 @@ installation environment.
 
 * kernel features
 
-  * Kexec – allows an installer to kexec into their own kernel
+  * Kexec – allows an installer to `kexec(8)
+    <http://linux.die.net/man/8/kexec>`_ into their own kernel
 
 * networking
 

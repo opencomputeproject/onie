@@ -9,8 +9,9 @@ FAQ
 What is ONIE?
 =============
 
-ONIE is a small operating system for bare metal network switches that
-provides an environment for automated provisioning.
+ONIE is a small operating system, pre-installed as firmware on bare
+metal network switchs, that provides an environment for automated
+provisioning.
 
 TODO
 ====

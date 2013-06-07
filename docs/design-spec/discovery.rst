@@ -347,8 +347,7 @@ style of busybox's udhcpc.  A sample of those variables follows:
   onie_disco_subnet | IP netmask
   onie_disco_vivso | VIVSO option data
 
-ONIE makes no assumptions about what the installer will do, save one:
-if the installer runs successfully it will reboot the system.
+See the :ref:`nos_interface` section for more about the NOS installer.
 
 .. rubric:: Footnotes
 

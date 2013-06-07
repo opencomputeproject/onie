@@ -257,6 +257,8 @@ comes as no surprise ONIE relies on U-Boot's NOR flash I/O.
 Much more interesting is the use of U-Boot environment variables in an
 ONIE enabled system.
 
+.. _platform_ind_vars:
+
 Platform Independent Environment Variables
 ------------------------------------------
 
@@ -302,10 +304,12 @@ ONIE defines and uses the following U-Boot variables:
   See ``check_boot_reason above``. The current reboot commands understood
   by ONIE are:
 
-    #. rescue – boot ONIE in rescue mode for debug purposes
+    #. install – boot ONIE and rerun the ODE application.
     #. uninstall – boot ONIE in uninstall mode, which erases
        everything from the system, except U-Boot and ONIE.
-    #. install – boot ONIE and rerun the ODE application.
+    #. rescue – boot ONIE in rescue mode for debug purposes
+    #. update – boot ONIE in ONIE update mode, which looks for and
+       installs a new version of ONIE.
   "
 
   ``nos_bootcmd`` % [Not Set]% "This is the variable a NOS vendor sets
@@ -348,3 +352,4 @@ ONIE defines and uses the following U-Boot variables:
 
 .. [#powerpc] `QorIQ PowerPC <http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME>`_
 .. [#uboot]   `U-Boot <http://www.denx.de/wiki/U-Boot>`_
+ 
