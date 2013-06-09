@@ -1,0 +1,160 @@
+platform fsl p2020rdb-pca patch
+
+Add ONIE support for the Freescale P2020RDB-PCA platform.
+
+diff --git a/board/freescale/p1_p2_rdb_pc/p1_p2_rdb_pc.c b/board/freescale/p1_p2_rdb_pc/p1_p2_rdb_pc.c
+index 5b5b86c..222fd1c 100644
+--- a/board/freescale/p1_p2_rdb_pc/p1_p2_rdb_pc.c
++++ b/board/freescale/p1_p2_rdb_pc/p1_p2_rdb_pc.c
+@@ -444,3 +444,69 @@ void ft_board_setup(void *blob, bd_t *bd)
+ #endif
+ }
+ #endif
++
++#ifdef CONFIG_ONIE
++
++/*
++ * mac_read_from_eeprom - read the MAC addresses from EEPROM
++ *
++ * This function reads the MAC addresses from EEPROM and sets the
++ * appropriate environment variables for each one read.
++ *
++ * The environment variables are only set if they haven't been set already.
++ * This ensures that any user-saved variables are never overwritten.
++ *
++ * This function is called after relocation.
++ */
++int mac_read_from_eeprom(void)
++{
++
++	/*
++	 * Normally you would find the MAC address a in board
++	 * information block read from an EEPROM or the NOR flash.
++	 *
++	 * However, this board does not have one, so we return a fake
++	 * ethaddr# here.
++	 *
++	 */
++
++	if (!getenv("ethaddr"))
++		setenv("ethaddr", "00:04:9f:02:80:a4");
++
++	printf("MAC addr: %s\n", getenv("ethaddr"));
++
++	return 0;
++}
++
++/*
++ * populate_serial_number - read the board serial number from EEPROM
++ *
++ * This function reads the serial number from the EEPROM and sets the
++ * "serail#" environment variable.
++ *
++ * The environment variable is only set if it has not been set
++ * already.  This ensures that any user-saved variables are never
++ * overwritten.
++ *
++ * This function is called after relocation.
++ *
++ */
++int populate_serial_number(void)
++{
++	/* Do not overwrite an existing serial# */
++	if (getenv("serial#"))
++		return 0;
++
++	/*
++	 * Normally you would find the serial number in a board
++	 * information block read from an EEPROM or the NOR flash.
++	 *
++	 * However, this board does not have one, so we return a fake
++	 * serial# here.
++	 */
++
++	setenv("serial#", "fake-serial-0123456789");
++
++	return 0;
++}
++#endif
+diff --git a/boards.cfg b/boards.cfg
+index e4b0d44..c6b2e5a 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -822,6 +822,7 @@ P2020RDB_36BIT_SDCARD        powerpc     mpc85xx     p1_p2_rdb           freesca
+ P2020RDB_36BIT_SPIFLASH      powerpc     mpc85xx     p1_p2_rdb           freescale      -           P1_P2_RDB:P2020RDB,36BIT,SPIFLASH
+ P2020RDB_NAND                powerpc     mpc85xx     p1_p2_rdb           freescale      -           P1_P2_RDB:P2020RDB,NAND
+ P2020RDB-PC                  powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB
++P2020RDB-PC_ONIE             powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,ONIE
+ P2020RDB-PC_36BIT            powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT
+ P2020RDB-PC_36BIT_NAND       powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT,NAND
+ P2020RDB-PC_36BIT_SDCARD     powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT,SDCARD
+diff --git a/include/configs/p1_p2_rdb_pc.h b/include/configs/p1_p2_rdb_pc.h
+index 964bfcd..01a4bb7 100644
+--- a/include/configs/p1_p2_rdb_pc.h
++++ b/include/configs/p1_p2_rdb_pc.h
+@@ -949,4 +949,65 @@ __stringify(__PCIE_RST_CMD)"\0"
+ 
+ #define CONFIG_BOOTCOMMAND	CONFIG_HDBOOT
+ 
++#ifdef CONFIG_ONIE
++
++/*
++ * Define CONFIG_SYS_I2C_MAC_OFFSET -- this enables the infrastructure
++ * to call our mac_read_from_eeprom() to set $ethaddr at boot time.
++ * See arch/powerpc/lib/board.c.
++ */
++#define CONFIG_SYS_I2C_MAC_OFFSET
++
++/*
++ * We will use TSEC3 as the primary interface.
++ */
++
++#undef CONFIG_TSEC1
++#undef CONFIG_TSEC2
++#undef CONFIG_TSEC3_NAME
++#define	CONFIG_TSEC3_NAME	"eth0"
++
++#undef CONFIG_ETHPRIME
++#define CONFIG_ETHPRIME		"eth0"
++
++#undef CONFIG_HAS_ETH1
++#undef CONFIG_HAS_ETH2
++
++/* Undefine a few things provided by common_config.h */
++#undef CONFIG_BOOTCOMMAND
++#undef CONFIG_SYS_PBSIZE
++#undef CONFIG_DOS_PARTITION
++#undef CONFIG_LOADS_ECHO
++#undef CONFIG_SYS_LOADS_BAUD_CHANGE
++#undef CONFIG_SYS_PCIE1_NAME
++#undef CONFIG_SYS_PCIE2_NAME
++#undef CONFIG_OF_LIBFDT
++#undef CONFIG_OF_BOARD_SETUP
++#undef CONFIG_OF_STDOUT_VIA_ALIAS
++#undef CONFIG_FIT
++#undef CONFIG_SYS_BAUDRATE_TABLE
++#undef CONFIG_EXTRA_ENV_SETTINGS
++
++#include "configs/common_config.h"
++
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS0\0"	\
++	"onie_start=0xefb60000\0"	\
++	"onie_sz.b=0x00400000\0" \
++	"vscfw_addr=ef000000\0"  \
++	"hwconfig=usb1:dr_mode=host,phy_type=ulpi\0"
++
++#define	CONFIG_EXTRA_ENV_SETTINGS		\
++	CONFIG_PLATFORM_ENV			\
++	CONFIG_ONIE_COMMON_UBOOT_ENV(33118,	\
++				    fsl_p2020rdbpca \
++		)
++
++#endif /* CONFIG_ONIE */
++
+ #endif /* __CONFIG_H */
