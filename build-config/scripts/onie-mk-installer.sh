@@ -22,7 +22,7 @@ output_file=$6
     exit 1
 }
 
-conf_file="$conf_dir/onie-${machine}-rom.conf"
+conf_file="$conf_dir/onie-rom.conf"
 [ -r "$conf_file" ] || {
     echo "ERROR: unable to read machine ROM configuration '$conf_file'."
     exit 1
