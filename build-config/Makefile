@@ -180,6 +180,7 @@ ifneq (,$(MAKECMDGOALS))
       $(warning You can also set the machine root directory with MACHINEROOT= .)
       $(error Unable to find valid machine configuration directory.)
     endif
+    include $(MACHINEDIR)/machine.make
   endif
 endif
 

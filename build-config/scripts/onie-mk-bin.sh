@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 #
 # Script to create the raw ONIE binaries, suitable for flashing
 # directly from u-boot.
@@ -40,14 +42,18 @@ UBOOT_BIN="$image_dir/${machine}.u-boot"
 }
 
 # Rummage u-boot directory for onie environment variables
-MACHINE="$(echo $machine | tr a-z A-Z)"
-MACHINE_CONFIG="$uboot_src/include/configs/${MACHINE}.h"
+true ${uboot_machine="$machine"}
+MACHINE_CONFIG="$uboot_src/include/configs/${uboot_machine}.h"
 [ -r "$MACHINE_CONFIG" ] || {
     echo "ERROR: u-boot config file '$MACHINE_CONFIG' does not exist."
     exit 1
 }
 
-env_sector_size=$(grep CONFIG_ENV_SECT_SIZE $MACHINE_CONFIG | awk '{print $3}')
+if [ -z "$env_sector_size" ] ; then
+    # try to figure it out from the $MACHINE_CONIFG
+    env_sector_size=$(grep CONFIG_ENV_SECT_SIZE $MACHINE_CONFIG | awk '{print $3}')
+fi
+
 env_sector_size=$(( $env_sector_size + 0 ))
 if [ "$env_sector_size" = "" ] || [ "$env_sector_size" = "0" ] ; then
     echo "ERROR: Unable to find #define CONFIG_ENV_SECT_SIZE in $MACHINE_CONFIG."

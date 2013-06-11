@@ -24,9 +24,7 @@ UBOOT_STAMP		= $(UBOOT_SOURCE_STAMP) \
 
 UBOOT			= $(UBOOT_INSTALL_STAMP)
 
-# Machine variables are lower case, but u-boot likes everything upper case
-UBOOT_MACHINE_UC	= $(shell echo $(MACHINE) | tr '[:lower:]' '[:upper:]')
-UBOOT_BIN		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE_UC)/u-boot.bin
+UBOOT_BIN		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.bin
 UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE).u-boot
 
 PHONY += u-boot u-boot-source u-boot-patch u-boot-build \
