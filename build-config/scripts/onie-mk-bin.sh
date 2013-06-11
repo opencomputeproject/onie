@@ -13,7 +13,6 @@ conf_dir=$3
 uboot_src=$4
 output_bin=$5
 
-env_sector_size=no
 onie_uimage_size=no
 contiguous=no
 conf_file="$conf_dir/onie-rom.conf"
@@ -21,6 +20,10 @@ conf_file="$conf_dir/onie-rom.conf"
     echo "ERROR: unable to read machine ROM configuration '$conf_file'."
     exit 1
 }
+
+# Most platforms have a max uImage size of 4MB.  You can override this
+# in the platform specific conf file.
+uimage_max_size=$(( 4 * 1024 * 1024 ))
 
 . $conf_file
 
@@ -35,6 +38,12 @@ onie_uimage="$image_dir/${machine}.uImage"
     exit 1
 }
 
+uimage_size=$(stat -c '%s' $onie_uimage)
+if [ $uimage_size -gt $uimage_max_size ] ; then
+    printf "ERROR: $onie_uimage size (%d) is greater than max size: %d\n" $uimage_size $uimage_max_size
+    exit 1
+fi
+
 UBOOT_BIN="$image_dir/${machine}.u-boot"
 [ -r "$UBOOT_BIN" ] || {
     echo "ERROR: u-boot binary '$UBOOT_BIN' does not exist."
@@ -42,7 +51,7 @@ UBOOT_BIN="$image_dir/${machine}.u-boot"
 }
 
 # Rummage u-boot directory for onie environment variables
-true ${uboot_machine="$machine"}
+true ${uboot_machine="$(echo $machine | tr a-z A-Z)"}
 MACHINE_CONFIG="$uboot_src/include/configs/${uboot_machine}.h"
 [ -r "$MACHINE_CONFIG" ] || {
     echo "ERROR: u-boot config file '$MACHINE_CONFIG' does not exist."
