@@ -49,10 +49,10 @@ if [ "$env_sector_size" = "" ] || [ "$env_sector_size" = "0" ] ; then
     exit 1
 fi
 
-onie_uimage_size=$(grep oniesz.b $MACHINE_CONFIG | sed -e 's/^.*=//' -e 's/\\.*$//')
+onie_uimage_size=$(grep onie_sz.b $MACHINE_CONFIG | sed -e 's/^.*=//' -e 's/\\.*$//')
 onie_uimage_size=$(( $onie_uimage_size + 0 ))
 if [ "$onie_uimage_size" = "" ] || [ "$onie_uimage_size" = "0" ] ; then
-    echo "ERROR: Unable to find qsize.b $MACHINE_CONFIG."
+    echo "ERROR: Unable to find onie_sz.b $MACHINE_CONFIG."
     exit 1
 fi
 

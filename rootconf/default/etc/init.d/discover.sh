@@ -9,13 +9,13 @@ import_cmdline
 daemon="discover"
 
 # Check for any one time boot commands
-if [ -n "$onie_reboot_cmd" ] ; then
+if [ -n "$onie_boot_reason" ] ; then
 
     # delete one time env variable
-    fw_setenv -f reboot_cmd > /dev/null 2>&1
+    fw_setenv -f onie_boot_reason > /dev/null 2>&1
 
-    # Further parse reboot_cmd
-    case "$onie_reboot_cmd" in
+    # Further parse boot_reason
+    case "$onie_boot_reason" in
         rescue)
             echo "$daemon: Rescue mode detected.  Installer disabled." > /dev/console
             echo "** Rescue Mode Enabled **" >> /etc/issue
@@ -32,7 +32,7 @@ if [ -n "$onie_reboot_cmd" ] ; then
             true
             ;;
         *)
-            log_failure_msg "$daemon: Unknown reboot command: $onie_reboot_cmd"
+            log_failure_msg "$daemon: Unknown reboot command: $onie_boot_reason"
             reboot
     esac
 

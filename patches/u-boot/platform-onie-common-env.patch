@@ -3,10 +3,10 @@ Summary:
 
 diff --git a/include/configs/onie_common_config.h b/include/configs/onie_common_config.h
 new file mode 100644
-index 0000000..e0013be
+index 0000000..9b3b913
 --- /dev/null
 +++ b/include/configs/onie_common_config.h
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,90 @@
 +/*
 + * Author: Curt Brune <curt@cumulusnetworks.com>
 + *
@@ -32,30 +32,34 @@ index 0000000..e0013be
 +#ifndef ONIE_COMMON_CONFIG_H__
 +#define ONIE_COMMON_CONFIG_H__
 +
++#include "configs/onie_version.h"
++
 +/*
-+ * onie load command, kicked off by CONFIG_BOOTCOMMAND.
++ * onie_bootcmd load command, kicked off by CONFIG_BOOTCOMMAND.
 + *
 + * oniestart -- platform specific address of onie image in NOR flash
 + * oniesz.b  -- size in bytes of the platform specific onie image in NOR flash
 + */
 +#define CONFIG_ONIE_BOOT_CMD \
-+	"oniebootcmd=echo\0"						\
-+	"onie=echo Loading Open Network Install Environment ...; cp.b $oniestart $loadaddr ${oniesz.b} && "\
-+	"run oargs && bootm ${loadaddr}#$platform\0"
++	"nos_bootcmd=echo\0"						\
++	"onie_bootcmd=echo Loading Open Network Install Environment ...; " \
++	  "echo Version: $onie_version ; "				\
++	  "cp.b $onie_start $loadaddr ${onie_sz.b} && "			\
++	  "run onie_args && bootm ${loadaddr}#$platform\0"
 +
 +/*
 + * Default onie boot args.
 + *
-+ * oinitargs     -- Basic args needed by all platforms.
-+ * oplatformargs -- Additional platform specific args needed by onie.
-+ *                  Can be overriden.
++ * onie_initargs     -- Basic args needed by all platforms.
++ * onie_platformargs -- Additional platform specific args needed by onie.
++ *                      Can be overriden.
 + */
 +#define CONFIG_ONIE_BOOT_ARGS \
-+	"oinitargs=setenv bootargs quiet console=$consoledev,$baudrate\0" \
-+	"oplatformargs=setenv bootargs $bootargs serial_num=${serial#} " \
++	"onie_initargs=setenv bootargs quiet console=$consoledev,$baudrate\0" \
++	"onie_platformargs=setenv bootargs $bootargs serial_num=${serial#} " \
 +	"eth_addr=$ethaddr vendor_id=$vendor_id platform=$platform " \
-+	"$obootargs $odebugargs \0" \
-+	"oargs=run oinitargs oplatformargs\0"
++	"$onie_bootargs $onie_debugargs \0" \
++	"onie_args=run onie_initargs onie_platformargs\0"
 +
 +/*
 + * Check for one time boot commands
@@ -64,12 +68,12 @@ index 0000000..e0013be
 + *
 + */
 +#define CONFIG_ONIE_CHECK_BOOT_CMD \
-+	"check_reboot_cmd=if test -n $reboot_cmd; then "  \
-+	  "setenv obootargs reboot_cmd=$reboot_cmd; " \
-+	  "run onie; " \
++	"check_boot_reason=if test -n $onie_boot_reason; then "  \
++	  "setenv onie_bootargs boot_reason=$onie_boot_reason; " \
++	  "run onie_bootcmd; " \
 +	"fi;\0"
 +
-+#define CONFIG_BOOTCOMMAND	"run check_reboot_cmd; run oniebootcmd; run onie"
++#define CONFIG_BOOTCOMMAND	"run check_boot_reason; run nos_bootcmd; run onie_bootcmd"
 +
 +/*
 + * Common environemnt variables.  Two levels of macro expansion to
@@ -88,6 +92,7 @@ index 0000000..e0013be
 +	"dhcp_vendor-class-identifier=" #plat "\0"	\
 +	"dhcp_user-class=" #plat "_uboot\0"		\
 +	"stdin=serial\0stdout=serial\0stderr=serial\0"	\
++	ONIE_VERSION					\
 +	CONFIG_ONIE_BOOT_ARGS CONFIG_ONIE_BOOT_CMD	\
 +	CONFIG_ONIE_CHECK_BOOT_CMD
 +
