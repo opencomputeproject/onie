@@ -1,6 +1,5 @@
 #-------------------------------------------------------------------------------
 #
-#
 #-------------------------------------------------------------------------------
 #
 # makefile fragment that defines the build of the onie cross-compiled linux kernel
@@ -29,7 +28,7 @@ KERNEL_STAMP		= $(KERNEL_SOURCE_STAMP) \
 			  $(KERNEL_HEADER_STAMP) \
 			  $(KERNEL_INSTALL_STAMP)
 
-KERNEL			= $(KERNEL_INSTALL_STAMP)
+KERNEL			= $(KERNEL_STAMP)
 
 PHONY += kernel kernel-source kernel-patch kernel-config 
 PHONY += kernel-build kernel-install kernel-clean
@@ -40,7 +39,6 @@ LINUX_BOOTDIR   = $(LINUXDIR)/arch/$(ARCH)/boot
 
 #-------------------------------------------------------------------------------
 
-KERNEL += $(KERNEL_STAMP)
 kernel: $(KERNEL_STAMP)
 
 #---
@@ -126,7 +124,7 @@ $(KERNEL_BUILD_STAMP): $(KERNEL_HEADER_STAMP)
 	$(Q) touch $@
 
 kernel-install: $(KERNEL_INSTALL_STAMP)
-$(KERNEL_INSTALL_STAMP): $(KERNEL_BUILD_STAMP)
+$(KERNEL_INSTALL_STAMP): $(KERNEL_BUILD_STAMP) $(KERNEL_HEADER_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Copy device tree blob to $(IMAGEDIR) ===="
 	$(Q) cp -vf $(LINUX_BOOTDIR)/$(MACHINE).dtb $(IMAGEDIR)/$(MACHINE).dtb

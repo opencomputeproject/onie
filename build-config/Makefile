@@ -167,10 +167,14 @@ PLATFORMDIR  = $(realpath ./platform)
 MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
-ifeq (,$(filter help clean-all dist, $(MAKECMDGOALS)))
-  ifeq ($(shell ls $(MACHINEDIR)),)
-    $(warning Unable to find machine directory '$(MACHINE)' in $(realpath ../machine))
-    $(error You must set the MACHINE= variable when invoking make.)
+ifneq (,$(MAKECMDGOALS))
+  ifeq (,$(filter help clean-all dist, $(MAKECMDGOALS)))
+    ifeq ($(wildcard $(MACHINEDIR)/*),)
+      $(warning Unable to find machine directory '$(MACHINE)' in $(MACHINEROOT))
+      $(warning You must set the MACHINE= variable when invoking make.)
+      $(warning You can also set the machine root directory with MACHINEROOT= .)
+      $(error Unable to find valid machine configuration directory.)
+    endif
   endif
 endif
 
@@ -210,19 +214,23 @@ include make/u-boot.make
 include make/uclibc.make
 include make/busybox.make
 include make/images.make
+include make/demo.make
 
 #-------------------------------------------------------------------------------
 #
 # top level targets
 #
 
-PHONY += all source clean clean-all
+PHONY += all source demo clean clean-all
 
 source: $(SOURCE)
 	$(Q) echo "=== Finished making $@ ==="
 
 all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE)
 	$(Q) echo "=== Finished making onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
+
+demo: $(KERNEL) $(DEMO_IMAGE)
+	$(Q) echo "=== Finished making demo onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
 
 clean: 	$(CLEAN)
 	$(Q) sudo rm -rf $(BUILDDIR)/images/*$(MACHINE)*
