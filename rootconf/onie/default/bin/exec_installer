@@ -1,0 +1,274 @@
+#!/bin/sh
+
+. /scripts/functions
+syslog_tag=onie-exec
+
+run_installer()
+{
+    [ -f $onie_installer ] || {
+        log_failure_msg "Unable to find installer: $onie_installer"
+        return 1
+    }
+    chmod +x $onie_installer
+    export onie_exec_url="$1"
+    # escape any % characters for printing with printf
+    print_exec_url=$(echo -n $onie_exec_url | sed -e 's/%/%%/g')
+    log_info_msg "Executing installer: $print_exec_url"
+    $onie_installer 2>&1 | logger -t os-install -p ${syslog_onie}.info
+
+    # installer should not return
+    return 1
+}
+
+# wget HTTP/FTP download helper
+wget_run()
+{
+    type=$1
+    URL="$2"
+
+    wget_args="-T 2 -O $onie_installer"
+    if [ -n "$onie_quiet" ] || [ -z "$onie_verbose" ] ; then
+        wget_args="$wget_args -q"
+    fi
+
+    if [ "$type" = "http" ] || [ "$type" = "https" ] ; then
+        # add HTTP headers
+        # Shell variable substituion
+        bb_ver=$(busybox | head -1 | sed -e 's/ (.*//' -e 's/ /-/')
+        os_ver=$(uname -r -s | sed -e 's/ /-/')
+        user_agent="-U onie/1.0 ($os_ver; $bb_ver)"
+        wget_headers=$(cat <<EOF
+ONIE-SERIAL-NUMBER:$onie_serial_num
+ONIE-ETH-ADDR:$onie_eth_addr
+ONIE-VENDOR-ID:$onie_vendor_id
+ONIE-PLATFORM:$onie_platform
+ONIE-SECURITY-KEY:$onie_sec_key
+EOF
+        )
+        for h in $wget_headers ; do
+            wget_args="$wget_args --header $h"
+        done
+    fi
+    log_debug "Running wget with: $user_agent $wget_args $URL"
+    echo "Info: Fetching $URL ..."
+    if [ "$onie_verbose" = "y" ]; then
+        wget "$user_agent" $wget_args "$URL" && run_installer "$URL" && return 0
+    else
+        wget "$user_agent" $wget_args "$URL" > /dev/null 2>&1 && run_installer "$URL" && return 0
+    fi
+
+    return 1
+}
+
+# TFTP download helper
+tftp_run()
+{
+    SERVER=$1
+    BOOTFILE=$2
+
+    URL="tftp://$SERVER/$BOOTFILE"
+    log_debug "Running tftp get with: server: $SERVER, bootfile: $BOOTFILE"
+    log_info_msg "Fetching $URL ..."
+    if [ "$onie_verbose" = "y" ]; then
+        tftp -g -l $onie_installer -r $BOOTFILE $SERVER && run_installer "$URL" && return 0
+    else
+        tftp -g -l $onie_installer -r $BOOTFILE $SERVER > /dev/null 2>&1 && run_installer "$URL" && return 0
+    fi
+
+    return 1
+}
+
+# Try possible URL handlers
+# URL could be:
+#   http://
+#   ftp://
+#   file://
+#   tftp://
+url_run()
+{
+    URL="$1"
+    url_type=${URL%%:*}
+    url_path=${URL##*://}
+    rm -f $onie_installer
+    case $url_type in
+        http | https | ftp)
+            wget_run $url_type "$URL" && return 0
+            ;;
+        tftp)
+            server=${url_path%%/*}
+            path=${url_path#*/}
+            tftp_run $server $path && return 0
+            ;;
+        *)
+            log_failure_msg "Unknown URL type: $URL"
+            ;;
+    esac
+
+    return 1
+}
+
+# Try various HTTP URLs
+http_download()
+{
+    # Try neighbors
+    while [ ${#onie_neighs} -gt 0 ] ; do
+        n=${onie_neighs%%,*}
+        onie_neighs=${onie_neighs#*,}
+        tmp=$(echo $n | sed -e 's/-/%/g');
+        url_run "http://$tmp/$onie_default_filename" && return 0
+    done
+
+    # HTTP server IP only
+    if [ -n "$onie_disco_wwwsrv" ] ; then
+        url_run "http://$onie_disco_wwwsrv/$onie_default_filename" && return 0
+    fi
+    
+    # Try BOOTP next-server IP as HTTP
+    if [ -n "$onie_disco_siaddr" ] ; then
+        url_run "http://$onie_disco_siaddr/$onie_default_filename" && return 0
+    fi
+    
+    # Try DHCP server IP as HTTP
+    if [ -n "$onie_disco_serverid" ] ; then
+        url_run "http://$onie_disco_serverid/$onie_default_filename" && return 0
+    fi
+
+    return 1
+}
+
+tftp_download()
+{
+    # Try BOOTP next-server and boot_file
+    if [ -n "$onie_disco_siaddr" ] && [ -n "$onie_disco_boot_file" ] ; then
+        url_run "tftp://$onie_disco_siaddr/$onie_disco_boot_file" && return 0
+    fi
+
+    # Try DHCP TFTP server name (opt 67) and boot_file
+    # Requires DNS
+    if [ -n "$onie_disco_tftp" ] && [ -n "$onie_disco_boot_file" ] ; then
+        url_run "tftp://$onie_disco_tftp/$onie_disco_boot_file" && return 0
+    fi
+
+    return 1
+}
+
+tftp_waterfall()
+{
+    # Build list of waterfall paths
+
+    [ -z "$onie_disco_siaddr" ] && return 1
+
+    wf_paths=
+    # First is based on MAC address
+    [ -n "$onie_eth_addr" ] && wf_paths="$(echo $onie_eth_addr | sed -e 's/:/-/g')/$onie_default_filename"
+
+    if [ -n "$onie_disco_ip" ] ; then
+        # Next 8 are based on IP address in HEX:
+        tmp=$(echo $onie_disco_ip | sed -e 's/\./ /g')
+        cmd="printf %02X%02X%02X%02X $tmp"
+        wf_ip=$(eval $cmd)
+        len=8
+        while [ $len -gt 0 ] ; do
+            wf_paths="$wf_paths $(echo $wf_ip | head -c $len)/$onie_default_filename"
+            len=$(( $len - 1 ))
+        done
+    fi
+
+    # Next is root of tftp server
+    wf_paths="$wf_paths $onie_default_filename"
+    
+    # vendor_id/platform
+    if [ -n "$onie_vendor_id" ] ; then
+        [ -n "$onie_platform" ] && wf_paths="$wf_paths $onie_vendor_id/$onie_platform/$onie_default_filename"
+        wf_paths="$wf_paths $onie_vendor_id/$onie_default_filename"
+    fi
+
+    for p in $wf_paths ; do
+        url_run "tftp://$onie_disco_siaddr/$p" && return 0
+    done
+
+    return 1
+}
+
+local_fs_run()
+{
+    mp=$(mktemp -d)
+    while [ ${#onie_local_parts} -gt 0 ] ; do
+        p=${onie_local_parts%%,*}
+        onie_local_parts=${onie_local_parts#*,}
+        mount /dev/$p $mp > /dev/null 2>&1 && {
+            if [ -r $mp/$onie_default_filename ] ; then
+                # copy to /tmp, which is a tmpfs -- installer needs to
+                # run with everything unmounted.
+                tmp_copy=$(mktemp -p /tmp)
+                cp $mp/$onie_default_filename $tmp_copy || {
+                    log_failure_msg "local_fs_run():/dev/$p Unable to copy $onie_default_filename to tmpfs"
+                    rm -f $tmp_copy
+                    return 1
+                }
+                sync ; sync
+                umount /dev/$p
+                ln -sf $tmp_copy $onie_installer || {
+                    log_failure_msg "local_fs_run():/dev/$p Unable to make symlink to $onie_installer in tmpfs"
+                    rm -f $tmp_copy
+                    return 1
+                }
+                run_installer "file://dev/$p/$onie_default_filename" && return 0
+                rm -f $tmp_copy $onie_installer
+            else
+                umount /dev/$p
+            fi
+        }
+    done
+    rm -rf $mp
+
+    return 1
+}
+
+##
+## Script starts here
+##
+
+import_parms "$1"
+rm -f $onie_installer
+
+# First try static URL
+if [ -n "$onie_static_url" ] ; then
+    url_run "$onie_static_url" && exit 0
+fi
+
+# Next try locally attached filesystems
+if [ -n "$onie_local_parts" ] ; then
+    local_fs_run && exit 0
+fi
+
+# Next try exactly discovered URLs
+if [ -n "$onie_disco_onie_url" ] ; then
+    url_run "$onie_disco_onie_url" && exit 0
+fi
+
+if [ -n "$onie_disco_url" ] ; then
+    url_run "$onie_disco_url" && exit 0
+fi
+
+# Try HTTP discovery methods next
+http_download && {
+    echo "http success, exiting..."
+    exit 0
+}
+
+# Try TFTP discovery methods next
+tftp_download && {
+    echo "tftp success, exiting..."
+    exit 0
+}
+
+# Finally try TFTP waterfall method
+tftp_waterfall
+
+exit 0
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

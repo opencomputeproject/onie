@@ -1,0 +1,94 @@
+Common u-boot configuration variables for qnq installation platforms.
+Summary:
+
+diff --git a/include/configs/onie_common_config.h b/include/configs/onie_common_config.h
+new file mode 100644
+index 0000000..e0013be
+--- /dev/null
++++ b/include/configs/onie_common_config.h
+@@ -0,0 +1,85 @@
++/*
++ * Author: Curt Brune <curt@cumulusnetworks.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
++ */
++
++/*
++ * U-boot configuration parameters common to ONIE platforms.
++ */
++
++#ifndef ONIE_COMMON_CONFIG_H__
++#define ONIE_COMMON_CONFIG_H__
++
++/*
++ * onie load command, kicked off by CONFIG_BOOTCOMMAND.
++ *
++ * oniestart -- platform specific address of onie image in NOR flash
++ * oniesz.b  -- size in bytes of the platform specific onie image in NOR flash
++ */
++#define CONFIG_ONIE_BOOT_CMD \
++	"oniebootcmd=echo\0"						\
++	"onie=echo Loading Open Network Install Environment ...; cp.b $oniestart $loadaddr ${oniesz.b} && "\
++	"run oargs && bootm ${loadaddr}#$platform\0"
++
++/*
++ * Default onie boot args.
++ *
++ * oinitargs     -- Basic args needed by all platforms.
++ * oplatformargs -- Additional platform specific args needed by onie.
++ *                  Can be overriden.
++ */
++#define CONFIG_ONIE_BOOT_ARGS \
++	"oinitargs=setenv bootargs quiet console=$consoledev,$baudrate\0" \
++	"oplatformargs=setenv bootargs $bootargs serial_num=${serial#} " \
++	"eth_addr=$ethaddr vendor_id=$vendor_id platform=$platform " \
++	"$obootargs $odebugargs \0" \
++	"oargs=run oinitargs oplatformargs\0"
++
++/*
++ * Check for one time boot commands
++ *
++ * onie will clear this variable during boot.
++ *
++ */
++#define CONFIG_ONIE_CHECK_BOOT_CMD \
++	"check_reboot_cmd=if test -n $reboot_cmd; then "  \
++	  "setenv obootargs reboot_cmd=$reboot_cmd; " \
++	  "run onie; " \
++	"fi;\0"
++
++#define CONFIG_BOOTCOMMAND	"run check_reboot_cmd; run oniebootcmd; run onie"
++
++/*
++ * Common environemnt variables.  Two levels of macro expansion to
++ * allow all parameters and #defines to be expanded and stringified.
++ *
++ * pen -- IANA Private Enterprise Number:
++ * http://www.iana.org/assignments/enterprise-numbers
++ *
++ */
++#define CONFIG_ONIE_COMMON_UBOOT_ENV(pen, plat)	\
++	CONFIG_ONIE_COMMON_UBOOT_ENV_X(pen, plat)
++#define CONFIG_ONIE_COMMON_UBOOT_ENV_X(pen, plat)	\
++	"vendor_id=" #pen "\0"				\
++	"platform=" #plat "\0"				\
++	"autoload=no\0"					\
++	"dhcp_vendor-class-identifier=" #plat "\0"	\
++	"dhcp_user-class=" #plat "_uboot\0"		\
++	"stdin=serial\0stdout=serial\0stderr=serial\0"	\
++	CONFIG_ONIE_BOOT_ARGS CONFIG_ONIE_BOOT_CMD	\
++	CONFIG_ONIE_CHECK_BOOT_CMD
++
++#endif /* ONIE_COMMON_CONFIG_H__ */

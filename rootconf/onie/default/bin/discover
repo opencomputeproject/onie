@@ -1,0 +1,175 @@
+#!/bin/sh
+
+##
+## Discover and run installer program.
+##
+## This assumes the shell is ash/dash.
+##
+
+. /scripts/functions
+syslog_tag=onie-discover
+onie_disco=
+
+sig_int_trap()
+{
+    # On ctrl-C drop to a shell
+    /bin/rescue 0
+}
+trap sig_int_trap INT
+
+# Neighbor table service discovery
+neigh_discovery()
+{
+
+    intf_list=$(net_intf)
+    ping_cnt=3
+
+    for i in $intf_list ; do
+        # Wait for interface link-local addr to leave tentative state
+        cnt=300
+        while [ $cnt -gt 0 ] ; do
+            foo=$(ip addr show dev $i | grep tentative)
+            [ "$?" -ne 0 ] && break
+            cnt=$(( $cnt - 1 ))
+            sleep 0.1
+        done
+        ping6 -I $i -c $ping_cnt ff02::1 > /dev/null 2>&1
+    done
+
+    # Allow neighbor table to populate -- better way?
+    sleep 4
+    # gather IPv4 neighbors
+    onie_neighs4=$(ip -4 neigh show | awk '{print $1}' | tr '\n' ',')
+    # gather IPv6 neighbors
+    onie_neighs6=$(ip -6 neigh show | awk '{print $1 "-" $3}' | tr '\n' ',')
+    onie_neighs="${onie_neighs6}${onie_neighs4}"
+    log_debug_msg "onie_neighs: $onie_neighs"
+}
+
+# Static service discovery
+sd_static()
+{
+    # If static URL passed to us by u-boot then use it
+    if [ -n "$onie_install_url" ] ; then
+        log_info_msg "Found static url: $onie_install_url"
+        onie_disco=$(add_parm "$onie_disco" onie_static_url $onie_install_url)
+        return 0
+    fi
+    return 1
+}
+
+# Check locally attached filesystems
+sd_localfs()
+{
+    # skip mtdblock partitions
+    part_list=$(tail -n +3 /proc/partitions | sed -e '/mtd/d' | awk '{ print $4 }')
+    mp=$(mktemp -d)
+    local_parts=
+    for p in $part_list ; do
+        mount /dev/$p $mp > /dev/null 2>&1 && {
+            if [ -r $mp/$onie_default_filename ] ; then
+                local_parts="${p},$local_parts"
+            fi
+            umount /dev/$p > /dev/null 2>&1
+        }
+    done
+    rm -rf $mp
+    if [ -n "$local_parts" ] ; then
+        onie_disco=$(add_parm "$onie_disco" onie_local_parts $local_parts)
+        return 0
+    fi
+
+    return 1
+}
+
+# DHCPv6 service discovery
+sd_dhcp6()
+{
+    # TODO
+    # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
+    return 1
+}
+
+# DHCPv4 service discovery
+sd_dhcp4()
+{
+    intf_list=$(net_intf)
+    udhcp_args="$(udhcpc_args) -t 2 -T 2 -n"
+
+    udhcp_request_opts=
+    for o in 7 43 54 66 67 72 114 ; do
+        udhcp_request_opts="$udhcp_request_opts -O $o"
+    done
+
+    # Initate DHCP request on every interface in the list.  Stop after
+    # one works.
+
+    for i in $intf_list ; do
+        log_debug_msg "Trying DHCPv4 on interface: $i"
+        tmp=$(udhcpc $udhcp_args $udhcp_request_opts -i $i -s /scripts/udhcp4_sd) && break
+        tmp=
+    done
+
+    onie_disco="${onie_disco}${tmp##*ONIE_PARMS:}"
+    if [ -n "$onie_disco" ] ; then
+        return 0
+    fi
+
+    return 1
+}
+
+# mDNS / DNS-SD service discovery
+sd_mdns()
+{
+    # TODO
+    # log_info_msg "Trying mDNS/DNS-SD service discovery."
+    return 1
+}
+
+# Fall back service discovery
+sd_fallback()
+{
+    # TODO
+    # log_info_msg "Trying fall back service discovery."
+    return 1
+}
+
+# Discover the URL(s) to use for the installer
+service_discovery()
+{
+    # add/update $onie_disco
+    log_info_msg "Service Discovery"
+    sd_static  && return
+    sd_localfs
+    sd_dhcp6
+    sd_dhcp4
+    sd_mdns
+    sd_fallback
+}
+
+delay=20
+
+# Download and run installer entry point -- never return
+while true ; do
+    /etc/init.d/networking.sh discover
+    service_discovery
+    log_debug_msg "onie_disco: $onie_disco"
+    neigh_discovery
+    exec_installer "onie_neighs@@${onie_neighs}##${onie_disco}" 2>&1 | logger -t onie-exec -p ${syslog_onie}.info
+    # pause to avoid DoSing someone
+    log_begin_msg "Sleeping for $delay seconds "
+    cnt=0
+    while [ $cnt -lt $delay ] ; do
+        if [ "$(( $cnt % 5 ))" = "0" ] ; then
+            _log_msg "$(( ($delay - $cnt) / 5 )).."
+        fi
+        cnt=$(( $cnt + 1 ))
+        sleep 1
+    done
+    log_end_msg
+done
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

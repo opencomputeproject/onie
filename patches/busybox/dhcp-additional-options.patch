@@ -1,0 +1,96 @@
+dhcp additional options patch
+
+Enable the send/receive of additional DHCP options:
+
+  DHCP_LOG_SERVER
+  DHCP_WWW_SERVER
+  DHCP_DEFAULT_URL
+
+diff --git a/networking/udhcp/common.c b/networking/udhcp/common.c
+index ae0e0d3..84cd48f 100644
+--- a/networking/udhcp/common.c
++++ b/networking/udhcp/common.c
+@@ -26,7 +26,7 @@ const struct dhcp_optflag dhcp_optflags[] = {
+ //	{ OPTION_IP | OPTION_LIST                 , 0x04 }, /* DHCP_TIME_SERVER   */
+ //	{ OPTION_IP | OPTION_LIST                 , 0x05 }, /* DHCP_NAME_SERVER   */
+ 	{ OPTION_IP | OPTION_LIST     | OPTION_REQ, 0x06 }, /* DHCP_DNS_SERVER    */
+-//	{ OPTION_IP | OPTION_LIST                 , 0x07 }, /* DHCP_LOG_SERVER    */
++	{ OPTION_IP | OPTION_LIST                 , 0x07 }, /* DHCP_LOG_SERVER    */
+ //	{ OPTION_IP | OPTION_LIST                 , 0x08 }, /* DHCP_COOKIE_SERVER */
+ 	{ OPTION_IP | OPTION_LIST                 , 0x09 }, /* DHCP_LPR_SERVER    */
+ 	{ OPTION_STRING_HOST          | OPTION_REQ, 0x0c }, /* DHCP_HOST_NAME     */
+@@ -44,6 +44,7 @@ const struct dhcp_optflag dhcp_optflags[] = {
+ 	{ OPTION_STRING_HOST                      , 0x28 }, /* DHCP_NIS_DOMAIN    */
+ 	{ OPTION_IP | OPTION_LIST                 , 0x29 }, /* DHCP_NIS_SERVER    */
+ 	{ OPTION_IP | OPTION_LIST     | OPTION_REQ, 0x2a }, /* DHCP_NTP_SERVER    */
++	{ OPTION_BIN                              , 0x2b }, /* DHCP_VENDOR_OPTS   */
+ 	{ OPTION_IP | OPTION_LIST                 , 0x2c }, /* DHCP_WINS_SERVER   */
+ 	{ OPTION_U32                              , 0x33 }, /* DHCP_LEASE_TIME    */
+ 	{ OPTION_IP                               , 0x36 }, /* DHCP_SERVER_ID     */
+@@ -51,8 +52,10 @@ const struct dhcp_optflag dhcp_optflags[] = {
+ //TODO: must be combined with 'sname' and 'file' handling:
+ 	{ OPTION_STRING_HOST                      , 0x42 }, /* DHCP_TFTP_SERVER_NAME */
+ 	{ OPTION_STRING                           , 0x43 }, /* DHCP_BOOT_FILE     */
++	{ OPTION_IP | OPTION_LIST                 , 0x48 }, /* DHCP_WWW_SERVER    */
+ //TODO: not a string, but a set of LASCII strings:
+ //	{ OPTION_STRING                           , 0x4D }, /* DHCP_USER_CLASS    */
++	{ OPTION_STRING                           , 0x72 }, /* DHCP_DEFAULT_URL   */
+ #if ENABLE_FEATURE_UDHCP_RFC3397
+ 	{ OPTION_DNS_STRING | OPTION_LIST         , 0x77 }, /* DHCP_DOMAIN_SEARCH */
+ 	{ OPTION_SIP_SERVERS                      , 0x78 }, /* DHCP_SIP_SERVERS   */
+@@ -95,7 +98,7 @@ const char dhcp_option_strings[] ALIGN1 =
+ //	"timesrv" "\0"     /* DHCP_TIME_SERVER    */
+ //	"namesrv" "\0"     /* DHCP_NAME_SERVER    */
+ 	"dns" "\0"         /* DHCP_DNS_SERVER     */
+-//	"logsrv" "\0"      /* DHCP_LOG_SERVER     */
++	"logsrv" "\0"      /* DHCP_LOG_SERVER     */
+ //	"cookiesrv" "\0"   /* DHCP_COOKIE_SERVER  */
+ 	"lprsrv" "\0"      /* DHCP_LPR_SERVER     */
+ 	"hostname" "\0"    /* DHCP_HOST_NAME      */
+@@ -110,13 +113,16 @@ const char dhcp_option_strings[] ALIGN1 =
+ 	"nisdomain" "\0"   /* DHCP_NIS_DOMAIN     */
+ 	"nissrv" "\0"      /* DHCP_NIS_SERVER     */
+ 	"ntpsrv" "\0"      /* DHCP_NTP_SERVER     */
++	"vendoropts" "\0"  /* DHCP_VENDOR_OPTS    */
+ 	"wins" "\0"        /* DHCP_WINS_SERVER    */
+ 	"lease" "\0"       /* DHCP_LEASE_TIME     */
+ 	"serverid" "\0"    /* DHCP_SERVER_ID      */
+ 	"message" "\0"     /* DHCP_ERR_MESSAGE    */
+ 	"tftp" "\0"        /* DHCP_TFTP_SERVER_NAME */
+ 	"bootfile" "\0"    /* DHCP_BOOT_FILE      */
++	"wwwsrv" "\0"      /* DHCP_WWW_SERVER     */
+ //	"userclass" "\0"   /* DHCP_USER_CLASS     */
++	"url" "\0"         /* DHCP_DEFAULT_URL    */
+ #if ENABLE_FEATURE_UDHCP_RFC3397
+ 	"search" "\0"      /* DHCP_DOMAIN_SEARCH  */
+ // doesn't work in udhcpd.conf since OPTION_SIP_SERVERS
+@@ -145,6 +151,7 @@ const uint8_t dhcp_option_lengths[] ALIGN1 = {
+ 	[OPTION_IP] =      4,
+ 	[OPTION_IP_PAIR] = 8,
+ //	[OPTION_BOOLEAN] = 1,
++	[OPTION_BIN] =  1,  /* ignored by udhcp_str2optset */
+ 	[OPTION_STRING] =  1,  /* ignored by udhcp_str2optset */
+ 	[OPTION_STRING_HOST] = 1,  /* ignored by udhcp_str2optset */
+ #if ENABLE_FEATURE_UDHCP_RFC3397
+diff --git a/networking/udhcp/dhcpc.c b/networking/udhcp/dhcpc.c
+index ddb328d..3b3d087 100644
+--- a/networking/udhcp/dhcpc.c
++++ b/networking/udhcp/dhcpc.c
+@@ -100,6 +100,7 @@ static const uint8_t len_of_option_as_string[] = {
+ 	[OPTION_IP_PAIR         ] = sizeof("255.255.255.255 ") * 2,
+ 	[OPTION_STATIC_ROUTES   ] = sizeof("255.255.255.255/32 255.255.255.255 "),
+ 	[OPTION_6RD             ] = sizeof("32 128 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 255.255.255.255 "),
++	[OPTION_BIN             ] = 2,
+ 	[OPTION_STRING          ] = 1,
+ 	[OPTION_STRING_HOST     ] = 1,
+ #if ENABLE_FEATURE_UDHCP_RFC3397
+@@ -240,6 +241,9 @@ static NOINLINE char *xmalloc_optname_optval(uint8_t *option, const struct dhcp_
+ 			dest += sprintf(dest, type == OPTION_U32 ? "%lu" : "%ld", (unsigned long) ntohl(val_u32));
+ 			break;
+ 		}
++		case OPTION_BIN:
++			*bin2hex(dest, (void*) option, len) = '\0';
++			return ret;
+ 		/* Note: options which use 'return' instead of 'break'
+ 		 * (for example, OPTION_STRING) skip the code which handles
+ 		 * the case of list of options.

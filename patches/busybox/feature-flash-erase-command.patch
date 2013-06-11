@@ -1,0 +1,518 @@
+feature-flash-erase-command patch
+
+Add flash_erase command.  Renamed flash_eraseall.c to flash_erase.c
+
+Removed flash_eraseall command as its functionality is covered with
+"flash_erase /dev/mtd2 0 0".
+
+diff --git a/include/applets.src.h b/include/applets.src.h
+index b13a3ec..566a2ce 100644
+--- a/include/applets.src.h
++++ b/include/applets.src.h
+@@ -149,7 +149,7 @@ IF_FDISK(APPLET(fdisk, BB_DIR_SBIN, BB_SUID_DROP))
+ IF_FGCONSOLE(APPLET(fgconsole, BB_DIR_USR_BIN, BB_SUID_DROP))
+ /* Benefits from suid root: better access to /dev/BLOCKDEVs: */
+ IF_FINDFS(APPLET(findfs, BB_DIR_SBIN, BB_SUID_MAYBE))
+-IF_FLASH_ERASEALL(APPLET(flash_eraseall, BB_DIR_USR_SBIN, BB_SUID_DROP))
++IF_FLASH_ERASE(APPLET(flash_erase, BB_DIR_USR_SBIN, BB_SUID_DROP))
+ IF_FLASH_LOCK(APPLET_ODDNAME(flash_lock, flash_lock_unlock, BB_DIR_USR_SBIN, BB_SUID_DROP, flash_lock))
+ IF_FLASH_UNLOCK(APPLET_ODDNAME(flash_unlock, flash_lock_unlock, BB_DIR_USR_SBIN, BB_SUID_DROP, flash_unlock))
+ IF_FLASHCP(APPLET(flashcp, BB_DIR_USR_SBIN, BB_SUID_DROP))
+diff --git a/miscutils/Config.src b/miscutils/Config.src
+index 5a69e2d..614b6cc 100644
+--- a/miscutils/Config.src
++++ b/miscutils/Config.src
+@@ -313,12 +313,13 @@ config FLASH_UNLOCK
+ 	  The flash_unlock binary from mtd-utils as of git head 5ec0c10d0. This
+ 	  utility unlocks part or all of the flash device.
+ 
+-config FLASH_ERASEALL
+-	bool "flash_eraseall"
++config FLASH_ERASE
++	bool "flash_erase"
+ 	default n  # doesn't build on Ubuntu 8.04
+ 	help
+-	  The flash_eraseall binary from mtd-utils as of git head c4c6a59eb.
+-	  This utility is used to erase the whole MTD device.
++	  The flash_erase binary based on mtd-utils as of git head
++	  c4c6a59eb.  This utility is used to erase specific erase
++	  blocks within a MTD device.
+ 
+ config IONICE
+ 	bool "ionice"
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index 129a264..24162e7 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -20,7 +20,7 @@ lib-$(CONFIG_DEVMEM)      += devmem.o
+ lib-$(CONFIG_EJECT)       += eject.o
+ lib-$(CONFIG_FBSPLASH)    += fbsplash.o
+ lib-$(CONFIG_FLASHCP)     += flashcp.o
+-lib-$(CONFIG_FLASH_ERASEALL) += flash_eraseall.o
++lib-$(CONFIG_FLASH_ERASE) += flash_erase.o
+ lib-$(CONFIG_FLASH_LOCK)     += flash_lock_unlock.o
+ lib-$(CONFIG_FLASH_UNLOCK)   += flash_lock_unlock.o
+ lib-$(CONFIG_IONICE)      += ionice.o
+diff --git a/miscutils/flash_erase.c b/miscutils/flash_erase.c
+new file mode 100644
+index 0000000..7a83a57
+--- /dev/null
++++ b/miscutils/flash_erase.c
+@@ -0,0 +1,245 @@
++/* vi: set sw=4 ts=4: */
++/* eraseall.c -- erase the whole of a MTD device
++ *
++ * Ported to busybox from mtd-utils.
++ *
++ * Copyright (C) 2000 Arcom Control System Ltd
++ *
++ * Renamed to flash_eraseall.c
++ *
++ * Licensed under GPLv2 or later, see file LICENSE in this source tree.
++ *
++ * 4/2013 -- Curt Brune <curt@cumulusnetworks.com>
++ *   Renamed to flash_erase.c
++ *   Added flash_erase command.
++ *   Removed flash_eraseall command.
++ *
++ */
++
++#include "libbb.h"
++#include <mtd/mtd-user.h>
++#include <linux/jffs2.h>
++
++#define OPTION_J  (1 << 0)
++#define OPTION_Q  (1 << 1)
++#define IS_NAND   (1 << 2)
++#define BBTEST    (1 << 3)
++
++/* mtd/jffs2-user.h used to have this atrocity:
++extern int target_endian;
++
++#define t16(x) ({ __u16 __b = (x); (target_endian==__BYTE_ORDER)?__b:bswap_16(__b); })
++#define t32(x) ({ __u32 __b = (x); (target_endian==__BYTE_ORDER)?__b:bswap_32(__b); })
++
++#define cpu_to_je16(x) ((jint16_t){t16(x)})
++#define cpu_to_je32(x) ((jint32_t){t32(x)})
++#define cpu_to_jemode(x) ((jmode_t){t32(x)})
++
++#define je16_to_cpu(x) (t16((x).v16))
++#define je32_to_cpu(x) (t32((x).v32))
++#define jemode_to_cpu(x) (t32((x).m))
++
++but mtd/jffs2-user.h is gone now (at least 2.6.31.6 does not have it anymore)
++*/
++
++/* We always use native endianness */
++#undef cpu_to_je16
++#undef cpu_to_je32
++#define cpu_to_je16(v) ((jint16_t){(v)})
++#define cpu_to_je32(v) ((jint32_t){(v)})
++
++//static void show_progress(mtd_info_t *meminfo, erase_info_t *erase)
++static void show_progress(unsigned erasesize, unsigned current, unsigned start, unsigned total)
++{
++	printf("\rErasing %u Kibyte @ %x - %2u%% complete.",
++	       erasesize / 1024,
++	       current,
++	       (unsigned) (((unsigned long long)(current - start) * 100) / total)
++	);
++	fflush_all();
++}
++
++//usage:#define flash_erase_trivial_usage
++//usage:       "[-jq] MTD_DEVICE START_OFFSET BLOCK_COUNT"
++//usage:#define flash_erase_full_usage "\n\n"
++//usage:       "Erase blocks of the specified MTD device.\n"
++//usage:       "Specify a count of 0 to erase to end of device.\n"
++//usage:     "\n	-j	Format the device for jffs2"
++//usage:     "\n	-q	Don't display progress messages"
++
++int flash_erase_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
++int flash_erase_main(int argc, char **argv)
++{
++	struct jffs2_unknown_node cleanmarker;
++	mtd_info_t meminfo;
++	int fd, clmpos, clmlen;
++	erase_info_t erase;
++	struct stat st;
++	unsigned n_erase_bytes;
++	unsigned flags;
++	char* mtd_name;
++	unsigned start, n_blocks;
++
++	opt_complementary = "=3";
++	flags = BBTEST | getopt32(argv, "jq");
++
++	argc -= optind;
++	argv += optind;
++
++	mtd_name = argv[0];
++
++	/* offset parameter */
++	start = xstrtoul(argv[1], 0);
++
++	/* n_blocks parameter */
++	n_blocks = xstrtoul(argv[2], 0);
++
++	fd = xopen(mtd_name, O_RDWR);
++	fstat(fd, &st);
++	if (!S_ISCHR(st.st_mode))
++		bb_error_msg_and_die("%s: not a char device", mtd_name);
++
++	xioctl(fd, MEMGETINFO, &meminfo);
++	erase.length = meminfo.erasesize;
++	if (meminfo.type == MTD_NANDFLASH)
++		flags |= IS_NAND;
++
++	if (n_blocks == 0) {
++		/* erase entire device */
++		n_erase_bytes = meminfo.size;
++	} else {
++		n_erase_bytes = meminfo.erasesize * n_blocks;
++	}
++
++	/*
++	 * Sanitize inputs:
++	 *   - starting offset aligned to erasesize boundary
++	 *   - requested region is completely within device
++	 */
++	if (start % meminfo.erasesize)
++		bb_error_msg_and_die("%s: offset 0x%08x not aligned to erase size 0x%08x",
++				     mtd_name, start, meminfo.erasesize);
++	if ((start + n_erase_bytes) > meminfo.size)
++		bb_error_msg_and_die("%s: erase region is outside of device", mtd_name);
++
++	clmpos = 0;
++	clmlen = 8;
++	if (flags & OPTION_J) {
++		uint32_t *crc32_table;
++
++		crc32_table = crc32_filltable(NULL, 0);
++
++		cleanmarker.magic = cpu_to_je16(JFFS2_MAGIC_BITMASK);
++		cleanmarker.nodetype = cpu_to_je16(JFFS2_NODETYPE_CLEANMARKER);
++		if (!(flags & IS_NAND))
++			cleanmarker.totlen = cpu_to_je32(sizeof(struct jffs2_unknown_node));
++		else {
++			struct nand_oobinfo oobinfo;
++
++			xioctl(fd, MEMGETOOBSEL, &oobinfo);
++
++			/* Check for autoplacement */
++			if (oobinfo.useecc == MTD_NANDECC_AUTOPLACE) {
++				/* Get the position of the free bytes */
++				clmpos = oobinfo.oobfree[0][0];
++				clmlen = oobinfo.oobfree[0][1];
++				if (clmlen > 8)
++					clmlen = 8;
++				if (clmlen == 0)
++					bb_error_msg_and_die("autoplacement selected and no empty space in oob");
++			} else {
++				/* Legacy mode */
++				switch (meminfo.oobsize) {
++				case 8:
++					clmpos = 6;
++					clmlen = 2;
++					break;
++				case 16:
++					clmpos = 8;
++					/*clmlen = 8;*/
++					break;
++				case 64:
++					clmpos = 16;
++					/*clmlen = 8;*/
++					break;
++				}
++			}
++			cleanmarker.totlen = cpu_to_je32(8);
++		}
++
++		cleanmarker.hdr_crc = cpu_to_je32(
++			crc32_block_endian0(0, &cleanmarker, sizeof(struct jffs2_unknown_node) - 4, crc32_table)
++		);
++	}
++
++	/* Don't want to destroy progress indicator by bb_error_msg's */
++	applet_name = xasprintf("\n%s: %s", applet_name, mtd_name);
++
++	for (erase.start = start; erase.start < (start + n_erase_bytes);
++	     erase.start += meminfo.erasesize) {
++		if (flags & BBTEST) {
++			int ret;
++			loff_t offset = erase.start;
++
++			ret = ioctl(fd, MEMGETBADBLOCK, &offset);
++			if (ret > 0) {
++				if (!(flags & OPTION_Q))
++					bb_info_msg("\nSkipping bad block at 0x%08x", erase.start);
++				continue;
++			}
++			if (ret < 0) {
++				/* Black block table is not available on certain flash
++				 * types e.g. NOR
++				 */
++				if (errno == EOPNOTSUPP) {
++					flags &= ~BBTEST;
++					if (flags & IS_NAND)
++						bb_error_msg_and_die("bad block check not available");
++				} else {
++					bb_perror_msg_and_die("MEMGETBADBLOCK error");
++				}
++			}
++		}
++
++		if (!(flags & OPTION_Q))
++			show_progress(meminfo.erasesize, erase.start, start, n_erase_bytes);
++
++		xioctl(fd, MEMERASE, &erase);
++
++		/* format for JFFS2 ? */
++		if (!(flags & OPTION_J))
++			continue;
++
++		/* write cleanmarker */
++		if (flags & IS_NAND) {
++			struct mtd_oob_buf oob;
++
++			oob.ptr = (unsigned char *) &cleanmarker;
++			oob.start = erase.start + clmpos;
++			oob.length = clmlen;
++			xioctl(fd, MEMWRITEOOB, &oob);
++		} else {
++			xlseek(fd, erase.start, SEEK_SET);
++			/* if (lseek(fd, erase.start, SEEK_SET) < 0) {
++				bb_perror_msg("MTD %s failure", "seek");
++				continue;
++			} */
++			xwrite(fd, &cleanmarker, sizeof(cleanmarker));
++			/* if (write(fd, &cleanmarker, sizeof(cleanmarker)) != sizeof(cleanmarker)) {
++				bb_perror_msg("MTD %s failure", "write");
++				continue;
++			} */
++		}
++		if (!(flags & OPTION_Q))
++			printf(" Cleanmarker written at %x.", erase.start);
++	}
++	if (!(flags & OPTION_Q)) {
++		show_progress(meminfo.erasesize, erase.start, start, n_erase_bytes);
++		bb_putchar('\n');
++	}
++
++	if (ENABLE_FEATURE_CLEAN_UP)
++		close(fd);
++	return EXIT_SUCCESS;
++
++}
+diff --git a/miscutils/flash_eraseall.c b/miscutils/flash_eraseall.c
+deleted file mode 100644
+index 0598371..0000000
+--- a/miscutils/flash_eraseall.c
++++ /dev/null
+@@ -1,206 +0,0 @@
+-/* vi: set sw=4 ts=4: */
+-/* eraseall.c -- erase the whole of a MTD device
+- *
+- * Ported to busybox from mtd-utils.
+- *
+- * Copyright (C) 2000 Arcom Control System Ltd
+- *
+- * Renamed to flash_eraseall.c
+- *
+- * Licensed under GPLv2 or later, see file LICENSE in this source tree.
+- */
+-
+-//usage:#define flash_eraseall_trivial_usage
+-//usage:       "[-jq] MTD_DEVICE"
+-//usage:#define flash_eraseall_full_usage "\n\n"
+-//usage:       "Erase an MTD device\n"
+-//usage:     "\n	-j	Format the device for jffs2"
+-//usage:     "\n	-q	Don't display progress messages"
+-
+-#include "libbb.h"
+-#include <mtd/mtd-user.h>
+-#include <linux/jffs2.h>
+-
+-#define OPTION_J  (1 << 0)
+-#define OPTION_Q  (1 << 1)
+-#define IS_NAND   (1 << 2)
+-#define BBTEST    (1 << 3)
+-
+-/* mtd/jffs2-user.h used to have this atrocity:
+-extern int target_endian;
+-
+-#define t16(x) ({ __u16 __b = (x); (target_endian==__BYTE_ORDER)?__b:bswap_16(__b); })
+-#define t32(x) ({ __u32 __b = (x); (target_endian==__BYTE_ORDER)?__b:bswap_32(__b); })
+-
+-#define cpu_to_je16(x) ((jint16_t){t16(x)})
+-#define cpu_to_je32(x) ((jint32_t){t32(x)})
+-#define cpu_to_jemode(x) ((jmode_t){t32(x)})
+-
+-#define je16_to_cpu(x) (t16((x).v16))
+-#define je32_to_cpu(x) (t32((x).v32))
+-#define jemode_to_cpu(x) (t32((x).m))
+-
+-but mtd/jffs2-user.h is gone now (at least 2.6.31.6 does not have it anymore)
+-*/
+-
+-/* We always use native endianness */
+-#undef cpu_to_je16
+-#undef cpu_to_je32
+-#define cpu_to_je16(v) ((jint16_t){(v)})
+-#define cpu_to_je32(v) ((jint32_t){(v)})
+-
+-static void show_progress(mtd_info_t *meminfo, erase_info_t *erase)
+-{
+-	printf("\rErasing %u Kibyte @ %x - %2u%% complete.",
+-		(unsigned)meminfo->erasesize / 1024,
+-		erase->start,
+-		(unsigned) ((unsigned long long) erase->start * 100 / meminfo->size)
+-	);
+-	fflush_all();
+-}
+-
+-int flash_eraseall_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+-int flash_eraseall_main(int argc UNUSED_PARAM, char **argv)
+-{
+-	struct jffs2_unknown_node cleanmarker;
+-	mtd_info_t meminfo;
+-	int fd, clmpos, clmlen;
+-	erase_info_t erase;
+-	struct stat st;
+-	unsigned int flags;
+-	char *mtd_name;
+-
+-	opt_complementary = "=1";
+-	flags = BBTEST | getopt32(argv, "jq");
+-
+-	mtd_name = argv[optind];
+-	fd = xopen(mtd_name, O_RDWR);
+-	fstat(fd, &st);
+-	if (!S_ISCHR(st.st_mode))
+-		bb_error_msg_and_die("%s: not a char device", mtd_name);
+-
+-	xioctl(fd, MEMGETINFO, &meminfo);
+-	erase.length = meminfo.erasesize;
+-	if (meminfo.type == MTD_NANDFLASH)
+-		flags |= IS_NAND;
+-
+-	clmpos = 0;
+-	clmlen = 8;
+-	if (flags & OPTION_J) {
+-		uint32_t *crc32_table;
+-
+-		crc32_table = crc32_filltable(NULL, 0);
+-
+-		cleanmarker.magic = cpu_to_je16(JFFS2_MAGIC_BITMASK);
+-		cleanmarker.nodetype = cpu_to_je16(JFFS2_NODETYPE_CLEANMARKER);
+-		if (!(flags & IS_NAND))
+-			cleanmarker.totlen = cpu_to_je32(sizeof(struct jffs2_unknown_node));
+-		else {
+-			struct nand_oobinfo oobinfo;
+-
+-			xioctl(fd, MEMGETOOBSEL, &oobinfo);
+-
+-			/* Check for autoplacement */
+-			if (oobinfo.useecc == MTD_NANDECC_AUTOPLACE) {
+-				/* Get the position of the free bytes */
+-				clmpos = oobinfo.oobfree[0][0];
+-				clmlen = oobinfo.oobfree[0][1];
+-				if (clmlen > 8)
+-					clmlen = 8;
+-				if (clmlen == 0)
+-					bb_error_msg_and_die("autoplacement selected and no empty space in oob");
+-			} else {
+-				/* Legacy mode */
+-				switch (meminfo.oobsize) {
+-				case 8:
+-					clmpos = 6;
+-					clmlen = 2;
+-					break;
+-				case 16:
+-					clmpos = 8;
+-					/*clmlen = 8;*/
+-					break;
+-				case 64:
+-					clmpos = 16;
+-					/*clmlen = 8;*/
+-					break;
+-				}
+-			}
+-			cleanmarker.totlen = cpu_to_je32(8);
+-		}
+-
+-		cleanmarker.hdr_crc = cpu_to_je32(
+-			crc32_block_endian0(0, &cleanmarker, sizeof(struct jffs2_unknown_node) - 4, crc32_table)
+-		);
+-	}
+-
+-	/* Don't want to destroy progress indicator by bb_error_msg's */
+-	applet_name = xasprintf("\n%s: %s", applet_name, mtd_name);
+-
+-	for (erase.start = 0; erase.start < meminfo.size;
+-	     erase.start += meminfo.erasesize) {
+-		if (flags & BBTEST) {
+-			int ret;
+-			loff_t offset = erase.start;
+-
+-			ret = ioctl(fd, MEMGETBADBLOCK, &offset);
+-			if (ret > 0) {
+-				if (!(flags & OPTION_Q))
+-					bb_info_msg("\nSkipping bad block at 0x%08x", erase.start);
+-				continue;
+-			}
+-			if (ret < 0) {
+-				/* Black block table is not available on certain flash
+-				 * types e.g. NOR
+-				 */
+-				if (errno == EOPNOTSUPP) {
+-					flags &= ~BBTEST;
+-					if (flags & IS_NAND)
+-						bb_error_msg_and_die("bad block check not available");
+-				} else {
+-					bb_perror_msg_and_die("MEMGETBADBLOCK error");
+-				}
+-			}
+-		}
+-
+-		if (!(flags & OPTION_Q))
+-			show_progress(&meminfo, &erase);
+-
+-		xioctl(fd, MEMERASE, &erase);
+-
+-		/* format for JFFS2 ? */
+-		if (!(flags & OPTION_J))
+-			continue;
+-
+-		/* write cleanmarker */
+-		if (flags & IS_NAND) {
+-			struct mtd_oob_buf oob;
+-
+-			oob.ptr = (unsigned char *) &cleanmarker;
+-			oob.start = erase.start + clmpos;
+-			oob.length = clmlen;
+-			xioctl(fd, MEMWRITEOOB, &oob);
+-		} else {
+-			xlseek(fd, erase.start, SEEK_SET);
+-			/* if (lseek(fd, erase.start, SEEK_SET) < 0) {
+-				bb_perror_msg("MTD %s failure", "seek");
+-				continue;
+-			} */
+-			xwrite(fd, &cleanmarker, sizeof(cleanmarker));
+-			/* if (write(fd, &cleanmarker, sizeof(cleanmarker)) != sizeof(cleanmarker)) {
+-				bb_perror_msg("MTD %s failure", "write");
+-				continue;
+-			} */
+-		}
+-		if (!(flags & OPTION_Q))
+-			printf(" Cleanmarker written at %x.", erase.start);
+-	}
+-	if (!(flags & OPTION_Q)) {
+-		show_progress(&meminfo, &erase);
+-		bb_putchar('\n');
+-	}
+-
+-	if (ENABLE_FEATURE_CLEAN_UP)
+-		close(fd);
+-	return EXIT_SUCCESS;
+-}

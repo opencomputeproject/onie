@@ -1,0 +1,120 @@
+New broadcom drivers support
+
+diff --git a/drivers/net/phy/broadcom.c b/drivers/net/phy/broadcom.c
+index 427ac60..799aa2c 100644
+--- a/drivers/net/phy/broadcom.c
++++ b/drivers/net/phy/broadcom.c
+@@ -23,26 +23,7 @@
+ #include <config.h>
+ #include <common.h>
+ #include <phy.h>
+-
+-/* Broadcom BCM54xx -- taken from linux sungem_phy */
+-#define MIIM_BCM54xx_AUXCNTL			0x18
+-#define MIIM_BCM54xx_AUXCNTL_ENCODE(val) (((val & 0x7) << 12)|(val & 0x7))
+-#define MIIM_BCM54xx_AUXSTATUS			0x19
+-#define MIIM_BCM54xx_AUXSTATUS_LINKMODE_MASK	0x0700
+-#define MIIM_BCM54xx_AUXSTATUS_LINKMODE_SHIFT	8
+-
+-#define MIIM_BCM54XX_SHD			0x1c
+-#define MIIM_BCM54XX_SHD_WRITE			0x8000
+-#define MIIM_BCM54XX_SHD_VAL(x)			((x & 0x1f) << 10)
+-#define MIIM_BCM54XX_SHD_DATA(x)		((x & 0x3ff) << 0)
+-#define MIIM_BCM54XX_SHD_WR_ENCODE(val, data)	\
+-	(MIIM_BCM54XX_SHD_WRITE | MIIM_BCM54XX_SHD_VAL(val) | \
+-	 MIIM_BCM54XX_SHD_DATA(data))
+-
+-#define MIIM_BCM54XX_EXP_DATA		0x15	/* Expansion register data */
+-#define MIIM_BCM54XX_EXP_SEL		0x17	/* Expansion register select */
+-#define MIIM_BCM54XX_EXP_SEL_SSD	0x0e00	/* Secondary SerDes select */
+-#define MIIM_BCM54XX_EXP_SEL_ER		0x0f00	/* Expansion register select */
++#include <broadcom_phy.h>
+ 
+ /* Broadcom BCM5461S */
+ static int bcm5461_config(struct phy_device *phydev)
+@@ -278,11 +259,33 @@ static struct phy_driver BCM5482S_driver = {
+ 	.shutdown = &genphy_shutdown,
+ };
+ 
++static struct phy_driver BCM54610_A3_driver = {
++	.name = "Broadcom BCM54610_A3",
++	.uid = 0x0143bd63,
++	.mask = 0xfffff0,
++	.features = PHY_GBIT_FEATURES,
++	.config = &bcm5461_config,
++	.startup = &bcm54xx_startup,
++	.shutdown = &genphy_shutdown,
++};
++
++static struct phy_driver BCM5481_A2_driver = {
++	.name = "Broadcom BCM5481_A2",
++	.uid = 0x0143bca2,
++	.mask = 0xfffff0,
++	.features = PHY_GBIT_FEATURES,
++	.config = &bcm5461_config,
++	.startup = &bcm54xx_startup,
++	.shutdown = &genphy_shutdown,
++};
++
+ int phy_broadcom_init(void)
+ {
+ 	phy_register(&BCM5482S_driver);
+ 	phy_register(&BCM5464S_driver);
+ 	phy_register(&BCM5461S_driver);
++	phy_register(&BCM54610_A3_driver);
++	phy_register(&BCM5481_A2_driver);
+ 
+ 	return 0;
+ }
+diff --git a/include/broadcom_phy.h b/include/broadcom_phy.h
+new file mode 100644
+index 0000000..2607c5c
+--- /dev/null
++++ b/include/broadcom_phy.h
+@@ -0,0 +1,46 @@
++/*
++ * Broadcom PHY drivers
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ *
++ * Copyright 2010-2011 Freescale Semiconductor, Inc.
++ * author Andy Fleming
++ *
++ */
++#ifndef BROADCOM_PHY_H__
++#define BROADCOM_PHY_H__
++
++/* Broadcom BCM54xx -- taken from linux sungem_phy */
++#define MIIM_BCM54xx_AUXCNTL            0x18
++#define MIIM_BCM54xx_AUXCNTL_ENCODE(val) (((val & 0x7) << 12)|(val & 0x7))
++#define MIIM_BCM54xx_AUXSTATUS          0x19
++#define MIIM_BCM54xx_AUXSTATUS_LINKMODE_MASK    0x0700
++#define MIIM_BCM54xx_AUXSTATUS_LINKMODE_SHIFT   8
++
++#define MIIM_BCM54XX_SHD            0x1c
++#define MIIM_BCM54XX_SHD_WRITE          0x8000
++#define MIIM_BCM54XX_SHD_VAL(x)         ((x & 0x1f) << 10)
++#define MIIM_BCM54XX_SHD_DATA(x)        ((x & 0x3ff) << 0)
++#define MIIM_BCM54XX_SHD_WR_ENCODE(val, data)   \
++    (MIIM_BCM54XX_SHD_WRITE | MIIM_BCM54XX_SHD_VAL(val) | \
++     MIIM_BCM54XX_SHD_DATA(data))
++
++#define MIIM_BCM54XX_EXP_DATA       0x15    /* Expansion register data */
++#define MIIM_BCM54XX_EXP_SEL        0x17    /* Expansion register select */
++#define MIIM_BCM54XX_EXP_SEL_SSD    0x0e00  /* Secondary SerDes select */
++#define MIIM_BCM54XX_EXP_SEL_ER     0x0f00  /* Expansion register select */
++
++#endif	/* BROADCOM_PHY_H__ */

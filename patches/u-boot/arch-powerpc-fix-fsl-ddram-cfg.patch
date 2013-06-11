@@ -1,0 +1,57 @@
+Fixup for FSL DDRAM configuration values
+
+diff --git a/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c b/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
+index 8016bcd..6265e52 100644
+--- a/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
++++ b/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
+@@ -305,6 +305,14 @@ static void set_timing_cfg_0(fsl_ddr_cfg_regs_t *ddr,
+ 		pre_pd_exit_mclk = act_pd_exit_mclk;
+ 		taxpd_mclk = 1;
+ 	}
++
++	if (popts->act_pd_exit_mclk_override) {	/* powerdown is not used */
++		/* act_pd_exit_mclk = tXARD, see above */
++		act_pd_exit_mclk = picos_to_mclk(tXP);
++		/* Mode register MR0[A12] is '1' - fast exit */
++		pre_pd_exit_mclk = act_pd_exit_mclk;
++		taxpd_mclk = 1;
++	}
+ #else /* CONFIG_FSL_DDR2 */
+ 	/*
+ 	 * (tXARD and tXARDS). Empirical?
+@@ -911,6 +919,8 @@ static void set_ddr_sdram_mode(fsl_ddr_cfg_regs_t *ddr,
+ 	if (popts->quad_rank_present)
+ 		dic = 1;	/* output driver impedance 240/7 ohm */
+ 
++	if (popts->dic_override)
++		dic = popts->dic;
+ 	/*
+ 	 * The esdmode value will also be used for writing
+ 	 * MR1 during write leveling for DDR3, although the
+@@ -1336,6 +1346,9 @@ static void set_ddr_wrlvl_cntl(fsl_ddr_cfg_regs_t *ddr, unsigned int wrlvl_en,
+ 		wrlvl_mrd = 0x6;
+ 		/* tWL_ODTEN 128 */
+ 		wrlvl_odten = 0x7;
++		if (popts->wrlvl_odten_override) {
++			wrlvl_odten = popts->wrlvl_odten;
++		}
+ 		/* tWL_DQSEN min = 25 nCK, we set it 32 */
+ 		wrlvl_dqsen = 0x5;
+ 		/*
+diff --git a/arch/powerpc/include/asm/fsl_ddr_sdram.h b/arch/powerpc/include/asm/fsl_ddr_sdram.h
+index 640d329..bb5a670 100644
+--- a/arch/powerpc/include/asm/fsl_ddr_sdram.h
++++ b/arch/powerpc/include/asm/fsl_ddr_sdram.h
+@@ -294,6 +294,12 @@ typedef struct memctl_options_s {
+ 	unsigned int wrlvl_start;
+ 	unsigned int wrlvl_ctl_2;
+ 	unsigned int wrlvl_ctl_3;
++	unsigned int wrlvl_odten_override;
++	unsigned int wrlvl_odten;
++
++	unsigned int act_pd_exit_mclk_override;
++	unsigned int dic_override;
++	unsigned int dic;
+ 
+ 	unsigned int half_strength_driver_enable;
+ 	unsigned int twoT_en;

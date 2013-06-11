@@ -1,0 +1,57 @@
+Tweak the kernel to support a JTAG hardware debugger
+
+- disable the software watchdog
+- enable Debug Interrupt in the PPC Machine State Register
+
+diff --git a/arch/powerpc/Kconfig.debug b/arch/powerpc/Kconfig.debug
+index 1b8a9c9..aba8704 100644
+--- a/arch/powerpc/Kconfig.debug
++++ b/arch/powerpc/Kconfig.debug
+@@ -132,6 +132,15 @@ config BDI_SWITCH
+ 	  Unless you are intending to debug the kernel with one of these
+ 	  machines, say N here.
+ 
++config JTAG_DEBUGGER
++	bool "Kernel modifications for JTAG debuggers"
++	depends on DEBUG_KERNEL && PPC32
++	help
++	  Modify kernel to allow JTAG debuggers to work.  So far, this includes
++	  setting the "DE" bit in booke ppc MSR_KERNEL and set the kernel's
++	  softlockup threshold to be negative, effectively disabling software based
++	  watchdogs.
++
+ config BOOTX_TEXT
+ 	bool "Support for early boot text console (BootX or OpenFirmware only)"
+ 	depends on PPC_OF && PPC_BOOK3S
+diff --git a/arch/powerpc/include/asm/reg_booke.h b/arch/powerpc/include/asm/reg_booke.h
+index 03c48e8..cd7b5af 100644
+--- a/arch/powerpc/include/asm/reg_booke.h
++++ b/arch/powerpc/include/asm/reg_booke.h
+@@ -37,7 +37,11 @@
+ #define MSR_KERNEL	(MSR_ME|MSR_RI|MSR_IR|MSR_DR|MSR_CE)
+ #define MSR_USER	(MSR_KERNEL|MSR_PR|MSR_EE)
+ #else
++#if defined(CONFIG_JTAG_DEBUGGER)
++#define MSR_KERNEL	(MSR_ME|MSR_RI|MSR_CE|MSR_DE)
++#else
+ #define MSR_KERNEL	(MSR_ME|MSR_RI|MSR_CE)
++#endif
+ #define MSR_USER	(MSR_KERNEL|MSR_PR|MSR_EE)
+ #endif
+ 
+diff --git a/kernel/watchdog.c b/kernel/watchdog.c
+index a8bc4d9..08beea7 100644
+--- a/kernel/watchdog.c
++++ b/kernel/watchdog.c
+@@ -28,7 +28,11 @@
+ #include <linux/perf_event.h>
+ 
+ int watchdog_enabled = 1;
++#if defined(CONFIG_JTAG_DEBUGGER)
++int __read_mostly watchdog_thresh = -10;
++#else
+ int __read_mostly watchdog_thresh = 10;
++#endif
+ 
+ static DEFINE_PER_CPU(unsigned long, watchdog_touch_ts);
+ static DEFINE_PER_CPU(struct task_struct *, softlockup_watchdog);

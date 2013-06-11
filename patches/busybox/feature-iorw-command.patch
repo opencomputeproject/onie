@@ -1,0 +1,299 @@
+feature iorw command patch
+
+Add the iorw command, which allows root to peek/poke arbitrary memory
+locations.
+
+diff --git a/include/applets.src.h b/include/applets.src.h
+index 566a2ce..5c3f6d6 100644
+--- a/include/applets.src.h
++++ b/include/applets.src.h
+@@ -188,6 +188,7 @@ IF_INETD(APPLET(inetd, BB_DIR_USR_SBIN, BB_SUID_DROP))
+ IF_INOTIFYD(APPLET(inotifyd, BB_DIR_SBIN, BB_SUID_DROP))
+ IF_INSTALL(APPLET(install, BB_DIR_USR_BIN, BB_SUID_DROP))
+ IF_IONICE(APPLET(ionice, BB_DIR_BIN, BB_SUID_DROP))
++IF_IORW(APPLET(iorw, BB_DIR_USR_SBIN, BB_SUID_DROP))
+ #if ENABLE_FEATURE_IP_ADDRESS \
+  || ENABLE_FEATURE_IP_ROUTE \
+  || ENABLE_FEATURE_IP_LINK \
+diff --git a/miscutils/Config.src b/miscutils/Config.src
+index 614b6cc..4a1928d 100644
+--- a/miscutils/Config.src
++++ b/miscutils/Config.src
+@@ -420,6 +420,13 @@ config FEATURE_HDPARM_HDIO_GETSET_DMA
+ 	help
+ 	  Enables the 'hdparm -d' option to get/set using_dma flag.
+ 
++config IORW
++	bool "iorw"
++	default n
++	help
++	  Enables the 'iorw' command, a way to peek/poke arbitrary
++	  memory mapped locations.
++
+ config MAKEDEVS
+ 	bool "makedevs"
+ 	default y
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index 24162e7..a2a860b 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -25,6 +25,7 @@ lib-$(CONFIG_FLASH_LOCK)     += flash_lock_unlock.o
+ lib-$(CONFIG_FLASH_UNLOCK)   += flash_lock_unlock.o
+ lib-$(CONFIG_IONICE)      += ionice.o
+ lib-$(CONFIG_HDPARM)      += hdparm.o
++lib-$(CONFIG_IORW)        += iorw.o
+ lib-$(CONFIG_INOTIFYD)    += inotifyd.o
+ lib-$(CONFIG_FEATURE_LAST_SMALL)+= last.o
+ lib-$(CONFIG_FEATURE_LAST_FANCY)+= last_fancy.o
+diff --git a/miscutils/iorw.c b/miscutils/iorw.c
+new file mode 100644
+index 0000000..f9d0d58
+--- /dev/null
++++ b/miscutils/iorw.c
+@@ -0,0 +1,246 @@
++/*
++* Author:  Curt Brune, curt@cumulusnetworks.com
++*
++* See file CREDITS for list of people who contributed to this
++* project.
++*
++* This program is free software; you can redistribute it and/or
++* modify it under the terms of the GNU General Public License as
++* published by the Free Software Foundation; either version 2 of
++* the License, or (at your option) any later version.
++*
++* This program is distributed in the hope that it will be useful,
++* but WITHOUT ANY WARRANTY; without even the implied warranty of
++* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
++* GNU General Public License for more details.
++*
++* You should have received a copy of the GNU General Public License
++* along with this program; if not, write to the Free Software
++* Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++* MA 02111-1307 USA
++*/
++
++#include "libbb.h"
++#include <stdint.h>
++#include <assert.h>
++#include <unistd.h>
++#include <string.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++
++/*
++**
++** Memory map physical address to logical address
++**
++*/
++static int fd = -1;
++
++static uint32_t mmap_map_addr(const uint32_t phys_addr,
++			      const uint32_t range,
++			      uint32_t *const log_addr_p)
++{
++	assert( log_addr_p);
++	assert( (phys_addr % getpagesize()) == 0 );
++
++	printf("Opening /dev/mem...\n");
++	if ( (fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0) {
++		bb_error_msg("Failed to open /dev/mem. Errno %d:%s",
++			     errno, strerror(errno));
++		return 1;
++	}
++
++	*log_addr_p = (uint32_t) mmap(0,
++				      (size_t) range,
++				      PROT_READ|PROT_WRITE,
++				      MAP_SHARED,
++				      fd,
++				      (off_t) phys_addr);
++
++	if (*log_addr_p == (unsigned long) MAP_FAILED) {
++		close(fd);
++		bb_error_msg("mmap() failed. Errno %d:%s",
++			     errno, strerror(errno));
++		return 1;
++	}
++
++	printf("Using mmapped addr: 0x%08x\n", (uint32_t)*log_addr_p);
++
++	return 0;
++}
++
++#if defined(__PPC__)
++#define SYNC asm volatile ("eieio" : : )
++#else
++#error Unsupported CPU architecture
++#endif
++
++static inline uint32_t read32(uint32_t addr)
++{
++	SYNC;
++	return *((volatile uint32_t *)addr);
++}
++
++static inline void write32(uint32_t addr, uint32_t data)
++{
++	*((volatile uint32_t *)addr) = data;
++	SYNC;
++}
++
++static inline uint8_t read16(uint32_t addr)
++{
++	SYNC;
++	return *((volatile uint16_t *)addr);
++}
++static inline void write16(uint32_t addr, uint16_t data)
++{
++	*((volatile uint16_t *)addr) = data;
++	SYNC;
++}
++
++static inline uint8_t read8(uint32_t addr)
++{
++	SYNC;
++	return *((volatile uint8_t *)addr);
++}
++static inline void write8(uint32_t addr, uint8_t data)
++{
++	*((volatile uint8_t *)addr) = data;
++	SYNC;
++}
++
++//usage:#define iorw_trivial_usage
++//usage:       "{r,w},{b,w,l}> <addr> <[number of reads]|value>"
++//usage:#define iorw_full_usage "\n\n"
++//usage:       "Peek/poke physical memory locations.\n"
++//usage:       "The first argument specifies read/write and the access size.\n"
++//usage:     "\n	r.{b,w,l} <addr> [number of reads],  Read {byte, word, long}"
++//usage:     "\n	w.{b,w,l} <addr> <value>, Write {byte, word, long} value"
++//usage:#define iorw_example_usage
++//usage:       "# iorw r.b 0xeff80000 32\n"
++//usage:       "[reads 32 bytes from physical address 0xeff80000]\n"
++//usage:       "# iorw r.l 0xeff80000 2\n"
++//usage:       "[reads 2 32-bit words from physical address 0xeff80000]\n"
++//usage:       "# iorw w.w 0xeff80000 0x4040\n"
++//usage:       "[writes 16-bit value 0x4040 to physical address 0xeff80000]\n"
++
++int iorw_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
++int iorw_main(int argc, char **argv)
++{
++	int sz = 0;
++	int num_items = 1, i;
++	uint32_t phys_addr, range, val = 0;
++	uint32_t map_addr, offset, virt_addr;
++	char* p;
++
++	if ( argc < 3 ) {
++		bb_error_msg("Not enough arguments.\n");
++		bb_show_usage();
++		return -1;
++	}
++
++	p = argv[1];
++	if ( ((p[0] != 'r') && (p[0] != 'w')) ||
++	     (p[1] != '.') ||
++	     ((p[2] != 'b') && (p[2] != 'w') && (p[2] != 'l'))) {
++		bb_error_msg("Unknown operation %s\n", p);
++		bb_show_usage();
++		return -1;
++	}
++
++	phys_addr = strtoul( argv[2], NULL, 0);
++
++	switch (p[2]) {
++	case 'b':
++		sz = 1;
++		break;
++	case 'w':
++		sz = 2;
++		if ( phys_addr & 0x1) {
++			bb_error_msg("2-byte access requested, but physical address 0x%08x is not 2-byte aligned.\n",
++				     phys_addr);
++			bb_show_usage();
++			return -1;
++		}
++		break;
++	case 'l':
++		sz = 4;
++		if ( phys_addr & 0x3) {
++			bb_error_msg("4-byte access requested, but physical address 0x%08x is not 4-byte aligned.\n",
++				     phys_addr);
++			bb_show_usage();
++			return -1;
++		}
++		break;
++	default:
++		bb_error_msg("Unknown data width '%c'\n", p[2]);
++		bb_show_usage();
++		return -1;
++	};
++
++	if ( p[0] == 'w') {
++		if (argc != 4) {
++			bb_error_msg("Bad format for write command\n");
++			bb_show_usage();
++			return -1;
++		}
++		val = strtoul( argv[3], NULL, 0);
++	}
++
++	if ( (p[0] == 'r') && (argc == 4)) {
++		num_items = strtoul( argv[3], NULL, 0);
++	}
++
++	//    printf("op:%c, sz:%d, phys_addr:0x%08x, num_items:%d, val:0x%08x\n",
++	//           p[0], sz, phys_addr, num_items, val);
++
++	map_addr = phys_addr - (phys_addr % getpagesize());
++	offset = phys_addr % getpagesize();
++
++	range = (((sz * num_items) + (phys_addr - map_addr) + getpagesize() - 1) /
++		 getpagesize()) * getpagesize();
++
++	// printf("map_addr: 0x%08x, range: 0x%08x, offset: 0x%08x\n", map_addr, range, offset);
++
++	if ( mmap_map_addr( map_addr, range, &virt_addr) != 0) {
++		bb_error_msg("mmap() failed.\n");
++		return -1;
++	}
++
++	if ( p[0] == 'w') {
++		switch (p[2]) {
++		case 'b':
++			write8( virt_addr + offset, val);
++			break;
++		case 'w':
++			write16( virt_addr + offset, val);
++			break;
++		case 'l':
++			write32( virt_addr + offset, val);
++			break;
++		};
++	}
++	else {
++		for ( i = 0; i < num_items; i++) {
++			uint32_t rval = 0, addr;
++			addr = virt_addr + offset + (i * sz);
++			switch (p[2]) {
++			case 'b':
++				rval = read8( addr);
++				break;
++			case 'w':
++				rval = read16( addr);
++				break;
++			case 'l':
++				rval = read32( addr);
++				break;
++			};
++			printf( "0x%08x: 0x%0*x\n", phys_addr + (i*sz), sz*2, rval);
++		}
++	}
++
++	close(fd);
++
++	return 0;
++}

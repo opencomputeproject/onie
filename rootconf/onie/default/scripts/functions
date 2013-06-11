@@ -1,0 +1,300 @@
+##
+## Useful functions and variables for boot time.
+##
+## This assumes the shell is ash/dash.
+##
+
+export onie_installer="/installer"
+onie_default_filename="onie-installer"
+
+syslog_onie="local0"
+syslog_tag="onie"
+
+_log_msg()
+{
+	printf "$@" | logger -t $syslog_tag -p ${syslog_onie}.info
+}
+
+_log_info_msg()
+{
+	printf "$@" | logger -t $syslog_tag -p ${syslog_onie}.info
+}
+
+_log_warn_msg()
+{
+	printf "$@" | logger -t ${syslog_tag}-warn -p ${syslog_onie}.warn
+}
+
+_log_err_msg()
+{
+	printf "$@" | logger -t ${syslog_tag}-error -p ${syslog_onie}.err
+}
+
+log_debug()
+{
+	if [ "$onie_verbose" = "y" ]; then 
+	    printf "$@" | logger -t ${syslog_tag}-debug -p ${syslog_onie}.debug
+        fi
+}
+
+log_success_msg()
+{
+	_log_info_msg "Success: $@\n"
+}
+
+log_info_msg()
+{
+	_log_info_msg "Info: $@\n"
+}
+
+log_failure_msg()
+{
+	_log_err_msg "Failure: $@\n"
+}
+
+log_warning_msg()
+{
+	_log_warn_msg "Warning: $@\n"
+}
+
+log_begin_msg()
+{
+	_log_info_msg "$@..."
+}
+
+log_end_msg()
+{
+	_log_info_msg " done.\n"
+}
+
+## Import kernel's /proc/cmdline variables
+import_cmdline()
+{
+
+    ONIE_REQUIRED_ARGS=$(cat <<EOF
+serial_num
+eth_addr
+vendor_id
+platform
+sec_key
+EOF
+    )
+
+    ONIE_OPTIONAL_ARGS=$(cat <<EOF
+quiet
+verbose
+reboot_cmd
+testing
+ip
+install_url
+bootfile
+dhcp
+EOF
+    )
+
+    for p in $ONIE_REQUIRED_ARGS $ONIE_OPTIONAL_ARGS ; do
+        unset $p
+        eval export onie_$p=
+    done
+
+    # Parse kernel command line options
+    for x in $(cat /proc/cmdline); do
+        parm=${x%%=*}
+        val=${x#*=}
+        case $parm in
+            # onie required args
+	    serial_num)
+		onie_serial_num="$val"
+		;;
+	    eth_addr|eth_addr0)
+		onie_eth_addr="$val"
+		;;
+	    vendor_id)
+		onie_vendor_id="$val"
+		;;
+	    platform)
+		onie_platform="$val"
+		;;
+	    fw_env)
+		onie_fw_env="$val"
+		;;
+	    sec_key)
+		onie_sec_key="$val"
+		;;
+
+            # onie optional args
+            ip)
+		onie_ip="$val"
+                ;;
+            serverip)
+		onie_serverip="$val"
+                ;;
+            bootfile)
+		onie_bootfile="$val"
+                ;;
+            dhcp)
+		onie_dhcp="$val"
+                ;;
+	    init)
+		onie_init="$val"
+		;;
+	    quiet)
+		onie_quiet=y
+		;;
+	    verbose)
+		onie_verbose=y
+		;;
+            reboot_cmd)
+		onie_reboot_cmd="$val"
+                ;;
+            install_url)
+		onie_install_url="$val"
+                ;;
+	    testing)
+		onie_testing=y
+		;;
+	esac
+    done
+
+}
+
+##
+## Run command and log failures
+##
+cmd_run()
+{
+    if [ "$onie_verbose" = "y" ] ; then
+        echo "Running command: $@" > /dev/stderr
+    fi
+    eval "$@" || {
+        log_failure_msg "$@ failed."
+        return 1
+    }
+}
+
+mounttmpfs()
+{
+    dir=$1
+    opts=$2
+
+    cmd_run mount -o "$opts" -t tmpfs tmpfs $dir || {
+            log_failure_msg "Could not mount tmpfs on $dir"
+            /bin/rescue 1
+    }
+    cmd_run touch $dir/.ramfs
+}
+
+# Decode onie specific DHCP vendor options (RFC 2132, option 43)
+# The input is an ASCII encoded binary string
+#
+# The onie vendor option format is specified in isc-dhcp config speak
+# as:
+#
+#  option space onie code width 1 length width 1 hash size 3;
+#  option onie.url code 1 = text;
+#
+import_vendoropts()
+{
+    opts="$1"
+    # consume opts string as TLV:
+    #   type - 1 byte
+    #   len  - 1 byte, num bytes in val
+
+    while [ ${#opts} -gt 0 ] ; do
+        type=$(printf %d 0x$(echo $opts | head -c 2))
+        len=$(printf %d 0x$(echo $opts | head -c 4 | tail -c 2))
+        tot_len=$(( ( $len * 2 ) + 4 ))
+        val=$(echo -n $opts | head -c $tot_len | tail -c $(( $len * 2 )))
+        # echo "Looking at type: $type, len: $len, val: $val"
+        case "$type" in
+            1)
+                # ONIE URL
+                tmp=
+                while [ ${#val} -gt 0 ] ; do
+                    byte=$(echo -n $val | head -c 2)
+                    char=$(printf %b \\x"$byte")
+                    tmp="${tmp}${char}"
+                    val=$(echo -n $val | tail -c $(( ${#val} - 2 )))
+                done
+                export onie_disco_onie_url="$tmp"
+                ;;
+            *)
+                log_warning_msg "Unknown onie vendor option type: $type"
+        esac
+        opts=$(echo $opts | tail -c $(( ${#opts} - $tot_len )))
+    done
+
+}
+
+# Import encoded name/val pairs into environment
+# The pairs are encoded into a single string as follow:
+#   name1@@val1##name2@@val2##..nameX@@valX##
+#
+import_parms()
+{
+    parms="$1"
+    while [ ${#parms} -gt 0 ] ; do
+        nv=${parms%%##*}
+        name="${nv%@@*}"
+        val=${nv#*@@}
+        parms=${parms#*##}
+        eval "export $name"="$val"
+    done
+
+    [ -n "$onie_disco_vendoropts" ] && import_vendoropts "$onie_disco_vendoropts"
+}
+
+# remove parm
+remove_parm()
+{
+    parms="$1"
+    name="$2"
+    echo "$parms" | sed -e "s/${name}@@[^#]*##//g"
+}
+
+# add parm
+add_parm()
+{
+    parms="$1"
+    name="$2"
+    val="$3"
+
+    # first remove name from parms
+    parms=$(remove_parm "$parms" "$name")
+    parms="${parms}${name}@@${val}##"
+    echo "$parms"
+}
+
+# network interface list
+net_intf()
+{
+    # Find eth interface to use for DHCP
+    intf=
+    if [ -n "$dhcp" ] ; then
+        intf="$dhcp"
+    elif [ -n "$ip" ] ; then
+        # Try ip=:::::${netdev}:dhcp
+        intf=$(echo $ip | awk -F: '{print $6}')
+    fi
+    if [ -z "$intf" ] ; then
+        intf_list=$(ifconfig -a |grep Ethernet| sed -e '/dummy/d'|awk '{print $1}')
+    else
+        intf_list="$intf"
+    fi
+    echo $intf_list
+}
+
+# generic udhcpc args
+udhcpc_args()
+{
+    udhcp_args="-q -S -V onie_dhcp_vendor_${onie_platform}"
+    # user_class - option 77 - string in hex
+    udhcp_user_class="-x 77:$(echo -n onie_dhcp_user_class | hexdump -ve '1/1 "%.2x"')"
+
+    echo "$udhcp_args" "$udhcp_user_class"
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

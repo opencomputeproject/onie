@@ -1,0 +1,63 @@
+#!/bin/sh
+# Busybox udhcpc4 reactor script.
+#
+# Based on the busybox example scripts
+# Copyright (C) 2009 by Axel Beckert.
+#
+
+RESOLV_CONF="/etc/resolv.conf"
+PROG="DHCP"
+
+case $1 in
+    bound|renew)
+        [ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+        [ -n "$subnet" ] && NETMASK="netmask $subnet"
+        
+        /sbin/ifconfig $interface $ip $BROADCAST $NETMASK
+        
+        if [ -n "$router" ]; then
+            
+            while /sbin/route del default gw 0.0.0.0 dev $interface >& /dev/null ; do :; done
+            
+            metric=0
+            for i in $router; do
+                /sbin/route add default gw $i dev $interface metric $metric
+                metric=$(($metric + 1))
+            done
+        fi
+        
+        # Update resolver configuration file
+        rm -f "$RESOLV_CONF"
+        touch "$RESOLV_CONF"
+        if [ -n "$domain" ]; then
+            echo "domain $domain" >> "$RESOLV_CONF"
+        fi
+
+        for i in $dns; do
+            echo "nameserver $i" >> "$RESOLV_CONF"
+        done
+
+        if [ -n "$hostname" ]; then
+            echo "$hostname" > /etc/hostname
+            $(hostname "$hostname")
+        fi
+
+        ;;
+
+    deconfig)
+        /sbin/ifconfig $interface 0.0.0.0
+        ;;
+
+    leasefail)
+        echo "$PROG: Lease failed: $message"
+        ;;
+
+    nak)
+        echo "$PROG: Received a NAK: $message"
+        ;;
+
+    *)
+        echo "$PROG: Unknown udhcpc command: $1";
+        exit 1;
+        ;;
+esac
