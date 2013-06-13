@@ -65,34 +65,6 @@ endif
 
 #-------------------------------------------------------------------------------
 #
-# Determine build id tag
-#
-# - default release is nightly build. 
-# - change it to RC1, RC2 etc. for Release Candidate releases
-# - or override this with a definition from the command line
-#
-VERSION_FILE	= $(abspath ./conf/version)
-RELEASE_VERSION = $(shell cat $(VERSION_FILE) | grep VERSION | sed -e 's/.*=//')
-RELEASE ?= "NB"
-LSB_RELEASE_TAG	?= $(shell [ -r ./conf/lsb-release ] && cat ./conf/lsb-release)
-ifeq ($(LSB_RELEASE_TAG),)
-  GIT_HEAD = $(shell git show --abbrev-commit HEAD | sed -ne "/^commit [0-9a-f]*/s/^commit //p")
-  ifeq (1, $(RELEASE))
-    LSB_RELEASE_TAG = $(RELEASE_VERSION)
-  else ifneq ($(RELEASE),NB)
-    LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(RELEASE)
-  else
-    BUILD_DATE = $(shell date +%Y%m%d%H%M)
-    LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(BUILD_DATE)-$(RELEASE)
-  endif
-  DIRTY  = $(shell git status | egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo dirty)
-  ifneq ($(DIRTY),)
-    LSB_RELEASE_TAG := $(LSB_RELEASE_TAG)-$(DIRTY)
-  endif
-endif
-
-#-------------------------------------------------------------------------------
-#
 #  help (the default target)
 #
 
@@ -181,6 +153,34 @@ ifneq (,$(MAKECMDGOALS))
       $(error Unable to find valid machine configuration directory.)
     endif
     include $(MACHINEDIR)/machine.make
+  endif
+endif
+
+#-------------------------------------------------------------------------------
+#
+# Determine build id tag
+#
+# - default release is nightly build. 
+# - change it to RC1, RC2 etc. for Release Candidate releases
+# - or override this with a definition from the command line
+#
+VERSION_FILE	= $(abspath ./conf/version)
+RELEASE_VERSION = $(shell cat $(VERSION_FILE) | grep VERSION | sed -e 's/.*=//')
+RELEASE ?= "NB"
+LSB_RELEASE_TAG	?= $(shell [ -r ./conf/lsb-release ] && cat ./conf/lsb-release)
+ifeq ($(LSB_RELEASE_TAG),)
+  GIT_HEAD = $(shell cd $(MACHINEDIR) && git show --abbrev-commit HEAD | sed -ne "/^commit [0-9a-f]*/s/^commit //p")
+  ifeq (1, $(RELEASE))
+    LSB_RELEASE_TAG = $(RELEASE_VERSION)
+  else ifneq ($(RELEASE),NB)
+    LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(RELEASE)
+  else
+    BUILD_DATE = $(shell date +%Y%m%d%H%M)
+    LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(BUILD_DATE)-$(RELEASE)
+  endif
+  DIRTY  = $(shell git status | egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo dirty)
+  ifneq ($(DIRTY),)
+    LSB_RELEASE_TAG := $(LSB_RELEASE_TAG)-$(DIRTY)
   endif
 endif
 
