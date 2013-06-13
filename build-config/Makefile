@@ -133,7 +133,7 @@ endif
 #
 #  Target Platform -- Usually specified on command line
 #
-MACHINE  ?= unknown
+MACHINE  ?= fsl_p2020rdbpca
 PLATFORM  = $(ARCH)-$(MACHINE)
 
 #-------------------------------------------------------------------------------
