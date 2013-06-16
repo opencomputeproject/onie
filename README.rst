@@ -14,5 +14,7 @@ Mailing List and Collaboration
 
 Join the conversation -- send questions, comments and ideas to onie@onie.org.
 
-Subscribe to the list or browse the archives [here](https://groups.google.com/a/onie.org/group/onie).
+Subscribe to the list or browse the archives [here] [1].
+
+  [1]: https://groups.google.com/a/onie.org/group/onie "ONIE Group"
 
