@@ -1,0 +1,728 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Image Discovery and Execution &mdash; Open Network Install Environment 0.0.2-ef05926-PUB4 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.0.2-ef05926-PUB4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment 0.0.2-ef05926-PUB4 documentation" href="../index.html" />
+    <link rel="up" title="Design Specification" href="index.html" />
+    <link rel="next" title="Network Operating System Interface" href="nos_interface.html" />
+    <link rel="prev" title="Linux Kernel and Device Tree Source" href="kernel.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="nos_interface.html" title="Network Operating System Interface"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="kernel.html" title="Linux Kernel and Device Tree Source"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 0.0.2-ef05926-PUB4 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Design Specification</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="image-discovery-and-execution">
+<h1>Image Discovery and Execution<a class="headerlink" href="#image-discovery-and-execution" title="Permalink to this headline">¶</a></h1>
+<p>The primary responsibility of ONIE is to locate a NOS installer and
+execute it.</p>
+<div class="section" id="installer-discovery-methods">
+<h2>Installer Discovery Methods<a class="headerlink" href="#installer-discovery-methods" title="Permalink to this headline">¶</a></h2>
+<p>ONIE attempts to locate the installer through a number of discovery
+methods.  The first successful method found is used to download and
+run an installer.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Even though an installer is successfully found, the
+installer can fail, in which case ONIE moves on to the next discover
+method.</p>
+</div>
+<p>The following methods are tried in order:</p>
+<ol class="arabic simple">
+<li>Statically configured (Passed from boot loader)</li>
+<li>Local file systems (USB for example)</li>
+<li>Exact URLs from DHCPv4</li>
+<li>Inexact URLs based on DHCP responses</li>
+<li>IPv6 neighbors</li>
+<li>TFTP waterfall</li>
+</ol>
+<p>The subsequent sections describe the methods in detail.</p>
+<div class="section" id="static-configuration-method">
+<h3>Static Configuration Method<a class="headerlink" href="#static-configuration-method" title="Permalink to this headline">¶</a></h3>
+<p>This method is intended for engineering use only, e.g. during the
+porting of ONIE to a new platform.  In the boot loader the user can
+statically configure an installer URL that ONIE will use.</p>
+<p>In the case of the U-Boot and Linux the user can set the
+<tt class="docutils literal"><span class="pre">install_url</span></tt> kernel command line argument prior to booting ONIE.
+Additional kernel command line arguments can be added by setting the
+<tt class="docutils literal"><span class="pre">onie_debugargs</span></tt> environment varialbe.  An example:</p>
+<div class="highlight-python"><pre>=&gt; setenv onie_debugargs 'install_url=http://10.0.1.249/nos_installer.bin'
+=&gt; run onie_bootcmd</pre>
+</div>
+</div>
+<div class="section" id="local-file-system-method">
+<h3>Local File System Method<a class="headerlink" href="#local-file-system-method" title="Permalink to this headline">¶</a></h3>
+<p>In this method ONIE searches the partitions of locally attached
+storage devices looking for the ONIE default installer file name.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The default installer file name is <tt class="docutils literal"><span class="pre">onie-installer</span></tt>.</p>
+</div>
+<p>This method is intended for the case where the NOS installer is
+available on a USB memory stick plugged into the front panel.</p>
+<p>The supported Linux file system types for the local storage are
+<tt class="docutils literal"><span class="pre">vfat</span></tt> (common on commercially availabe USB sticks) and <tt class="docutils literal"><span class="pre">ext2</span></tt>.</p>
+<p>The general algorithm for locating the installer on local storage
+proceeds as follows:</p>
+<div class="highlight-python"><pre>foreach $partition in /proc/partitions {
+  if able to mount $partition then {
+    if default file name exists {
+      Add partition to found_list
+    }
+  }
+}
+
+foreach $partition in found_list {
+  Run installer from $partition
+}</pre>
+</div>
+</div>
+<div class="section" id="dhcp-requests-and-responses">
+<h3>DHCP Requests and Responses<a class="headerlink" href="#dhcp-requests-and-responses" title="Permalink to this headline">¶</a></h3>
+<p>DHCP provides a powerful and flexible mechanism for specifying the
+installer URL exactly.  During the DHCP request ONIE sets a number of
+options to help the DHCP server determine an appropriate response.</p>
+<p>The following options are set during the request:</p>
+<table border="1" class="docutils">
+<caption>DHCP Request Options</caption>
+<colgroup>
+<col width="13%" />
+<col width="38%" />
+<col width="38%" />
+<col width="13%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Option</th>
+<th class="head">Name</th>
+<th class="head">ISC option-name</th>
+<th class="head">RFC</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>60</td>
+<td>Vendor Class Identifier</td>
+<td>vendor-class-identifier</td>
+<td><a class="footnote-reference" href="#id19" id="id1">[1]</a></td>
+</tr>
+<tr class="row-odd"><td>77</td>
+<td>User Class</td>
+<td>user-class</td>
+<td><a class="footnote-reference" href="#id19" id="id2">[1]</a></td>
+</tr>
+<tr class="row-even"><td>125</td>
+<td>Vendor-Identifying Vendor-Specific Information</td>
+<td>vivso</td>
+<td><a class="footnote-reference" href="#id20" id="id3">[2]</a></td>
+</tr>
+<tr class="row-odd"><td>55</td>
+<td>Parameter Request List</td>
+<td>dhcp-parameter-request-list</td>
+<td><a class="footnote-reference" href="#id19" id="id4">[1]</a></td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="vendor-class-identifier-option-60">
+<h4>Vendor Class Identifier &#8211; Option 60<a class="headerlink" href="#vendor-class-identifier-option-60" title="Permalink to this headline">¶</a></h4>
+<p>The vendor class identifier option is the concatenation of three
+strings, separated by the colon <tt class="docutils literal"><span class="pre">:</span></tt> character:</p>
+<ol class="arabic simple">
+<li>The static string <tt class="docutils literal"><span class="pre">onie_vendor</span></tt></li>
+<li>The platform name.</li>
+<li>The machine&#8217;s CPU architecture.</li>
+</ol>
+<p>For example using our ficticious PowerPC machine the string would be:</p>
+<div class="highlight-python"><pre>onie_vendor:VENDOR_MACHINE:powerpc</pre>
+</div>
+<p>Valid values for the CPU architecture string currnntly are:</p>
+<ul class="simple">
+<li>powerpc</li>
+<li>x86</li>
+</ul>
+<p>See the <a class="reference internal" href="boot_loader.html#u-boot-platform-vars"><em>Platform Dependent Environment Variables</em></a> table for more about the platform name.</p>
+</div>
+<div class="section" id="user-class-option-77">
+<h4>User Class &#8211; Option 77<a class="headerlink" href="#user-class-option-77" title="Permalink to this headline">¶</a></h4>
+<p>The user class option is set to the static string:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">onie_dhcp_user_class</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="vendor-identifying-vendor-specific-information-vivso">
+<span id="dhcp-vivso"></span><h4>Vendor-Identifying Vendor-Specific Information (VIVSO)<a class="headerlink" href="#vendor-identifying-vendor-specific-information-vivso" title="Permalink to this headline">¶</a></h4>
+<p>The VIVSO option allows for custom option namespaces, where the
+namespace is identified by the <a class="reference external" href="http://www.iana.org/assignments/enterprise-numbers">32-bit IANA Private Enterprise Number</a>.  ONIE
+currently uses the enterprise number <tt class="docutils literal"><span class="pre">40310</span></tt> to identify its custom
+namespace.</p>
+<p>The option codes within the ONIE namespace are of size 1 byte.  The
+option payload length is also 1 byte.</p>
+<p>Within this namespace the following option codes are defined:</p>
+<table border="1" class="docutils">
+<caption>VIVSO Options</caption>
+<colgroup>
+<col width="17%" />
+<col width="33%" />
+<col width="17%" />
+<col width="33%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Option Code</th>
+<th class="head">Name</th>
+<th class="head">Type</th>
+<th class="head">Example</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>1</td>
+<td>Installer URL</td>
+<td>string</td>
+<td>http://10.0.1.205/nos_installer.bin</td>
+</tr>
+<tr class="row-odd"><td>2</td>
+<td>Updater URL</td>
+<td>string</td>
+<td>http://10.0.1.205/onie_update.bin</td>
+</tr>
+<tr class="row-even"><td>3</td>
+<td>Platform Name</td>
+<td>string</td>
+<td>VENDOR_MACHINE</td>
+</tr>
+<tr class="row-odd"><td>4</td>
+<td>CPU Architecture</td>
+<td>string</td>
+<td>powerpc</td>
+</tr>
+<tr class="row-even"><td>5</td>
+<td>Vendor ID</td>
+<td>unsigned 32-bit integer</td>
+<td>vendor_id from U-Boot</td>
+</tr>
+</tbody>
+</table>
+<p>See the <a class="reference internal" href="boot_loader.html#u-boot-platform-vars"><em>Platform Dependent Environment Variables</em></a> table for more about the platform
+name and vendor ID.</p>
+</div>
+<div class="section" id="parameter-request-list-option-55">
+<h4>Parameter Request List &#8211; Option 55<a class="headerlink" href="#parameter-request-list-option-55" title="Permalink to this headline">¶</a></h4>
+<p>The parameter request list option encodes a list of requested options.
+ONIE requests the following options:</p>
+<table border="1" class="docutils">
+<caption>DHCP Parameter Request List Options</caption>
+<colgroup>
+<col width="11%" />
+<col width="22%" />
+<col width="22%" />
+<col width="11%" />
+<col width="11%" />
+<col width="22%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Option</th>
+<th class="head">Name</th>
+<th class="head">ISC option-name</th>
+<th class="head">Option Type</th>
+<th class="head">RFC</th>
+<th class="head">Example</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>1</td>
+<td>Subnet Mask</td>
+<td>subnet-mask</td>
+<td>dotted quad</td>
+<td><a class="footnote-reference" href="#id19" id="id5">[1]</a></td>
+<td>255.255.255.0</td>
+</tr>
+<tr class="row-odd"><td>3</td>
+<td>Default Gateway</td>
+<td>routers</td>
+<td>dotted quad</td>
+<td><a class="footnote-reference" href="#id19" id="id6">[1]</a></td>
+<td>10.0.1.2</td>
+</tr>
+<tr class="row-even"><td>6</td>
+<td>Domain Server</td>
+<td>domain-name-servers</td>
+<td>dotted quad</td>
+<td><a class="footnote-reference" href="#id19" id="id7">[1]</a></td>
+<td>10.0.1.2</td>
+</tr>
+<tr class="row-odd"><td>7</td>
+<td>Log Server</td>
+<td>log-servers</td>
+<td>dotted quad</td>
+<td><a class="footnote-reference" href="#id19" id="id8">[1]</a></td>
+<td>10.0.1.2</td>
+</tr>
+<tr class="row-even"><td>12</td>
+<td>Hostname</td>
+<td>host-name</td>
+<td>&nbsp;</td>
+<td><a class="footnote-reference" href="#id19" id="id9">[1]</a></td>
+<td>switch-19</td>
+</tr>
+<tr class="row-odd"><td>15</td>
+<td>Domain Name</td>
+<td>domain-name</td>
+<td>string</td>
+<td><a class="footnote-reference" href="#id19" id="id10">[1]</a></td>
+<td>cumulusnetworks.com</td>
+</tr>
+<tr class="row-even"><td>42</td>
+<td>NTP Servers</td>
+<td>ntp-servers</td>
+<td>dotted quad</td>
+<td><a class="footnote-reference" href="#id19" id="id11">[1]</a></td>
+<td>10.0.1.2</td>
+</tr>
+<tr class="row-odd"><td>54</td>
+<td>DHCP Server Identifier</td>
+<td>dhcp-server-identifier</td>
+<td>dotted quad</td>
+<td><a class="footnote-reference" href="#id19" id="id12">[1]</a></td>
+<td>10.0.1.2</td>
+</tr>
+<tr class="row-even"><td>66</td>
+<td>TFTP Server Name</td>
+<td>tftp-server-name</td>
+<td>string</td>
+<td><a class="footnote-reference" href="#id19" id="id13">[1]</a></td>
+<td>behemoth01 (requires DNS)</td>
+</tr>
+<tr class="row-odd"><td>67</td>
+<td>TFTP Bootfile Name</td>
+<td>bootfile-name or filename</td>
+<td>string</td>
+<td><a class="footnote-reference" href="#id19" id="id14">[1]</a></td>
+<td>tftp/installer.sh</td>
+</tr>
+<tr class="row-even"><td>72</td>
+<td>HTTP Server IP</td>
+<td>www-server</td>
+<td>dotted quad</td>
+<td><a class="footnote-reference" href="#id19" id="id15">[1]</a></td>
+<td>10.0.1.251</td>
+</tr>
+<tr class="row-odd"><td>114</td>
+<td>Default URL</td>
+<td>default-url</td>
+<td>string</td>
+<td><a class="footnote-reference" href="#id21" id="id16">[3]</a></td>
+<td>http://server/path/installer</td>
+</tr>
+<tr class="row-even"><td>150</td>
+<td>TFTP Server IP Address</td>
+<td>next-server</td>
+<td>dotted quad</td>
+<td><a class="footnote-reference" href="#id22" id="id17">[4]</a></td>
+<td>10.50.1.200</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="section" id="exact-installer-urls-from-dhcpv4">
+<h3>Exact Installer URLs From DHCPv4<a class="headerlink" href="#exact-installer-urls-from-dhcpv4" title="Permalink to this headline">¶</a></h3>
+<p>The DHCP options discussed previously provide a number of ways to
+express the <strong>exact</strong> URL of the NOS installer.  When interpreting URLs,
+ONIE accepts the following URI schemes:</p>
+<ul class="simple">
+<li>http://server/path/....</li>
+<li>https://server/path/....</li>
+<li>ftp://server/path/....</li>
+<li>tftp://server/path/....</li>
+</ul>
+<p>The following options can be used to form an exact URL.</p>
+<table border="1" class="docutils">
+<caption>Exact DHCP URLs</caption>
+<colgroup>
+<col width="20%" />
+<col width="20%" />
+<col width="60%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Option</th>
+<th class="head">Name</th>
+<th class="head">Comments</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>125</td>
+<td>VIVSO</td>
+<td>The <em>installer URL</em> option (code = 1) specified in the ONIE VIVSO
+options yields an exact URL.  See the <a class="reference internal" href="#dhcp-vivso"><em>Vendor-Identifying Vendor-Specific Information (VIVSO)</em></a> section above</td>
+</tr>
+<tr class="row-odd"><td>114</td>
+<td>Default URL</td>
+<td>Intended for http, but other URLs accepted</td>
+</tr>
+<tr class="row-even"><td>150 + 67</td>
+<td>TFTP Server IP and TFTP Bootfile</td>
+<td>Both options required for an exact URL</td>
+</tr>
+<tr class="row-odd"><td>66 + 67</td>
+<td>TFTP Server Name and TFTP Bootfile</td>
+<td>Both options required for an exact URL.  Requires DNS</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="partial-installer-urls">
+<h3>Partial Installer URLs<a class="headerlink" href="#partial-installer-urls" title="Permalink to this headline">¶</a></h3>
+<p>Configuring a DHCP server for exact URLs may be impractical in certain
+situations.</p>
+<p>For example consider an enterprise scenario where the corporate IT
+department that controls the DHCP server is separate from the
+application development department trying to prototype new web
+services.  The application department wants to move quickly and
+prototype their new solution as soon as possible.  In this case
+waiting for the IT department to make DHCP server changes takes too
+much time.</p>
+<p>To allow for flexibility in the administration of the DHCP server ONIE
+can find an installer using partial DHCP information.  ONIE uses a
+default sequence of URL paths and default file names in conjunction
+with partial DHCP information to find an installer.</p>
+<p>The default installer name that ONIE looks for is:</p>
+<div class="highlight-python"><pre>onie-installer-${onie_machine}-${onie_arch}</pre>
+</div>
+<p>For our hypothetical PowerPC machine the default installer name would
+be:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">onie</span><span class="o">-</span><span class="n">installer</span><span class="o">-</span><span class="n">VENDOR_MACHINE</span><span class="o">-</span><span class="n">powerpc</span>
+</pre></div>
+</div>
+<p>The default methods using partial DHCP information to locate an
+installer are:</p>
+<table border="1" class="docutils">
+<caption>Partial DHCP URLs</caption>
+<colgroup>
+<col width="20%" />
+<col width="20%" />
+<col width="60%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">DHCP Options</th>
+<th class="head">Name</th>
+<th class="head">URL</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>67</td>
+<td>TFTP Bootfile</td>
+<td>Contents of bootfile <a class="footnote-reference" href="#bootfile-url" id="id18">[5]</a></td>
+</tr>
+<tr class="row-odd"><td>72</td>
+<td>HTTP Server IP</td>
+<td>http://$http_server_ip/$onie_default_installer_name</td>
+</tr>
+<tr class="row-even"><td>66</td>
+<td>TFTP Server IP</td>
+<td>http://$tftp_server_ip/$onie_default_installer_name</td>
+</tr>
+<tr class="row-odd"><td>66</td>
+<td>DHCP Server IP</td>
+<td>http://$dhcp_server_ip/$onie_default_installer_name</td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="tftp-waterfall">
+<h4>TFTP Waterfall<a class="headerlink" href="#tftp-waterfall" title="Permalink to this headline">¶</a></h4>
+<p>A classic PXE-like TFTP waterfall is also provided for.  Given a TFTP
+server address ONIE attempts to download the installer using a
+sequence of TFTP paths with decreasing levels of specificity.</p>
+<p>The TFTP URL name has this format:</p>
+<div class="highlight-python"><pre>tftp://$tftp_server_ip/$path_prefix/$onie_default_installer_name</pre>
+</div>
+<p>The <tt class="docutils literal"><span class="pre">$tftp_server_ip</span></tt> comes from DHCP option 66.</p>
+<p>The <tt class="docutils literal"><span class="pre">$path_prefix</span></tt> is determined in the following manner:</p>
+<ul class="simple">
+<li>First the path_prefix is built using the Ethernet management
+interface&#8217;s MAC address using lower case hexadecimal with a dash
+separator. For example with address <tt class="docutils literal"><span class="pre">55:66:AA:BB:CC:DD</span></tt> the
+path_prefix would be <tt class="docutils literal"><span class="pre">55-66-aa-bb-cc-dd</span></tt>.</li>
+<li>Next, the path_prefix is built using the Ethernet management
+interface&#8217;s IP address in upper case hexadecimal,
+e.g. <tt class="docutils literal"><span class="pre">192.168.1.178</span> <span class="pre">-&gt;</span> <span class="pre">C0A801B2</span></tt>.  If the installer is not found
+at that location remove the least significant hex digit and try
+again.</li>
+<li>Ultimately try without a path_prefix, i.e. look at the root of the
+TFTP server.</li>
+</ul>
+<p>Here is a complete list of the bootfile paths attempted using the
+example MAC address, IP address and the ficticious PowerPC platform:</p>
+<div class="highlight-python"><pre>55-66-aa-bb-cc-dd/$onie_default_installer_name
+C0A801B2/$onie_default_installer_name
+C0A801B/$onie_default_installer_name
+C0A801/$onie_default_installer_name
+C0A80/$onie_default_installer_name
+C0A8/$onie_default_installer_name
+C0A/$onie_default_installer_name
+C0/$onie_default_installer_name
+C/$onie_default_installer_name
+$onie_default_installer_name</pre>
+</div>
+</div>
+<div class="section" id="http-ipv6-neighbors">
+<h4>HTTP IPv6 Neighbors<a class="headerlink" href="#http-ipv6-neighbors" title="Permalink to this headline">¶</a></h4>
+<p>ONIE also queries it is IPv6 link-local neighbors via HTTP for an
+installer.  The general algorithm follows:</p>
+<ol class="arabic simple">
+<li>ping6 the &#8220;all nodes&#8221; link local IPv6 multicast address, <tt class="docutils literal"><span class="pre">ff02::1</span></tt>.</li>
+<li>for each responding neighbor try to download the
+$onie_default_installer_name from the root of the web server.</li>
+</ol>
+<p>Here is an example the URLs used by this method:</p>
+<div class="highlight-python"><pre>http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE-powerpc
+http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-VENDOR_MACHINE-powerpc
+http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-VENDOR_MACHINE-powerpc
+http://fe80::4638:39ff:fe00:1c0%eth0/onie-installer-VENDOR_MACHINE-powerpc</pre>
+</div>
+<p>This makes it very simple to walk up to a switch and directly connect
+a laptop to the Ethernet management port and install from a local
+HTTP server.</p>
+</div>
+</div>
+</div>
+<div class="section" id="execution-environment">
+<h2>Execution Environment<a class="headerlink" href="#execution-environment" title="Permalink to this headline">¶</a></h2>
+<p>After ONIE locates and downloads an installer the next step is to run
+the installer.</p>
+<p>Prior to execution ONIE prepares an execution environment:</p>
+<ul class="simple">
+<li>chmod +x on the downloaded installer</li>
+<li>export a number of environment variables, usable by the installer</li>
+<li>run the installer</li>
+</ul>
+<p>ONIE exports the following environment variables:</p>
+<table border="1" class="docutils">
+<caption>Installer Core Environment Variables</caption>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Variable Name</th>
+<th class="head">Meaning</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>onie_exec_url</td>
+<td>Currently executing URL</td>
+</tr>
+<tr class="row-odd"><td>onie_platform</td>
+<td>Vendor and Machine name</td>
+</tr>
+<tr class="row-even"><td>onie_vendor_id</td>
+<td>32-bit IANA Private Enterprise Number in decimal</td>
+</tr>
+<tr class="row-odd"><td>onie_serial_num</td>
+<td>Device serial number</td>
+</tr>
+<tr class="row-even"><td>onie_eth_addr</td>
+<td>MAC address for Ethernet management port</td>
+</tr>
+</tbody>
+</table>
+<p>In addition, any and all DHCP response options are exported, in the
+style of busybox&#8217;s udhcpc.  A sample of those variables follows:</p>
+<table border="1" class="docutils">
+<caption>Installer DHCP Environment Variables</caption>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Variable Name</th>
+<th class="head">Meaning</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>onie_disco_dns</td>
+<td>DNS Server</td>
+</tr>
+<tr class="row-odd"><td>onie_disco_domain</td>
+<td>Domain name fro DNS</td>
+</tr>
+<tr class="row-even"><td>onie_disco_hostname</td>
+<td>Switch hostname</td>
+</tr>
+<tr class="row-odd"><td>onie_disco_interface</td>
+<td>Ethernet management interface, e.g. eth0</td>
+</tr>
+<tr class="row-even"><td>onie_disco_ip</td>
+<td>Ethernet management IP address</td>
+</tr>
+<tr class="row-odd"><td>onie_disco_router</td>
+<td>Gateway</td>
+</tr>
+<tr class="row-even"><td>onie_disco_serverid</td>
+<td>DHCP server IP</td>
+</tr>
+<tr class="row-odd"><td>onie_disco_siaddr</td>
+<td>TFTP server IP</td>
+</tr>
+<tr class="row-even"><td>onie_disco_subnet</td>
+<td>IP netmask</td>
+</tr>
+<tr class="row-odd"><td>onie_disco_vivso</td>
+<td>VIVSO option data</td>
+</tr>
+</tbody>
+</table>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-interface"><em>Network Operating System Interface</em></a> section for more about the NOS installer.</p>
+<p class="rubric">Footnotes</p>
+<table class="docutils footnote" frame="void" id="id19" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[1]</td><td><em>(<a class="fn-backref" href="#id1">1</a>, <a class="fn-backref" href="#id2">2</a>, <a class="fn-backref" href="#id4">3</a>, <a class="fn-backref" href="#id5">4</a>, <a class="fn-backref" href="#id6">5</a>, <a class="fn-backref" href="#id7">6</a>, <a class="fn-backref" href="#id8">7</a>, <a class="fn-backref" href="#id9">8</a>, <a class="fn-backref" href="#id10">9</a>, <a class="fn-backref" href="#id11">10</a>, <a class="fn-backref" href="#id12">11</a>, <a class="fn-backref" href="#id13">12</a>, <a class="fn-backref" href="#id14">13</a>, <a class="fn-backref" href="#id15">14</a>)</em> <a class="reference external" href="http://www.ietf.org/rfc/rfc2132.txt">RFC 2132</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id20" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id3">[2]</a></td><td><a class="reference external" href="http://www.ietf.org/rfc/rfc3925.txt">RFC 3925</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id21" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id16">[3]</a></td><td><a class="reference external" href="http://www.ietf.org/rfc/rfc3679.txt">RFC 3679</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id22" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id17">[4]</a></td><td><a class="reference external" href="http://www.ietf.org/rfc/rfc5859.txt">RFC 5859</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="bootfile-url" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id18">[5]</a></td><td>Try to intrepret the bootfile as a URL.  This is a
+small abuse of the TFTP bootfile option, which has
+a precedent in other loading schemes such as <a class="reference external" href="http://ipxe.org/howto/dhcpd">iPXE</a>.</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Image Discovery and Execution</a><ul>
+<li><a class="reference internal" href="#installer-discovery-methods">Installer Discovery Methods</a><ul>
+<li><a class="reference internal" href="#static-configuration-method">Static Configuration Method</a></li>
+<li><a class="reference internal" href="#local-file-system-method">Local File System Method</a></li>
+<li><a class="reference internal" href="#dhcp-requests-and-responses">DHCP Requests and Responses</a><ul>
+<li><a class="reference internal" href="#vendor-class-identifier-option-60">Vendor Class Identifier &#8211; Option 60</a></li>
+<li><a class="reference internal" href="#user-class-option-77">User Class &#8211; Option 77</a></li>
+<li><a class="reference internal" href="#vendor-identifying-vendor-specific-information-vivso">Vendor-Identifying Vendor-Specific Information (VIVSO)</a></li>
+<li><a class="reference internal" href="#parameter-request-list-option-55">Parameter Request List &#8211; Option 55</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#exact-installer-urls-from-dhcpv4">Exact Installer URLs From DHCPv4</a></li>
+<li><a class="reference internal" href="#partial-installer-urls">Partial Installer URLs</a><ul>
+<li><a class="reference internal" href="#tftp-waterfall">TFTP Waterfall</a></li>
+<li><a class="reference internal" href="#http-ipv6-neighbors">HTTP IPv6 Neighbors</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#execution-environment">Execution Environment</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="kernel.html"
+                        title="previous chapter">Linux Kernel and Device Tree Source</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="nos_interface.html"
+                        title="next chapter">Network Operating System Interface</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="../_sources/design-spec/discovery.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="nos_interface.html" title="Network Operating System Interface"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="kernel.html" title="Linux Kernel and Device Tree Source"
+             >previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 0.0.2-ef05926-PUB4 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Design Specification</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright .
+    </div>
+  </body>
+</html>
