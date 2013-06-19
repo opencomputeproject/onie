@@ -145,7 +145,7 @@ MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter help clean-all dist %build-host doc% %html %pdf, $(MAKECMDGOALS)))
+  ifeq (,$(filter lsb-release-tag help clean-all %build-host doc% %html %pdf, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINE)' in $(MACHINEROOT))
       $(warning You must set the MACHINE= variable when invoking make.)
@@ -169,7 +169,7 @@ RELEASE_VERSION = $(shell cat $(VERSION_FILE) | grep VERSION | sed -e 's/.*=//')
 RELEASE ?= "NB"
 LSB_RELEASE_TAG	?= $(shell [ -r ./conf/lsb-release ] && cat ./conf/lsb-release)
 ifeq ($(LSB_RELEASE_TAG),)
-  GIT_HEAD = $(shell cd $(MACHINEDIR) && git show --abbrev-commit HEAD | sed -ne "/^commit [0-9a-f]*/s/^commit //p")
+  GIT_HEAD = $(shell cd $(MACHINEROOT) && git show --abbrev-commit HEAD | sed -ne "/^commit [0-9a-f]*/s/^commit //p")
   ifeq (1, $(RELEASE))
     LSB_RELEASE_TAG = $(RELEASE_VERSION)
   else ifneq ($(RELEASE),NB)
@@ -178,7 +178,8 @@ ifeq ($(LSB_RELEASE_TAG),)
     BUILD_DATE = $(shell date +%Y%m%d%H%M)
     LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(BUILD_DATE)-$(RELEASE)
   endif
-  DIRTY  = $(shell git status | egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo dirty)
+  DIRTY  = $(shell cd $(MACHINEROOT) && git status | \
+		egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo dirty)
   ifneq ($(DIRTY),)
     LSB_RELEASE_TAG := $(LSB_RELEASE_TAG)-$(DIRTY)
   endif
@@ -250,41 +251,9 @@ clean-all:
 	$(Q) sudo rm -rf $(BUILDDIR)/*
 	$(Q) echo "=== Finished making $@ ==="
 
-PHONY += dist
-DIST_DIR		= $(BUILDDIR)/dist
-DIST_MACHINE_DIR	= $(DIST_DIR)/machine
-DIST_DOCS_DIR		= $(DIST_DIR)/docs
-DIST_CORE_RELEASE	= onie-core-$(LSB_RELEASE_TAG)
-DIST_CORE_STAGE_DIR	= $(DIST_DIR)/$(DIST_CORE_RELEASE)
-DIST_CORE_TARBALL	= $(DIST_CORE_STAGE_DIR).tar.xz
-DIST_TAR_OPTIONS	= --exclude-backups --exclude=*~
-DIST_CORE_DIRS = 	\
-	build-config 	\
-	demo		\
-	installer	\
-	patches 	\
-	rootconf 	\
-	upstream
-
-source_is_clean:
-	$(Q) [ "$(RELEASE)" != "NB" ] || ( echo "Error: Lame distribution RELEASE tag: $(RELEASE)" && false )
-	$(Q) [ "$(DIRTY)" = "" ] || ( echo "Error: Dirty Source -- uncommited files" && git status && false )
-
-dist: source_is_clean html pdf
-	$(Q) echo "=== Making $(LSB_RELEASE_TAG) source distriution ==="
-	$(Q) rm -rf $(DIST_DIR)
-	$(Q) mkdir -p $(DIST_DIR) $(DIST_MACHINE_DIR) $(DIST_CORE_STAGE_DIR) $(DIST_DOCS_DIR)
-	$(Q) cd $(PROJECTDIR); cp -a $(DIST_CORE_DIRS) $(DIST_CORE_STAGE_DIR)
-	$(Q) echo $(LSB_RELEASE_TAG) > $(DIST_CORE_STAGE_DIR)/build-config/conf/lsb-release
-	$(Q) tar $(DIST_TAR_OPTIONS) -C $(DIST_DIR) -cJf $(DIST_CORE_TARBALL) $(DIST_CORE_RELEASE)
-	$(Q) rm -rf $(DIST_CORE_STAGE_DIR)
-	$(Q) cd $(PROJECTDIR)/machine; for m in $$(ls) ; do \
-		echo "   === Adding machine: $$m ==="; \
-		tar $(DIST_TAR_OPTIONS) -C $(PROJECTDIR) -cJf $(DIST_MACHINE_DIR)/onie-$${m}-$(LSB_RELEASE_TAG).tar.xz machine/$${m} ; \
-	done
-	$(Q) echo $(LSB_RELEASE_TAG) > $(DIST_DIR)/VERSION
-	$(Q) cp -a $(DOCBUILDDIR)/{html,pdf} $(DIST_DOCS_DIR)
-	$(Q) echo "=== Finished making distribution $(DIST_CORE_TARBALL)"
+PHONY += lsb-release-tag
+lsb-release-tag:
+	$(Q) echo $(LSB_RELEASE_TAG)
 
 # Install required build packages for a debian based build host
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf
