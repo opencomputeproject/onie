@@ -279,7 +279,7 @@ Install and setup a HTTP server on your build host
 We will assume the root of the HTTP server is ``/var/www``.
 
 Copy the demo installer to the HTTP server root, using the name
-``onie-installer``::
+``onie-installer-<platform>-<arch>``::
 
   $ cp build/images/demo-installer-<platform>.bin /var/www/onie-installer-<platform>-<arch>
 
