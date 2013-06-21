@@ -167,6 +167,9 @@ The layout of the ``machine`` directory follows::
           ├── platform-<platform>.patch
           └── series
 
+This directory contains all the files necessary to build ONIE for the
+Freescale P2020RBD-PCA reference platform.
+
 ================================   =======
 File                               Purpose
 ================================   =======
@@ -278,14 +281,22 @@ We will assume the root of the HTTP server is ``/var/www``.
 Copy the demo installer to the HTTP server root, using the name
 ``onie-installer``::
 
-  $ cp build/images/demo-installer-<platform>.bin /var/www/onie-installer
+  $ cp build/images/demo-installer-<platform>.bin /var/www/onie-installer-<platform>-<arch>
+
+Currently the only supported ``<arch>`` is ``powerpc``.
 
 Power on the Network Switch
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 When the switch powers up, ONIE will run and it will attempt to find
 an installer.  One of the methods is to look for a file named
-``onie-installer`` on all of the switch's IPv6 neighors.
+``onie-installer-<platform>-<arch>`` on all of the switch's IPv6
+neighors.
+
+Using the Freescale P2020RDB-PCA reference platform as an example the
+default installer name would be::
+
+  onie-installer-fsl_p2020rdbpca-powerpc
 
 1.  Connect to the serial console of the network switch.
 2.  Power cycle the machine.
