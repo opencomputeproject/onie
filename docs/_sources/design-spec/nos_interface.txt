@@ -86,6 +86,8 @@ discovery and installation phase.
 
     => run onie_uninstall
 
+.. _rescue_recovery:
+
 Rescue and Recovery
 ===================
 
@@ -126,6 +128,8 @@ system.  When the system starts up again ONIE will see the
   typing::
 
     => run onie_rescue
+
+.. _nos_intf_updating_onie:
 
 Updating ONIE
 =============

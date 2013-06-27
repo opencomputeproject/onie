@@ -93,8 +93,17 @@ For example::
   $ cd build-config
   $ make -j4 MACHINE=<platform> all
 
-When complete, the ONIE binary is located in
-``build/images/<platform>.bin``.
+When complete, the following ONIE binaries are created in the
+``build/images`` directory:
+
+.. _onie_build_products:
+
+.. csv-table:: ONIE Build Products
+  :header: "File", "Purpose"
+  :delim: |
+
+  <platform>.bin | Raw binary, suitable for NOR flash programming
+  onie-updater-<platform>-<arch>.sh | ONIE updater, for use with the ONIE update mechanism
 
 Installing the ONIE binary
 --------------------------

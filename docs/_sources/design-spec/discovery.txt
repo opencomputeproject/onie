@@ -5,6 +5,8 @@ Image Discovery and Execution
 The primary responsibility of ONIE is to locate a NOS installer and
 execute it.
 
+.. _installer_discovery:
+
 Installer Discovery Methods
 ===========================
 
@@ -34,10 +36,10 @@ This method is intended for engineering use only, e.g. during the
 porting of ONIE to a new platform.  In the boot loader the user can
 statically configure an installer URL that ONIE will use.
 
-In the case of the U-Boot and Linux the user can set the
-``install_url`` kernel command line argument prior to booting ONIE.
-Additional kernel command line arguments can be added by setting the
-``onie_debugargs`` environment varialbe.  An example::
+In the case of U-Boot and Linux the user can set the ``install_url``
+kernel command line argument prior to booting ONIE.  Additional kernel
+command line arguments can be added by setting the ``onie_debugargs``
+environment varialbe.  An example::
 
   => setenv onie_debugargs 'install_url=http://10.0.1.249/nos_installer.bin'
   => run onie_bootcmd
@@ -48,7 +50,7 @@ Local File System Method
 In this method ONIE searches the partitions of locally attached
 storage devices looking for the ONIE default installer file name.
 
-.. note:: The default installer file name is ``onie-installer``.
+.. note:: The default installer file name is ``onie-installer-<platform>-<arch>``.
 
 This method is intended for the case where the NOS installer is
 available on a USB memory stick plugged into the front panel.
@@ -133,6 +135,8 @@ The option codes within the ONIE namespace are of size 1 byte.  The
 option payload length is also 1 byte.
 
 Within this namespace the following option codes are defined:
+
+.. _dhcp_vendor_options:
 
 .. csv-table:: VIVSO Options
   :header: "Option Code", "Name", "Type", "Example"
