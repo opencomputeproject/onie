@@ -138,21 +138,6 @@ http_download()
         url_run "$onie_disco_boot_file" quiet && return 0
     fi
 
-    # HTTP server IP only
-    if [ -n "$onie_disco_wwwsrv" ] ; then
-        url_run "http://$onie_disco_wwwsrv/$onie_default_filename" && return 0
-    fi
-    
-    # Try BOOTP next-server IP as HTTP
-    if [ -n "$onie_disco_siaddr" ] ; then
-        url_run "http://$onie_disco_siaddr/$onie_default_filename" && return 0
-    fi
-    
-    # Try DHCP server IP as HTTP
-    if [ -n "$onie_disco_serverid" ] ; then
-        url_run "http://$onie_disco_serverid/$onie_default_filename" && return 0
-    fi
-
     return 1
 }
 
@@ -172,11 +157,9 @@ tftp_download()
     return 1
 }
 
-tftp_waterfall()
+waterfall()
 {
     # Build list of waterfall paths
-
-    [ -z "$onie_disco_siaddr" ] && return 1
 
     wf_paths=
     # First is based on MAC address
@@ -197,9 +180,19 @@ tftp_waterfall()
     # Next is root of tftp server
     wf_paths="$wf_paths $onie_default_filename"
     
-    for p in $wf_paths ; do
-        url_run "tftp://$onie_disco_siaddr/$p" && return 0
-    done
+    # HTTP server IP waterfall
+    if [ -n "$onie_disco_wwwsrv" ] ; then
+        for p in $wf_paths ; do
+            url_run "http://$onie_disco_wwwsrv/$p" && return 0
+        done
+    fi
+    
+    # TFTP waterfall
+    if [ -n "$onie_disco_siaddr" ] ; then
+        for p in $wf_paths ; do
+            url_run "tftp://$onie_disco_siaddr/$p" && return 0
+        done
+    fi
 
     return 1
 }
@@ -303,9 +296,9 @@ tftp_download && {
     exit 0
 }
 
-# Finally try TFTP waterfall method
-tftp_waterfall  && {
-    echo "tftp waterfall success, exiting..."
+# Finally try HTTP/TFTP waterfall methods
+waterfall && {
+    echo "waterfall success, exiting..."
     exit 0
 }
 
