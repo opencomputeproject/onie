@@ -13,9 +13,7 @@ ARGS="-b 3 -D"
 case $cmd in
     start)
         killall $daemon > /dev/null 2>&1
-        log_begin_msg "Starting: $daemon"
         $daemon $ARGS
-        log_end_msg
         ;;
     stop)
         log_begin_msg "Stopping: $daemon"
