@@ -160,23 +160,19 @@ endif
 #
 # Determine build id tag
 #
-# - default release is nightly build. 
-# - change it to RC1, RC2 etc. for Release Candidate releases
-# - or override this with a definition from the command line
+# - The version is derived from the current git branch and the build
+# - date.
 #
-VERSION_FILE	= $(abspath ./conf/version)
-RELEASE_VERSION = $(shell cat $(VERSION_FILE) | grep VERSION | sed -e 's/.*=//')
-RELEASE ?= "NB"
 LSB_RELEASE_TAG	?= $(shell [ -r ./conf/lsb-release ] && cat ./conf/lsb-release)
 ifeq ($(LSB_RELEASE_TAG),)
-  GIT_HEAD = $(shell cd $(MACHINEROOT) && git show --abbrev-commit HEAD | sed -ne "/^commit [0-9a-f]*/s/^commit //p")
-  ifeq (1, $(RELEASE))
-    LSB_RELEASE_TAG = $(RELEASE_VERSION)
-  else ifneq ($(RELEASE),NB)
-    LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(RELEASE)
+  GIT_BRANCH = $(shell cd $(MACHINEROOT) && git rev-parse --abbrev-ref HEAD)
+  BUILD_DATE = $(shell date +%Y%m%d%H%M)
+  ifneq ($(RELEASE),)
+    # Optional: If RELEASE specified on the command line insert the
+    # string after the branch name.
+    LSB_RELEASE_TAG = $(GIT_BRANCH)-$(RELEASE)-$(BUILD_DATE)
   else
-    BUILD_DATE = $(shell date +%Y%m%d%H%M)
-    LSB_RELEASE_TAG = $(RELEASE_VERSION)-$(GIT_HEAD)-$(BUILD_DATE)-$(RELEASE)
+    LSB_RELEASE_TAG = $(GIT_BRANCH)-$(BUILD_DATE)
   endif
   DIRTY  = $(shell cd $(MACHINEROOT) && git status | \
 		egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo dirty)
