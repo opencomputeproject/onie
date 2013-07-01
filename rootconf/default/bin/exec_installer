@@ -130,7 +130,10 @@ http_download()
         n=${onie_neighs%%,*}
         onie_neighs=${onie_neighs#*,}
         tmp=$(echo $n | sed -e 's/-/%/g');
-        url_run "http://$tmp/$onie_default_filename" && return 0
+        # Check if server appears to be alive
+        nc -w 3 $tmp 80 -e /bin/true > /dev/null 2>&1 && {
+            url_run "http://$tmp/$onie_default_filename" && return 0
+        }
     done
 
     # Try bootfile as a URL, supress warnings
@@ -182,9 +185,12 @@ waterfall()
     
     # HTTP server IP waterfall
     if [ -n "$onie_disco_wwwsrv" ] ; then
-        for p in $wf_paths ; do
-            url_run "http://$onie_disco_wwwsrv/$p" && return 0
-        done
+        # First check if server appears to be alive
+        nc -w 3 $onie_disco_wwwsrv 80 -e /bin/true > /dev/null 2>&1 && {
+            for p in $wf_paths ; do
+                url_run "http://$onie_disco_wwwsrv/$p" && return 0
+            done
+        }
     fi
     
     # TFTP waterfall
