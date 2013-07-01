@@ -74,6 +74,32 @@ wget_run()
     return 1
 }
 
+# tftp_wrap -- A wrapper around busybox's tftp command that on error
+# inspects the stderr output looking for a timeout.
+tftp_timeout=no
+tftp_wrap()
+{
+    tftp_timeout=no
+
+    # capture tftp command output
+    tftp_tmpout=$(mktemp)
+    tftp $* > $tftp_tmpout 2>&1 
+    rc=$?
+
+    # on error check for timeout
+    if [ "$rc" != "0" ] ; then
+        grep -q timeout $tftp_tmpout && {
+            tftp_timeout=yes
+        }
+    fi
+
+    # return output to caller
+    cat $tftp_tmpout
+    rm -f $tftp_tmpout
+
+    return $rc
+}
+
 # TFTP download helper
 tftp_run()
 {
@@ -84,9 +110,9 @@ tftp_run()
     log_debug_msg "Running tftp get with: server: $SERVER, bootfile: $BOOTFILE"
     log_info_msg "Fetching $URL ..."
     if [ "$onie_verbose" = "y" ]; then
-        tftp -g -l $onie_installer -r $BOOTFILE $SERVER && run_installer "$URL" && return 0
+        tftp_wrap -g -l $onie_installer -r $BOOTFILE $SERVER && run_installer "$URL" && return 0
     else
-        tftp -g -l $onie_installer -r $BOOTFILE $SERVER > /dev/null 2>&1 && run_installer "$URL" && return 0
+        tftp_wrap -g -l $onie_installer -r $BOOTFILE $SERVER > /dev/null 2>&1 && run_installer "$URL" && return 0
     fi
 
     return 1
@@ -197,6 +223,10 @@ waterfall()
     if [ -n "$onie_disco_siaddr" ] ; then
         for p in $wf_paths ; do
             url_run "tftp://$onie_disco_siaddr/$p" && return 0
+            if [ "$tftp_timeout" = "yes" ] ; then
+                # Stop TFTP waterfall on a timeout.
+                break;
+            fi
         done
     fi
 
