@@ -84,10 +84,6 @@ $(IMAGE_BIN_STAMP): $(IMAGEDIR)/$(MACHINE).uImage $(UBOOT_INSTALL_STAMP) $(SCRIP
 		$(MACHINEDIR) $(UBOOT_DIR) $(IMAGEDIR)/onie-$(MACHINE).bin
 	$(Q) touch $@
 
-#$(IMAGEDIR)/onie-%.bin : $(IMAGEDIR)/%.uImage $(UBOOT_INSTALL_STAMP)
-# 	$(Q) echo "==== Create $* ONIE binary image ===="
-# 	$(Q) $(SCRIPTDIR)/onie-mk-bin.sh $* $(IMAGEDIR) $(MACHINEDIR) $(UBOOT_DIR) $@
-
 ifndef MAKE_CLEAN
 IMAGE_UPDATER_FILES = $(shell \
 			test -d $(INSTALLER_DIR) && \
@@ -103,12 +99,8 @@ image-updater: $(IMAGE_UPDATER_STAMP)
 $(IMAGE_UPDATER_STAMP): $(IMAGEDIR)/$(MACHINE).uImage $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-installer.sh
 	$(Q) echo "==== Create $(MACHINE) ONIE updater ===="
 	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh $(MACHINE) $(MACHINE_CONF) \
-		$(INSTALLER_DIR) $(IMAGEDIR) $(MACHINEDIR) $(IMAGEDIR)/onie-updater-$(MACHINE)-$(ARCH).sh
+		$(INSTALLER_DIR) $(IMAGEDIR) $(MACHINEDIR) $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE).sh
 	$(Q) touch $@
-
-# $(IMAGEDIR)/onie-updater-%-$(ARCH).sh : $(IMAGEDIR)/%.uImage $(UBOOT_INSTALL_STAMP)
-#  	$(Q) echo "==== Create $* ONIE updater ===="
-#  	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh $* $(MACHINE_CONF) $(INSTALLER_DIR) $(IMAGEDIR) $(MACHINEDIR) $@
 
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
