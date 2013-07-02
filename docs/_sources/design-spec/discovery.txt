@@ -48,9 +48,15 @@ Local File System Method
 ------------------------
 
 In this method ONIE searches the partitions of locally attached
-storage devices looking for the ONIE default installer file name.
+storage devices looking for one of the ONIE default installer file
+names.
 
-.. note:: The default installer file name is ``onie-installer-<platform>-<arch>``.
+.. note:: The default installer file names are searched in the following order:
+
+  #. ``onie-installer-<arch>-<platform>``
+  #. ``onie-installer-<platform>``
+  #. ``onie-installer-<arch>``
+  #. ``onie-installer``
 
 This method is intended for the case where the NOS installer is
 available on a USB memory stick plugged into the front panel.
@@ -221,14 +227,20 @@ can find an installer using partial DHCP information.  ONIE uses a
 default sequence of URL paths and default file names in conjunction
 with partial DHCP information to find an installer.
 
-The default installer name that ONIE looks for is::
+ONIE looks for the following default installer file names in order::
 
-  onie-installer-${onie_machine}-${onie_arch}
+  onie-installer-<arch>-<platform>
+  onie-installer-<platform>
+  onie-installer-<arch>
+  onie-installer
 
-For our hypothetical PowerPC machine the default installer name would
-be::
+For our hypothetical PowerPC machine the default installer file names
+would be::
 
-  onie-installer-VENDOR_MACHINE-powerpc
+  onie-installer-powerpc-VENDOR_MACHINE
+  onie-installer-VENDOR_MACHINE
+  onie-installer-powerpc
+  onie-installer
 
 The default methods using partial DHCP information to locate an
 installer are:
@@ -239,9 +251,9 @@ installer are:
   :delim: |
 
   67 | TFTP Bootfile | Contents of bootfile [#bootfile_url]_
-  72 | HTTP Server IP | \http://$http_server_ip/$onie_default_installer_name
-  66 | TFTP Server IP | \http://$tftp_server_ip/$onie_default_installer_name
-  66 | DHCP Server IP | \http://$dhcp_server_ip/$onie_default_installer_name
+  72 | HTTP Server IP | \http://$http_server_ip/${onie_default_installer_names}
+  66 | TFTP Server IP | \http://$tftp_server_ip/${onie_default_installer_names}
+  66 | DHCP Server IP | \http://$dhcp_server_ip/${onie_default_installer_names}
 
 TFTP Waterfall
 ^^^^^^^^^^^^^^
@@ -275,16 +287,19 @@ The ``$path_prefix`` is determined in the following manner:
 Here is a complete list of the bootfile paths attempted using the
 example MAC address, IP address and the ficticious PowerPC platform::
 
-  55-66-aa-bb-cc-dd/$onie_default_installer_name
-  C0A801B2/$onie_default_installer_name
-  C0A801B/$onie_default_installer_name
-  C0A801/$onie_default_installer_name
-  C0A80/$onie_default_installer_name
-  C0A8/$onie_default_installer_name
-  C0A/$onie_default_installer_name
-  C0/$onie_default_installer_name
-  C/$onie_default_installer_name
-  $onie_default_installer_name
+  55-66-aa-bb-cc-dd/onie-installer-<arch>-<platform>
+  C0A801B2/onie-installer-<arch>-<platform>
+  C0A801B/onie-installer-<arch>-<platform>
+  C0A801/onie-installer-<arch>-<platform>
+  C0A80/onie-installer-<arch>-<platform>
+  C0A8/onie-installer-<arch>-<platform>
+  C0A/onie-installer-<arch>-<platform>
+  C0/onie-installer-<arch>-<platform>
+  C/onie-installer-<arch>-<platform>
+  onie-installer-<arch>-<platform>
+  onie-installer-<platform>
+  onie-installer-<arch>
+  onie-installer
 
 HTTP IPv6 Neighbors
 ^^^^^^^^^^^^^^^^^^^
@@ -298,10 +313,18 @@ installer.  The general algorithm follows:
 
 Here is an example the URLs used by this method::
 
-  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE-powerpc
-  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-VENDOR_MACHINE-powerpc
-  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-VENDOR_MACHINE-powerpc
-  http://fe80::4638:39ff:fe00:1c0%eth0/onie-installer-VENDOR_MACHINE-powerpc
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc-VENDOR_MACHINE
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc-VENDOR_MACHINE
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-VENDOR_MACHINE
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc-VENDOR_MACHINE
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-VENDOR_MACHINE
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer
 
 This makes it very simple to walk up to a switch and directly connect
 a laptop to the Ethernet management port and install from a local

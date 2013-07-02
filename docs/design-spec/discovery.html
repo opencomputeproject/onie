@@ -7,7 +7,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Image Discovery and Execution &mdash; Open Network Install Environment 0.0.2-0d722ce-NB documentation</title>
+    <title>Image Discovery and Execution &mdash; Open Network Install Environment master-201307021448 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -15,7 +15,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.0.2-0d722ce-NB',
+        VERSION:     'master-201307021448',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -24,7 +24,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="Open Network Install Environment 0.0.2-0d722ce-NB documentation" href="../index.html" />
+    <link rel="top" title="Open Network Install Environment master-201307021448 documentation" href="../index.html" />
     <link rel="up" title="Design Specification" href="index.html" />
     <link rel="next" title="Network Operating System Interface" href="nos_interface.html" />
     <link rel="prev" title="Linux Kernel and Device Tree Source" href="kernel.html" /> 
@@ -42,7 +42,7 @@
         <li class="right" >
           <a href="kernel.html" title="Linux Kernel and Device Tree Source"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">Open Network Install Environment 0.0.2-0d722ce-NB documentation</a> &raquo;</li>
+        <li><a href="../index.html">Open Network Install Environment master-201307021448 documentation</a> &raquo;</li>
           <li><a href="index.html" accesskey="U">Design Specification</a> &raquo;</li> 
       </ul>
     </div>  
@@ -93,10 +93,17 @@ environment varialbe.  An example:</p>
 <div class="section" id="local-file-system-method">
 <h3>Local File System Method<a class="headerlink" href="#local-file-system-method" title="Permalink to this headline">¶</a></h3>
 <p>In this method ONIE searches the partitions of locally attached
-storage devices looking for the ONIE default installer file name.</p>
+storage devices looking for one of the ONIE default installer file
+names.</p>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
-<p class="last">The default installer file name is <tt class="docutils literal"><span class="pre">onie-installer-&lt;platform&gt;-&lt;arch&gt;</span></tt>.</p>
+<p>The default installer file names are searched in the following order:</p>
+<ol class="last arabic simple">
+<li><tt class="docutils literal"><span class="pre">onie-installer-&lt;arch&gt;-&lt;platform&gt;</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">onie-installer-&lt;platform&gt;</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">onie-installer-&lt;arch&gt;</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">onie-installer</span></tt></li>
+</ol>
 </div>
 <p>This method is intended for the case where the NOS installer is
 available on a USB memory stick plugged into the front panel.</p>
@@ -422,12 +429,18 @@ much time.</p>
 can find an installer using partial DHCP information.  ONIE uses a
 default sequence of URL paths and default file names in conjunction
 with partial DHCP information to find an installer.</p>
-<p>The default installer name that ONIE looks for is:</p>
-<div class="highlight-python"><pre>onie-installer-${onie_machine}-${onie_arch}</pre>
+<p>ONIE looks for the following default installer file names in order:</p>
+<div class="highlight-python"><pre>onie-installer-&lt;arch&gt;-&lt;platform&gt;
+onie-installer-&lt;platform&gt;
+onie-installer-&lt;arch&gt;
+onie-installer</pre>
 </div>
-<p>For our hypothetical PowerPC machine the default installer name would
-be:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="n">onie</span><span class="o">-</span><span class="n">installer</span><span class="o">-</span><span class="n">VENDOR_MACHINE</span><span class="o">-</span><span class="n">powerpc</span>
+<p>For our hypothetical PowerPC machine the default installer file names
+would be:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">onie</span><span class="o">-</span><span class="n">installer</span><span class="o">-</span><span class="n">powerpc</span><span class="o">-</span><span class="n">VENDOR_MACHINE</span>
+<span class="n">onie</span><span class="o">-</span><span class="n">installer</span><span class="o">-</span><span class="n">VENDOR_MACHINE</span>
+<span class="n">onie</span><span class="o">-</span><span class="n">installer</span><span class="o">-</span><span class="n">powerpc</span>
+<span class="n">onie</span><span class="o">-</span><span class="n">installer</span>
 </pre></div>
 </div>
 <p>The default methods using partial DHCP information to locate an
@@ -452,15 +465,15 @@ installer are:</p>
 </tr>
 <tr class="row-odd"><td>72</td>
 <td>HTTP Server IP</td>
-<td>http://$http_server_ip/$onie_default_installer_name</td>
+<td>http://$http_server_ip/${onie_default_installer_names}</td>
 </tr>
 <tr class="row-even"><td>66</td>
 <td>TFTP Server IP</td>
-<td>http://$tftp_server_ip/$onie_default_installer_name</td>
+<td>http://$tftp_server_ip/${onie_default_installer_names}</td>
 </tr>
 <tr class="row-odd"><td>66</td>
 <td>DHCP Server IP</td>
-<td>http://$dhcp_server_ip/$onie_default_installer_name</td>
+<td>http://$dhcp_server_ip/${onie_default_installer_names}</td>
 </tr>
 </tbody>
 </table>
@@ -489,16 +502,19 @@ TFTP server.</li>
 </ul>
 <p>Here is a complete list of the bootfile paths attempted using the
 example MAC address, IP address and the ficticious PowerPC platform:</p>
-<div class="highlight-python"><pre>55-66-aa-bb-cc-dd/$onie_default_installer_name
-C0A801B2/$onie_default_installer_name
-C0A801B/$onie_default_installer_name
-C0A801/$onie_default_installer_name
-C0A80/$onie_default_installer_name
-C0A8/$onie_default_installer_name
-C0A/$onie_default_installer_name
-C0/$onie_default_installer_name
-C/$onie_default_installer_name
-$onie_default_installer_name</pre>
+<div class="highlight-python"><pre>55-66-aa-bb-cc-dd/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+C0A801B2/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+C0A801B/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+C0A801/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+C0A80/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+C0A8/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+C0A/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+C0/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+C/onie-installer-&lt;arch&gt;-&lt;platform&gt;
+onie-installer-&lt;arch&gt;-&lt;platform&gt;
+onie-installer-&lt;platform&gt;
+onie-installer-&lt;arch&gt;
+onie-installer</pre>
 </div>
 </div>
 <div class="section" id="http-ipv6-neighbors">
@@ -511,10 +527,18 @@ installer.  The general algorithm follows:</p>
 $onie_default_installer_name from the root of the web server.</li>
 </ol>
 <p>Here is an example the URLs used by this method:</p>
-<div class="highlight-python"><pre>http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE-powerpc
-http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-VENDOR_MACHINE-powerpc
-http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-VENDOR_MACHINE-powerpc
-http://fe80::4638:39ff:fe00:1c0%eth0/onie-installer-VENDOR_MACHINE-powerpc</pre>
+<div class="highlight-python"><pre>http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc-VENDOR_MACHINE
+http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE
+http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc
+http://fe80::4638:39ff:fe00:139e%eth0/onie-installer
+http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc-VENDOR_MACHINE
+http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-VENDOR_MACHINE
+http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc
+http://fe80::4638:39ff:fe00:2659%eth0/onie-installer
+http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc-VENDOR_MACHINE
+http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-VENDOR_MACHINE
+http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc
+http://fe80::230:48ff:fe9f:1547%eth0/onie-installer</pre>
 </div>
 <p>This makes it very simple to walk up to a switch and directly connect
 a laptop to the Ethernet management port and install from a local
@@ -717,7 +741,7 @@ a precedent in other loading schemes such as <a class="reference external" href=
         <li class="right" >
           <a href="kernel.html" title="Linux Kernel and Device Tree Source"
              >previous</a> |</li>
-        <li><a href="../index.html">Open Network Install Environment 0.0.2-0d722ce-NB documentation</a> &raquo;</li>
+        <li><a href="../index.html">Open Network Install Environment master-201307021448 documentation</a> &raquo;</li>
           <li><a href="index.html" >Design Specification</a> &raquo;</li> 
       </ul>
     </div>

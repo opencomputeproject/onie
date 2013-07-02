@@ -30,9 +30,20 @@ All of the methods for discovering a network OS installer from the
 :ref:`installer_discovery` section also apply to discovering an ONIE
 updater image, with a few exceptions.
 
-The default updater image name that ONIE looks for is::
+ONIE looks for the following default updater file names in order::
 
-  onie-updater-${onie_machine}-${onie_arch}
+  onie-updater-<arch>-<platform>
+  onie-updater-<platform>
+  onie-updater-<arch>
+  onie-updater
+
+For our hypothetical PowerPC machine the default updater file names
+would be::
+
+  onie-updater-powerpc-VENDOR_MACHINE
+  onie-updater-VENDOR_MACHINE
+  onie-updater-powerpc
+  onie-updater
 
 Another difference is when using DHCP :ref:`dhcp_vivso` you must set
 option 2 ``Updater URL`` to specify the updater URL.
