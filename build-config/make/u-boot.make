@@ -24,8 +24,10 @@ UBOOT_STAMP		= $(UBOOT_SOURCE_STAMP) \
 
 UBOOT			= $(UBOOT_INSTALL_STAMP)
 
+UBOOT_NAME		= $(shell echo $(MACHINE_PREFIX) | tr [:lower:] [:upper:])
+UBOOT_MACHINE		?= $(UBOOT_NAME)
 UBOOT_BIN		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.bin
-UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE).u-boot
+UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE_PREFIX).u-boot
 
 PHONY += u-boot u-boot-source u-boot-patch u-boot-build \
 	 u-boot-install u-boot-clean
@@ -39,7 +41,7 @@ SOURCE += $(UBOOT_PATCH_STAMP)
 u-boot-source: $(UBOOT_SOURCE_STAMP)
 $(UBOOT_SOURCE_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Getting and extracting upstream U-Boot ===="
+	$(Q) echo "==== $(PLATFORM): Getting and extracting upstream U-Boot ===="
 	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(UBOOT_TARBALL).sha1
 	$(Q) rm -rf $(UBOOT_BUILD_DIR)
 	$(Q) mkdir -p $(UBOOT_BUILD_DIR)
@@ -63,7 +65,16 @@ $(UBOOT_PATCH_STAMP): $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOUR
 	$(Q) cp $(MACHINEDIR)/u-boot/*.patch $(UBOOT_PATCHDIR)
 	$(Q) cat $(MACHINEDIR)/u-boot/series >> $(UBOOT_PATCHDIR)/series
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(UBOOT_PATCHDIR)/series $(UBOOT_DIR)
-	$(Q) echo "#define ONIE_VERSION \"onie_version=$(LSB_RELEASE_TAG)\\0\"" > $(UBOOT_DIR)/include/configs/onie_version.h
+	$(Q) echo "#define ONIE_VERSION \
+		\"onie_version=$(LSB_RELEASE_TAG)\\0\"	\
+		\"onie_vendor_id=$(VENDOR_ID)\\0\"	\
+		\"onie_platform=$(PLATFORM)\\0\"	\
+		\"onie_machine=$(MACHINE)\\0\"		\
+		\"platform=$(MACHINE)\\0\"		\
+		\"onie_machine_rev=$(MACHINE_REV)\\0\"	\
+		\"dhcp_vendor-class-identifier=$(PLATFORM)\\0\"	\
+		\"dhcp_user-class=$(PLATFORM)_uboot\\0\"	\
+		" > $(UBOOT_DIR)/include/configs/onie_version.h
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
@@ -87,7 +98,7 @@ $(UBOOT_BUILD_STAMP): $(UBOOT_BIN)
 
 u-boot-install: $(UBOOT_INSTALL_STAMP)
 $(UBOOT_INSTALL_STAMP): $(UBOOT_BUILD_STAMP)
-	$(Q) echo "==== Installing u-boot ($(MACHINE)) ===="
+	$(Q) echo "==== Installing u-boot ($(MACHINE_PREFIX)) ===="
 	$(Q) cp -v $(UBOOT_BIN) $(UBOOT_INSTALL_IMAGE)
 	$(Q) chmod a-x $(UBOOT_INSTALL_IMAGE)
 	$(Q) touch $@

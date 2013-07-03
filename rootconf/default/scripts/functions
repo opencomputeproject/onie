@@ -19,10 +19,11 @@ else
 fi
 
 # Primary default filename is most specific
-onie_default_filename="${filename_prefix}-${onie_arch}-${onie_machine}"
+onie_default_filename="${filename_prefix}-${onie_platform}"
 # Default file name list in decreasing order of precision
 onie_default_filenames="\
 $onie_default_filename
+${filename_prefix}-${onie_arch}-${onie_machine}
 ${filename_prefix}-${onie_machine}
 ${filename_prefix}-${onie_arch}
 ${filename_prefix}
@@ -105,8 +106,6 @@ import_cmdline()
     ONIE_REQUIRED_ARGS=$(cat <<EOF
 serial_num
 eth_addr
-vendor_id
-platform
 sec_key
 EOF
     )
@@ -133,12 +132,6 @@ EOF
 		;;
 	    eth_addr|eth_addr0)
 		true ${onie_eth_addr="$val"}
-		;;
-	    vendor_id)
-		true ${onie_vendor_id="$val"}
-		;;
-	    platform)
-		true ${onie_platform="$val"}
 		;;
 	    fw_env)
 		true ${onie_fw_env="$val"}
@@ -372,15 +365,17 @@ make_str_opt()
 # generic udhcpc args
 udhcpc_args()
 {
-    local udhcp_args="-q -S -V onie_vendor:${onie_platform}:${onie_arch}"
+    local udhcp_args="-q -S -V onie_vendor:${onie_platform}"
     # user_class - option 77 - string in hex
     local udhcp_user_class="-x 77:$(str2hex onie_dhcp_user_class)"
     # vendor specific options - option 125 - string in hex
     # code 3 - machine
     # code 4 - CPU architecture
-    local udhcp_vivso_machine="$(make_str_opt 3 $onie_platform)"
+    # code 5 - machine revision
+    local udhcp_vivso_machine="$(make_str_opt 3 $onie_machine)"
     local udhcp_vivso_arch="$(make_str_opt 4 $onie_arch)"
-    local payload="${udhcp_vivso_machine}${udhcp_vivso_arch}"
+    local udhcp_vivso_machine_rev="$(make_str_opt 5 $onie_machine_rev)"
+    local payload="${udhcp_vivso_machine}${udhcp_vivso_arch}${udhcp_vivso_machine_rev}"
     local len=$(( ${#payload} / 2 ))
     local udhcp_vivso="-x 125:$(printf %08X%02X%s $onie_iana_enterprise $len $payload)"
     echo "$udhcp_args" "$udhcp_user_class" "$udhcp_vivso"

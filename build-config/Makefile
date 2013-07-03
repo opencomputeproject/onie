@@ -106,30 +106,8 @@ endif
 #  Target Platform -- Usually specified on command line
 #
 MACHINE  ?= fsl_p2020rdbpca
-PLATFORM  = $(ARCH)-$(MACHINE)
-
-#-------------------------------------------------------------------------------
-#
-#  build tree
-#
-
-PROJECTDIR  =  $(abspath ..)
-BUILDDIR    =  $(abspath ../build)
-MBUILDDIR   =  $(BUILDDIR)/$(MACHINE)
-STAMPDIR    =  $(MBUILDDIR)/stamp
-SYSROOTDIR  =  $(MBUILDDIR)/sysroot
-INITRAMFSDIR=  $(MBUILDDIR)/initramfs
-IMAGEDIR    =  $(BUILDDIR)/images
-
-TREEDIRS     += $(BUILDDIR) $(STAMPDIR) $(SYSROOTDIR) \
-		$(IMAGEDIR) $(INITRAMFSDIR)
-
-TREE_STAMP  = $(STAMPDIR)/tree
-
-tree-stamp: $(TREE_STAMP)
-$(TREE_STAMP):
-	$(Q) mkdir -pv $(TREEDIRS)
-	$(Q) touch $@
+MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
+PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
 
 #-------------------------------------------------------------------------------
 #
@@ -140,14 +118,13 @@ PATCHDIR     = $(realpath ../patches)
 UPSTREAMDIR  = $(realpath ../upstream)
 CONFDIR	     = $(realpath ../rootconf)
 SCRIPTDIR    = $(realpath ./scripts)
-PLATFORMDIR  = $(realpath ./platform)
 MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
 ifneq (,$(MAKECMDGOALS))
   ifeq (,$(filter lsb-release-tag help clean-all %build-host doc% %html %pdf, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
-      $(warning Unable to find machine directory '$(MACHINE)' in $(MACHINEROOT))
+      $(warning Unable to find machine directory '$(MACHINEDIR)')
       $(warning You must set the MACHINE= variable when invoking make.)
       $(warning You can also set the machine root directory with MACHINEROOT= .)
       $(error Unable to find valid machine configuration directory.)
@@ -158,6 +135,28 @@ endif
 
 #-------------------------------------------------------------------------------
 #
+#  build tree
+#
+
+PROJECTDIR  =  $(abspath ..)
+BUILDDIR    =  $(abspath ../build)
+MBUILDDIR   =  $(BUILDDIR)/$(MACHINE_PREFIX)
+STAMPDIR    =  $(MBUILDDIR)/stamp
+SYSROOTDIR  =  $(MBUILDDIR)/sysroot
+INITRAMFSDIR=  $(MBUILDDIR)/initramfs
+IMAGEDIR    =  $(BUILDDIR)/images
+
+TREEDIRS     += $(BUILDDIR) $(STAMPDIR) $(SYSROOTDIR) \
+		$(IMAGEDIR) $(INITRAMFSDIR)
+
+TREE_STAMP  = $(STAMPDIR)/tree
+tree-stamp: $(TREE_STAMP)
+$(TREE_STAMP):
+	$(Q) mkdir -pv $(TREEDIRS)
+	$(Q) touch $@
+
+#-------------------------------------------------------------------------------
+#
 # Determine build id tag
 #
 # - The version is derived from the current git branch and the build
@@ -165,7 +164,7 @@ endif
 #
 LSB_RELEASE_TAG	?= $(shell [ -r ./conf/lsb-release ] && cat ./conf/lsb-release)
 ifeq ($(LSB_RELEASE_TAG),)
-  GIT_BRANCH = $(shell cd $(MACHINEROOT) && git rev-parse --abbrev-ref HEAD)
+  GIT_BRANCH = $(shell cd $(MACHINEDIR) && git rev-parse --abbrev-ref HEAD)
   BUILD_DATE = $(shell date +%Y%m%d%H%M)
   ifneq ($(RELEASE),)
     # Optional: If RELEASE specified on the command line insert the
@@ -174,7 +173,7 @@ ifeq ($(LSB_RELEASE_TAG),)
   else
     LSB_RELEASE_TAG = $(GIT_BRANCH)-$(BUILD_DATE)
   endif
-  DIRTY  = $(shell cd $(MACHINEROOT) && git status | \
+  DIRTY  = $(shell cd $(MACHINEDIR) && git status | \
 		egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo dirty)
   ifneq ($(DIRTY),)
     LSB_RELEASE_TAG := $(LSB_RELEASE_TAG)-$(DIRTY)
@@ -239,7 +238,7 @@ demo: $(KERNEL) $(DEMO_IMAGE)
 docs: html pdf
 
 clean: 	$(CLEAN)
-	$(Q) sudo rm -rf $(BUILDDIR)/images/*$(MACHINE)*
+	$(Q) sudo rm -rf $(BUILDDIR)/images/*$(MACHINE_PREFIX)*
 	$(Q) sudo rm -rf $(MBUILDDIR)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM) ==="
 

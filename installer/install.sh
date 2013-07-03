@@ -11,8 +11,15 @@ cd $(dirname $0)
 # get running machine from conf file
 [ -r /etc/machine.conf ] && . /etc/machine.conf
 
+# for backward compatibility if running machine_rev is empty assume it
+# is 0.
+true ${onie_machine_rev=0}
+
 fail=
 if [ "$onie_machine" != "$image_machine" ] ; then
+    fail=yes
+fi
+if [ "$onie_machine_rev" != "$image_machine_rev" ] ; then
     fail=yes
 fi
 if [ "$onie_arch" != "$image_arch" ] ; then
@@ -21,8 +28,8 @@ fi
 
 if [ "$fail" = "yes" ] && [ -z "$force" ] ; then
     echo "ERROR: Machine mismatch"
-    echo "Running machine     : ${onie_arch}/$onie_machine"
-    echo "Update Image machine: ${image_arch}/$image_machine"
+    echo "Running machine     : ${onie_arch}/${onie_machine}-${onie_machine_rev}"
+    echo "Update Image machine: ${image_arch}/${image_machine}-${image_machine_rev}"
     echo "Source URL: $onie_exec_url"
     exit 1
 fi
@@ -35,6 +42,7 @@ fi
 echo "ONIE: Version     : $image_version"
 echo "ONIE: Architecture: $image_arch"
 echo "ONIE: Machine     : $image_machine"
+echo "ONIE: Machine Rev : $image_machine_rev"
 
 xz -d -c onie-update.tar.xz | tar -xf -
 

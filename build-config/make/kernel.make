@@ -129,7 +129,7 @@ kernel-install: $(KERNEL_INSTALL_STAMP)
 $(KERNEL_INSTALL_STAMP): $(KERNEL_BUILD_STAMP) $(KERNEL_HEADER_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Copy device tree blob to $(IMAGEDIR) ===="
-	$(Q) cp -vf $(LINUX_BOOTDIR)/$(KERNEL_DTB) $(IMAGEDIR)/$(MACHINE).dtb
+	$(Q) cp -vf $(LINUX_BOOTDIR)/$(KERNEL_DTB) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb
 	$(Q) touch $@
 
 CLEAN += kernel-clean
