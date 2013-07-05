@@ -10,8 +10,8 @@
 DEMO_SYSROOTDIR		= $(MBUILDDIR)/demo-sysroot
 DEMO_SYSROOT_CPIO	= $(MBUILDDIR)/demo-sysroot.cpio
 DEMO_SYSROOT_CPIO_XZ	= $(DEMO_SYSROOT_CPIO).xz
-DEMO_UIMAGE		= $(IMAGEDIR)/demo-$(MACHINE).uImage
-DEMO_BIN		= $(IMAGEDIR)/demo-installer-$(MACHINE).bin
+DEMO_UIMAGE		= $(IMAGEDIR)/demo-$(PLATFORM).uImage
+DEMO_BIN		= $(IMAGEDIR)/demo-installer-$(PLATFORM).bin
 
 DEMO_SYSROOT_COMPLETE_STAMP	= $(STAMPDIR)/demo-sysroot-complete
 DEMO_UIMAGE_COMPLETE_STAMP	= $(STAMPDIR)/demo-uimage-complete
@@ -52,6 +52,7 @@ $(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_COMPLETE_STAMP)
 	$(Q) sudo sed -i -e '/onie/d' $(DEMO_SYSROOTDIR)/etc/syslog.conf
 	$(Q) cd $(DEMO_OS_DIR) && sudo ./install $(DEMO_SYSROOTDIR)
 	$(Q) t=`mktemp`; echo "machine=$(MACHINE)" > $$t ; \
+		echo "platform=$(PLATFORM)" >> $$t ; \
 		sudo cp $$t $(DEMO_SYSROOTDIR)/scripts/machine.conf && rm -f $$t
 	$(Q) sudo cp $(MACHINEDIR)/demo/platform.conf $(DEMO_SYSROOTDIR)/scripts
 	$(Q) touch $@
@@ -64,9 +65,9 @@ $(DEMO_SYSROOT_CPIO_XZ) : $(DEMO_SYSROOT_COMPLETE_STAMP)
 	$(Q) xz --compress --force --check=crc32 -8 $(DEMO_SYSROOT_CPIO)
 
 $(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
-	$(Q) echo "==== Create demo $(MACHINE) u-boot multi-file initramfs uImage ===="
-	$(Q) cd $(IMAGEDIR) && mkimage -T multi -C gzip -a 0 -e 0 -n "Demo $(MACHINE)" \
-		-d $(LINUXDIR)/vmlinux.bin.gz:$(DEMO_SYSROOT_CPIO_XZ):$(MACHINE).dtb $(DEMO_UIMAGE)
+	$(Q) echo "==== Create demo $(MACHINE_PREFIX) u-boot multi-file initramfs uImage ===="
+	$(Q) cd $(IMAGEDIR) && mkimage -T multi -C gzip -a 0 -e 0 -n "Demo $(MACHINE_PREFIX)" \
+		-d $(LINUXDIR)/vmlinux.bin.gz:$(DEMO_SYSROOT_CPIO_XZ):$(MACHINE_PREFIX).dtb $(DEMO_UIMAGE)
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
@@ -80,7 +81,7 @@ endif
 
 $(IMAGEDIR)/demo-installer-%.bin : $(DEMO_UIMAGE_COMPLETE_STAMP) $(MACHINE_DEMO_DIR)/*
 	$(Q) echo "==== Create demo $* self-extracting archive ===="
-	$(Q) ./scripts/onie-mk-demo.sh $(MACHINE) $(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf \
+	$(Q) ./scripts/onie-mk-demo.sh $(MACHINE) $(PLATFORM) $(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf \
 		$(DEMO_UIMAGE) $(DEMO_BIN)
 
 PHONY += demo-image-complete

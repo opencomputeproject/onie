@@ -1,10 +1,11 @@
 #!/bin/sh
 
 machine=$1
-installer_dir=$2
-platform_conf=$3
-uimage_file=$4
-output_file=$5
+platform=$2
+installer_dir=$3
+platform_conf=$4
+uimage_file=$5
+output_file=$6
 shift 5
 
 if  [ ! -d $installer_dir ] || \
@@ -48,6 +49,7 @@ cp $uimage_file $tmp_installdir || clean_up 1
 echo -n "."
 cp $platform_conf $tmp_installdir || clean_up 1
 echo "machine=$machine" > $tmp_installdir/machine.conf
+echo "platform=$platform" >> $tmp_installdir/machine.conf
 echo -n "."
 
 sharch="$tmp_dir/sharch.tar"
