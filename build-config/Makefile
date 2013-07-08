@@ -250,6 +250,10 @@ PHONY += lsb-release-tag
 lsb-release-tag:
 	$(Q) echo $(LSB_RELEASE_TAG)
 
+PHONY += machine-prefix
+machine-prefix:
+	$(Q) echo $(MACHINE_PREFIX)
+
 # Install required build packages for a debian based build host
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf
 PHONY += debian-prepare-build-host
