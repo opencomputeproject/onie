@@ -103,7 +103,7 @@ The following variables must be set by the platform:
     ``consoledev``, The primary serial console port, ``ttyS0``, compiled in
     ``onie_start``, The starting address, ``0xefb60000``, compiled in
     ``onie_sz.b``, Size of the ONIE kernel uImage region, ``0x00400000``, compiled in
-    ``platform``, Identifying string of the form "``<vendor>_<machine>``", ``vendor_machine``, non-volatile storage
+    ``platform``, Identifying string of the form "``<vendor>_<machine>-r<machine_revision>``", ``vendor_machine-r0``, non-volatile storage
     ``vendor_id``, 32-bit IANA Private Enterprise Number in decimal, ``12345``, non-volatile storage
     ``serial#``, Device serial number, ``XZY00123``, non-volatile storage
     ``eth_addr``, MAC address for ethernet management port, ``00:11:22:33:44:55``, non-volatile storage

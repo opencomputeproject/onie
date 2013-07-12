@@ -105,6 +105,21 @@ The total length of the TlvInfo EERPOM data, from the first byte of the
 identification string to the last byte of the CRC TLV, must be less than or
 equal to 2048 bytes.
 
+The layout of the entire EEPROM block looks like:
+
+==============   =============      ==============================================
+Field Name       Size in Bytes      Value
+==============   =============      ==============================================
+ID String        8                  "TlvInfo"
+Header Version   1                  0x01
+Total Length     2                  Total number of bytes that follow
+TLV 1            Depends            The data for TLV 1
+TLV 2            Depends            The data for TLV 2
+\.....           \.....             \.....
+TLV N            Depends            The data for TLV N
+CRC-32 TLV       6                  Type = 0xFE, Length = 4, Value = 4 byte CRC-32
+==============   =============      ==============================================
+
 Type Code Values
 ----------------
 
@@ -135,7 +150,8 @@ Type Code  Length      Description       Format
 0x27       Variable    Label Revision    An ASCII string containing the label revision.
 0x28       Variable    Platform Name     An ASCII string which identifies a CPU subsystem
                                          (CPU, arch, DRAM, NOR flash). Particularly useful
-                                         when the CPU resides on a daughter card.
+                                         when the CPU resides on a daughter card.  Typically
+                                         this includes <arch>-<machine>-<machine_revision>.
 0x29       Variable    ONIE Version      An ASCII string containing the version of the
                                          ONIE software installed by the manufacturer.
 0x2A       2 bytes     MAC #1 Size       A two-byte big-endian unsigned number of sequential
@@ -151,6 +167,8 @@ Type Code  Length      Description       Format
                                          manufacturer for the production of this device.
                                          This is typically the company name on the outside
                                          of the device.
+0x2E       Variable    Diag Version      An ASCII string containing the version of the 
+                                         diagnostic software.
 0xFD       Variable    Vendor Extension  This type code allows vendors to include extra
                                          information which is specific to the vendor and
                                          cannot be specified using the other type codes.
@@ -182,4 +200,4 @@ codes is handled by the ONIE Foundation [#ONIE]_.
 .. [#uboot]   `U-Boot <http://www.denx.de/wiki/U-Boot>`_
 .. [#ISOCountry] `ISO 3166-1 alpha-2 codes <http://www.iso.org/iso/country_codes/iso_3166_code_lists/country_names_and_code_elements.htm>`_
 .. [#IANAEnt] `IANA Enterprise Numbers <http://www.iana.org/assignments/enterprise-numbers>`_
-.. [#ONIE]    `ONIE Foundation <http://www.onie.org>`_
+.. [#ONIE]    `ONIE Project <http://http://onie.github.io/onie/>`_
