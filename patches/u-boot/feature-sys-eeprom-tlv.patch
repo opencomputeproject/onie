@@ -29,10 +29,10 @@ index 54fcc81..98a08e5 100644
  COBJS-$(CONFIG_CMD_INI) += cmd_ini.o
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..12d180d
+index 0000000..72c122e
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,994 @@
+@@ -0,0 +1,971 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -274,7 +274,9 @@ index 0000000..12d180d
 +	{ TLV_CODE_MANUF_NAME	 , "Manufacturer"},
 +	{ TLV_CODE_MANUF_COUNTRY , "Country Code"},
 +	{ TLV_CODE_VENDOR_NAME	 , "Vendor Name"},
++	{ TLV_CODE_DIAG_VERSION	 , "Diag Version"},
 +	{ TLV_CODE_VENDOR_EXT	 , "Vendor Extension"},
++	{ TLV_CODE_CRC_32	 , "CRC-32"},
 +};
 +
 +/**
@@ -319,14 +321,16 @@ index 0000000..12d180d
 +
 +	switch (tlv->type) {
 +	case TLV_CODE_PRODUCT_NAME:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
-+		break;
 +	case TLV_CODE_PART_NUMBER:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
-+		break;
 +	case TLV_CODE_SERIAL_NUMBER:
++	case TLV_CODE_MANUF_DATE:
++	case TLV_CODE_LABEL_REVISION:
++	case TLV_CODE_PLATFORM_NAME:
++	case TLV_CODE_ONIE_VERSION:
++	case TLV_CODE_MANUF_NAME:
++	case TLV_CODE_MANUF_COUNTRY:
++	case TLV_CODE_VENDOR_NAME:
++	case TLV_CODE_DIAG_VERSION:
 +		memcpy(value, tlv->value, tlv->length);
 +		value[tlv->length] = 0;
 +		break;
@@ -335,39 +339,11 @@ index 0000000..12d180d
 +			tlv->value[0], tlv->value[1], tlv->value[2],
 +			tlv->value[3], tlv->value[4], tlv->value[5]);
 +		break;
-+	case TLV_CODE_MANUF_DATE:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
-+		break;
 +	case TLV_CODE_DEVICE_VERSION:
 +		sprintf(value, "%u", tlv->value[0]);
 +		break;
-+	case TLV_CODE_LABEL_REVISION:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
-+		break;
-+	case TLV_CODE_PLATFORM_NAME:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
-+		break;
-+	case TLV_CODE_ONIE_VERSION:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
-+		break;
 +	case TLV_CODE_MAC_SIZE:
 +		sprintf(value, "%u", (tlv->value[0] << 8) | tlv->value[1]);
-+		break;
-+	case TLV_CODE_MANUF_NAME:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
-+		break;
-+	case TLV_CODE_MANUF_COUNTRY:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
-+		break;
-+	case TLV_CODE_VENDOR_NAME:
-+		memcpy(value, tlv->value, tlv->length);
-+		value[tlv->length] = 0;
 +		break;
 +	case TLV_CODE_VENDOR_EXT:
 +		value[0] = 0;
@@ -665,6 +641,7 @@ index 0000000..12d180d
 +	case TLV_CODE_MANUF_NAME:
 +	case TLV_CODE_MANUF_COUNTRY:
 +	case TLV_CODE_VENDOR_NAME:
++	case TLV_CODE_DIAG_VERSION:
 +		strncpy(data, strval, MAX_TLV_VALUE_LEN);
 +		new_tlv_len = min(MAX_TLV_VALUE_LEN, strlen(strval));
 +		break;
@@ -1029,10 +1006,10 @@ index 0000000..12d180d
 +#endif /* CONFIG_POPULATE_SERIAL_NUMBER */
 diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
 new file mode 100644
-index 0000000..0d80759
+index 0000000..23214ed
 --- /dev/null
 +++ b/include/sys_eeprom.h
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,121 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -1127,6 +1104,7 @@ index 0000000..0d80759
 +#define TLV_CODE_MANUF_NAME     0x2B
 +#define TLV_CODE_MANUF_COUNTRY  0x2C
 +#define TLV_CODE_VENDOR_NAME    0x2D
++#define TLV_CODE_DIAG_VERSION   0x2E
 +#define TLV_CODE_VENDOR_EXT     0xFD
 +#define TLV_CODE_CRC_32         0xFE
 +
