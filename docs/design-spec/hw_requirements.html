@@ -7,7 +7,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Hardware Requirements &mdash; Open Network Install Environment 1.3.0-201307061058 documentation</title>
+    <title>Hardware Requirements &mdash; Open Network Install Environment 1.4.0-201307141622 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -15,7 +15,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '1.3.0-201307061058',
+        VERSION:     '1.4.0-201307141622',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -24,7 +24,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="Open Network Install Environment 1.3.0-201307061058 documentation" href="../index.html" />
+    <link rel="top" title="Open Network Install Environment 1.4.0-201307141622 documentation" href="../index.html" />
     <link rel="up" title="Design Specification" href="index.html" />
     <link rel="next" title="Boot Loader" href="boot_loader.html" />
     <link rel="prev" title="Overview" href="overview.html" /> 
@@ -42,7 +42,7 @@
         <li class="right" >
           <a href="overview.html" title="Overview"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">Open Network Install Environment 1.3.0-201307061058 documentation</a> &raquo;</li>
+        <li><a href="../index.html">Open Network Install Environment 1.4.0-201307141622 documentation</a> &raquo;</li>
           <li><a href="index.html" accesskey="U">Design Specification</a> &raquo;</li> 
       </ul>
     </div>  
@@ -160,6 +160,54 @@ offset in the EEPROM: by adding 11 (the length of the fixed header information)
 <p>The total length of the TlvInfo EERPOM data, from the first byte of the
 identification string to the last byte of the CRC TLV, must be less than or
 equal to 2048 bytes.</p>
+<p>The layout of the entire EEPROM block looks like:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="19%" />
+<col width="18%" />
+<col width="63%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Field Name</th>
+<th class="head">Size in Bytes</th>
+<th class="head">Value</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>ID String</td>
+<td>8</td>
+<td>&#8220;TlvInfo&#8221;</td>
+</tr>
+<tr class="row-odd"><td>Header Version</td>
+<td>1</td>
+<td>0x01</td>
+</tr>
+<tr class="row-even"><td>Total Length</td>
+<td>2</td>
+<td>Total number of bytes that follow</td>
+</tr>
+<tr class="row-odd"><td>TLV 1</td>
+<td>Depends</td>
+<td>The data for TLV 1</td>
+</tr>
+<tr class="row-even"><td>TLV 2</td>
+<td>Depends</td>
+<td>The data for TLV 2</td>
+</tr>
+<tr class="row-odd"><td>.....</td>
+<td>.....</td>
+<td>.....</td>
+</tr>
+<tr class="row-even"><td>TLV N</td>
+<td>Depends</td>
+<td>The data for TLV N</td>
+</tr>
+<tr class="row-odd"><td>CRC-32 TLV</td>
+<td>6</td>
+<td>Type = 0xFE, Length = 4, Value = 4 byte CRC-32</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div class="section" id="type-code-values">
 <h3>Type Code Values<a class="headerlink" href="#type-code-values" title="Permalink to this headline">¶</a></h3>
@@ -236,7 +284,8 @@ of the device.</td>
 <td>Platform Name</td>
 <td>An ASCII string which identifies a CPU subsystem
 (CPU, arch, DRAM, NOR flash). Particularly useful
-when the CPU resides on a daughter card.</td>
+when the CPU resides on a daughter card.  Typically
+this includes &lt;arch&gt;-&lt;machine&gt;-&lt;machine_revision&gt;.</td>
 </tr>
 <tr class="row-odd"><td>0x29</td>
 <td>Variable</td>
@@ -273,7 +322,13 @@ manufacturer for the production of this device.
 This is typically the company name on the outside
 of the device.</td>
 </tr>
-<tr class="row-even"><td>0xFD</td>
+<tr class="row-even"><td>0x2E</td>
+<td>Variable</td>
+<td>Diag Version</td>
+<td>An ASCII string containing the version of the
+diagnostic software.</td>
+</tr>
+<tr class="row-odd"><td>0xFD</td>
 <td>Variable</td>
 <td>Vendor Extension</td>
 <td>This type code allows vendors to include extra
@@ -288,7 +343,7 @@ the IANA enterprise number <a class="footnote-reference" href="#ianaent" id="id4
 is needed, then multiple TLVs with this type code
 can be used.</td>
 </tr>
-<tr class="row-odd"><td>0xFE</td>
+<tr class="row-even"><td>0xFE</td>
 <td>4 bytes</td>
 <td>CRC-32</td>
 <td>A four-byte CRC which covers the EEPROM contents
@@ -298,7 +353,7 @@ field of this TLV, inclusive.  This CRC uses the
 crc32 algorithm (see python&#8217;s <tt class="docutils literal"><span class="pre">binascii.crc32()</span></tt>
 function).</td>
 </tr>
-<tr class="row-even"><td>0xFF</td>
+<tr class="row-odd"><td>0xFF</td>
 <td>None</td>
 <td>Reserved</td>
 <td>This type code is illegal and will never be used,
@@ -337,7 +392,7 @@ codes is handled by the ONIE Foundation <a class="footnote-reference" href="#oni
 <table class="docutils footnote" frame="void" id="onie" rules="none">
 <colgroup><col class="label" /><col /></colgroup>
 <tbody valign="top">
-<tr><td class="label"><a class="fn-backref" href="#id5">[5]</a></td><td><a class="reference external" href="http://www.onie.org">ONIE Foundation</a></td></tr>
+<tr><td class="label"><a class="fn-backref" href="#id5">[5]</a></td><td><a class="reference external" href="http://http://onie.github.io/onie/">ONIE Project</a></td></tr>
 </tbody>
 </table>
 </div>
@@ -402,7 +457,7 @@ codes is handled by the ONIE Foundation <a class="footnote-reference" href="#oni
         <li class="right" >
           <a href="overview.html" title="Overview"
              >previous</a> |</li>
-        <li><a href="../index.html">Open Network Install Environment 1.3.0-201307061058 documentation</a> &raquo;</li>
+        <li><a href="../index.html">Open Network Install Environment 1.4.0-201307141622 documentation</a> &raquo;</li>
           <li><a href="index.html" >Design Specification</a> &raquo;</li> 
       </ul>
     </div>

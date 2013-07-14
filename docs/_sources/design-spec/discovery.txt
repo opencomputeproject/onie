@@ -29,6 +29,35 @@ The following methods are tried in order:
 
 The subsequent sections describe the methods in detail.
 
+.. _default_file_name:
+
+Default File Name Search Order
+------------------------------
+
+In a number of the following methods ONIE searches for default file
+names in a specific order.  All the methods use the same default file
+names and search order, which we describe in this section.
+
+The default installer file names are searched in the following order:
+
+#. ``onie-installer-<arch>-<vendor>_<machine>-r<machine_revision>``
+#. ``onie-installer-<arch>-<vendor>_<machine>``
+#. ``onie-installer-<vendor>_<machine>``
+#. ``onie-installer-<arch>``
+#. ``onie-installer``
+
+For our hypothetical PowerPC machine the default installer file names
+would be::
+
+  onie-installer-powerpc-VENDOR_MACHINE-r0
+  onie-installer-powerpc-VENDOR_MACHINE
+  onie-installer-VENDOR_MACHINE
+  onie-installer-powerpc
+  onie-installer
+
+.. note:: In the case of ``ONIE update`` mode the file name prefix is
+          *onie-updater* instead of *onie-installer*.
+
 Static Configuration Method
 ---------------------------
 
@@ -51,12 +80,8 @@ In this method ONIE searches the partitions of locally attached
 storage devices looking for one of the ONIE default installer file
 names.
 
-.. note:: The default installer file names are searched in the following order:
-
-  #. ``onie-installer-<arch>-<platform>``
-  #. ``onie-installer-<platform>``
-  #. ``onie-installer-<arch>``
-  #. ``onie-installer``
+See the :ref:`default_file_name` section for more on the default file
+names.
 
 This method is intended for the case where the NOS installer is
 available on a USB memory stick plugged into the front panel.
@@ -101,16 +126,15 @@ The following options are set during the request:
 Vendor Class Identifier -- Option 60
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The vendor class identifier option is the concatenation of three
+The vendor class identifier option is the concatenation of two
 strings, separated by the colon ``:`` character:
 
 #.  The static string ``onie_vendor``
-#.  The platform name.
-#.  The machine's CPU architecture.
+#.  <arch>-<vendor>_<machine>-r<machine_revision>
 
 For example using our ficticious PowerPC machine the string would be::
 
-  onie_vendor:VENDOR_MACHINE:powerpc
+  onie_vendor:powerpc-VENDOR_MACHINE-r0
 
 Valid values for the CPU architecture string currnntly are:
 
@@ -153,10 +177,10 @@ Within this namespace the following option codes are defined:
   2 | Updater URL | string | \http://10.0.1.205/onie_update.bin
   3 | Platform Name | string | VENDOR_MACHINE
   4 | CPU Architecture | string | powerpc
-  5 | Vendor ID | unsigned 32-bit integer | vendor_id from U-Boot
+  5 | Machine Revision | string | 0
 
 See the :ref:`u_boot_platform_vars` table for more about the platform
-name and vendor ID.
+name.
 
 Parameter Request List -- Option 55
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -182,6 +206,28 @@ ONIE requests the following options:
   72 | HTTP Server IP | www-server | dotted quad | [#2132]_ | 10.0.1.251
   114 | Default URL | default-url | string | [#3679]_ | \http://server/path/installer
   150 | TFTP Server IP Address | next-server | dotted quad | [#5859]_ | 10.50.1.200
+
+HTTP Requests and HTTP Headers
+------------------------------
+
+All HTTP requests made by ONIE include a set of standard HTTP headers,
+which a HTTP CGI automation system could utilize.  The headers sent on
+each HTTP request are:
+
+.. csv-table:: HTTP Headers
+  :header: "Header", "Value", "Example"
+  :widths: 1, 1, 1
+  :delim: |
+
+  ONIE-SERIAL-NUMBER: | Serial Number | XYZ123004
+  ONIE-ETH-ADDR: | Management MAC Address | 08:9e:01:62:d1:93
+  ONIE-VENDOR-ID: | 32-bit IANA Private Enterprise Number in decimal | 12345
+  ONIE-MACHINE: | <vendor>_<machine> | VENDOR_MACHINE
+  ONIE-MACHINE-REV: | <machine_revision> | 0
+  ONIE-ARCH: | CPU architecture | powerpc
+  ONIE-SECURITY-KEY: | Security key | d3b07384d-ac-6238ad5ff00
+  ONIE-OPERATION: | ONIE mode of operation | ``os-install`` or ``onie-update``
+
 
 Exact Installer URLs From DHCPv4
 --------------------------------
@@ -227,23 +273,11 @@ can find an installer using partial DHCP information.  ONIE uses a
 default sequence of URL paths and default file names in conjunction
 with partial DHCP information to find an installer.
 
-ONIE looks for the following default installer file names in order::
+See the :ref:`default_file_name` section for more on the default file
+names and search order.
 
-  onie-installer-<arch>-<platform>
-  onie-installer-<platform>
-  onie-installer-<arch>
-  onie-installer
-
-For our hypothetical PowerPC machine the default installer file names
-would be::
-
-  onie-installer-powerpc-VENDOR_MACHINE
-  onie-installer-VENDOR_MACHINE
-  onie-installer-powerpc
-  onie-installer
-
-The default methods using partial DHCP information to locate an
-installer are:
+The following DHCP option responses are used to locate an installer in
+conjunction with the default file names:
 
 .. csv-table:: Partial DHCP URLs
   :header: "DHCP Options", "Name", "URL"
@@ -281,25 +315,29 @@ The ``$path_prefix`` is determined in the following manner:
   at that location remove the least significant hex digit and try
   again.
 
-- Ultimately try without a path_prefix, i.e. look at the root of the
-  TFTP server.
+- Ultimately look for the list of default file names at the root of
+  the TFTP server.
 
 Here is a complete list of the bootfile paths attempted using the
 example MAC address, IP address and the ficticious PowerPC platform::
 
-  55-66-aa-bb-cc-dd/onie-installer-<arch>-<platform>
-  C0A801B2/onie-installer-<arch>-<platform>
-  C0A801B/onie-installer-<arch>-<platform>
-  C0A801/onie-installer-<arch>-<platform>
-  C0A80/onie-installer-<arch>-<platform>
-  C0A8/onie-installer-<arch>-<platform>
-  C0A/onie-installer-<arch>-<platform>
-  C0/onie-installer-<arch>-<platform>
-  C/onie-installer-<arch>-<platform>
-  onie-installer-<arch>-<platform>
-  onie-installer-<platform>
+  55-66-aa-bb-cc-dd/onie-installer-<arch>-<vendor>_<machine>
+  C0A801B2/onie-installer-<arch>-<vendor>_<machine>
+  C0A801B/onie-installer-<arch>-<vendor>_<machine>
+  C0A801/onie-installer-<arch>-<vendor>_<machine>
+  C0A80/onie-installer-<arch>-<vendor>_<machine>
+  C0A8/onie-installer-<arch>-<vendor>_<machine>
+  C0A/onie-installer-<arch>-<vendor>_<machine>
+  C0/onie-installer-<arch>-<vendor>_<machine>
+  C/onie-installer-<arch>-<vendor>_<machine>
+  onie-installer-<arch>-<vendor>_<machine>-<machine_revision>
+  onie-installer-<arch>-<vendor>_<machine>
+  onie-installer-<vendor>_<machine>
   onie-installer-<arch>
   onie-installer
+
+See the :ref:`default_file_name` section for more on the default file
+names and search order.
 
 HTTP IPv6 Neighbors
 ^^^^^^^^^^^^^^^^^^^
@@ -308,19 +346,22 @@ ONIE also queries it is IPv6 link-local neighbors via HTTP for an
 installer.  The general algorithm follows:
 
 #. ping6 the "all nodes" link local IPv6 multicast address, ``ff02::1``.
-#. for each responding neighbor try to download the
-   $onie_default_installer_name from the root of the web server.
+#. for each responding neighbor try to download the default file names
+   from the root of the web server.
 
 Here is an example the URLs used by this method::
 
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc-VENDOR_MACHINE-r0
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc-VENDOR_MACHINE
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc-VENDOR_MACHINE-r0
   http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc-VENDOR_MACHINE
   http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-VENDOR_MACHINE
   http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc
   http://fe80::4638:39ff:fe00:2659%eth0/onie-installer
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc-VENDOR_MACHINE-r0
   http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc-VENDOR_MACHINE
   http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-VENDOR_MACHINE
   http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc
@@ -329,6 +370,9 @@ Here is an example the URLs used by this method::
 This makes it very simple to walk up to a switch and directly connect
 a laptop to the Ethernet management port and install from a local
 HTTP server.
+
+See the :ref:`default_file_name` section for more on the default file
+names and search order.
 
 Execution Environment
 =====================
@@ -350,7 +394,7 @@ ONIE exports the following environment variables:
   :delim: |
 
   onie_exec_url | Currently executing URL
-  onie_platform | Vendor and Machine name
+  onie_platform | CPU architecture, Vendor and Machine name
   onie_vendor_id | 32-bit IANA Private Enterprise Number in decimal
   onie_serial_num | Device serial number
   onie_eth_addr | MAC address for Ethernet management port
