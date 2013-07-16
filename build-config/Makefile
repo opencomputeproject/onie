@@ -34,7 +34,11 @@
 #   │   ├── stamp
 #   │   ├── sysroot
 #   │   ├── u-boot
-#   │   └── uclibc
+#   │   ├── uclibc
+#   │   ├── e2fsprogs
+#   │   ├── zlib
+#   │   ├── lzo
+#   │   └── mtdutils
 #   ├── docs
 #   └── images
 #
@@ -100,6 +104,8 @@ ifeq ($(ARCH), powerpc)
 else
   $(error Error: Unknown architecture '$(ARCH)')
 endif
+
+UCLIBC_FLAGS=--sysroot=$(UCLIBC_DEV_SYSROOT) -muclibc -L$(CROSSCOMPILER_LIBS) -L$(CROSSCOMPILER_LIBS)/../../../lib
 
 #-------------------------------------------------------------------------------
 #
@@ -215,6 +221,10 @@ include make/kernel.make
 include make/u-boot.make
 include make/uclibc.make
 include make/busybox.make
+include make/zlib.make
+include make/lzo.make
+include make/e2fsprogs.make
+include make/mtdutils.make
 include make/images.make
 include make/demo.make
 include make/docs.make

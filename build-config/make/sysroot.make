@@ -23,7 +23,7 @@ $(SYSROOT_INIT_STAMP): $(TREE_STAMP)
 	$(Q) sudo rm -rf $(SYSROOTDIR)
 	$(Q) sudo mkdir -p -v $(SYSROOTDIR)
 	$(Q) sudo mkdir -p -v -m 0755 $(SYSROOTDIR)/dev
-	$(Q) sudo mkdir -p -v $(SYSROOTDIR)/{sys,proc,tmp,etc,var/log,usr,lib,mnt}
+	$(Q) sudo mkdir -p -v $(SYSROOTDIR)/{sys,proc,tmp,etc,var/log,usr/lib,lib,mnt}
 	$(Q) touch $@
 
 #---
