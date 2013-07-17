@@ -170,6 +170,13 @@ sub devices
 	makedev("mtd${i}",      "c", 90, (2*${i}), ${root}, ${root}, 0660);
     }
 
+    print "UBI device access: ubi\n";
+    makedev("ubi_ctrl", "c", 10, 63, ${root}, ${root}, 0660);
+    makedev("ubi0"    , "c", 253, 0, ${root}, ${root}, 0660);
+    foreach my $i (0..7) {
+	makedev("ubi0_${i}", "c", 253, ${i}+1, ${root}, ${root}, 0660);
+    }
+
     print "SD flash access: mmcblk0 mmcblk0p{1..7}\n";
     makedev("mmcblk0",          "b", 179,    0, ${root}, ${root}, 0660);
     foreach my $i (1..7) {
