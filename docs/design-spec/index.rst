@@ -1,3 +1,5 @@
+.. _full_design_spec:
+
 ********************
 Design Specification
 ********************
