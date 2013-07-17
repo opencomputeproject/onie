@@ -69,6 +69,8 @@ $(UCLIBC_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(UCLIBC_BUILD_STAMP)
 		KERNEL_HEADERS=$(KERNEL_HEADERS)  \
 		CROSS=$(CROSSPREFIX)	\
 		PREFIX=$(SYSROOTDIR) install_runtime install_utils
+	$(Q) sudo $(CROSSBIN)/$(CROSSPREFIX)strip $(SYSROOTDIR)/{usr/bin/getconf,usr/bin/ldd,sbin/ldconfig} # fixup for unstripped binaries
+	$(Q) sudo ln -fs ld-uClibc.so.0 $(SYSROOTDIR)/lib/ld.so.1 # fixup for ldd, getconf and ldconfig
 	$(Q) echo "==== Installing development uclibc in $(UCLIBC_DEV_SYSROOT) ===="
 	$(Q) sudo PATH='$(CROSSBIN):$(PATH)' 	\
 		$(MAKE) -C $(UCLIBC_DIR) $(UCLIBC_VERBOSE) \
