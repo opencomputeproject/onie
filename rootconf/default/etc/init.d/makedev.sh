@@ -117,3 +117,5 @@ for x in $mtds ; do
 done
 
 make_fw_env_config
+
+mkdir -p $ONIE_RUN_DIR

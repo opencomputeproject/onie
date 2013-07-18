@@ -49,7 +49,7 @@ config_ethmgmt_dhcp4()
         udhcp_args="$udhcp_args -t 5 -T 3"
     fi
     udhcp_request_opts=
-    for o in subnet broadcast router domain hostname ntpsrv dns ; do
+    for o in subnet broadcast router domain hostname ntpsrv dns logsrv ; do
         udhcp_request_opts="$udhcp_request_opts -O $o"
     done
 
