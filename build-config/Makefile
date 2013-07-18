@@ -38,7 +38,8 @@
 #   │   ├── e2fsprogs
 #   │   ├── zlib
 #   │   ├── lzo
-#   │   └── mtdutils
+#   │   ├── mtdutils
+#   │   └── dropbear
 #   ├── docs
 #   └── images
 #
@@ -225,6 +226,7 @@ include make/zlib.make
 include make/lzo.make
 include make/e2fsprogs.make
 include make/mtdutils.make
+include make/dropbear.make
 include make/images.make
 include make/demo.make
 include make/docs.make
