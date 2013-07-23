@@ -29,10 +29,10 @@ index 54fcc81..98a08e5 100644
  COBJS-$(CONFIG_CMD_INI) += cmd_ini.o
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..72c122e
+index 0000000..0d881ff
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,971 @@
+@@ -0,0 +1,1127 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -883,6 +883,162 @@ index 0000000..72c122e
 +	*converted_accum = i;
 +	return 0;
 +}
++
++#ifdef CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO
++
++/**
++ * Provide sys_eeprom read/write functions for platforms that store
++ * the information in a flash sector.
++ */
++
++#ifndef CONFIG_SYS_FLASH_HWINFO_ADDR
++# error CONFIG_SYS_FLASH_HWINFO_ADDR must be defined when using common flash i/o.
++#endif
++
++#ifndef CONFIG_SYS_FLASH_HWINFO_SECT_SIZE
++# error CONFIG_SYS_FLASH_HWINFO_SECT_SIZE must be defined when using common flash i/o.
++#endif
++
++/**
++ * read_sys_eeprom - read the hwinfo from flash
++ */
++int read_sys_eeprom(void *eeprom, int offset, int len)
++{
++	memcpy(eeprom, (void *)(CONFIG_SYS_FLASH_HWINFO_ADDR + offset), len);
++	return 0;
++}
++
++/**
++ * write_sys_eeprom - write the hwinfo to flash
++ */
++int write_sys_eeprom(void *eeprom, int len)
++{
++	int ret;
++	int addr_start, addr_last;
++
++	addr_start = CONFIG_SYS_FLASH_HWINFO_ADDR;
++	addr_last  = CONFIG_SYS_FLASH_HWINFO_ADDR +
++		CONFIG_SYS_FLASH_HWINFO_SECT_SIZE - 1;
++
++	/* unprotect CONFIG_SYS_FLASH_HWINFO_ADDR */
++	ret = flash_sect_protect(0 /* protect off */,
++				 addr_start, addr_last);
++	if (ret != 0) {
++		printf("Unprotecting flash range 0x%08x - 0x%08x failed.\n",
++		       addr_start, addr_last);
++		flash_perror(ret);
++		return -1;
++	}
++
++	/* erase CONFIG_SYS_FLASH_HWINFO_ADDR */
++	ret = flash_sect_erase(addr_start, addr_last);
++	if (ret != 0) {
++		printf("Erasing flash range 0x%08x - 0x%08x failed.\n",
++		       addr_start, addr_last);
++		flash_perror(ret);
++		return -1;
++	}
++
++	/* flash write eeprom data to CONFIG_SYS_FLASH_HWINFO_ADDR */
++	ret = flash_write(eeprom, addr_start, len);
++	if (ret != 0) {
++		printf("Writing %d bytes to flash addr 0x%08x failed.\n",
++		       len, addr_start);
++		flash_perror(ret);
++		return -1;
++	}
++
++	/* protect CONFIG_SYS_FLASH_HWINFO_ADDR */
++	ret = flash_sect_protect(1 /* protect on */,
++				 addr_start, addr_last);
++	if (ret != 0) {
++		printf("Protecting flash range 0x%08x - 0x%08x failed.\n",
++		       addr_start, addr_last);
++		flash_perror(ret);
++		return -1;
++	}
++
++	return 0;
++}
++
++#endif /* CONFIG_SYS_FLASH_HWINFO_ADDR && CONFIG_SYS_FLASH_HWINFO_SECT_SIZE */
++
++#ifdef CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO
++
++/**
++ *  Use common i2c read/write functions
++ *
++ */
++
++#ifndef CONFIG_SYS_I2C_EEPROM_ADDR
++# error CONFIG_SYS_I2C_EEPROM_ADDR must be defined when using common i2c i/o.
++#endif
++#ifndef CONFIG_SYS_I2C_EEPROM_ADDR_LEN
++# error CONFIG_SYS_I2C_EEPROM_ADDR_LEN must be defined when using common i2c i/o.
++#endif
++#ifndef CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS
++# error CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS must be defined when using common i2c i/o.
++#endif
++
++/**
++ * read_sys_eeprom - read the hwinfo from i2c EEPROM
++ */
++int read_sys_eeprom(void *eeprom, int offset, int len)
++{
++	int ret;
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	unsigned int bus;
++#endif
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	bus = i2c_get_bus_num();
++	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
++#endif
++	ret = i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, offset,
++		       CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
++		       eeprom, len);
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	i2c_set_bus_num(bus);
++#endif
++
++	return ret;
++}
++
++/**
++ * write_sys_eeprom - write the hwinfo to i2c EEPROM
++ */
++int write_sys_eeprom(void *eeprom, int len)
++{
++	int ret = 0;
++	int i;
++	void *p;
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	unsigned int bus;
++#endif
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	bus = i2c_get_bus_num();
++	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
++#endif
++
++	for (i = 0, p = eeprom; i < len; i += 8, p += 8) {
++		ret = i2c_write(CONFIG_SYS_I2C_EEPROM_ADDR, i,
++				CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
++				p, min(len - i, 8));
++		if (ret)
++			break;
++		udelay(CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS * 1000);
++	}
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	i2c_set_bus_num(bus);
++#endif
++
++	return ret;
++}
++
++#endif /* CONFIG_SYS_EEPROM_USE_COMMON_IO */
 +
 +#ifdef CONFIG_SYS_EEPROM_LOAD_ENV_MAC
 +
