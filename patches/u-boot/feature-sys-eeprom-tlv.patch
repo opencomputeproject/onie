@@ -29,28 +29,15 @@ index 54fcc81..98a08e5 100644
  COBJS-$(CONFIG_CMD_INI) += cmd_ini.o
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..0d881ff
+index 0000000..91cceb3
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,1127 @@
+@@ -0,0 +1,1129 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
 + *
-+ * This program is free software; you can redistribute it and/or
-+ * modify it under the terms of the GNU General Public License as
-+ * published by the Free Software Foundation; either version 2 of
-+ * the License, or (at your option) any later version.
-+ *
-+ * This program is distributed in the hope that it will be useful,
-+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+ * GNU General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
-+ * MA 02111-1307 USA
++ * SPDX-License-Identifier:	GPL-2.0+
 + */
 +
 +#include <common.h>
@@ -76,6 +63,8 @@ index 0000000..0d881ff
 +
 +/* Set to 1 if we've read EEPROM into memory */
 +static int has_been_read = 0;
++/* Set to 1 if the EEPROM contents were valid when read from hardware */
++static int hw_eeprom_valid = 1;
 +/* The EERPOM contents after being read into memory */
 +static u8 eeprom[TLV_INFO_MAX_LEN];
 +
@@ -187,6 +176,8 @@ index 0000000..0d881ff
 +		eeprom_hdr->version = TLV_INFO_VERSION;
 +		eeprom_hdr->totallen = cpu_to_be16(0);
 +		update_crc(eeprom);
++		/* Note that the contents of the hardware is not valid */
++		hw_eeprom_valid = 0;
 +	}
 +
 +	has_been_read = 1;
@@ -432,8 +423,19 @@ index 0000000..0d881ff
 +		return -1;
 +	}
 +
++	/* After writing the HW contents are valid */
++	hw_eeprom_valid = 1;
++
 +	printf("Programming passed.\n");
 +	return 0;
++}
++
++/**
++ * is_sys_eeprom_valid - Is the EEPROM binary data in hardware valid
++ */
++int is_sys_eeprom_valid()
++{
++	return hw_eeprom_valid;
 +}
 +
 +/**
@@ -1162,28 +1164,15 @@ index 0000000..0d881ff
 +#endif /* CONFIG_POPULATE_SERIAL_NUMBER */
 diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
 new file mode 100644
-index 0000000..23214ed
+index 0000000..524f14c
 --- /dev/null
 +++ b/include/sys_eeprom.h
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,120 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
 + *
-+ * This program is free software; you can redistribute it and/or
-+ * modify it under the terms of the GNU General Public License as
-+ * published by the Free Software Foundation; either version 2 of
-+ * the License, or (at your option) any later version.
-+ *
-+ * This program is distributed in the hope that it will be useful,
-+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+ * GNU General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
-+ * MA 02111-1307 USA
++ * SPDX-License-Identifier:	GPL-2.0+
 + */
 +
 +#ifndef __SYS_EEPROM_H_
@@ -1285,5 +1274,17 @@ index 0000000..23214ed
 + *
 + */
 +extern int write_sys_eeprom(void *eeprom, int len);
++
++/**
++ * is_sys_eeprom_valid - Is the EEPROM binary data in hardware valid
++ *
++ * An external caller can use this to determine if the hardware
++ * contains valid TLV EEPROM data.
++ *
++ * Returns non-zero when the binary data in hardware is valid,
++ * otherwise returns zero.
++ *
++ */
++extern int is_sys_eeprom_valid(void);
 +
 +#endif /* __SYS_EEPROM_H_ */
