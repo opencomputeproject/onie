@@ -9,7 +9,7 @@ ARGS="-b 3 -D -L"
 . /scripts/functions
 
 ARG_FILE="${ONIE_RUN_DIR}/syslogd.args"
-LOGSRVS=$(cat "${ONIE_RUN_DIR}/dhcp.logsrv")
+[ -r "${ONIE_RUN_DIR}/dhcp.logsrv" ] && LOGSRVS=$(cat "${ONIE_RUN_DIR}/dhcp.logsrv")
 for r in $LOGSRVS ; do
     ARGS="$ARGS -R $r"
 done
