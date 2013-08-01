@@ -17,8 +17,9 @@ IMAGE_COMPLETE_STAMP	= $(STAMPDIR)/image-complete
 IMAGE		= $(IMAGE_COMPLETE_STAMP)
 
 LSB_RELEASE_FILE = $(MBUILDDIR)/lsb-release
-OS_RELEASE_FILE	= $(MBUILDDIR)/os-release
-MACHINE_CONF	= $(MBUILDDIR)/machine.conf
+OS_RELEASE_FILE	 = $(MBUILDDIR)/os-release
+MACHINE_CONF	 = $(MBUILDDIR)/machine.conf
+RC_LOCAL	 = $(abspath $(MACHINEDIR)/rc.local)
 
 INSTALLER_DIR	= $(abspath ../installer)
 
@@ -39,11 +40,12 @@ SYSROOT_NEW_FILES = $(shell \
   ifneq ($(SYSROOT_NEW_FILES),)
     $(shell rm -f $(SYSROOT_COMPLETE_STAMP))
   endif
+  RC_LOCAL_DEP = $(shell test -r $(RC_LOCAL) && echo $(RC_LOCAL))
 endif
 
 PHONY += sysroot-complete
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
-$(SYSROOT_COMPLETE_STAMP): $(PACKAGES_INSTALL_STAMPS)
+$(SYSROOT_COMPLETE_STAMP): $(PACKAGES_INSTALL_STAMPS) $(RC_LOCAL_DEP)
 	$(Q) sudo rm -f $(SYSROOTDIR)/linuxrc
 	$(Q) echo "==== Installing the basic set of devices ===="
 	$(Q) sudo $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR)
@@ -67,6 +69,9 @@ $(SYSROOT_COMPLETE_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) sudo cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) sudo cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) sudo cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
+	$(Q) if [ -r $(RC_LOCAL) ] ; then \
+		sudo cp -a $(RC_LOCAL) $(SYSROOTDIR)/etc/rc.local ; \
+	     fi
 	$(Q) touch $@
 
 # This step creates the cpio archive and compresses it
