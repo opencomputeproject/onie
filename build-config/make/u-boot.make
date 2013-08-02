@@ -75,6 +75,8 @@ $(UBOOT_PATCH_STAMP): $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOUR
 		\"dhcp_vendor-class-identifier=$(PLATFORM)\\0\"	\
 		\"dhcp_user-class=$(PLATFORM)_uboot\\0\"	\
 		" > $(UBOOT_DIR)/include/configs/onie_version.h
+	$(Q) echo '#define CONFIG_IDENT_STRING "\nONIE $(LSB_RELEASE_TAG)"' \
+		>> $(UBOOT_DIR)/include/configs/onie_version.h
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
