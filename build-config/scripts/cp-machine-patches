@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# Script to copy patches which are listed in series file from the input patch directoriews
+# into output directory
+#
+
+OUTPUT_DIR="$1"
+SERIES="$2"
+PATCH_DIR_1="$3"
+PATCH_DIR_2="$4"
+
+# For example:
+# SERIES:machine/celestica/cel_redstone/u-boot/series
+# OUTPUT_DIR:build/cel_redstone-r0/u-boot/patch/series
+# PATCH_DIR_1:machine/celestica/u-boot
+# PATCH_DIR_2:machine/celestica/cel_redstone/u-boot
+#
+
+if [ $# -ne 4 ]; then
+	echo "Usage: $0 <destination_dir> <series> <patch_dir_1> <patch_dir_2>"
+	exit 1
+fi
+
+if [ -z "$SERIES" -o -z "$OUTPUT_DIR" -o -z "$PATCH_DIR_1" -o -z "$PATCH_DIR_2" \
+	-o ! -r "$SERIES" -o ! -d "$OUTPUT_DIR" ]; then
+	echo "Usage: $0 <destination_dir> <series> <patch_dir_1> <patch_dir_2>"
+	exit 100
+fi
+
+OUTPUT_DIR="`realpath \"$OUTPUT_DIR\"`"
+SERIES="`realpath \"$SERIES\"`"
+PATCH_DIR_1="`realpath \"$PATCH_DIR_1\"`"
+PATCH_DIR_2="`realpath \"$PATCH_DIR_2\"`"
+
+copy_series () {
+	while read line; do
+		line="`echo ${line} | cut -d'#' -f1`"
+		if [ -z "$line" ]; then
+			continue
+		fi
+
+#
+# Patches listed in series file must exist in one of the specified patch directories
+# Error scenarios:
+#   Patch with same name listed in series file exists in more than one patch directory
+#   Patch listed in series file doesn't exist in either patch directories
+#
+		if [ -r "${PATCH_DIR_1}/${line}" ]; then
+			if [ -r "${PATCH_DIR_2}/${line}" ]; then
+				echo "Patches with same name ${line} exists in both ${PATCH_DIR_1} and ${PATCH_DIR_2}" >&2
+				exit 1
+			else
+				cp -v ${PATCH_DIR_1}/${line} ${OUTPUT_DIR}/
+				continue
+			fi
+		fi
+
+		if [ ! -r "${PATCH_DIR_2}/${line}" ]; then
+			echo "Patch ${line} doesn't exist in ${PATCH_DIR_1} and ${PATCH_DIR_2}" >&2
+			exit 1
+		fi
+
+		cp -v ${PATCH_DIR_2}/${line} ${OUTPUT_DIR}/
+	done
+}
+
+cd "${OUTPUT_DIR}" ; copy_series < "$SERIES"

@@ -72,8 +72,9 @@ $(KERNEL_PATCH_STAMP): $(KERNEL_SRCPATCHDIR)/* $(MACHINEDIR)/kernel/* $(KERNEL_S
 		exit 1)
 	$(Q) mkdir -p $(KERNEL_PATCHDIR)
 	$(Q) cp $(KERNEL_SRCPATCHDIR)/* $(KERNEL_PATCHDIR)
-	$(Q) cp $(MACHINEDIR)/kernel/*.patch $(KERNEL_PATCHDIR)
 	$(Q) cat $(MACHINEDIR)/kernel/series >> $(KERNEL_PATCHDIR)/series
+	$(Q) $(SCRIPTDIR)/cp-machine-patches $(KERNEL_PATCHDIR) $(MACHINEDIR)/kernel/series	\
+		$(MACHINEDIR)/kernel $(MACHINEROOT)/kernel
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(KERNEL_PATCHDIR)/series $(LINUXDIR)
 	$(Q) touch $@
 

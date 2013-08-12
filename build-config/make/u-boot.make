@@ -62,8 +62,9 @@ $(UBOOT_PATCH_STAMP): $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOUR
 		exit 1)
 	$(Q) mkdir -p $(UBOOT_PATCHDIR)
 	$(Q) cp $(UBOOT_SRCPATCHDIR)/* $(UBOOT_PATCHDIR)
-	$(Q) cp $(MACHINEDIR)/u-boot/*.patch $(UBOOT_PATCHDIR)
 	$(Q) cat $(MACHINEDIR)/u-boot/series >> $(UBOOT_PATCHDIR)/series
+	$(Q) $(SCRIPTDIR)/cp-machine-patches $(UBOOT_PATCHDIR) $(MACHINEDIR)/u-boot/series	\
+		$(MACHINEDIR)/u-boot $(MACHINEROOT)/u-boot
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(UBOOT_PATCHDIR)/series $(UBOOT_DIR)
 	$(Q) echo "#define ONIE_VERSION \
 		\"onie_version=$(LSB_RELEASE_TAG)\\0\"	\
