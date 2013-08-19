@@ -50,3 +50,20 @@ One subsequent boots the start up sequence is:
 
 # The boot loader launches the default OS, which is the NOS
 # The NOS boots and executes
+
+.. _onie_fsm:
+
+ONIE Finite State Machine
+=========================
+
+The following diagram illustrates the ONIE finite state machine.
+
+.. figure:: onie-fsm.png
+  :scale: 75
+  :align: center
+  :alt: ONIE Finite State Machine
+
+Alertnate image formats: :download:`[PDF] <onie-fsm.pdf>` :download:`[SVG] <onie-fsm.svg>`
+
+The states and transitions are thoroughly discussed in subsequent
+sections.
