@@ -22,8 +22,8 @@ run_installer()
     fi
 
     chmod +x $onie_installer
-    # Send installer execution output to the console
-    { $onie_installer; echo "$?" > /var/run/install.rc; } 2>&1 | tee /dev/console | logger $log_stderr -t os-install -p ${syslog_onie}.info
+    # Send installer execution output to stdout
+    { $onie_installer; echo "$?" > /var/run/install.rc; } 2>&1 | tee "/proc/$$/fd/1" | logger $log_stderr -t os-install -p ${syslog_onie}.info
     [ "$(cat /var/run/install.rc)" = "0" ] && reboot && return 0
 
     # installer should not return
@@ -38,7 +38,7 @@ wget_run()
 
     wget_args="-T 3 -O $onie_installer"
 
-    if [ "$onie_verbose" = "y" ]; then
+    if [ "$onie_verbose" = "y" ] || [ "$from_cli" = "yes" ] ; then
         out_file="/proc/$$/fd/1"
     else
         wget_args="$wget_args -q"
@@ -111,7 +111,7 @@ tftp_run()
     URL="tftp://$SERVER/$BOOTFILE"
     log_debug_msg "Running tftp get with: server: $SERVER, bootfile: $BOOTFILE"
     log_info_msg "Fetching $URL ..."
-    if [ "$onie_verbose" = "y" ]; then
+    if [ "$onie_verbose" = "y" ] || [ "$from_cli" = "yes" ] ; then
         tftp_wrap -g -l $onie_installer -r $BOOTFILE $SERVER && run_installer "$URL" && return 0
     else
         tftp_wrap -g -l $onie_installer -r $BOOTFILE $SERVER > /dev/null 2>&1 && run_installer "$URL" && return 0
@@ -306,8 +306,11 @@ parms="$(cat $parm_file)"
 import_parms "$parms"
 rm -f $onie_installer
 
+from_cli=no
+
 # Try static installer URL from CLI
 if [ -n "$onie_cli_static_url" ] ; then
+    from_cli=yes
     # also send to stdout of current process
     tee_log_file=/proc/$$/fd/1
     url_run "$onie_cli_static_url" && exit 0
@@ -317,6 +320,7 @@ fi
 
 # Try static updater URL from CLI
 if [ -n "$onie_cli_static_update_url" ] ; then
+    from_cli=yes
     # also send to stdout of current process
     tee_log_file=/proc/$$/fd/1
     url_run "$onie_cli_static_update_url" && exit 0
