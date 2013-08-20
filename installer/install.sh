@@ -60,8 +60,13 @@ flashcp -v u-boot.bin /dev/mtd-uboot || {
     exit 1
 }
 
-# update ONIE version in u-boot env
-fw_setenv -f onie_version "$image_version"
+# - update ONIE version in u-boot env
+# - clear the onie_boot_reason if set
+(cat <<EOF
+onie_boot_reason
+onie_version "$image_version"
+EOF
+) | fw_setenv -f -s -
 
 echo "Rebooting..."
 reboot

@@ -12,13 +12,11 @@ daemon="discover"
 
 do_start() {
 
-    # Check for one time boot commands.  Delete the one time env
-    # variable.
-    fw_setenv -f onie_boot_reason > /dev/null 2>&1
-
     # parse boot_reason
     case "$onie_boot_reason" in
         rescue)
+            # Delete the one time onie_boot_reason env variable.
+            fw_setenv -f onie_boot_reason > /dev/null 2>&1
             echo "$daemon: Rescue mode detected.  Installer disabled." > /dev/console
             echo "** Rescue Mode Enabled **" >> /etc/issue
             exit 0
@@ -35,6 +33,14 @@ do_start() {
             echo "** ONIE Update Mode Enabled **" >> /etc/issue
             ;;
         install)
+            # Delete the one time onie_boot_reason variable.  Also set
+            # nos_bootcmd to a no-op, which will keep us in this state
+            # if installation fails.
+            (cat <<EOF
+onie_boot_reason
+nos_bootcmd true
+EOF
+            ) | fw_setenv -f -s - > /dev/null 2>&1
             # pass through to discover
             echo "$daemon: installer mode detected.  Running installer." > /dev/console
             echo "** Installer Mode Enabled **" >> /etc/issue
