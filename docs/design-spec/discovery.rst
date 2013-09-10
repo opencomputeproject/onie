@@ -104,6 +104,8 @@ proceeds as follows::
     Run installer from $partition
   }
 
+.. _onie_dhcp_requests:
+
 DHCP Requests and Responses
 ---------------------------
 
@@ -122,6 +124,8 @@ The following options are set during the request:
   77  | User Class | user-class | [#2132]_
   125 | Vendor-Identifying Vendor-Specific Information | vivso | [#3925]_
   55  | Parameter Request List | dhcp-parameter-request-list | [#2132]_
+
+.. _onie_dhcp_vendor_class:
 
 Vendor Class Identifier -- Option 60
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -338,6 +342,8 @@ example MAC address, IP address and the ficticious PowerPC platform::
 
 See the :ref:`default_file_name` section for more on the default file
 names and search order.
+
+.. _discover_neighbors:
 
 HTTP IPv6 Neighbors
 ^^^^^^^^^^^^^^^^^^^
