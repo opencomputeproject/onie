@@ -7,7 +7,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>User Guide &mdash; Open Network Install Environment 1.6.2 documentation</title>
+    <title>Quick Start Guide – ONIE By Example &mdash; Open Network Install Environment 1.6.4 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -15,7 +15,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '1.6.2',
+        VERSION:     '1.6.4',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -24,7 +24,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="Open Network Install Environment 1.6.2 documentation" href="../index.html" />
+    <link rel="top" title="Open Network Install Environment 1.6.4 documentation" href="../index.html" />
     <link rel="next" title="Design Specification" href="../design-spec/index.html" />
     <link rel="prev" title="Overview" href="../overview/index.html" /> 
   </head>
@@ -41,7 +41,7 @@
         <li class="right" >
           <a href="../overview/index.html" title="Overview"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">Open Network Install Environment 1.6.2 documentation</a> &raquo;</li> 
+        <li><a href="../index.html">Open Network Install Environment 1.6.4 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -50,10 +50,538 @@
         <div class="bodywrapper">
           <div class="body">
             
-  <div class="section" id="user-guide">
-<h1>User Guide<a class="headerlink" href="#user-guide" title="Permalink to this headline">¶</a></h1>
-<div class="section" id="todo">
-<h2>TODO<a class="headerlink" href="#todo" title="Permalink to this headline">¶</a></h2>
+  <div class="section" id="quick-start-guide-onie-by-example">
+<h1>Quick Start Guide &#8211; ONIE By Example<a class="headerlink" href="#quick-start-guide-onie-by-example" title="Permalink to this headline">¶</a></h1>
+<p>ONIE supports a number of methods for locating a Network Operating
+System (NOS) installer image.  The methods range from <strong>really easy</strong> to
+<strong>rather complex</strong>.</p>
+<p>The easy methods are suitable for installing a NOS on a small number
+of switches as a proof of concept or for a demo.  These methods, while
+easy to setup, offer limited configurable options that more complex
+networks may require.</p>
+<p>The more complex methods are suitable for complex networks and large
+scale switch deployment scenarios.  These methods offer a wide range
+of flexible options, with the downside being you need to understand
+and configure said options.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The examples throughout this section reference a
+hypothetical PowerPC based switch, called <strong>MACHINE</strong>, manufactured by a
+hypothetical hardware manufacturer, called <strong>VENDOR</strong>.</p>
+</div>
+<div class="section" id="serving-the-nos-installer-image">
+<h2>Serving the NOS Installer Image<a class="headerlink" href="#serving-the-nos-installer-image" title="Permalink to this headline">¶</a></h2>
+<p>For all installation scenarios ONIE expects the NOS installer image to
+be available on the network via HTTP.  This guide assumes the
+following hostname and IPv4 address of the web server:</p>
+<div class="highlight-python"><pre>hostname:  image-server
+IP addr :  203.0.113.10</pre>
+</div>
+<p>Before continuing the following resources must be setup:</p>
+<ul class="simple">
+<li>Install and configure a HTTP server</li>
+<li>Copy the NOS installer image to the HTTP server</li>
+</ul>
+<div class="section" id="install-configure-http-server">
+<h3>Install / Configure HTTP Server<a class="headerlink" href="#install-configure-http-server" title="Permalink to this headline">¶</a></h3>
+<p>Download and install your favorite HTTP server <a class="footnote-reference" href="#apache-httpd" id="id1">[3]</a>
+<a class="footnote-reference" href="#thttpd" id="id2">[4]</a>.</p>
+<p>The examples in this guide assume Apache httpd is installed on a Linux
+machine with the default configuration options.  The document root of
+the web server is <tt class="docutils literal"><span class="pre">/var/www</span></tt>.</p>
+</div>
+<div class="section" id="copy-nos-installer-image-to-http-server">
+<h3>Copy NOS Installer Image to HTTP Server<a class="headerlink" href="#copy-nos-installer-image-to-http-server" title="Permalink to this headline">¶</a></h3>
+<p>After procuring your NOS installer image from your NOS vendor copy the
+installer to the document root of your web server.  In the case of
+Apache on Linux the document root directory is <tt class="docutils literal"><span class="pre">/var/www</span></tt>.  You
+probably need root privileges to copy files there.</p>
+<p>For the purposes of this guide we assume the <strong>fictitious</strong> name of the
+NOS installer image is <tt class="docutils literal"><span class="pre">ACME_XYZ1234_PowerPC_Installer.bin</span></tt>.  After
+copying this file to the document root of the web server the contents
+of <tt class="docutils literal"><span class="pre">/var/www</span></tt> should look like this:</p>
+<div class="highlight-python"><pre>image-server:~$ sudo cp ACME_XYZ1234_PowerPC_Installer.bin /var/www
+image-server:~$ ls -l /var/www
+-rw-r--r-- 1 root root  17755 Jun 27 16:18 ACME_XYZ1234_PowerPC_Installer.bin</pre>
+</div>
+</div>
+<div class="section" id="test-nos-installer-download-from-http-server">
+<span id="test-http-server"></span><h3>Test NOS Installer Download from HTTP Server<a class="headerlink" href="#test-nos-installer-download-from-http-server" title="Permalink to this headline">¶</a></h3>
+<p>Before proceeding it is a good idea to double check the configuration
+of the web server and the location of the NOS installer image.  From
+another machine try to download the NOS installer image.  You could
+use a web browser or a CLI command <a class="footnote-reference" href="#wget" id="id3">[5]</a> <a class="footnote-reference" href="#curl" id="id4">[6]</a>.</p>
+<p>The URLs to double check are:</p>
+<div class="highlight-python"><pre>http://203.0.113.10/ACME_XYZ1234_PowerPC_Installer.bin
+http://image-server/ACME_XYZ1234_PowerPC_Installer.bin</pre>
+</div>
+</div>
+</div>
+<div class="section" id="directly-connected-scenario">
+<span id="directly-connected"></span><h2>Directly Connected Scenario<a class="headerlink" href="#directly-connected-scenario" title="Permalink to this headline">¶</a></h2>
+<p>The most simple topology is when the web server is directly connected
+to the Ethernet management port on the target switch.  This is
+depicted in the following diagram.</p>
+<div class="figure align-center">
+<a class="reference internal image-reference" href="../_images/direct-connect.png"><img alt="Switch and Web Server Directly Connected" src="../_images/direct-connect.png" style="width: 447.75px; height: 136.5px;" /></a>
+</div>
+<p>This simple configuration is appropriate for provisioning a small
+number of switches without relying on a lot of infrastructure.  You
+might have this scenario in a production environment when you wheel a
+crash cart up to a switch in a rack and need to perform a quick
+one-off install.</p>
+<p>In this scenario, without any additional configuration, ONIE will
+discover the IP address (either IPv6 or IPv4) of the link local web
+server.  See the <a class="reference internal" href="../design-spec/discovery.html#discover-neighbors"><em>HTTP IPv6 Neighbors</em></a> section for more on how
+ONIE discovers its link local neighbors.</p>
+<p>After neighbor discovery ONIE makes HTTP requests for a series of
+default installer image file names as described in the
+<a class="reference internal" href="../design-spec/discovery.html#default-file-name"><em>Default File Name Search Order</em></a> section.</p>
+<p>Applying the default file name conventions described in that section
+ONIE makes the following HTTP requests looking for an installer image:</p>
+<div class="highlight-python"><pre>http://203.0.113.10/onie-installer-powerpc-VENDOR_MACHINE-r0
+http://203.0.113.10/onie-installer-powerpc-VENDOR_MACHINE
+http://203.0.113.10/onie-installer-VENDOR_MACHINE
+http://203.0.113.10/onie-installer-powerpc
+http://203.0.113.10/onie-installer</pre>
+</div>
+<p>A simple way to configure the web server is to symlink (or rename) the
+NOS vendor&#8217;s image name to one of the default ONIE installer file
+names.  The symlink technique is shown here:</p>
+<div class="highlight-python"><pre>image-server:~$ cd /var/www
+image-server:/var/www$ sudo ln -s ACME_XYZ1234_PowerPC_Installer.bin ./onie-installer
+image-server:/var/www$ ls -l
+lrwxrwxrwx 1 root root  104 Jul 22 14:01 onie-installer -&gt; ACME_XYZ1234_PowerPC_Installer.bin</pre>
+</div>
+<p>With the symlink in place, the web server hands back the full
+installer image in response to the request for <tt class="docutils literal"><span class="pre">onie-installer</span></tt>.
+Now ONIE can download and run the installer image.</p>
+</div>
+<div class="section" id="l2-connected-scenario">
+<h2>L2 Connected  Scenario<a class="headerlink" href="#l2-connected-scenario" title="Permalink to this headline">¶</a></h2>
+<p>In this topology the target switch and the web server are both in the
+same layer 2 network.  For example they might both be plugged into the
+same unmanaged switch.  This is depicted in the following diagram.</p>
+<div class="figure align-center">
+<a class="reference internal image-reference" href="../_images/l2-connect.png"><img alt="Switch and Web Server on Same L2 Network" src="../_images/l2-connect.png" style="width: 449.25px; height: 190.5px;" /></a>
+</div>
+<p>This scenario proceeds just like the <a class="reference internal" href="#directly-connected"><em>Directly Connected Scenario</em></a>
+described previously.  ONIE discovers the IP address of the web server
+and tries to download a series of default file names from the server.</p>
+</div>
+<div class="section" id="basic-dhcp-scenario-1-specify-installer-image-url">
+<span id="basic-dhcp-1"></span><h2>Basic DHCP Scenario 1 (Specify Installer Image URL)<a class="headerlink" href="#basic-dhcp-scenario-1-specify-installer-image-url" title="Permalink to this headline">¶</a></h2>
+<p>In this scenario we jump up one level in sophistication and use a DHCP
+server to provide more specific information about the location of the
+installer image.  The DHCP server, target switch and web server are
+all located on the same layer 2 network.  This is depicted in the
+following diagram.</p>
+<div class="figure align-center">
+<a class="reference internal image-reference" href="../_images/dhcp.png"><img alt="Switch and Web Server on Same L2 Network with DHCP Server" src="../_images/dhcp.png" style="width: 450.0px; height: 304.5px;" /></a>
+</div>
+<p>The DHCP server provides the following information:</p>
+<ul class="simple">
+<li>IP address for the target switch from a pool of IP addresses</li>
+<li>URL of the installer image on the web server</li>
+</ul>
+<p>Below is a sample from a dhcpd.conf file for ISC DHCP server
+<a class="footnote-reference" href="#isc-dhcp" id="id5">[1]</a> <a class="footnote-reference" href="#isc-dhcp-options" id="id6">[2]</a>.  For more how ONIE uses DHCP
+options see the <a class="reference internal" href="../design-spec/discovery.html#onie-dhcp-requests"><em>DHCP Requests and Responses</em></a> section:</p>
+<div class="highlight-python"><pre>subnet 203.0.113.0 netmask 255.255.255.0 {
+  range 203.0.113.20 203.0.113.200;
+  option default-url = "http://203.0.113.10/customer-abc-onie-installer";
+}</pre>
+</div>
+<p>With this configuration ONIE picks up an IP address from the pool
+defined by the <tt class="docutils literal"><span class="pre">range</span></tt> parameter.  ONIE next attempts to download
+the URL specified by the <tt class="docutils literal"><span class="pre">default-url</span></tt> parameter.</p>
+<p>With this technique you can:</p>
+<ul class="simple">
+<li>Assign whatever IP addresses make sense for you network</li>
+<li>Name the installer image whatever you want, including
+sub-directories.</li>
+</ul>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">In this example the web server and target switch must be on
+the same layer 2 network.</p>
+</div>
+</div>
+<div class="section" id="basic-dhcp-scenario-2-domain-name-server">
+<span id="basic-dhcp-2"></span><h2>Basic DHCP Scenario 2 (Domain Name Server)<a class="headerlink" href="#basic-dhcp-scenario-2-domain-name-server" title="Permalink to this headline">¶</a></h2>
+<p>This scenario is just like <a class="reference internal" href="#basic-dhcp-1"><em>Basic DHCP Scenario 1 (Specify Installer Image URL)</em></a> with the addition of a
+domain name server (DNS).  By introducing a domain name server you can
+use logical names for the web server, without using hard coded IP
+addresses.</p>
+<p>To add support for DNS we specify the <tt class="docutils literal"><span class="pre">domain-name-servers</span></tt> DHCP
+option in the dhcpd.conf file:</p>
+<div class="highlight-python"><pre>subnet 203.0.113.0 netmask 255.255.255.0 {
+  range 203.0.113.20 203.0.113.200;
+  option domain-name-servers 203.0.113.2;
+  option default-url = "http://image-server/customer-abc-onie-installer";
+}</pre>
+</div>
+<p>The domain name server is 203.0.113.2.  ONIE uses this server to
+resolve the IP address for the hostname <tt class="docutils literal"><span class="pre">image-server</span></tt>.</p>
+</div>
+<div class="section" id="layer-3-network-scenario">
+<h2>Layer 3 Network Scenario<a class="headerlink" href="#layer-3-network-scenario" title="Permalink to this headline">¶</a></h2>
+<p>This scenario picks up where the <a class="reference internal" href="#basic-dhcp-2"><em>Basic DHCP Scenario 2 (Domain Name Server)</em></a> left off and adds
+router information to the DHCP configuration.  In this scenario the
+target switch traverses a layer 3 network via a gateway to reach the
+web server.  The network topology is shown in the following diagram.</p>
+<div class="figure align-center">
+<a class="reference internal image-reference" href="../_images/l3-connect.png"><img alt="Switch and Web Server on Different L3 Networks with DHCP Server" src="../_images/l3-connect.png" style="width: 485.25px; height: 345.0px;" /></a>
+</div>
+<p>With this setup the web server and target switch can reside on
+different subnets.  The target switch needs to send packets via a
+router to reach the web server, since the machines are on different
+subnets.</p>
+<p>To specify a router for the target switch the DHCP configuration sets
+the <tt class="docutils literal"><span class="pre">routers</span></tt> option to the IP address of the router:</p>
+<div class="highlight-python"><pre>subnet 203.0.113.0 netmask 255.255.255.0 {
+  range 203.0.113.20 203.0.113.200;
+  option domain-name-servers 203.0.113.2;
+  option routers 203.0.113.3;
+  option default-url = "http://image-server/customer-abc-onie-installer";
+}</pre>
+</div>
+<p>When requesting the installer image the target switch sends packets to
+203.0.113.3, which then forwards the packets to the next hop in the
+layer 3 network.  Ultimately the packets reach the web server and it
+replies with the installer image.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The DHCP server must be in the same layer 2 network as the
+target switch.  The web server is free to reside in any
+subnet reachable by the router.</p>
+</div>
+</div>
+<div class="section" id="advanced-dhcp-match-vendor-class-identifier">
+<span id="dhcp-debug"></span><h2>Advanced DHCP (Match Vendor Class Identifier)<a class="headerlink" href="#advanced-dhcp-match-vendor-class-identifier" title="Permalink to this headline">¶</a></h2>
+<p>When ONIE makes a DHCP request it sets the DHCP vendor class
+(option 60) to a particular string.  See the
+<a class="reference internal" href="../design-spec/discovery.html#onie-dhcp-vendor-class"><em>Vendor Class Identifier &#8211; Option 60</em></a> section for more on how the DHCP vendor
+class is set.  Using our fictitious PowerPC machine the string would
+be:</p>
+<div class="highlight-python"><pre>onie_vendor:powerpc-VENDOR_MACHINE-r0</pre>
+</div>
+<p>The ISC DHCP server configuration file syntax contains basic string
+matching functionality that we can use to identify ONIE DHCP requests.
+By parsing this string an appropriate image URL can be returned by the
+<tt class="docutils literal"><span class="pre">default-url</span></tt> DHCP option <a class="footnote-reference" href="#dhcp-eval" id="id7">[7]</a> <a class="footnote-reference" href="#dhcp-options" id="id8">[8]</a>.</p>
+<p>The following DHCP stanzas differentiate between PowerPC ONIE enabled
+switches from fictitious vendors &#8216;VendorX&#8217; and &#8216;VendorY&#8217;:</p>
+<div class="highlight-python"><pre>class "onie-vendor-X-class" {
+  match if substring(option vendor-class-identifier, 0, 27) = "onie_vendor:powerpc-VendorX";
+  option default-url = "http://image-server/VendorX-onie-installer";
+}
+
+class "onie-vendor-Y-class" {
+  match if substring(option vendor-class-identifier, 0, 27) = "onie_vendor:powerpc-VendorY";
+  option default-url = "http://image-server/VendorY-onie-installer";
+}</pre>
+</div>
+<p>In this case the DHCP server hands back different URLs depending on
+the vendor-class-identifier.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>When debugging such constructs you may find it useful to
+sprinkle in some DHCP logging directives.  For example the
+following log() directive placed <strong>outside</strong> the class stanza
+can help you understand what is going on:</p>
+<div class="highlight-python"><pre>log(error, concat("vendor-class: ", substring(option vendor-class-identifier, 0, 11)));
+log(error, concat("platform    : ", substring(option vendor-class-identifier, 12, 999)));</pre>
+</div>
+<p>The first log() displays the first 11 characters of the
+vendor-class-identifier, which should be the string
+&#8216;onie_vendor&#8217;.  The 2nd log() displays the remaining
+characters.</p>
+<p class="last">Once everything is working you can remove the logging.</p>
+</div>
+</div>
+<div class="section" id="advanced-dhcp-2-vivso">
+<h2>Advanced DHCP 2 (VIVSO)<a class="headerlink" href="#advanced-dhcp-2-vivso" title="Permalink to this headline">¶</a></h2>
+<p>As an alternative to string matching on the vendor-class-identifier
+ONIE also sends a Vendor-Identifying Vendor-Specific Information
+Option (VIVSO - DHCP option 125) <a class="footnote-reference" href="#dhcp-options" id="id9">[8]</a>.</p>
+<p>The VIVSO method is a more precise method of identifying the target
+switch, however, this method also requires a bit more configuration on
+the DHCP server.</p>
+<p>For more on how ONIE uses VIVSO see the <a class="reference internal" href="../design-spec/discovery.html#dhcp-vivso"><em>Vendor-Identifying Vendor-Specific Information (VIVSO)</em></a> section.  Go
+read that now if you are interested in using VIVSO.  I mean it, go
+now, we will wait for you to get back.</p>
+<p>The VIVSO option is bi-directional &#8211; the ONIE DHCP client sends the
+option with identifying fields set and the DHCP server responds with
+the URL field set.</p>
+<p>VIVSO is nothing more than encapsulating vendor specific options
+inside a standard DHCP option (option 125) <a class="footnote-reference" href="#rfc-3925" id="id10">[9]</a>.</p>
+<p>In order for the ISC DHCP server to parse option 125 we have to define
+the fields and data types to use.  Here is a snippet of ISC DHCP server
+configuration defining the fields that ONIE uses:</p>
+<div class="highlight-python"><pre># Create an option namespace called ONIE
+option space onie code width 1 length width 1;
+
+# Define the code names and data types within the ONIE namespace
+option onie.installer_url code 1 = text;
+option onie.updater_url   code 2 = text;
+option onie.machine       code 3 = text;
+option onie.arch          code 4 = text;
+option onie.machine_rev   code 5 = text;
+
+# Package the ONIE namespace into option 125
+option space vivso code width 4 length width 1;
+option vivso.onie code 40310 = encapsulate onie;
+option vivso.iana code 0 = string;
+option op125 code 125 = encapsulate vivso;</pre>
+</div>
+<p><em>I told you this method required more configuration...</em></p>
+<p>The number 40310 is a 32-bit IANA Enterprise Number used by ONIE to
+identify its name space <a class="footnote-reference" href="#iana-number" id="id11">[10]</a>.  Since VIVSO allows for
+multiple sets of vendor specific options, each set of options must be
+uniquely identified by a IANA enterprise number.</p>
+<p>The option space configuration should go into the <tt class="docutils literal"><span class="pre">dhcpd.conf</span></tt> file
+at the <strong>global</strong> level, outside of any class definitions.</p>
+<p>Now with the option space defined we can use the definitions when
+receiving a VIVSO option.  Here is a snippet using the option space
+definitions to inspect the target switch architecture and machine
+type:</p>
+<div class="highlight-python"><pre>class "onie-vendor-classes" {
+  # Limit the matching to a request we know originated from ONIE
+  match if substring(option vendor-class-identifier, 0, 11) = "onie_vendor";
+
+  # Required to use VIVSO
+  option vivso.iana 01:01:01;
+
+  # generic CPU architecture matching
+  if option onie.arch = "powerpc" {
+    option onie.installer_url = "http://image-server/generic-powerpc-onie-installer";
+  }
+
+  # matching on CPU architecture and machine type
+  if option onie.arch = "powerpc" and option onie.machine = "XYZ1234" {
+    option onie.installer_url = "http://image-server/powerpc-xyz1234-onie-installer";
+  }
+
+  # The contents of an option can also be used to create the response text
+  if exists onie.arch and exists onie.machine and exists onie.machine_rev {
+    option onie.installer_url = concat("http://image-server/image-installer-",
+                                     option onie.arch, "-", option onie.machine,
+                                     "-r", option onie.machine_rev);
+  }
+
+  # When operating in ONIE 'update' mode ONIE will check the
+  # onie.updater_url response option
+  if option onie.arch = "powerpc" and option onie.machine = "XYZ1234" {
+    option onie.updater_url = "http://image-server/onie-updater-VENDOR_XYZ1234-powerpc.bin";
+  }
+
+}</pre>
+</div>
+<p>Whew!  Let&#8217;s go through this configuration and discuss what they mean.
+First the class definition:</p>
+<div class="highlight-python"><pre>class "onie-vendor-classes" {
+  # Limit the matching to a request we know originated from ONIE
+  match if substring(option vendor-class-identifier, 0, 11) = "onie_vendor";</pre>
+</div>
+<p>The idea here is to limit the subsequent matching to a request we know
+originated from an ONIE enabled machine.  This is really just a bit of
+healthy paranoia.</p>
+<p>Next the iana option:</p>
+<div class="highlight-python"><pre># Required to use VIVSO
+option vivso.iana 01:01:01;</pre>
+</div>
+<p>This along with the option space &#8216;vivso&#8217; defined above is a work
+around to a known issue in ISC DHCP server.  Without this work around
+the server will not send back an option 125 response
+<a class="footnote-reference" href="#vivso-workaround" id="id12">[11]</a>.</p>
+<p>Next the generic CPU architecture matching statement:</p>
+<div class="highlight-python"><pre># generic CPU architecture matching
+if option onie.arch = "powerpc" {
+  option onie.installer_url = "http://image-server/generic-powerpc-onie-installer";
+}</pre>
+</div>
+<p>This is an example of comparing an option field to a string.  If the
+string matches then the <tt class="docutils literal"><span class="pre">installer_url</span></tt> in the response is set to the
+specified string.</p>
+<p>Next, using the request field values in the response field values:</p>
+<div class="highlight-python"><pre># The contents of an option can also be used to create the response text
+if exists onie.arch and exists onie.machine and exists onie.machine_rev {
+  option onie.installer_url = concat("http://image-server/image-installer-",
+                                   option onie.arch, "-", option onie.machine,
+                                   "-r", option onie.machine_rev);
+}</pre>
+</div>
+<p>Using the function <tt class="docutils literal"><span class="pre">concat</span></tt> you can piece together several strings
+to form the fields of the response.  Use the <tt class="docutils literal"><span class="pre">option</span></tt> directive to
+extract the strings from the request and use the results to create the
+response.</p>
+<p>For example in the above snippet assume onie.arch = &#8220;powerpc&#8221;,
+onie.machine = &#8220;XYZ1234&#8221; and onie.machine_rev = &#8220;2&#8221;.  In this case
+onie.installer_url would be set to:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">onie</span><span class="o">.</span><span class="n">installer_url</span> <span class="o">=</span> <span class="s">&quot;http://image-server/image-installer-powerpc-XYZ1234-r2&quot;</span>
+</pre></div>
+</div>
+<p>Finally let&#8217;s look at the <tt class="docutils literal"><span class="pre">updater_url</span></tt> field:</p>
+<div class="highlight-python"><pre># When operating in ONIE 'update' mode ONIE will check the
+# onie.updater_url response option
+if option onie.arch = "powerpc" and option onie.machine = "XYZ1234" {
+  option onie.updater_url = "http://image-server/onie-updater-VENDOR_XYZ1234-powerpc.bin";
+}</pre>
+</div>
+<p>ONIE can run in &#8220;self-update mode&#8221; where it looks for an ONIE update
+URL.  The update URL is used to download an ONIE self-update binary,
+which ONIE uses to update itself.</p>
+<p>Everything we have discussed about installer image URLs applies to
+ONIE updater URLs when ONIE runs in update mode.</p>
+<p>See the <a class="reference internal" href="../design-spec/updater.html#updating-onie"><em>Updating ONIE</em></a> section for more about ONIE update mode.</p>
+</div>
+<div class="section" id="debugging-an-installation">
+<h2>Debugging an Installation<a class="headerlink" href="#debugging-an-installation" title="Permalink to this headline">¶</a></h2>
+<p>If you are having trouble with an ONIE based installation here are a
+few suggestions.</p>
+<div class="section" id="verify-web-server-configuration">
+<h3>Verify Web Server Configuration<a class="headerlink" href="#verify-web-server-configuration" title="Permalink to this headline">¶</a></h3>
+<p>Are you able to download the image from the web server using a web
+browser?  See the <a class="reference internal" href="#test-http-server"><em>Test NOS Installer Download from HTTP Server</em></a> section.</p>
+</div>
+<div class="section" id="try-direct-connection">
+<h3>Try Direct Connection<a class="headerlink" href="#try-direct-connection" title="Permalink to this headline">¶</a></h3>
+<p>Try connecting the web server directly to the target switch as
+described in the <a class="reference internal" href="#directly-connected"><em>Directly Connected Scenario</em></a> section.</p>
+</div>
+<div class="section" id="inspect-dhcp-server-logs">
+<h3>Inspect DHCP Server Logs<a class="headerlink" href="#inspect-dhcp-server-logs" title="Permalink to this headline">¶</a></h3>
+<p>Try adding some logging to your DHCP server configuration as described
+in the <a class="reference internal" href="#dhcp-debug"><em>Advanced DHCP (Match Vendor Class Identifier)</em></a> section.</p>
+<p>Also see if you server is handing out leases to the expected MAC
+addresses.</p>
+</div>
+<div class="section" id="use-tcpdump">
+<h3>Use TCPDUMP<a class="headerlink" href="#use-tcpdump" title="Permalink to this headline">¶</a></h3>
+<p>If possible use tcpdump to inspect the network traffic on the DHCP
+server <a class="footnote-reference" href="#tcpdump" id="id13">[12]</a>.  If you can gain root access to the DHCP server
+run the following tcpdump command to inspect the network traffic:</p>
+<div class="highlight-python"><pre>dhcp-server:~ # tcpdump -v -v -e -i &lt;intf&gt; ether host &lt;MAC address&gt;</pre>
+</div>
+<p>Replace &lt;intf&gt; with the network interface of the DHCP server that is
+facing the target switch.  For example it might be &#8216;eth0&#8217; or &#8216;eth1&#8217;,
+etc.</p>
+<p>Replace &lt;MAC address&gt; with the MAC address of the target switch&#8217;s
+Ethernet management port.  You should be able to find the MAC address
+on a label affixed to the outside of the switch.</p>
+</div>
+<div class="section" id="simplify-dhcp-configuration">
+<h3>Simplify DHCP Configuration<a class="headerlink" href="#simplify-dhcp-configuration" title="Permalink to this headline">¶</a></h3>
+<p>Try to trim down your DHCP configuration to the bare minimum.
+Remember configuration within matching classes supersedes any global
+scope configuration.</p>
+</div>
+<div class="section" id="add-a-remote-syslog-server">
+<h3>Add a Remote Syslog Server<a class="headerlink" href="#add-a-remote-syslog-server" title="Permalink to this headline">¶</a></h3>
+<p>ONIE can remotely log it&#8217;s progress to a syslog server.  If the DHCP
+response contains a <tt class="docutils literal"><span class="pre">log-servers</span></tt> option ONIE will remotely log to
+that server.  Here is the ISC DHCP server syntax to specify a remote
+syslog server:</p>
+<div class="highlight-python"><pre>option log-servers 203.0.113.2;</pre>
+</div>
+</div>
+<div class="section" id="log-in-to-the-target-switch">
+<h3>Log In to the Target Switch<a class="headerlink" href="#log-in-to-the-target-switch" title="Permalink to this headline">¶</a></h3>
+<p>If you can determine that ONIE is getting an IP address from the DHCP
+server (look at the DHCP leases file) you can remotely login to the
+target switch using ssh or telnet:</p>
+<div class="highlight-python"><pre>linux:$ ssh root@203.0.113.22
+The authenticity of host '203.0.113.22 (203.0.113.22)' can't be established.
+RSA key fingerprint is 15:05:64:8a:c6:f3:5f:65:41:a6:10:f6:9d:43:9c:49.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '203.0.113.22' (RSA) to the list of known hosts.
+ONIE:~ #</pre>
+</div>
+<p>ONIE does not require a password for either ssh or telnet.  Once
+logged in you can inspect the ONIE log file, <tt class="docutils literal"><span class="pre">/var/log/onie.log</span></tt> and
+see what is happening:</p>
+<div class="highlight-python"><pre>ONIE:~ # cat /var/log/onie.log</pre>
+</div>
+</div>
+<div class="section" id="connect-to-the-serial-console">
+<h3>Connect to the Serial Console<a class="headerlink" href="#connect-to-the-serial-console" title="Permalink to this headline">¶</a></h3>
+<p>If all else fails you can connect to the serial console of the target
+switch.  ONIE uses a baud rate of 115200.</p>
+<p class="rubric">Footnotes</p>
+<table class="docutils footnote" frame="void" id="isc-dhcp" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id5">[1]</a></td><td><a class="reference external" href="http://www.isc.org/downloads/dhcp/">ISC DHCP Server</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="isc-dhcp-options" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id6">[2]</a></td><td><a class="reference external" href="http://www.ipamworldwide.com/dhcp-options/isc-dhcpv4-options.html">ISC DHCP Server Options</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="apache-httpd" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id1">[3]</a></td><td><a class="reference external" href="http://httpd.apache.org/">Apache httpd</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="thttpd" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id2">[4]</a></td><td><a class="reference external" href="http://acme.com/software/thttpd/">tiny/turbo/throttling HTTP server</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="wget" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id3">[5]</a></td><td><a class="reference external" href="http://linux.die.net/man/1/wget">wget http download</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="curl" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id4">[6]</a></td><td><a class="reference external" href="http://linux.die.net/man/1/curl">curl http download</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="dhcp-eval" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id7">[7]</a></td><td><a class="reference external" href="http://linux.die.net/man/5/dhcp-eval">dhcp-eval(5)</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="dhcp-options" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[8]</td><td><em>(<a class="fn-backref" href="#id8">1</a>, <a class="fn-backref" href="#id9">2</a>)</em> <a class="reference external" href="http://linux.die.net/man/5/dhcp-options">dhcp-options(5)</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="rfc-3925" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id10">[9]</a></td><td><a class="reference external" href="http://tools.ietf.org/html/rfc3925">RFC-3925 and VIVSO</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="iana-number" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id11">[10]</a></td><td><a class="reference external" href="http://www.iana.org/assignments/enterprise-numbers/enterprise-numbers">IANA Enterprise Number</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="vivso-workaround" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id12">[11]</a></td><td><a class="reference external" href="https://lists.isc.org/pipermail/dhcp-users/2012-July/015793.html">VIVSO work around discussion thread</a></td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="tcpdump" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id13">[12]</a></td><td><a class="reference external" href="http://linux.die.net/man/8/tcpdump">tcpdump - dump traffic on a network</a></td></tr>
+</tbody>
+</table>
+</div>
 </div>
 </div>
 
@@ -68,8 +596,31 @@
             </a></p>
   <h3><a href="../index.html">Table Of Contents</a></h3>
   <ul>
-<li><a class="reference internal" href="#">User Guide</a><ul>
-<li><a class="reference internal" href="#todo">TODO</a></li>
+<li><a class="reference internal" href="#">Quick Start Guide &#8211; ONIE By Example</a><ul>
+<li><a class="reference internal" href="#serving-the-nos-installer-image">Serving the NOS Installer Image</a><ul>
+<li><a class="reference internal" href="#install-configure-http-server">Install / Configure HTTP Server</a></li>
+<li><a class="reference internal" href="#copy-nos-installer-image-to-http-server">Copy NOS Installer Image to HTTP Server</a></li>
+<li><a class="reference internal" href="#test-nos-installer-download-from-http-server">Test NOS Installer Download from HTTP Server</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#directly-connected-scenario">Directly Connected Scenario</a></li>
+<li><a class="reference internal" href="#l2-connected-scenario">L2 Connected  Scenario</a></li>
+<li><a class="reference internal" href="#basic-dhcp-scenario-1-specify-installer-image-url">Basic DHCP Scenario 1 (Specify Installer Image URL)</a></li>
+<li><a class="reference internal" href="#basic-dhcp-scenario-2-domain-name-server">Basic DHCP Scenario 2 (Domain Name Server)</a></li>
+<li><a class="reference internal" href="#layer-3-network-scenario">Layer 3 Network Scenario</a></li>
+<li><a class="reference internal" href="#advanced-dhcp-match-vendor-class-identifier">Advanced DHCP (Match Vendor Class Identifier)</a></li>
+<li><a class="reference internal" href="#advanced-dhcp-2-vivso">Advanced DHCP 2 (VIVSO)</a></li>
+<li><a class="reference internal" href="#debugging-an-installation">Debugging an Installation</a><ul>
+<li><a class="reference internal" href="#verify-web-server-configuration">Verify Web Server Configuration</a></li>
+<li><a class="reference internal" href="#try-direct-connection">Try Direct Connection</a></li>
+<li><a class="reference internal" href="#inspect-dhcp-server-logs">Inspect DHCP Server Logs</a></li>
+<li><a class="reference internal" href="#use-tcpdump">Use TCPDUMP</a></li>
+<li><a class="reference internal" href="#simplify-dhcp-configuration">Simplify DHCP Configuration</a></li>
+<li><a class="reference internal" href="#add-a-remote-syslog-server">Add a Remote Syslog Server</a></li>
+<li><a class="reference internal" href="#log-in-to-the-target-switch">Log In to the Target Switch</a></li>
+<li><a class="reference internal" href="#connect-to-the-serial-console">Connect to the Serial Console</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -114,7 +665,7 @@
         <li class="right" >
           <a href="../overview/index.html" title="Overview"
              >previous</a> |</li>
-        <li><a href="../index.html">Open Network Install Environment 1.6.2 documentation</a> &raquo;</li> 
+        <li><a href="../index.html">Open Network Install Environment 1.6.4 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
