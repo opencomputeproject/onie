@@ -16,12 +16,12 @@ To update ONIE you follow a procedure similar to installing a network
 OS, except instead of using a network OS installer use the ONIE
 updater.  Also a few details are different as described next.
 
-Start ONIE in Update Mode
-=========================
+Start ONIE in Self-Update Mode
+==============================
 
-First to initiate ONIE update mode follow the steps described in the
+To initiate ONIE self-update mode, follow the steps described in the
 network OS interface :ref:`nos_intf_updating_onie` section.  This
-launches ONIE in update mode.
+launches ONIE in self-update mode.
 
 Specifying Updater URL
 ======================

@@ -2,23 +2,24 @@
 Boot Loader
 ***********
 
-.. note:: ONIE has no specific CPU architecture requirements -- it is
-  Linux.
-   
-  The dominant architecture today, however, is Freescale's QorIQ PowerPC [#powerpc]_.
-   
-  The documentation in this section currently focuses on that
-  architecture and the associated U-Boot [#uboot]_ boot loader.
-   
-  Supporting the x86 architecture is on the road map.
-
-U-Boot provides the start up environment for loading and running the
-ONIE kernel and the NOS kernel.
+U-Boot provides the startup environment for loading and running the
+ONIE kernel and the network operation system (NOS) kernel.
 
 ONIE uses U-Boot for base services and builds on top of it.
 
 The U-Boot functionality consists of platform dependent
 responsibilities as well as platform independent features.
+
+.. note:: ONIE has no specific CPU architecture requirements -- it is
+  Linux.
+   
+  The dominant architecture today, however, is Freescale's `QorIQ PowerPC
+  <http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME>`_.
+   
+  The documentation in this section currently focuses on that architecture and 
+  the associated `U-Boot <http://www.denx.de/wiki/U-Boot>`_ boot loader.
+   
+  Supporting the x86 architecture is on the roadmap.
 
 .. note:: The examples throughout this section reference a
   hypothetical machine, called *MACHINE*, manufactured by a hypothetical
@@ -29,8 +30,8 @@ responsibilities as well as platform independent features.
 NOR Flash Memory Layout
 =======================
 
-The typical layout of a 32MB NOR flash for an ONIE system looks like
-(Not to Scale)::
+The typical layout of a 32MB NOR flash for an ONIE system looks like this
+(note that this diagram is not to scale)::
 
   +---------------------------+  High Memory Address
   |   CPU Reset Vector        |
@@ -60,44 +61,40 @@ The typical layout of a 32MB NOR flash for an ONIE system looks like
   |                           |
   +---------------------------+  Low Memory Address
 
-Platform Dependent Hardware Initialization
+Platform-Dependent Hardware Initialization
 ==========================================
 
-ONIE expects the platform U-Boot to provide a number of services at
-boot time, including:
+ONIE expects U-Boot to provide a number of services at boot time, including:
 
-# Platform specific hardware initialization
-# Provide information (in the form of environment variables) to the boot time scripts.
+* Platform-specific hardware initialization.
+* Provide information (in the form of environment variables) to the boot time scripts.
 
-It is the responsibility of the platform U-Boot to initialize the
-following devices for the operating system:
+U-Boot is responsible for initializing the following devices for the operating system:
 
 ===================   ========
 Device                Comments
 ===================   ========
 System Fans	      Set system idle fan speed to 50%. The switching ASIC is not running.
-Ethernet Management   Initialize the PHY and Network devices for possible DHCP/TFTP downloads.
+Ethernet Management   Initialize the PHY and network devices for possible DHCP/TFTP downloads.
 Front Panel LEDs      Set front panel system status LEDs to a known state.
 PCIe root complex     Initialize PCIe root complex corresponding to the switching ASIC.
 ===================   ========
 
-In addition the platform is responsible for setting up a number of
-environment variables.
+In addition, U-Boot is responsible for setting up a number of environment variables.
 
-Information that is the same for all machines can be compiled into
-U-Boot itself, e.g. the NOR flash offset of where ONIE resides.
+Information that is the same for all machines can be compiled into U-Boot itself. For
+example, the NOR flash offset of where ONIE resides.
 
-On the other hand information that is unique for every device,
-e.g. serial number, MAC address, should reside in non-volatile
-storage, such as an EEPROM or NOR Flash.
+On the other hand, information that is unique for every device, like serial number or MAC 
+address, should reside in non-volatile storage, such as an EEPROM or NOR flash.
 
-See the :ref:`non_volatile_board_info` section.
+See :ref:`non_volatile_board_info` for more information.
 
-The following variables must be set by the platform:
+The following variables must be set by the U-Boot platform:
 
 .. _u_boot_platform_vars:
 
-.. csv-table::  Platform Dependent Environment Variables
+.. csv-table::  Platform-Dependent Environment Variables
    :header: "Variable", "Use / Meaning", "Example", "Compiled In or Non-Volatile Storage"
 
     ``consoledev``, The primary serial console port, ``ttyS0``, compiled in
@@ -106,7 +103,7 @@ The following variables must be set by the platform:
     ``platform``, Identifying string of the form "``<vendor>_<machine>-r<machine_revision>``", ``vendor_machine-r0``, non-volatile storage
     ``vendor_id``, 32-bit IANA Private Enterprise Number in decimal, ``12345``, non-volatile storage
     ``serial#``, Device serial number, ``XZY00123``, non-volatile storage
-    ``eth_addr``, MAC address for ethernet management port, ``00:11:22:33:44:55``, non-volatile storage
+    ``eth_addr``, MAC address for Ethernet management port, ``00:11:22:33:44:55``, non-volatile storage
 
 Environment Variables: ``consoledev, oniestart and oniesz.b``
 -------------------------------------------------------------
@@ -123,8 +120,8 @@ The definition of the CONFIG_PLATFORM_ENV macro would look like:
           "onie_start=0xefb60000\0" \
           "onie_sz.b=0x00400000\0"
 
-Environment Variables: ``platform and vendor_id``
--------------------------------------------------
+Environment Variables: ``platform`` and ``vendor_id``
+-----------------------------------------------------
 
 These variables are compiled into U-Boot using the platform's U-Boot
 configuration header file ``include/configs/VENDOR_MACHINE.h``.
@@ -132,8 +129,8 @@ configuration header file ``include/configs/VENDOR_MACHINE.h``.
 Calling the ``CONFIG_ONIE_COMMON_UBOOT_ENV`` macro adds these variable
 to the default environment.
 
-In this example the vendor_id is "12345" and the platform is
-"vendor_machine".  This would look like:
+In this example, the ``vendor_id`` is "12345" and the ``platform`` is
+"vendor_model".  This would look like:
 
 .. code-block:: c
 
@@ -145,11 +142,10 @@ In this example the vendor_id is "12345" and the platform is
 Environment Variable: ``serial#``
 ---------------------------------
 
-The serial number must reside in non-volatile storage, such as an
-EEPROM or a NOR-flash sector dedicated to storing manufacturing data.
-It is not acceptable to store the serial number in a U-Boot
-environment variable as the U-Boot environment is reset to defaults
-during provisioning and re-provisioning.
+The serial number must reside in non-volatile storage, such as an EEPROM or a NOR 
+flash sector dedicated to storing manufacturing data. You **must not** store the 
+serial number in a U-Boot environment variable as the U-Boot environment is reset 
+to defaults during provisioning and re-provisioning.
 
 The platform must provide an implementation for the
 ``populate_serial_number()`` function , which U-Boot calls during
@@ -187,11 +183,10 @@ Environment Variable: ``eth_addr``
 ----------------------------------
 
 The MAC address for the Ethernet management interface must reside in
-non-volatile storage, such as an EEPROM or a NOR-flash sector
-dedicated to storing manufacturing data.  It is not acceptable to
+non-volatile storage, such as an EEPROM or a NOR flash sector
+dedicated to storing manufacturing data.  You **must not**
 store the MAC address in a U-Boot environment variable as the U-Boot
-environment is reset to defaults during provisioning and
-re-provisioning.
+environment is reset to defaults during provisioning and re-provisioning.
 
 The platform must provide an implementation for the
 ``mac_read_from_eeprom()`` function , which U-Boot calls during board
@@ -242,40 +237,39 @@ An example implementation looks like:
     return 0;
   }
 
-Platform Independent U-Boot Features
+Platform-Independent U-Boot Features
 ====================================
 
 ONIE relies on two fundamental features of U-Boot:
 
-#. Reading and writing the NOR boot flash.
+* Reading and writing the NOR boot flash.
+* Reading and writing U-Boot environment variables.
 
-#. Reading and writing U-Boot environment variables.
+The ONIE kernel and ``initramfs`` reside in the NOR boot flash, which is why ONIE 
+relies on U-Boot's NOR flash I/O.
 
-The ONIE kernel and initramfs resides in the NOR boot flash, so it
-comes as no surprise ONIE relies on U-Boot's NOR flash I/O.
-
-Much more interesting is the use of U-Boot environment variables in an
-ONIE enabled system.
+What's more interesting is the use of U-Boot environment variables in an ONIE-enabled
+system, as described in the next section.
 
 .. _platform_ind_vars:
 
-Platform Independent Environment Variables
+Platform-Independent Environment Variables
 ------------------------------------------
 
 ONIE uses a number of different U-Boot variables to manage the system.
 
 The most important environment variable is ``bootcmd``, which U-Boot
 executes during every boot.  ONIE is the sole owner of this variable.
-A NOS should **never** use this variable directly in an ONIE enabled
-system.  ONIE provides other variables a NOS can use to control its
+An NOS should **never** use this variable directly in an ONIE-enabled
+system.  ONIE provides other variables an NOS can use to control its
 boot process.
 
-The 2nd most important variable is ``bootargs``, which U-Boot adds to
+The second most important variable is ``bootargs``, which U-Boot adds to
 the kernel command line when booting a kernel.
 
 ONIE defines and uses the following U-Boot variables:
 
-.. csv-table:: Platform Independent Environment Variables
+.. csv-table:: Platform-Independent Environment Variables
   :header: "Variable Name", "Default Value", "Use / Meaning"
   :widths: 1, 1, 2
   :delim: %
@@ -297,25 +291,25 @@ ONIE defines and uses the following U-Boot variables:
     fi;
   "% "
   Called by ``bootcmd`` every boot. Checks the ``onie_boot_reason`` variable
-  and if set U-Boot loads the ONIE kernel with the contents of
+  and, if set, U-Boot loads the ONIE kernel with the contents of
   ``$onie_boot_reason`` added to the kernel command line arguments."
 
   ``onie_boot_reason`` % "[Not Set]"% "
   See ``check_boot_reason above``. The current reboot commands understood
   by ONIE are:
 
-    #. install – boot ONIE and rerun the ODE application.
-    #. uninstall – boot ONIE in uninstall mode, which erases
+    #. ``install`` – Boot ONIE and rerun the ODE application.
+    #. ``uninstall`` – Boot ONIE in uninstall mode, which erases
        everything from the system, except U-Boot and ONIE.
-    #. rescue – boot ONIE in rescue mode for debug purposes
-    #. update – boot ONIE in ONIE update mode, which looks for and
+    #. ``rescue`` – Boot ONIE in rescue mode for debug purposes.
+    #. ``update`` – Boot ONIE in ONIE self-update mode, which looks for and
        installs a new version of ONIE.
   "
 
-  ``nos_bootcmd`` % [Not Set]% "This is the variable a NOS vendor sets
-  to control their boot process. When set it is expected that the NOS
-  vendor's init loads a NOS and does not return. If the NOS vendor init
-  fails or returns for whatever reason execution falls through to
+  ``nos_bootcmd`` % [Not Set]% "This is the variable an NOS vendor sets
+  to control their boot process. When set, it is expected that the NOS
+  vendor's init loads an NOS and does not return. If the NOS vendor init
+  fails or returns for whatever reason, execution falls through to
   loading ONIE."
 
   ``onie_bootcmd`` % "::
@@ -339,17 +333,13 @@ ONIE defines and uses the following U-Boot variables:
     setenv bootargs $bootargs serial_num=${serial#}
       eth_addr=$ethaddr vendor_id=$vendor_id
       platform=$platform $onie_bootargs $onie_debugargs
-  "% "Appends additional, platform specific, variables to the kernel
+  "% "Appends additional, platform-specific variables to the kernel
   command line when booting ONIE."
 
   ``onie_bootargs`` % [Not Set]% "Used by ``check_boot_reason`` to pass
   additional kernel arguments when booting ONIE."
 
-  ``onie_debugargs`` % [Not Set]% "For development / debug use to pass
+  ``onie_debugargs`` % [Not Set]% "For development and debug use to pass
   additional kernel arguments when booting ONIE."
 
-.. rubric:: Footnotes
-
-.. [#powerpc] `QorIQ PowerPC <http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME>`_
-.. [#uboot]   `U-Boot <http://www.denx.de/wiki/U-Boot>`_
  

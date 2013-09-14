@@ -4,8 +4,8 @@
 Network Operating System Interface
 **********************************
 
-ONIE provides an environment for a NOS to perform system provisioning
-and maintainance operations, including:
+ONIE provides an environment for a network operating system (NOS) to perform 
+system provisioning and maintainance operations, including:
 
 - Installing the NOS into the hardware
 - Reinstalling a different NOS
@@ -145,11 +145,11 @@ To invoke the ONIE update operation the running NOS sets the
 ``onie_boot_reason`` U-Boot environment variable to the value
 ``update`` (see :ref:`platform_ind_vars`) and then reboots the
 system.  When the system starts up again ONIE will see the
-``onie_boot_reason`` and enter ONIE update mode.
+``onie_boot_reason`` and enter ONIE self-update mode.
 
 .. note::
 
-  From the U-Boot prompt you can also boot ONIE into ONIE update mode by
+  From the U-Boot prompt you can also boot ONIE into ONIE self-update mode by
   typing::
 
     => run onie_update
