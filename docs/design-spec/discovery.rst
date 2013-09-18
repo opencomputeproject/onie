@@ -58,6 +58,10 @@ would be::
 .. note:: In the case of ONIE *self-update mode*, the file name prefix is
           ``onie-updater`` instead of ``onie-installer``.
 
+.. note:: For the exact file names used for your specific hardware
+          platform please contact your NOS vendor or your hardware
+          vendor.
+
 Static Configuration Method
 ---------------------------
 
@@ -140,6 +144,10 @@ For example, using the example PowerPC machine, the string would be::
 
   onie_vendor:powerpc-VENDOR_MACHINE-r0
 
+.. note:: For the exact DHCP Vendor Class Identifier used for your
+          specific hardware platform please contact your NOS vendor or
+          your hardware vendor.
+
 Valid values for the CPU architecture string currently are:
 
 -  powerpc
@@ -210,6 +218,8 @@ ONIE requests the following options:
   72 | HTTP Server IP | www-server | dotted quad | `2132 <http://www.ietf.org/rfc/rfc2132.txt>`_ | 10.0.1.251
   114 | Default URL | default-url | string | `3679 <http://www.ietf.org/rfc/rfc3679.txt>`_ | \http://server/path/installer
   150 | TFTP Server IP Address | next-server | dotted quad | `5859 <http://www.ietf.org/rfc/rfc5859.txt>`_ | 10.50.1.200
+
+.. _http_headers:
 
 HTTP Requests and HTTP Headers
 ------------------------------

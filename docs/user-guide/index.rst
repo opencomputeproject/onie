@@ -116,6 +116,10 @@ the following HTTP requests looking for an installer image::
   http://203.0.113.10/onie-installer-powerpc
   http://203.0.113.10/onie-installer
 
+.. note:: For the exact file names used for your specific hardware
+          platform please contact your NOS vendor or your hardware
+          vendor.
+
 A simple way to configure the Web server is to symlink (or rename) the
 NOS vendor's image name to one of the default ONIE installer file
 names.  The symlink technique is shown here::
@@ -243,9 +247,13 @@ When requesting the installer image, the target switch sends packets to
 layer 3 network.  Ultimately the packets reach the Web server and it
 replies with the installer image.
 
-.. note:: The DHCP server must be in the same layer 2 network as the
-          target switch.  The Web server is free to reside in any
-          subnet reachable by the router.
+.. note:: For this scenario, the DHCP server must be in the same layer
+          2 network as the target switch.  The Web server is free to
+          reside in any subnet reachable by the router.
+
+.. note:: You can use BOOTP relay agents [#bootp_relay]_ to locate your
+          DHCP server on a different layer 2 network.  Configuration
+          of BOOTP realy agents is beyond the scope of this document.
 
 .. _dhcp_debug:
 
@@ -258,6 +266,10 @@ for more on how the DHCP vendor class is set.  Using our example
 PowerPC machine, the string would be::
 
   onie_vendor:powerpc-VENDOR_MACHINE-r0
+
+.. note:: For the exact DHCP Vendor Class Identifier used for your
+          specific hardware platform please contact your NOS vendor or
+          your hardware vendor.
 
 The ISC DHCP server configuration file syntax contains basic string
 matching functionality that we can use to identify ONIE DHCP requests.
@@ -452,6 +464,30 @@ ONIE updater URLs when ONIE runs in self-update mode.
 
 See :ref:`updating_onie` for more about ONIE self-update mode.
 
+HTTP Headers and Scripting
+==========================
+
+When ONIE makes an HTTP request for an image a number of ONIE-specific
+HTTP headers are sent.  The values of these headers could be used in
+advanced deployments to taylor the provisioning.  The following
+headers are set::
+
+  ONIE-SERIAL-NUMBER:
+  ONIE-ETH-ADDR:
+  ONIE-VENDOR-ID:
+  ONIE-MACHINE:
+  ONIE-MACHINE-REV:
+  ONIE-ARCH:
+  ONIE-SECURITY-KEY:
+  ONIE-OPERATION:
+
+See :ref:`http_headers` for more about these HTTP headers.
+
+For exmaple, the image URL handed out by the DHPC server could be a
+CGI script on the HTTP server.  The CGI script could use the headers,
+like ``ONIE-SERIAL-NUMBER`` and ``ONIE-ETH-ADDR``, to tie the
+deployment together with an inventory control database.
+
 Debugging an Installation
 =========================
 
@@ -548,6 +584,7 @@ switch.  ONIE uses a baud rate of 115200.
 ..  [#curl]         `curl http download <http://linux.die.net/man/1/curl>`_
 ..  [#dhcp_eval]    `dhcp-eval(5) <http://linux.die.net/man/5/dhcp-eval>`_
 ..  [#dhcp_options] `dhcp-options(5) <http://linux.die.net/man/5/dhcp-options>`_
+..  [#bootp_relay]  `RFC-2131 and BOOTP Relay Agent <http://tools.ietf.org/html/rfc2131.html>`_
 ..  [#rfc_3925]     `RFC-3925 and VIVSO <http://tools.ietf.org/html/rfc3925>`_
 ..  [#iana_number]  `IANA Enterprise Number <http://www.iana.org/assignments/enterprise-numbers/enterprise-numbers>`_
 ..  [#vivso_workaround] `VIVSO work around discussion thread <https://lists.isc.org/pipermail/dhcp-users/2012-July/015793.html>`_
