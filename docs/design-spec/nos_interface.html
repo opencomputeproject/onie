@@ -54,31 +54,30 @@
             
   <div class="section" id="network-operating-system-interface">
 <span id="nos-interface"></span><h1>Network Operating System Interface<a class="headerlink" href="#network-operating-system-interface" title="Permalink to this headline">¶</a></h1>
-<p>ONIE provides an environment for a NOS to perform system provisioning
-and maintainance operations, including:</p>
+<p>ONIE provides an environment for a network operating system (NOS) to perform
+system provisioning and maintainance operations, including:</p>
 <ul class="simple">
 <li>Installing the NOS into the hardware</li>
 <li>Reinstalling a different NOS</li>
-<li>Uninstalling, i.e. wiping the system clean</li>
+<li>Uninstalling, or wiping the system clean</li>
 <li>Rescue and recovery</li>
 <li>Updating ONIE</li>
 </ul>
 <p>This environment forms an interface between ONIE and the NOS.</p>
-<p>U-Boot environment variables to communicate are the communication
-channel between ONIE and the NOS.  Both ONIE and the NOS must be able
-to read and write U-Boot environment variables.</p>
+<p>ONIE communicates with the NOS via U-Boot environment variables.  Both ONIE
+and the NOS must be able to read and write U-Boot environment variables.</p>
 <div class="section" id="nos-installer">
 <h2>NOS Installer<a class="headerlink" href="#nos-installer" title="Permalink to this headline">¶</a></h2>
-<p>ONIE makes no requirements on the NOS installer save for one: The NOS
-<strong>must</strong> update the <tt class="docutils literal"><span class="pre">nos_bootcmd</span></tt> U-Boot environment variable
-described in <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform Independent Environment Variables</em></a>.  This is the signal telling
-U-Boot to load the NOS on subsequent boots, bypassing ONIE.</p>
-<p>What goes into the <tt class="docutils literal"><span class="pre">nos_bootcmd</span></tt> is entirely up to the NOS, but
+<p>The only requirement ONIE has for the NOS is that the NOS <strong>must</strong> update the
+<tt class="docutils literal"><span class="pre">nos_bootcmd</span></tt> U-Boot environment variable described in
+<a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>. This signal tells U-Boot to load the NOS on
+subsequent boots, bypassing ONIE.</p>
+<p>What goes into the <tt class="docutils literal"><span class="pre">nos_bootcmd</span></tt> is entirely up to the NOS vendor, but
 generally it will contain commands to load and boot the NOS image from
-NOR flash or from an SD-card.</p>
-<p>Other than that the NOS installer is free to do whatever is necessary
-to persistently install the operating system into the hardware.  The
-install has a lot of flexibility.</p>
+NOR flash or from an SD card.</p>
+<p>Other than that, the NOS installer will do whatever is necessary
+to persistently install the operating system into the hardware; the
+installer has a lot of flexibility.</p>
 <p>Some examples of what an installer could do:</p>
 <ul class="simple">
 <li>Fetch additional binaries and configuration files via HTTP</li>
@@ -86,36 +85,36 @@ install has a lot of flexibility.</p>
 <li>Download a new kernel+initramfs and <a class="reference external" href="http://linux.die.net/man/8/kexec">kexec(8)</a> into it</li>
 </ul>
 </div>
-<div class="section" id="reinstall-install-a-different-nos">
-<h2>Reinstall / Install a Different NOS<a class="headerlink" href="#reinstall-install-a-different-nos" title="Permalink to this headline">¶</a></h2>
-<p>From the running NOS it is possible to instruct ONIE to go back to the
+<div class="section" id="reinstalling-or-installing-a-different-nos">
+<h2>Reinstalling or Installing a Different NOS<a class="headerlink" href="#reinstalling-or-installing-a-different-nos" title="Permalink to this headline">¶</a></h2>
+<p>From the running NOS, it is possible to instruct ONIE to return to the
 initial discovery and installation phase.  This could be used to
-re-install the current NOS or to install a different NOS.</p>
-<p>To invoke the install operation the running NOS sets the
+reinstall the current NOS or to install a different NOS.</p>
+<p>To invoke the install operation, the running NOS sets the
 <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
-<tt class="docutils literal"><span class="pre">install</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform Independent Environment Variables</em></a>) and then reboots the
-system.  When the system starts up again ONIE will see the
+<tt class="docutils literal"><span class="pre">install</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
+system.  When the system starts up again, ONIE will see the
 <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and restart the discovery and installation phase.</p>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
-<p>From the U-Boot prompt you can also boot ONIE into the discovery and
+<p>From the U-Boot prompt, you can also boot ONIE into the discovery and
 installation phase by typing:</p>
 <div class="last highlight-python"><pre>=&gt; run onie_bootcmd</pre>
 </div>
 </div>
 </div>
-<div class="section" id="uninstall">
-<h2>Uninstall<a class="headerlink" href="#uninstall" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="uninstalling">
+<h2>Uninstalling<a class="headerlink" href="#uninstalling" title="Permalink to this headline">¶</a></h2>
 <p>ONIE has an uninstall operation that wipes out the unused portions of
-NOR flash and the attached mass storage device (SD-card, USB NAND
-flash, etc).  The only thing untouched is ONIE itself.  This is a
-&#8220;reset to factory defaults&#8221; operation.</p>
-<p>To invoke the install operation the running NOS sets the
+NOR flash and the attached mass storage device (like an SD card or USB NAND
+flash). The only thing untouched is ONIE itself. This is a
+&#8220;reset to factory defaults&#8221;-like operation.</p>
+<p>To invoke the uninstall operation, the running NOS sets the
 <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
-<tt class="docutils literal"><span class="pre">uninstall</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform Independent Environment Variables</em></a>) and then reboots the
-system.  When the system starts up again ONIE will see the
+<tt class="docutils literal"><span class="pre">uninstall</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
+system.  When the system starts up again ONIE, will see the
 <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and start the uninstall process.</p>
-<p>Following the uninstall process the system will return to the
+<p>Following the uninstall process, the system returns to the
 discovery and installation phase.</p>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
@@ -127,32 +126,31 @@ mode by typing:</p>
 </div>
 <div class="section" id="rescue-and-recovery">
 <span id="rescue-recovery"></span><h2>Rescue and Recovery<a class="headerlink" href="#rescue-and-recovery" title="Permalink to this headline">¶</a></h2>
-<p>ONIE provides a rescue and recovery mode, mostly useful during
-development, but potentially useful when trying to recover a broken
+<p>ONIE provides a rescue and recovery mode, which is useful mostly during
+development, but is potentially useful when trying to recover a broken
 system.</p>
 <p>The rescue mode is the same as the discovery and installation phase,
-but with the discovery mechanism disabled.  ONIE is <strong>not</strong> trying to
-locate and install an image.  It simply sits there allowing you to
-poke around the system.</p>
-<p>In this mode you can attach to ONIE via the serial console or via
-telnet.  You can use the available busybox tools to try and fix a
+but the discovery mechanism is disabled.  ONIE does <strong>not</strong> try to
+locate and install an image; it simply sits there allowing you to
+troubleshoot the system.</p>
+<p>In this mode you can connect to ONIE via the serial console or via
+telnet.  You can use the available BusyBox tools to try and fix a
 problem.  Or use <a class="reference external" href="http://linux.die.net/man/1/wget">wget</a> to download
 more tools and files.</p>
 <p>Two useful commands included with ONIE are:</p>
 <ul class="simple">
-<li>install_url &#8211; Takes one argument, a URL to a NOS installer.  This
-command downloads and installs the URL, just as if it had been
+<li><tt class="docutils literal"><span class="pre">install_url</span></tt> &#8211; It takes one argument, a URL to a NOS installer.  This
+command downloads and installs from the URL, just as if it had been
 <em>discovered</em>.</li>
-<li>update_url &#8211; Takes one argument, a URL to an ONIE updater.  This
+<li><tt class="docutils literal"><span class="pre">update_url</span></tt> &#8211; It takes one argument, a URL to an ONIE updater.  This
 command downloads and runs the updater, just as if it had been
 <em>discovered</em>.  See the <a class="reference internal" href="updater.html#updating-onie"><em>Updating ONIE</em></a> section for more about
 updating ONIE.</li>
 </ul>
-<p>To invoke the rescue operation the running NOS sets the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
-<tt class="docutils literal"><span class="pre">rescue</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform Independent Environment Variables</em></a>) and then reboots the
-system.  When the system starts up again ONIE will see the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and enter rescue mode.</p>
+<p>To invoke the rescue operation, the running NOS sets the <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt>
+U-Boot environment variable to the value <tt class="docutils literal"><span class="pre">rescue</span></tt>
+(see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the system.  When the system
+starts up again, ONIE will see the <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and enter rescue mode.</p>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
 <p>From the U-Boot prompt you can also boot ONIE into rescue mode by
@@ -164,18 +162,18 @@ typing:</p>
 <div class="section" id="updating-onie">
 <span id="nos-intf-updating-onie"></span><h2>Updating ONIE<a class="headerlink" href="#updating-onie" title="Permalink to this headline">¶</a></h2>
 <p>ONIE provides a way to update itself, including the boot loader and
-Linux kernel.  In many ways this behaves similarly to the discovery
+Linux kernel.  In many ways, this behaves similarly to the discovery
 and installation phase, except that ONIE is looking for a different
 kind of image.</p>
 <p>See the <a class="reference internal" href="updater.html#updating-onie"><em>Updating ONIE</em></a> section for more about updating ONIE.</p>
-<p>To invoke the ONIE update operation the running NOS sets the
+<p>To invoke the ONIE update operation, the running NOS sets the
 <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
-<tt class="docutils literal"><span class="pre">update</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform Independent Environment Variables</em></a>) and then reboots the
-system.  When the system starts up again ONIE will see the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and enter ONIE update mode.</p>
+<tt class="docutils literal"><span class="pre">update</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
+system.  When the system starts up again, ONIE will see the
+<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and enter ONIE self-update mode.</p>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
-<p>From the U-Boot prompt you can also boot ONIE into ONIE update mode by
+<p>From the U-Boot prompt you can also boot ONIE into ONIE self-update mode by
 typing:</p>
 <div class="last highlight-python"><pre>=&gt; run onie_update</pre>
 </div>
@@ -196,8 +194,8 @@ typing:</p>
   <ul>
 <li><a class="reference internal" href="#">Network Operating System Interface</a><ul>
 <li><a class="reference internal" href="#nos-installer">NOS Installer</a></li>
-<li><a class="reference internal" href="#reinstall-install-a-different-nos">Reinstall / Install a Different NOS</a></li>
-<li><a class="reference internal" href="#uninstall">Uninstall</a></li>
+<li><a class="reference internal" href="#reinstalling-or-installing-a-different-nos">Reinstalling or Installing a Different NOS</a></li>
+<li><a class="reference internal" href="#uninstalling">Uninstalling</a></li>
 <li><a class="reference internal" href="#rescue-and-recovery">Rescue and Recovery</a></li>
 <li><a class="reference internal" href="#updating-onie">Updating ONIE</a></li>
 </ul>

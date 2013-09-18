@@ -2,21 +2,21 @@
 Linux Kernel and Device Tree Source
 ***********************************
 
-ONIE provides an environment in which a NOS installer can run.  As
-such the kernel must provide features and services useful for an
-installer.  This places a number of requirements on the Linux kernel
-configuration.
+ONIE provides an environment in which a network operating system (NOS) installer 
+can run. As such, the kernel must provide features and services useful for an
+installer.  This places a number of requirements on the Linux kernel configuration.
 
-In addition the kernel requires support for individual hardware
-platforms and the associated device tree source [#dts]_.
+In addition, the kernel requires support for individual hardware platforms and the 
+associated `device tree source <http://devicetree.org/Device_Tree_Usage>`_.
 	
 .. note:: The examples throughout this section reference a
   hypothetical machine, called *MACHINE*, manufactured by a
   hypothetical hardware manufacturer, called *VENDOR*.  The machine is
-  based on a Freescale QorIQ PowerPC [#powerpc]_ CPU.
+  based on a Freescale `QorIQ PowerPC 
+  <http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME>`_ CPU.
 
 Every platform must add platform support to the Linux kernel.  To add
-support for the platform the following Linux kernel files must be
+support for the platform, the following Linux kernel files must be
 created or modified:
 
 ======================================================       =======
@@ -42,19 +42,20 @@ properties relevant to ONIE are discussed here.
 Node                Property         Purpose
 =================   ==============   ==============================================
 ``/``               ``model``        A string that uniquely identifies the hardware 
-                                     platform, e.g. "vendor,model-XYZ".
+                                     platform. For example, "vendor,model-XYZ".
 ``/``               ``compatible``   A string that identifies a platform that is 
-                                     compatible with the model, e.g. "vendor,model"
-``/localbus/nor``   ``partitions``   Partitions the NOR flash into logical regions.
+                                     compatible with the model. For example, 
+                                     "vendor,model".
+``/localbus/nor``   ``partitions``   Node that partitions the NOR flash into 
+                                     logical regions.
 =================   ==============   ==============================================
 
 
-``model`` and ``compatible`` properties
+``model`` and ``compatible`` Properties
 ---------------------------------------
 
 The ``model`` and ``compatible`` properties are used by the kernel at
-boot time to invoke the correct platform initialization routines.
-Here is an example::
+boot time to invoke the correct platform initialization routines. For example::
 
   /dts-v1/;
   / {
@@ -63,25 +64,24 @@ Here is an example::
   [ ... ]
   };
 
-See how the ``compatible`` property is used in the
-:ref:`platform_support_c_file` section below.
+See how the ``compatible`` property is used in :ref:`platform_support_c_file` below.
 
 NOR Flash Partitioning
 ----------------------
 
 The NOR flash partitioning scheme is very important for U-Boot and
-ONIE.  For the QorIQ platform the ``/localbus/nor`` node defines how the
+ONIE.  For the QorIQ platform, the ``/localbus/nor`` node defines how the
 NOR flash is partitioned.
 
-For an ONIE system with a 32MB NOR flash the partitioning looks like:
+For an ONIE system with a 32MB NOR flash, the partitioning looks like:
 
 ============   ===============   =======
 Region Label   Typical Size      Purpose
 ============   ===============   =======
-open           ~ 28MB            Left over space for use by the operating system
-onie           4MB               Space occupied by the ONIE kernel and initramfs
-uboot-env      64KB (1 sector)   Space occupied by the U-Boot environment variables
-uboot          512KB             Space occupied by the U-Boot binary
+open           ~ 28MB            Leftover space for use by the operating system.
+onie           4MB               Space occupied by the ONIE kernel and ``initramfs``.
+uboot-env      64KB (1 sector)   Space occupied by the U-Boot environment variables.
+uboot          512KB             Space occupied by the U-Boot binary.
 ============   ===============   =======
 
 Here is an example NOR flash node where the NOR flash is 128MB in size::
@@ -117,8 +117,7 @@ Here is an example NOR flash node where the NOR flash is 128MB in size::
           };
   };
 
-Compare this partitioning scheme to the picture in the
-:ref:`nor_flash_memory_layout` section.
+Compare this partitioning scheme to the picture in :ref:`nor_flash_memory_layout`.
 
 	
 .. warning:: The region ``label`` properties within the nodes are
@@ -139,7 +138,7 @@ Kconfig and Makefile
 ====================
 
 The ``Kconfig`` file must contain an additional stanza for the new
-platform.  Here is an example::
+platform. For example::
 
   config VENDOR_MACHINE
          bool "VENDOR Corporation Model MACHINE"
@@ -148,7 +147,7 @@ platform.  Here is an example::
            This option enables support for the VENDOR MACHINE networking platform
 
 The ``Makefile`` file must contain an additional entry for the new
-platform.  Here is an example::
+platform. For example::
 
   obj-$(CONFIG_VENDOR_MACHINE) += vendor_machine.o
 
@@ -162,11 +161,11 @@ necessary for a particular platform.  Most of these initialization
 codes can be ported from a similar hardware platform, like a P2020
 reference platform.
 
-If the platform uses a non-standard reset mechanism, e.g. to reset the
-board it is required to write to a CPLD, that code would live in the
+If the platform uses a non-standard reset mechanism -- for example, to reset the
+board, it is required to write to a CPLD -- that code would live in the
 platform support C file.
 
-Here is a snippet from a platform support C file for a P2020 based platform:
+Here is a snippet from a platform support C file for a P2020-based platform:
 
 .. code-block:: c
 
@@ -202,10 +201,10 @@ Here is a snippet from a platform support C file for a P2020 based platform:
 	
 The ``vendor_machine_probe()`` is called by the kernel at boot
 time. It searches the device tree for a node whose compatible property
-is "vendor,machine". If it finds it the kernel now knows what type of
+is "vendor,machine". If it finds it, the kernel now knows what type of
 machine is running.
 	
-The platform specific ``vendor_machine_restart()`` function is called
+The platform-specific ``vendor_machine_restart()`` function is called
 by the kernel during system reboot. In this example it is necessary to
 write to a reset register within a board CPLD. Some systems may not
 need this as they can simply use the ``HRESET_REQ`` signal provided by
@@ -214,37 +213,33 @@ the P2020.
 Generic Kernel Configuration
 ============================
 
-In addition to the platform specific kernel code, ONIE requires a
+In addition to the platform-specific kernel code, ONIE requires a
 number of other configuration options to support an effective
 installation environment.
 
-* kernel features
+* Kernel features
 
   * Kexec – allows an installer to `kexec(8)
-    <http://linux.die.net/man/8/kexec>`_ into their own kernel
+    <http://linux.die.net/man/8/kexec>`_ into its own kernel
 
-* networking
+* Networking
 
-  * Driver for the ethernet management interface
+  * Driver for the Ethernet management interface
   * IPv4
   * IPv6
 
-* file systems
+* File systems
 
-  * vfat – allows for installation from USB memory sticks.
+  * vfat, which allows for installation from USB memory sticks
   * ext2, ext3
   * jffs2
   * squashfs
   * nfs
 
-* hardware support
+* Hardware support
 
   * PCIe
   * i2c EEPROMs
   * USB storage devices
   * SDHC
 
-.. rubric:: Footnotes
-
-.. [#dts]     `Device Tree Source <http://devicetree.org/Device_Tree_Usage>`_
-.. [#powerpc] `QorIQ PowerPC <http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME>`_

@@ -13,10 +13,10 @@ network switches.  ONIE enables a bare metal network switch ecosystem
 where end users have a choice among different network operating
 systems.
 
-Traditionally Ethernet switches are procured with pre-installed,
+Traditionally, Ethernet switches are procured with pre-installed,
 captive operating systems, effectively creating networking appliances
-that lock end-users into a vertical supply chain.  While there is
-industry wide discussion of a mythical "white-box" network switch,
+that lock end users into a vertical supply chain.  While there is
+industry-wide discussion of a mythical "white box" network switch,
 this ecosystem does not exist; failing in part due to the fact that
 the hardware cannot accept multiple operating systems.
 
@@ -24,13 +24,13 @@ As a matter of form, these switches have a management subsystem, based
 on a variety of CPU architectures that typically include serial
 console, out-of-band Ethernet, and sometimes even pluggable mass
 storage.  This subsystem can function independently from the switching
-ASIC(s) associated with the "front-panel" Ethernet interfaces
-(i.e. without a full networking OS).
+ASIC(s) associated with the "front panel" Ethernet interfaces
+(that is, without a full network OS, or NOS).
 
 ONIE defines an open source "install environment" that runs on this
 management subsystem utilizing facilities in a Linux/BusyBox
-environment. This environment allows end-users and channel partners to
-install the target network OS as part of data center provisioning, in
+environment. This environment allows end users and channel partners to
+install the target NOS as part of data center provisioning, in
 the fashion that servers are provisioned.
 
 ONIE enables switch hardware suppliers, distributors and resellers to
@@ -42,15 +42,15 @@ network hardware and operating system alternatives.
 **Highlights:**
 
 * Combines a boot loader with a modern Linux kernel and BusyBox
-* Provides an environment for installing any network OS
-* Disruptive, liberating users from a captive, pre-installed network OS
+* Provides an environment for installing any NOS
+* Disruptive; liberating users from a captive, pre-installed NOS
 * Helps automate large scale data center switch provisioning
-* Manage your switches like you manage your Linux servers
+* Enables you to manage your switches like you manage your Linux servers
 
 Design Overview
 ===============
 
-.. note:: For the complete design see the :ref:`full_design_spec`.
+.. note:: For the complete design, see the :ref:`full_design_spec`.
 
 ONIE is the combination of a boot loader and a small operating system
 for bare metal network switches that provides an environment for
@@ -62,13 +62,13 @@ but not the forwarding data plane as shown in the following figure:
   :align: center
   :alt: Typical Network Switch CPU Complex
 
-  Typical Network Switch CPU Complex - ONIE uses the elements highlighted on the left
+  Typical Network Switch CPU Complex -- ONIE uses the elements highlighted on the left
 
 Initial System Boot
 -------------------
 
-When a new machine boots for the first time ONIE locates and executes
-a network OS vendorÕs installation program, as shown here:
+When a new machine boots for the first time, ONIE locates and executes
+an NOS vendor's installation program, as shown here:
 
 .. figure:: First_Boot.png
   :scale: 50
@@ -81,7 +81,7 @@ Subsequent System Boots
 -----------------------
 
 ONIE is **not** used on every boot of the system.  After the initial
-installation subsequent boots go straight into the network OS,
+installation, subsequent boots go straight into the NOS,
 bypassing ONIE.  This is depicted here:
 
 .. figure:: Second_Boot.png
@@ -89,7 +89,7 @@ bypassing ONIE.  This is depicted here:
   :align: center
   :alt: Subsequent System Boots
 
-  Subsequent Boots -- After the network OS is installed
+  Subsequent Boots -- After the NOS Is Installed
 
 Mechanisms exist for a system to re-enter the installation phase.  An
 API is defined so that network operating systems can direct the system
@@ -98,7 +98,7 @@ to re-enter the installation phase.
 Locating an Installer Image
 ---------------------------
 
-ONIE uses a number of methods to locate a network OS installer,
+ONIE uses a number of methods to locate the NOS installer,
 including, but not limited to:
 
 * Statically configured from the boot loader
@@ -112,8 +112,7 @@ The preferred method for image download is HTTP as it offers robust
 performance for large image sizes.  TFTP is also supported, but its
 use is discouraged in favor of HTTP.
 
-Once an image is located ONIE proceeds to execute the network OS
-installer.
+Once an image is located, ONIE proceeds to execute the NOS installer.
 
 The following diagram illustrates an example of the location and
 execution steps:
@@ -157,14 +156,14 @@ An example of the information exported to the installer includes:
 
 These variables allow an installer to integrate with other process
 automation and orchestration, immediately tying together serial
-numbers, MAC addresses and network OS versions.
+numbers, MAC addresses and NOS versions.
 
 Installer Overview
 ------------------
 
-The installer's responsibility is to persistently install the
-operating system into the hardware.  In fulfilling that role an ONIE
-compliant network OS installer has a lot of flexibility.
+The installer's responsibility is to persistently install the operating 
+system into the hardware.  In fulfilling that role an ONIE-compliant
+NOS installer has a lot of flexibility.
 
 Some examples of what an installer could do:
 
@@ -177,23 +176,23 @@ Some examples of what an installer could do:
 Network Operating System Interface
 ----------------------------------
 
-ONIE provides an environment for a network OS to perform system
+ONIE provides an environment for the NOS to perform system
 provisioning and maintenance operations, including:
 
-* Reinstalling a different network OS
+* Reinstalling a different NOS
 
-* Uninstalling, i.e. wiping the system clean
+* Uninstalling/wiping the system clean
 
 * Rescue and recovery
 
 * Updating ONIE
 
-This environment forms an interface between ONIE and the network OS.
+This environment forms an interface between ONIE and the NOS.
 
 Updating ONIE
 -------------
 
 ONIE provides a mechanism for updating itself.  This mechanism
 proceeds much like the network installer discovery and executing
-phase, however the image in this case is an ONIE update image.  Once
+phase, but the image in this case is an ONIE update image.  Once
 located, the ONIE update image is downloaded and executed.

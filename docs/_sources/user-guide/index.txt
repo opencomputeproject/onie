@@ -6,57 +6,57 @@ ONIE supports a number of methods for locating a Network Operating
 System (NOS) installer image.  The methods range from **really easy** to
 **rather complex**.
 
-The easy methods are suitable for installing a NOS on a small number
+The easy methods are suitable for installing an NOS on a small number
 of switches as a proof of concept or for a demo.  These methods, while
-easy to setup, offer limited configurable options that more complex
+easy to set up, offer limited configurable options that more complex
 networks may require.
 
 The more complex methods are suitable for complex networks and large
 scale switch deployment scenarios.  These methods offer a wide range
 of flexible options, with the downside being you need to understand
-and configure said options.
+and configure these options.
 
 .. note:: The examples throughout this section reference a
-  hypothetical PowerPC based switch, called **MACHINE**, manufactured by a
+  hypothetical PowerPC-based switch, called **MACHINE**, manufactured by a
   hypothetical hardware manufacturer, called **VENDOR**.
 
 Serving the NOS Installer Image
 ===============================
 
-For all installation scenarios ONIE expects the NOS installer image to
+For all installation scenarios, ONIE expects the NOS installer image to
 be available on the network via HTTP.  This guide assumes the
-following hostname and IPv4 address of the web server::
+following hostname and IPv4 address of the Web server::
 
   hostname:  image-server
   IP addr :  203.0.113.10
 
-Before continuing the following resources must be setup:
+Before continuing, the following resources must be set up:
 
-- Install and configure a HTTP server
-- Copy the NOS installer image to the HTTP server
+- Install and configure an HTTP server.
+- Copy the NOS installer image to the HTTP server.
 
-Install / Configure HTTP Server
--------------------------------
+Installing and Configuring the HTTP Server
+------------------------------------------
 
 Download and install your favorite HTTP server [#apache_httpd]_
 [#thttpd]_.
 
 The examples in this guide assume Apache httpd is installed on a Linux
 machine with the default configuration options.  The document root of
-the web server is ``/var/www``.
+the Web server is ``/var/www``.
 
-Copy NOS Installer Image to HTTP Server
----------------------------------------
+Copying the NOS Installer Image to the HTTP Server
+--------------------------------------------------
 
-After procuring your NOS installer image from your NOS vendor copy the
-installer to the document root of your web server.  In the case of
-Apache on Linux the document root directory is ``/var/www``.  You
+After procuring your NOS installer image from your NOS vendor, copy the
+installer to the document root of your Web server.  In the case of
+Apache on Linux, the document root directory is ``/var/www``.  You
 probably need root privileges to copy files there.
 
-For the purposes of this guide we assume the **fictitious** name of the
-NOS installer image is ``ACME_XYZ1234_PowerPC_Installer.bin``.  After
-copying this file to the document root of the web server the contents
-of ``/var/www`` should look like this::
+For the purposes of this guide, assume the the NOS installer image is 
+named ``ACME_XYZ1234_PowerPC_Installer.bin``.  After copying this file 
+to the document root of the Web server, the contents of ``/var/www`` 
+should look like this::
 
   image-server:~$ sudo cp ACME_XYZ1234_PowerPC_Installer.bin /var/www
   image-server:~$ ls -l /var/www
@@ -64,13 +64,14 @@ of ``/var/www`` should look like this::
 
 .. _test_http_server:
 
-Test NOS Installer Download from HTTP Server
---------------------------------------------
+Testing the NOS Installer Download from the HTTP Server
+-------------------------------------------------------
 
-Before proceeding it is a good idea to double check the configuration
-of the web server and the location of the NOS installer image.  From
-another machine try to download the NOS installer image.  You could
-use a web browser or a CLI command [#wget]_ [#curl]_.
+Before proceeding, it is a good idea to double check the configuration
+of the Web server and the location of the NOS installer image.  From
+another machine, try to download the NOS installer image.  You could
+use a Web browser or a CLI command like ``wget`` ([#wget]_) or ``curl`` 
+([#curl]_).
 
 The URLs to double check are::
 
@@ -82,9 +83,9 @@ The URLs to double check are::
 Directly Connected Scenario
 ===========================
 
-The most simple topology is when the web server is directly connected
-to the Ethernet management port on the target switch.  This is
-depicted in the following diagram.
+The most simple topology is when the Web server is directly connected
+to the Ethernet management port on the target switch, as depicted in the 
+following diagram.
 
 .. figure:: direct-connect.png
   :scale: 75
@@ -98,16 +99,16 @@ crash cart up to a switch in a rack and need to perform a quick
 one-off install.
 
 In this scenario, without any additional configuration, ONIE will
-discover the IP address (either IPv6 or IPv4) of the link local web
+discover the IP address (either IPv6 or IPv4) of the link local Web
 server.  See the :ref:`discover_neighbors` section for more on how
 ONIE discovers its link local neighbors.
 
-After neighbor discovery ONIE makes HTTP requests for a series of
-default installer image file names as described in the
-:ref:`default_file_name` section.
+After neighbor discovery, ONIE makes HTTP requests for a series of
+default installer image file names as described in
+:ref:`default_file_name`.
 
-Applying the default file name conventions described in that section
-ONIE makes the following HTTP requests looking for an installer image::
+Next, ONIE applies the default file name conventions, then it makes 
+the following HTTP requests looking for an installer image::
 
   http://203.0.113.10/onie-installer-powerpc-VENDOR_MACHINE-r0
   http://203.0.113.10/onie-installer-powerpc-VENDOR_MACHINE
@@ -115,7 +116,11 @@ ONIE makes the following HTTP requests looking for an installer image::
   http://203.0.113.10/onie-installer-powerpc
   http://203.0.113.10/onie-installer
 
-A simple way to configure the web server is to symlink (or rename) the
+.. note:: For the exact file names used for your specific hardware
+          platform please contact your NOS vendor or your hardware
+          vendor.
+
+A simple way to configure the Web server is to symlink (or rename) the
 NOS vendor's image name to one of the default ONIE installer file
 names.  The symlink technique is shown here::
 
@@ -124,16 +129,16 @@ names.  The symlink technique is shown here::
   image-server:/var/www$ ls -l 
   lrwxrwxrwx 1 root root  104 Jul 22 14:01 onie-installer -> ACME_XYZ1234_PowerPC_Installer.bin
 
-With the symlink in place, the web server hands back the full
+With the symlink in place, the Web server hands back the full
 installer image in response to the request for ``onie-installer``.
 Now ONIE can download and run the installer image.
 
 L2 Connected  Scenario
 ======================
 
-In this topology the target switch and the web server are both in the
-same layer 2 network.  For example they might both be plugged into the
-same unmanaged switch.  This is depicted in the following diagram.
+In this topology, the target switch and the Web server are both in the
+same layer 2 network. For example, they might both be plugged into the
+same unmanaged switch. This is depicted in the following diagram.
 
 .. figure:: l2-connect.png
   :scale: 75
@@ -141,7 +146,7 @@ same unmanaged switch.  This is depicted in the following diagram.
   :alt: Switch and Web Server on Same L2 Network
 
 This scenario proceeds just like the :ref:`directly_connected`
-described previously.  ONIE discovers the IP address of the web server
+described previously.  ONIE discovers the IP address of the Web server
 and tries to download a series of default file names from the server.
 
 .. _basic_dhcp_1:
@@ -151,7 +156,7 @@ Basic DHCP Scenario 1 (Specify Installer Image URL)
 
 In this scenario we jump up one level in sophistication and use a DHCP
 server to provide more specific information about the location of the
-installer image.  The DHCP server, target switch and web server are
+installer image.  The DHCP server, target switch and Web server are
 all located on the same layer 2 network.  This is depicted in the
 following diagram.
 
@@ -163,11 +168,11 @@ following diagram.
 The DHCP server provides the following information:
 
 - IP address for the target switch from a pool of IP addresses
-- URL of the installer image on the web server
+- URL of the installer image on the Web server
 
-Below is a sample from a dhcpd.conf file for ISC DHCP server
-[#isc_dhcp]_ [#isc_dhcp_options]_.  For more how ONIE uses DHCP
-options see the :ref:`onie_dhcp_requests` section::
+Below is a sample from a ``dhcpd.conf`` file for an ISC DHCP server
+[#isc_dhcp]_ [#isc_dhcp_options]_.  For more information on how ONIE 
+uses DHCP options, see the :ref:`onie_dhcp_requests` section::
 
   subnet 203.0.113.0 netmask 255.255.255.0 {
     range 203.0.113.20 203.0.113.200;
@@ -180,11 +185,11 @@ the URL specified by the ``default-url`` parameter.
 
 With this technique you can:
 
-- Assign whatever IP addresses make sense for you network
+- Assign whatever IP addresses make sense for your network.
 - Name the installer image whatever you want, including
   sub-directories.
 
-.. note:: In this example the web server and target switch must be on
+.. note:: In this example the Web server and target switch must be on
           the same layer 2 network.
 
 .. _basic_dhcp_2:
@@ -194,11 +199,11 @@ Basic DHCP Scenario 2 (Domain Name Server)
 
 This scenario is just like :ref:`basic_dhcp_1` with the addition of a
 domain name server (DNS).  By introducing a domain name server you can
-use logical names for the web server, without using hard coded IP
+use logical names for the Web server, without using hard-coded IP
 addresses.
 
-To add support for DNS we specify the ``domain-name-servers`` DHCP
-option in the dhcpd.conf file::
+To add support for DNS, specify the ``domain-name-servers`` DHCP
+option in the ``dhcpd.conf`` file::
 
   subnet 203.0.113.0 netmask 255.255.255.0 {
     range 203.0.113.20 203.0.113.200;
@@ -215,19 +220,19 @@ Layer 3 Network Scenario
 This scenario picks up where the :ref:`basic_dhcp_2` left off and adds
 router information to the DHCP configuration.  In this scenario the
 target switch traverses a layer 3 network via a gateway to reach the
-web server.  The network topology is shown in the following diagram.
+Web server.  The network topology is shown in the following diagram.
 
 .. figure:: l3-connect.png
   :scale: 75
   :align: center
   :alt: Switch and Web Server on Different L3 Networks with DHCP Server
 
-With this setup the web server and target switch can reside on
+With this setup, the Web server and target switch can reside on
 different subnets.  The target switch needs to send packets via a
-router to reach the web server, since the machines are on different
+router to reach the Web server, since the machines are on different
 subnets.
 
-To specify a router for the target switch the DHCP configuration sets
+To specify a router for the target switch, in the DHCP configuration, set
 the ``routers`` option to the IP address of the router::
 
   subnet 203.0.113.0 netmask 255.255.255.0 {
@@ -237,35 +242,42 @@ the ``routers`` option to the IP address of the router::
     option default-url = "http://image-server/customer-abc-onie-installer";
   }
 
-When requesting the installer image the target switch sends packets to
+When requesting the installer image, the target switch sends packets to
 203.0.113.3, which then forwards the packets to the next hop in the
-layer 3 network.  Ultimately the packets reach the web server and it
+layer 3 network.  Ultimately the packets reach the Web server and it
 replies with the installer image.
 
-.. note:: The DHCP server must be in the same layer 2 network as the
-          target switch.  The web server is free to reside in any
-          subnet reachable by the router.
+.. note:: For this scenario, the DHCP server must be in the same layer
+          2 network as the target switch.  The Web server is free to
+          reside in any subnet reachable by the router.
+
+.. note:: You can use BOOTP relay agents [#bootp_relay]_ to locate your
+          DHCP server on a different layer 2 network.  Configuration
+          of BOOTP realy agents is beyond the scope of this document.
 
 .. _dhcp_debug:
 
 Advanced DHCP (Match Vendor Class Identifier)
 =============================================
 
-When ONIE makes a DHCP request it sets the DHCP vendor class
-(option 60) to a particular string.  See the
-:ref:`onie_dhcp_vendor_class` section for more on how the DHCP vendor
-class is set.  Using our fictitious PowerPC machine the string would
-be::
+When ONIE makes a DHCP request, it sets the DHCP vendor class
+(option 60) to a particular string.  See :ref:`onie_dhcp_vendor_class` 
+for more on how the DHCP vendor class is set.  Using our example 
+PowerPC machine, the string would be::
 
   onie_vendor:powerpc-VENDOR_MACHINE-r0
 
+.. note:: For the exact DHCP Vendor Class Identifier used for your
+          specific hardware platform please contact your NOS vendor or
+          your hardware vendor.
+
 The ISC DHCP server configuration file syntax contains basic string
 matching functionality that we can use to identify ONIE DHCP requests.
-By parsing this string an appropriate image URL can be returned by the
+By parsing this string, an appropriate image URL can be returned by the
 ``default-url`` DHCP option [#dhcp_eval]_ [#dhcp_options]_.
 
-The following DHCP stanzas differentiate between PowerPC ONIE enabled
-switches from fictitious vendors 'VendorX' and 'VendorY'::
+The following DHCP stanzas differentiate between PowerPC ONIE-enabled
+switches from example vendors **VendorX** and **VendorY**::
 
   class "onie-vendor-X-class" {
     match if substring(option vendor-class-identifier, 0, 27) = "onie_vendor:powerpc-VendorX";
@@ -278,19 +290,19 @@ switches from fictitious vendors 'VendorX' and 'VendorY'::
   }
 
 In this case the DHCP server hands back different URLs depending on
-the vendor-class-identifier.
+the ``vendor-class-identifier`` option.
 
 .. note:: When debugging such constructs you may find it useful to
-          sprinkle in some DHCP logging directives.  For example the
-          following log() directive placed **outside** the class stanza
+          sprinkle in some DHCP logging directives.  For example, the
+          following ``log()`` directive placed **outside** the class stanza
           can help you understand what is going on::
 
             log(error, concat("vendor-class: ", substring(option vendor-class-identifier, 0, 11)));
             log(error, concat("platform    : ", substring(option vendor-class-identifier, 12, 999)));
 
-          The first log() displays the first 11 characters of the
-          vendor-class-identifier, which should be the string
-          'onie_vendor'.  The 2nd log() displays the remaining
+          The first ``log()`` displays the first 11 characters of the
+          ``vendor-class-identifier``, which should be the string
+          ``onie_vendor``.  The 2nd ``log()`` displays the remaining
           characters.
 
           Once everything is working you can remove the logging.
@@ -298,7 +310,7 @@ the vendor-class-identifier.
 Advanced DHCP 2 (VIVSO)
 =======================
 
-As an alternative to string matching on the vendor-class-identifier
+As an alternative to string matching on the ``vendor-class-identifier``,
 ONIE also sends a Vendor-Identifying Vendor-Specific Information
 Option (VIVSO - DHCP option 125) [#dhcp_options]_.
 
@@ -306,9 +318,9 @@ The VIVSO method is a more precise method of identifying the target
 switch, however, this method also requires a bit more configuration on
 the DHCP server.
 
-For more on how ONIE uses VIVSO see the :ref:`dhcp_vivso` section.  Go
-read that now if you are interested in using VIVSO.  I mean it, go
-now, we will wait for you to get back.
+For more information on how ONIE uses VIVSO, see :ref:`dhcp_vivso`. Read 
+that now if you are interested in using VIVSO. (I mean it, go
+now; we will wait for you to get back.)
 
 The VIVSO option is bi-directional -- the ONIE DHCP client sends the
 option with identifying fields set and the DHCP server responds with
@@ -317,8 +329,8 @@ the URL field set.
 VIVSO is nothing more than encapsulating vendor specific options
 inside a standard DHCP option (option 125) [#rfc_3925]_.
 
-In order for the ISC DHCP server to parse option 125 we have to define
-the fields and data types to use.  Here is a snippet of ISC DHCP server
+In order for the ISC DHCP server to parse option 125, we have to define
+the fields and data types to use.  Here is a snippet of the ISC DHCP server
 configuration defining the fields that ONIE uses::
 
   # Create an option namespace called ONIE
@@ -347,7 +359,7 @@ uniquely identified by a IANA enterprise number.
 The option space configuration should go into the ``dhcpd.conf`` file
 at the **global** level, outside of any class definitions.
 
-Now with the option space defined we can use the definitions when
+Now, with the option space defined, we can use the definitions when
 receiving a VIVSO option.  Here is a snippet using the option space
 definitions to inspect the target switch architecture and machine
 type::
@@ -385,27 +397,26 @@ type::
   }
 
 Whew!  Let's go through this configuration and discuss what they mean.
-First the class definition::
+First the ``class`` definition::
 
   class "onie-vendor-classes" {
     # Limit the matching to a request we know originated from ONIE
     match if substring(option vendor-class-identifier, 0, 11) = "onie_vendor";
 
 The idea here is to limit the subsequent matching to a request we know
-originated from an ONIE enabled machine.  This is really just a bit of
+originated from an ONIE-enabled machine.  This is really just a bit of
 healthy paranoia.
 
-Next the iana option::
+Next, the ``iana`` option::
 
     # Required to use VIVSO
     option vivso.iana 01:01:01;
 
-This along with the option space 'vivso' defined above is a work
-around to a known issue in ISC DHCP server.  Without this work around
-the server will not send back an option 125 response
-[#vivso_workaround]_.
+This along with the option space ``vivso`` defined above is a workaround 
+to a known issue in ISC DHCP server.  Without this workaround, the server 
+will not send back an option 125 response [#vivso_workaround]_.
 
-Next the generic CPU architecture matching statement::
+Next, the generic CPU architecture matching statement::
 
     # generic CPU architecture matching
     if option onie.arch = "powerpc" {
@@ -413,7 +424,7 @@ Next the generic CPU architecture matching statement::
     }
 
 This is an example of comparing an option field to a string.  If the
-string matches then the ``installer_url`` in the response is set to the
+string matches, then the ``installer_url`` in the response is set to the
 specified string.
 
 Next, using the request field values in the response field values::
@@ -430,13 +441,13 @@ to form the fields of the response.  Use the ``option`` directive to
 extract the strings from the request and use the results to create the
 response.
 
-For example in the above snippet assume onie.arch = "powerpc",
-onie.machine = "XYZ1234" and onie.machine_rev = "2".  In this case
-onie.installer_url would be set to::
+For example in the above snippet assume ``onie.arch = "powerpc"``,
+``onie.machine = "XYZ1234"`` and ``onie.machine_rev = "2"``. In this case,
+``onie.installer_url`` would be set to::
 
   onie.installer_url = "http://image-server/image-installer-powerpc-XYZ1234-r2"
 
-Finally let's look at the ``updater_url`` field::
+Finally, let's look at the ``updater_url`` field::
 
     # When operating in ONIE 'update' mode ONIE will check the
     # onie.updater_url response option
@@ -444,38 +455,62 @@ Finally let's look at the ``updater_url`` field::
       option onie.updater_url = "http://image-server/onie-updater-VENDOR_XYZ1234-powerpc.bin";
     }
 
-ONIE can run in "self-update mode" where it looks for an ONIE update
+ONIE can run in *self-update mode* where it looks for an ONIE update
 URL.  The update URL is used to download an ONIE self-update binary,
 which ONIE uses to update itself.
 
 Everything we have discussed about installer image URLs applies to
-ONIE updater URLs when ONIE runs in update mode.
+ONIE updater URLs when ONIE runs in self-update mode.
 
-See the :ref:`updating_onie` section for more about ONIE update mode.
+See :ref:`updating_onie` for more about ONIE self-update mode.
+
+HTTP Headers and Scripting
+==========================
+
+When ONIE makes an HTTP request for an image a number of ONIE-specific
+HTTP headers are sent.  The values of these headers could be used in
+advanced deployments to taylor the provisioning.  The following
+headers are set::
+
+  ONIE-SERIAL-NUMBER:
+  ONIE-ETH-ADDR:
+  ONIE-VENDOR-ID:
+  ONIE-MACHINE:
+  ONIE-MACHINE-REV:
+  ONIE-ARCH:
+  ONIE-SECURITY-KEY:
+  ONIE-OPERATION:
+
+See :ref:`http_headers` for more about these HTTP headers.
+
+For exmaple, the image URL handed out by the DHPC server could be a
+CGI script on the HTTP server.  The CGI script could use the headers,
+like ``ONIE-SERIAL-NUMBER`` and ``ONIE-ETH-ADDR``, to tie the
+deployment together with an inventory control database.
 
 Debugging an Installation
 =========================
 
-If you are having trouble with an ONIE based installation here are a
+If you are having trouble with an ONIE based installation, here are a
 few suggestions.
 
 Verify Web Server Configuration
 -------------------------------
 
-Are you able to download the image from the web server using a web
-browser?  See the :ref:`test_http_server` section.
+Are you able to download the image from the Web server using a Web
+browser?  See :ref:`test_http_server`.
 
 Try Direct Connection
 ---------------------
 
-Try connecting the web server directly to the target switch as
-described in the :ref:`directly_connected` section.
+Try connecting the Web server directly to the target switch as
+described in :ref:`directly_connected`.
 
 Inspect DHCP Server Logs
 ------------------------
 
 Try adding some logging to your DHCP server configuration as described
-in the :ref:`dhcp_debug` section.
+in :ref:`dhcp_debug`.
 
 Also see if you server is handing out leases to the expected MAC
 addresses.
@@ -483,15 +518,14 @@ addresses.
 Use TCPDUMP
 -----------
 
-If possible use tcpdump to inspect the network traffic on the DHCP
-server [#tcpdump]_.  If you can gain root access to the DHCP server
-run the following tcpdump command to inspect the network traffic::
+If possible use ``tcpdump`` to inspect the network traffic on the DHCP
+server [#tcpdump]_.  If you can gain root access to the DHCP server,
+run the following ``tcpdump`` command to inspect the network traffic::
 
-  dhcp-server:~ # tcpdump -v -v -e -i <intf> ether host <MAC address>
+  dhcp-server:~ # tcpdump -v -e -i <intf> ether host <MAC address>
 
 Replace <intf> with the network interface of the DHCP server that is
-facing the target switch.  For example it might be 'eth0' or 'eth1',
-etc.
+facing the target switch.  For example it might be 'eth0' or 'eth1'.
 
 Replace <MAC address> with the MAC address of the target switch's
 Ethernet management port.  You should be able to find the MAC address
@@ -507,8 +541,8 @@ scope configuration.
 Add a Remote Syslog Server
 --------------------------
 
-ONIE can remotely log it's progress to a syslog server.  If the DHCP
-response contains a ``log-servers`` option ONIE will remotely log to
+ONIE can remotely log its progress to a ``syslog`` server.  If the DHCP
+response contains a ``log-servers`` option, ONIE will remotely log to
 that server.  Here is the ISC DHCP server syntax to specify a remote
 syslog server::
 
@@ -518,8 +552,8 @@ Log In to the Target Switch
 ---------------------------
 
 If you can determine that ONIE is getting an IP address from the DHCP
-server (look at the DHCP leases file) you can remotely login to the
-target switch using ssh or telnet::
+server (look at the DHCP leases file) you can remotely log in to the
+target switch using ``ssh`` or ``telnet``::
 
   linux:$ ssh root@203.0.113.22
   The authenticity of host '203.0.113.22 (203.0.113.22)' can't be established.
@@ -528,8 +562,8 @@ target switch using ssh or telnet::
   Warning: Permanently added '203.0.113.22' (RSA) to the list of known hosts.
   ONIE:~ # 
 
-ONIE does not require a password for either ssh or telnet.  Once
-logged in you can inspect the ONIE log file, ``/var/log/onie.log`` and
+ONIE does not require a password for either ``ssh`` or ``telnet``.  Once
+logged in you can inspect the ONIE log file ``/var/log/onie.log`` and
 see what is happening::
 
   ONIE:~ # cat /var/log/onie.log 
@@ -537,7 +571,7 @@ see what is happening::
 Connect to the Serial Console
 -----------------------------
 
-If all else fails you can connect to the serial console of the target
+If all else fails, you can connect to the serial console of the target
 switch.  ONIE uses a baud rate of 115200.
 
 .. rubric:: Footnotes
@@ -550,6 +584,7 @@ switch.  ONIE uses a baud rate of 115200.
 ..  [#curl]         `curl http download <http://linux.die.net/man/1/curl>`_
 ..  [#dhcp_eval]    `dhcp-eval(5) <http://linux.die.net/man/5/dhcp-eval>`_
 ..  [#dhcp_options] `dhcp-options(5) <http://linux.die.net/man/5/dhcp-options>`_
+..  [#bootp_relay]  `RFC-2131 and BOOTP Relay Agent <http://tools.ietf.org/html/rfc2131.html>`_
 ..  [#rfc_3925]     `RFC-3925 and VIVSO <http://tools.ietf.org/html/rfc3925>`_
 ..  [#iana_number]  `IANA Enterprise Number <http://www.iana.org/assignments/enterprise-numbers/enterprise-numbers>`_
 ..  [#vivso_workaround] `VIVSO work around discussion thread <https://lists.isc.org/pipermail/dhcp-users/2012-July/015793.html>`_

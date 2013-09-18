@@ -4,17 +4,22 @@ Glossary
 
 .. glossary::
 
-   ONIE
-     Open Network Install Environment
-
-   ODE
-     ONIE Discovery and Executation Application
-
-   NOS
-     Network Operating System
-
    DTS
-     Device tree source
+     Device tree source.
 
    NOR Flash
-     Wikipedia `NOR Flash <http://en.wikipedia.org/wiki/Flash_memory#NOR_flash>`_
+     See `NOR Flash <http://en.wikipedia.org/wiki/Flash_memory#NOR_flash>`_ on
+     Wikipedia.
+
+   NOS
+     Network operating system.
+
+   ODE
+     ONIE Discovery and Execution application.
+
+   ONIE
+     Open Network Install Environment.
+
+
+
+
