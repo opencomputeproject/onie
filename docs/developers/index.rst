@@ -100,8 +100,8 @@ directory:
   :header: "File", "Purpose"
   :delim: |
 
-  <platform>.bin | Raw binary, suitable for NOR flash programming
-  onie-updater-<platform>-<arch>.sh | ONIE updater, for use with the ONIE update mechanism
+  onie-<platform>-<revision>.bin | Raw binary, suitable for NOR flash programming
+  onie-updater-<platform>-<revision> | ONIE updater, for use with the ONIE update mechanism
 
 Installing the ONIE binary
 --------------------------
@@ -266,17 +266,17 @@ File                        Purpose
 ==========================  =======
 bin/discover                Image discovery script. Feeds into exec_installer.
 bin/exec_installer          Downloads and executes an installer image.
-bin/install_url             CLI for explicity specifying a NOS URL to use for the install.
+bin/install_url             CLI for explicitly specifying a NOS URL to use for the install.
 bin/support                 CLI that generates a tarball of useful system information.
 bin/uninstaller             Executed during uninstall operations.
-bin/update_url              CLI for explicity specifying an ONIE update URL to use for the install.
+bin/update_url              CLI for explicit specifying an ONIE update URL to use for the install.
 etc/init.d                  Various initialization scripts.
 etc/inittab                 Standard Linux initialization script.
 etc/issue                   Standard Linux logon customization file.
 etc/mtab                    Standard Linux file listing mounted file systems.
 etc/passwd                  Standard Linux database file listing users authorized to access the system.
 etc/profile                 Standard Linux file listing users of the system.
-etc/rcS.d/S01makedev.sh     Creates the usual Linux kernel devices and filesystems.
+etc/rcS.d/S01makedev.sh     Creates the usual Linux kernel devices and file systems.
 etc/rcS.d/S05rc.local       Standard Linux script to start rc.local.
 etc/rcS.d/S10networking.sh  Brings up the Ethernet management interface.
 etc/rcS.d/S20syslogd.sh     Starts the syslogd service.
@@ -346,7 +346,7 @@ Powering on the Network Switch
 
 When the switch powers up, ONIE will run and attempt to find an installer.  
 One of the methods is to look for a file named
-``onie-installer-<platform>-<arch>`` on all of the switch's IPv6 neighors.
+``onie-installer-<platform>-<arch>`` on all of the switch's IPv6 neighbors.
 
 Using the Freescale P2020RDB-PCA reference platform as an example, the
 default installer name would be::
@@ -372,8 +372,8 @@ The serial console output should now look like::
 ONIE will find the demo installer and run it.  After that, the machine
 will reboot into the demo OS.
 
-Demo Operating System
----------------------
+Demo Network Operating System
+-----------------------------
 
 After the install, the system will reboot and you should see something
 like::
@@ -390,11 +390,13 @@ something like::
 
 The example OS is running BusyBox, so feel free to look around.
 
-Reinstalling or Installing a Different OS
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. _demo_nos_reinstall:
+
+Re-installing or Installing a Different OS
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you want to install a new operating system you can re-run the ONIE
-installation process.  The demo OS has a command to do just that::
+installation process.  The demo NOS has a command to do just that::
 
   PLATFORM:/ # install
   
@@ -403,6 +405,8 @@ run again.  You would do this, for example, when you want to change
 operating systems.
 
 .. warning::  This is a destructive operation.
+
+.. _demo_nos_uninstall:
 
 Uninstalling to Wipe the Machine Clean
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -417,6 +421,8 @@ NOR flash and mass storage devices.
 
 .. warning:: This is a destructive operation.
 
+.. _demo_nos_rescue:
+
 Rescue Boot
 ^^^^^^^^^^^
 
@@ -427,6 +433,19 @@ do not run while in rescue mode::
   PLATFORM:/ # rescue
   
 This command will reboot the machine and ONIE will enter rescue mode.
+
+.. _demo_nos_update:
+
+Updating ONIE
+^^^^^^^^^^^^^
+
+If you want to upgrade the ONIE version on the system use the
+``update`` command.  This will restart the machine in ONIE update
+mode::
+
+  PLATFORM:/ # update
+
+See :ref:`updating_onie` for more details on this mode.
 
 Demo Source Code Layout
 -----------------------
@@ -472,4 +491,202 @@ these source files::
 
   build-config/make/demo.make
   build-config/scripts/mkdemo.sh
+
+ONIE Porting Guide
+==================
+
+This section describes requirements and general guidelines to follow
+when porting ONIE to a new platform.  Also the :ref:`testing_guide`
+should be used to validate the ONIE implementation.
+
+Porting U-Boot
+--------------
+
+When porting U-Boot the following items should be checked and
+verified:
+
+* Ethernet management PHY LEDs function correctly
+* Front panel status LEDs are set appropriately - check power, fans
+  and set any corresponding LEDs
+* Fan speeds set to 40-50% duty cycle
+* Verify MAC address and Serial # are exported as environment variables
+* Confirm CONFIG_SYS_CLK_FREQ and CONFIG_DDR_CLK_FREQ oscillators by
+  visual inspection.  For example if an oscillator is 66.666MHz use
+  66666000 not 66666666.  That will lead to skew.
+* Issue "INFO" message if a PSU is not detected or is in a failed state
+* Verify the "INSTALL" instructions from the machine directory work.
+  These are the instructions used to install ONIE from the u-boot
+  prompt.  If the INSTALL instructions need updating then fix them.
+
+ONIE DTS (Device Tree)
+----------------------
+
+When porting the ONIE kernel the following .dts (device tree) entries
+should be checked and verified:
+
+* The RTC is in the .dts file and works correctly
+* The MDIO/PHY interrupts are correct in .dts
+* Disable unused serial consoles in .dts
+* Verify all EEPROMs (including SPDs) are accessible via sysfs using
+  hexdump.  Set the "label" property accordingly:
+
+  * board_eeprom – for the board EEPROM
+
+  * psu1_eeprom / psu2_eeprom – for the power supply unit (PSU) eeproms
+
+  * port1, port2, ... port52 – for the SFP+/QSFP eeproms
+
+* For PCA95xx I2C muxes use the 'deselect-on-exit' property
+* I2C nodes use the 'fsl,preserve-clocking' property
+
+ONIE Kernel
+-----------
+
+* Inspect the boot log and dmesg output looking for any errors or
+  anything unusual
+* Inspect ``cat /proc/interrupts`` – are the expected interrutps
+  enabled?
+* If the platform has CPLDs try acessing some registers using the
+  ``iorw`` command.  Can you read a version register?
+* Verify the demo NOS compiles and installs OK
+* If the box has USB ports plug in a USB stick and see if you can
+  mount a partition
+* Verify the ``install_url <demo NOS installer URL>`` command works from
+  rescue mode
+* Verify the ``update_url <ONIE updater URL>`` command works from
+  rescue mode
+
+.. _testing_guide:
+
+ONIE Testing Guide
+==================
+
+When porting ONIE to a new platform use the tests in this section to
+verify the ONIE implementation.  The demo NOS described previously can
+be used to exercise the ONIE functionality.
+
+The tests in this section assume you have compiled ONIE and installed
+it on the target hardware.
+
+ONIE Install Operations
+-----------------------
+
+These tests exercise the ability of ONIE to locate and install a NOS.
+
+.. _locally_attached_network_test:
+
+Locally Attached Network Install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This test exercises the ability of ONIE to locate an installer image
+over the network.
+
+Using a locally attached HTTP server verify the following:
+
+#. the machine boots
+#. the Ethernet management interface is configured
+#. the machine downloads the demo NOS installer
+#. the machine installs the demo NOS
+#. the machine reboots into the demo NOS
+
+See :ref:`quick_start_guide` for more on how to configure a HTTP
+server and setup the directly attached network.
+
+Locally Attached File System Install (USB Memory Stick)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If the platform does **not** have a USB port skip this test.
+
+This test exercises the ability of ONIE to locate an installer image
+on a locally attached file system.  The primary use case is when an
+installer image is located on the root directory of a USB memory
+stick.
+
+Follow these steps:
+
+#. Power off the switch
+#. Copy the demo NOS installer to the root directory of a USB memory
+   stick.  Use the file names described in :ref:`default_file_name`.
+#. Insert the USB memory stick into the switch's USB port.
+#. Turn on the switch power
+
+Verify the following:
+
+#. the machine boots
+#. the USB memory stick is detected
+#. the machine installs the demo NOS from the USB memory stick
+#. the machine reboots into the demo NOS
+
+To verify the memory stick is detected you can inspect the output of
+the ``dmesg`` command looking for your USB device.  Also you can
+inspect the contents of the ``/proc/partitions`` file.
+
+ONIE / NOS Interface Commands
+-----------------------------
+
+These tests exercise the interfaces between the NOS and ONIE.  See
+:ref:`nos_interface` for more on these interfaces.
+
+Use the previously described demo NOS commands to exercise the
+ONIE-NOS interface.
+
+Install / Re-Provision
+^^^^^^^^^^^^^^^^^^^^^^
+
+From the demo NOS prompt verify the ``install`` command works
+correctly.  See :ref:`demo_nos_reinstall` for more about this command.
+
+After issuing this command you should verify the following happens:
+
+#. the machine reboots
+#. after the reboot ONIE starts in ONIE installer mode
+
+Rescue Mode
+^^^^^^^^^^^
+
+From the demo NOS prompt verify the ``rescue`` command works
+correctly.  See :ref:`demo_nos_rescue` for more about this command.
+
+After issuing this command you should verify the following happens:
+
+#. the machine reboots
+#. after the reboot ONIE starts in ONIE rescue mode
+
+Uninstall
+^^^^^^^^^
+
+From the demo NOS prompt verify the ``uninstall`` command works
+correctly.  See :ref:`demo_nos_uninstall` for more about this command.
+
+After issuing this command you should verify the following happens:
+
+#. the machine reboots
+#. after the reboot ONIE starts in ONIE uninstall mode
+#. the mass storage device(s) are erased
+#. after uninstalling the machine reboots again
+#. the machine detects a corrupt u-boot environment and writes a new
+   default environment
+#. the machine boots into ONIE installer mode
+
+ONIE Update
+^^^^^^^^^^^
+
+This test is very similar to the :ref:`locally_attached_network_test`,
+except in this case ONIE is trying to locate and run an ONIE updater
+instead of a NOS installer.
+
+For more on updating ONIE and the default ONIE updater file names see
+:ref:`updating_onie`.
+
+From the demo NOS prompt verify the ``update`` command works
+correctly.  See :ref:`demo_nos_update` for more about this command.
+
+After issuing this command you should verify the following happens:
+
+#. the machine reboots
+#. after the reboot ONIE starts in ONIE update mode
+#. the Ethernet management interface is configured
+#. the machine downloads the ONIE updater
+#. the machine installs the ONIE updater
+#. the machine reboots into the demo NOS
 
