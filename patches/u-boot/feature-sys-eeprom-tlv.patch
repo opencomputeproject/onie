@@ -29,10 +29,10 @@ index 54fcc81..98a08e5 100644
  COBJS-$(CONFIG_CMD_INI) += cmd_ini.o
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..91cceb3
+index 0000000..6157df2
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,1129 @@
+@@ -0,0 +1,1139 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -301,7 +301,17 @@ index 0000000..91cceb3
 + *  prior to calling this function.
 + */
 +#define DECODE_NAME_MAX     20
-+#define DECODE_VALUE_MAX    256
++
++/*
++ * The max decode value is currently for the 'raw' type or the 'vendor
++ * extension' type, both of which have the same decode format.  The
++ * max decode string size is computed as follows:
++ *
++ *   strlen(" 0xFF") * TLV_VALUE_MAX_LEN + 1
++ *
++ */
++#define DECODE_VALUE_MAX    ((5 * TLV_VALUE_MAX_LEN) + 1)
++
 +static void decode_tlv(tlvinfo_tlv_t * tlv)
 +{
 +	char name[DECODE_NAME_MAX];
@@ -338,7 +348,7 @@ index 0000000..91cceb3
 +		break;
 +	case TLV_CODE_VENDOR_EXT:
 +		value[0] = 0;
-+		for (i = 0; i < (DECODE_VALUE_MAX/5); i++) {
++		for (i = 0; (i < (DECODE_VALUE_MAX/5)) && (i < tlv->length); i++) {
 +			sprintf(value, "%s 0x%02X", value, tlv->value[i]);
 +		}
 +		break;
@@ -1164,10 +1174,10 @@ index 0000000..91cceb3
 +#endif /* CONFIG_POPULATE_SERIAL_NUMBER */
 diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
 new file mode 100644
-index 0000000..524f14c
+index 0000000..29d9b95
 --- /dev/null
 +++ b/include/sys_eeprom.h
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,123 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -1230,6 +1240,9 @@ index 0000000..524f14c
 +    u8  value[0];
 +};
 +typedef struct tlvinfo_tlv_s tlvinfo_tlv_t;
++
++/* Maximum length of a TLV value in bytes */
++#define TLV_VALUE_MAX_LEN        255
 +
 +/**
 + *  The TLV Types.
