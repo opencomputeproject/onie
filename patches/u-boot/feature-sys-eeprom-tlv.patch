@@ -29,10 +29,10 @@ index 54fcc81..98a08e5 100644
  COBJS-$(CONFIG_CMD_INI) += cmd_ini.o
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..6157df2
+index 0000000..e52bb42
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,1139 @@
+@@ -0,0 +1,1145 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -873,7 +873,7 @@ index 0000000..6157df2
 +	}
 +
 +	/* Convert string to bytes */
-+	for (i = 0, p = (char *)string; (i < 256) && (*p != 0); i++) {
++	for (i = 0, p = (char *)string; (i < TLV_VALUE_MAX_LEN) && (*p != 0); i++) {
 +		while ((*p == ' ') || (*p == '\t') || (*p == ',') || (*p == ';')) {
 +			p++;
 +		}
@@ -884,12 +884,18 @@ index 0000000..6157df2
 +			}
 +			byte = simple_strtoul(p, &p, 0);
 +			if (byte >= 256) {
-+				printf("ERROR: The value specified is greater than 255: (%u) in string: %s",
++				printf("ERROR: The value specified is greater than 255: (%u) in string: %s\n",
 +				       byte, string);
 +				return -1;
 +			}
 +			buf[i] = byte & 0xFF;
 +		}
++	}
++
++	if ((i == TLV_VALUE_MAX_LEN) && (*p != 0)) {
++		printf("ERROR: Trying to assign too many bytes "
++		       "(max: %d) in string: %s\n", TLV_VALUE_MAX_LEN, string);
++		return -1;
 +	}
 +
 +	*converted_accum = i;
