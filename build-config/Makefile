@@ -152,6 +152,7 @@ STAMPDIR    =  $(MBUILDDIR)/stamp
 SYSROOTDIR  =  $(MBUILDDIR)/sysroot
 INITRAMFSDIR=  $(MBUILDDIR)/initramfs
 IMAGEDIR    =  $(BUILDDIR)/images
+TESTDIR     =  $(PROJECTDIR)/test
 
 TREEDIRS     += $(BUILDDIR) $(STAMPDIR) $(SYSROOTDIR) \
 		$(IMAGEDIR) $(INITRAMFSDIR)
@@ -272,5 +273,18 @@ PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update
 	$(Q) sudo apt-get install $(DEBIAN_BUILD_HOST_PACKAGES)
+
+PHONY += test-onie
+SITE_CONFIG ?= $(TESTDIR)/site.conf
+DUT_NAME    ?= onie-test-01
+DUT_LOG_DIR ?= /tmp/$(DUT_NAME)
+DUT_LOG     = $(DUT_LOG_DIR)/test-onie-$$(date +%s).log
+
+test-onie:
+	$(Q) mkdir -p $(DUT_LOG_DIR)
+	$(Q) $(TESTDIR)/bin/test-onie.py \
+		--machine-dir=$(MACHINEDIR) --site-config=$(SITE_CONFIG) \
+		--dut-name=$(DUT_NAME) --log-level=INFO \
+		--console-log=$(DUT_LOG)
 
 .PHONY: $(PHONY)
