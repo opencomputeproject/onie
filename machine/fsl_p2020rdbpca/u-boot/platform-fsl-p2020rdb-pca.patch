@@ -2,80 +2,6 @@ platform fsl p2020rdb-pca patch
 
 Add ONIE support for the Freescale P2020RDB-PCA platform.
 
-diff --git a/board/freescale/p1_p2_rdb_pc/p1_p2_rdb_pc.c b/board/freescale/p1_p2_rdb_pc/p1_p2_rdb_pc.c
-index 5b5b86c..222fd1c 100644
---- a/board/freescale/p1_p2_rdb_pc/p1_p2_rdb_pc.c
-+++ b/board/freescale/p1_p2_rdb_pc/p1_p2_rdb_pc.c
-@@ -444,3 +444,69 @@ void ft_board_setup(void *blob, bd_t *bd)
- #endif
- }
- #endif
-+
-+#ifdef CONFIG_ONIE
-+
-+/*
-+ * mac_read_from_eeprom - read the MAC addresses from EEPROM
-+ *
-+ * This function reads the MAC addresses from EEPROM and sets the
-+ * appropriate environment variables for each one read.
-+ *
-+ * The environment variables are only set if they haven't been set already.
-+ * This ensures that any user-saved variables are never overwritten.
-+ *
-+ * This function is called after relocation.
-+ */
-+int mac_read_from_eeprom(void)
-+{
-+
-+	/*
-+	 * Normally you would find the MAC address a in board
-+	 * information block read from an EEPROM or the NOR flash.
-+	 *
-+	 * However, this board does not have one, so we return a fake
-+	 * ethaddr# here.
-+	 *
-+	 */
-+
-+	if (!getenv("ethaddr"))
-+		setenv("ethaddr", "00:04:9f:02:80:a4");
-+
-+	printf("MAC addr: %s\n", getenv("ethaddr"));
-+
-+	return 0;
-+}
-+
-+/*
-+ * populate_serial_number - read the board serial number from EEPROM
-+ *
-+ * This function reads the serial number from the EEPROM and sets the
-+ * "serail#" environment variable.
-+ *
-+ * The environment variable is only set if it has not been set
-+ * already.  This ensures that any user-saved variables are never
-+ * overwritten.
-+ *
-+ * This function is called after relocation.
-+ *
-+ */
-+int populate_serial_number(void)
-+{
-+	/* Do not overwrite an existing serial# */
-+	if (getenv("serial#"))
-+		return 0;
-+
-+	/*
-+	 * Normally you would find the serial number in a board
-+	 * information block read from an EEPROM or the NOR flash.
-+	 *
-+	 * However, this board does not have one, so we return a fake
-+	 * serial# here.
-+	 */
-+
-+	setenv("serial#", "fake-serial-0123456789");
-+
-+	return 0;
-+}
-+#endif
 diff --git a/boards.cfg b/boards.cfg
 index e4b0d44..f389720 100644
 --- a/boards.cfg
@@ -89,21 +15,26 @@ index e4b0d44..f389720 100644
  P2020RDB-PC_36BIT_NAND       powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT,NAND
  P2020RDB-PC_36BIT_SDCARD     powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT,SDCARD
 diff --git a/include/configs/p1_p2_rdb_pc.h b/include/configs/p1_p2_rdb_pc.h
-index 964bfcd..aeb7e9e 100644
+index 964bfcd..47c86d2 100644
 --- a/include/configs/p1_p2_rdb_pc.h
 +++ b/include/configs/p1_p2_rdb_pc.h
-@@ -949,4 +949,63 @@ __stringify(__PCIE_RST_CMD)"\0"
+@@ -949,4 +949,68 @@ __stringify(__PCIE_RST_CMD)"\0"
  
  #define CONFIG_BOOTCOMMAND	CONFIG_HDBOOT
  
 +#ifdef CONFIG_ONIE
 +
 +/*
-+ * Define CONFIG_SYS_I2C_MAC_OFFSET -- this enables the infrastructure
-+ * to call our mac_read_from_eeprom() to set $ethaddr at boot time.
-+ * See arch/powerpc/lib/board.c.
++ * Board hardware information (EEPROM), stored in flash.
 + */
-+#define CONFIG_SYS_I2C_MAC_OFFSET
++#define CONFIG_CMD_SYS_EEPROM
++#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
++#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	1
++
++#define CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO
++#define CONFIG_SYS_FLASH_HWINFO_ADDR		0xef040000
++/* 64K(one sector) for HWINFO */
++#define CONFIG_SYS_FLASH_HWINFO_SECT_SIZE	0x00020000
 +
 +/*
 + * We will use TSEC3 as the primary interface.

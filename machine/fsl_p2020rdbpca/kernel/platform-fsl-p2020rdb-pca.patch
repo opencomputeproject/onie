@@ -3,7 +3,7 @@ platform fsl p2020rdb patch
 Add support for the Freescale P2020RDB-PCA platform.
 
 diff --git a/arch/powerpc/boot/dts/p2020rdb.dts b/arch/powerpc/boot/dts/p2020rdb.dts
-index 1d7a05f..7ea2b1c 100644
+index 1d7a05f..7a1311d 100644
 --- a/arch/powerpc/boot/dts/p2020rdb.dts
 +++ b/arch/powerpc/boot/dts/p2020rdb.dts
 @@ -16,9 +16,7 @@
@@ -17,7 +17,7 @@ index 1d7a05f..7ea2b1c 100644
  		serial0 = &serial0;
  		serial1 = &serial1;
  		pci0 = &pci0;
-@@ -52,33 +50,29 @@
+@@ -52,33 +50,35 @@
  				read-only;
  			};
  
@@ -27,9 +27,9 @@ index 1d7a05f..7ea2b1c 100644
 -				label = "NOR (RO) DTB Image";
 -				read-only;
 +			partition@1 {
-+				/* Available for apps */
-+				reg = <0x00040000 0x00b20000>;
-+				label = "open";
++				/* EEPROM data, 128KB, 1 sector */
++				reg = <0x00040000 0x00020000>;
++				label = "board_eeprom";
  			};
  
 -			partition@80000 {
@@ -38,9 +38,9 @@ index 1d7a05f..7ea2b1c 100644
 -				label = "NOR (RO) Linux Kernel Image";
 -				read-only;
 +			partition@2 {
-+				/* 4MB ONIE uImage */
-+				reg = <0x00b60000 0x00400000>;
-+				label = "onie";
++				/* Available for apps */
++				reg = <0x00060000 0x00b00000>;
++				label = "open";
  			};
  
 -			partition@400000 {
@@ -48,10 +48,9 @@ index 1d7a05f..7ea2b1c 100644
 -				reg = <0x00400000 0x00b00000>;
 -				label = "NOR (RW) JFFS2 Root File System";
 +			partition@3 {
-+				/* U-Boot environment varialbes, 128KB, 1 sector */
-+				reg = <0x00f60000 0x00020000>;
-+				label = "uboot-env";
-+				env_size = <0x2000>;
++				/* 4MB ONIE uImage */
++				reg = <0x00b60000 0x00400000>;
++				label = "onie";
  			};
  
 -			partition@f00000 {
@@ -62,13 +61,20 @@ index 1d7a05f..7ea2b1c 100644
 -				label = "NOR (RO) U-Boot Image";
 -				read-only;
 +			partition@4 {
++				/* U-Boot environment varialbes, 128KB, 1 sector */
++				reg = <0x00f60000 0x00020000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++
++			partition@5 {
 +				/* 512KB u-boot */
 +				reg = <0x00f80000 0x00080000>;
 +				label = "uboot";
  			};
  		};
  
-@@ -238,14 +232,11 @@
+@@ -238,14 +238,11 @@
  		};
  
  		enet0: ethernet@24000 {
