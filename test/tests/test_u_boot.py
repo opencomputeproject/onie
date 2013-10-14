@@ -9,7 +9,6 @@ try:
     import io
     import logging
     import unittest
-    import random
     from test_base import BaseTestCase
 except ImportError, e:
     raise ImportError (str(e) + "- required module not found")
@@ -93,29 +92,52 @@ class Test300_UBootFeatures(UBootTestCase):
         logging.debug("Common U-Boot Tests setUp()")
         self.seq = range(10)
 
-    def test_20_shuffle(self):
-        # make sure the shuffled sequence does not lose any elements
-        logging.debug("test_shuffle() - " + self.dut.name)
-        text = self.dut.send("echo $ver")
-        logging.debug("echo $ver: " + text)
+    def test_10_onie_version(self):
+        text = self.dut.send("echo $ver")[0]
         onie_version = self.dut.get_config('onie_version')
         self.assertIn(onie_version, text,
                       "Could not find ONIE version " + onie_version)
-        random.shuffle(self.seq)
-        self.seq.sort()
-        self.assertEqual(self.seq, range(10))
 
-        # should raise an exception for an immutable sequence
-        self.assertRaises(TypeError, random.shuffle, (1,2,3))
+    def test_15_mac_address(self):
+        "Read MAC address from EEPROM"
+        eeprom_mac = self.dut.get_uboot_mac_addr()
+        self.assertIsNot(eeprom_mac, None,
+                         "Could not find ONIE MAC address")
+        logging.info("Base MAC address: " + eeprom_mac)
 
-    def test_20_choice(self):
-        logging.debug("test_choice()")
-        element = random.choice(self.seq)
-        self.assertTrue(element in self.seq)
+    def test_15_serial_number(self):
+        "Read serial number from EEPROM"
+        eeprom_sn = self.dut.get_uboot_serial_num()
+        self.assertIsNot(eeprom_sn, None,
+                         "Could not find ONIE serial number")
+        logging.info("Serial Number: " + eeprom_sn)
 
-    def test_20_sample(self):
-        logging.debug("test_sample()")
-        with self.assertRaises(ValueError):
-            random.sample(self.seq, 20)
-        for element in random.sample(self.seq, 5):
-            self.assertTrue(element in self.seq)
+    def test_20_verify_default_vars(self):
+        '''
+        Verify U-Boot sets environement variable defaults from the
+        EEPROM contnets:
+
+          -- 'ethaddr' variable
+          -- 'serial#' variable
+
+        '''
+        # Clear variables and reboot
+        eeprom_mac = self.dut.get_uboot_mac_addr()
+        eeprom_sn  = self.dut.get_uboot_serial_num()
+        self.dut.send("setenv ethaddr")
+        self.dut.send("setenv serial#")
+        self.dut.send('saveenv')
+        self.dut.sendline("reset")
+        self.sync_uboot_prompt(30)
+        output = self.dut.send("echo $ethaddr")
+        ethaddr = output[0]
+        self.assertEqual(eeprom_mac, ethaddr,
+                         "EEPROM MAC address and ethaddr variable differ\n" +
+                         "  EEPROM MAC: >>>" + eeprom_mac + "<<<\n" +
+                         "  ethaddr   : >>>" + ethaddr + "<<<\n")
+        output = self.dut.send("echo ${serial#}")
+        serial = output[0]
+        self.assertEqual(eeprom_sn, serial,
+                         "EEPROM serial number and serial# variable differ\n" +
+                         "  EEPROM SN: >>>" + eeprom_sn + "<<<\n" +
+                         "  serial#  : >>>" + serial + "<<<\n")
