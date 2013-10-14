@@ -47,12 +47,12 @@ class Connection:
         logging.info("Logging console output: " + self.dut.args.console_log.name)
         self.child.logfile = self.dut.args.console_log
         self._login()
-
+        self.send('')
+        
     def _login(self):
         '''
         After open() _login() is called to provide any required chat.
         '''
-
         pass
 
     def close(self):
@@ -114,7 +114,9 @@ class Connection:
                              (to, line))
             sys.exit(1)
 
-        return output
+        # Return the output, split into lines.  Also skip the first
+        # line as it is just an echo of the command sent.
+        return output.splitlines()[1:]
 
     def sendline(self, line):
         '''
