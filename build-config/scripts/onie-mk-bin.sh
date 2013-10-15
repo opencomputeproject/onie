@@ -32,7 +32,7 @@ uimage_max_size=$(( 4 * 1024 * 1024 ))
     exit 1
 }
 
-onie_uimage="$image_dir/${machine}.uImage"
+onie_uimage="$image_dir/${machine}.itb"
 [ -r "$onie_uimage" ] || {
     echo "ERROR: onie-uImage '$onie_uimage' does not exist."
     exit 1

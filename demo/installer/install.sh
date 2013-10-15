@@ -9,7 +9,7 @@ echo "Demo Installer: platform: $platform"
 
 install_uimage() {
     echo "Copying uImage to NOR flash:"
-    flashcp -v demo-${platform}.uImage $mtd_dev
+    flashcp -v demo-${platform}.itb $mtd_dev
 }
 
 hw_load() {

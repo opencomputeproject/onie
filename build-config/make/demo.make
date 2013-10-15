@@ -10,7 +10,7 @@
 DEMO_SYSROOTDIR		= $(MBUILDDIR)/demo-sysroot
 DEMO_SYSROOT_CPIO	= $(MBUILDDIR)/demo-sysroot.cpio
 DEMO_SYSROOT_CPIO_XZ	= $(DEMO_SYSROOT_CPIO).xz
-DEMO_UIMAGE		= $(IMAGEDIR)/demo-$(PLATFORM).uImage
+DEMO_UIMAGE		= $(IMAGEDIR)/demo-$(PLATFORM).itb
 DEMO_BIN		= $(IMAGEDIR)/demo-installer-$(PLATFORM).bin
 
 DEMO_SYSROOT_COMPLETE_STAMP	= $(STAMPDIR)/demo-sysroot-complete
@@ -65,9 +65,9 @@ $(DEMO_SYSROOT_CPIO_XZ) : $(DEMO_SYSROOT_COMPLETE_STAMP)
 	$(Q) xz --compress --force --check=crc32 -8 $(DEMO_SYSROOT_CPIO)
 
 $(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
-	$(Q) echo "==== Create demo $(MACHINE_PREFIX) u-boot multi-file initramfs uImage ===="
-	$(Q) cd $(IMAGEDIR) && mkimage -T multi -C gzip -a 0 -e 0 -n "Demo $(MACHINE_PREFIX)" \
-		-d $(LINUXDIR)/vmlinux.bin.gz:$(DEMO_SYSROOT_CPIO_XZ):$(MACHINE_PREFIX).dtb $(DEMO_UIMAGE)
+	$(Q) echo "==== Create demo $(MACHINE_PREFIX) u-boot multi-file initramfs itb ===="
+	$(Q) cd $(IMAGEDIR) && $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) \
+				$(MACHINE_PREFIX) $(DEMO_SYSROOT_CPIO_XZ) $(DEMO_UIMAGE)
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN

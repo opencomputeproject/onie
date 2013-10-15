@@ -81,16 +81,16 @@ $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 		sudo find . | sudo cpio --create -H newc > $(SYSROOT_CPIO) )
 	$(Q) xz --compress --force --check=crc32 -8 $(SYSROOT_CPIO)
 
-.SECONDARY: $(IMAGEDIR)/$(MACHINE_PREFIX).uImage
+.SECONDARY: $(IMAGEDIR)/$(MACHINE_PREFIX).itb
 
-$(IMAGEDIR)/%.uImage : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ)
-	$(Q) echo "==== Create $* u-boot multi-file initramfs uImage ===="
-	$(Q) ( cd $(IMAGEDIR) && mkimage -T multi -C gzip -a 0 -e 0 -n "$*" \
-		-d $(LINUXDIR)/vmlinux.bin.gz:$(SYSROOT_CPIO_XZ):$*.dtb $*.uImage )
+$(IMAGEDIR)/%.itb : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ)
+	$(Q) echo "==== Create $* u-boot multi-file .itb image ===="
+	$(Q) cd $(IMAGEDIR) && $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) \
+				$(MACHINE_PREFIX) $(SYSROOT_CPIO_XZ) $@
 
 PHONY += image-bin
 image-bin: $(IMAGE_BIN_STAMP)
-$(IMAGE_BIN_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).uImage $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-bin.sh
+$(IMAGE_BIN_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).itb $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-bin.sh
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE binary image ===="
 	$(Q) $(SCRIPTDIR)/onie-mk-bin.sh $(MACHINE_PREFIX) $(IMAGEDIR) \
 		$(MACHINEDIR) $(UBOOT_DIR) $(IMAGEDIR)/onie-$(MACHINE_PREFIX).bin
@@ -108,7 +108,7 @@ endif
 
 PHONY += image-updater
 image-updater: $(IMAGE_UPDATER_STAMP)
-$(IMAGE_UPDATER_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).uImage $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-installer.sh
+$(IMAGE_UPDATER_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).itb $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-installer.sh
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE updater ===="
 	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh $(MACHINE_PREFIX) $(MACHINE_CONF) \
 		$(INSTALLER_DIR) $(IMAGEDIR) $(MACHINEDIR) $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
@@ -122,7 +122,7 @@ $(IMAGE_COMPLETE_STAMP): $(IMAGE_BIN_STAMP) $(IMAGE_UPDATER_STAMP)
 CLEAN += image-clean
 image-clean:
 	$(Q) rm -f $(IMAGEDIR)/onie-$(MACHINE_PREFIX).bin $(IMAGEDIR)/onie-installer-$(MACHINE_PREFIX).sh \
-		$(IMAGEDIR)/$(MACHINE_PREFIX).uImage $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
+		$(IMAGEDIR)/$(MACHINE_PREFIX).itb $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
 #
