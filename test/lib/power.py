@@ -22,7 +22,7 @@ try:
 except ImportError, e:
     raise ImportError (str(e) + "- required module not found")
 
-class PowerControl:
+class PowerControl(object):
     '''
     Base power control class
     '''

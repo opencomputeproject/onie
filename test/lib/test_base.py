@@ -38,7 +38,7 @@ class BaseTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         logging.debug("Opening DUT connection")
-        BaseTestCase.dut.open(BaseTestCase.prompt)
+        BaseTestCase.dut.open(re.compile(BaseTestCase.prompt))
 
     @classmethod
     def tearDownClass(cls):

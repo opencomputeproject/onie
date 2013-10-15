@@ -41,7 +41,7 @@ def gdut_get():
         sys.exit(1)
     return gdut
 
-class DUT:
+class DUT(object):
     '''
     Base Device Under Test (DUT) class
     '''
@@ -53,6 +53,7 @@ class DUT:
         self.name = name
         self.args = args
         self.config = config
+        self.type  = config.get(name, 'dut_type')
         cnx_class  = connection.find_connection(config.get(name, 'console_proto'))
         self._cnx  = cnx_class(self)
         power_class  = power.find_power_control(config.get(name, 'power_proto'))
@@ -78,14 +79,22 @@ class DUT:
 
         code -- the TLV code to look for.
         '''
-        m = re.search('.*0x%02X\s+[0-8]+\s+(.*)' % (code), self.uboot_eeprom)
+
+        pattern = ".*0x%02X\s+[0-8]+\s+(.*)" % (code)
+        prog = re.compile(pattern)
+        for l in self.uboot_eeprom:
+            m = prog.match(l)
+            if m is not None:
+                break
+
         if m is None or m.lastindex != 1:
             logging.warning("Unable to find TLV code 0x%02X in EEPROM data:" %
                             (code) + "\n" + self.uboot_eeprom)
             return None
         return m.group(1).strip('\r\n')
 
-    def get_uboot_mac_addr(self):
+    @property
+    def uboot_mac_addr(self):
         '''
         Retreive the Ethernet management MAC address from the EEPROM,
         using the U-Boot CLI.
@@ -95,13 +104,14 @@ class DUT:
 
         # Screen scrape the MAC address
         # Base MAC Address     0x24   6 00:04:9F:02:80:A4
-        mac = self.parse_tlv_eeprom(0x24)
+        mac = self._parse_tlv_eeprom(0x24)
         if mac is None:
             logging.critical("Unable to find MAC address in EEPROM data:" +
                              "\n" + self.uboot_eeprom)
         return mac
 
-    def get_uboot_serial_num(self):
+    @property
+    def uboot_serial_num(self):
         '''
         Retreive the DUT serial number the EEPROM, using the U-Boot
         CLI.
@@ -111,7 +121,7 @@ class DUT:
 
         # Screen scrape the Serial Number
         # Serial Number        0x23  22 fake-serial-0123456789
-        sn = self.parse_tlv_eeprom(0x23)
+        sn = self._parse_tlv_eeprom(0x23)
         if sn is None:
             logging.critical("Unable to find serial number in EEPROM data:" +
                              "\n" + self.uboot_eeprom)
@@ -134,8 +144,13 @@ class DUT:
     def expect(self, string, timeout=-1):
         return self._cnx.expect(string, timeout)
 
-    def set_prompt(self, prompt=""):
-        return self._cnx.set_prompt(prompt)
+    @property
+    def prompt(self):
+        return self._cnx.prompt
+
+    @prompt.setter
+    def prompt(self, pattern=""):
+        self._cnx.prompt = pattern
 
     # The DUT class proxies the power class methods via its 'power'
     # instance variable: open(), send(), close()
