@@ -17,6 +17,9 @@ class UBootTestCase(BaseTestCase):
     '''
     Abstract base class for U-Boot based tests.
     '''
+
+    BaseTestCase.prompt = "=>"
+
     def sync_uboot_prompt(self, timeout=-1):
         '''
         When this method is invoked the system is expected to reboot
@@ -26,6 +29,14 @@ class UBootTestCase(BaseTestCase):
         '''
         self.dut.expect('Hit any key', timeout=timeout)
         self.dut.send('')
+
+    @property
+    def u_boot_version(self, timeout=-1):
+        '''
+        Get the running U-Boot version
+        '''
+        self.dut.send('')
+        return self.dut.send("echo $ver")[0]
 
 class Test100_UBootInitialize(UBootTestCase):
     '''
@@ -41,14 +52,14 @@ class Test100_UBootInitialize(UBootTestCase):
 
     @classmethod
     def setUpClass(cls):
-        BaseTestCase.setUpClass()
+        UBootTestCase.setUpClass()
         # Disable further test execution if tests in this class fail.
         Test100_UBootInitialize.org_failfast = BaseTestCase.dut.test_result.failfast
         BaseTestCase.dut.test_result.failfast = True
 
     @classmethod
     def tearDownClass(cls):
-        BaseTestCase.tearDownClass()
+        UBootTestCase.tearDownClass()
         # Restore original failfast setting
         BaseTestCase.dut.test_result.failfast = Test100_UBootInitialize.org_failfast
 
@@ -60,7 +71,7 @@ class Test100_UBootInitialize(UBootTestCase):
 
         self.dut.power_cycle()
         self.sync_uboot_prompt(timeout=120)
-        text = self.dut.send("echo $ver")
+        text = self.u_boot_version
         self.assertIn("U-Boot", text,
                       "After power cycle no U-Boot version string")
 
@@ -77,37 +88,44 @@ class Test100_UBootInitialize(UBootTestCase):
         self.dut.send("setenv onie_debugargs install_url=" + onie_url)
         # boot ONIE with install URL - could take a while
         self.dut.sendline("run onie_update")
-        self.sync_uboot_prompt(300)
+        # Look for ONIE update mode
+        self.dut.expect("update mode detected", 60)
+        # Look for installer execution
+        self.dut.expect("Executing installer:", 60)
+        # Wait for install and reboot
+        self.sync_uboot_prompt(120)
         # check version of ONIE changed
-        text = self.dut.send("echo $ver")
+        text = self.u_boot_version
         onie_version = self.dut.get_config('onie_version')
         self.assertIn(onie_version, text,
                       "Could not find ONIE version " + onie_version)
 
 class Test300_UBootFeatures(UBootTestCase):
-
-    BaseTestCase.prompt = "=>"
+    '''
+    Test cases that only involve U-Boot.  All the tests here can be
+    exercised from U-Boot, possibly with a reset required.
+    '''
 
     def setUp(self):
         logging.debug("Common U-Boot Tests setUp()")
         self.seq = range(10)
 
     def test_10_onie_version(self):
-        text = self.dut.send("echo $ver")[0]
+        text = self.u_boot_version
         onie_version = self.dut.get_config('onie_version')
         self.assertIn(onie_version, text,
                       "Could not find ONIE version " + onie_version)
 
     def test_15_mac_address(self):
         "Read MAC address from EEPROM"
-        eeprom_mac = self.dut.get_uboot_mac_addr()
+        eeprom_mac = self.dut.uboot_mac_addr
         self.assertIsNot(eeprom_mac, None,
                          "Could not find ONIE MAC address")
         logging.info("Base MAC address: " + eeprom_mac)
 
     def test_15_serial_number(self):
         "Read serial number from EEPROM"
-        eeprom_sn = self.dut.get_uboot_serial_num()
+        eeprom_sn = self.dut.uboot_serial_num
         self.assertIsNot(eeprom_sn, None,
                          "Could not find ONIE serial number")
         logging.info("Serial Number: " + eeprom_sn)
@@ -122,8 +140,8 @@ class Test300_UBootFeatures(UBootTestCase):
 
         '''
         # Clear variables and reboot
-        eeprom_mac = self.dut.get_uboot_mac_addr()
-        eeprom_sn  = self.dut.get_uboot_serial_num()
+        eeprom_mac = self.dut.uboot_mac_addr
+        eeprom_sn  = self.dut.uboot_serial_num
         self.dut.send("setenv ethaddr")
         self.dut.send("setenv serial#")
         self.dut.send('saveenv')
@@ -141,3 +159,44 @@ class Test300_UBootFeatures(UBootTestCase):
                          "EEPROM serial number and serial# variable differ\n" +
                          "  EEPROM SN: >>>" + eeprom_sn + "<<<\n" +
                          "  serial#  : >>>" + serial + "<<<\n")
+
+class Test350_NOS(UBootTestCase):
+    '''
+    Test cases that interact with a NOS, including NOS installation.
+    '''
+
+    def test_10_nos_dhcp_install(self):
+        '''
+        Test installing the DEMO NOS where the DHCP server specifies
+        default-url (option 114).
+
+        Here is a very simple configuration using dnsmasq as the DHCP
+        server:
+
+          # Map Vendor Class to dnsmasq tag 'onie'
+          dhcp-vendorclass=set:onie,onie_vendor:
+
+          # set default URL (option 114)
+          dhcp-option=tag:onie,114,"http://test-04/onie/demo-nos-installer.bin"
+
+        '''
+
+        # Run ONIE in 'installer' mode
+        self.dut.send("setenv nos_bootcmd echo")
+        self.dut.sendline("boot")
+        # Look for ONIE installer mode
+        self.dut.expect("installer mode detected", 60)
+        # Look for installer execution
+        self.dut.expect("Executing installer:", 60)
+        # Installer runs, system should reboot -- look for U-Boot
+        self.dut.expect("Hit any key to stop autoboot:", 120)
+        # Should boot into demo NOS
+        self.dut.expect("Welcome to the %s platform" % self.dut.type, 120)
+        self.dut.expect("Please press Enter to activate this console")
+        uboot_prompt = self.dut.prompt
+        self.dut.prompt = re.compile(".*:.* #")
+        self.dut.send("")
+        self.dut.sendline("reboot")
+        # restore uboot prompt
+        self.dut.prompt = uboot_prompt
+        self.sync_uboot_prompt(30)
