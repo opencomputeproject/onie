@@ -22,8 +22,12 @@ run_installer()
     fi
 
     chmod +x $onie_installer
-    # Send installer execution output to stdout
-    { $onie_installer; echo "$?" > /var/run/install.rc; } 2>&1 | tee "/proc/$$/fd/1" | logger $log_stderr -t os-install -p ${syslog_onie}.info
+    # Send installer execution output to stdout or /dev/console
+    tee_path="$(realpath "/proc/$$/fd/1" 2>/dev/null)"
+    if [ "$tee_path" = "/dev/null" ] || [ -z "$tee_path" ] ; then
+        tee_path=/dev/console
+    fi
+    { $onie_installer; echo "$?" > /var/run/install.rc; } 2>&1 | tee $tee_path | logger $log_stderr -t os-install -p ${syslog_onie}.info
     [ "$(cat /var/run/install.rc)" = "0" ] && reboot && return 0
 
     # installer should not return
