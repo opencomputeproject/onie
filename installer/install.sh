@@ -60,16 +60,33 @@ flashcp -v u-boot.bin /dev/mtd-uboot || {
     exit 1
 }
 
+# Set/clear a few U-Boot environment variables.  Some of the values
+# come from the compiled-in default environment of the update image.
+#
 # - clear the onie_boot_reason if set
-# - update ONIE version in u-boot env.
+#
+# - update onie_version with the version of the update image.
+#
 # - update the 'ver' environment variable.  Use the U-Boot/ONIE
 #   version compiled into the image.  The string is null-terminated.
+#
+# - update the onie_bootcmd variable as this command may have changed
+#   from one version to the next.  Use the value found in the update
+#   image.
 ver=$(dd if=/dev/mtd-uboot bs=1 skip=4 count=256 2>/dev/null | awk -F\x00 '{ print $1; exit }')
+bootcmd=$(awk -F\x00 '{print $1}' /dev/mtd-uboot | awk -F= '{ if ($1 == "onie_bootcmd") { print $2 } }')
+if [ -z "$bootcmd" ] ; then
+    # do not update this var
+    bootvar=
+else
+    bootvar=onie_bootcmd
+fi
 
 (cat <<EOF
 onie_boot_reason
 onie_version $image_version
 ver $ver
+$bootvar $bootcmd
 EOF
 ) | fw_setenv -f -s -
 
