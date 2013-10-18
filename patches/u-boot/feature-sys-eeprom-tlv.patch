@@ -29,10 +29,10 @@ index 54fcc81..98a08e5 100644
  COBJS-$(CONFIG_CMD_INI) += cmd_ini.o
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..e52bb42
+index 0000000..0453274
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,1145 @@
+@@ -0,0 +1,1133 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -67,24 +67,6 @@ index 0000000..e52bb42
 +static int hw_eeprom_valid = 1;
 +/* The EERPOM contents after being read into memory */
 +static u8 eeprom[TLV_INFO_MAX_LEN];
-+
-+/**
-+ *  is_valid_tlvinfo_header
-+ *
-+ *  Perform sanity checks on the first 11 bytes of the TlvInfo EEPROM
-+ *  data pointed to by the parameter:
-+ *      1. First 8 bytes contain null-terminated ASCII string "TlvInfo"
-+ *      2. Version byte is 1
-+ *      3. Total length bytes contain value which is less than or equal
-+ *         to the allowed maximum (2048-11)
-+ *
-+ */
-+static inline bool is_valid_tlvinfo_header(tlvinfo_header_t *hdr)
-+{
-+	return( (strcmp(hdr->signature, TLV_INFO_ID_STRING) == 0) &&
-+		(hdr->version == TLV_INFO_VERSION) &&
-+		(be16_to_cpu(hdr->totallen) <= TLV_TOTAL_LEN_MAX) );
-+}
 +
 +/**
 + *  is_valid_tlv
@@ -641,6 +623,8 @@ index 0000000..e52bb42
 +	u32 value;
 +	char data[MAX_TLV_VALUE_LEN];
 +	int eeprom_index;
++	int max_size = min(TLV_TOTAL_LEN_MAX,
++			   CONFIG_SYS_EEPROM_MAX_SIZE - sizeof(tlvinfo_header_t));
 +
 +	// Encode each TLV type into the format to be stored in the EERPOM
 +	switch (tcode) {
@@ -700,7 +684,7 @@ index 0000000..e52bb42
 +	}
 +
 +	// Is there room for this TLV?
-+	if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) + new_tlv_len) > TLV_TOTAL_LEN_MAX) {
++	if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) + new_tlv_len) > max_size) {
 +		printf("ERROR: There is not enough room in the EERPOM to save data.\n");
 +		return(FALSE);
 +	}
@@ -997,6 +981,15 @@ index 0000000..e52bb42
 +#ifndef CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS
 +# error CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS must be defined when using common i2c i/o.
 +#endif
++#ifndef CONFIG_SYS_EEPROM_PAGE_WRITE_BITS
++# error CONFIG_SYS_EEPROM_PAGE_WRITE_BITS must be defined when using common i2c i/o.
++#endif
++
++#ifdef CONFIG_SYS_EEPROM_OFFSET
++#  define EEPROM_OFFSET CONFIG_SYS_EEPROM_OFFSET
++#else
++#  define EEPROM_OFFSET 0x0
++#endif
 +
 +/**
 + * read_sys_eeprom - read the hwinfo from i2c EEPROM
@@ -1012,9 +1005,9 @@ index 0000000..e52bb42
 +	bus = i2c_get_bus_num();
 +	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
 +#endif
-+	ret = i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, offset,
-+		       CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
-+		       eeprom, len);
++	ret = eeprom_read(CONFIG_SYS_I2C_EEPROM_ADDR,
++			  EEPROM_OFFSET + offset,
++			  eeprom, len);
 +
 +#ifdef CONFIG_SYS_EEPROM_BUS_NUM
 +	i2c_set_bus_num(bus);
@@ -1040,14 +1033,9 @@ index 0000000..e52bb42
 +	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
 +#endif
 +
-+	for (i = 0, p = eeprom; i < len; i += 8, p += 8) {
-+		ret = i2c_write(CONFIG_SYS_I2C_EEPROM_ADDR, i,
-+				CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
-+				p, min(len - i, 8));
-+		if (ret)
-+			break;
-+		udelay(CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS * 1000);
-+	}
++	ret = eeprom_write(CONFIG_SYS_I2C_EEPROM_ADDR,
++			   EEPROM_OFFSET,
++			   eeprom, len);
 +
 +#ifdef CONFIG_SYS_EEPROM_BUS_NUM
 +	i2c_set_bus_num(bus);
@@ -1180,10 +1168,10 @@ index 0000000..e52bb42
 +#endif /* CONFIG_POPULATE_SERIAL_NUMBER */
 diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
 new file mode 100644
-index 0000000..29d9b95
+index 0000000..de9f771
 --- /dev/null
 +++ b/include/sys_eeprom.h
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,145 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -1305,5 +1293,27 @@ index 0000000..29d9b95
 + *
 + */
 +extern int is_sys_eeprom_valid(void);
++
++/**
++ *  is_valid_tlvinfo_header
++ *
++ *  Perform sanity checks on the first 11 bytes of the TlvInfo EEPROM
++ *  data pointed to by the parameter:
++ *      1. First 8 bytes contain null-terminated ASCII string "TlvInfo"
++ *      2. Version byte is 1
++ *      3. Total length bytes contain value which is less than or equal
++ *         to the allowed maximum (2048-11)
++ *
++ */
++static inline bool is_valid_tlvinfo_header(tlvinfo_header_t *hdr)
++{
++
++	int max_size = min(TLV_TOTAL_LEN_MAX,
++			   CONFIG_SYS_EEPROM_MAX_SIZE - sizeof(tlvinfo_header_t));
++
++	return( (strcmp(hdr->signature, TLV_INFO_ID_STRING) == 0) &&
++		(hdr->version == TLV_INFO_VERSION) &&
++		(be16_to_cpu(hdr->totallen) <= max_size) );
++}
 +
 +#endif /* __SYS_EEPROM_H_ */
