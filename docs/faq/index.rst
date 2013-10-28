@@ -27,3 +27,9 @@ Why is the default console baud rate 115200?
 =============================================
 
 It is the 21st century -- time to use a reasonably fast baud rate.
+
+How often is ONIE released?
+===========================
+
+ONIE is released every 3 months.  For more details, read the
+:ref:`release_cycle` section.
