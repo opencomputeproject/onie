@@ -752,7 +752,7 @@ Examples:
 Current Status
 --------------
 
-The Merge Window for the next release (v2013.11) is :green:`closed`.
+The Merge Window for the next release (v2013.11) is :red:`closed`.
 
 Release "v2013.11" is scheduled for November 13, 2013.
 
