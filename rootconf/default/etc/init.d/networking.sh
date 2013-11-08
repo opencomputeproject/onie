@@ -24,11 +24,14 @@ config_ethmgmt_static()
 # DHCPv6 ethernet management configuration
 config_ethmgmt_dhcp6()
 {
+    intf=$1
+    shift
+
     # TODO
     # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
 
     # If already using the fallback IP stop
-    [ -r "$fallback_active" ] && return 1
+    [ -r ${fallback_active}_${intf} ] && return 1
 
     return 1
 }
@@ -36,10 +39,11 @@ config_ethmgmt_dhcp6()
 # DHCPv4 ethernet management configuration
 config_ethmgmt_dhcp4()
 {
-    # If already using the fallback IP stop
-    [ -r "$fallback_active" ] && return 1
+    intf=$1
+    shift
 
-    intf_list=$(net_intf)
+    # If already using the fallback IP stop
+    [ -r ${fallback_active}_${intf} ] && return 1
 
     # no default args
     udhcp_args="$(udhcpc_args) -n -o"
@@ -53,19 +57,17 @@ config_ethmgmt_dhcp4()
         udhcp_request_opts="$udhcp_request_opts -O $o"
     done
 
-    # Initate DHCP request on every interface in the list.  Stop after
-    # one works.
-    for i in $intf_list ; do
-        log_info_msg "Trying DHCPv4 on interface: $i"
-        tmp=$(udhcpc $udhcp_args $udhcp_request_opts $udhcp_user_class -i $i -s /scripts/udhcp4_net)
-        if [ "$?" = "0" ] ; then
-            local ipaddr=$(ifconfig $i |grep 'inet '|sed -e 's/:/ /g'|awk '{ print $3 " / " $7 }')
-            log_console_msg "Using DHCPv4 addr: ${i}: $ipaddr"
-            return 0
-        fi
-    done
+    log_info_msg "Trying DHCPv4 on interface: $intf"
+    tmp=$(udhcpc $udhcp_args $udhcp_request_opts $udhcp_user_class -i $intf -s /scripts/udhcp4_net)
+    if [ "$?" = "0" ] ; then
+        local ipaddr=$(ifconfig $intf |grep 'inet '|sed -e 's/:/ /g'|awk '{ print $3 " / " $7 }')
+        log_console_msg "Using DHCPv4 addr: ${intf}: $ipaddr"
+    else
+        _log_err_msg "DHCPv4 on interface: $intf failed"
+        return 1
+    fi
+    return 0
 
-    return 1
 }
 
 # Fall back ethernet management configuration
@@ -75,20 +77,30 @@ config_ethmgmt_fallback()
     local base_ip=10
     local default_nm="255.255.255.0"
     local default_hn="onie-host"
+    intf_counter=$1
+    shift
+    intf=$1
+    shift
 
+    interface_base_ip=$(( $base_ip + $intf_counter ))
     # Assign sequential static IP to each detected interface
-    for i in $(net_intf) ; do
-        local default_ip="192.168.3.$base_ip"
-        log_console_msg "Using default IPv4 addr: ${i}: ${default_ip}/${default_nm}"
-        ifconfig $i $default_ip netmask $default_nm || {
-            log_console_msg "Problems setting default IPv4 addr: ${i}: ${default_ip}/${default_nm}"
-        }
-        base_ip=$(( $base_ip + 1 ))
-    done
+    local default_ip="192.168.3.$interface_base_ip"
+    log_console_msg "Using default IPv4 addr: ${intf}: ${default_ip}/${default_nm}"
+    ifconfig $intf $default_ip netmask $default_nm || {
+        _log_err_msg "Problems setting default IPv4 addr: ${intf}: ${default_ip}/${default_nm}"
+        return 1
+    }
 
-    hostname $default_hn
+    hostname $default_hn || {
+        _log_err_msg "Problems setting default hostname: ${intf}: ${default_hn}"
+        return 1
+    }
 
-    touch $fallback_active
+    touch ${fallback_active}_${intf} || {
+        _log_err_msg "Problems marking fallback file: ${intf}: ${fallback_active}_${intf}"
+        return 1
+    }
+    return 0
 
 }
 
@@ -100,20 +112,32 @@ config_ethmgmt_fallback()
 # 4. Fall back to well known IP address
 config_ethmgmt()
 {
+    intf_list=$(net_intf)
+    intf_counter=0
+    return_value=0
+
     config_ethmgmt_static "$*" && return
 
     # Bring up all the interfaces for the subsequent methods.
-    for i in $intf_list ; do
-        cmd_run ifconfig $i up
+    for intf in $intf_list ; do
+        cmd_run ifconfig $intf up
+        params="$intf $*"
+        eval "result_${intf}=0"
+        config_ethmgmt_dhcp6 $params  || config_ethmgmt_dhcp4 $params || config_ethmgmt_fallback $intf_counter $params || eval "result_${intf}=1"
+        intf_counter=$(( $intf_counter + 1))
     done
-
-    config_ethmgmt_dhcp6 "$*"  && return
-    config_ethmgmt_dhcp4 "$*"  && return
-    config_ethmgmt_fallback "$*"
+    for intf in $intf_list ; do
+        eval "curr_intf_result=\${result_${intf}}"
+        if [ "x$curr_intf_result" != "x0" ] ; then
+            log_console_msg "Failed to configure ${intf} interface"
+            return_value=1
+        fi
+    done
+    return $return_value
 }
 
 if [ "$1" = "start" ] ; then
-    rm -f $fallback_active
+    rm -f ${fallback_active}_*
 fi
 
 config_ethmgmt "$*"
