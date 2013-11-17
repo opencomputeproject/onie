@@ -43,7 +43,7 @@ doc-help:
 
 CLEAN += doc-clean
 doc-clean:
-	-rm -rf $(DOCBUILDDIR)/*
+	$(Q) rm -rf $(DOCBUILDDIR)/*
 
 html:
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(DOCBUILDDIR)/html
