@@ -219,6 +219,7 @@ endif
 # target make fragments
 #
 
+-include local.make
 include make/sysroot.make
 include make/kernel.make
 include make/u-boot.make
