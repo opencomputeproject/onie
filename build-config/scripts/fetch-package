@@ -1,0 +1,58 @@
+#!/bin/sh
+
+# Download files if the destination does not already exist.
+# Try a list of base URLs
+
+usage() {
+    cat <<EOF
+$0: Usage
+$0 <download dir> <base file name> <URL1> [[URL2] .. [URLx]]
+
+Download file into download directory using the list of base URLs.
+For example the following URL is attempted:
+
+   \$URL1/\$base_file_name
+
+EOF
+}
+
+OUTDIR=$1
+FILE=$2
+
+[ -d "$OUTDIR" ] || {
+    echo "Error: Downoad directory does not exist: $OUTDIR"
+    usage
+    exit 1
+}
+
+[ -n "$FILE" ] || {
+    echo "Error: Base file name not specified"
+    usage
+    exit 1
+}
+
+shift 2
+
+[ $# -ge 1 ] || {
+    echo "Error: URL list not specified"
+    usage
+    exit 1
+}
+
+# File already downloaded
+[ -r "${OUTDIR}/${FILE}" ] && {
+    echo "Using cached ${OUTDIR}/${FILE}"
+    exit 0
+}
+
+while [ $# -ge 1 ] ; do
+    URL="$1/$FILE"
+    wget --no-verbose -O "${OUTDIR}/${FILE}" $URL
+    if [ $? -eq 0 ] ; then
+        # stop
+        break
+    else
+        rm -f "${OUTDIR}/${FILE}"
+    fi
+    shift
+done

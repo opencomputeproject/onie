@@ -147,6 +147,7 @@ endif
 
 PROJECTDIR  =  $(abspath ..)
 BUILDDIR    =  $(abspath ../build)
+DOWNLOADDIR ?= $(BUILDDIR)/download
 MBUILDDIR   =  $(BUILDDIR)/$(MACHINE_PREFIX)
 STAMPDIR    =  $(MBUILDDIR)/stamp
 SYSROOTDIR  =  $(MBUILDDIR)/sysroot
@@ -155,7 +156,7 @@ IMAGEDIR    =  $(BUILDDIR)/images
 TESTDIR     =  $(PROJECTDIR)/test
 
 TREEDIRS     += $(BUILDDIR) $(STAMPDIR) $(SYSROOTDIR) \
-		$(IMAGEDIR) $(INITRAMFSDIR)
+		$(IMAGEDIR) $(INITRAMFSDIR) $(DOWNLOADDIR)
 
 TREE_STAMP  = $(STAMPDIR)/tree
 tree-stamp: $(TREE_STAMP)
@@ -237,9 +238,12 @@ include make/docs.make
 # top level targets
 #
 
-PHONY += all source demo clean clean-all docs
+PHONY += all source demo clean clean-all download download-clean docs
 
 source: $(SOURCE)
+	$(Q) echo "=== Finished making $@ ==="
+
+download: $(DOWNLOAD)
 	$(Q) echo "=== Finished making $@ ==="
 
 all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE)
@@ -255,7 +259,11 @@ clean: 	$(CLEAN)
 	$(Q) sudo rm -rf $(MBUILDDIR)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM) ==="
 
-clean-all:
+download-clean: $(DOWNLOAD_CLEAN)
+	$(Q) rm -rf $(DOWNLOADDIR)/*
+	$(Q) echo "=== Finished making $@ ==="
+
+clean-all: clean download-clean
 	$(Q) sudo rm -rf $(BUILDDIR)/*
 	$(Q) echo "=== Finished making $@ ==="
 
