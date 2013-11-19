@@ -1,0 +1,35 @@
+#!/bin/sh
+
+##
+## Try to install the URL given on the command line
+##
+
+. /scripts/functions
+
+import_cmdline
+
+cli_static_url=$1
+
+[ -n "$cli_static_url" ] || {
+    echo "Error: Installer URL not specified."
+    echo "Usage: $0 <URL>"
+    echo "  URL types:   http, ftp, tftp"
+    exit 1
+}
+
+onie_disco=
+onie_disco=$(add_parm "$onie_disco" onie_cli_static_url $cli_static_url)
+
+# stop discovery engine
+/etc/init.d/discover.sh stop > /dev/null 2>&1
+sleep 1
+
+install_parms_file="/tmp/.install_url_parms"
+echo "$onie_disco" > $install_parms_file
+exec_installer $install_parms_file
+rm -f $install_parms_file
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

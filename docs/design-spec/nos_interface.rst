@@ -104,16 +104,21 @@ telnet.  You can use the available BusyBox tools to try and fix a
 problem.  Or use `wget <http://linux.die.net/man/1/wget>`_ to download
 more tools and files.
 
-Two useful commands included with ONIE are:
+A few useful commands included with ONIE are:
 
-- ``install_url`` -- It takes one argument, a URL to a NOS installer.  This
+- ``onie-nos-install`` -- It takes one argument, a URL to a NOS installer.  This
   command downloads and installs from the URL, just as if it had been
   *discovered*.
 
-- ``update_url`` -- It takes one argument, a URL to an ONIE updater.  This
+- ``onie-self-update`` -- It takes one argument, a URL to an ONIE updater.  This
   command downloads and runs the updater, just as if it had been
   *discovered*.  See the :ref:`updating_onie` section for more about
   updating ONIE.
+
+- ``onie-stop`` -- Stop the discovery process.  This can be useful in
+  debugging cases where the discovery process is interfering with the
+  debug.  With the discovery process disabled the system is quiet and
+  you can poke around.
 
 To invoke the rescue operation, the running NOS sets the ``onie_boot_reason`` 
 U-Boot environment variable to the value ``rescue`` 
