@@ -7,7 +7,10 @@
 
 LINUX_VERSION		= 3.2
 LINUX_SUBVERSION	= $(LINUX_VERSION).35
-LINUX_TARBALL		= $(UPSTREAMDIR)/linux-$(LINUX_SUBVERSION).tar.xz
+LINUX_TARBALL		= linux-$(LINUX_SUBVERSION).tar.xz
+LINUX_TARBALL_SHA256	= sha256sums.asc
+LINUX_TARBALL_URLS	= https://www.kernel.org/pub/linux/kernel/v3.x
+
 #-------------------------------------------------------------------------------
 
 LINUX_CONFIG 		= conf/linux.powerpc-e500.config
@@ -17,12 +20,14 @@ KERNEL_HEADERS 		= $(LINUXDIR)/usr/include
 
 KERNEL_SRCPATCHDIR	= $(PATCHDIR)/kernel
 KERNEL_PATCHDIR		= $(KERNELDIR)/patch
+KERNEL_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/kernel-download
 KERNEL_SOURCE_STAMP	= $(STAMPDIR)/kernel-source
 KERNEL_PATCH_STAMP	= $(STAMPDIR)/kernel-patch
 KERNEL_BUILD_STAMP	= $(STAMPDIR)/kernel-build
 KERNEL_HEADER_STAMP	= $(STAMPDIR)/kernel-header
 KERNEL_INSTALL_STAMP	= $(STAMPDIR)/kernel-install
-KERNEL_STAMP		= $(KERNEL_SOURCE_STAMP) \
+KERNEL_STAMP		= $(KERNEL_DOWNLOAD_STAMP) \
+			  $(KERNEL_SOURCE_STAMP) \
 			  $(KERNEL_PATCH_STAMP) \
 			  $(KERNEL_BUILD_STAMP) \
 			  $(KERNEL_HEADER_STAMP) \
@@ -32,8 +37,8 @@ KERNEL			= $(KERNEL_STAMP)
 
 KERNEL_DTB		?= $(MACHINE).dtb
 
-PHONY += kernel kernel-source kernel-patch kernel-config 
-PHONY += kernel-build kernel-install kernel-clean
+PHONY += kernel kernel-download kernel-source kernel-patch kernel-config
+PHONY += kernel-build kernel-install kernel-clean kernel-download-clean
 
 #-------------------------------------------------------------------------------
 
@@ -45,16 +50,22 @@ kernel: $(KERNEL_STAMP)
 
 #---
 
-SOURCE += $(KERNEL_PATCH_STAMP)
-
-kernel-source: $(KERNEL_SOURCE_STAMP)
-$(KERNEL_SOURCE_STAMP): $(TREE_STAMP)
+DOWNLOAD += $(KERNEL_DOWNLOAD_STAMP)
+kernel-download: $(KERNEL_DOWNLOAD_STAMP)
+$(KERNEL_DOWNLOAD_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Getting and extracting Linux ===="
-	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(LINUX_TARBALL).sha1
-	$(Q) rm -rf $(KERNELDIR)
-	$(Q) mkdir -p $(KERNELDIR)
-	$(Q) cd $(KERNELDIR) && tar xJf $(LINUX_TARBALL)
+	$(Q) echo "==== Getting Linux ===="
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(LINUX_TARBALL) $(LINUX_TARBALL_URLS)
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(LINUX_TARBALL_SHA256) $(LINUX_TARBALL_URLS)
+	$(Q) cd $(DOWNLOADDIR) && grep $(LINUX_TARBALL) $(LINUX_TARBALL_SHA256) | sha256sum -c -
+	$(Q) touch $@
+
+SOURCE += $(KERNEL_PATCH_STAMP)
+kernel-source: $(KERNEL_SOURCE_STAMP)
+$(KERNEL_SOURCE_STAMP): $(KERNEL_DOWNLOAD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Extracting Linux ===="
+	$(Q) $(SCRIPTDIR)/extract-package $(KERNELDIR) $(DOWNLOADDIR)/$(LINUX_TARBALL)
 	$(Q) cd $(KERNELDIR) && ln -s linux-$(LINUX_SUBVERSION) linux
 	$(Q) touch $@
 
@@ -138,6 +149,11 @@ kernel-clean:
 	$(Q) rm -rf $(KERNELDIR)
 	$(Q) rm -f $(KERNEL_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+DOWNLOAD_CLEAN += kernel-download-clean
+kernel-download-clean:
+	$(Q) rm -f $(KERNEL_DOWNLOAD_STAMP) $(DOWNLOADDIR)/$(LINUX_TARBALL) \
+		   $(DOWNLOADDIR)/$(LINUX_TARBALL_SHA256)
 
 #-------------------------------------------------------------------------------
 #
