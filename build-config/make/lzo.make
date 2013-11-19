@@ -7,34 +7,42 @@
 #
 
 LZO_VERSION		= 2.06
-LZO_TARBALL		= $(UPSTREAMDIR)/lzo-$(LZO_VERSION).tar.gz
+LZO_TARBALL		= lzo-$(LZO_VERSION).tar.gz
+LZO_TARBALL_URLS	= http://www.oberhumer.com/opensource/lzo/download
 LZO_BUILD_DIR		= $(MBUILDDIR)/lzo
 LZO_DIR			= $(LZO_BUILD_DIR)/lzo-$(LZO_VERSION)
 
+LZO_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/lzo-download
 LZO_SOURCE_STAMP	= $(STAMPDIR)/lzo-source
 LZO_CONFIGURE_STAMP	= $(STAMPDIR)/lzo-configure
 LZO_BUILD_STAMP		= $(STAMPDIR)/lzo-build
 LZO_INSTALL_STAMP	= $(STAMPDIR)/lzo-install
-LZO_STAMP		= $(LZO_SOURCE_STAMP) \
+LZO_STAMP		= $(LZO_DOWNLOAD_STAMP) \
+			  $(LZO_SOURCE_STAMP) \
 			  $(LZO_CONFIGURE_STAMP) \
 			  $(LZO_BUILD_STAMP) \
 			  $(LZO_INSTALL_STAMP)
 
-PHONY += lzo lzo-source lzo-configure \
-	lzo-build lzo-install lzo-clean
+PHONY += lzo lzo-download lzo-source lzo-configure \
+	lzo-build lzo-install lzo-clean lzo-download-clean
 
 lzo: $(LZO_STAMP)
 
-SOURCE += $(LZO_SOURCE_STAMP)
-
-lzo-source: $(LZO_SOURCE_STAMP)
-$(LZO_SOURCE_STAMP): $(TREE_STAMP)
+DOWNLOAD += $(LZO_DOWNLOAD_STAMP)
+lzo-download: $(LZO_DOWNLOAD_STAMP)
+$(LZO_DOWNLOAD_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Getting and extracting upstream lzo ===="
-	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(LZO_TARBALL).sha1
-	$(Q) rm -rf $(LZO_BUILD_DIR)
-	$(Q) mkdir -p $(LZO_BUILD_DIR)
-	$(Q) cd $(LZO_BUILD_DIR) && tar xf $(LZO_TARBALL)
+	$(Q) echo "==== Getting upstream lzo ===="
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(LZO_TARBALL) $(LZO_TARBALL_URLS)
+	$(Q) cd $(DOWNLOADDIR) && sha1sum -c $(UPSTREAMDIR)/$(LZO_TARBALL).sha1
+	$(Q) touch $@
+
+SOURCE += $(LZO_SOURCE_STAMP)
+lzo-source: $(LZO_SOURCE_STAMP)
+$(LZO_SOURCE_STAMP): $(LZO_DOWNLOAD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Extracting upstream lzo ===="
+	$(Q) $(SCRIPTDIR)/extract-package $(LZO_BUILD_DIR) $(DOWNLOADDIR)/$(LZO_TARBALL)
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
@@ -74,6 +82,10 @@ lzo-clean:
 	$(Q) rm -rf $(LZO_BUILD_DIR)
 	$(Q) rm -f $(LZO_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+DOWNLOAD_CLEAN += lzo-download-clean
+lzo-download-clean:
+	$(Q) rm -f $(LZO_DOWNLOAD_STAMP) $(DOWNLOADDIR)/$(LZO_TARBALL)
 
 #-------------------------------------------------------------------------------
 #
