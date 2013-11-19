@@ -7,37 +7,46 @@
 #
 
 E2FSPROGS_VERSION		= 1.42.8
-E2FSPROGS_TARBALL		= $(UPSTREAMDIR)/e2fsprogs-$(E2FSPROGS_VERSION).tar.xz
+E2FSPROGS_TARBALL		= e2fsprogs-$(E2FSPROGS_VERSION).tar.xz
+E2FSPROGS_TARBALL_URLS		= https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.42.8
 E2FSPROGS_BUILD_DIR		= $(MBUILDDIR)/e2fsprogs
 E2FSPROGS_DIR			= $(E2FSPROGS_BUILD_DIR)/e2fsprogs-$(E2FSPROGS_VERSION)
 
-E2FSPROGS_SRCPATCHDIR		=	 $(PATCHDIR)/e2fsprogs
+E2FSPROGS_SRCPATCHDIR		= $(PATCHDIR)/e2fsprogs
+E2FSPROGS_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/e2fsprogs-download
 E2FSPROGS_SOURCE_STAMP		= $(STAMPDIR)/e2fsprogs-source
 E2FSPROGS_PATCH_STAMP		= $(STAMPDIR)/e2fsprogs-patch
 E2FSPROGS_CONFIGURE_STAMP	= $(STAMPDIR)/e2fsprogs-configure
 E2FSPROGS_BUILD_STAMP		= $(STAMPDIR)/e2fsprogs-build
 E2FSPROGS_INSTALL_STAMP		= $(STAMPDIR)/e2fsprogs-install
-E2FSPROGS_STAMP			= $(E2FSPROGS_SOURCE_STAMP) \
+E2FSPROGS_STAMP			= $(E2FSPROGS_DOWNLOAD_STAMP) \
+				  $(E2FSPROGS_SOURCE_STAMP) \
 				  $(E2FSPROGS_PATCH_STAMP) \
 				  $(E2FSPROGS_CONFIGURE_STAMP) \
 				  $(E2FSPROGS_BUILD_STAMP) \
 				  $(E2FSPROGS_INSTALL_STAMP)
 
-PHONY += e2fsprogs e2fsprogs-source e2fsprogs-patch e2fsprogs-configure\
-	e2fsprogs-build e2fsprogs-install e2fsprogs-clean
+PHONY += e2fsprogs e2fsprogs-download e2fsprogs-source e2fsprogs-patch \
+	 e2fsprogs-configure e2fsprogs-build e2fsprogs-install e2fsprogs-clean \
+	 e2fsprogs-download-clean
 
 e2fsprogs: $(E2FSPROGS_STAMP)
 
-SOURCE += $(E2FSPROGS_SOURCE_STAMP)
-
-e2fsprogs-source: $(E2FSPROGS_SOURCE_STAMP)
-$(E2FSPROGS_SOURCE_STAMP): $(TREE_STAMP)
+DOWNLOAD += $(E2FSPROGS_DOWNLOAD_STAMP)
+e2fsprogs-download: $(E2FSPROGS_DOWNLOAD_STAMP)
+$(E2FSPROGS_DOWNLOAD_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Getting and extracting upstream e2fsprogs ===="
-	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(E2FSPROGS_TARBALL).sha1
-	$(Q) rm -rf $(E2FSPROGS_BUILD_DIR)
-	$(Q) mkdir -p $(E2FSPROGS_BUILD_DIR)
-	$(Q) cd $(E2FSPROGS_BUILD_DIR) && tar xf $(E2FSPROGS_TARBALL)
+	$(Q) echo "==== Getting upstream e2fsprogs ===="
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(E2FSPROGS_TARBALL) $(E2FSPROGS_TARBALL_URLS)
+	$(Q) cd $(DOWNLOADDIR) && sha1sum -c $(UPSTREAMDIR)/$(E2FSPROGS_TARBALL).sha1
+	$(Q) touch $@
+
+SOURCE += $(E2FSPROGS_SOURCE_STAMP)
+e2fsprogs-source: $(E2FSPROGS_SOURCE_STAMP)
+$(E2FSPROGS_SOURCE_STAMP): $(E2FSPROGS_DOWNLOAD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Extracting upstream e2fsprogs ===="
+	$(Q) $(SCRIPTDIR)/extract-package $(E2FSPROGS_BUILD_DIR) $(DOWNLOADDIR)/$(E2FSPROGS_TARBALL)
 	$(Q) touch $@
 
 e2fsprogs-patch: $(E2FSPROGS_PATCH_STAMP)
@@ -86,6 +95,10 @@ e2fsprogs-clean:
 	$(Q) rm -rf $(E2FSPROGS_BUILD_DIR)
 	$(Q) rm -f $(E2FSPROGS_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+CLEAN_DOWNLOAD += e2fsprogs-download-clean
+e2fsprogs-download-clean:
+	$(Q) rm -f $(E2FSPROGS_DOWNLOAD_STAMP) $(DOWNLOADDIR)/e2fsprogs*
 
 #-------------------------------------------------------------------------------
 #
