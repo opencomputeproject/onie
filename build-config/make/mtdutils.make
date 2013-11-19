@@ -6,35 +6,45 @@
 # This is a makefile fragment that defines the build of mtdutils
 #
 
-MTDUTILS_VERSION		= 1.5.0
-MTDUTILS_TARBALL		= $(UPSTREAMDIR)/mtd-utils-$(MTDUTILS_VERSION).tar.bz2
-MTDUTILS_BUILD_DIR		= $(MBUILDDIR)/mtd-utils
-MTDUTILS_DIR			= $(MTDUTILS_BUILD_DIR)/mtd-utils-$(MTDUTILS_VERSION)
+MTDUTILS_VERSION	= 1.5.0
+MTDUTILS_COMMIT		= ca39eb1
+MTDUTILS_TARBALL	= mtd-utils-$(MTDUTILS_VERSION).tar.gz
+MTDUTILS_TARBALL_URLS	= http://git.infradead.org/mtd-utils.git/snapshot
+MTDUTILS_BUILD_DIR	= $(MBUILDDIR)/mtd-utils
+MTDUTILS_DIR		= $(MTDUTILS_BUILD_DIR)/mtd-utils-$(MTDUTILS_COMMIT)
 
+MTDUTILS_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/mtdutils-download
 MTDUTILS_SOURCE_STAMP	= $(STAMPDIR)/mtdutils-source
 MTDUTILS_BUILD_STAMP	= $(STAMPDIR)/mtdutils-build
 MTDUTILS_INSTALL_STAMP	= $(STAMPDIR)/mtdutils-install
-MTDUTILS_STAMP		= $(MTDUTILS_SOURCE_STAMP) \
+MTDUTILS_STAMP		= $(MTDUTILS_DOWNLOAD_STAMP) \
+			  $(MTDUTILS_SOURCE_STAMP) \
 			  $(MTDUTILS_BUILD_STAMP) \
 			  $(MTDUTILS_INSTALL_STAMP)
 
 MTDBINS = mkfs.jffs2 mkfs.ubifs ubinize ubiformat ubinfo mtdinfo
 
-PHONY += mtdutils mtdutils-source mtdutils-build \
-	 mtdutils-install mtdutils-clean
+PHONY += mtdutils mtdutils-download mtdutils-source mtdutils-build \
+	 mtdutils-install mtdutils-clean mtdutils-download-clean
 
 mtdutils: $(MTDUTILS_STAMP)
 
-SOURCE += $(MTDUTILS_SOURCE_STAMP)
-
-mtdutils-source: $(MTDUTILS_SOURCE_STAMP)
-$(MTDUTILS_SOURCE_STAMP): $(TREE_STAMP)
+DOWNLOAD += $(MTDUTILS_DOWNLOAD_STAMP)
+mtdutils-download: $(MTDUTILS_DOWNLOAD_STAMP)
+$(MTDUTILS_DOWNLOAD_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Getting and extracting upstream mtdutils ===="
-	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(MTDUTILS_TARBALL).sha1
-	$(Q) rm -rf $(MTDUTILS_BUILD_DIR)
-	$(Q) mkdir -p $(MTDUTILS_BUILD_DIR)
-	$(Q) cd $(MTDUTILS_BUILD_DIR) && tar xf $(MTDUTILS_TARBALL)
+	$(Q) echo "==== Getting upstream mtdutils ===="
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(MTDUTILS_COMMIT).tar.gz $(MTDUTILS_TARBALL_URLS)
+	$(Q) cd $(DOWNLOADDIR) && ln -fs $(MTDUTILS_COMMIT).tar.gz $(MTDUTILS_TARBALL)
+	$(Q) cd $(DOWNLOADDIR) && sha1sum -c $(UPSTREAMDIR)/$(MTDUTILS_TARBALL).sha1
+	$(Q) touch $@
+
+SOURCE += $(MTDUTILS_SOURCE_STAMP)
+mtdutils-source: $(MTDUTILS_SOURCE_STAMP)
+$(MTDUTILS_SOURCE_STAMP): $(MTDUTILS_DOWNLOAD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Extracting upstream mtdutils ===="
+	$(Q) $(SCRIPTDIR)/extract-package $(MTDUTILS_BUILD_DIR) $(DOWNLOADDIR)/$(MTDUTILS_TARBALL)
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
@@ -77,6 +87,11 @@ mtdutils-clean:
 	$(Q) rm -rf $(MTDUTILS_BUILD_DIR)
 	$(Q) rm -f $(MTDUTILS_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+DOWNLOAD_CLEAN += mtdutils-download-clean
+mtdutils-download-clean:
+	$(Q) rm -f $(MTDUTILS_DOWNLOAD_STAMP) $(DOWNLOADDIR)/$(MTDUTILS_COMMIT).tar.gz \
+		   $(DOWNLOADDIR)/$(MTDUTILS_TARBALL)
 
 #-------------------------------------------------------------------------------
 #
