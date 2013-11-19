@@ -7,36 +7,45 @@
 #
 
 ZLIB_VERSION		= 1.2.8
-ZLIB_TARBALL		= $(UPSTREAMDIR)/zlib-$(ZLIB_VERSION).tar.gz
+ZLIB_TARBALL		= zlib-$(ZLIB_VERSION).tar.gz
+ZLIB_TARBALL_URLS	= http://zlib.net \
+			  http://softlayer-dal.dl.sourceforge.net/project/libpng/zlib/1.2.8
 ZLIB_BUILD_DIR		= $(MBUILDDIR)/zlib
 ZLIB_DIR		= $(ZLIB_BUILD_DIR)/zlib-$(ZLIB_VERSION)
 
+ZLIB_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/zlib-download
 ZLIB_SOURCE_STAMP	= $(STAMPDIR)/zlib-source
 ZLIB_CONFIGURE_STAMP	= $(STAMPDIR)/zlib-configure
 ZLIB_BUILD_STAMP	= $(STAMPDIR)/zlib-build
 ZLIB_INSTALL_STAMP	= $(STAMPDIR)/zlib-install
-ZLIB_STAMP		= $(ZLIB_SOURCE_STAMP) \
+ZLIB_STAMP		= $(ZLIB_DOWNLOAD_STAMP) \
+			  $(ZLIB_SOURCE_STAMP) \
 			  $(ZLIB_CONFIGURE_STAMP) \
 			  $(ZLIB_BUILD_STAMP) \
 			  $(ZLIB_INSTALL_STAMP)
 
-PHONY += zlib zlib-source zlib-configure \
-	zlib-build zlib-install zlib-clean
+PHONY += zlib zlib-download zlib-source zlib-configure \
+	 zlib-build zlib-install zlib-clean zlib-download-clean
 
 ZLIBLIBS = libz.so libz.so.1 libz.so.1.2.8
 
 zlib: $(ZLIB_STAMP)
 
-SOURCE += $(ZLIB_SOURCE_STAMP)
-
-zlib-source: $(ZLIB_SOURCE_STAMP)
-$(ZLIB_SOURCE_STAMP): $(TREE_STAMP)
+DOWNLOAD += $(ZLIB_DOWNLOAD_STAMP)
+zlib-download: $(ZLIB_DOWNLOAD_STAMP)
+$(ZLIB_DOWNLOAD_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Getting and extracting upstream zlib ===="
-	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(ZLIB_TARBALL).sha1
-	$(Q) rm -rf $(ZLIB_BUILD_DIR)
-	$(Q) mkdir -p $(ZLIB_BUILD_DIR)
-	$(Q) cd $(ZLIB_BUILD_DIR) && tar xf $(ZLIB_TARBALL)
+	$(Q) echo "==== Getting upstream zlib ===="
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(ZLIB_TARBALL) $(ZLIB_TARBALL_URLS)
+	$(Q) cd $(DOWNLOADDIR) && sha1sum -c $(UPSTREAMDIR)/$(ZLIB_TARBALL).sha1
+	$(Q) touch $@
+
+SOURCE += $(ZLIB_SOURCE_STAMP)
+zlib-source: $(ZLIB_SOURCE_STAMP)
+$(ZLIB_SOURCE_STAMP): $(ZLIB_DOWNLOAD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Extracting upstream zlib ===="
+	$(Q) $(SCRIPTDIR)/extract-package $(ZLIB_BUILD_DIR) $(DOWNLOADDIR)/$(ZLIB_TARBALL)
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
@@ -84,6 +93,10 @@ zlib-clean:
 	$(Q) rm -rf $(ZLIB_BUILD_DIR)
 	$(Q) rm -f $(ZLIB_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+DOWNLOAD_CLEAN += zlib-download-clean
+zlib-download-clean:
+	$(Q) rm -f $(ZLIB_DOWNLOAD_STAMP) $(DOWNLOADDIR)/$(ZLIB_TARBALL)
 
 #-------------------------------------------------------------------------------
 #
