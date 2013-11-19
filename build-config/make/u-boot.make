@@ -7,17 +7,20 @@
 #
 
 UBOOT_VERSION		= 2013.01.01
-UBOOT_TARBALL		= $(UPSTREAMDIR)/u-boot-$(UBOOT_VERSION).tar.bz2
+UBOOT_TARBALL		= u-boot-$(UBOOT_VERSION).tar.bz2
+UBOOT_TARBALL_URLS	= ftp://ftp.denx.de/pub/u-boot
 UBOOT_BUILD_DIR		= $(MBUILDDIR)/u-boot
 UBOOT_DIR		= $(UBOOT_BUILD_DIR)/u-boot-$(UBOOT_VERSION)
 
 UBOOT_SRCPATCHDIR	= $(PATCHDIR)/u-boot
 UBOOT_PATCHDIR		= $(UBOOT_BUILD_DIR)/patch
+UBOOT_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/u-boot-download
 UBOOT_SOURCE_STAMP	= $(STAMPDIR)/u-boot-source
 UBOOT_PATCH_STAMP	= $(STAMPDIR)/u-boot-patch
 UBOOT_BUILD_STAMP	= $(STAMPDIR)/u-boot-build
 UBOOT_INSTALL_STAMP	= $(STAMPDIR)/u-boot-install
-UBOOT_STAMP		= $(UBOOT_SOURCE_STAMP) \
+UBOOT_STAMP		= $(UBOOT_DOWNLOAD_STAMP) \
+			  $(UBOOT_SOURCE_STAMP) \
 			  $(UBOOT_PATCH_STAMP) \
 			  $(UBOOT_BUILD_STAMP) \
 			  $(UBOOT_INSTALL_STAMP)
@@ -29,23 +32,28 @@ UBOOT_MACHINE		?= $(UBOOT_NAME)
 UBOOT_BIN		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.bin
 UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE_PREFIX).u-boot
 
-PHONY += u-boot u-boot-source u-boot-patch u-boot-build \
-	 u-boot-install u-boot-clean
+PHONY += u-boot u-boot-download u-boot-source u-boot-patch u-boot-build \
+	 u-boot-install u-boot-clean u-boot-download-clean
 
 #-------------------------------------------------------------------------------
 
 u-boot: $(UBOOT_STAMP)
 
-SOURCE += $(UBOOT_PATCH_STAMP)
-
-u-boot-source: $(UBOOT_SOURCE_STAMP)
-$(UBOOT_SOURCE_STAMP): $(TREE_STAMP)
+DOWNLOAD += $(UBOOT_DOWNLOAD_STAMP)
+u-boot-download: $(UBOOT_DOWNLOAD_STAMP)
+$(UBOOT_DOWNLOAD_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== $(PLATFORM): Getting and extracting upstream U-Boot ===="
-	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(UBOOT_TARBALL).sha1
-	$(Q) rm -rf $(UBOOT_BUILD_DIR)
-	$(Q) mkdir -p $(UBOOT_BUILD_DIR)
-	$(Q) cd $(UBOOT_BUILD_DIR) && tar xjf $(UBOOT_TARBALL)
+	$(Q) echo "==== Getting upstream U-Boot ===="
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UBOOT_TARBALL) $(UBOOT_TARBALL_URLS)
+	$(Q) cd $(DOWNLOADDIR) && sha1sum -c $(UPSTREAMDIR)/$(UBOOT_TARBALL).sha1
+	$(Q) touch $@
+
+SOURCE += $(UBOOT_PATCH_STAMP)
+u-boot-source: $(UBOOT_SOURCE_STAMP)
+$(UBOOT_SOURCE_STAMP): $(UBOOT_DOWNLOAD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Extracting upstream U-Boot ===="
+	$(Q) $(SCRIPTDIR)/extract-package $(UBOOT_BUILD_DIR) $(DOWNLOADDIR)/$(UBOOT_TARBALL)
 	$(Q) touch $@
 
 #
@@ -112,6 +120,10 @@ u-boot-clean:
 	$(Q) rm -f $(UBOOT_STAMP)
 	$(Q) rm -f $(IMAGEDIR)/*.u-boot
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+DOWNLOAD_CLEAN += u-boot-download-clean
+u-boot-download-clean:
+	$(Q) rm -f $(UBOOT_DOWNLOAD_STAMP) $(DOWNLOADDIR)/$(UBOOT_TARBALL)
 
 #-------------------------------------------------------------------------------
 #
