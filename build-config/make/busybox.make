@@ -7,36 +7,46 @@
 #
 
 BUSYBOX_VERSION		= 1.20.0
-BUSYBOX_TARBALL		= $(UPSTREAMDIR)/busybox-$(BUSYBOX_VERSION).tar.bz2
+BUSYBOX_TARBALL		= busybox-$(BUSYBOX_VERSION).tar.bz2
+BUSYBOX_TARBALL_SIGN	= $(BUSYBOX_TARBALL).sign
+BUSYBOX_TARBALL_URLS	= http://www.busybox.net/downloads
 BUSYBOX_BUILD_DIR	= $(MBUILDDIR)/busybox
 BUSYBOX_DIR		= $(BUSYBOX_BUILD_DIR)/busybox-$(BUSYBOX_VERSION)
 BUSYBOX_CONFIG		= conf/busybox.config
 
 BUSYBOX_SRCPATCHDIR	= $(PATCHDIR)/busybox
+BUSYBOX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/busybox-download
 BUSYBOX_SOURCE_STAMP	= $(STAMPDIR)/busybox-source
 BUSYBOX_PATCH_STAMP	= $(STAMPDIR)/busybox-patch
 BUSYBOX_BUILD_STAMP	= $(STAMPDIR)/busybox-build
 BUSYBOX_INSTALL_STAMP	= $(STAMPDIR)/busybox-install
-BUSYBOX_STAMP		= $(BUSYBOX_SOURCE_STAMP) \
-				  $(BUSYBOX_PATCH_STAMP) \
-				  $(BUSYBOX_BUILD_STAMP) \
-				  $(BUSYBOX_INSTALL_STAMP)
+BUSYBOX_STAMP		= $(BUSYBOX_DOWNLOAD_STAMP) \
+			  $(BUSYBOX_SOURCE_STAMP) \
+			  $(BUSYBOX_PATCH_STAMP) \
+			  $(BUSYBOX_BUILD_STAMP) \
+			  $(BUSYBOX_INSTALL_STAMP)
 
-PHONY += busybox busybox-source busybox-config busybox-patch \
-	busybox-build busybox-install busybox-clean
+PHONY += busybox busybox-download busybox-source busybox-config busybox-patch \
+	busybox-build busybox-install busybox-clean busybox-download-clean
 
 busybox: $(BUSYBOX_STAMP)
 
-SOURCE += $(BUSYBOX_SOURCE_STAMP)
-
-busybox-source: $(BUSYBOX_SOURCE_STAMP)
-$(BUSYBOX_SOURCE_STAMP): $(TREE_STAMP)
+DOWNLOAD += $(BUSYBOX_DOWNLOAD_STAMP)
+busybox-download: $(BUSYBOX_DOWNLOAD_STAMP)
+$(BUSYBOX_DOWNLOAD_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Getting and extracting upstream U-Boot ===="
-	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(BUSYBOX_TARBALL).sha1
-	$(Q) rm -rf $(BUSYBOX_BUILD_DIR)
-	$(Q) mkdir -p $(BUSYBOX_BUILD_DIR)
-	$(Q) cd $(BUSYBOX_BUILD_DIR) && tar xjf $(BUSYBOX_TARBALL)
+	$(Q) echo "==== Getting upstream BusyBox ===="
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(BUSYBOX_TARBALL) $(BUSYBOX_TARBALL_URLS)
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(BUSYBOX_TARBALL_SIGN) $(BUSYBOX_TARBALL_URLS)
+	$(Q) cd $(DOWNLOADDIR) && sed -n -e 's/^SHA1: //p' $(BUSYBOX_TARBALL_SIGN) | sha1sum -c -
+	$(Q) touch $@
+
+SOURCE += $(BUSYBOX_SOURCE_STAMP)
+busybox-source: $(BUSYBOX_SOURCE_STAMP)
+$(BUSYBOX_SOURCE_STAMP): $(BUSYBOX_DOWNLOAD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Extracting upstream BusyBox ===="
+	$(Q) $(SCRIPTDIR)/extract-package $(BUSYBOX_BUILD_DIR) $(DOWNLOADDIR)/$(BUSYBOX_TARBALL)
 	$(Q) touch $@
 
 busybox-patch: $(BUSYBOX_PATCH_STAMP)
@@ -92,6 +102,11 @@ busybox-clean:
 	$(Q) rm -rf $(BUSYBOX_BUILD_DIR)
 	$(Q) rm -f $(BUSYBOX_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+DOWNLOAD_CLEAN += busybox-download-clean
+busybox-download-clean:
+	$(Q) rm -f $(BUSYBOX_DOWNLOAD_STAMP) $(DOWNLOADDIR)/$(BUSYBOX_TARBALL) \
+		   $(DOWNLOADDIR)/$(BUSYBOX_TARBALL_SIGN)
 
 #-------------------------------------------------------------------------------
 #
