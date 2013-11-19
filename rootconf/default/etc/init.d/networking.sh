@@ -6,8 +6,6 @@ PATH=/usr/bin:/usr/sbin:/bin:/sbin
 
 import_cmdline
 
-fallback_active=/var/run/.fallback_active
-
 # Static ethernet management configuration
 config_ethmgmt_static()
 {
@@ -30,9 +28,6 @@ config_ethmgmt_dhcp6()
     # TODO
     # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
 
-    # If already using the fallback IP stop
-    [ -r ${fallback_active}_${intf} ] && return 1
-
     return 1
 }
 
@@ -41,9 +36,6 @@ config_ethmgmt_dhcp4()
 {
     intf=$1
     shift
-
-    # If already using the fallback IP stop
-    [ -r ${fallback_active}_${intf} ] && return 1
 
     # no default args
     udhcp_args="$(udhcpc_args) -n -o"
@@ -96,10 +88,6 @@ config_ethmgmt_fallback()
         return 1
     }
 
-    touch ${fallback_active}_${intf} || {
-        _log_err_msg "Problems marking fallback file: ${intf}: ${fallback_active}_${intf}"
-        return 1
-    }
     return 0
 
 }
@@ -135,9 +123,5 @@ config_ethmgmt()
     done
     return $return_value
 }
-
-if [ "$1" = "start" ] ; then
-    rm -f ${fallback_active}_*
-fi
 
 config_ethmgmt "$*"
