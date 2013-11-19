@@ -7,33 +7,44 @@
 #
 
 UCLIBC_VERSION		= 0.9.32.1
-UCLIBC_TARBALL		= $(UPSTREAMDIR)/uClibc-$(UCLIBC_VERSION).tar.xz
+UCLIBC_TARBALL		= uClibc-$(UCLIBC_VERSION).tar.xz
+UCLIBC_TARBALL_SIGN	= $(UCLIBC_TARBALL).sign
+UCLIBC_TARBALL_URLS	= http://www.uclibc.org/downloads
 UCLIBC_BUILD_DIR	= $(MBUILDDIR)/uclibc
 UCLIBC_DIR		= $(UCLIBC_BUILD_DIR)/uClibc-$(UCLIBC_VERSION)
 UCLIBC_CONFIG		= conf/uclibc-$(ARCH).config
 UCLIBC_DEV_SYSROOT	= $(UCLIBC_BUILD_DIR)/uclibc-dev-sysroot
 
+UCLIBC_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/uclibc-download
 UCLIBC_SOURCE_STAMP	= $(STAMPDIR)/uclibc-source
 UCLIBC_BUILD_STAMP	= $(STAMPDIR)/uclibc-build
 UCLIBC_INSTALL_STAMP	= $(STAMPDIR)/uclibc-install
-UCLIBC_STAMP		= $(UCLIBC_SOURCE_STAMP) \
+UCLIBC_STAMP		= $(UCLIBC_DOWNLOAD_STAMP) \
+			  $(UCLIBC_SOURCE_STAMP) \
 			  $(UCLIBC_BUILD_STAMP) \
 			  $(UCLIBC_INSTALL_STAMP)
 
-PHONY += uclibc uclibc-source uclibc-build uclibc-install uclibc-clean
+PHONY += uclibc uclibc-download uclibc-source uclibc-build \
+	 uclibc-install uclibc-clean uclibc-download-clean
 
 uclibc: $(UCLIBC_STAMP)
 
-SOURCE += $(UCLIBC_SOURCE_STAMP)
-
-uclibc-source: $(UCLIBC_SOURCE_STAMP)
-$(UCLIBC_SOURCE_STAMP): $(TREE_STAMP)
+DOWNLOAD += $(UCLIBC_DOWNLOAD_STAMP)
+uclibc-download: $(UCLIBC_DOWNLOAD_STAMP)
+$(UCLIBC_DOWNLOAD_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Getting and extracting upstream U-Boot ===="
-	$(Q) cd $(UPSTREAMDIR) && sha1sum -c $(UCLIBC_TARBALL).sha1
-	$(Q) rm -rf $(UCLIBC_BUILD_DIR)
-	$(Q) mkdir -p $(UCLIBC_BUILD_DIR)
-	$(Q) cd $(UCLIBC_BUILD_DIR) && tar xJf $(UCLIBC_TARBALL)
+	$(Q) echo "==== Getting upstream uClibc ===="
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UCLIBC_TARBALL) $(UCLIBC_TARBALL_URLS)
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UCLIBC_TARBALL_SIGN) $(UCLIBC_TARBALL_URLS)
+	$(Q) cd $(DOWNLOADDIR) && grep SHA256 $(UCLIBC_TARBALL_SIGN) | sed -e 's/^SHA256: //' | sha256sum -c -
+	$(Q) touch $@
+
+SOURCE += $(UCLIBC_SOURCE_STAMP)
+uclibc-source: $(UCLIBC_SOURCE_STAMP)
+$(UCLIBC_SOURCE_STAMP): $(UCLIBC_DOWNLOAD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Extracting upstream uClibc ===="
+	$(Q) $(SCRIPTDIR)/extract-package $(UCLIBC_BUILD_DIR) $(DOWNLOADDIR)/$(UCLIBC_TARBALL)
 	$(Q) touch $@
 
 $(UCLIBC_DIR)/.config: $(UCLIBC_CONFIG) $(UCLIBC_SOURCE_STAMP)
@@ -90,6 +101,11 @@ uclibc-clean:
 	$(Q) rm -rf $(UCLIBC_BUILD_DIR)
 	$(Q) rm -f $(UCLIBC_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+CLEAN_DOWNLOAD += uclibc-download-clean
+uclibc-download-clean:
+	$(Q) rm -f $(UCLIBC_DOWNLOAD_STAMP) $(DOWNLOADDIR)/$(UCLIBC_TARBALL_SIGN) \
+		   $(DOWNLOADDIR)/$(UCLIBC_TARBALL)
 
 #-------------------------------------------------------------------------------
 #
