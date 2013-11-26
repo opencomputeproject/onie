@@ -83,39 +83,6 @@ help:
 	$(Q) for I in $(sort $(PHONY)); do echo "    $$I"; done
 	$(Q) echo ""
 
-
-#-------------------------------------------------------------------------------
-#
-#  Target Architecture and Toolchain Setup
-#
-
-ARCH        ?= powerpc
-TARGET      ?= $(ARCH)-linux
-CROSSPREFIX ?= $(TARGET)-
-CROSSBIN    ?= /opt/eldk-5.3/powerpc-softfloat/sysroots/i686-eldk-linux/usr/bin/powerpc-nf-linux
-
-# Determine the location of the compiler libraries and start files.
-# These are needed later for linking user space binaries with uClibc.
-CROSSCOMPILER_LIBS ?= $(shell dirname $$(dirname $$(PATH=$(CROSSBIN):$(PATH) $(CROSSPREFIX)gcc -print-libgcc-file-name)))
-ifeq ($(CROSSCOMPILER_LIBS),)
-  $(error Unable to determine compiler libraries for cross compiler $(CROSSPREFIX))
-endif
-
-ifeq ($(ARCH), powerpc)
-else
-  $(error Error: Unknown architecture '$(ARCH)')
-endif
-
-UCLIBC_FLAGS=--sysroot=$(UCLIBC_DEV_SYSROOT) -muclibc -L$(CROSSCOMPILER_LIBS) -L$(CROSSCOMPILER_LIBS)/../../../lib
-
-#-------------------------------------------------------------------------------
-#
-#  Target Platform -- Usually specified on command line
-#
-MACHINE  ?= fsl_p2020rdbpca
-MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
-PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
-
 #-------------------------------------------------------------------------------
 #
 #  local source trees
@@ -125,11 +92,53 @@ PATCHDIR     = $(realpath ../patches)
 UPSTREAMDIR  = $(realpath ../upstream)
 CONFDIR	     = $(realpath ../rootconf)
 SCRIPTDIR    = $(realpath ./scripts)
+
+#-------------------------------------------------------------------------------
+#
+#  project build tree
+#
+
+PROJECTDIR	=  $(abspath ..)
+BUILDDIR	=  $(abspath ../build)
+IMAGEDIR	=  $(BUILDDIR)/images
+TESTDIR		=  $(PROJECTDIR)/test
+DOWNLOADDIR	?= $(BUILDDIR)/download
+export DOWNLOADDIR
+
+# These directories are needed once for the entire project
+PROJECTDIRS	= $(BUILDDIR) $(IMAGEDIR) $(DOWNLOADDIR)
+PROJECT_STAMP	= $(BUILDDIR)/stamp-project
+project-stamp: $(PROJECT_STAMP)
+$(PROJECT_STAMP): 
+	$(Q) mkdir -pv $(PROJECTDIRS)
+	$(Q) touch $@
+
+#-------------------------------------------------------------------------------
+#
+#  Target machine -- Usually specified on command line
+#
+MACHINE  ?= fsl_p2020rdbpca
+MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
+
 MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
+#-------------------------------------------------------------------------------
+#
+#  machine build tree
+#
+
+MBUILDDIR	=  $(BUILDDIR)/$(MACHINE_PREFIX)
+STAMPDIR	=  $(MBUILDDIR)/stamp
+SYSROOTDIR	=  $(MBUILDDIR)/sysroot
+DEV_SYSROOT	=  $(MBUILDDIR)/dev-sysroot
+INITRAMFSDIR	=  $(MBUILDDIR)/initramfs
+
+# These directories are needed per machine
+TREEDIRS     += $(STAMPDIR) $(STAGE_SYSROOT) $(INITRAMFSDIR)
+
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter lsb-release-tag help clean-all %build-host doc% %html %pdf, $(MAKECMDGOALS)))
+  ifeq (,$(filter lsb-release-tag help distclean %build-host doc% %html %pdf, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINEDIR)')
       $(warning You must set the MACHINE= variable when invoking make.)
@@ -137,30 +146,16 @@ ifneq (,$(MAKECMDGOALS))
       $(error Unable to find valid machine configuration directory.)
     endif
     include $(MACHINEDIR)/machine.make
+    ARCHDIR ?= $(realpath ./arch)
+    include $(ARCHDIR)/$(ONIE_ARCH).make
   endif
 endif
 
-#-------------------------------------------------------------------------------
-#
-#  build tree
-#
-
-PROJECTDIR  =  $(abspath ..)
-BUILDDIR    =  $(abspath ../build)
-DOWNLOADDIR ?= $(BUILDDIR)/download
-MBUILDDIR   =  $(BUILDDIR)/$(MACHINE_PREFIX)
-STAMPDIR    =  $(MBUILDDIR)/stamp
-SYSROOTDIR  =  $(MBUILDDIR)/sysroot
-INITRAMFSDIR=  $(MBUILDDIR)/initramfs
-IMAGEDIR    =  $(BUILDDIR)/images
-TESTDIR     =  $(PROJECTDIR)/test
-
-TREEDIRS     += $(BUILDDIR) $(STAMPDIR) $(SYSROOTDIR) \
-		$(IMAGEDIR) $(INITRAMFSDIR) $(DOWNLOADDIR)
+PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
 
 TREE_STAMP  = $(STAMPDIR)/tree
 tree-stamp: $(TREE_STAMP)
-$(TREE_STAMP):
+$(TREE_STAMP): $(PROJECT_STAMP)
 	$(Q) mkdir -pv $(TREEDIRS)
 	$(Q) touch $@
 
@@ -220,10 +215,20 @@ endif
 #
 
 -include local.make
+
+# Default mirror for packages needed by ONIE
+ONIE_MIRROR	?= http://dev.cumulusnetworks.com/~curt/mirror/onie
+
+include make/crosstool-ng.make
+include make/kernel-download.make
+include make/uclibc-download.make
+include make/xtools.make
 include make/sysroot.make
 include make/kernel.make
-include make/u-boot.make
-include make/uclibc.make
+ifeq ($(UBOOT_ENABLE),yes)
+  include make/u-boot.make
+endif
+include make/compiler.make
 include make/busybox.make
 include make/zlib.make
 include make/lzo.make
@@ -239,7 +244,7 @@ include make/docs.make
 # top level targets
 #
 
-PHONY += all source demo clean clean-all download download-clean docs
+PHONY += all source demo clean userspace-clean download download-clean docs
 
 source: $(SOURCE)
 	$(Q) echo "=== Finished making $@ ==="
@@ -255,7 +260,10 @@ demo: $(KERNEL) $(DEMO_IMAGE)
 
 docs: html pdf
 
-clean: 	$(CLEAN)
+userspace-clean: $(USERSPACE_CLEAN)
+	$(Q) echo "=== Finished making $@ ==="
+
+clean: 	$(CLEAN) $(USERSPACE_CLEAN)
 	$(Q) sudo rm -rf $(BUILDDIR)/images/*$(MACHINE_PREFIX)*
 	$(Q) sudo rm -rf $(MBUILDDIR)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM) ==="
@@ -264,8 +272,13 @@ download-clean: $(DOWNLOAD_CLEAN)
 	$(Q) rm -rf $(DOWNLOADDIR)/*
 	$(Q) echo "=== Finished making $@ ==="
 
-clean-all: clean download-clean
-	$(Q) sudo rm -rf $(BUILDDIR)/*
+distclean: download-clean $(DIST_CLEAN)
+	$(Q) for d in $(BUILDDIR)/* ; do \
+		[ -e "$$d" ] || break ; \
+		echo -n "=== Cleaning $$(basename $$d) ... " ; \
+		sudo rm -rf $$d ; \
+		echo " done ===" ; done
+	$(Q) rm -f $(PROJECT_STAMP)
 	$(Q) echo "=== Finished making $@ ==="
 
 PHONY += lsb-release-tag
@@ -277,7 +290,8 @@ machine-prefix:
 	$(Q) echo $(MACHINE_PREFIX)
 
 # Install required build packages for a debian based build host
-DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf
+DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf \
+				  gperf
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update

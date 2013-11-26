@@ -8,7 +8,7 @@
 
 UBOOT_VERSION		= 2013.01.01
 UBOOT_TARBALL		= u-boot-$(UBOOT_VERSION).tar.bz2
-UBOOT_TARBALL_URLS	= ftp://ftp.denx.de/pub/u-boot
+UBOOT_TARBALL_URLS	+= $(ONIE_MIRROR) ftp://ftp.denx.de/pub/u-boot
 UBOOT_BUILD_DIR		= $(MBUILDDIR)/u-boot
 UBOOT_DIR		= $(UBOOT_BUILD_DIR)/u-boot-$(UBOOT_VERSION)
 
@@ -19,8 +19,7 @@ UBOOT_SOURCE_STAMP	= $(STAMPDIR)/u-boot-source
 UBOOT_PATCH_STAMP	= $(STAMPDIR)/u-boot-patch
 UBOOT_BUILD_STAMP	= $(STAMPDIR)/u-boot-build
 UBOOT_INSTALL_STAMP	= $(STAMPDIR)/u-boot-install
-UBOOT_STAMP		= $(UBOOT_DOWNLOAD_STAMP) \
-			  $(UBOOT_SOURCE_STAMP) \
+UBOOT_STAMP		= $(UBOOT_SOURCE_STAMP) \
 			  $(UBOOT_PATCH_STAMP) \
 			  $(UBOOT_BUILD_STAMP) \
 			  $(UBOOT_INSTALL_STAMP)
@@ -41,16 +40,16 @@ u-boot: $(UBOOT_STAMP)
 
 DOWNLOAD += $(UBOOT_DOWNLOAD_STAMP)
 u-boot-download: $(UBOOT_DOWNLOAD_STAMP)
-$(UBOOT_DOWNLOAD_STAMP): $(TREE_STAMP)
+$(UBOOT_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Getting upstream U-Boot ===="
-	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UBOOT_TARBALL) $(UBOOT_TARBALL_URLS)
-	$(Q) cd $(DOWNLOADDIR) && sha1sum -c $(UPSTREAMDIR)/$(UBOOT_TARBALL).sha1
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
+		$(UBOOT_TARBALL) $(UBOOT_TARBALL_URLS)
 	$(Q) touch $@
 
 SOURCE += $(UBOOT_PATCH_STAMP)
 u-boot-source: $(UBOOT_SOURCE_STAMP)
-$(UBOOT_SOURCE_STAMP): $(UBOOT_DOWNLOAD_STAMP)
+$(UBOOT_SOURCE_STAMP): $(TREE_STAMP) | $(UBOOT_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream U-Boot ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(UBOOT_BUILD_DIR) $(DOWNLOADDIR)/$(UBOOT_TARBALL)
@@ -93,7 +92,7 @@ UBOOT_NEW = $(shell test -d $(UBOOT_DIR) && test -f $(UBOOT_BUILD_STAMP) && \
 	       find -L $(UBOOT_DIR) -newer $(UBOOT_BUILD_STAMP) -print -quit)
 endif
 
-$(UBOOT_BUILD_DIR)/%/u-boot.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW)
+$(UBOOT_BUILD_DIR)/%/u-boot.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
 	$(Q) echo "==== Building u-boot ($*) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
 		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\

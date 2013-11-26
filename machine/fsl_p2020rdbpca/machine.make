@@ -1,5 +1,7 @@
 # Makefile fragment for FSL P2020RDB
 
+ONIE_ARCH ?= powerpc-softfloat
+
 VENDOR_REV ?= ONIE
 
 # Translate hardware revision to ONIE hardware revision

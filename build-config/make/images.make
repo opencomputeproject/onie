@@ -25,7 +25,6 @@ INSTALLER_DIR	= $(abspath ../installer)
 
 # List the packages to install
 PACKAGES_INSTALL_STAMPS = \
-	$(UCLIBC_INSTALL_STAMP) \
 	$(ZLIB_INSTALL_STAMP) \
 	$(BUSYBOX_INSTALL_STAMP) \
 	$(MTDUTILS_INSTALL_STAMP) \
@@ -43,9 +42,41 @@ SYSROOT_NEW_FILES = $(shell \
   RC_LOCAL_DEP = $(shell test -r $(RC_LOCAL) && echo $(RC_LOCAL))
 endif
 
-PHONY += sysroot-complete
+PHONY += sysroot-check sysroot-complete
+
+CHECKROOT	= $(MBUILDDIR)/check
+CHECKDIR	= $(CHECKROOT)/checkdir
+CHECKFILES	= $(CHECKROOT)/checkfiles.txt
+SYSFILES	= $(CHECKROOT)/sysfiles.txt
+
+SYSROOT_LIBS	= ld-uClibc.so.0 ld-uClibc-0.9.32.1.so \
+		  libm.so.0 libm-0.9.32.1.so \
+		  libgcc_s.so.1 libgcc_s.so \
+		  libc.so.0 libuClibc-0.9.32.1.so \
+		  libcrypt.so.0 libcrypt-0.9.32.1.so \
+		  libutil.so.0 libutil-0.9.32.1.so
+
+# sysroot-check verifies that we have all the shared libraries
+# required by the executables in our final sysroot.
+sysroot-check: $(SYSROOT_CHECK_STAMP)
+$(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
+	$(Q) for file in $(SYSROOT_LIBS) ; do \
+		sudo cp -av $(DEV_SYSROOT)/lib/$$file $(SYSROOTDIR)/lib/ ; \
+	done
+	$(Q) find $(SYSROOTDIR) -type f -print0 | xargs -0 file | grep ELF | awk -F':' '{ print $$1 }' | \
+		sudo xargs $(CROSSBIN)/$(CROSSPREFIX)strip
+	$(Q) mkdir -p $(CHECKROOT) && \
+	     sudo $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
+		-s $(SYSROOTDIR) -d $(CHECKDIR) && \
+		diff -qr $(CHECKDIR) $(SYSROOTDIR) > /dev/null 2>&1 || \
+			(echo "ERROR: Missing files in SYSROOTDIR:" && \
+			 diff -qr $(CHECKDIR) $(SYSROOTDIR) | grep -v 'special file'; \
+			 sudo rm -rf $(CHECKROOT) && false)
+	$(Q) sudo rm -rf $(CHECKROOT)
+	$(Q) touch $@
+
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
-$(SYSROOT_COMPLETE_STAMP): $(PACKAGES_INSTALL_STAMPS) $(RC_LOCAL_DEP)
+$(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) sudo rm -f $(SYSROOTDIR)/linuxrc
 	$(Q) echo "==== Installing the basic set of devices ===="
 	$(Q) sudo $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR)
@@ -119,7 +150,7 @@ image-complete: $(IMAGE_COMPLETE_STAMP)
 $(IMAGE_COMPLETE_STAMP): $(IMAGE_BIN_STAMP) $(IMAGE_UPDATER_STAMP)
 	$(Q) touch $@
 
-CLEAN += image-clean
+USERSPACE_CLEAN += image-clean
 image-clean:
 	$(Q) rm -f $(IMAGEDIR)/onie-$(MACHINE_PREFIX).bin $(IMAGEDIR)/onie-installer-$(MACHINE_PREFIX).sh \
 		$(IMAGEDIR)/$(MACHINE_PREFIX).itb $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)

@@ -8,7 +8,7 @@
 
 LZO_VERSION		= 2.06
 LZO_TARBALL		= lzo-$(LZO_VERSION).tar.gz
-LZO_TARBALL_URLS	= http://www.oberhumer.com/opensource/lzo/download
+LZO_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.oberhumer.com/opensource/lzo/download
 LZO_BUILD_DIR		= $(MBUILDDIR)/lzo
 LZO_DIR			= $(LZO_BUILD_DIR)/lzo-$(LZO_VERSION)
 
@@ -17,8 +17,7 @@ LZO_SOURCE_STAMP	= $(STAMPDIR)/lzo-source
 LZO_CONFIGURE_STAMP	= $(STAMPDIR)/lzo-configure
 LZO_BUILD_STAMP		= $(STAMPDIR)/lzo-build
 LZO_INSTALL_STAMP	= $(STAMPDIR)/lzo-install
-LZO_STAMP		= $(LZO_DOWNLOAD_STAMP) \
-			  $(LZO_SOURCE_STAMP) \
+LZO_STAMP		= $(LZO_SOURCE_STAMP) \
 			  $(LZO_CONFIGURE_STAMP) \
 			  $(LZO_BUILD_STAMP) \
 			  $(LZO_INSTALL_STAMP)
@@ -26,20 +25,22 @@ LZO_STAMP		= $(LZO_DOWNLOAD_STAMP) \
 PHONY += lzo lzo-download lzo-source lzo-configure \
 	lzo-build lzo-install lzo-clean lzo-download-clean
 
+LZO_LIBS = liblzo2.so.2 liblzo2.so.2.0.0
+
 lzo: $(LZO_STAMP)
 
 DOWNLOAD += $(LZO_DOWNLOAD_STAMP)
 lzo-download: $(LZO_DOWNLOAD_STAMP)
-$(LZO_DOWNLOAD_STAMP): $(TREE_STAMP)
+$(LZO_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Getting upstream lzo ===="
-	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(LZO_TARBALL) $(LZO_TARBALL_URLS)
-	$(Q) cd $(DOWNLOADDIR) && sha1sum -c $(UPSTREAMDIR)/$(LZO_TARBALL).sha1
+	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
+		$(LZO_TARBALL) $(LZO_TARBALL_URLS)
 	$(Q) touch $@
 
 SOURCE += $(LZO_SOURCE_STAMP)
 lzo-source: $(LZO_SOURCE_STAMP)
-$(LZO_SOURCE_STAMP): $(LZO_DOWNLOAD_STAMP)
+$(LZO_SOURCE_STAMP): $(TREE_STAMP) | $(LZO_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream lzo ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(LZO_BUILD_DIR) $(DOWNLOADDIR)/$(LZO_TARBALL)
@@ -51,15 +52,16 @@ LZO_NEW_FILES = $(shell test -d $(LZO_DIR) && test -f $(LZO_BUILD_STAMP) && \
 endif
 
 lzo-configure: $(LZO_CONFIGURE_STAMP)
-$(LZO_CONFIGURE_STAMP): $(LZO_SOURCE_STAMP) $(UCLIBC_INSTALL_STAMP)
+$(LZO_CONFIGURE_STAMP): $(LZO_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure lzo-$(LZO_VERSION) ===="
 	$(Q) cd $(LZO_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(LZO_DIR)/configure				\
-		--prefix=$(UCLIBC_DEV_SYSROOT)/usr		\
+		--enable-shared					\
+		--prefix=$(DEV_SYSROOT)/usr			\
 		--host=$(TARGET)				\
 		CC=$(CROSSPREFIX)gcc				\
-		CFLAGS="-Os -I$(KERNEL_HEADERS) $(UCLIBC_FLAGS)"
+		CFLAGS="$(ONIE_CFLAGS)"
 	$(Q) touch $@
 
 lzo-build: $(LZO_BUILD_STAMP)
@@ -72,12 +74,15 @@ $(LZO_BUILD_STAMP): $(LZO_CONFIGURE_STAMP) $(LZO_NEW_FILES)
 lzo-install: $(LZO_INSTALL_STAMP)
 $(LZO_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(LZO_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing lzo in $(UCLIBC_DEV_SYSROOT) ===="
+	$(Q) echo "==== Installing lzo in $(DEV_SYSROOT) ===="
 	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(LZO_DIR) install
+	$(Q) for file in $(LZO_LIBS) ; do \
+		sudo cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
+	done
 	$(Q) touch $@
 
-CLEAN += lzo-clean
+USERSPACE_CLEAN += lzo-clean
 lzo-clean:
 	$(Q) rm -rf $(LZO_BUILD_DIR)
 	$(Q) rm -f $(LZO_STAMP)
