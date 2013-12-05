@@ -214,7 +214,7 @@ ONIE requests the following options:
   42 | NTP Servers | ntp-servers | dotted quad | `2132 <http://www.ietf.org/rfc/rfc2132.txt>`_ | 10.0.1.2
   54 | DHCP Server Identifier | dhcp-server-identifier | dotted quad | `2132 <http://www.ietf.org/rfc/rfc2132.txt>`_ | 10.0.1.2
   66 | TFTP Server Name | tftp-server-name | string | `2132 <http://www.ietf.org/rfc/rfc2132.txt>`_ | behemoth01 (requires DNS)
-  67 | TFTP Bootfile Name | bootfile-name or filename | string | `2132 <http://www.ietf.org/rfc/rfc2132.txt>`_ | tftp/installer.sh
+  67 | TFTP Bootfile Name | bootfile-name [#bootfile_name]_ or filename | string | `2132 <http://www.ietf.org/rfc/rfc2132.txt>`_ | tftp/installer.sh
   72 | HTTP Server IP | www-server | dotted quad | `2132 <http://www.ietf.org/rfc/rfc2132.txt>`_ | 10.0.1.251
   114 | Default URL | default-url | string | `3679 <http://www.ietf.org/rfc/rfc3679.txt>`_ | \http://server/path/installer
   150 | TFTP Server IP Address | next-server | dotted quad | `5859 <http://www.ietf.org/rfc/rfc5859.txt>`_ | 10.50.1.200
@@ -439,3 +439,6 @@ See :ref:`nos_interface` for more about the NOS installer.
                    small abuse of the TFTP bootfile option, which has
                    a precedent in other loading schemes such as `iPXE
                    <http://ipxe.org/howto/dhcpd>`_.
+
+.. [#bootfile_name] ONIE currently ignores this parameter. `TFTP Waterfall`_
+                    works, as it uses default file names. 
