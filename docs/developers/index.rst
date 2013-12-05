@@ -49,49 +49,24 @@ For a different Linux distribution, look at the Makefile and the
 ``$(DEBIAN_BUILD_HOST_PACKAGES)`` variable.  Then install packages for
 your distribution that provide the same tools.
 
-Optional: Installing the ELDK version 5.3
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Cross-Compiler Toolchain
+------------------------
 
-Compiling ONIE requires a cross-compiling toolchain.
+The ONIE build process generates and uses a cross compiling toolchain
+based on `gcc <http://gcc.gnu.org/>`_ and `uClibc
+<http://www.uclibc.org/>`_.  The `crosstool-NG
+<http://crosstool-ng.org/>`_ project is used to manage the build the
+of the toolchain.
 
-Compiling ONIE has been qualified using the `ELDK 5.3
-<http://www.denx.de/wiki/ELDK-5>`_ ``powerpc-softfloat`` toolchain,
-installed into /opt/eldk-5.3 on the build host.
-
-If you want to use a different toolchain, skip this section.
-
-First, read the `ELDK download 
-<http://www.denx.de/wiki/view/ELDK-5/WebHome#Section_1.6.>`_ instructions all 
-the way through to understand the procedure.
-
-Next, download the following files, maintaining the directory structure::
-
-  $ mkdir eldk-download
-  $ cd eldk-download
-  $ mkdir -p targets/powerpc-softfloat
-  $ wget ftp://ftp.denx.de/pub/eldk/5.3/install.sh
-  $ chmod +x ./install.sh
-  $ cd targets/powerpc-softfloat
-  $ wget ftp://ftp.denx.de/pub/eldk/5.3/targets/powerpc-softfloat/target.conf
-  $ wget ftp://ftp.denx.de/pub/eldk/5.3/targets/powerpc-softfloat/eldk-eglibc-i686-powerpc-toolchain-gmae-5.3.sh
-
-Finally, install the toolchain into ``/opt/eldk-5.3``. This requires ``sudo``
-root privileges::
-
-  $ cd eldk-download
-  $ ./install.sh -s gmae -r - powerpc-softfloat
+A number of packages are downloaded from the Internet by the ONIE
+build process and cached for subsequent builds.  You can setup your
+own local mirror for these packages by setting up
+``onie/build-config/local.make``.  See the sample file,
+``onie/build-config/local.make.example``, and the ``ONIE_MIRROR`` and
+``CROSSTOOL_ONIE_MIRROR`` variables for examples.
 
 Cross-Compiling ONIE
 --------------------
-
-The primary Makefile, ``build-config/Makefile``, defaults to using the
-`ELDK 5.3 <http://www.denx.de/wiki/ELDK-5>`_ ``powerpc-softfloat``
-toolchain.  To use a different toolchain, change the following
-variables in ``build-config/Makefile``::
-
-  ARCH        ?= powerpc
-  TARGET      ?= $(ARCH)-linux
-  CROSSBIN    ?= /opt/eldk-5.3/powerpc-softfloat/sysroots/i686-eldk-linux/usr/bin/powerpc-nf-linux
 
 To compile ONIE, first change directories to ``build-config`` and then
 type ``make MACHINE=<platform> all``, specifying the target machine.
@@ -132,9 +107,12 @@ The ONIE source code layout is as follows::
   │       ├── doctrees
   │       └── html
   ├── build-config
+  │   ├── arch
   │   ├── conf
   │   ├── make
   │   └── scripts
+  ├── contrib
+  │   └── onie-server
   ├── demo
   ├── docs
   ├── installer
@@ -142,9 +120,11 @@ The ONIE source code layout is as follows::
   │   └──<platform> 
   │       ├── demo
   │       ├── kernel
+  │       ├── test
   │       └── u-boot
   ├── patches
   │   ├── busybox
+  │   ├── crosstool-NG
   │   ├── e2fsprogs
   │   ├── kernel
   │   └── u-boot
@@ -158,6 +138,10 @@ The ONIE source code layout is as follows::
   │       ├── root
   │       ├── sbin
   │       └── scripts
+  ├── test
+  │   ├── bin
+  │   ├── lib
+  │   └── tests
   └── upstream
 
 ====================  =======
@@ -165,9 +149,11 @@ Directory             Purpose
 ====================  =======
 build/docs            The final documentation is placed here.
 build-config          Builds are launched from this directory.  The main Makefile is here.
+build-config/arch     Contains configurations for CPU architectures.
 build-config/conf     Contains configurations common to all platforms.
 build-config/make     Contains makefile fragments included by the main Makefile.
 build-config/scripts  Scripts used by the build process.
+contrib/onie-server   A stand alone DHCP+HTTP python based server to simple installs.
 demo                  A sample ONIE-compliant installer and OS.  See README.demo for details.
 docs                  What you are reading now.
 installer             Files for building an ONIE update installer.
@@ -175,6 +161,9 @@ machine               Contains platform-specific machine definition files.  More
 patches               Patch sets applied to upstream projects, common to all platforms.
 rootconf              Files copied into the final sysroot image. The main ONIE discovery
                       and execution application lives here.  More details below.
+test/bin              Contains the ONIE testing harness (python unittest based).
+test/lib              Common python classes for writing ONIE tests.
+test/tests            ONIE tests.
 upstream              Local cache of upstream project tarballs.
 ====================  =======
 
@@ -701,6 +690,46 @@ After issuing this command you should verify the following happens:
 #. the machine installs the ONIE updater
 #. the machine reboots into the demo NOS
 
+ONIE Testing Infrastructure
+===========================
+
+A testing framework is located in the ``test`` sub-directory.  At the
+moment documentation is sparse.  Here's the layout::
+
+  test
+  ├── bin
+  │   └── test-onie.py
+  ├── lib
+  │   ├── connection.py
+  │   ├── dut.py
+  │   ├── power.py
+  │   ├── test_base.py
+  │   └── test_utils.py
+  ├── site.conf
+  └── tests
+      ├── __init__.py
+      └── test_u_boot.py
+
+=========================    =======
+File                         Purpose
+=========================    =======
+test/bin/test-onie.py        the main program entry point
+test/lib                     some base classes for DUTs, connections, power
+test/lib/connection.py       class for connections, serial console servers
+test/lib/dut.py              DUT base class
+test/lib/power.py            class for dealing with remote PDUs
+test/lib/test_base.py        base class for tests
+test/lib/test_utils.py       misc utility functions
+test/tests                   the "tests"
+test/tests/test_u_boot.py    tests involving u-boot
+test/site.conf               config file for various DUTs and options
+=========================    =======
+
+The Makefile in ``build-config/Makefile`` contains a ``test`` target
+that runs ``bin/test-onie.py`` with various parameters.
+
+See ``test/tests/test_u_boot.py`` for an example of writing a test.
+
 .. _release_cycle:
 
 ONIE Release Cycle
@@ -754,9 +783,9 @@ Examples:
 Current Status
 --------------
 
-The Merge Window for the next release (v2013.11) is :red:`closed`.
+The Merge Window for the next release (v2014.02) is :green:`open`.
 
-Release "v2013.11" is scheduled for November 13, 2013.
+Release "v2014.02" is scheduled for February 12, 2014.
 
 Future Releases
 ---------------

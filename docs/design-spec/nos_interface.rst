@@ -115,10 +115,10 @@ A few useful commands included with ONIE are:
   *discovered*.  See the :ref:`updating_onie` section for more about
   updating ONIE.
 
-- ``onie-stop`` -- Stop the discovery process.  This can be useful in
-  debugging cases where the discovery process is interfering with the
-  debug.  With the discovery process disabled the system is quiet and
-  you can poke around.
+- ``onie-discovery-stop`` -- Stop the discovery process.  This can be
+  useful in debugging cases where the discovery process is interfering
+  with the debug.  With the discovery process disabled the system is
+  quiet and you can poke around.
 
 To invoke the rescue operation, the running NOS sets the ``onie_boot_reason`` 
 U-Boot environment variable to the value ``rescue`` 
