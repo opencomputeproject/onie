@@ -170,7 +170,7 @@ Vendor-Identifying Vendor-Specific Information (VIVSO)
 The VIVSO option allows for custom option namespaces, where the
 namespace is identified by the `32-bit IANA Private Enterprise Number
 <http://www.iana.org/assignments/enterprise-numbers>`_.  ONIE
-currently uses the enterprise number ``40310`` to identify its custom
+currently uses the enterprise number ``42623`` to identify its custom
 namespace.
 
 The option codes within the ONIE namespace have a size of 1 byte. The
