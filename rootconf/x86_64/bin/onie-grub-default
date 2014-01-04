@@ -1,0 +1,88 @@
+#!/bin/sh
+
+this_script=$(basename $(realpath $0))
+script_dir=$(dirname $(realpath $0))
+
+args="d:hv"
+
+usage()
+{
+    echo "usage: $this_script -d <menu entry> [-hv]"
+    cat <<EOF
+Set the default GRUB boot entry to "menu entry".
+
+The "menu entry" argument is required.
+
+COMMAND LINE OPTIONS
+
+	-d
+		Set the default GRUB boot entry to "menu entry".  This
+		argument is required.
+
+	-h
+		Help.  Print this message.
+
+	-v
+		Be verbose.  Print what is happening.
+EOF
+}
+
+default=
+verbose=no
+cmd_verbose=
+
+while getopts "$args" a ; do
+    case $a in
+        h)
+            usage
+            exit 0
+            ;;
+        v)
+            verbose=yes
+            cmd_verbose=-v
+            ;;
+        d)
+            default="$OPTARG"
+            ;;
+        *)
+            echo "Unknown argument: $a"
+            usage
+            exit 1
+    esac
+done
+
+if [ -z "$default" ] ; then
+    echo "ERROR: Default GRUB menu entry not specified"
+    usage
+    exit 1
+fi
+
+[ -r "$script_dir/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. $script_dir/onie-blkdev-common
+
+[ "$verbose" = "yes" ] && echo "Mounting ONIE partitions ..."
+onie_mount_partitions || {
+    echo "ERROR: Unable to mount ONIE partitions"
+    exit 1
+}
+
+[ "$verbose" = "yes" ] && echo "Setting default GRUB menu entry to: $default"
+
+[ "$verbose" = "yes" ] && echo "Creating $onie_config_mnt/grub_default"
+(cat <<EOF
+## Begin grub_default
+
+set default='$default'
+
+## End grub_default
+EOF
+) > $onie_config_mnt/grub_default
+
+[ "$verbose" = "yes" ] && echo "Un-mounting ONIE partitions ..."
+onie_umount_partitions
+
+echo "Success: Run \`onie-grub-update' to make changes take effect."
+exit 0
