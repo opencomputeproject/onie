@@ -120,7 +120,7 @@ $(PROJECT_STAMP):
 #
 #  Target machine -- Usually specified on command line
 #
-MACHINE  ?= fsl_p2020rdbpca
+MACHINE  ?= kvm_x86_64
 MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
 
 MACHINEROOT ?= $(realpath ../machine)

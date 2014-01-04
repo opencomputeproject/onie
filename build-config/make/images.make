@@ -8,7 +8,7 @@
 
 ROOTCONFDIR		= $(CONFDIR)
 SYSROOT_CPIO		= $(MBUILDDIR)/sysroot.cpio
-SYSROOT_CPIO_XZ		= $(SYSROOT_CPIO).xz
+SYSROOT_CPIO_XZ		= $(IMAGEDIR)/$(MACHINE_PREFIX).initrd
 UIMAGE			= $(IMAGEDIR)/$(MACHINE_PREFIX).uImage
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
@@ -30,13 +30,22 @@ PACKAGES_INSTALL_STAMPS = \
 	$(MTDUTILS_INSTALL_STAMP) \
 	$(DROPBEAR_INSTALL_STAMP)
 
+ifeq ($(GPT_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(GPTFDISK_INSTALL_STAMP)
+endif
+
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
 			test -d $(ROOTCONFDIR)/default && \
 			test -f $(SYSROOT_INIT_STAMP) &&  \
 			find -L $(ROOTCONFDIR)/default -mindepth 1 -cnewer $(SYSROOT_COMPLETE_STAMP) \
 			  -print -quit 2>/dev/null)
-  ifneq ($(SYSROOT_NEW_FILES),)
+SYSROOT_NEW_FILES += $(shell \
+			test -d $(ROOTCONFDIR)/$(ONIE_ARCH) && \
+			test -f $(SYSROOT_INIT_STAMP) &&  \
+			find -L $(ROOTCONFDIR)/$(ONIE_ARCH) -mindepth 1 -cnewer $(SYSROOT_COMPLETE_STAMP) \
+			  -print -quit 2>/dev/null)
+  ifneq ($(strip $(SYSROOT_NEW_FILES)),)
     $(shell rm -f $(SYSROOT_COMPLETE_STAMP))
   endif
   RC_LOCAL_DEP = $(shell test -r $(RC_LOCAL) && echo $(RC_LOCAL))
@@ -87,7 +96,10 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) sudo rm -f $(SYSROOTDIR)/linuxrc
 	$(Q) echo "==== Installing the basic set of devices ===="
 	$(Q) sudo $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR)
-	$(Q) cd $(ROOTCONFDIR) && sudo ./install $(SYSROOTDIR)
+	$(Q) cd $(ROOTCONFDIR) && sudo ./install default $(SYSROOTDIR)
+	$(Q) cd $(ROOTCONFDIR) && if [ -d $(ONIE_ARCH) ] ; then \
+		sudo ./install $(ONIE_ARCH) $(SYSROOTDIR) ; \
+	     fi
 	$(Q) cd $(SYSROOTDIR) && sudo ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_ID=onie" >> $(LSB_RELEASE_FILE)
@@ -117,8 +129,7 @@ $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for bootstrap ===="
 	$(Q) ( cd $(SYSROOTDIR) && \
 		sudo find . | sudo cpio --create -H newc > $(SYSROOT_CPIO) )
-	$(Q) xz --compress --force --check=crc32 -8 $(SYSROOT_CPIO)
-	$(Q) cp $@ $(IMAGEDIR)/$(MACHINE_PREFIX).initrd
+	$(Q) xz --compress --force --check=crc32 --stdout -8 $(SYSROOT_CPIO) > $@
 
 .SECONDARY: $(IMAGEDIR)/$(MACHINE_PREFIX).itb
 
@@ -155,7 +166,6 @@ $(IMAGE_UPDATER_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).itb $(UBOOT_INSTALL_STAMP)
 
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
-# $(IMAGE_COMPLETE_STAMP): $(IMAGE_BIN_STAMP) $(IMAGE_UPDATER_STAMP)
 $(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE)
 	$(Q) touch $@
 

@@ -4,32 +4,32 @@
 # Create a U-Boot FIT image (itb)
 #
 
-MACHINE=$1
+MACHINE="$1"
 [ -n "$MACHINE" ] || {
     echo "Error: MACHINE was not specified"
     exit 1
 }
 
-MACHINE_PREFIX=$2
+MACHINE_PREFIX="$2"
 [ -n "$MACHINE_PREFIX" ] || {
     echo "Error: MACHINE_PREFIX was not specified"
     exit 1
 }
 
-SYSROOT=$3
+SYSROOT="$3"
 [ -r "$SYSROOT" ] || {
     echo "Error: SYSROOT file is not readable: $(realpath $SYSROOT)"
     exit 1
 }
 
-OUTFILE=$4
+OUTFILE="$4"
 [ -n "$OUTFILE" ] || {
     echo "Error: output .itb file not specified"
     exit 1
 }
 
 clean_tmp() {
-    rm $1
+    rm "$1"
 }
 
 its_file="$(mktemp)"
@@ -114,4 +114,4 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 EOF
 ) > $its_file
 
-mkimage -f $its_file $OUTFILE
+mkimage -f $its_file "$OUTFILE"

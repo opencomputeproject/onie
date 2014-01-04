@@ -66,39 +66,6 @@ mount_kernelfs()
     }
 }
 
-make_fw_env_config()
-{
-    # Look for the NOR flash node in the device tree with property
-    # "env_size".
-    env_file=$(find /proc/device-tree -name env_size)
-    [ -n "$env_file" ] || {
-        log_failure_msg "Unable to find u-boot environment device-tree node"
-        return 1
-    }
-    env_sz="0x$(hexdump $env_file | awk '{print $2 $3}')"
-    [ -n "$env_sz" ] || {
-        log_failure_msg "Unable to find u-boot environment size"
-        return 1
-    }
-    mtd=$(grep uboot-env /proc/mtd | sed -e 's/:.*$//')
-    [ -c "/dev/$mtd" ] || {
-        log_failure_msg "Unable to find u-boot environment mtd device: /dev/$mtd"
-        return 1
-    }
-    sect_sz="0x$(grep uboot-env /proc/mtd | awk '{print $3}')"
-    [ -n "$sect_sz" ] || {
-        log_failure_msg "Unable to find u-boot environment mtd erase size"
-        return 1
-    }
-
-    (cat <<EOF
-# MTD device name       Device offset   Env. size       Flash sector size
-/dev/$mtd               0x00000000      $env_sz         $sect_sz
-EOF
-) > /etc/fw_env.config
-    
-}
-
 log_begin_msg "Mounting kernel filesystems"
 mount_kernelfs
 log_end_msg
@@ -118,7 +85,5 @@ for x in $mtds ; do
         ln -sf $dev /dev/mtd-$name
     fi
 done
-
-make_fw_env_config
 
 mkdir -p $ONIE_RUN_DIR

@@ -27,6 +27,8 @@ KERNEL_STAMP		= $(KERNEL_SOURCE_STAMP) \
 
 KERNEL			= $(KERNEL_STAMP)
 
+KERNEL_VMLINUZ		= $(IMAGEDIR)/$(MACHINE_PREFIX).vmlinuz
+
 PHONY += kernel kernel-source kernel-patch kernel-config
 PHONY += kernel-build kernel-install kernel-clean
 
@@ -117,7 +119,7 @@ kernel-vmlinuz-install: $(KERNEL_VMLINUZ_INSTALL_STAMP)
 $(KERNEL_VMLINUZ_INSTALL_STAMP): $(KERNEL_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Copy vmlinuz to $(IMAGEDIR) ===="
-	$(Q) cp -vf $(LINUX_BOOTDIR)/bzImage $(IMAGEDIR)/$(MACHINE_PREFIX).vmlinuz
+	$(Q) cp -vf $(LINUX_BOOTDIR)/bzImage $(KERNEL_VMLINUZ)
 	$(Q) touch $@
 
 kernel-install: $(KERNEL_INSTALL_STAMP)
