@@ -45,6 +45,11 @@ SYSROOT_NEW_FILES += $(shell \
 			test -f $(SYSROOT_INIT_STAMP) &&  \
 			find -L $(ROOTCONFDIR)/$(ONIE_ARCH) -mindepth 1 -cnewer $(SYSROOT_COMPLETE_STAMP) \
 			  -print -quit 2>/dev/null)
+SYSROOT_NEW_FILES += $(shell \
+			test -d $(MACHINEDIR)/rootconf && \
+			test -f $(SYSROOT_INIT_STAMP) &&  \
+			find -L $(MACHINEDIR)/rootconf -mindepth 1 -cnewer $(SYSROOT_COMPLETE_STAMP) \
+			  -print -quit 2>/dev/null)
   ifneq ($(strip $(SYSROOT_NEW_FILES)),)
     $(shell rm -f $(SYSROOT_COMPLETE_STAMP))
   endif
@@ -101,6 +106,9 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) cd $(ROOTCONFDIR) && sudo ./install default $(SYSROOTDIR)
 	$(Q) cd $(ROOTCONFDIR) && if [ -d $(ONIE_ARCH) ] ; then \
 		sudo ./install $(ONIE_ARCH) $(SYSROOTDIR) ; \
+	     fi
+	$(Q) if [ -d $(MACHINEDIR)/rootconf ] ; then \
+		sudo $(ROOTCONFDIR)/install $(MACHINEDIR)/rootconf $(SYSROOTDIR) ; \
 	     fi
 	$(Q) cd $(SYSROOTDIR) && sudo ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
