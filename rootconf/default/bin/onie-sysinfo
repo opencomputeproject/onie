@@ -1,0 +1,153 @@
+#!/bin/sh
+
+. /lib/onie/functions
+
+get_serial_num()
+{
+    if [ -n "$serial_num" ] ; then
+        echo $serial_num
+    else
+        echo "Unknown"
+    fi
+}
+
+get_eth_addr()
+{
+    # Print Ethernet address from eth0 interface
+    ip link show eth0 | grep ether | awk '{print $2}'
+}
+
+[ -r /lib/onie/sysinfo-arch ]     && . /lib/onie/sysinfo-arch
+[ -r /lib/onie/sysinfo-platform ] && . /lib/onie/sysinfo-platform
+
+args="sevimrpcfa"
+
+usage()
+{
+    echo "$(basename $0) [-${args}]"
+    cat <<EOF
+Dump ONIE system information.
+
+COMMAND LINE OPTIONS
+
+	The default is to dump the ONIE platform (-p).
+
+	-h
+		Help.  Print this message.
+
+	-s
+		Serial Number
+
+	-e
+		Management Ethernet MAC address
+
+	-v
+		ONIE version string
+
+	-i
+		ONIE vendor ID.  Print the ONIE vendor's IANA enterprise number.
+
+	-m
+		ONIE machine string
+
+	-r
+		ONIE machine revision string
+
+	-p
+		ONIE platform string.  This is the default.
+
+	-c
+		ONIE CPU architecture
+
+	-f
+		ONIE configuration version
+
+	-a
+		Dump all information.
+EOF
+}
+
+sn=no
+mac=no
+version=no
+vendor_id=no
+machine=no
+machine_rev=no
+platform=no
+arch=no
+config_version=no
+all=no
+
+[ $# -eq 0 ] && platform=yes
+
+while getopts "$args" a ; do
+    case $a in
+        h)
+            usage
+            exit 0
+            ;;
+        s)
+            sn=yes
+            ;;
+        e)
+            mac=yes
+            ;;
+        v)
+            version=yes
+            ;;
+        i)
+            vendor_id=yes
+            ;;
+        m)
+            machine=yes
+            ;;
+        r)
+            machine_rev=yes
+            ;;
+        p)
+            platform=yes
+            ;;
+        c)
+            arch=yes
+            ;;
+        f)
+            config_version=yes
+            ;;
+        a)
+            all=yes
+            ;;
+        *)
+            echo "Unknown argument: $a"
+            usage
+            exit 1
+    esac
+done
+
+print_val()
+{
+    if [ -n "$1" ] ; then
+        echo -n "$1 "
+    else
+        echo -n "unknown "
+    fi
+}
+
+if [ "$sn" = "yes" ] || [ "$all" = "yes" ] ; then
+    val=$(get_serial_num)
+    print_val $val
+fi
+
+if [ "$mac" = "yes" ] || [ "$all" = "yes" ] ; then
+    val=$(get_eth_addr)
+    print_val $val
+fi
+
+for v in version vendor_id machine machine_rev platform arch config_version ; do
+    eval dump='$'$v
+    if [ "$dump" = "yes" ] || [ "$all" = "yes" ] ; then
+        eval val='$onie'_$v
+        print_val $val
+    fi
+done
+
+echo
