@@ -1,0 +1,88 @@
+#!/bin/sh
+
+this_script=$(basename $(realpath $0))
+script_dir=$(dirname $(realpath $0))
+
+args="n:hv"
+
+usage()
+{
+    echo "usage: $this_script -n <entry_name> [-hv]"
+    cat <<EOF
+Remove GRUB configuration entry.
+
+The -n argument is required.
+
+COMMAND LINE OPTIONS
+
+	-n
+		GRUB configuration fragment name.  This argument is required.
+
+                The specified fragment will be removed from the
+		configuration if it exists.
+
+	-h
+		Help.  Print this message.
+
+	-v
+		Be verbose.  Print what is happening.
+EOF
+}
+
+entry_name=
+verbose=no
+cmd_verbose=
+
+while getopts "$args" a ; do
+    case $a in
+        h)
+            usage
+            exit 0
+            ;;
+        v)
+            verbose=yes
+            ;;
+        n)
+            entry_name="$OPTARG"
+            ;;
+        *)
+            echo "Unknown argument: $a"
+            usage
+            exit 1
+    esac
+done
+
+[ -n "$entry_name" ] || {
+    echo "ERROR: configuration entry name not specified"
+    usage
+    exit 1
+}
+
+[ -r "$script_dir/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. $script_dir/onie-blkdev-common
+
+[ "$verbose" = "yes" ] && echo "Mounting ONIE partitions ..."
+onie_mount_partitions || {
+    echo "ERROR: Unable to mount ONIE partitions"
+    exit 1
+}
+
+[ -f "$onie_config_mnt/grub.d/$entry_name" ] || {
+    echo "ERROR: Entry $entry_name does not exist"
+    exit 1
+}
+
+[ "$verbose" = "yes" ] && echo "removing $onie_config_mnt/grub.d/$entry_name"
+/bin/rm -f "$onie_config_mnt/grub.d/$entry_name" || {
+    echo "ERROR: Problems removing $onie_config_mnt/grub.d/$entry_name"
+    exit 1
+}
+
+[ "$verbose" = "yes" ] && echo "Un-mounting ONIE partitions ..."
+onie_umount_partitions
+
+echo "Success: Run \`onie-grub-update' to make changes take effect."
+exit 0
