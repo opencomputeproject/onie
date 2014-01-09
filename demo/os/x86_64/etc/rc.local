@@ -1,0 +1,36 @@
+#!/bin/sh
+
+. /lib/onie/functions
+
+# Mount demo filesystem
+demo_mnt="/mnt/onie-demo"
+
+mkdir -p $demo_mnt || {
+    echo "Error: Unable to create demo file system mount point: $demo_mnt"
+    exit 1
+}
+
+# Find demo blkid label "ONIE-DEMO"
+
+label="ONIE-DEMO"
+num_parts="$(blkid | grep $label | wc -l)"
+if [ $num_parts -ne 1 ] ; then
+    echo "ERROR: Unable to determine $label disk label"
+    echo "Found $num_parts total partitions with that label"
+    exit 1
+fi
+demo_dev=$(blkid | grep $label | sed -e 's/://' | awk '{print $1}')
+if [ ! -b "$demo_dev" ] ; then
+    echo "ERROR: $label device does not look like a block device: $demo_dev"
+    exit 1
+fi
+
+mount -t ext2 -o defaults $demo_dev $demo_mnt || {
+    echo "Error: Unable to mount $demo_dev on $demo_mnt"
+    exit 1
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

@@ -1,7 +1,7 @@
 #!/bin/sh
 
-. /scripts/machine.conf
-. /scripts/platform.conf
+. /lib/demo/machine.conf
+. /lib/demo/platform.conf
 
 echo "Welcome to the $machine platform." > /etc/issue
 

@@ -47,29 +47,28 @@ DEMO_TRIM = \
    etc/init.d/discover.sh	\
    bin/discover			\
    bin/uninstaller		\
-   scripts/udhcp4_sd		
+   lib/onie/udhcp4_sd		
 
 PHONY += demo-sysroot-complete
 demo-sysroot-complete: $(DEMO_SYSROOT_COMPLETE_STAMP)
 $(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_COMPLETE_STAMP)
-	$(Q) sudo rm -rf $(DEMO_SYSROOTDIR)
+	$(Q) rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) echo "==== Copying existing ONIE sysroot ===="
-	$(Q) sudo cp -a $(SYSROOTDIR) $(DEMO_SYSROOTDIR)
-	$(Q) cd $(DEMO_SYSROOTDIR) && sudo rm $(DEMO_TRIM)
-	$(Q) sudo sed -i -e '/onie/d' $(DEMO_SYSROOTDIR)/etc/syslog.conf
-	$(Q) cd $(DEMO_OS_DIR) && sudo ./install default $(DEMO_SYSROOTDIR)
-	$(Q) cd $(DEMO_OS_DIR) && sudo ./install $(ONIE_ARCH) $(DEMO_SYSROOTDIR)
+	$(Q) cp -a $(SYSROOTDIR) $(DEMO_SYSROOTDIR)
+	$(Q) cd $(DEMO_SYSROOTDIR) && rm $(DEMO_TRIM)
+	$(Q) sed -i -e '/onie/d' $(DEMO_SYSROOTDIR)/etc/syslog.conf
+	$(Q) cd $(DEMO_OS_DIR) && ./install default $(DEMO_SYSROOTDIR)
+	$(Q) cd $(DEMO_OS_DIR) && ./install $(ONIE_ARCH) $(DEMO_SYSROOTDIR)
 	$(Q) t=`mktemp`; echo "machine=$(MACHINE)" > $$t ; \
 		echo "platform=$(PLATFORM)" >> $$t ; \
-		sudo cp $$t $(DEMO_SYSROOTDIR)/scripts/machine.conf && rm -f $$t
-	$(Q) sudo cp $(MACHINEDIR)/demo/platform.conf $(DEMO_SYSROOTDIR)/scripts
+		cp $$t $(DEMO_SYSROOTDIR)/lib/demo/machine.conf && rm -f $$t
+	$(Q) cp $(MACHINEDIR)/demo/platform.conf $(DEMO_SYSROOTDIR)/lib/demo
 	$(Q) touch $@
 
 # This step creates the cpio archive and compresses it
 $(DEMO_SYSROOT_CPIO_XZ) : $(DEMO_SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for demo OS ===="
-	$(Q) ( cd $(DEMO_SYSROOTDIR) && \
-		sudo find . | sudo cpio --create -H newc > $(DEMO_SYSROOT_CPIO) )
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(DEMO_SYSROOTDIR) $(DEMO_SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(DEMO_SYSROOT_CPIO) > $@
 
 $(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
@@ -105,7 +104,7 @@ $(DEMO_IMAGE_COMPLETE_STAMP): $(DEMO_BIN)
 
 CLEAN += demo-clean
 demo-clean:
-	$(Q) sudo rm -rf $(DEMO_SYSROOTDIR)
+	$(Q) rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) rm -f $(MBUILDDIR)/demo-* $(DEMO_IMAGE_PARTS) $(DEMO_BIN)
 	$(Q) rm -f $(DEMO_SYSROOT_COMPLETE_STAMP) $(DEMO_IMAGE_COMPLETE_STAMP)
 	$(Q) rm -f $(DEMO_IMAGE_PARTS_COMPLETE)
