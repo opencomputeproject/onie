@@ -1,17 +1,23 @@
 #!/bin/sh
 
-machine=$1
-platform=$2
-installer_dir=$3
-platform_conf=$4
-uimage_file=$5
+arch=$1
+machine=$2
+platform=$3
+installer_dir=$4
+platform_conf=$5
 output_file=$6
-shift 5
+
+shift 6
 
 if  [ ! -d $installer_dir ] || \
-    [ ! -r $installer_dir/install.sh ] || \
     [ ! -r $installer_dir/sharch_body.sh ] ; then
     echo "Error: Invalid installer script directory: $installer_dir"
+    exit 1
+fi
+
+if  [ ! -d $installer_dir/$arch ] || \
+    [ ! -r $installer_dir/$arch/install.sh ] ; then
+    echo "Error: Invalid arch installer directory: $installer_dir/$arch"
     exit 1
 fi
 
@@ -20,8 +26,8 @@ fi
     exit 1
 }
 
-[ -r "$uimage_file" ] || {
-    echo "Error: Unable to read installer uImage file: $uimage_file"
+[ $# -gt 0 ] || {
+    echo "Error: No OS image files found"
     exit 1
 }
 
@@ -34,7 +40,7 @@ clean_up()
 
 # make the data archive
 # contents:
-#   - uImage file
+#   - kernel and initramfs
 #   - install.sh
 #   - $platform_conf
 
@@ -43,9 +49,9 @@ tmp_dir=$(mktemp --directory)
 tmp_installdir="$tmp_dir/installer"
 mkdir $tmp_installdir || clean_up 1
 
-cp $installer_dir/install.sh $tmp_installdir || clean_up 1
+cp $installer_dir/$arch/install.sh $tmp_installdir || clean_up 1
 echo -n "."
-cp $uimage_file $tmp_installdir || clean_up 1
+cp $* $tmp_installdir || clean_up 1
 echo -n "."
 cp $platform_conf $tmp_installdir || clean_up 1
 echo "machine=$machine" > $tmp_installdir/machine.conf
