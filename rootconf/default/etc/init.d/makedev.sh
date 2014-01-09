@@ -13,6 +13,9 @@ mount -t proc -o nodev,noexec,nosuid proc /proc
 
 . /scripts/functions
 
+# Set console logging to show KERN_NOTICE and above
+echo "6 4 1 6" > /proc/sys/kernel/printk
+
 ##
 ## Mount kernel virtual file systems, ala debian init script of the
 ## same name.  We use different options in some cases, so move the
