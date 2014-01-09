@@ -1,9 +1,16 @@
-# dropbear config for PowerPC platforms
+# dropbear config for x86_64 platforms
+
+[ -r "/bin/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. /bin/onie-blkdev-common
 
 # The RSA and DSS keys are stored in the ONIE-CONFIG partition.  If
 # the keys are missing generate the keys and store the results for
 # future boots.
 get_keys_arch() {
+    onie_mount_partitions
     if [ -r "$onie_config_mnt/$RSA_KEY" ] ; then
         cp "$onie_config_mnt/$RSA_KEY" $RSA_KEY
     else
@@ -21,5 +28,6 @@ get_keys_arch() {
         mkdir -p "$(dirname $onie_config_mnt/$DSS_KEY)"
         cp $DSS_KEY "$onie_config_mnt/$DSS_KEY"
     fi
+    onie_umount_partitions
 }
 
