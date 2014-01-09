@@ -25,59 +25,15 @@ onie_umount_partitions()
     rm -rf $_tmp_mnt
 }
 
-# Find the ONIE partitions.
-#
-# When this function returns success the following variables are set:
-#
-#   onie_boot_dev   -- block device for the ONIE-BOOT partition
-#   onie_config_dev -- block device for the ONIE-CONFIG partition
-onie_find_partitions()
-{
-    for label in ONIE-BOOT ONIE-CONFIG ; do
-        # Sanity check
-        num_parts="$(blkid | grep $label | wc -l)"
-        if [ $num_parts -ne 1 ] ; then
-            echo "ERROR: Unable to determine $label disk label"
-            echo "Found $num_parts total partitions with that label"
-            return 1
-        fi
-        dev=$(blkid | grep $label | sed -e 's/://' | awk '{print $1}')
-        if [ ! -b "$dev" ] ; then
-            echo "ERROR: ONIE device does not look like a block device: $dev"
-            return 1
-        fi
-        case "$label" in
-            ONIE-BOOT)
-                onie_boot_dev="$dev"
-                ;;
-            ONIE-CONFIG)
-                onie_config_dev="$dev"
-                ;;
-            *)
-                echo "ERROR: Unknown label"
-                return 1
-                ;;
-        esac
-    done
-
-    return 0
-}
-
-# Find and mount the ONIE partitions.
+# Mount the ONIE partitions.
 #
 # When this function returns success the ONIE partitions are mounted
 # and the following variables are set:
 #
-#   onie_boot_dev   -- block device for the ONIE-BOOT partition
 #   onie_boot_mnt   -- filesystem mount point for the ONIE-BOOT partition (read-only)
-#   onie_config_dev -- block device for the ONIE-CONFIG partition
 #   onie_config_mnt -- filesystem mount point for the ONIE-CONFIG partition (read-write)
 onie_mount_partitions()
 {
-    onie_find_partitions || {
-        echo "ERROR: Unable to locate the ONIE partitions"
-        return 1
-    }
 
     _tmp_mnt=$(mktemp -d)
     onie_boot_mnt="$_tmp_mnt/boot"
@@ -86,14 +42,14 @@ onie_mount_partitions()
     trap onie_umount_partitions EXIT
 
     mkdir -p $onie_boot_mnt
-    mount -o defaults,ro -t $onie_boot_fs_type $onie_boot_dev $onie_boot_mnt || {
-        echo "ERROR: Problems mounting $onie_boot_dev on $onie_boot_mnt"
+    mount -o defaults,ro -t $onie_boot_fs_type LABEL=ONIE-BOOT $onie_boot_mnt || {
+        echo "ERROR: Problems mounting ONIE-BOOT on $onie_boot_mnt"
         exit 1
     }
 
     mkdir -p $onie_config_mnt
-    mount -o defaults,rw -t $onie_config_fs_type $onie_config_dev $onie_config_mnt || {
-        echo "ERROR: Problems mounting $onie_config_dev on $onie_config_mnt"
+    mount -o defaults,rw -t $onie_config_fs_type LABEL=ONIE-CONFIG $onie_config_mnt || {
+        echo "ERROR: Problems mounting ONIE-CONFIG on $onie_config_mnt"
         exit 1
     }
 
