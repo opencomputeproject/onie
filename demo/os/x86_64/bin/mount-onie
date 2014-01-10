@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# Mount ONIE initrd for access to the
+# ONIE tools.
+
+onie_umount_partitions()
+{
+    umount $onie_boot_mnt > /dev/null 2>&1
+    rm -rf $_tmp_mnt
+}
+
+_tmp_mnt=$(mktemp -d)
+onie_boot_mnt="$_tmp_mnt/boot"
+
+trap onie_umount_partitions EXIT
+
+mkdir -p $onie_boot_mnt
+mount -o defaults,ro LABEL=ONIE-BOOT $onie_boot_mnt || {
+    echo "ERROR: Problems mounting ONIE-BOOT on $onie_boot_mnt"
+    exit 1
+}
+
+# Run ONIE provided mount script
+$onie_boot_mnt/mount_onie.sh || {
+    echo "ERROR: Problems mounting ONIE tools partitions"
+    exit 1
+}
+
+onie_umount_partitions
