@@ -10,6 +10,10 @@ ROOTCONFDIR		= $(CONFDIR)
 SYSROOT_CPIO		= $(MBUILDDIR)/sysroot.cpio
 SYSROOT_CPIO_XZ		= $(IMAGEDIR)/$(MACHINE_PREFIX).initrd
 UIMAGE			= $(IMAGEDIR)/$(MACHINE_PREFIX).uImage
+ITB_IMAGE		= $(IMAGEDIR)/$(MACHINE_PREFIX).itb
+
+UPDATER_ITB		= $(MBUILDDIR)/onie.itb
+UPDATER_INITRD		= $(MBUILDDIR)/onie.initrd
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
 IMAGE_UPDATER_STAMP	= $(STAMPDIR)/image-updater
@@ -68,9 +72,13 @@ SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(UCLIBC_VERSION).so \
 		  libgcc_s.so.1 libgcc_s.so \
 		  libc.so.0 libuClibc-$(UCLIBC_VERSION).so \
 		  libcrypt.so.0 libcrypt-$(UCLIBC_VERSION).so \
-		  libdl.so.0 libdl-$(UCLIBC_VERSION).so \
-		  libpthread.so.0 libpthread-$(UCLIBC_VERSION).so \
 		  libutil.so.0 libutil-$(UCLIBC_VERSION).so
+
+ifeq ($(EXT3_4_ENABLE),yes)
+SYSROOT_LIBS	+= \
+		  libdl.so.0 libdl-$(UCLIBC_VERSION).so \
+		  libpthread.so.0 libpthread-$(UCLIBC_VERSION).so
+endif
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)
   SYSROOT_LIBS += libstdc++.so libstdc++.so.6 libstdc++.so.6.0.17
@@ -139,16 +147,22 @@ $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR) $(SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(SYSROOT_CPIO) > $@
 
-.SECONDARY: $(IMAGEDIR)/$(MACHINE_PREFIX).itb
+$(UPDATER_INITRD) : $(SYSROOT_CPIO_XZ)
+	ln -sf $< $@
+
+.SECONDARY: $(ITB_IMAGE)
 
 $(IMAGEDIR)/%.itb : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ)
 	$(Q) echo "==== Create $* u-boot multi-file .itb image ===="
 	$(Q) cd $(IMAGEDIR) && $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) \
 				$(MACHINE_PREFIX) $(SYSROOT_CPIO_XZ) $@
 
+$(UPDATER_ITB) : $(ITB_IMAGE)
+	ln -sf $< $@
+
 PHONY += image-bin
 image-bin: $(IMAGE_BIN_STAMP)
-$(IMAGE_BIN_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).itb $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-bin.sh
+$(IMAGE_BIN_STAMP): $(ITB_IMAGE) $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-bin.sh
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE binary image ===="
 	$(Q) $(SCRIPTDIR)/onie-mk-bin.sh $(MACHINE_PREFIX) $(IMAGEDIR) \
 		$(MACHINEDIR) $(UBOOT_DIR) $(IMAGEDIR)/onie-$(MACHINE_PREFIX).bin
@@ -166,10 +180,11 @@ endif
 
 PHONY += image-updater
 image-updater: $(IMAGE_UPDATER_STAMP)
-$(IMAGE_UPDATER_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).itb $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-installer.sh
+$(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(SCRIPTDIR)/onie-mk-installer.sh
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE updater ===="
-	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh $(MACHINE_PREFIX) $(MACHINE_CONF) \
-		$(INSTALLER_DIR) $(IMAGEDIR) $(MACHINEDIR) $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
+	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh $(ONIE_ARCH) $(MACHINEDIR) \
+		$(MACHINE_CONF) $(INSTALLER_DIR) \
+		$(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX) $(UPDATER_IMAGE_PARTS)
 	$(Q) touch $@
 
 PHONY += image-complete

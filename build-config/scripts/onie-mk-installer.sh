@@ -5,50 +5,34 @@
 # to a running ONIE system during "update" mode.
 #
 
-machine=$1
-machine_conf=$2
-installer_dir=$3
-image_dir=$4
-conf_dir=$5
-output_file=$6
+arch=$1
+machine_dir=$2
+machine_conf=$3
+installer_dir=$4
+output_file=$5
+
+shift 5
+
+[ -d "$machine_dir" ] || {
+    echo "ERROR: machine directory '$machine_dir' does not exist."
+    exit 1
+}
+if [ "$arch" = "x86_64" ] ; then
+    # installer_conf is required for x86_64
+    installer_conf="${machine_dir}/installer.conf"
+    [ -r "$installer_conf" ] || {
+        echo "ERROR: unable to read machine installer file: $installer_conf"
+        exit 1
+    }
+fi
 
 [ -r "$machine_conf" ] || {
     echo "ERROR: unable to read machine configuration file: $machine_conf"
     exit 1
 }
 
-[ -d "$conf_dir" ] || {
-    echo "ERROR: machine configuration directory '$conf_dir' does not exist."
-    exit 1
-}
-
-conf_file="$conf_dir/onie-rom.conf"
-[ -r "$conf_file" ] || {
-    echo "ERROR: unable to read machine ROM configuration '$conf_file'."
-    exit 1
-}
-
-. $conf_file
-
 [ -d "$installer_dir" ] || {
-    echo "ERROR: installer directory '$installer_dir' does not exist."
-    exit 1
-}
-
-[ -d "$image_dir" ] || {
-    echo "ERROR: image directory '$image_dir' does not exist."
-    exit 1
-}
-
-onie_uimage="$image_dir/${machine}.itb"
-[ -r "$onie_uimage" ] || {
-    echo "ERROR: onie-uImage '$onie_uimage' does not exist."
-    exit 1
-}
-
-uboot_bin="$image_dir/${machine}.u-boot"
-[ -r "$uboot_bin" ] || {
-    echo "ERROR: u-boot binary '$uboot_bin' does not exist."
+    echo "ERROR: installer directory does not exist: $installer_dir"
     exit 1
 }
 
@@ -58,56 +42,75 @@ touch $output_file || {
 }
 rm -f $output_file
 
+[ $# -gt 0 ] || {
+    echo "Error: No ONIE update image files found"
+    exit 1
+}
+
 tmp_dir=
 clean_up()
 {
     rm -rf $tmp_dir
-    exit $1
 }
+
+trap clean_up EXIT
 
 # make the data archive
 # contents:
-#   - uImage file
-#   - u-boot file
+#   - OS image files
 #   - $machine_conf
 
 echo -n "Building self-extracting ONIE installer image ."
 tmp_dir=$(mktemp --directory)
 tmp_installdir="$tmp_dir/installer"
-mkdir $tmp_installdir || clean_up 1
+mkdir $tmp_installdir || exit 1
 tmp_tardir="$tmp_dir/tar"
-mkdir $tmp_tardir || clean_up 1
+mkdir $tmp_tardir || exit 1
 
-cp $onie_uimage $tmp_tardir/ONIE.bin || clean_up 1
-echo -n "."
-cp $uboot_bin $tmp_tardir/u-boot.bin || clean_up 1
-echo -n "."
+for f in $* ; do
+    cp -rL "$f" $tmp_tardir || exit 1
+    echo -n "."
+done
 
 # Bundle data into a tar file
-tar -C $tmp_tardir -cJf $tmp_installdir/onie-update.tar.xz $(ls $tmp_tardir) || clean_up 1
+tar -C $tmp_tardir -cJf $tmp_installdir/onie-update.tar.xz $(ls $tmp_tardir) || exit 1
 echo -n "."
 
-cp $installer_dir/install.sh $tmp_installdir || clean_up 1
+cp $installer_dir/install.sh $tmp_installdir || exit 1
 echo -n "."
-sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine.conf || clean_up 1
+cp -r $installer_dir/$arch/* $tmp_installdir
+echo -n "."
+
+# Add optional installer configuration file
+if [ "$arch" = "x86_64" ] ; then
+    cp "$installer_conf" $tmp_installdir || exit 1
+    echo -n "."
+    GRUB_MACHINE_CONF="$tmp_installdir/grub/grub-machine.cfg"
+    echo "## Begin grub-machine.cfg" > $GRUB_MACHINE_CONF
+    # make sure each var is 'exported' for GRUB shell
+    sed -e 's/\(.*\)=\(.*$\)/\1=\2\nexport \1/' $machine_conf >> $GRUB_MACHINE_CONF
+    echo "## End grub-machine.cfg" >> $GRUB_MACHINE_CONF
+    echo -n "."
+fi
+sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine.conf || exit 1
 echo -n "."
 
 sharch="$tmp_dir/sharch.tar"
 tar -C $tmp_dir -cf $sharch installer || {
     echo "Error: Problems creating $sharch archive"
-    clean_up 1
+    exit 1
 }
 echo -n "."
 
 [ -f "$sharch" ] || {
     echo "Error: $sharch not found"
-    clean_up 1
+    exit 1
 }
 sha1=$(cat $sharch | sha1sum | awk '{print $1}')
 echo -n "."
 cp $installer_dir/sharch_body.sh $output_file || {
     echo "Error: Problems copying sharch_body.sh"
-    clean_up 1
+    exit 1
 }
 
 # Replace variables in the sharch template
@@ -119,5 +122,3 @@ echo " Done."
 
 echo "Success:  ONIE install image is ready in ${output_file}:"
 ls -l ${output_file}
-
-clean_up 0

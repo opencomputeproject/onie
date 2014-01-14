@@ -46,10 +46,23 @@ echo -n "Preparing image archive ..."
 sed -e '1,/^exit_marker$/d' $archive_path | tar xf - || clean_up 1
 echo " OK."
 cd $cur_wd
-if [ -n "$extract" ] ; then
+
+extract=no
+args=":x"
+while getopts "$args" a ; do
+    case $a in
+        x)
+            extract=yes
+            ;;
+        *)
+        ;;
+    esac
+done
+
+if [ "$extract" = "yes" ] ; then
     # stop here
     echo "Image extracted to: $tmp_dir"
-    if [ "$(id -u)" = "0" ] && [ ! -d "$extract" ] ; then
+    if [ "$(id -u)" = "0" ] ; then
         echo "To un-mount the tmpfs when finished type:  umount $tmp_dir"
     fi
     exit 0
@@ -61,7 +74,7 @@ fi
     clean_up 1
 }
 
-$tmp_dir/installer/install.sh
+$tmp_dir/installer/install.sh "$@"
 rc="$?"
 
 clean_up $rc

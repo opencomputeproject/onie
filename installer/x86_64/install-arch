@@ -1,0 +1,332 @@
+# x86_64 specific ONIE installer functions
+
+[ -r ./installer.conf ]  || {
+    echo "ERROR: ONIE machine installer.conf file is missing."
+    exit 1
+}
+. ./installer.conf
+
+args_arch="d:"
+
+usage_arch=$(cat <<EOF
+	-d
+		Target ONIE install device.  Must be a valid block device.
+EOF
+)
+
+# Parse architecture specific installer args
+parse_arg_arch()
+{
+    a="$1"
+    optarg="$2"
+
+    case $a in
+        d)
+            onie_dev="$optarg"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+# ONIE Partition parameters.  'start' and 'size' are in units of 512
+# byte sectors.
+
+# sectors_per_mb = (1024 * 1024) / 512 = 2048
+sectors_per_mb=2048
+
+# GRUB Boot Partition
+grub_boot_part=1
+grub_boot_start=2048
+# 2MB
+grub_boot_size=$(( 2 * $sectors_per_mb ))
+
+# ONIE-BOOT Paritition 
+onie_boot_part=$(( $grub_boot_part + 1 ))
+onie_boot_start=$(( $grub_boot_start + $grub_boot_size ))
+# 128MB
+onie_boot_size=$(( 128 * $sectors_per_mb ))
+
+# ONIE-CONFIG Paritition
+onie_config_part=$(( $onie_boot_part + 1 ))
+onie_config_start=$(( $onie_boot_start + $onie_boot_size ))
+# 4MB
+onie_config_size=$(( 4 * $sectors_per_mb ))
+
+# Verify the format of the ONIE partitions
+#   For each ONIE partition (GRUB-BOOT, ONIE-BOOT, ONIE-CONFIG) verify:
+#     1. expected partition number
+#     2. expected partition GUID
+#     3. expected starting sector address
+#     4. expected partition size
+
+verify_onie_partitions()
+{
+    for p in grub_boot onie_boot onie_config ; do
+        for v in part label start size gpt_uuid ; do
+            eval $v='$'${p}_$v
+        done
+
+        # Check UUID
+        sgdisk -i $part $onie_dev | grep -q $gpt_uuid || {
+            echo "$label: Unable to find GUID $gpt_uuid on $onie_dev"
+            return 1
+        }
+
+        # Check starting sector
+        part_start=$(sgdisk -i $part $onie_dev | grep 'First sector:' | awk '{ print $3 }')
+        [ $part_start -eq $start ] || {
+            echo "$label: Start sector mismatch.  Found $part_start, expected $start"
+            return 1
+        }
+
+        # Check partition size
+        part_size=$(sgdisk -i $part $onie_dev | grep 'Partition size:' | awk '{ print $3 }')
+        [ $part_size -eq $size ] || {
+            echo "$label: Partition size mismatch.  Found $part_size, expected $size"
+            return 1
+        }
+    done
+
+    return 0
+}
+
+# Creates the GPT disk label on the device.  Wipes out all partitions.
+create_gpt_disk_label()
+{
+    # Create GPT disk label
+    [ "$verbose" = "yes" ] && echo "Creating GPT disk label on: $onie_dev"
+    sgdisk --clear "$onie_dev" || {
+        echo "ERROR: Problems creating GPT disk label on: $onie_dev"
+        exit 1
+    }
+}
+
+create_part()
+{
+    p=$1
+    for v in part label start size gpt_uuid ; do
+        eval $v='$'${p}_$v
+    done
+
+    [ "$verbose" = "yes" ] && echo "Creating $label on: ${onie_dev}$part"
+
+    sgdisk --new=$part:$start:+$size \
+        --typecode=$part:$gpt_uuid \
+        --change-name=$part:"$label" "$onie_dev" || {
+        echo "ERROR: Problems creating $label partition $part on: $onie_dev"
+        exit 1
+    }
+
+}
+
+install_grub()
+{
+    grub-install --boot-directory="$onie_boot_mnt" --recheck "$onie_dev" || {
+        echo "ERROR: grub-install failed on: $onie_dev"
+        exit 1
+    }
+    cp -r grub/* $onie_boot_mnt/grub || {
+        echo "ERROR: copying grub files to destatition: $onie_boot_mnt/grub"
+        exit 1
+    }
+    cat $onie_boot_mnt/grub/grub-machine.cfg	\
+        $onie_boot_mnt/grub/grub-common.cfg	\
+        $onie_boot_mnt/grub/grub-onie.cfg   > $onie_boot_mnt/grub/grub-default.cfg
+
+}
+
+# Default ONIE-CONFIG migration functions.
+#
+# migrate_config_pre  -- called before destroying existing ONIE-CONFIG
+# migrate_config_post -- called after creating new ONIE-CONFIG
+#
+# The default behaviour is to simply preserve the existing
+# information, i.e. migrate_config_pre_default makes a copy in /tmp
+# and migrate_config_post_default copies from /tmp into the new
+# partition.
+
+migrate_config_pre_default()
+{
+
+    migrate_config_dir=$(mktemp -d)
+    cp -a $onie_config_mnt/. $migrate_config_dir
+    
+}
+
+migrate_config_post_default()
+{
+    
+    cp -a $migrate_config_dir/. $onie_config_mnt
+    rm -rf $migrate_config_dir
+}
+
+clean_up_mnt()
+{
+    umount $onie_boot_mnt > /dev/null 2>&1
+    umount $onie_config_mnt > /dev/null 2>&1
+    rm -rf $_tmp_mnt
+}
+
+install_onie()
+{
+
+    [ -r ./onie-blkdev-common ] || {
+        echo "ERROR: Unable to find onie-blkdev-common"
+        exit 1
+    }
+    . ./onie-blkdev-common
+
+    # Find install device.
+    # - Default value from  burned in platform.conf
+    # - Overridden with -d CLI arg
+    [ -b "$onie_dev" ] || {
+        echo "ERROR: Invalid ONIE install device: $onie_dev"
+        exit 1
+    }
+
+    echo "Installing ONIE on: $onie_dev"
+        
+    # Check that no partitions on this device are currently mounted
+    if grep -q "$onie_dev" /proc/mounts ; then
+        echo "ERROR: Partitions on target device ($onie_dev) are currently mounted."
+        grep "$onie_dev" /proc/mounts
+        exit 1
+    fi
+
+    format_disk=no
+    verify_onie_partitions || {
+        # Initialize block device
+        format_disk=yes
+        create_gpt_disk_label
+        for p in grub_boot onie_boot onie_config ; do
+            create_part $p
+        done
+    }
+
+    _tmp_mnt=$(mktemp -d)
+    onie_boot_mnt="$_tmp_mnt/boot"
+    onie_config_mnt="$_tmp_mnt/config"
+    mkdir -p $onie_boot_mnt
+    mkdir -p $onie_config_mnt
+
+    trap clean_up_mnt EXIT
+
+    # Unconditionally create file system on ONIE-BOOT partition
+    onie_boot_dev="${onie_dev}$onie_boot_part"
+    [ "$verbose" = "yes" ] && echo "Creating $onie_boot_fs_type file system on: $onie_boot_dev"
+    mkfs.$onie_boot_fs_type -q -L $onie_boot_label $onie_boot_dev || {
+        echo "Error: Unable to create $onie_boot_fs_type file system on: $onie_boot_dev"
+        exit 1
+    }
+
+    mount -o defaults,rw -t $onie_boot_fs_type $onie_boot_dev $onie_boot_mnt || {
+        echo "Error: Unable to mount $onie_boot_label ($onie_boot_dev) on ${onie_boot_mnt}"
+        exit 1
+    }
+
+    # Install GRUB on $onie_boot_dev
+    install_grub || {
+        echo "Error: Unable to mount $onie_boot_label ($onie_boot_dev) on ${onie_boot_mnt}"
+        exit 1
+    }
+
+    cp onie.vmlinuz onie.initrd mount_onie.sh $onie_boot_mnt || {
+        echo "Error: Unable to copy ONIE kernel to $onie_boot_mnt"
+        exit 1
+    }
+
+    # For the ONIE-CONFIG read/write partition we have to be a bit
+    # careful.  If we we can mount ONIE-CONFIG partition using the
+    # file system label.
+    #
+    # 1. Can we mount the file system label? Then migrate existing
+    #    configuration.
+    #
+    # 2. Unable to mount by file system label?  Then recreate file
+    #    system.
+
+    onie_config_dev="${onie_dev}$onie_config_part"
+
+    bad_config=no
+    if [ "$format_disk" = "no" ] ; then
+        mount -o defaults,rw -t $onie_config_fs_type $onie_config_dev $onie_config_mnt > /dev/null 2>&1 || {
+            bad_config=yes
+        }
+    fi
+
+    if [ "$format_disk" = "yes" ] || [ "$bad_config" = "yes" ] ; then
+        # ONIE-CONFIG is unmountable.  Format it and install skeletal
+        # config files.
+
+        # Create file system on ONIE-CONFIG partition
+        [ "$verbose" = "yes" ] && echo "Creating $onie_config_fs_type file system on: $onie_config_dev"
+        mkfs.$onie_config_fs_type -q -L $onie_config_label $onie_config_dev || {
+            echo "Error: Unable to create $onie_config_fs_type file system on: $onie_config_dev"
+            exit 1
+        }
+
+        mount -o defaults,rw -t $onie_config_fs_type $onie_config_dev $onie_config_mnt || {
+            echo "Error: Unable to mount $onie_config_label ($onie_config_dev) on ${onie_config_mnt}"
+            exit 1
+        }
+
+        # Install skeletal grub.d on $onie_config_dev
+        cp -a grub/grub.d.skel $onie_config_mnt/grub.d
+
+    else
+        # Migrate existing config - check running onie_config_version
+        # vs. the update image_config_version from the installer.
+
+        [ "$verbose" = "yes" ] && {
+            echo "Migrating ONIE configuration from version $onie_config_version to $image_config_version"
+        }
+        tmp_migrate_config_pre="migrate_config_pre_${onie_config_version}_to_${image_config_version}"
+        tmp_migrate_config_post="migrate_config_post_${onie_config_version}_to_${image_config_version}"
+
+        if type "$tmp_migrate_config_pre" > /dev/null && \
+            type "$tmp_migrate_config_post" > /dev/null ; then
+            migrate_config_pre="$tmp_migrate_config_pre"
+            migrate_config_post="$tmp_migrate_config_post"
+        else
+            migrate_config_pre="migrate_config_pre_default"
+            migrate_config_post="migrate_config_post_default"
+        fi
+
+        [ "$verbose" = "yes" ] && echo "Running migrate_config_pre: $migrate_config_pre"
+        eval $migrate_config_pre || {
+            echo "Error: Problems running migrate_config_pre: $migrate_config_pre"
+            exit 1
+        }
+
+        umount $onie_config_mnt
+
+        # Create file system on ONIE-CONFIG partition
+        [ "$verbose" = "yes" ] && echo "Creating $onie_config_fs_type file system on: $onie_config_dev"
+        mkfs.$onie_config_fs_type -q -L $onie_config_label $onie_config_dev || {
+            echo "Error: Unable to create $onie_config_fs_type file system on: $onie_config_dev"
+            exit 1
+        }
+
+        mount -o defaults,rw -t $onie_config_fs_type $onie_config_dev $onie_config_mnt || {
+            echo "Error: Unable to mount ONIE-CONFIG ($onie_config_dev) on ${onie_config_mnt}"
+            exit 1
+        }
+
+        [ "$verbose" = "yes" ] && echo "Running migrate_config_post: $migrate_config_post"
+        eval $migrate_config_post || {
+            echo "Error: Problems running migrate_config_post: $migrate_config_post"
+            exit 1
+        }
+
+    fi
+
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

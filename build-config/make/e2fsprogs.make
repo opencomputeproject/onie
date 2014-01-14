@@ -30,13 +30,18 @@ PHONY += e2fsprogs e2fsprogs-download e2fsprogs-source e2fsprogs-patch \
 	 e2fsprogs-configure e2fsprogs-build e2fsprogs-install e2fsprogs-clean \
 	 e2fsprogs-download-clean
 
-E2FSPROGS_LIB_DIRS	= et e2p blkid ext2fs uuid blkid
+E2FSPROGS_LIB_DIRS	= uuid
 E2FSPROGS_LIBS	= \
+	libuuid.so    libuuid.so.1    libuuid.so.1.2
+
+ifeq ($(EXT3_4_ENABLE),yes)
+E2FSPROGS_LIB_DIRS	+= et e2p blkid ext2fs blkid
+E2FSPROGS_LIBS += \
 	libcom_err.so libcom_err.so.2 libcom_err.so.2.1 \
 	libe2p.so     libe2p.so.2     libe2p.so.2.3     \
 	libblkid.so   libblkid.so.1   libblkid.so.1.0   \
-	libext2fs.so  libext2fs.so.2  libext2fs.so.2.4  \
-	libuuid.so    libuuid.so.1    libuuid.so.1.2
+	libext2fs.so  libext2fs.so.2  libext2fs.so.2.4
+endif
 
 e2fsprogs: $(E2FSPROGS_STAMP)
 

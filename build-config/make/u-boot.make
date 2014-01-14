@@ -30,6 +30,7 @@ UBOOT_NAME		= $(shell echo $(MACHINE_PREFIX) | tr [:lower:] [:upper:])
 UBOOT_MACHINE		?= $(UBOOT_NAME)
 UBOOT_BIN		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.bin
 UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE_PREFIX).u-boot
+UPDATER_UBOOT		= $(MBUILDDIR)/u-boot.bin
 
 PHONY += u-boot u-boot-download u-boot-source u-boot-patch u-boot-build \
 	 u-boot-install u-boot-clean u-boot-download-clean
@@ -111,6 +112,7 @@ $(UBOOT_INSTALL_STAMP): $(UBOOT_BUILD_STAMP)
 	$(Q) echo "==== Installing u-boot ($(MACHINE_PREFIX)) ===="
 	$(Q) cp -v $(UBOOT_BIN) $(UBOOT_INSTALL_IMAGE)
 	$(Q) chmod a-x $(UBOOT_INSTALL_IMAGE)
+	$(Q) ln -sf $(UBOOT_INSTALL_IMAGE) $(UPDATER_UBOOT)
 	$(Q) touch $@
 
 CLEAN += u-boot-clean
