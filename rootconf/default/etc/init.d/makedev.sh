@@ -11,7 +11,7 @@ mount -t proc -o nodev,noexec,nosuid proc /proc
 [ -e /dev/console ] || mknod -m 0600 /dev/console c 5 1
 [ -e /dev/null ] || mknod -m 0666 /dev/null c 1 3
 
-. /scripts/functions
+. /lib/onie/functions
 
 # Set console logging to show KERN_NOTICE and above
 echo "6 4 1 6" > /proc/sys/kernel/printk

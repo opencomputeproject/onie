@@ -2,7 +2,7 @@
 
 cmd="$1"
 
-. /scripts/functions
+. /lib/onie/functions
 
 name=dropbear
 daemon=/usr/sbin/$name

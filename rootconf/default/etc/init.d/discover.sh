@@ -4,7 +4,7 @@ cmd="$1"
 
 PATH=/usr/bin:/usr/sbin:/bin:/sbin
 
-. /scripts/functions
+. /lib/onie/functions
 
 import_cmdline
 

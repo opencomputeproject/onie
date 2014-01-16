@@ -6,7 +6,7 @@ daemon="syslogd"
 
 ARGS="-b 3 -D -L"
 
-. /scripts/functions
+. /lib/onie/functions
 
 ARG_FILE="${ONIE_RUN_DIR}/syslogd.args"
 [ -r "${ONIE_RUN_DIR}/dhcp.logsrv" ] && LOGSRVS=$(cat "${ONIE_RUN_DIR}/dhcp.logsrv")

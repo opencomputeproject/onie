@@ -2,7 +2,7 @@
 
 PATH=/usr/bin:/usr/sbin:/bin:/sbin
 
-. /scripts/functions
+. /lib/onie/functions
 
 import_cmdline
 
@@ -50,7 +50,7 @@ config_ethmgmt_dhcp4()
     done
 
     log_info_msg "Trying DHCPv4 on interface: $intf"
-    tmp=$(udhcpc $udhcp_args $udhcp_request_opts $udhcp_user_class -i $intf -s /scripts/udhcp4_net)
+    tmp=$(udhcpc $udhcp_args $udhcp_request_opts $udhcp_user_class -i $intf -s /lib/onie/udhcp4_net)
     if [ "$?" = "0" ] ; then
         local ipaddr=$(ifconfig $intf |grep 'inet '|sed -e 's/:/ /g'|awk '{ print $3 " / " $7 }')
         log_console_msg "Using DHCPv4 addr: ${intf}: $ipaddr"
