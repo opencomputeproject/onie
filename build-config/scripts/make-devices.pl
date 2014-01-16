@@ -202,6 +202,16 @@ sub devices
     foreach my $i (1..8) {
 	makedev("sdb${i}", "b", 8, ${i} + 16, ${root}, ${disk}, 0660);
     }
+
+    print "virtio Devices: vda vdb\n";
+    makedev("vda", "b", 254,  0, ${root}, ${disk}, 0660);
+    makedev("vdb", "b", 254, 16, ${root}, ${disk}, 0660);
+    foreach my $i (1..8) {
+	makedev("vda${i}", "b", 254, ${i}, ${root}, ${disk}, 0660);
+    }
+    foreach my $i (1..8) {
+	makedev("vdb${i}", "b", 254, ${i} + 16, ${root}, ${disk}, 0660);
+    }
 }
 
 

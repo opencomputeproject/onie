@@ -14,15 +14,11 @@ LINUXDIR   		= $(KERNELDIR)/linux
 KERNEL_SRCPATCHDIR	= $(PATCHDIR)/kernel
 KERNEL_PATCHDIR		= $(KERNELDIR)/patch
 
-ifeq ($(KERNEL_NEEDS_DTB),yes)
-  KERNEL_DTB		?= $(MACHINE).dtb
-  KERNEL_INSTALL_DEPS	+= kernel-dtb-install
-endif
-
 KERNEL_SOURCE_STAMP	= $(STAMPDIR)/kernel-source
 KERNEL_PATCH_STAMP	= $(STAMPDIR)/kernel-patch
 KERNEL_BUILD_STAMP	= $(STAMPDIR)/kernel-build
 KERNEL_DTB_INSTALL_STAMP = $(STAMPDIR)/kernel-dtb-install
+KERNEL_VMLINUZ_INSTALL_STAMP = $(STAMPDIR)/kernel-vmlinuz-install
 KERNEL_INSTALL_STAMP	= $(STAMPDIR)/kernel-install
 KERNEL_STAMP		= $(KERNEL_SOURCE_STAMP) \
 			  $(KERNEL_PATCH_STAMP) \
@@ -115,6 +111,13 @@ $(KERNEL_DTB_INSTALL_STAMP): $(KERNEL_BUILD_STAMP)
 		$(KERNEL_DTB)
 	$(Q) echo "==== Copy device tree blob to $(IMAGEDIR) ===="
 	$(Q) cp -vf $(LINUX_BOOTDIR)/$(KERNEL_DTB) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb
+	$(Q) touch $@
+
+kernel-vmlinuz-install: $(KERNEL_VMLINUZ_INSTALL_STAMP)
+$(KERNEL_VMLINUZ_INSTALL_STAMP): $(KERNEL_BUILD_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Copy vmlinuz to $(IMAGEDIR) ===="
+	$(Q) cp -vf $(LINUX_BOOTDIR)/bzImage $(IMAGEDIR)/$(MACHINE_PREFIX).vmlinuz
 	$(Q) touch $@
 
 kernel-install: $(KERNEL_INSTALL_STAMP)

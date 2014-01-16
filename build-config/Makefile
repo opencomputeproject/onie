@@ -48,6 +48,9 @@
 # Don't move this, it must be in FRONT of any included makefiles
 THIS_MAKEFILE = $(realpath $(firstword $(MAKEFILE_LIST)))
 
+# Allow users to override any ?= variables early
+-include local.make
+
 #-------------------------------------------------------------------------------
 #
 # Setup
@@ -213,8 +216,6 @@ endif
 #
 # target make fragments
 #
-
--include local.make
 
 # Default mirror for packages needed by ONIE
 ONIE_MIRROR	?= http://dev.cumulusnetworks.com/~curt/mirror/onie

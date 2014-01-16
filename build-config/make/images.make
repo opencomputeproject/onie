@@ -14,7 +14,7 @@ UIMAGE			= $(IMAGEDIR)/$(MACHINE_PREFIX).uImage
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
 IMAGE_UPDATER_STAMP	= $(STAMPDIR)/image-updater
 IMAGE_COMPLETE_STAMP	= $(STAMPDIR)/image-complete
-IMAGE		= $(IMAGE_COMPLETE_STAMP)
+IMAGE			= $(IMAGE_COMPLETE_STAMP)
 
 LSB_RELEASE_FILE = $(MBUILDDIR)/lsb-release
 OS_RELEASE_FILE	 = $(MBUILDDIR)/os-release
@@ -49,30 +49,33 @@ CHECKDIR	= $(CHECKROOT)/checkdir
 CHECKFILES	= $(CHECKROOT)/checkfiles.txt
 SYSFILES	= $(CHECKROOT)/sysfiles.txt
 
-SYSROOT_LIBS	= ld-uClibc.so.0 ld-uClibc-0.9.32.1.so \
-		  libm.so.0 libm-0.9.32.1.so \
+SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(UCLIBC_VERSION).so \
+		  libm.so.0 libm-$(UCLIBC_VERSION).so \
 		  libgcc_s.so.1 libgcc_s.so \
-		  libc.so.0 libuClibc-0.9.32.1.so \
-		  libcrypt.so.0 libcrypt-0.9.32.1.so \
-		  libutil.so.0 libutil-0.9.32.1.so
+		  libc.so.0 libuClibc-$(UCLIBC_VERSION).so \
+		  libcrypt.so.0 libcrypt-$(UCLIBC_VERSION).so \
+		  libutil.so.0 libutil-$(UCLIBC_VERSION).so
 
 # sysroot-check verifies that we have all the shared libraries
 # required by the executables in our final sysroot.
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
-		sudo cp -av $(DEV_SYSROOT)/lib/$$file $(SYSROOTDIR)/lib/ ; \
+		sudo cp -av $(DEV_SYSROOT)/lib/$$file $(SYSROOTDIR)/lib/ || exit 1 ; \
 	done
 	$(Q) find $(SYSROOTDIR) -type f -print0 | xargs -0 file | grep ELF | awk -F':' '{ print $$1 }' | \
 		sudo xargs $(CROSSBIN)/$(CROSSPREFIX)strip
+	$(Q) sudo rm -rf $(CHECKROOT)
 	$(Q) mkdir -p $(CHECKROOT) && \
 	     sudo $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
 		-s $(SYSROOTDIR) -d $(CHECKDIR) && \
-		diff -qr $(CHECKDIR) $(SYSROOTDIR) > /dev/null 2>&1 || \
+		(cd $(SYSROOTDIR) && find . > $(SYSFILES)) && \
+		(cd $(CHECKDIR) && find . > $(CHECKFILES)) && \
+		diff -q $(SYSFILES) $(CHECKFILES) > /dev/null 2>&1 || { \
 			(echo "ERROR: Missing files in SYSROOTDIR:" && \
-			 diff -qr $(CHECKDIR) $(SYSROOTDIR) | grep -v 'special file'; \
-			 sudo rm -rf $(CHECKROOT) && false)
-	$(Q) sudo rm -rf $(CHECKROOT)
+			 diff $(SYSFILES) $(CHECKFILES) ; \
+			 false) \
+		}
 	$(Q) touch $@
 
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
@@ -111,6 +114,7 @@ $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) ( cd $(SYSROOTDIR) && \
 		sudo find . | sudo cpio --create -H newc > $(SYSROOT_CPIO) )
 	$(Q) xz --compress --force --check=crc32 -8 $(SYSROOT_CPIO)
+	$(Q) cp $@ $(IMAGEDIR)/$(MACHINE_PREFIX).initrd
 
 .SECONDARY: $(IMAGEDIR)/$(MACHINE_PREFIX).itb
 
@@ -147,13 +151,13 @@ $(IMAGE_UPDATER_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).itb $(UBOOT_INSTALL_STAMP)
 
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
-$(IMAGE_COMPLETE_STAMP): $(IMAGE_BIN_STAMP) $(IMAGE_UPDATER_STAMP)
+# $(IMAGE_COMPLETE_STAMP): $(IMAGE_BIN_STAMP) $(IMAGE_UPDATER_STAMP)
+$(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE)
 	$(Q) touch $@
 
 USERSPACE_CLEAN += image-clean
 image-clean:
-	$(Q) rm -f $(IMAGEDIR)/onie-$(MACHINE_PREFIX).bin $(IMAGEDIR)/onie-installer-$(MACHINE_PREFIX).sh \
-		$(IMAGEDIR)/$(MACHINE_PREFIX).itb $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
+	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
 #
