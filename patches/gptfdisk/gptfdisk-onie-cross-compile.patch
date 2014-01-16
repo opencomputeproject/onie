@@ -1,0 +1,51 @@
+gptfdisk ONIE cross compile patch
+
+Small modifications to the gptfdisk Makefile for cross compiling in
+the ONIE build environment.
+
+Main changes:
+
+- prefix gcc and g++ with $(CROSS_PREFIX)
+- remove Unicode support
+
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..61758e7
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,2 @@
++gdisk
++sgdisk
+diff --git a/Makefile b/Makefile
+index 3364082..1aeaa5b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,7 +1,7 @@
+-CC=gcc
+-CXX=g++
++CC=$(CROSS_COMPILE)gcc
++CXX=$(CROSS_COMPILE)g++
+ CFLAGS+=-D_FILE_OFFSET_BITS=64
+-CXXFLAGS+=-Wall -D_FILE_OFFSET_BITS=64 -D USE_UTF16
++CXXFLAGS+=-Wall -D_FILE_OFFSET_BITS=64
+ #CXXFLAGS+=-Wall -D_FILE_OFFSET_BITS=64
+ LDFLAGS+=
+ LIB_NAMES=crc32 support guid gptpart mbrpart basicmbr mbr gpt bsd parttypes attributes diskio diskio-unix
+@@ -15,7 +15,7 @@ all:	cgdisk gdisk sgdisk fixparts
+ 
+ gdisk:	$(LIB_OBJS) gdisk.o gpttext.o
+ #	$(CXX) $(LIB_OBJS) gdisk.o gpttext.o $(LDFLAGS) -luuid -o gdisk
+-	$(CXX) $(LIB_OBJS) gdisk.o gpttext.o $(LDFLAGS) -licuio -licuuc -luuid -o gdisk
++	$(CXX) $(LIB_OBJS) gdisk.o gpttext.o $(LDFLAGS) -luuid -o gdisk
+ 
+ cgdisk: $(LIB_OBJS) cgdisk.o gptcurses.o
+ #	$(CXX) $(LIB_OBJS) cgdisk.o gptcurses.o $(LDFLAGS) -luuid -lncurses -o cgdisk
+@@ -23,7 +23,7 @@ cgdisk: $(LIB_OBJS) cgdisk.o gptcurses.o
+ 
+ sgdisk: $(LIB_OBJS) sgdisk.o gptcl.o
+ #	$(CXX) $(LIB_OBJS) sgdisk.o gptcl.o $(LDFLAGS) -luuid -lpopt -o sgdisk
+-	$(CXX) $(LIB_OBJS) sgdisk.o gptcl.o $(LDFLAGS) -licuio -licuuc -luuid -lpopt -o sgdisk
++	$(CXX) $(LIB_OBJS) sgdisk.o gptcl.o $(LDFLAGS) -luuid -lpopt -o sgdisk
+ 
+ fixparts: $(MBR_LIB_OBJS) fixparts.o
+ 	$(CXX) $(MBR_LIB_OBJS) fixparts.o $(LDFLAGS) -o fixparts

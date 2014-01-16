@@ -236,6 +236,10 @@ include make/lzo.make
 include make/e2fsprogs.make
 include make/mtdutils.make
 include make/dropbear.make
+ifeq ($(GPT_ENABLE),yes)
+  include make/popt.make
+  include make/gptfdisk.make
+endif
 include make/images.make
 include make/demo.make
 include make/docs.make

@@ -10,6 +10,7 @@
 #
 
 ONIE_CFLAGS	= -Os --sysroot=$(DEV_SYSROOT)
+ONIE_CXXFLAGS	= -Os --sysroot=$(DEV_SYSROOT)
 ONIE_LDFLAGS	= --sysroot=$(DEV_SYSROOT)
 
 #-------------------------------------------------------------------------------

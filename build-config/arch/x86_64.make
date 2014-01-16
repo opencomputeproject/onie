@@ -19,6 +19,10 @@ CLIB64 = 64
 
 PLATFORM_IMAGE_COMPLETE = $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ)
 
+GPT_ENABLE = yes
+# gptfdisk requires C++
+REQUIRE_CXX_LIBS = yes
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:

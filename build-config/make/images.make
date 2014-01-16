@@ -56,6 +56,10 @@ SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(UCLIBC_VERSION).so \
 		  libcrypt.so.0 libcrypt-$(UCLIBC_VERSION).so \
 		  libutil.so.0 libutil-$(UCLIBC_VERSION).so
 
+ifeq ($(REQUIRE_CXX_LIBS),yes)
+  SYSROOT_LIBS += libstdc++.so libstdc++.so.6 libstdc++.so.6.0.17
+endif
+
 # sysroot-check verifies that we have all the shared libraries
 # required by the executables in our final sysroot.
 sysroot-check: $(SYSROOT_CHECK_STAMP)
