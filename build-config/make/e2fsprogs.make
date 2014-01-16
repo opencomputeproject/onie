@@ -30,7 +30,13 @@ PHONY += e2fsprogs e2fsprogs-download e2fsprogs-source e2fsprogs-patch \
 	 e2fsprogs-configure e2fsprogs-build e2fsprogs-install e2fsprogs-clean \
 	 e2fsprogs-download-clean
 
-E2FSPROGS_LIBS = libuuid.so.1 libuuid.so.1.2
+E2FSPROGS_LIB_DIRS	= et e2p blkid ext2fs uuid blkid
+E2FSPROGS_LIBS	= \
+	libcom_err.so libcom_err.so.2 libcom_err.so.2.1 \
+	libe2p.so     libe2p.so.2     libe2p.so.2.3     \
+	libblkid.so   libblkid.so.1   libblkid.so.1.0   \
+	libext2fs.so  libext2fs.so.2  libext2fs.so.2.4  \
+	libuuid.so    libuuid.so.1    libuuid.so.1.2
 
 e2fsprogs: $(E2FSPROGS_STAMP)
 
@@ -74,6 +80,8 @@ $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_INSTALL_STAMP) $(LZO_INSTALL_STAMP) \
 		--prefix=$(DEV_SYSROOT)/usr			\
 		--host=$(TARGET)				\
 		--disable-tls					\
+		--disable-defrag				\
+		--enable-symlink-build				\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"
 	$(Q) touch $@
@@ -82,18 +90,27 @@ e2fsprogs-build: $(E2FSPROGS_BUILD_STAMP)
 $(E2FSPROGS_BUILD_STAMP): $(E2FSPROGS_NEW_FILES) $(E2FSPROGS_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building e2fsprogs-$(E2FSPROGS_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(E2FSPROGS_DIR)/lib/uuid
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(E2FSPROGS_DIR)
 	$(Q) touch $@
 
 e2fsprogs-install: $(E2FSPROGS_INSTALL_STAMP)
 $(E2FSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(E2FSPROGS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing e2fsprogs in $(DEV_SYSROOT) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'			\
-		$(MAKE) -C $(E2FSPROGS_DIR)/lib/uuid install
+	$(Q) for dir in $(E2FSPROGS_LIB_DIRS) ; do \
+		sudo PATH='$(CROSSBIN):$(PATH)' \
+			$(MAKE) -C $(E2FSPROGS_DIR)/lib/$$dir install ; \
+	     done
 	$(Q) for file in $(E2FSPROGS_LIBS) ; do \
 		sudo cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
-	done
+	     done
+	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'			\
+		$(MAKE) -C $(E2FSPROGS_DIR)/misc install
+	$(Q) sudo rm -f $(SYSROOTDIR)/sbin/mke2fs $(SYSROOTDIR)/sbin/mkfs.ext2
+	$(Q) sudo cp -av $(DEV_SYSROOT)/usr/sbin/mke2fs $(SYSROOTDIR)/usr/sbin/ 
+	$(Q) sudo ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext2
+	$(Q) sudo ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext3
+	$(Q) sudo ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext4
 	$(Q) touch $@
 
 USERSPACE_CLEAN += e2fsprogs-clean

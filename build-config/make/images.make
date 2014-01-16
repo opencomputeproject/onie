@@ -63,6 +63,8 @@ SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(UCLIBC_VERSION).so \
 		  libgcc_s.so.1 libgcc_s.so \
 		  libc.so.0 libuClibc-$(UCLIBC_VERSION).so \
 		  libcrypt.so.0 libcrypt-$(UCLIBC_VERSION).so \
+		  libdl.so.0 libdl-$(UCLIBC_VERSION).so \
+		  libpthread.so.0 libpthread-$(UCLIBC_VERSION).so \
 		  libutil.so.0 libutil-$(UCLIBC_VERSION).so
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)

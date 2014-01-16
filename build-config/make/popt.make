@@ -72,7 +72,7 @@ $(POPT_CONFIGURE_STAMP): $(POPT_PATCH_STAMP) $(POPT_NEW_FILES) | $(DEV_SYSROOT_I
 		--host=$(TARGET)				\
 		--disable-nls					\
 		CC=$(CROSSPREFIX)gcc				\
-		CFLAGS="$(ONIE_CFLAGS) -DONIE_UCLIBC"		\
+		CFLAGS="$(ONIE_CFLAGS)"				\
 		LDFLAGS="$(ONIE_LDFLAGS)"
 	$(Q) touch $@
 
