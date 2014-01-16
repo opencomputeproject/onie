@@ -47,10 +47,10 @@ index 24162e7..a2a860b 100644
  lib-$(CONFIG_FEATURE_LAST_FANCY)+= last_fancy.o
 diff --git a/miscutils/iorw.c b/miscutils/iorw.c
 new file mode 100644
-index 0000000..26ac640
+index 0000000..af90e7e
 --- /dev/null
 +++ b/miscutils/iorw.c
-@@ -0,0 +1,243 @@
+@@ -0,0 +1,250 @@
 +/*
 +* Author:  Curt Brune, curt@cumulusnetworks.com
 +*
@@ -92,7 +92,7 @@ index 0000000..26ac640
 +
 +static uint32_t mmap_map_addr(const uint32_t phys_addr,
 +			      const uint32_t range,
-+			      uint32_t *const log_addr_p)
++			      uintptr_t *const log_addr_p)
 +{
 +	assert( log_addr_p);
 +	assert( (phys_addr % getpagesize()) == 0 );
@@ -103,14 +103,14 @@ index 0000000..26ac640
 +		return 1;
 +	}
 +
-+	*log_addr_p = (uint32_t) mmap(0,
++	*log_addr_p = (uintptr_t) mmap(0,
 +				      (size_t) range,
 +				      PROT_READ|PROT_WRITE,
 +				      MAP_SHARED,
 +				      fd,
 +				      (off_t) phys_addr);
 +
-+	if (*log_addr_p == (unsigned long) MAP_FAILED) {
++	if (*log_addr_p == (uintptr_t) MAP_FAILED) {
 +		close(fd);
 +		bb_error_msg("mmap() failed. Errno %d:%s",
 +			     errno, strerror(errno));
@@ -121,43 +121,47 @@ index 0000000..26ac640
 +}
 +
 +#if defined(__PPC__)
-+#define SYNC asm volatile ("eieio" : : )
++#define mb()   __asm__ __volatile__ ("sync" : : : "memory")
++#elif defined(__x86_64__)
++#define mb()	asm volatile("mfence":::"memory")
++#elif defined(__i386__)
++#define mb()	asm volatile("" ::: "memory")
 +#else
 +#error Unsupported CPU architecture
 +#endif
 +
-+static inline uint32_t read32(uint32_t addr)
++static inline uint32_t read32(uintptr_t addr)
 +{
-+	SYNC;
++	mb();
 +	return *((volatile uint32_t *)addr);
 +}
 +
-+static inline void write32(uint32_t addr, uint32_t data)
++static inline void write32(uintptr_t addr, uint32_t data)
 +{
 +	*((volatile uint32_t *)addr) = data;
-+	SYNC;
++	mb();
 +}
 +
-+static inline uint8_t read16(uint32_t addr)
++static inline uint8_t read16(uintptr_t addr)
 +{
-+	SYNC;
++	mb();
 +	return *((volatile uint16_t *)addr);
 +}
-+static inline void write16(uint32_t addr, uint16_t data)
++static inline void write16(uintptr_t addr, uint16_t data)
 +{
 +	*((volatile uint16_t *)addr) = data;
-+	SYNC;
++	mb();
 +}
 +
-+static inline uint8_t read8(uint32_t addr)
++static inline uint8_t read8(uintptr_t addr)
 +{
-+	SYNC;
++	mb();
 +	return *((volatile uint8_t *)addr);
 +}
-+static inline void write8(uint32_t addr, uint8_t data)
++static inline void write8(uintptr_t addr, uint8_t data)
 +{
 +	*((volatile uint8_t *)addr) = data;
-+	SYNC;
++	mb();
 +}
 +
 +//usage:#define iorw_trivial_usage
@@ -181,7 +185,8 @@ index 0000000..26ac640
 +	int sz = 0;
 +	int num_items = 1, i;
 +	uint32_t phys_addr, range, val = 0;
-+	uint32_t map_addr, offset, virt_addr;
++	uint32_t map_addr, offset;
++	uintptr_t virt_addr;
 +	char* p;
 +
 +	if ( argc < 3 ) {
@@ -273,7 +278,9 @@ index 0000000..26ac640
 +	}
 +	else {
 +		for ( i = 0; i < num_items; i++) {
-+			uint32_t rval = 0, addr;
++			uint32_t rval = 0;
++			uintptr_t addr;
++
 +			addr = virt_addr + offset + (i * sz);
 +			switch (p[2]) {
 +			case 'b':
