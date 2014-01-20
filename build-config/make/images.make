@@ -81,13 +81,13 @@ endif
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
-		sudo cp -av $(DEV_SYSROOT)/lib/$$file $(SYSROOTDIR)/lib/ || exit 1 ; \
+		cp -av $(DEV_SYSROOT)/lib/$$file $(SYSROOTDIR)/lib/ || exit 1 ; \
 	done
 	$(Q) find $(SYSROOTDIR) -type f -print0 | xargs -0 file | grep ELF | awk -F':' '{ print $$1 }' | \
-		sudo xargs $(CROSSBIN)/$(CROSSPREFIX)strip
-	$(Q) sudo rm -rf $(CHECKROOT)
+		xargs $(CROSSBIN)/$(CROSSPREFIX)strip
+	$(Q) rm -rf $(CHECKROOT)
 	$(Q) mkdir -p $(CHECKROOT) && \
-	     sudo $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
+	     $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
 		-s $(SYSROOTDIR) -d $(CHECKDIR) && \
 		(cd $(SYSROOTDIR) && find . > $(SYSFILES)) && \
 		(cd $(CHECKDIR) && find . > $(CHECKFILES)) && \
@@ -100,17 +100,15 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
 $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
-	$(Q) sudo rm -f $(SYSROOTDIR)/linuxrc
-	$(Q) echo "==== Installing the basic set of devices ===="
-	$(Q) sudo $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR)
-	$(Q) cd $(ROOTCONFDIR) && sudo ./install default $(SYSROOTDIR)
+	$(Q) rm -f $(SYSROOTDIR)/linuxrc
+	$(Q) cd $(ROOTCONFDIR) && ./install default $(SYSROOTDIR)
 	$(Q) cd $(ROOTCONFDIR) && if [ -d $(ONIE_ARCH) ] ; then \
-		sudo ./install $(ONIE_ARCH) $(SYSROOTDIR) ; \
+		./install $(ONIE_ARCH) $(SYSROOTDIR) ; \
 	     fi
 	$(Q) if [ -d $(MACHINEDIR)/rootconf ] ; then \
-		sudo $(ROOTCONFDIR)/install $(MACHINEDIR)/rootconf $(SYSROOTDIR) ; \
+		$(ROOTCONFDIR)/install $(MACHINEDIR)/rootconf $(SYSROOTDIR) ; \
 	     fi
-	$(Q) cd $(SYSROOTDIR) && sudo ln -fs sbin/init ./init
+	$(Q) cd $(SYSROOTDIR) && ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_ID=onie" >> $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_RELEASE=$(LSB_RELEASE_TAG)" >> $(LSB_RELEASE_FILE)
@@ -126,19 +124,19 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) echo "onie_machine=$(MACHINE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_machine_rev=$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(MACHINE_CONF)
-	$(Q) sudo cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
-	$(Q) sudo cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
-	$(Q) sudo cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
+	$(Q) echo "onie_config_version=$(ONIE_CONFIG_VERSION)" >> $(MACHINE_CONF)
+	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
+	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
+	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
 	$(Q) if [ -r $(RC_LOCAL) ] ; then \
-		sudo cp -a $(RC_LOCAL) $(SYSROOTDIR)/etc/rc.local ; \
+		cp -a $(RC_LOCAL) $(SYSROOTDIR)/etc/rc.local ; \
 	     fi
 	$(Q) touch $@
 
 # This step creates the cpio archive and compresses it
 $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for bootstrap ===="
-	$(Q) ( cd $(SYSROOTDIR) && \
-		sudo find . | sudo cpio --create -H newc > $(SYSROOT_CPIO) )
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR) $(SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(SYSROOT_CPIO) > $@
 
 .SECONDARY: $(IMAGEDIR)/$(MACHINE_PREFIX).itb

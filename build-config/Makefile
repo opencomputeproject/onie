@@ -269,8 +269,8 @@ userspace-clean: $(USERSPACE_CLEAN)
 	$(Q) echo "=== Finished making $@ ==="
 
 clean: 	$(CLEAN) $(USERSPACE_CLEAN)
-	$(Q) sudo rm -rf $(BUILDDIR)/images/*$(MACHINE_PREFIX)*
-	$(Q) sudo rm -rf $(MBUILDDIR)
+	$(Q) rm -rf $(BUILDDIR)/images/*$(MACHINE_PREFIX)*
+	$(Q) rm -rf $(MBUILDDIR)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM) ==="
 
 download-clean: $(DOWNLOAD_CLEAN)
@@ -281,7 +281,7 @@ distclean: download-clean $(DIST_CLEAN)
 	$(Q) for d in $(BUILDDIR)/* ; do \
 		[ -e "$$d" ] || break ; \
 		echo -n "=== Cleaning $$(basename $$d) ... " ; \
-		sudo rm -rf $$d ; \
+		rm -rf $$d ; \
 		echo " done ===" ; done
 	$(Q) rm -f $(PROJECT_STAMP)
 	$(Q) echo "=== Finished making $@ ==="

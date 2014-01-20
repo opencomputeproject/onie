@@ -87,10 +87,10 @@ popt-install: $(POPT_INSTALL_STAMP)
 $(POPT_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(POPT_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing popt in $(DEV_SYSROOT) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'			\
+	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(POPT_DIR) install
 	$(Q) for file in $(POPT_LIBS) ; do \
-		sudo cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
+		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
 	done
 	$(Q) touch $@
 

@@ -68,7 +68,7 @@ mtdutils-install: $(MTDUTILS_INSTALL_STAMP)
 $(MTDUTILS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(MTDUTILS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing mtdutils in $(DEV_SYSROOT) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'				\
+	$(Q) PATH='$(CROSSBIN):$(PATH)'				\
 	    $(MAKE) -C $(MTDUTILS_DIR)				\
 		PREFIX=$(DEV_SYSROOT)/usr			\
 		CROSS=$(CROSSPREFIX)				\
@@ -76,7 +76,7 @@ $(MTDUTILS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(MTDUTILS_BUILD_STAMP)
                 WITHOUT_XATTR=1                                 \
                 install
 	$(Q) for file in $(MTDBINS) ; do \
-		sudo cp -av $(DEV_SYSROOT)/usr/sbin/$$file $(SYSROOTDIR)/usr/sbin/ ; \
+		cp -av $(DEV_SYSROOT)/usr/sbin/$$file $(SYSROOTDIR)/usr/sbin/ ; \
 	done
 	$(Q) touch $@
 

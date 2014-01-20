@@ -74,7 +74,7 @@ $(GPTFDISK_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(GPTFDISK_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing gptfdisk programs in $(SYSROOTDIR) ===="
 	$(Q) for file in $(GPTFDISK_PROGRAMS); do \
-		sudo cp -av $(GPTFDISK_DIR)/$$file $(SYSROOTDIR)/usr/bin ; \
+		cp -av $(GPTFDISK_DIR)/$$file $(SYSROOTDIR)/usr/bin ; \
 	     done
 	$(Q) touch $@
 

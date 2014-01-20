@@ -95,13 +95,13 @@ dropbear-install: $(DROPBEAR_INSTALL_STAMP)
 $(DROPBEAR_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(DROPBEAR_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing dropbear in $(DEV_SYSROOT) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(DROPBEAR_DIR) \
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(DROPBEAR_DIR) \
 		PROGRAMS="$(DROPBEAR_PROGRAMS)" MULTI=1 install
-	$(Q) sudo cp -av $(DEV_SYSROOT)/usr/bin/$(DROPBEAR_MULTI_BIN) $(SYSROOTDIR)/usr/bin
+	$(Q) cp -av $(DEV_SYSROOT)/usr/bin/$(DROPBEAR_MULTI_BIN) $(SYSROOTDIR)/usr/bin
 	$(Q) for file in $(DROPBEAR_BINS); do \
-		cd $(SYSROOTDIR)/$$(dirname $$file) && sudo ln -svf $(DROPBEAR_MULTI_BIN) $$(basename $$file) ; \
+		cd $(SYSROOTDIR)/$$(dirname $$file) && ln -svf $(DROPBEAR_MULTI_BIN) $$(basename $$file) ; \
 	     done
-	$(Q) sudo mkdir -p $(SYSROOTDIR)/etc/dropbear
+	$(Q) mkdir -p $(SYSROOTDIR)/etc/dropbear
 	$(Q) touch $@
 
 USERSPACE_CLEAN += dropbear-clean

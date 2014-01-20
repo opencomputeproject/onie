@@ -98,19 +98,21 @@ $(E2FSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(E2FSPROGS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing e2fsprogs in $(DEV_SYSROOT) ===="
 	$(Q) for dir in $(E2FSPROGS_LIB_DIRS) ; do \
-		sudo PATH='$(CROSSBIN):$(PATH)' \
+		PATH='$(CROSSBIN):$(PATH)' \
 			$(MAKE) -C $(E2FSPROGS_DIR)/lib/$$dir install ; \
 	     done
 	$(Q) for file in $(E2FSPROGS_LIBS) ; do \
-		sudo cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
+		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
 	     done
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'			\
+ifeq ($(EXT3_4_ENABLE),yes)
+	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(E2FSPROGS_DIR)/misc install
-	$(Q) sudo rm -f $(SYSROOTDIR)/sbin/mke2fs $(SYSROOTDIR)/sbin/mkfs.ext2
-	$(Q) sudo cp -av $(DEV_SYSROOT)/usr/sbin/mke2fs $(SYSROOTDIR)/usr/sbin/ 
-	$(Q) sudo ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext2
-	$(Q) sudo ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext3
-	$(Q) sudo ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext4
+	$(Q) rm -f $(SYSROOTDIR)/sbin/mke2fs $(SYSROOTDIR)/sbin/mkfs.ext2
+	$(Q) cp -av $(DEV_SYSROOT)/usr/sbin/mke2fs $(SYSROOTDIR)/usr/sbin/ 
+	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext2
+	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext3
+	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext4
+endif
 	$(Q) touch $@
 
 USERSPACE_CLEAN += e2fsprogs-clean

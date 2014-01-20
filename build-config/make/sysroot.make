@@ -34,11 +34,11 @@ sysroot-init: $(SYSROOT_INIT_STAMP)
 $(SYSROOT_INIT_STAMP): $(TREE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Preparing a new sysroot directory ===="
-	$(Q) sudo rm -rf $(SYSROOTDIR)
-	$(Q) sudo mkdir -p -v $(SYSROOTDIR)
-	$(Q) sudo mkdir -p -v -m 0755 $(SYSROOTDIR)/dev
-	$(Q) sudo mkdir -p -v $(SYSROOTDIR)/{sys,proc,tmp,etc,lib,mnt}
-	$(Q) sudo mkdir -p -v $(SYSROOTDIR)/{var/log,usr/lib,usr/bin,usr/sbin,lib,mnt}
+	$(Q) rm -rf $(SYSROOTDIR)
+	$(Q) mkdir -p -v $(SYSROOTDIR)
+	$(Q) mkdir -p -v -m 0755 $(SYSROOTDIR)/dev
+	$(Q) mkdir -p -v $(SYSROOTDIR)/{sys,proc,tmp,etc,lib,mnt}
+	$(Q) mkdir -p -v $(SYSROOTDIR)/{var/log,usr/lib,usr/bin,usr/sbin,usr/share,lib,mnt}
 	$(Q) touch $@
 
 # Development sysroot, used for compiling and linking user space
@@ -49,13 +49,14 @@ $(DEV_SYSROOT_INIT_STAMP): $(TREE_STAMP) | $(XTOOLS_BUILD_STAMP)
 	$(Q) echo "==== Preparing a new development sysroot ===="
 	$(Q) rm -rf $(DEV_SYSROOT)
 	$(Q) cp -a $$($(CROSSBIN)/$(CROSSPREFIX)gcc -print-sysroot) $(DEV_SYSROOT)
+	$(Q) find $(DEV_SYSROOT) -print0 | xargs -0 chmod +w
 	$(Q) touch $@
 
 #---
 
 USERSPACE_CLEAN += sysroot-clean
 sysroot-clean:
-	$(Q) sudo rm -rf $(DEV_SYSROOT) $(SYSROOTDIR)
+	$(Q) rm -rf $(DEV_SYSROOT) $(SYSROOTDIR)
 	$(Q) rm -f $(SYSROOT_INIT_STAMP) $(SYSROOT_CHECK_STAMP) $(SYSROOT_COMPLETE_STAMP)
 	$(Q) rm -f $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
