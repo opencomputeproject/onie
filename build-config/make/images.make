@@ -38,6 +38,10 @@ ifeq ($(GPT_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(GPTFDISK_INSTALL_STAMP)
 endif
 
+ifeq ($(GRUB_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(GRUB_INSTALL_STAMP)
+endif
+
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
 			test -d $(ROOTCONFDIR)/default && \
@@ -84,15 +88,21 @@ ifeq ($(REQUIRE_CXX_LIBS),yes)
   SYSROOT_LIBS += libstdc++.so libstdc++.so.6 libstdc++.so.6.0.17
 endif
 
-# sysroot-check verifies that we have all the shared libraries
-# required by the executables in our final sysroot.
+# sysroot-check does the following:
+#
+# - strip the ELF binaries (grub moduels and kernel)
+#
+# - verifies that we have all the shared libraries required by the
+#   executables in our final sysroot.
+
+
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
 		cp -av $(DEV_SYSROOT)/lib/$$file $(SYSROOTDIR)/lib/ || exit 1 ; \
 	done
-	$(Q) find $(SYSROOTDIR) -type f -print0 | xargs -0 file | grep ELF | awk -F':' '{ print $$1 }' | \
-		xargs $(CROSSBIN)/$(CROSSPREFIX)strip
+	$(Q) find $(SYSROOTDIR) -path */lib/grub/* -prune -o \( -type f -print0 \) | xargs -0 file | \
+		grep ELF | awk -F':' '{ print $$1 }' | xargs $(CROSSBIN)/$(CROSSPREFIX)strip
 	$(Q) rm -rf $(CHECKROOT)
 	$(Q) mkdir -p $(CHECKROOT) && \
 	     $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
@@ -133,6 +143,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) echo "onie_machine_rev=$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_config_version=$(ONIE_CONFIG_VERSION)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_build_date=\"$$(date --utc)\"" >> $(MACHINE_CONF)
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
@@ -173,7 +184,7 @@ IMAGE_UPDATER_FILES = $(shell \
 			test -d $(INSTALLER_DIR) && \
 			find -L $(INSTALLER_DIR) -mindepth 1 -cnewer $(IMAGE_UPDATER_STAMP) \
 			  -print -quit 2>/dev/null)
-  ifneq ($(IMAGE_UPDATER_FILES),)
+  ifneq ($(strip $(IMAGE_UPDATER_FILES)),)
     $(shell rm -f $(IMAGE_UPDATER_STAMP))
   endif
 endif

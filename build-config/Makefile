@@ -240,6 +240,9 @@ ifeq ($(GPT_ENABLE),yes)
   include make/popt.make
   include make/gptfdisk.make
 endif
+ifeq ($(GRUB_ENABLE),yes)
+  include make/grub.make
+endif
 include make/images.make
 include make/demo.make
 include make/docs.make
