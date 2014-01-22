@@ -14,7 +14,7 @@ ARGS="-m -B -P"
 RSA_KEY=/etc/dropbear/dropbear_rsa_host_key
 DSS_KEY=/etc/dropbear/dropbear_dss_host_key
 
-[ -r /etc/init.d/dropbear-arch.sh ] && . /etc/init.d/dropbear-arch.sh
+[ -r /lib/onie/dropbear-arch ] && . /lib/onie/dropbear-arch
 
 get_keys() {
     # If keys are already present just return

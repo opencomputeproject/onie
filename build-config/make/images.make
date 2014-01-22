@@ -120,8 +120,11 @@ sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
 $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) rm -f $(SYSROOTDIR)/linuxrc
 	$(Q) cd $(ROOTCONFDIR) && ./install default $(SYSROOTDIR)
-	$(Q) cd $(ROOTCONFDIR) && if [ -d $(ONIE_ARCH) ] ; then \
-		./install $(ONIE_ARCH) $(SYSROOTDIR) ; \
+	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie ] ; then \
+		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
+	     fi
+	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin ] ; then	\
+		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin/* $(SYSROOTDIR)/bin ; \
 	     fi
 	$(Q) if [ -d $(MACHINEDIR)/rootconf ] ; then \
 		$(ROOTCONFDIR)/install $(MACHINEDIR)/rootconf $(SYSROOTDIR) ; \
