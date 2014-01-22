@@ -2,6 +2,8 @@
 onie_boot_mnt="/mnt/onie-boot"
 onie_config_mnt="/mnt/onie-config"
 
+onie_tmp_mnt="/mnt/tmp"
+
 # gfdisk types and GPT UUIDs from gptfdisk-0.8.8/parttypes.cc
 grub_boot_gfdisk_type="0xEF02"
 onie_boot_gfdisk_type="0x3100"
@@ -20,9 +22,32 @@ onie_config_label="ONIE-CONFIG"
 
 onie_umount_partitions()
 {
-    umount $onie_boot_mnt > /dev/null 2>&1
-    umount $onie_config_mnt > /dev/null 2>&1
-    rm -rf $_tmp_mnt
+    rc=0
+
+    [ -d "$onie_boot_mnt" ] && {
+        umount $onie_boot_mnt > /dev/null 2>&1
+        rmdir $onie_boot_mnt || {
+            echo "ERROR: Problems removing directory: $onie_boot_mnt"
+            rc=$(( $rc + 1 ))
+        }
+    }        
+
+    [ -d "$onie_config_mnt" ] && {
+        umount $onie_config_mnt > /dev/null 2>&1
+        rmdir $onie_config_mnt || {
+            echo "ERROR: Problems removing directory: $onie_config_mnt"
+            rc=$(( $rc + 1 ))
+        }
+    }
+
+    [ -d "$onie_tmp_mnt" ] && {
+        rmdir $onie_tmp_mnt || {
+            echo "ERROR: Problems removing directory: $onie_tmp_mnt"
+            rc=$(( $rc + 1 ))
+        }
+    }
+
+    return $rc
 }
 
 # Mount the ONIE partitions.
@@ -35,9 +60,9 @@ onie_umount_partitions()
 onie_mount_partitions()
 {
 
-    _tmp_mnt=$(mktemp -d)
-    onie_boot_mnt="$_tmp_mnt/boot"
-    onie_config_mnt="$_tmp_mnt/config"
+    mkdir -p $onie_tmp_mnt
+    onie_boot_mnt="$onie_tmp_mnt/boot"
+    onie_config_mnt="$onie_tmp_mnt/config"
 
     trap onie_umount_partitions EXIT
 
