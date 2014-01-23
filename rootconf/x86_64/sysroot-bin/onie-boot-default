@@ -3,21 +3,37 @@
 this_script=$(basename $(realpath $0))
 lib_dir="$(dirname $(realpath $0))/../lib/onie"
 
-args="d:hv"
+args="o:d:lhv"
 
 usage()
 {
-    echo "usage: $this_script -d <menu entry> [-hv]"
+    echo "usage: $this_script [-d <menu entry>] [-o <onie_mode>] [-lhv]"
     cat <<EOF
-Set the default GRUB boot entry to "menu entry".
+Get or set the default GRUB boot entry.  The default is to show
+the current default entry.
 
-The "menu entry" argument is required.
+You can not specify both the -d and -o options at the same time.
 
 COMMAND LINE OPTIONS
 
 	-d
-		Set the default GRUB boot entry to "menu entry".  This
-		argument is required.
+		Set the default GRUB boot entry to "menu entry".  You
+		need to know the complete menu entry string.
+
+	-o
+		Set the default GRUB boot entry to a particular "ONIE
+		mode".  Available ONIE modes are:
+
+		install   -- ONIE OS installer mode
+		rescue    -- ONIE rescue mode
+		uninstall -- ONIE OS uninstall mode
+		update    -- ONIE self update mode
+
+                Some platforms may offer additional modes.  Check with
+                your hardware vendor.
+
+	-l
+		List the current default entry.  This is the default.
 
 	-h
 		Help.  Print this message.
@@ -27,7 +43,10 @@ COMMAND LINE OPTIONS
 EOF
 }
 
+
 default=
+onie_mode=
+list=
 verbose=no
 cmd_verbose=
 
@@ -41,8 +60,14 @@ while getopts "$args" a ; do
             verbose=yes
             cmd_verbose=-v
             ;;
+        l)
+            list=yes
+            ;;
         d)
             default="$OPTARG"
+            ;;
+        o)
+            onie_mode="$OPTARG"
             ;;
         *)
             echo "Unknown argument: $a"
@@ -51,8 +76,8 @@ while getopts "$args" a ; do
     esac
 done
 
-if [ -z "$default" ] ; then
-    echo "ERROR: Default GRUB menu entry not specified"
+if [ -n "$default" ] && [ -n "$onie_mode" ] ; then
+    echo "ERROR: Only one of -d and -o can be specified at a time"
     usage
     exit 1
 fi
@@ -68,6 +93,33 @@ onie_mount_partitions || {
     echo "ERROR: Unable to mount ONIE partitions"
     exit 1
 }
+
+if [ -z "$default" -a -z "$onie_mode" ] || [ "$list" = "yes" ] ; then
+    # Find default image -- grub.cfg is constructed so that the effective
+    # 'set default=' line appears last, even if the user manages to
+    # specify earlier definitions.  Hence the use of 'tail -n 1' here.
+
+    onie_grub_cfg="${onie_config_mnt}/grub.cfg"
+    default_img=$(grep default= "$onie_grub_cfg" | tail -n 1 | sed -e 's/set//' -e 's/.*default=//' -e "s/['\"]//g")
+    if [ -z "$default_img" ] ; then
+        echo "WARNING: No defaut image specified.  Using first menu entry."
+    else
+        echo "Default boot image: $default_img"
+    fi
+    exit 0
+fi
+
+if [ -n "$onie_mode" ] ; then
+    case "$onie_mode" in
+        install|uninstall|rescue|update)
+            [ "$verbose" = "yes" ] && echo "Setting ONIE mode to: $onie_mode"
+            default='${onie_submenu}>${onie_menu_'"${onie_mode}}"
+            ;;
+        *)
+            echo "ERROR: Unknown ONIE mode: $onie_mode"
+            exit 1
+    esac
+fi
 
 [ "$verbose" = "yes" ] && echo "Setting default GRUB menu entry to: $default"
 
