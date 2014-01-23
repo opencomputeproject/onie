@@ -8,6 +8,12 @@ cd $(dirname $0)
 }
 . ./machine.conf
 
+# Default implementation is no additional args
+parse_arg_arch()
+{
+    return 1
+}
+
 [ -r ./install-arch ] || {
     echo "ERROR: ONIE update install-arch file is missing."
     exit 1
