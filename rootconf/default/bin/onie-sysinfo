@@ -1,6 +1,12 @@
 #!/bin/sh
 
-. /lib/onie/functions
+this_script=$(basename $(realpath $0))
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+[ -r "$lib_dir/functions" ] || {
+    echo "ERROR: Unable to find onie functions:$lib_dir/functions"
+    exit 1
+}
+. $lib_dir/functions
 
 get_serial_num()
 {
@@ -17,10 +23,10 @@ get_eth_addr()
     ip link show eth0 | grep ether | awk '{print $2}'
 }
 
-[ -r /lib/onie/sysinfo-arch ]     && . /lib/onie/sysinfo-arch
-[ -r /lib/onie/sysinfo-platform ] && . /lib/onie/sysinfo-platform
+[ -r $lib_dir/sysinfo-arch ]     && . $lib_dir/sysinfo-arch
+[ -r $lib_dir/sysinfo-platform ] && . $lib_dir/sysinfo-platform
 
-args="sevimrpcfa"
+args="sevimrpcfda"
 
 usage()
 {
@@ -62,6 +68,9 @@ COMMAND LINE OPTIONS
 	-f
 		ONIE configuration version
 
+	-d
+		ONIE build date
+
 	-a
 		Dump all information.
 EOF
@@ -76,6 +85,7 @@ machine_rev=no
 platform=no
 arch=no
 config_version=no
+build_date=no
 all=no
 
 [ $# -eq 0 ] && platform=yes
@@ -113,6 +123,9 @@ while getopts "$args" a ; do
         f)
             config_version=yes
             ;;
+        d)
+            build_date=yes
+            ;;
         a)
             all=yes
             ;;
@@ -142,7 +155,7 @@ if [ "$mac" = "yes" ] || [ "$all" = "yes" ] ; then
     print_val $val
 fi
 
-for v in version vendor_id machine machine_rev platform arch config_version ; do
+for v in version vendor_id machine machine_rev platform arch config_version build_date ; do
     eval dump='$'$v
     if [ "$dump" = "yes" ] || [ "$all" = "yes" ] ; then
         eval val='$onie'_$v
