@@ -59,6 +59,7 @@ $(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_COMPLETE_STAMP)
 	$(Q) sed -i -e '/onie/d' $(DEMO_SYSROOTDIR)/etc/syslog.conf
 	$(Q) cd $(DEMO_OS_DIR) && ./install default $(DEMO_SYSROOTDIR)
 	$(Q) cd $(DEMO_OS_DIR) && ./install $(ONIE_ARCH) $(DEMO_SYSROOTDIR)
+	$(Q) mkdir -p $(DEMO_SYSROOTDIR)/lib/demo
 	$(Q) t=`mktemp`; echo "machine=$(MACHINE)" > $$t ; \
 		echo "platform=$(PLATFORM)" >> $$t ; \
 		cp $$t $(DEMO_SYSROOTDIR)/lib/demo/machine.conf && rm -f $$t
