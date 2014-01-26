@@ -196,10 +196,10 @@ sub devices
     print "SCSI Devices: sda sdb\n";
     makedev("sda", "b", 8, 0, ${root}, ${disk}, 0660);
     makedev("sdb", "b", 8, 16, ${root}, ${disk}, 0660);
-    foreach my $i (1..8) {
+    foreach my $i (1..15) {
 	makedev("sda${i}", "b", 8, ${i}, ${root}, ${disk}, 0660);
     }
-    foreach my $i (1..8) {
+    foreach my $i (1..15) {
 	makedev("sdb${i}", "b", 8, ${i} + 16, ${root}, ${disk}, 0660);
     }
 
