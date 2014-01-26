@@ -9,14 +9,14 @@ switches.
 Documentation
 -------------
 
-* <docs/QUICKSTART.README>
+* [docs/QUICKSTART.README](docs/QUICKSTART.README)
     Simplified instructions for building and installing the ONL images.
 
-* <docs/BuildTroubleshooting.md>
+* [docs/BuildTroubleshooting.md](docs/BuildTroubleshooting.md)
     Troubleshooting tips for when you run into problems with the
     QUICKSTART guide.
 
-* <docs/SupportedHardware.md>
+* [docs/SupportedHardware.md](docs/SupportedHardware.md)
     A list of hardware that ONL supports (in various forms)
 
 Please see the docs directory for additional information. 
