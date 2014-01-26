@@ -3,16 +3,16 @@
 this_script=$(basename $(realpath $0))
 lib_dir="$(dirname $(realpath $0))/../lib/onie"
 
-args="o:d:lhv"
+args="o:d:lhvq"
 
 usage()
 {
-    echo "usage: $this_script [-d <menu entry>] [-o <onie_mode>] [-lhv]"
+    echo "usage: $this_script [-d <menu entry>] [-o <onie_mode>] [-lhvq]"
     cat <<EOF
 Get or set the default GRUB boot entry.  The default is to show
 the current default entry.
 
-You can not specify both the -d and -o options at the same time.
+You cannot specify both the -d and -o options at the same time.
 
 COMMAND LINE OPTIONS
 
@@ -38,6 +38,9 @@ COMMAND LINE OPTIONS
 	-h
 		Help.  Print this message.
 
+	-q
+		Quiet.  No printing, except for errors.
+
 	-v
 		Be verbose.  Print what is happening.
 EOF
@@ -47,6 +50,7 @@ EOF
 default=
 onie_mode=
 list=
+quiet=no
 verbose=no
 cmd_verbose=
 
@@ -69,12 +73,17 @@ while getopts "$args" a ; do
         o)
             onie_mode="$OPTARG"
             ;;
+        q)
+            quiet=yes
+            ;;
         *)
             echo "Unknown argument: $a"
             usage
             exit 1
     esac
 done
+
+[ "$verbose" = "yes" ] && quiet=no
 
 if [ -n "$default" ] && [ -n "$onie_mode" ] ; then
     echo "ERROR: Only one of -d and -o can be specified at a time"
@@ -136,5 +145,5 @@ EOF
 [ "$verbose" = "yes" ] && echo "Un-mounting ONIE partitions ..."
 onie_umount_partitions
 
-echo "Success: Run \`onie-boot-update' to make changes take effect."
+[ "$quiet" = "no" ] && echo "Success: Run \`onie-boot-update' to make changes take effect."
 exit 0

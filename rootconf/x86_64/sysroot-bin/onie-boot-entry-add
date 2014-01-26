@@ -3,11 +3,11 @@
 this_script=$(basename $(realpath $0))
 lib_dir="$(dirname $(realpath $0))/../lib/onie"
 
-args="n:c:hv"
+args="n:c:hvq"
 
 usage()
 {
-    echo "usage: $this_script -n <entry_name> -c <entry_config_file> [-hv]"
+    echo "usage: $this_script -n <entry_name> -c <entry_config_file> [-hvq]"
     cat <<EOF
 Add GRUB configuration file to ONIE GRUB configuration.
 
@@ -31,6 +31,9 @@ COMMAND LINE OPTIONS
 	-h
 		Help.  Print this message.
 
+	-q
+		Quiet.  No printing, except for errors.
+
 	-v
 		Be verbose.  Print what is happening.
 EOF
@@ -38,6 +41,7 @@ EOF
 
 entry_name=
 entry_config_file=
+quiet=no
 verbose=no
 cmd_verbose=
 
@@ -57,12 +61,17 @@ while getopts "$args" a ; do
         c)
             entry_config_file="$OPTARG"
             ;;
+        q)
+            quiet=yes
+            ;;
         *)
             echo "Unknown argument: $a"
             usage
             exit 1
     esac
 done
+
+[ "$verbose" = "yes" ] && quiet=no
 
 [ -n "$entry_name" ] || {
     echo "ERROR: configuration entry name not specified"
@@ -103,5 +112,5 @@ onie_mount_partitions || {
 [ "$verbose" = "yes" ] && echo "Un-mounting ONIE partitions ..."
 onie_umount_partitions
 
-echo "Success: Run \`onie-boot-update' to make changes take effect."
+[ "$quiet" = "no" ] && echo "Success: Run \`onie-boot-update' to make changes take effect."
 exit 0

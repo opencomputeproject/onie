@@ -3,11 +3,11 @@
 this_script=$(basename $(realpath $0))
 lib_dir="$(dirname $(realpath $0))/../lib/onie"
 
-args="hv"
+args="qhv"
 
 usage()
 {
-    echo "usage: $this_script [-hv]"
+    echo "usage: $this_script [-hvq]"
     cat <<EOF
 Regenerate the final GRUB configuration file from fragments.
 
@@ -16,11 +16,15 @@ COMMAND LINE OPTIONS
 	-h
 		Help.  Print this message.
 
+	-q
+		Quiet.  No printing, except for errors.
+
 	-v
 		Be verbose.  Print what is happening.
 EOF
 }
 
+quiet=no
 verbose=no
 cmd_verbose=
 
@@ -34,12 +38,17 @@ while getopts "$args" a ; do
             verbose=yes
             cmd_verbose=-v
             ;;
+        q)
+            quiet=yes
+            ;;
         *)
             echo "Unknown argument: $a"
             usage
             exit 1
     esac
 done
+
+[ "$verbose" = "yes" ] && quiet=no
 
 [ -r "$lib_dir/onie-blkdev-common" ] || {
     echo "ERROR: Unable to find onie-blkdev-common"
@@ -107,10 +116,10 @@ if [ -z "$default_img" ] ; then
     default_img="$first_img"
 fi
 
-echo "Default boot image: $default_img"
+[ "$quiet" = "no" ] && echo "Default boot image: $default_img"
 
 [ "$verbose" = "yes" ] && echo "Un-mounting ONIE partitions ..."
 onie_umount_partitions
 
-echo "Success: ONIE GRUB boot configuration updated."
+[ "$quiet" = "no" ] && echo "Success: ONIE boot configuration updated."
 exit 0
