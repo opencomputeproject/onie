@@ -30,6 +30,8 @@ all:
 	@echo ""
 	@echo "    install-ws-deps          Install build dependencies into your workspace after creating it."
 	@echo ""
+	@echo "    all-components           Build all components in workspace before building actual images."
+	@echo ""
 	@echo "    deb-clean                Clean all debian log files in the components subtree."
 	@echo ""
 
@@ -53,6 +55,14 @@ install-host-deps:
 ############################################################
 install-ws-deps: __install-ws-deps
 
+
+############################################################
+#
+# Build each of the underlying components
+#
+############################################################
+all-components:
+	export ONL=`pwd` && make -C $$ONL/builds/components
 
 ############################################################
 #
