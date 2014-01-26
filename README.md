@@ -9,7 +9,7 @@ switches.
 Documentation
 -------------
 
-* [docs/QUICKSTART.README](docs/QUICKSTART.README)
+* [docs/QuickStart.md](docs/QuickStart.md)
     Simplified instructions for building and installing the ONL images.
 
 * [docs/BuildTroubleshooting.md](docs/BuildTroubleshooting.md)
