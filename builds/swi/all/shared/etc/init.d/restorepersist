@@ -1,0 +1,38 @@
+#!/bin/bash
+
+### BEGIN INIT INFO
+# Provides:        restorepersist
+# Required-Start:  initdev
+# Required-Stop:   
+# Default-Start:   S
+# Default-Stop:    
+# Short-Description: Restore files into /persist
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+log_action_begin_msg "Restoring persistent files"
+
+rm -rf /persist
+mkdir -p /persist/sys /persist/node
+chmod 777 /persist/sys /persist/node
+mkdir -p /mnt/flash/persist
+( cd /persist/sys; cpio -i --quiet </mnt/flash/persist/sys ) 2>/dev/null
+( cd /persist/node; cpio -i --quiet </mnt/flash/persist/node ) 2>/dev/null
+
+log_action_end_msg 0
+
+for t in rsa dsa ecdsa; do
+    if [ ! -f /persist/sys/ssh_host_${t}_key ]; then
+	log_action_begin_msg "Creating SSH2 ${t^^} key"
+	ssh-keygen -q -t ${t} -f /persist/sys/ssh_host_${t}_key -N ""
+	log_action_end_msg $?
+    fi
+done
+sed -i "s%^HostKey /etc/ssh/%HostKey /persist/sys/%g" /etc/ssh/sshd_config
+sed -i "s%^driftfile /var/lib/ntp/%driftfile /persist/node/%g" /etc/ntp.conf
+
+watchdir --watchdir=/persist/sys --watchdir=/persist/node --period=1 --daemon --logfile=/var/log/watchdir /sbin/savepersist
+
+/sbin/savepersist /persist/sys
+/sbin/savepersist /persist/node

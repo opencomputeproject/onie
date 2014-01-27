@@ -1,0 +1,36 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:        snmpd-baseconf
+# Required-Start:  initdev
+# Required-Stop:   
+# Default-Start:   S
+# Default-Stop:    
+# Short-Description: Set up snmpd.conf
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+log_action_begin_msg "Setting up base snmpd configuration"
+
+unset descr
+descr=$(cat /etc/onl_version 2>/dev/null)
+
+cat >/etc/snmp/snmpd.conf <<EOF
+# System information
+sysDescr ${descr}
+sysLocation Not set
+sysContact Not set
+
+# Access control
+rocommunity public
+
+agentSecName disman
+createUser disman MD5 "internal user for monitoring"
+rouser disman auth
+
+override .1.3.6.1.2.1.2.1.0 integer 56
+
+# Enable sub-agents
+master agentx
+EOF

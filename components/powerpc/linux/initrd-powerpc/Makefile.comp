@@ -1,0 +1,62 @@
+# -*- Makefile -*-
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+#
+#
+############################################################
+BUILD_INITRD_POWERPC := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
+include $(ONL)/make/config.mk
+
+ONL_BUILD_CONFIG := powerpc
+
+# Release string, copied from swi.mk
+ifndef RELEASE
+RELEASE := Open Network Linux$(ONL_RELEASE_BANNER)($(ONL_BUILD_CONFIG),$(ONL_BUILD_TIMESTAMP),$(ONL_BUILD_SHA1))
+endif
+
+initrd-powerpc: $(BUILD_INITRD_POWERPC)/initrd-powerpc
+
+$(ONL_SUBMODULE_LOADER)/.setup.done:
+	$(MAKE) -C $(ONL_SUBMODULE_LOADER) setup
+	touch $(ONL_SUBMODULE_LOADER)/.setup.done
+
+$(BUILD_INITRD_POWERPC)/initrd-powerpc: $(ONL_SUBMODULE_LOADER)/.setup.done
+	$(MAKE) -C $(ONL_SUBMODULE_LOADER) platform-configs
+	$(MAKE) -C $(ONL_SUBMODULE_LOADER) ONL_RELEASE="$(RELEASE)" buildroot-powerpc
+	cat $(ONL_SUBMODULE_LOADER)/buildroot-powerpc/images/rootfs.cpio.gz >initrd-powerpc
+
+.PHONY: deb $(BUILD_INITRD_POWERPC)/initrd-powerpc
+
+deb:
+	$(MAKE) -C deb
+
+
+
+
+
+
+
+
+
+
+
+

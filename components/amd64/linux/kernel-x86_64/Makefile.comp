@@ -1,0 +1,50 @@
+# -*- Makefile -*-
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+#
+# X86 kernel build.
+#
+############################################################
+BUILD_X86_LINUX := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
+include $(ONL)/make/config.mk
+
+all: kernel-x86_64 linux-x86_64-headers
+
+DEFCONFIG=onl_x86_64_defconfig
+
+kernel-x86_64: $(ONL_SUBMODULE_LINUX_3_9_6)/arch/x86/configs/$(DEFCONFIG) 
+	mkdir -p $(BUILD_X86_LINUX)/linux-build-x86_64
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_9_6) $(DEFCONFIG) O=$(BUILD_X86_LINUX)/linux-build-x86_64
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_9_6) bzImage O=$(BUILD_X86_LINUX)/linux-build-x86_64
+	cp $(BUILD_X86_LINUX)/linux-build-x86_64/arch/x86/boot/bzImage $(BUILD_X86_LINUX)/kernel-x86_64
+
+
+.PHONY: linux-x86_64-headers deb
+
+linux-x86_64-headers: $(ONL_SUBMODULE_LINUX_3_9_6)/arch/x86/configs/$(DEFCONFIG)
+	mkdir -p $(BUILD_X86_LINUX)/linux-x86_64-headers
+	cp -a $(ONL_SUBMODULE_LINUX_3_9_6)/include $(ONL_SUBMODULE_LINUX_3_9_6)/arch/x86/include $(BUILD_X86_LINUX)/linux-x86_64-headers
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_9_6) ARCH=x86 O=$(BUILD_X86_LINUX)/linux-x86_64-headers $(DEFCONFIG)
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_9_6) ARCH=x86 O=$(BUILD_X86_LINUX)/linux-x86_64-headers headers_install modules_prepare 
+
+deb:
+	$(MAKE) -C deb

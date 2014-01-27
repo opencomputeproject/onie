@@ -1,0 +1,55 @@
+# -*- Makefile -*-
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+#
+#
+#
+############################################################
+ifndef ONL
+$(error $$ONL is not defined.)
+else
+include $(ONL)/make/config.mk
+endif
+
+.DEFAULT_GOAL := all
+
+# Pull loader from the repo
+loader-i386.iso := $(shell $(ONL_PKG_INSTALL) loader-i386:i386 --find-file loader-i386.iso)
+
+SWI := $(ONL)/builds/swi/i386/kvm/onl-i386-kvm.swi
+
+# Rebuild i386.swi
+$(SWI):
+	$(MAKE) -C $(dir $(SWI))
+
+# Create hda image with integrated SWI
+onl-i386.img: $(SWI)
+	rm -f $@
+	mkdosfs -F 32 -C $@ 2097152
+	mcopy -i $@ $(SWI) ::onl-i386.swi
+	echo "SWI=flash:onl-i386.swi" > boot-config
+	echo "NETDEV=ma1" >> boot-config
+	echo "NETAUTO=dhcp" >> boot-config
+	mcopy -i $@ boot-config ::boot-config
+	rm boot-config
+
+all: $(loader-i386.iso) onl-i386.img
+	cp $(loader-i386.iso) . 
