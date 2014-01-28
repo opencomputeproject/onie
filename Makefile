@@ -39,7 +39,7 @@ all:
 #
 ############################################################
 install-host-deps:
-	sudo apt-get install binfmt-support qemu-user-static multistrap apt-cacher-ng
+	sudo apt-get install binfmt-support qemu-user-static multistrap apt-cacher-ng devscripts debhelper
 	$(MAKE) -C tools
 	sudo dpkg -i tools/*.deb
 
