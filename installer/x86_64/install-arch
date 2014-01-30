@@ -234,8 +234,20 @@ install_onie()
         exit 1
     }
 
-    cp onie.vmlinuz onie.initrd mount_onie.sh $onie_boot_mnt || {
+    cp onie.vmlinuz onie.initrd mount-onie-tools onie-tools.tar.xz $onie_boot_mnt || {
         echo "Error: Unable to copy ONIE kernel to $onie_boot_mnt"
+        exit 1
+    }
+
+    # put the ONIE tools in place
+    ./mount-onie-tools quiet || {
+        echo "Error: Problems extracting onie-tools"
+        exit 1
+    }
+
+    # Done with $onie_boot_mnt
+    umount $onie_boot_mnt || {
+        echo "Error: Problems un-mounting $onie_boot_label ($onie_boot_dev) from ${onie_boot_mnt}"
         exit 1
     }
 
@@ -323,6 +335,21 @@ install_onie()
         }
 
     fi
+
+    umount $onie_config_mnt || {
+        echo "Error: Problems un-mouningt ONIE-CONFIG ($onie_config_dev) from ${onie_config_mnt}"
+        exit 1
+    }
+
+    # Use the new onie-tools from *this* installer to update the ONIE
+    # boot configuration.  This is required to pick up any new
+    # configuration *this* installer has put in place.  At a minimum
+    # the ONIE version and build dates are changing, for example.
+    [ "$verbose" = "yes" ] && echo "Updating ONIE boot configuration"
+    /mnt/onie-tools/bin/onie-boot-update -q || {
+        echo "Error: Problems updating ONIE boot configuration"
+        exit 1
+    }
 
 }
 

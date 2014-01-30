@@ -14,6 +14,15 @@ ITB_IMAGE		= $(IMAGEDIR)/$(MACHINE_PREFIX).itb
 
 UPDATER_ITB		= $(MBUILDDIR)/onie.itb
 UPDATER_INITRD		= $(MBUILDDIR)/onie.initrd
+UPDATER_ONIE_TOOLS	= $(MBUILDDIR)/onie-tools.tar.xz
+
+ONIE_TOOLS_LIST = \
+	lib/onie \
+	bin/onie-boot-default \
+	bin/onie-boot-entry-add \
+	bin/onie-boot-entry-remove \
+	bin/onie-boot-entry-show \
+	bin/onie-boot-update
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
 IMAGE_UPDATER_STAMP	= $(STAMPDIR)/image-updater
@@ -163,6 +172,10 @@ $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 
 $(UPDATER_INITRD) : $(SYSROOT_CPIO_XZ)
 	ln -sf $< $@
+
+$(UPDATER_ONIE_TOOLS):  $(SYSROOT_COMPLETE_STAMP)
+	$(Q) echo "==== Create ONIE Tools tarball ===="
+	$(Q) tar -C $(SYSROOTDIR) -cJf $@ $(ONIE_TOOLS_LIST)
 
 .SECONDARY: $(ITB_IMAGE)
 

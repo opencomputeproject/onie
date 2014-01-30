@@ -1,0 +1,30 @@
+#!/bin/sh
+
+this_script=$(basename $(realpath $0))
+script_dir=$(dirname $(realpath $0))
+
+quiet=no
+if [ "$1" = "quiet" ] ; then
+    quiet=yes
+fi
+
+onie_dir="/mnt/onie-tools"
+mkdir -p $onie_dir || exit 1
+mount -t tmpfs -o "defaults,noatime,size=20M" onie-tools-tmpfs $onie_dir || exit 1
+
+# test that needed utilities are present in host OS
+for u in xz tar ; do 
+    which $u > /dev/null 2>&1 || {
+        echo "ERROR: missing utility '$u', needed to mount ONIE tools"
+        exit 1
+    }
+done
+(xz -d -c $script_dir/onie-tools.tar.xz | tar -C $onie_dir -xf -) || {
+    echo "ERROR: problem extracting ONIE tools."
+    exit 1
+}
+
+if [ "$quiet" = "no" ] ; then
+    echo "ONIE tools available in $onie_dir/bin"
+    echo "Type 'umount $onie_dir' when finished"
+fi
