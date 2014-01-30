@@ -7,6 +7,15 @@
 ##
 
 . /lib/onie/functions
+
+# Allow an architecture to skip some partitions during discovery.  The
+# default skip list is empty.
+skip_parts_arch()
+{
+    return 0
+}
+[ -r /lib/onie/discover-arch ] && . /lib/onie/discover-arch
+
 syslog_tag=discover
 onie_disco=
 
@@ -58,10 +67,15 @@ sd_static()
     return 1
 }
 
-# Check locally attached filesystems
+# Check locally attached filesystems, skipping the ONIE partitions
 sd_localfs()
 {
-    part_list=$(blkid | sed -e 's/:.*$//')
+    sed_cmd=
+    # Possibly skip some partitions, specific to an architecture
+    for skip in $(skip_parts_arch) ; do
+        sed_cmd="$sed_cmd -e /$skip/d"
+    done
+    part_list=$(blkid | sed $sed_cmd -e 's/:.*$//')
     mp=$(mktemp -d)
     local_parts=
     for p in $part_list ; do
