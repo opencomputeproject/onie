@@ -1,0 +1,45 @@
+#!/bin/sh
+
+##
+## Uninstall the system.
+##
+## This assumes the shell is ash/dash.
+##
+
+this_script=$(basename $(realpath $0))
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+
+. $lib_dir/functions
+syslog_tag=onie-uninstaller
+
+import_cmdline
+
+log_pre=
+if [ "$onie_testing" = "y" ] ; then
+    log_pre="Testing: "
+fi
+
+uninstall_system()
+{
+    printf "${log_pre}ERROR:  No uninstall_system handler found.\n"
+    return 1
+}
+
+[ -r $lib_dir/uninstall-arch ]     && . $lib_dir/uninstall-arch
+[ -r $lib_dir/uninstall-platform ] && . $lib_dir/uninstall-platform
+
+uninstall_system || {
+    printf "${log_pre}ERROR: Problems uninstalling system..."
+    exit 1
+}
+
+printf "${log_pre}Uninstall complete.  Rebooting...\n"
+
+if [ "$onie_testing" != "y" ] ; then
+    reboot
+fi
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

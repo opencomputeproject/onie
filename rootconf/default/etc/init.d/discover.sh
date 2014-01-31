@@ -32,6 +32,7 @@ install_remain_sticky_arch()
 
 [ -r /lib/onie/boot-mode-arch ] || {
     echo "Error: missing /lib/onie/boot-mode-arch file." > /dev/console
+    exit 1
 }
 . /lib/onie/boot-mode-arch
 
@@ -51,7 +52,7 @@ do_start() {
         uninstall)
             echo "$daemon: Uninstall mode detected.  Running uninstaller." > /dev/console
             echo "** Uninstall Mode Enabled **" >> /etc/issue
-            /bin/uninstaller
+            /bin/onie-uninstaller
             exit 0
             ;;
         update)
