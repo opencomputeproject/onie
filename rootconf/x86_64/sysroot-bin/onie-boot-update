@@ -67,7 +67,6 @@ onie_mount_partitions || {
 # Verify the required fragments exist
 for f in \
     $onie_boot_mnt/grub/grub-common.cfg \
-    $onie_config_mnt/grub_default \
     $onie_boot_mnt/grub/grub-onie.cfg ; do 
       [ -r "$f" ] || {
           echo "ERROR: Unable to read config fragment: $f"
@@ -91,7 +90,20 @@ EOF
 cat $onie_boot_mnt/grub/grub-machine.cfg >> $grub_cfg
 cat $onie_boot_mnt/grub/grub-common.cfg  >> $grub_cfg
 cat $onie_config_mnt/grub.d/*            >> $grub_cfg
-cat $onie_config_mnt/grub_default        >> $grub_cfg
+
+onie_mode_file="$onie_config_mnt/onie_boot_reason"
+user_default_file="$onie_config_mnt/onie_default"
+if [ -r "$onie_mode_file" ] ; then
+    # The ONIE boot mode takes precedence
+    echo "# default from ONIE boot mode"    >> $grub_cfg
+    echo "default="'"${onie_submenu}>${onie_menu_'"$(cat $onie_mode_file)"'}"' >> $grub_cfg
+else
+    if [ -r "$user_default_file" ] ; then
+        echo "# default from User menu default"    >> $grub_cfg
+        echo "default="'"'"$(cat $user_default_file)"'"' >> $grub_cfg
+    fi
+fi
+
 cat $onie_boot_mnt/grub/grub-onie.cfg    >> $grub_cfg
 
 onie_grub_cfg="${onie_config_mnt}/grub.cfg"
