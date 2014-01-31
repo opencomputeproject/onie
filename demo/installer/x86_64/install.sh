@@ -15,6 +15,13 @@ blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' | sed -e 's/[0-9]://' | head
     exit 1
 }
 
+# Check that no partitions on this device are currently mounted
+if grep -q "$blk_dev" /proc/mounts ; then
+    echo "ERROR: Partitions on target device ($blk_dev) are currently mounted."
+    grep "$blk_dev" /proc/mounts
+    exit 1
+fi
+
 demo_part_name="demo-$machine"
 
 # See if demo partition already exists
@@ -89,6 +96,12 @@ EOF
 
 onie-boot-entry-add -v -n 30_onie_demo -c $tmp_entry || {
     echo "Error: Unable to add boot menu entry"
+    exit 1
+}
+
+# Clear any ONIE boot mode
+onie-boot-default -v -o none || {
+    echo "Error: Unable to clear ONIE boot mode"
     exit 1
 }
 
