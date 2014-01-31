@@ -22,6 +22,7 @@ ONIE_TOOLS_LIST = \
 	bin/onie-boot-entry-add \
 	bin/onie-boot-entry-remove \
 	bin/onie-boot-entry-show \
+	bin/onie-boot-init \
 	bin/onie-boot-update
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin

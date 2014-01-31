@@ -276,23 +276,14 @@ install_onie()
     fi
 
     if [ "$format_disk" = "yes" ] || [ "$bad_config" = "yes" ] ; then
-        # ONIE-CONFIG is unmountable.  Format it and install skeletal
-        # config files.
+        # Initialize the ONIE-CONFIG partition.
 
-        # Create file system on ONIE-CONFIG partition
-        [ "$verbose" = "yes" ] && echo "Creating $onie_config_fs_type file system on: $onie_config_dev"
-        mkfs.$onie_config_fs_type -q -L $onie_config_label $onie_config_dev || {
-            echo "Error: Unable to create $onie_config_fs_type file system on: $onie_config_dev"
+        # Use the new onie-tools from *this* installer.
+        [ "$verbose" = "yes" ] && echo "Initializing ONIE-CONFIG partition"
+        /mnt/onie-tools/bin/onie-boot-init -fq -d $onie_config_dev || {
+            echo "Error: Problems initializing ONIE boot configuration"
             exit 1
         }
-
-        mount -o defaults,rw -t $onie_config_fs_type $onie_config_dev $onie_config_mnt || {
-            echo "Error: Unable to mount $onie_config_label ($onie_config_dev) on ${onie_config_mnt}"
-            exit 1
-        }
-
-        # Install skeletal grub.d on $onie_config_dev
-        cp -a grub/grub.d.skel $onie_config_mnt/grub.d
 
     else
         # Migrate existing config - check running onie_config_version
@@ -319,7 +310,10 @@ install_onie()
             exit 1
         }
 
-        umount $onie_config_mnt
+        umount $onie_config_mnt || {
+            echo "Error: Problems un-mouningt ONIE-CONFIG ($onie_config_dev) from ${onie_config_mnt}"
+            exit 1
+        }
 
         # Create file system on ONIE-CONFIG partition
         [ "$verbose" = "yes" ] && echo "Creating $onie_config_fs_type file system on: $onie_config_dev"
@@ -339,12 +333,12 @@ install_onie()
             exit 1
         }
 
-    fi
+        umount $onie_config_mnt || {
+            echo "Error: Problems un-mouningt ONIE-CONFIG ($onie_config_dev) from ${onie_config_mnt}"
+            exit 1
+        }
 
-    umount $onie_config_mnt || {
-        echo "Error: Problems un-mouningt ONIE-CONFIG ($onie_config_dev) from ${onie_config_mnt}"
-        exit 1
-    }
+    fi
 
     # Use the new onie-tools from *this* installer to update the ONIE
     # boot configuration.  This is required to pick up any new
@@ -353,6 +347,12 @@ install_onie()
     [ "$verbose" = "yes" ] && echo "Updating ONIE boot configuration"
     /mnt/onie-tools/bin/onie-boot-update -q || {
         echo "Error: Problems updating ONIE boot configuration"
+        exit 1
+    }
+
+    # Done with the onie-tools
+    umount /mnt/onie-tools || {
+        echo "Error: Problems un-mouningt onie-tools"
         exit 1
     }
 
