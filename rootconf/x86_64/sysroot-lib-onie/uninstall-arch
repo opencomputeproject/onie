@@ -1,0 +1,80 @@
+# x86_64 specific uninstall routine
+
+# Erase a block device partition
+# Step 1 -- Overwrite the partition with random data
+# Step 2 -- Remove the partition from the GPT partition table
+erase_part()
+{
+    blk_dev="$1"
+    part="$2"
+
+    device="${blk_dev}$part"
+    dev_sz=$(blockdev --getsize64 /dev/$device)
+    cur_sz=0
+    count=0
+    n_mb=8
+    step=$(( $n_mb * 1024 * 1024 ))
+    total=$(( $dev_sz + $step - 1 ))
+    total=$(( $total / $step ))
+    mb_sz=$(( $dev_sz / ( 1024 * 1024 ) ))
+    printf "${log_pre}Erasing internal mass storage device: /dev/$device (${mb_sz}MB)\n"
+    if [ "$onie_testing" != "y" ] ; then
+        dd if=/dev/urandom of=/tmp/junk.bin bs=1M count=$n_mb > /dev/null 2>&1
+        while [ $cur_sz -lt $dev_sz ] ; do
+            dd if=/tmp/junk.bin of=/dev/$device bs=$step seek=$count > /dev/null 2>&1
+            count=$(( $count + 1 ))
+            cur_sz=$(( $step * $count ))
+            printf "\r  Percent complete: %02u%%" $(( ($count * 100) / $total ))
+        done
+        printf "\n"
+    fi
+    printf "${log_pre}Erase complete.\n"
+
+    if [ "$onie_testing" != "y" ] ; then
+        printf "${log_pre}Deleting partition $part from /dev/$blk_dev\n"
+        sgdisk -d $part /dev/$blk_dev > /dev/null 2>&1 || {
+            printf "${log_pre}Unable to remove partition $name, $part on /dev/$blk_dev\n"
+            return 1
+        }
+    fi
+
+}
+
+uninstall_system()
+{
+
+    # Clean up block device that contains ONIE
+    blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' | sed -e 's/[0-9]://' | head -n 1 | sed -e 's#/dev/##')
+
+    [ -b "/dev/$blk_dev" ] || {
+        echo "Error: Unable to determine block device of ONIE install"
+        exit 1
+    }
+
+    # Wipe out and delete all partitions, except for the ONIE and GRUB
+    # partitions.
+    ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev//" | while read part ; do
+        name="$(sgdisk -i $part /dev/$blk_dev | grep 'Partition name:')"
+        name=${name#*"'"}
+        name=${name%"'"*}
+        case "$name" in
+            GRUB-BOOT|ONIE-BOOT|ONIE-CONFIG)
+                # echo "skipping ONIE part"
+                continue
+                ;;
+            *)
+                erase_part $blk_dev $part
+                ;;
+        esac
+    done
+
+    # Clean up ONIE-CONFIG, default will be ONIE install mode
+    onie-boot-default -q -c
+
+    return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
