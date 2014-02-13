@@ -1,6 +1,6 @@
 Hardware Support
 ================
-Because of the HTML formatting, this page may be best views from
+Because of the HTML formatting, this page may be best viewed from
 <http://github.com/opennetworklinux/ONL/docs/SupportedHardware.md>.
 
 
