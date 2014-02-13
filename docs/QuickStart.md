@@ -13,6 +13,10 @@ Build Host:
 - IP forwarding enabled on build machine
 	* in /etc/sysctl.conf, set ipv4.ip_forward=1
 	* sudo sysctl -p
+- NetworkManager (or similar utilities) is disabled
+    * Either disable via `sudo service networkmanager stop`
+    * Or tell NetworkManager to ignore new interfaces:
+        https://wiki.debian.org/NetworkManager#Wired_Networks_are_Unmanaged
 
 ------------------------------------------------------------
 GENERAL
@@ -161,5 +165,3 @@ NAT networking should always work:
 ------------------------------------------------------------
     #> cd cd $ONL/builds/kvm/i386/onl
     #> make run-nat
-
-
