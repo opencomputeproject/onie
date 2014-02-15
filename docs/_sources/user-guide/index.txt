@@ -347,13 +347,13 @@ configuration defining the fields that ONIE uses::
    
   # Package the ONIE namespace into option 125
   option space vivso code width 4 length width 1;
-  option vivso.onie code 40310 = encapsulate onie;
+  option vivso.onie code 42623 = encapsulate onie;
   option vivso.iana code 0 = string;
   option op125 code 125 = encapsulate vivso;
 
 *I told you this method required more configuration...*
 
-The number 40310 is a 32-bit IANA Enterprise Number used by ONIE to
+The number 42623 is a 32-bit IANA Enterprise Number used by ONIE to
 identify its name space [#iana_number]_.  Since VIVSO allows for
 multiple sets of vendor specific options, each set of options must be
 uniquely identified by a IANA enterprise number.

@@ -14,7 +14,7 @@ Open Network Install Environment Documentation
    developers/index
    glossary/index
 
-This documentation is current as of |release| for version |version|.
+This documentation is current for version |release| as of |version|.
 
 .. put these in the TOC after the design-spec; files are in onie/doctmp
 ..   hw-vendors/index
