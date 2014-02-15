@@ -783,9 +783,11 @@ Examples:
 Current Status
 --------------
 
-The Merge Window for the next release (v2014.02) is :green:`open`.
+The Merge Window for the next release (v2014.05) is :green:`open`.
 
-Release "v2014.02" is scheduled for February 12, 2014.
+Release "v2014.02" went out on February 14, 2014.
+
+Release "v2024.05" is scheduled to go out on May 14, 2014.
 
 Future Releases
 ---------------
@@ -797,7 +799,7 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  v2014.02 | Wed, Dec 11, 2013 | Wed, Feb 12, 2014
   v2014.05 | Wed, Mar 12, 2014 | Wed, May 14, 2014
   v2014.08 | Wed, Jun 11, 2014 | Wed, Aug 13, 2014
   v2014.11 | Wed, Sep 10, 2014 | Wed, Nov 12, 2014
+  v2015.02 | Wed, Dec 17, 2014 | Wed, Feb 11, 2015
