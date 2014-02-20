@@ -19,5 +19,5 @@
 # </bsn.cl>
 ############################################################
 ARCH=all
-PACKAGE_NAMES=vendor-config-xonl
+PACKAGE_NAMES=vendor-config-onl
 include ../../../../../make/debuild.mk
