@@ -1,3 +1,4 @@
+#!/usr/bin/python
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 # 
@@ -18,12 +19,21 @@
 # 
 # </bsn.cl>
 ############################################################
-ifndef ONL
-$(error $$ONL is undefined.)
-endif
+#
+# OpenNetworkPlatform support for Accton platforms.
+#
+############################################################
+from onl.platform.base import OpenNetworkPlatformBase, sysinfo
+import struct
+import time
 
-# Fill me out if necessary
-# ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-onl:all
+class OpenNetworkPlatformAccton(OpenNetworkPlatformBase):
 
-include $(ONL)/make/component.mk
+    def manufacturer(self):
+        return "Accton"
+
+    def _sys_info_dict(self):
+        return {
+            sysinfo.PRODUCT_NAME : "AcctonNotImplemented",
+            }
+

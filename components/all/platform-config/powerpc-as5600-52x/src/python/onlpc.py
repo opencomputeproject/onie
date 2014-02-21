@@ -1,3 +1,4 @@
+#!/usr/bin/python
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 # 
@@ -18,12 +19,35 @@
 # 
 # </bsn.cl>
 ############################################################
-ifndef ONL
-$(error $$ONL is undefined.)
-endif
+#
+# Platform Driver for powerpc-as5600-52x
+#
+############################################################
+import os
+import struct
+import time
+import subprocess
+from onl.platform.base import *
+from onl.vendor.accton import *
 
-# Fill me out if necessary
-# ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-onl:all
+class OpenNetworkPlatformImplementation(OpenNetworkPlatformAccton):
 
-include $(ONL)/make/component.mk
+    def model(self):
+        return "AS5600-52X"
+
+    def platform(self):
+        return 'powerpc-as5600-52x'
+
+    def _plat_info_dict(self):
+        return {
+            platinfo.LAG_COMPONENT_MAX : 16,
+            platinfo.PORT_COUNT : 52,
+            }
+
+    def _plat_oid_table(self):
+        raise Exception()
+
+
+if __name__ == "__main__":
+    print OpenNetworkPlatformImplementation()
+

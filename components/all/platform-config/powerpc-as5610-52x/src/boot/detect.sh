@@ -18,12 +18,11 @@
 # 
 # </bsn.cl>
 ############################################################
-ifndef ONL
-$(error $$ONL is undefined.)
-endif
+# Default platform detection.
+if grep -q "^model.*: powerpc-as5610-52x$" /proc/cpuinfo; then
+    echo "powerpc-as5610-52x" >/etc/onl_platform
+    exit 0
+else
+    exit 1
+fi
 
-# Fill me out if necessary
-# ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-onl:all
-
-include $(ONL)/make/component.mk

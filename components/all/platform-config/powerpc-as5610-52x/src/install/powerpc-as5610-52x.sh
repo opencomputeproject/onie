@@ -18,12 +18,14 @@
 # 
 # </bsn.cl>
 ############################################################
-ifndef ONL
-$(error $$ONL is undefined.)
-endif
+#
+# Installer scriptlet for the powerpc-as5610-52x
+#
 
-# Fill me out if necessary
-# ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-onl:all
+# The loader is installed in the fat partition of the first USB storage device
+platform_bootcmd='usb start; fatload usb 0:1 0x10000000 onl-loader; setenv bootargs console=$consoledev,$baudrate onl_platform=powerpc-as5610-52x; bootm 0x10000000'
 
-include $(ONL)/make/component.mk
+platform_installer() {
+    # Standard installation to usb storage
+    installer_standard_blockdev_install sda 16M 64M ""
+}

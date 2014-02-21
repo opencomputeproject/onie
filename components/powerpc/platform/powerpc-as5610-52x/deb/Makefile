@@ -18,12 +18,9 @@
 # 
 # </bsn.cl>
 ############################################################
-ifndef ONL
-$(error $$ONL is undefined.)
-endif
+ARCH=powerpc
+PACKAGE_NAMES=platform-powerpc-as5610-52x
+include ../../../../../make/debuild.mk
 
-# Fill me out if necessary
-# ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-onl:all
 
-include $(ONL)/make/component.mk
+

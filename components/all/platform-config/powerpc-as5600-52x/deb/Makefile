@@ -18,12 +18,6 @@
 # 
 # </bsn.cl>
 ############################################################
-ifndef ONL
-$(error $$ONL is undefined.)
-endif
-
-# Fill me out if necessary
-# ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-onl:all
-
-include $(ONL)/make/component.mk
+ARCH=all
+PACKAGE_NAMES=platform-config-powerpc-as5600-52x
+include ../../../../../make/debuild.mk

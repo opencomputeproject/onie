@@ -22,8 +22,7 @@ ifndef ONL
 $(error $$ONL is undefined.)
 endif
 
-# Fill me out if necessary
 # ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-onl:all
+ONL_REQUIRED_PACKAGES := vendor-config-onl:all vendor-config-accton:all
 
 include $(ONL)/make/component.mk

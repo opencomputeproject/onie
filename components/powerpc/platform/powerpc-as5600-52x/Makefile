@@ -22,8 +22,10 @@ ifndef ONL
 $(error $$ONL is undefined.)
 endif
 
-# Fill me out if necessary
-# ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-onl:all
+ONL_REQUIRED_PACKAGES := kernel-85xx:powerpc \
+			 kernel-85xx-dtbs:powerpc \
+			 initrd-powerpc:powerpc
 
 include $(ONL)/make/component.mk
+
+

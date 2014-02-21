@@ -24,6 +24,6 @@ endif
 
 # Fill me out if necessary
 # ONL_REQUIRED_SUBMODULES :=
-ONL_REQUIRED_PACKAGES := vendor-config-xonl:all
+ONL_REQUIRED_PACKAGES := vendor-config-onl:all
 
 include $(ONL)/make/component.mk
