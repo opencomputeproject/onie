@@ -1,10 +1,18 @@
 Additional Broadcom PHY support
 
 diff --git a/drivers/net/phy/broadcom.c b/drivers/net/phy/broadcom.c
-index e8be47d..ba48ca9 100644
+index e8be47d..6d7fc60 100644
 --- a/drivers/net/phy/broadcom.c
 +++ b/drivers/net/phy/broadcom.c
-@@ -26,6 +26,9 @@
+@@ -17,6 +17,7 @@
+ #include <linux/module.h>
+ #include <linux/phy.h>
+ #include <linux/brcmphy.h>
++#include <linux/delay.h>
+ 
+ 
+ #define BRCM_PHY_MODEL(phydev) \
+@@ -26,6 +27,9 @@
  	((phydev)->drv->phy_id & ~((phydev)->drv->phy_id_mask))
  
  
@@ -14,7 +22,7 @@ index e8be47d..ba48ca9 100644
  #define MII_BCM54XX_ECR		0x10	/* BCM54xx extended control register */
  #define MII_BCM54XX_ECR_IM	0x1000	/* Interrupt mask */
  #define MII_BCM54XX_ECR_IF	0x0800	/* Interrupt force */
-@@ -38,7 +41,8 @@
+@@ -38,7 +42,8 @@
  #define MII_BCM54XX_EXP_SEL_SSD	0x0e00	/* Secondary SerDes select */
  #define MII_BCM54XX_EXP_SEL_ER	0x0f00	/* Expansion register select */
  
@@ -24,7 +32,7 @@ index e8be47d..ba48ca9 100644
  #define MII_BCM54XX_ISR		0x1a	/* BCM54xx interrupt status register */
  #define MII_BCM54XX_IMR		0x1b	/* BCM54xx interrupt mask register */
  #define MII_BCM54XX_INT_CRCERR	0x0001	/* CRC error */
-@@ -57,10 +61,17 @@
+@@ -57,10 +62,17 @@
  #define MII_BCM54XX_INT_MDIX	0x2000	/* MDIX status change */
  #define MII_BCM54XX_INT_PSERR	0x4000	/* Pair swap error */
  
@@ -42,7 +50,7 @@ index e8be47d..ba48ca9 100644
  
  /*
   * AUXILIARY CONTROL SHADOW ACCESS REGISTERS.  (PHY REG 0x18)
-@@ -172,7 +183,6 @@
+@@ -172,7 +184,6 @@
  
  #define MII_BRCM_FET_SHDW_MISCCTRL	0x10	/* Shadow misc ctrl */
  #define MII_BRCM_FET_SHDW_MC_FAME	0x4000	/* Force Auto MDIX enable */
@@ -50,7 +58,7 @@ index e8be47d..ba48ca9 100644
  #define MII_BRCM_FET_SHDW_AUXMODE4	0x1a	/* Auxiliary mode 4 */
  #define MII_BRCM_FET_SHDW_AM4_LED_MASK	0x0003
  #define MII_BRCM_FET_SHDW_AM4_LED_MODE1 0x0001
-@@ -420,6 +430,31 @@ static int bcm54xx_config_init(struct phy_device *phydev)
+@@ -420,6 +431,31 @@ static int bcm54xx_config_init(struct phy_device *phydev)
  	return 0;
  }
  
@@ -82,7 +90,7 @@ index e8be47d..ba48ca9 100644
  static int bcm5482_config_init(struct phy_device *phydev)
  {
  	int err, reg;
-@@ -510,6 +545,125 @@ static int bcm5482_read_status(struct phy_device *phydev)
+@@ -510,6 +546,125 @@ static int bcm5482_read_status(struct phy_device *phydev)
  	return err;
  }
  
@@ -208,7 +216,7 @@ index e8be47d..ba48ca9 100644
  static int bcm54xx_ack_interrupt(struct phy_device *phydev)
  {
  	int reg;
-@@ -522,6 +676,18 @@ static int bcm54xx_ack_interrupt(struct phy_device *phydev)
+@@ -522,6 +677,18 @@ static int bcm54xx_ack_interrupt(struct phy_device *phydev)
  	return 0;
  }
  
@@ -227,7 +235,7 @@ index e8be47d..ba48ca9 100644
  static int bcm54xx_config_intr(struct phy_device *phydev)
  {
  	int reg, err;
-@@ -539,6 +705,23 @@ static int bcm54xx_config_intr(struct phy_device *phydev)
+@@ -539,6 +706,23 @@ static int bcm54xx_config_intr(struct phy_device *phydev)
  	return err;
  }
  
@@ -251,7 +259,7 @@ index e8be47d..ba48ca9 100644
  static int bcm5481_config_aneg(struct phy_device *phydev)
  {
  	int ret;
-@@ -729,6 +912,21 @@ static struct phy_driver bcm5461_driver = {
+@@ -729,6 +913,21 @@ static struct phy_driver bcm5461_driver = {
  	.driver		= { .owner = THIS_MODULE },
  };
  
@@ -273,7 +281,7 @@ index e8be47d..ba48ca9 100644
  static struct phy_driver bcm5464_driver = {
  	.phy_id		= PHY_ID_BCM5464,
  	.phy_id_mask	= 0xfffffff0,
-@@ -862,6 +1060,9 @@ static int __init broadcom_init(void)
+@@ -862,6 +1061,9 @@ static int __init broadcom_init(void)
  	ret = phy_driver_register(&bcm5461_driver);
  	if (ret)
  		goto out_5461;
@@ -283,7 +291,7 @@ index e8be47d..ba48ca9 100644
  	ret = phy_driver_register(&bcm5464_driver);
  	if (ret)
  		goto out_5464;
-@@ -905,6 +1106,8 @@ out_5481:
+@@ -905,6 +1107,8 @@ out_5481:
  out_5464:
  	phy_driver_unregister(&bcm5461_driver);
  out_5461:
@@ -292,7 +300,7 @@ index e8be47d..ba48ca9 100644
  	phy_driver_unregister(&bcm5421_driver);
  out_5421:
  	phy_driver_unregister(&bcm5411_driver);
-@@ -923,6 +1126,7 @@ static void __exit broadcom_exit(void)
+@@ -923,6 +1127,7 @@ static void __exit broadcom_exit(void)
  	phy_driver_unregister(&bcm5481_driver);
  	phy_driver_unregister(&bcm5464_driver);
  	phy_driver_unregister(&bcm5461_driver);
@@ -300,7 +308,7 @@ index e8be47d..ba48ca9 100644
  	phy_driver_unregister(&bcm5421_driver);
  	phy_driver_unregister(&bcm5411_driver);
  }
-@@ -934,6 +1138,7 @@ static struct mdio_device_id __maybe_unused broadcom_tbl[] = {
+@@ -934,6 +1139,7 @@ static struct mdio_device_id __maybe_unused broadcom_tbl[] = {
  	{ PHY_ID_BCM5411, 0xfffffff0 },
  	{ PHY_ID_BCM5421, 0xfffffff0 },
  	{ PHY_ID_BCM5461, 0xfffffff0 },
