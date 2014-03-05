@@ -29,6 +29,7 @@
 #   build
 #   ├── <platform>
 #   │   ├── busybox
+#   |   |-- i2ctools
 #   │   ├── initramfs
 #   │   ├── kernel
 #   │   ├── stamp
@@ -242,6 +243,9 @@ ifeq ($(GPT_ENABLE),yes)
 endif
 ifeq ($(GRUB_ENABLE),yes)
   include make/grub.make
+endif
+ifeq ($(I2CTOOLS_ENABLE),yes)
+  include make/i2ctools.make
 endif
 include make/images.make
 include make/demo.make

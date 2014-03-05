@@ -32,6 +32,8 @@ EXT3_4_ENABLE = yes
 
 GRUB_ENABLE = yes
 
+I2CTOOLS_ENABLE = yes
+
 # Update this if the GRUB configuration mechanism changes from one
 # release to the next.
 ONIE_CONFIG_VERSION = 0
