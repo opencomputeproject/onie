@@ -172,6 +172,8 @@ Type Code  Length      Description       Format
                                          of the device.
 0x2E       Variable    Diag Version      An ASCII string containing the version of the 
                                          diagnostic software.
+0x2F       Variable    Service Tag       An ASCII string containing a vendor defined service
+                                         tag. 
 0xFD       Variable    Vendor Extension  This type code allows vendors to include extra
                                          information that is specific to the vendor and
                                          cannot be specified using the other type codes.
