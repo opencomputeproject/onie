@@ -8,8 +8,24 @@ lib_dir="$(dirname $(realpath $0))/../lib/onie"
 }
 . $lib_dir/functions
 
+# Determine the board serial number.  Check a number of methods in
+# order:
+#
+# 1. is it set in the environment?  highest priority
+# 2. platform function provided
+# 3. architecture function provided
+# 4. return 'unknown'
+
 get_serial_num()
 {
+    if [ -z "$serial_num" ] ; then
+        if type get_serial_num_platform | grep -q 'shell function' > /dev/null 2>&1 ; then
+            serial_num=$(get_serial_num_platform)
+        elif type get_serial_num_arch | grep -q 'shell function' > /dev/null 2>&1 ; then
+                serial_num=$(get_serial_num_arch)
+        fi
+    fi
+
     if [ -n "$serial_num" ] ; then
         echo $serial_num
     else
@@ -17,10 +33,35 @@ get_serial_num()
     fi
 }
 
-get_eth_addr()
+
+# Determine the first MAC address, typically used for eth0.  Check a
+# number of methods in order:
+#
+# 1. is it set in the environment?  highest priority
+# 2. platform function provided
+# 3. architecture function provided
+# 4. use the contents of /sys/class/net/eth0/address
+# 5. return 'unknown'
+
+get_ethaddr()
 {
-    # Print Ethernet address from eth0 interface
-    ip link show eth0 | grep ether | awk '{print $2}'
+    if [ -z "$eth_addr" ] ; then
+        if type get_ethaddr_platform | grep -q 'shell function' > /dev/null 2>&1 ; then
+            eth_addr=$(get_ethaddr_platform)
+        elif type get_ethaddr_arch | grep -q 'shell function' > /dev/null 2>&1 ; then
+            eth_addr=$(get_ethaddr_arch)
+        elif [ -r /sys/class/net/eth0/address ] ; then
+            # Print Ethernet address from eth0 interface
+            eth_addr=$(cat /sys/class/net/eth0/address)
+        fi
+    fi
+
+    if [ -n "$eth_addr" ] ; then
+        echo $eth_addr
+    else
+        echo "Unknown"
+    fi
+
 }
 
 [ -r $lib_dir/sysinfo-arch ]     && . $lib_dir/sysinfo-arch
@@ -151,7 +192,7 @@ if [ "$sn" = "yes" ] || [ "$all" = "yes" ] ; then
 fi
 
 if [ "$mac" = "yes" ] || [ "$all" = "yes" ] ; then
-    val=$(get_eth_addr)
+    val=$(get_ethaddr)
     print_val $val
 fi
 
