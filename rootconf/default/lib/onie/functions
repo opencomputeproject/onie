@@ -18,6 +18,9 @@ if [ "$onie_boot_reason" = "update" ] ; then
 else
     filename_prefix="onie-installer"
     onie_operation="os-install"
+    if [ "$boot_reason" = "rescue" ] ; then
+        tee_log_file=/dev/console
+    fi
 fi
 
 # Primary default filename is most specific
@@ -382,6 +385,50 @@ udhcpc_args()
     local len=$(( ${#payload} / 2 ))
     local udhcp_vivso="-x 125:$(printf %08X%02X%s $onie_iana_enterprise $len $payload)"
     echo "$udhcp_args" "$udhcp_user_class" "$udhcp_vivso"
+}
+
+# Increment a MAC address by the specified integer
+# $1 -- base MAC address in AA:BB:CC:DD:EE:FF format
+# $2 -- amount to increment
+mac_add()
+{
+    base="$1"
+    inc="$2"
+
+    # Convert MAC string to integer and increment
+    a=$(( 0x$(echo $base | sed -e 's/://g') + $inc ))
+
+    # Sanitize the resulting  MAC address
+
+    # check if MAC is >= FF:FF:FF:FF:FF:FF
+    if [ $a -ge $(( 0xFFFFFFFFFFFF )) ] ; then
+        log_console_msg "ERROR: MAC address too large: Base MAC: $base, inc: $inc"
+        echo "bad_mac"
+        return 1
+    fi
+
+    # check if multicast MAC
+    if [ $(( $a & 0x010000000000 )) -ne 0 ] ; then
+        log_console_msg "ERROR: Multicast MAC address: Base MAC: $base, inc: $inc"
+        echo "bad_mac"
+        return 1
+    fi
+
+    # check if MAC == 0
+    if [ $a -eq 0 ] ; then
+        log_console_msg "ERROR: MAC address is zero: Base MAC: $base, inc: $inc"
+        echo "bad_mac"
+        return 1
+    fi
+
+    # Convert integer to HEX string
+    a=$(printf "%012x" $a)
+    b=
+    for x in $(seq 5 -1 0) ; do
+        b="$(echo $a|cut -b $(( ($x * 2) + 1 ))-$(( ($x * 2) + 2 )))":"$b"
+    done
+    echo $b | cut -b 1-17
+    return 0
 }
 
 # Local Variables:

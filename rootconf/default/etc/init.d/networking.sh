@@ -124,4 +124,26 @@ config_ethmgmt()
     return $return_value
 }
 
+# When starting the network at boot time configure the MAC addresses
+# for all the Ethernet management interfaces.
+if [ "$1" = "start" ] ; then
+    # Configure Ethernet management MAC addresses
+    intf_list=$(net_intf)
+    intf_counter=0
+
+    # Set MAC addr for all interfaces, but leave the interfaces down.
+    base_mac=$(onie-sysinfo -e)
+    for intf in $intf_list ; do
+        new_mac="$(mac_add $base_mac $intf_counter)"
+        if [ $? -eq 0 ] ; then
+            log_info_msg "Using $intf MAC address: $new_mac"
+            cmd_run ifconfig $intf down
+            cmd_run ifconfig $intf hw ether $new_mac down
+        else
+            log_failure_msg "Unable to configure MAC address for $intf"
+        fi
+        intf_counter=$(( $intf_counter + 1))
+    done
+fi
+
 config_ethmgmt "$*"
