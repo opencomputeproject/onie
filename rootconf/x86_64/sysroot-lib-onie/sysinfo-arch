@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# x86_64 sysinfo implemenations: see /bin/onie-sysinfo
+
+# On platforms that support the ONIE TLV format, use the
+# onie-syseeprom command to find the 'Serial Number' TLV.
+get_serial_num_arch()
+{
+    if [ -x /usr/bin/onie-syseeprom ] ; then
+        sn="$(onie-syseeprom | grep 'Serial Number' | grep 0x23 | awk '{print $5}')"
+        if [ -n "$sn" ] ; then
+            echo $sn
+        else
+            log_console "Unable to find 'Serial Number' TLV in EEPROM data."
+        fi
+    fi
+}
+
+# On platforms that support the ONIE TLV format, use the
+# onie-syseeprom command to find the 'Base MAC Address' TLV.
+get_ethaddr_arch()
+{
+    if [ -x /usr/bin/onie-syseeprom ] ; then
+        mac="$(onie-syseeprom | grep 'Base MAC Address' | grep 0x24 | awk '{print $6}')"
+        if [ -n "$mac" ] ; then
+            echo $mac
+        else
+            log_console "Unable to find 'Base MAC Address' TLV in EEPROM data."
+        fi
+    fi
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
