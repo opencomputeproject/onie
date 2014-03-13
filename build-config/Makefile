@@ -247,6 +247,9 @@ endif
 ifeq ($(I2CTOOLS_ENABLE),yes)
   include make/i2ctools.make
 endif
+ifeq ($(DMIDECODE_ENABLE),yes)
+  include make/dmidecode.make
+endif
 include make/images.make
 include make/demo.make
 include make/docs.make
