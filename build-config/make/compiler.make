@@ -9,9 +9,10 @@
 # Note: The kernel and u-boot do not use these options.
 #
 
-ONIE_CFLAGS	= -Os --sysroot=$(DEV_SYSROOT)
-ONIE_CXXFLAGS	= -Os --sysroot=$(DEV_SYSROOT)
-ONIE_LDFLAGS	= --sysroot=$(DEV_SYSROOT)
+export ONIE_CPPFLAGS	= --sysroot=$(DEV_SYSROOT)
+export ONIE_CFLAGS	= -Os $(ONIE_CPPFLAGS)
+export ONIE_CXXFLAGS	= -Os $(ONIE_CPPFLAGS)
+export ONIE_LDFLAGS	= --sysroot=$(DEV_SYSROOT)
 
 #-------------------------------------------------------------------------------
 #
