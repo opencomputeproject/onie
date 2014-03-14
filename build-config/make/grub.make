@@ -49,16 +49,18 @@ $(GRUB_SOURCE_STAMP): $(TREE_STAMP) | $(GRUB_DOWNLOAD_STAMP)
 	$(Q) touch $@
 
 grub-configure: $(GRUB_CONFIGURE_STAMP)
-$(GRUB_CONFIGURE_STAMP): $(GRUB_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(GRUB_CONFIGURE_STAMP): $(GRUB_SOURCE_STAMP) $(LVM2_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure grub-$(GRUB_VERSION) ===="
 	$(Q) cd $(GRUB_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(GRUB_DIR)/configure				\
 		--prefix=/usr					\
 		--host=$(TARGET)				\
+		--enable-device-mapper				\
 		--disable-nls					\
 		--disable-efiemu				\
 		CC=$(CROSSPREFIX)gcc				\
+		CPPFLAGS="$(ONIE_CPPFLAGS)"			\
 		CFLAGS="$(ONIE_CFLAGS)"				\
 		LDFLAGS="$(ONIE_LDFLAGS)"
 	$(Q) touch $@

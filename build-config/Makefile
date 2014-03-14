@@ -241,6 +241,9 @@ ifeq ($(GPT_ENABLE),yes)
   include make/popt.make
   include make/gptfdisk.make
 endif
+ifeq ($(LVM2_ENABLE),yes)
+  include make/lvm2.make
+endif
 ifeq ($(GRUB_ENABLE),yes)
   include make/grub.make
 endif

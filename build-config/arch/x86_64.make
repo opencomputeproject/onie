@@ -36,6 +36,8 @@ I2CTOOLS_ENABLE ?= yes
 
 DMIDECODE_ENABLE = yes
 
+LVM2_ENABLE = yes
+
 # Update this if the GRUB configuration mechanism changes from one
 # release to the next.
 ONIE_CONFIG_VERSION = 0
