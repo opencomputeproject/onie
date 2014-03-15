@@ -19,6 +19,9 @@ endif
 # Interface Masters IANA number
 VENDOR_ID = 30324
 
+# Skip the i2ctools and the onie-syseeprom command for this platform
+I2CTOOLS_ENABLE = no
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
