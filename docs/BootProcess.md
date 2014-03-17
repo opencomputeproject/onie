@@ -59,33 +59,34 @@ Partition 3: ONL SWitch Images (SWIs) partition (mounts as "/mnt/flash2" both du
 
 ONL file system layout
 -----------------------
-root@onl-powerpc:/bin# df
-Filesystem     1K-blocks  Used Available Use% Mounted on
-rootfs             72040   176     71864   1% /
-devtmpfs            1024     0      1024   0% /dev
-none               72040   176     71864   1% /
-tmpfs              48028   148     47880   1% /run
-tmpfs               5120     0      5120   0% /run/lock
-/dev/sda2          71177     7     71170   1% /mnt/flash
-/dev/sda3        3791960 98172   3693788   3% /mnt/flash2
-tmpfs              96040     0     96040   0% /run/shm
+
+    root@onl-powerpc:/bin# df
+    Filesystem     1K-blocks  Used Available Use% Mounted on
+    rootfs             72040   176     71864   1% /
+    devtmpfs            1024     0      1024   0% /dev
+    none               72040   176     71864   1% /
+    tmpfs              48028   148     47880   1% /run
+    tmpfs               5120     0      5120   0% /run/lock
+    /dev/sda2          71177     7     71170   1% /mnt/flash
+    /dev/sda3        3791960 98172   3693788   3% /mnt/flash2
+    tmpfs              96040     0     96040   0% /run/shm
 
 
 SWI
 --------
 
-Zip file contains
+Zip file contains:
 
-robs@ubuntu:~/work.onl/ONL/builds/swi/powerpc/all$ unzip -l onl-c7850a5-powerpc-all-2014.02.12.11.49.swi
-Archive:  onl-c7850a5-powerpc-all-2014.02.12.11.49.swi
-Length      Date       Time    Name
----------   ---------- -----   ----
-6877424     2014-02-12 11:55   kernel-85xx
-3378828     2014-02-12 11:55   initrd-powerpc
-93753344    2014-02-12 11:55   rootfs-powerpc.sqsh
-100         2014-02-12 11:55   version
----------                     -------
-104009696                     4 files
+    robs@ubuntu:~/work.onl/ONL/builds/swi/powerpc/all$ unzip -l onl-c7850a5-powerpc-all-2014.02.12.11.49.swi
+    Archive:  onl-c7850a5-powerpc-all-2014.02.12.11.49.swi
+    Length      Date       Time    Name
+    ---------   ---------- -----   ----
+    6877424     2014-02-12 11:55   kernel-85xx
+    3378828     2014-02-12 11:55   initrd-powerpc
+    93753344    2014-02-12 11:55   rootfs-powerpc.sqsh
+    100         2014-02-12 11:55   version
+    ---------                     -------
+    104009696                     4 files
 
 1. 'kernel-85xx'    : the actual kernel image for the running ONL
 2. 'initrd-$ARCH'   : the initial ram disk for the kernel
