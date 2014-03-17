@@ -86,4 +86,25 @@ for x in $mtds ; do
     fi
 done
 
+# create virtio block devices
+# Use the devices found in /sys/block
+vdevs=$(ls -d /sys/block/vd[a-z] 2&> /dev/null) && {
+    for d in $vdevs ; do
+        dev=$(basename $d)
+        major=$(sed -e 's/:.*$//' $d/dev)
+        rm -f /dev/$dev
+        mknod /dev/$dev b $major 0 || {
+            log_failure_msg "Problems creating /dev/$dev block device."
+            continue
+        }
+        for minor in $(seq 8) ; do
+            rm -f /dev/${dev}$minor
+            mknod /dev/${dev}$minor b $major $minor || {
+                log_failure_msg "Problems creating /dev/$dev block device."
+                continue
+            }
+        done
+    done
+}
+
 mkdir -p $ONIE_RUN_DIR
