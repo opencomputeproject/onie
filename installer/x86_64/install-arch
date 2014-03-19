@@ -119,8 +119,28 @@ create_part()
 
     [ "$verbose" = "yes" ] && echo "Creating $label on: ${onie_dev}$part"
 
+    # Create a new partition with the given start, size, gpt_uuid and
+    # name.  Additionally set partition attributes based on the
+    # particular partition.
+
+    case "$p" in
+        grub_boot | onie_boot)
+            # Set system partition (bit 0) and read-only (bit 60)
+            # attributes.
+            attr_bitmask="0x1000000000000001"
+            ;;
+        onie_config)
+            # Set system partition (bit 0) attributes.
+            attr_bitmask="0x1"
+            ;;
+        *)
+        echo "ERROR: unknown ONIE partition name: $p"
+        exit 1
+    esac
+
     sgdisk --new=$part:$start:+$size \
         --typecode=$part:$gpt_uuid \
+        --attributes=$part:=:$attr_bitmask \
         --change-name=$part:"$label" "$onie_dev" || {
         echo "ERROR: Problems creating $label partition $part on: $onie_dev"
         exit 1
