@@ -92,6 +92,29 @@ config_ethmgmt_fallback()
 
 }
 
+# Check if the specified interface is operationally "up".  Try for 5
+# seconds and then give up.
+check_link_up()
+{
+    local intf=$1
+    local operstate="/sys/class/net/${intf}/operstate"
+
+    _log_info_msg "Info: ${intf}:  Checking link... "
+    local i=0
+    [ -r $operstate ] && while [ $i -lt 50 ] ; do
+        if [ "$(cat $operstate)" = "up" ] ; then
+            _log_info_msg "up.\n"
+            return 0
+        fi
+        sleep 0.1
+        i=$(( $i + 1 ))
+    done
+
+    # no link
+    _log_info_msg "down.\n"
+    return 1
+}
+
 # Configure the management interface
 # Try these methods in order:
 # 1. static, from kernel command line parameters
@@ -111,6 +134,11 @@ config_ethmgmt()
         cmd_run ifconfig $intf up
         params="$intf $*"
         eval "result_${intf}=0"
+        check_link_up $intf || {
+            log_console_msg "${intf}: link down.  Skipping configuration."
+            eval "result_${intf}=1"
+            continue
+        }
         config_ethmgmt_dhcp6 $params  || config_ethmgmt_dhcp4 $params || config_ethmgmt_fallback $intf_counter $params || eval "result_${intf}=1"
         intf_counter=$(( $intf_counter + 1))
     done
