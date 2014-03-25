@@ -1,7 +1,7 @@
 Hardware Support
 ================
 Because of the HTML formatting, this page may be best viewed from
-<http://github.com/opennetworklinux/ONL/docs/SupportedHardware.md>.
+<https://github.com/opennetworklinux/ONL/blob/master/docs/SupportedHardware.md>.
 
 
 Quanta
