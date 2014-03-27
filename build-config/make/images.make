@@ -16,6 +16,8 @@ UPDATER_ITB		= $(MBUILDDIR)/onie.itb
 UPDATER_INITRD		= $(MBUILDDIR)/onie.initrd
 UPDATER_ONIE_TOOLS	= $(MBUILDDIR)/onie-tools.tar.xz
 
+UPDATER_IMAGE		= $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
+
 ONIE_TOOLS_LIST = \
 	lib/onie \
 	bin/onie-boot-default \
@@ -215,8 +217,74 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(SCRIPTDIR)/onie-mk-ins
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE updater ===="
 	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh $(ONIE_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
-		$(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX) $(UPDATER_IMAGE_PARTS)
+		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS)
 	$(Q) touch $@
+
+ifeq ($(PXE_EFI64_ENABLE),yes)
+
+PXE_EFI64_IMAGE		= $(UPDATER_IMAGE).efi64.pxe
+RECOVERY_CONF_DIR	= $(PROJECTDIR)/build-config/recovery
+RECOVERY_SYSROOT	= $(MBUILDDIR)/recovery-sysroot
+RECOVERY_CPIO		= $(MBUILDDIR)/recovery.cpio
+RECOVERY_INITRD		= $(MBUILDDIR)/recovery.initrd
+RECOVERY_ISO_SYSROOT	= $(MBUILDDIR)/recovery-sysroot-iso
+RECOVERY_ISO		= $(UPDATER_IMAGE).iso
+PXE_EFI64_GRUB_MODS	= $(MBUILDDIR)/pxe-efi64-grub-modlist
+
+RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
+RECOVERY_ISO_STAMP	= $(STAMPDIR)/recovery-iso
+PXE_EFI64_STAMP		= $(STAMPDIR)/pxe-efi64
+
+PHONY += pxe-efi64 recovery-initrd recovery-iso
+
+# Make an initrd based on the ONIE sysroot that also includes the ONIE
+# updater image.
+recovery-initrd: $(RECOVERY_INITRD_STAMP)
+$(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
+	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery initrd ===="
+	$(Q) rm -rf $(RECOVERY_SYSROOT)
+	$(Q) cp -a $(SYSROOTDIR) $(RECOVERY_SYSROOT)
+	$(Q) mkdir -p $(RECOVERY_SYSROOT)/usr/share/locale
+	$(Q) cp $(UPDATER_IMAGE) $(RECOVERY_SYSROOT)/lib/onie/onie-updater
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
+	$(Q) xz --compress --force --check=crc32 --stdout -8 $(RECOVERY_CPIO) > $(RECOVERY_INITRD)
+	$(Q) touch $@
+
+# Make hybrid .iso image containing the ONIE kernel and recovery intrd
+recovery-iso: $(RECOVERY_ISO_STAMP)
+$(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cfg $(RECOVERY_CONF_DIR)/syslinux.cfg
+	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery Hybrid iso ===="
+	$(Q) rm -rf $(RECOVERY_ISO_SYSROOT)
+	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)
+	$(Q) cp $(UPDATER_VMLINUZ) $(RECOVERY_ISO_SYSROOT)/vmlinuz
+	$(Q) cp $(RECOVERY_INITRD) $(RECOVERY_ISO_SYSROOT)/initrd.xz
+	$(Q) [ -r /usr/lib/syslinux/isolinux.bin ] || {						\
+		echo "ERROR:  /usr/lib/syslinux/isolinux.bin is not present";			\
+		echo "ERROR:  Is the syslinux-common package installed on your build host??" ;	\
+		exit 1; }
+	$(Q) cp /usr/lib/syslinux/isolinux.bin $(RECOVERY_ISO_SYSROOT)
+	$(Q) cp $(RECOVERY_CONF_DIR)/syslinux.cfg $(RECOVERY_ISO_SYSROOT)
+	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)/boot/grub
+	$(Q) cat $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
+	$(Q) genisoimage -r -V "ONIE-RECOVERY" -cache-inodes -J -l -b isolinux.bin	\
+		-c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table		\
+		-o $(RECOVERY_ISO) $(RECOVERY_ISO_SYSROOT)
+	$(Q) isohybrid.pl $(RECOVERY_ISO)
+	$(Q) touch $@
+
+# Convert the .iso to a PXE-EFI64 bootable image using GRUB
+pxe-efi64: $(PXE_EFI64_STAMP)
+$(PXE_EFI64_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
+	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE PXE EFI64 Recovery Image ===="
+	$(Q) cd $(GRUB_HOST_INSTALL_DIR)/usr/lib/grub/x86_64-efi && \
+		ls *.mod|sed -e 's/\.mod//g'|egrep -v '(ehci|at_keyboard)' > $(PXE_EFI64_GRUB_MODS)
+	$(Q) $(GRUB_HOST_INSTALL_DIR)/usr/bin/grub-mkimage --format=x86_64-efi	\
+	    --config=$(RECOVERY_CONF_DIR)/grub-embed.cfg			\
+	    --directory=$(GRUB_HOST_INSTALL_DIR)/usr/lib/grub/x86_64-efi	\
+	    --output=$(PXE_EFI64_IMAGE) --memdisk=$(RECOVERY_ISO)		\
+	    $$(cat $(PXE_EFI64_GRUB_MODS))
+	$(Q) touch $@
+endif
 
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
