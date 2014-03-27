@@ -34,7 +34,7 @@ if [ -z "$demo_part" ] ; then
     demo_part=$(( $last_part + 1 ))
 
     # Create new partition
-    sgdisk --new=${demo_part}::+10MB \
+    sgdisk --new=${demo_part}::+128MB \
         --change-name=${demo_part}:$demo_part_name $blk_dev || {
         echo "Error: Unable to create partition $demo_part on $blk_dev"
         exit 1
