@@ -69,11 +69,6 @@ $(E2FSPROGS_PATCH_STAMP): $(E2FSPROGS_SRCPATCHDIR)/* $(E2FSPROGS_SOURCE_STAMP)
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(E2FSPROGS_SRCPATCHDIR)/series $(E2FSPROGS_DIR)
 	$(Q) touch $@
 
-ifndef MAKE_CLEAN
-E2FSPROGS_NEW_FILES = $(shell test -d $(E2FSPROGS_DIR) && test -f $(E2FSPROGS_BUILD_STAMP) && \
-	              find -L $(E2FSPROGS_DIR) -newer $(E2FSPROGS_BUILD_STAMP) -type f -print -quit)
-endif
-
 e2fsprogs-configure: $(E2FSPROGS_CONFIGURE_STAMP)
 $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_INSTALL_STAMP) $(LZO_INSTALL_STAMP) \
 			      $(E2FSPROGS_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
@@ -90,6 +85,12 @@ $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_INSTALL_STAMP) $(LZO_INSTALL_STAMP) \
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"
 	$(Q) touch $@
+
+ifndef MAKE_CLEAN
+E2FSPROGS_NEW_FILES = $(shell test -d $(E2FSPROGS_DIR) && test -f $(E2FSPROGS_BUILD_STAMP) && \
+	              find -L $(E2FSPROGS_DIR) -newer $(E2FSPROGS_BUILD_STAMP) -type f \
+			\! -name symlinks \! -name symlinks.o -print -quit)
+endif
 
 e2fsprogs-build: $(E2FSPROGS_BUILD_STAMP)
 $(E2FSPROGS_BUILD_STAMP): $(E2FSPROGS_NEW_FILES) $(E2FSPROGS_CONFIGURE_STAMP)
