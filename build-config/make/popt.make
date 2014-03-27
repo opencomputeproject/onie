@@ -57,13 +57,8 @@ $(POPT_PATCH_STAMP): $(POPT_SRCPATCHDIR)/* $(POPT_SOURCE_STAMP)
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(POPT_SRCPATCHDIR)/series $(POPT_DIR)
 	$(Q) touch $@
 
-ifndef MAKE_CLEAN
-POPT_NEW_FILES = $(shell test -d $(POPT_DIR) && test -f $(POPT_BUILD_STAMP) && \
-	              find -L $(POPT_DIR) -newer $(POPT_CONFIGURE_STAMP) -type f -print -quit)
-endif
-
 popt-configure: $(POPT_CONFIGURE_STAMP)
-$(POPT_CONFIGURE_STAMP): $(POPT_PATCH_STAMP) $(POPT_NEW_FILES) | $(DEV_SYSROOT_INIT_STAMP)
+$(POPT_CONFIGURE_STAMP): $(POPT_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure popt-$(POPT_VERSION) ===="
 	$(Q) cd $(POPT_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
@@ -76,8 +71,13 @@ $(POPT_CONFIGURE_STAMP): $(POPT_PATCH_STAMP) $(POPT_NEW_FILES) | $(DEV_SYSROOT_I
 		LDFLAGS="$(ONIE_LDFLAGS)"
 	$(Q) touch $@
 
+ifndef MAKE_CLEAN
+POPT_NEW_FILES = $(shell test -d $(POPT_DIR) && test -f $(POPT_BUILD_STAMP) && \
+	              find -L $(POPT_DIR) -newer $(POPT_BUILD_STAMP) -type f -print -quit)
+endif
+
 popt-build: $(POPT_BUILD_STAMP)
-$(POPT_BUILD_STAMP): $(POPT_CONFIGURE_STAMP)
+$(POPT_BUILD_STAMP): $(POPT_CONFIGURE_STAMP) $(POPT_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building popt-$(POPT_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(POPT_DIR)
