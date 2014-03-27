@@ -51,7 +51,7 @@ DEMO_TRIM = \
 
 PHONY += demo-sysroot-complete
 demo-sysroot-complete: $(DEMO_SYSROOT_COMPLETE_STAMP)
-$(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_COMPLETE_STAMP)
+$(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_CPIO_XZ)
 	$(Q) rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) echo "==== Copying existing ONIE sysroot ===="
 	$(Q) cp -a $(SYSROOTDIR) $(DEMO_SYSROOTDIR)
