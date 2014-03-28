@@ -222,13 +222,14 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(SCRIPTDIR)/onie-mk-ins
 
 ifeq ($(PXE_EFI64_ENABLE),yes)
 
-PXE_EFI64_IMAGE		= $(UPDATER_IMAGE).efi64.pxe
+PXE_EFI64_IMAGE		= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).efi64.pxe
+RECOVERY_ISO_IMAGE	= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).iso
+
 RECOVERY_CONF_DIR	= $(PROJECTDIR)/build-config/recovery
 RECOVERY_SYSROOT	= $(MBUILDDIR)/recovery-sysroot
 RECOVERY_CPIO		= $(MBUILDDIR)/recovery.cpio
 RECOVERY_INITRD		= $(MBUILDDIR)/recovery.initrd
 RECOVERY_ISO_SYSROOT	= $(MBUILDDIR)/recovery-sysroot-iso
-RECOVERY_ISO		= $(UPDATER_IMAGE).iso
 PXE_EFI64_GRUB_MODS	= $(MBUILDDIR)/pxe-efi64-grub-modlist
 
 RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
@@ -268,8 +269,8 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 	$(Q) cat $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
 	$(Q) genisoimage -r -V "ONIE-RECOVERY" -cache-inodes -J -l -b isolinux.bin	\
 		-c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table		\
-		-o $(RECOVERY_ISO) $(RECOVERY_ISO_SYSROOT)
-	$(Q) isohybrid.pl $(RECOVERY_ISO)
+		-o $(RECOVERY_ISO_IMAGE) $(RECOVERY_ISO_SYSROOT)
+	$(Q) isohybrid.pl $(RECOVERY_ISO_IMAGE)
 	$(Q) touch $@
 
 # Convert the .iso to a PXE-EFI64 bootable image using GRUB
@@ -281,7 +282,7 @@ $(PXE_EFI64_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_ISO_STAMP) $(RECOVERY_
 	$(Q) $(GRUB_HOST_INSTALL_DIR)/usr/bin/grub-mkimage --format=x86_64-efi	\
 	    --config=$(RECOVERY_CONF_DIR)/grub-embed.cfg			\
 	    --directory=$(GRUB_HOST_INSTALL_DIR)/usr/lib/grub/x86_64-efi	\
-	    --output=$(PXE_EFI64_IMAGE) --memdisk=$(RECOVERY_ISO)		\
+	    --output=$(PXE_EFI64_IMAGE) --memdisk=$(RECOVERY_ISO_IMAGE)		\
 	    $$(cat $(PXE_EFI64_GRUB_MODS))
 	$(Q) touch $@
 endif
