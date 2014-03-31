@@ -245,7 +245,6 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery initrd ===="
 	$(Q) rm -rf $(RECOVERY_SYSROOT)
 	$(Q) cp -a $(SYSROOTDIR) $(RECOVERY_SYSROOT)
-	$(Q) mkdir -p $(RECOVERY_SYSROOT)/usr/share/locale
 	$(Q) cp $(UPDATER_IMAGE) $(RECOVERY_SYSROOT)/lib/onie/onie-updater
 	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(RECOVERY_CPIO) > $(RECOVERY_INITRD)
