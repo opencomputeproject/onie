@@ -38,7 +38,7 @@ $(SYSROOT_INIT_STAMP): $(TREE_STAMP)
 	$(Q) mkdir -p -v $(SYSROOTDIR)
 	$(Q) mkdir -p -v -m 0755 $(SYSROOTDIR)/dev
 	$(Q) mkdir -p -v $(SYSROOTDIR)/{sys,proc,tmp,etc,lib,mnt}
-	$(Q) mkdir -p -v $(SYSROOTDIR)/{var/log,usr/lib,usr/bin,usr/sbin,usr/share,lib,mnt}
+	$(Q) mkdir -p -v $(SYSROOTDIR)/{var/log,usr/lib,usr/bin,usr/sbin,usr/share/locale,lib,mnt}
 	$(Q) touch $@
 
 # Development sysroot, used for compiling and linking user space
