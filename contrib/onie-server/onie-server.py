@@ -8,6 +8,7 @@
 # This program is designed to run on multiple platforms (linux, windows, etc)
 
 import socket
+import os
 import os.path
 import re
 import subprocess
@@ -16,6 +17,7 @@ import sys
 from threading import Thread
 from Queue import Queue, Empty
 from shutil import copyfile
+from subprocess import check_output
 
 # This queue is used for storing STDOUT and STDERR messages from the three
 # servers that we will start
@@ -67,13 +69,74 @@ print "We need to determine which of the interfaces on your laptop " \
       "you want to boot."
 inside_ip = False
 outside_ip = False
-for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
 
-    # Skip over any 127.X.X.X addresses or the default 169.254.X.X
-    # address for windows
-    if (ip.startswith("127.") or ip.startswith("169.254.")):
-       next
+if sys.platform.startswith('win32'):
+    def platform_get_ipaddrs():
+        '''
+        Windows output:
+        Connection-specific DNS Suffix  . : nc.rr.com
+        IPv4 Address. . . . . . . . . . . : 10.0.1.51
+        Subnet Mask . . . . . . . . . . . : 255.255.255.0
+        Default Gateway . . . . . . . . . : 10.0.1.1
+        '''
+        ipaddrs = []
+        output = check_output(['ipconfig'])
+        for line in output.split('\n'):
+            result = re.search('IPv4 Address.*?(\d+\.\d+\.\d+\.\d+)', line)
+            if (result):
+                ipaddrs.append(result.group(1))
+        return ipaddrs
+elif sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
+    def platform_get_ipaddrs():
+        '''
+        Mac OSX output:
+        en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+            ether 78:31:c1:b9:c0:64
+            inet6 fe80::7a31:c1ff:feb9:c064%en0 prefixlen 64 scopeid 0x4
+            inet 10.0.1.48 netmask 0xffffff00 broadcast 10.0.1.255
+            inet6 fd91:fa24:ce87::7a31:c1ff:feb9:c064 prefixlen 64 autoconf
+            inet6 fd91:fa24:ce87::1c89:1c9f:35d2:700b prefixlen 64 autoconf temporary
+            nd6 options=1<PERFORMNUD>
+            media: autoselect
+            status: active
 
+        Linux ifconfig output:
+        eth6      Link encap:Ethernet  HWaddr 00:1b:21:d9:77:a5
+                  inet addr:192.168.10.11  Bcast:192.168.10.255  Mask:255.255.255.0
+                  inet6 addr: fe80::21b:21ff:fed9:77a5/64 Scope:Link
+                  UP BROADCAST RUNNING MULTICAST  MTU:9000  Metric:1
+                  RX packets:19791391 errors:0 dropped:0 overruns:0 frame:0
+                  TX packets:24163418 errors:0 dropped:0 overruns:0 carrier:0
+                  collisions:0 txqueuelen:1000
+                  RX bytes:19859316960 (18.4 GiB)  TX bytes:28200124245 (26.2 GiB)
+        Linux ip output:
+        22: swp20: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 500
+            link/ether 44:38:39:00:11:28 brd ff:ff:ff:ff:ff:ff
+            inet 10.1.0.1/24 brd 10.1.0.255 scope global swp20
+            inet 10.1.0.2/24 brd 10.1.0.255 scope global secondary swp20
+        '''
+        ipaddrs = []
+        # prefer Linux ip tool and fallback to ifconfig for Mac and Linux
+        # distros that lack ip tool
+        try:
+            output = check_output(['ip', 'addr', 'show'])
+        except OSError:
+            output = check_output(['ifconfig'])
+        for line in output.split('\n'):
+            result = re.search('inet (addr:)?(\d+\.\d+\.\d+\.\d+)', line)
+            if (result):
+                ipaddrs.append(result.group(2))
+        return ipaddrs
+else:
+    def platform_get_ipaddrs():
+        raise NotImplementedError("Platform not supported")
+
+def get_addresses():
+    addresses = [i for i in platform_get_ipaddrs() if not (
+            i.startswith("127.") or i.startswith("169.254."))]
+    return addresses
+
+for ip in get_addresses():
     print "\nWhat type of interface is %s?" % ip
     print "1: This interface is connected to the Internet"
     print "2: This interface is connected to my bare-metal switch"
