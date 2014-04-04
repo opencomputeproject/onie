@@ -1,7 +1,7 @@
 ############################################################
 # <bsn.cl fy=2014 v=onl>
 # 
-#           Copyright 2014 BigSwitch Networks, Inc.           
+#           Copyright 2014 Big Switch Networks, Inc.          
 # 
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -18,6 +18,11 @@
 # 
 # </bsn.cl>
 ############################################################
+#
+#
+#
+############################################################
+ifndef ONL
+$(error $$ONL is not set)
+endif
 include $(ONL)/make/subdirs.mk
-
-
