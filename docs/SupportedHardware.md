@@ -18,7 +18,7 @@ Accton
 ------
 <table border="3" style="width:800px;padding=15px;border-spacing:5px">
 <tr> <th> Device                  <th> Ports            <th> CPU                 <th> Forwarding             <th> Support Status         </tr>
-<tr> <th> Accton AS4600-54T       <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56540      <td> Supported and Tested   </tr>
+<tr> <td> Accton AS4600-54T       <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56540      <td> Supported and Tested   </tr>
 <tr> <td> Accton AS5600-52X       <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56846      <td> Supported and Tested   </tr>
 <tr> <td> Accton AS5610-52X       <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56846      <td> Supported and Tested   </tr>
 <tr> <td> Accton AS5710-54X       <td> 48x10G + 6x40G   <td> P2041               <td> Broadcom BCM56854      <td> Supported and Tested   </tr>
