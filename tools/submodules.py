@@ -20,7 +20,7 @@
 # </bsn.cl>
 ############################################################
 #
-# Submodule management. 
+# Submodule management.
 #
 ############################################################
 import os
@@ -34,8 +34,8 @@ required_submodules = sys.argv[1].split(':')
 # The second argument is the set of local modules
 local_submodules = sys.argv[2].split(':')
 
-# The third argument is the switchlight root
-switchlight_root = sys.argv[3]
+# The third argument is the onl root
+onl_root = sys.argv[3]
 
 
 def submodule_update(module, depth=None):
@@ -43,7 +43,7 @@ def submodule_update(module, depth=None):
     if depth and module != 'loader':
         print "shallow clone depth=%d" % int(depth)
         # Shallow clone first
-        url = subprocess.check_output(['git', 'config', '-f', '.gitmodules', '--get', 
+        url = subprocess.check_output(['git', 'config', '-f', '.gitmodules', '--get',
                                        'submodule.submodules/%s.url' % module])
         url = url.rstrip('\n')
         args = [ 'git', 'clone', '--depth', depth, url, 'submodules/%s' % module ]
@@ -57,20 +57,20 @@ def submodule_update(module, depth=None):
         args.append("--recursive")
     args.append('submodules/%s' % module)
     if subprocess.check_call(args) != 0:
-        print "git error updating module '%s'. See the log in %s/submodules/%s.update.log" % (module, switchlight_root, module)
+        print "git error updating module '%s'. See the log in %s/submodules/%s.update.log" % (module, onl_root, module)
         sys.exit(1)
 
 
 
-# 
+#
 # Get the current submodule status
 #
-os.chdir(switchlight_root)
+os.chdir(onl_root)
 
 #
 # We only operate on the required modules that are also
 # defined as local. Any other custom module paths
-# are just assumed to be up to the user to manage and instantiate. 
+# are just assumed to be up to the user to manage and instantiate.
 #
 git_submodule_status = {}
 try:
