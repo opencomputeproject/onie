@@ -2,7 +2,7 @@
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 # 
-#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
 # 
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -39,6 +39,11 @@ ONL_LOCAL_SUBMODULES := none
 ifndef ONL_SUBMODULE_LINUX_3_9_6
 ONL_SUBMODULE_LINUX_3_9_6      := $(ONL)/submodules/linux-3.9.6
 ONL_LOCAL_SUBMODULES += linux-3.9.6
+endif
+
+ifndef ONL_SUBMODULE_LINUX_3_8_13
+ONL_SUBMODULE_LINUX_3_8_13      := $(ONL)/submodules/linux-3.8.13
+ONL_LOCAL_SUBMODULES += linux-3.8.13
 endif
 
 ifndef ONL_SUBMODULE_INFRA
