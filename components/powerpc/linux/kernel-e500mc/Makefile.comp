@@ -1,0 +1,86 @@
+# -*- Makefile -*-
+############################################################
+# <bsn.cl fy=2013 v=onl>
+#
+#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+#
+#        http://www.eclipse.org/legal/epl-v10.html
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+#
+# </bsn.cl>
+############################################################
+#
+# Powerpc Linux for the E500MC/P2041 Platforms
+#
+############################################################
+COMPDIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
+include $(ONL)/make/config.mk
+
+all: kernel-e500mc linux-e500mc-headers dtbs
+
+kernel-e500mc: $(COMPDIR)/kernel-e500mc
+linux-e500mc-headers: $(COMPDIR)/linux-e500mc-headers
+
+KERNEL_E500MC := $(COMPDIR)/kernel-e500mc
+KERNEL_E500MC_HEADERS := $(COMPDIR)/linux-e500mc-headers
+DEFCONFIG := onl_e500mc_defconfig
+
+$(COMPDIR)/kernel-e500mc: $(ONL_SUBMODULE_LINUX_3_8_13)/arch/powerpc/configs/$(DEFCONFIG)
+	mkdir -p $(COMPDIR)/linux-build-e500mc
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_8_13) $(DEFCONFIG) ARCH=powerpc O=$(COMPDIR)/linux-build-e500mc
+	PATH=$$PATH:$(ONL)/tools $(MAKE) -C $(ONL_SUBMODULE_LINUX_3_8_13) uImage ARCH=powerpc O=$(COMPDIR)/linux-build-e500mc
+	powerpc-linux-gnu-strip -o $(COMPDIR)/kernel-e500mc $(COMPDIR)/linux-build-e500mc/vmlinux
+	cp $(COMPDIR)/linux-build-e500mc/vmlinux.bin.gz $(COMPDIR)/kernel-e500mc.bin.gz
+
+$(COMPDIR)/linux-e500mc-headers/.done: $(ONL_SUBMODULE_LINUX_3_8_13)/arch/powerpc/configs/$(DEFCONFIG)
+	mkdir -p $(COMPDIR)/linux-e500mc-headers
+	cp -a $(ONL_SUBMODULE_LINUX_3_8_13)/include $(ONL_SUBMODULE_LINUX_3_8_13)/arch/powerpc/include $(COMPDIR)/linux-e500mc-headers
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_8_13) ARCH=powerpc O=$(COMPDIR)/linux-e500mc-headers $(DEFCONFIG)
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_8_13) ARCH=powerpc O=$(COMPDIR)/linux-e500mc-headers headers_install modules_prepare arch/powerpc/lib/crtsavres.o
+	cp -R $(ONL_SUBMODULE_LINUX_3_8_13)/scripts $(COMPDIR)/linux-e500mc-headers
+	cp -R $(ONL_SUBMODULE_LINUX_3_8_13)/Makefile $(COMPDIR)/linux-e500mc-headers
+	cp -R $(ONL_SUBMODULE_LINUX_3_8_13)/arch/powerpc/Makefile $(COMPDIR)/linux-e500mc-headers/arch/powerpc
+	touch $@
+
+$(COMPDIR)/linux-e500mc-headers: $(COMPDIR)/linux-e500mc-headers/.done
+
+
+# These are the dtb files built for this kernel configuration:
+DTS_LIST := powerpc-as6700-32x-r0 powerpc-as5710-54x-r0a
+DTB_LIST := $(foreach dts,$(DTS_LIST),$(COMPDIR)/linux-e500mc-dtbs/$(dts).dtb)
+
+$(COMPDIR)/linux-e500mc-dtbs/%.dtb: $(ONL_SUBMODULE_LINUX_3_8_13)/arch/powerpc/boot/dts/%.dts kernel-e500mc | $(shell mkdir -p $(COMPDIR)/linux-e500mc-dtbs)
+	linux-build-e500mc/scripts/dtc/dtc -I dts -O dtb -o $@ $<
+
+dtbs: $(DTB_LIST)
+
+.PHONY: deb
+
+deb:
+	$(MAKE) -C deb
+
+CLEANLIST := kernel-e500mc  kernel-e500mc.bin.gz  linux-build-e500mc  linux-e500mc-dtbs  linux-e500mc-headers
+
+clean:
+	rm -rf $(CLEANLIST)
+
+
+
+
+
+
+
+
+
+
