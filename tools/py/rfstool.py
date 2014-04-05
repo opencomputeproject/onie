@@ -2,7 +2,7 @@
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 # 
-#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
 # 
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -117,7 +117,7 @@ def useradd(username, uid, password, shell, deleteFirst=True):
 def user_recovery_add(password):
     if password == 'standard':
         # The standard recovery password is the first eight characters
-        # of the md5sum of the string 'slrecovery@[sha1]'
+        # of the md5sum of the string 'onlrecovery@[sha1]'
         sha1 = subprocess.check_output(['git', 'rev-list', 'HEAD', '-1']).strip()
         password="slrecovery@[%s]" % sha1
         logger.info("Recovery password input is '%s'", password)
