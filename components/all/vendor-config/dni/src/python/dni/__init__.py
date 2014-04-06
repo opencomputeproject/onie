@@ -1,3 +1,4 @@
+#!/usr/bin/python
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 #
@@ -19,22 +20,20 @@
 # </bsn.cl>
 ############################################################
 #
-# These are the platforms to include in this installer build.
+# OpenNetworkPlatform support for DNI platforms.
 #
 ############################################################
-INSTALLER_PLATFORMS :=  powerpc-as4600-54t \
-			powerpc-as5600-52x \
-			powerpc-as5610-52x \
-			powerpc-as5710-54x-r0a \
-			powerpc-as6700-32x-r0 \
-			powerpc-quanta-lb9a-r0 \
-			powerpc-quanta-lb9-r0 \
-			powerpc-quanta-ly2-r0 \
-			powerpc-dni-7448-r0
+from onl.platform.base import OpenNetworkPlatformBase, sysinfo
+import struct
+import time
 
+class OpenNetworkPlatformDNI(OpenNetworkPlatformBase):
 
+    def manufacturer(self):
+        return "DNI"
 
-
-
-
+    def _sys_info_dict(self):
+        return {
+            sysinfo.PRODUCT_NAME : "DNINotImplemented",
+            }
 

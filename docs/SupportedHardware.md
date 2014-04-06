@@ -25,3 +25,12 @@ Accton
 <tr> <td> Accton AS6700-32X       <td> 32x40G           <td> P2041               <td> Broadcom BCM56850      <td> Supported and Tested   </tr>
 
 </table>
+
+DNI
+---
+<table border="3" style="width:800px;padding=15px;border-spacing:5px">
+
+<tr> <th> Device                  <th> Ports            <th> CPU                 <th> Forwarding             <th> Support Status         </tr>
+<tr> <td> 7448                    <td> 48x10G  + 4x40G  <td> P2020               <td> Broadcom BCM56845      <td> Supported and Tested   </tr>
+
+</table>
