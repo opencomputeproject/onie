@@ -2,7 +2,7 @@
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 # 
-#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
 # 
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance

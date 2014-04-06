@@ -1,7 +1,7 @@
 ############################################################
 # <bsn.cl fy=2014 v=onl>
 # 
-#           Copyright 2014 BigSwitch Networks, Inc.           
+#           Copyright 2014 Big Switch Networks, Inc.          
 # 
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -18,13 +18,11 @@
 # 
 # </bsn.cl>
 ############################################################
-DIRECTORIES := $(notdir $(wildcard $(CURDIR)/*))
-FILTER := make Makefile Makefile~
-DIRECTORIES := $(filter-out $(FILTER),$(DIRECTORIES))
-
-$(MAKECMDGOALS):
-	echo $(DIRECTORIES)
-	$(foreach d,$(DIRECTORIES),$(MAKE) -C $(d) $(MAKECMDGOALS) || exit 1;)
+ifndef SUBDIRS
+SUBDIRS=$(patsubst %/,%, $(wildcard */))
+endif
+makesubdirs $(MAKECMDGOALS):
+	@$(foreach d,$(SUBDIRS), test ! -f $(d)/Makefile || $(MAKE) -C $(d) $(MAKECMDGOALS) || exit 1;)
 
 
 

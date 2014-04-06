@@ -2,7 +2,7 @@
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 # 
-#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
 # 
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -143,7 +143,8 @@ ap.add_argument("--build", help="Attempt to build local package if it exists.",
                 action='store_true')
 ap.add_argument("--add-pkg", nargs='+', action='append',
                 default=None, help="Install new package files and invalidate corresponding installs.")
-ap.add_argument("--list-all", action='store_true', help="List all available component packages");
+ap.add_argument("--list-all", action='store_true', help="List all available component packages")
+ap.add_argument("--list", nargs='+', action='append', default=None, help="Search for matching package names.")
 ap.add_argument("--force-build", help="Force rebuild from source.",
                 action='store_true')
 ap.add_argument("--verbose", action='store_true', help="verbose logging")
@@ -193,6 +194,16 @@ if ops.list_all:
     for p in all_:
         if not ":any" in p and package_enabled(p):
             print p
+    sys.exit(0)
+
+if ops.list:
+    all_ = find_all_packages(os.path.abspath("%s/components" % (ONL)))
+    for p in all_:
+        if not ":any" in p and package_enabled(p):
+            for substr in ops.list[0]:
+                if substr in p:
+                    print p
+                    continue
     sys.exit(0)
 
 if ops.add_pkg:

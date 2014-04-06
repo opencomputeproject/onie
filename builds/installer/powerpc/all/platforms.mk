@@ -1,7 +1,7 @@
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 #
-#        Copyright 2013, 2014 BigSwitch Networks, Inc.
+#        Copyright 2013, 2014 Big Switch Networks, Inc.
 #
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -22,9 +22,19 @@
 # These are the platforms to include in this installer build.
 #
 ############################################################
-INSTALLER_PLATFORMS :=  powerpc-quanta-lb9-r0 \
-			powerpc-quanta-ly2-r0 \
+INSTALLER_PLATFORMS :=  powerpc-as4600-54t \
+			powerpc-as5600-52x \
 			powerpc-as5610-52x \
-			powerpc-as5600-52x
+			powerpc-as5710-54x-r0a \
+			powerpc-as6700-32x-r0 \
+			powerpc-quanta-lb9a-r0 \
+			powerpc-quanta-lb9-r0 \
+			powerpc-quanta-ly2-r0 \
+			powerpc-dni-7448-r0
+
+
+
+
+
 
 
