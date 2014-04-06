@@ -39,6 +39,6 @@ DNI/Agema
 <tr class="info">
      <th> Device                  <th> Ports            <th> CPU                 <th> Forwarding             <th> Support Status         </tr>
 </thead>
-<tr> <td> AG-7448CU               <td> 48x10G  + 4x40G  <td> P2020               <td> Broadcom BCM56845 (Trident+)     <td> Supported and Tested   </tr>
+<tr> <td> AG-7448CU               <td> 48x10G  + 4x40G  <td> P2020               <td> Broadcom BCM56845 (Trident)     <td> Supported and Tested   </tr>
 
 </table>
