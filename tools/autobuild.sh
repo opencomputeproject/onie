@@ -1,22 +1,22 @@
 #!/bin/bash
 ############################################################
 # <bsn.cl fy=2013 v=onl>
-# 
-#        Copyright 2013, 2014 Big Switch Networks, Inc.       
-# 
+#
+#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
 # with the License. You may obtain a copy of the License at
-# 
+#
 #        http://www.eclipse.org/legal/epl-v10.html
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
 # either express or implied. See the License for the specific
 # language governing permissions and limitations under the
 # License.
-# 
+#
 # </bsn.cl>
 ############################################################
 #
@@ -73,7 +73,7 @@ cd $WS_ROOT
 # Set one build date for all builds
 export ONL_BUILD_TIMESTAMP=`date +%Y.%m.%d.%H.%M`
 export ONL=/build/onl
-: ${INSTALL_SERVER:=bsn@switch-nfs}
+: ${INSTALL_SERVER:=switch-nfs}
 : ${INSTALL_BASE_DIR:=/var/export/onl/autobuilds}
 INSTALL_AUTOBUILD_DIR=${INSTALL_BASE_DIR}/$USERDIR"$BRANCH"
 INSTALL_DIR=${INSTALL_AUTOBUILD_DIR}/$ONL_BUILD_TIMESTAMP.$SHA1
@@ -88,6 +88,9 @@ EOF
 
 rm -rf $ONL_ROOT/builds/BUILDS
 
+#
+# Optimized parallel build setups
+#
 (chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel0 -j $JOBS) || true
 (chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel1 -j $JOBS) || true
 (chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel2 -j $JOBS) || true
@@ -95,6 +98,11 @@ rm -rf $ONL_ROOT/builds/BUILDS
 (chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel4 -j $JOBS) || true
 (chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel5 -j $JOBS) || true
 (chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel6 -j $JOBS) || true
+
+#
+# Anything that still needs to be built (this shouldn't fail).
+#
+(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache components)
 
 function build_and_install {
     # Build Requested
