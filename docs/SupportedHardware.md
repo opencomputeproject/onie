@@ -12,7 +12,7 @@ Quanta/IW Networks
      <th> Device                  <th> Ports            <th> CPU                 <th> Forwarding             		<th> Support Status         </tr>
 </thead>
 <tr> <td> QuantaMesh T1048-LB9    <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56534 (Firebolt3)    	<td> Supported and Tested   </tr>
-<tr> <td> QuantaMesh T1048-LB9a   <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56534 (Firebolt3)    	<td> Supported and Tested   </tr>
+<tr> <td> QuantaMesh T1048-LB9A   <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56534 (Firebolt3)    	<td> Supported and Tested   </tr>
 <tr> <td> QuantaMesh T3048-LY2    <td> 48x10G + 4x40G   <td> P2020               <td> Broadcom BCM56846 (Trident+)     	<td> Supported and Tested   </tr>
 </table>
 
