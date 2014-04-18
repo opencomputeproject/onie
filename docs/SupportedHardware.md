@@ -4,7 +4,7 @@ Because of the HTML formatting, this page may be best viewed from
 <http://opennetlinux.org/hcl>
 
 
-Quanta/IW Networks
+Quanta
 ------
 <table class="table table-striped table-hover">
 <thead>
