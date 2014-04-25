@@ -244,6 +244,9 @@ endif
 ifeq ($(LVM2_ENABLE),yes)
   include make/lvm2.make
 endif
+ifeq ($(PARTED_ENABLE),yes)
+  include make/parted.make
+endif
 ifeq ($(GRUB_ENABLE),yes)
   include make/grub.make
 endif

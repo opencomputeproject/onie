@@ -27,19 +27,29 @@ UPDATER_IMAGE_PARTS_COMPLETE = $(KERNEL_INSTALL_STAMP) $(UPDATER_INITRD) $(UPDAT
 DEMO_IMAGE_PARTS = $(DEMO_KERNEL_VMLINUZ) $(DEMO_SYSROOT_CPIO_XZ)
 DEMO_IMAGE_PARTS_COMPLETE = $(DEMO_KERNEL_COMPLETE_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
 
+# Include the GPT partitioning tools
 GPT_ENABLE = yes
 
 # gptfdisk requires C++
 REQUIRE_CXX_LIBS = yes
 
+# Include the GNU parted partitioning tools
+PARTED_ENABLE = yes
+
+# Include ext3/4 file system tools
 EXT3_4_ENABLE = yes
 
+# Include GRUB tools
 GRUB_ENABLE = yes
 
+# Default to include the i2ctools.  A particular machine.make can
+# override this.
 I2CTOOLS_ENABLE ?= yes
 
+# Include dmidecode tools
 DMIDECODE_ENABLE = yes
 
+# Include lvm2 tools
 LVM2_ENABLE = yes
 
 # Update this if the GRUB configuration mechanism changes from one
