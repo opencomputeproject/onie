@@ -30,7 +30,7 @@ PHONY += grub grub-download grub-source grub-patch \
 	 grub-configure grub-build grub-install grub-clean \
 	 grub-download-clean
 
-GRUB_SBIN = grub-install grub-bios-setup grub-probe
+GRUB_SBIN = grub-install grub-bios-setup grub-probe grub-reboot grub-set-default
 GRUB_BIN = grub-mkrelpath grub-mkimage grub-editenv
 
 grub: $(GRUB_STAMP)
@@ -71,6 +71,8 @@ $(GRUB_CONFIGURE_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_INSTALL_STAMP) | $(DEV_SYSRO
 		--enable-device-mapper				\
 		--disable-nls					\
 		--disable-efiemu				\
+		--disable-grub-mkfont				\
+		--disable-grub-themes				\
 		CC=$(CROSSPREFIX)gcc				\
 		CPPFLAGS="$(ONIE_CPPFLAGS)"			\
 		CFLAGS="$(ONIE_CFLAGS)"				\
