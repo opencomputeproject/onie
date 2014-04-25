@@ -11,7 +11,7 @@ To compile ONIE first change directories to ``build-config`` and then
 type ``"make MACHINE=kvm_x86_64 all"``.  For example::
 
   $ cd build-config
-  $ make -j4 MACHINE=kvm_x86_64 all
+  $ make -j4 MACHINE=kvm_x86_64 all recovery-iso
 
 When complete, the ONIE binaries are located in
 ``build/images``::
@@ -19,6 +19,7 @@ When complete, the ONIE binaries are located in
 -rw-r--r-- 1 3963992 Jan 30 16:38 kvm_x86_64-r0.initrd
 -rw-r--r-- 1 3091328 Jan 30 10:58 kvm_x86_64-r0.vmlinuz
 -rw-r--r-- 1 7067253 Jan 30 16:38 onie-updater-x86_64-kvm_x86_64-r0
+-rw-r--r-- 1 17825792 Apr 25 09:56 onie-recovery-x86_64-kvm_x86_64-r0.iso
 
 kvm_x86_64-r0.vmlinuz -- This is the ONIE kernel image
 
@@ -28,36 +29,44 @@ onie-updater-x86_64-kvm_x86_64-r0 -- This is the ONIE self-update
 image.  This image is a self-extracting archive used for installing
 ONIE.
 
-Creating an Empty x86_64 Virtual Machine
-========================================
+onie-recovery-x86_64-kvm_x86_64-r0.iso -- This is a recovery ISO image
+that can be install as a CDROM image.
+
+Creating a New x86_64 Virtual Machine Using the ISO Image
+=========================================================
 
 To create the VM:
 
-1. Create a 150MB blank disk image to use as the "hard drive" for your VM.
+1. Create a 256MB blank disk image to use as the "hard drive" for your VM.
    Name the file onie-x86-demo.img, putting it somewhere in your home
    directory::
 
-     $ dd if=/dev/zero of=$HOME/kvm/onie-x86-demo.img bs=1M count=150
+     $ dd if=/dev/zero of=$HOME/kvm/onie-x86-demo.img bs=1M count=256
 
-2. edit mk-vm.sh and set the DISK variable to point at the path you
-   used in step 1.
+2. edit mk-vm.sh and:
+
+   - set the "DISK" variable to point at the path you used in step 1.
+
+   - set the "CDROM" variable to point at the
+     onie-recovery-x86_64-kvm_x86_64-r0.iso ISO image.
+
+   - set the "mode" variable to "cdrom".  This will boot off the ISO
+     image.
 
 3. run mk-mv.sh
 
-This will create and launch a VM called "onie-x86-test".
+4. From the boot menu select the "embed" option to install ONIE to the
+   blank VM disk.
 
-Use virt-manager to connect to the VM console.
+5. After the install is complete kill the virtual machine and edit
+   mk-mv.sh, setting "mode" to "disk".  This will boot the VM from the
+   disk image.
 
-You can start/stop the VM using virsh::
+  This will create and launch a VM called
+"onie-x86-test".
 
-  $ virsh start onie-x86-test
-  $ virsh destroy onie-x86-test
-
-Initially the VM is blank, the only software installed on the VM is
-the BIOS and iPXE.
-
-Installing the ONIE binaries into the Virtual Machine
-=====================================================
+Creating a New x86_64 Virtual Machine Using iPXE
+================================================
 
 This example assumes you have configured a DHCP server and a HTTP
 server.  The DHCP server is nice to have, but not required.  The HTTP
@@ -81,25 +90,32 @@ When running under QEMU the virtual machine initially boots into
 SeaBIOS, which has ipxe installed.  See http://www.ipxe.org/ for
 complete details about ipxe.
 
-1.  Before starting the virtual machine, connect to the console of the
-    machine using virt-manager's VNC connection.
+1. Create a 256MB blank disk image to use as the "hard drive" for your VM.
+   Name the file onie-x86-demo.img, putting it somewhere in your home
+   directory::
 
-2.  Once installed, ONIE is configured to use the serial console of
-    the VM.  It is nice to connect to that now, before installing
-    ONIE, so you can see the difference between "before ONIE install"
-    and "after ONIE install".  You can use the "virsh console" command
-    to connect to the console::
+     $ dd if=/dev/zero of=$HOME/kvm/onie-x86-demo.img bs=1M count=256
 
-      $ virsh console onie-x86-test
+2. edit mk-vm.sh and:
 
-3.  Start the virtual machine using 'virsh start <machine-name>'
+   - set the "DISK" variable to point at the path you used in step 1.
 
-4.  On the console you wil see the SeaBIOS splash screen, followed by
-    the ipxe splash screen.  Type <ctrl>-B now.
+   - set the "mode" variable to "disk".  This will try to boot off the
+     unitialized hard disk.
 
-5.  That should drop you to iPXE prompt
+3. run mk-mv.sh -- NOTE: After starting this script you need to be
+   *fast* (5 seconds) to complete steps 4 and 5.
 
-6.  Configure the network interface.  This example assumes you have a
+4. connect to the vnc output of the VM::
+
+   vncviewer :0  (you can change the VNC_PORT in mk-mv.sh)
+
+5.  On the vnc console you wil see the SeaBIOS splash screen, followed
+    by the ipxe splash screen.  Type <ctrl>-B now.
+
+6.  That should drop you to iPXE prompt
+
+7.  Configure the network interface.  This example assumes you have a
     DHCP server configured.  If not, use the ipxe ``config`` command
     to set up the network parameters.  At the ipxe prompt type::
 
