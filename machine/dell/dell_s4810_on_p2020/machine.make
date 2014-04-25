@@ -1,4 +1,4 @@
-# Makefile fragment for DNI 7448
+# Makefile fragment for DELL S4810-ON P2020
 
 ONIE_ARCH ?= powerpc-softfloat
 
