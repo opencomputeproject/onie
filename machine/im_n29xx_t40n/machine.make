@@ -22,6 +22,9 @@ VENDOR_ID = 30324
 # Skip the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = no
 
+# Default to msdos disk label for this platform
+PARTITION_TYPE = msdos
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
