@@ -1,0 +1,1916 @@
+U-boot support for DNI-7448 platform.
+
+diff --git a/board/dni/dni_7448/Makefile b/board/dni/dni_7448/Makefile
+new file mode 100644
+index 0000000..06dcfa9
+--- /dev/null
++++ b/board/dni/dni_7448/Makefile
+@@ -0,0 +1,36 @@
++#
++# Copyright 2004 Freescale Semiconductor.
++# (C) Copyright 2001-2006
++# Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++#
++# See file CREDITS for list of people who contributed to this
++# project.
++#
++# SPDX-License-Identifier:	GPL-2.0+
++#
++
++include $(TOPDIR)/config.mk
++
++LIB	= $(obj)lib$(BOARD).o
++
++COBJS-y	+= $(BOARD).o
++COBJS-y	+= law.o
++COBJS-y	+= tlb.o
++COBJS-y	+= ddr.o
++COBJS-y	+= old_eeprom.o
++
++SRCS	:= $(SOBJS-y:.o=.S) $(COBJS-y:.o=.c)
++OBJS	:= $(addprefix $(obj),$(COBJS-y))
++SOBJS	:= $(addprefix $(obj),$(SOBJS-y))
++
++$(LIB):	$(obj).depend $(OBJS) $(SOBJS)
++	$(call cmd_link_o_target, $(OBJS))
++
++#########################################################################
++
++# defines $(obj).depend target
++include $(SRCTREE)/rules.mk
++
++sinclude $(obj).depend
++
++#########################################################################
+diff --git a/board/dni/dni_7448/ddr.c b/board/dni/dni_7448/ddr.c
+new file mode 100644
+index 0000000..7e61b1f
+--- /dev/null
++++ b/board/dni/dni_7448/ddr.c
+@@ -0,0 +1,97 @@
++/*
++ * Copyright 2008 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * Version 2 as published by the Free Software Foundation.
++ */
++
++#include <common.h>
++
++#include <asm/fsl_ddr_sdram.h>
++#include <asm/fsl_ddr_dimm_params.h>
++
++void fsl_ddr_board_options(memctl_options_t *popts,
++			   dimm_params_t    *pdimm,
++			   unsigned int      ctrl_num)
++{
++	int i;
++
++	/*
++	** Using two vintages of DNI boards with different DIMMS a
++	** parameter sweep analysis showed clk_adjust=5 and
++	** wrlvl_start=7 to be in a sweet spot for both board types.
++	*/
++	popts->clk_adjust = 5;
++
++	/*
++	 * Value 0x1f gleened from old/new DNI boards that both used this
++	 * value.
++	 */
++	popts->cpo_override = 0x1f;
++	/*
++	 * Value cas_latency is in units of clocks.  The value used
++	 * here was gleened from old/new DNI boards that both used
++	 * this value.
++	 */
++	popts->cas_latency_override = 1;
++	popts->cas_latency_override_value = 6;
++
++	/*
++	 * 1 = 1/4 clock delay
++	 * 2 = 1/2 clock delay
++	 * 3 = 3/4 clock delay
++	 * 4 = 1   clock delay
++	 * 5 = 5/4 clock delay
++	 * 6 = 3/2 clock delay
++	 *
++	 * Value 3 gleened from old/new DNI boards that both used this
++	 * value.
++	 *
++	 */
++	popts->write_data_delay = 3;
++
++	/*
++	 * Value 0 gleened from old/new DNI boards that both used this
++	 * value.
++	 */
++	popts->half_strength_driver_enable = 0;
++
++	/*
++	 * Value 2 gleened from old/new DNI boards that both used this
++	 * value.
++	 */
++	popts->rtt_override = 1;
++	popts->rtt_override_value = 2;
++	popts->rtt_wr_override_value = 2;
++
++	/*
++	 * DNI old/new boards use a value of 0x89080600 for ZQ_CNTL
++	 */
++	popts->zq_en = 1;
++
++	/*
++	 * DNI old/new boards use a value of 0x8655a608 for WRLVL_CNTL
++	 */
++	popts->wrlvl_en = 1;
++	popts->wrlvl_override = 1;
++	popts->wrlvl_sample = 10;
++	popts->wrlvl_start = 7;
++	popts->wrlvl_odten_override = 1;
++	popts->wrlvl_odten = 5;
++
++	/*
++	 * DNI old/new boards use trwt_mclk=0.
++	 */
++	popts->trwt_override = 1;
++	popts->trwt = 0;
++
++	popts->act_pd_exit_mclk_override = 1;
++	popts->dic_override = 1;
++	popts->dic = 1;
++
++	for (i = 0; i < CONFIG_CHIP_SELECTS_PER_CTRL; i++) {
++		popts->cs_local_opts[i].odt_rd_cfg = 0;
++		popts->cs_local_opts[i].odt_wr_cfg = 1;
++	}
++}
+diff --git a/board/dni/dni_7448/dni_7448.c b/board/dni/dni_7448/dni_7448.c
+new file mode 100644
+index 0000000..8d8d0fe
+--- /dev/null
++++ b/board/dni/dni_7448/dni_7448.c
+@@ -0,0 +1,602 @@
++/*
++ * Copyright 2004, 2007, 200 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2002 Scott McNutt <smcnutt@artesyncp.com>
++ *
++ * Curt Brune <curt@cumulusnetworks.com>
++ * Vidya Ravipati <vidya@cumulusnetworks.com>
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#include <common.h>
++#include <command.h>
++#include <config.h>
++#include <pci.h>
++#include <asm/processor.h>
++#include <asm/mmu.h>
++#include <asm/cache.h>
++#include <asm/immap_85xx.h>
++#include <asm/fsl_pci.h>
++#include <asm/fsl_ddr_sdram.h>
++#include <asm/io.h>
++#include <miiphy.h>
++#include <libfdt.h>
++#include <fdt_support.h>
++#include <fsl_mdio.h>
++#include <tsec.h>
++#include <broadcom_phy.h>
++#include <asm/fsl_law.h>
++#include <asm/mp.h>
++#include <netdev.h>
++
++#include <asm/fsl_serdes.h>
++#include <spd_sdram.h>
++#include <i2c.h>
++#include "dni_7448_cpld.h"
++
++DECLARE_GLOBAL_DATA_PTR;
++
++#if !defined(CONFIG_DNI_7448)
++#error "Platform define error!"
++#endif
++
++extern int handle_old_eeprom(void);
++
++/*******************************************************************************
++ *
++ * CPLD I/O
++ *
++ */
++static inline u8 cpld_rd(u32 reg)
++{
++	return in_8(((u8 *)CFG_CPLD_BASE_ADDR + reg));
++}
++
++static inline void cpld_wr(u32 reg, u8 data)
++{
++	out_8(((u8 *)CFG_CPLD_BASE_ADDR + reg), data);
++}
++
++/*******************************************************************************
++ *
++ * Early initialization
++ *
++ */
++int board_early_init_f(void)
++{
++#ifdef CONFIG_MMC
++	ccsr_gur_t *gur = (ccsr_gur_t *)(CONFIG_SYS_MPC85xx_GUTS_ADDR);
++
++	setbits_be32(&gur->pmuxcr,
++			 (MPC85xx_PMUXCR_SDHC_CD |
++			 MPC85xx_PMUXCR_SDHC_WP));
++#endif
++
++	return 0;
++}
++
++/*******************************************************************************
++ *
++ * Initialize board and the local bus
++ */
++void
++local_bus_init(void)
++{
++	volatile ccsr_gur_t *gur = (void *)(CONFIG_SYS_MPC85xx_GUTS_ADDR);
++	volatile fsl_lbc_t *lbc = LBC_BASE_ADDR;
++
++	uint clkdiv;
++	sys_info_t sysinfo;
++
++	get_sys_info(&sysinfo);
++	clkdiv = (lbc->lcrr & LCRR_CLKDIV) * 2;
++
++	gur->lbiuiplldcr1 = 0x00078080;
++	if (clkdiv == 16) {
++		gur->lbiuiplldcr0 = 0x7c0f1bf0;
++	} else if (clkdiv == 8) {
++		gur->lbiuiplldcr0 = 0x6c0f1bf0;
++	} else if (clkdiv == 4) {
++		gur->lbiuiplldcr0 = 0x5c0f1bf0;
++	}
++
++	lbc->lcrr |= 0x00030000;
++
++	asm("sync;isync;msync");
++
++	lbc->ltesr = 0xffffffff;	/* Clear LBC error interrupts */
++	lbc->lteir = 0xffffffff;	/* Enable LBC error interrupts */
++}
++
++
++
++int checkboard(void)
++{
++
++	u8    prod, prod_id, prod_rev;
++	u8    cpld_ver;
++	char *name;
++
++	prod     = cpld_rd(DNI7448_CPLD_BOARD_REV_OFFSET);
++	prod_id  = (prod & DNI7448_CPLD_BOARD_TYPE_MASK) >>
++		DNI7448_CPLD_BOARD_TYPE_SHIFT;
++	prod_rev = (prod & DNI7448_CPLD_BOARD_REV_MASK) >>
++		DNI7448_CPLD_BOARD_REV_SHIFT;
++
++	cpld_ver = cpld_rd(DNI7448_CPLD_REV_OFFSET);
++
++	name = (prod_id == 1) ? "ET-7448BF" : "Unknown";
++	printf("Board: DNI %s (hw_id: %d, hw_rev: %d, cpld_ver: 0x%02X)\n",
++		name, prod_id, prod_rev, cpld_ver);
++
++	local_bus_init();
++
++	return 0;
++}
++
++int board_early_init_r(void)
++{
++	const unsigned int flashbase = CONFIG_SYS_FLASH_BASE;
++	const u8 flash_esel = find_tlb_idx((void *)flashbase, 1);
++
++	/*
++	 * Remap Boot flash region to caching-inhibited
++	 * so that flash can be erased properly.
++	 */
++
++	/* Flush d-cache and invalidate i-cache of any FLASH data */
++	flush_dcache();
++	invalidate_icache();
++
++	/* invalidate existing TLB entry for flash */
++	disable_tlb(flash_esel);
++
++	set_tlb(1, flashbase, CONFIG_SYS_FLASH_BASE_PHYS,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++			0, flash_esel, BOOKE_PAGESZ_256M, 1);
++
++	return 0;
++}
++
++/*
++ *
++ * setup PCI
++ *
++ * Cribbed from board/freescale/mpc8536ds/mpc8536ds.c
++ *
++ */
++
++
++#ifdef CONFIG_PCI
++void pci_init_board(void)
++{
++	fsl_pcie_init_board(0);
++}
++#endif
++
++/*******************************************************************************
++ *
++ * PCI device tree massaging
++ */
++#if defined(CONFIG_OF_BOARD_SETUP)
++void ft_board_setup(void *blob, bd_t *bd)
++{
++	ft_cpu_setup(blob, bd);
++
++	FT_FSL_PCI_SETUP;
++}
++#endif
++
++/* apply errata for the front panel mgmt phy */
++int board_phy_config(struct phy_device *phydev)
++{
++	unsigned short shdw;
++	unsigned short ctrl;
++	unsigned short led;
++
++	/*
++	** Overall goal is to disable Auto-Neg in the 1000Base-X MII
++	** Control register.  Need to wind our way through the MII
++	** register indirections to get there.
++	**
++	*/
++	enum {
++		MIIM_BCM54XX_SHD_LED_CTRL		= 0x09,
++		MIIM_BCM54XX_SHD_LED_CTRL_ACT_LINK_EN	= 0x10,
++		MIIM_BCM54XX_SHD_LED_CTRL_ACT_EN	= 0x08,
++		MIIM_BCM54XX_SHD_LED_SEL_1		= 0x0D,
++		MIIM_BCM54XX_SHD_LED_SEL_2		= 0x0E,
++		MIIM_BCM54XX_SHD_MODE_CTRL		= 0x1f,
++		MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG	= 0x0001,
++	};
++
++	enum {
++		MIIM_BCM5461S_SHD_LED_LINKSPD1		= 0x0,
++		MIIM_BCM5461S_SHD_LED_LINKSPD2,
++		MIIM_BCM5461S_SHD_LED_XMITLED,
++		MIIM_BCM5461S_SHD_LED_ACTIVITYLED,
++		MIIM_BCM5461S_SHD_LED_FXLED,
++		MIIM_BCM5461S_SHD_LED_SLAVE,
++		MIIM_BCM5461S_SHD_LED_INTR,
++		MIIM_BCM5461S_SHD_LED_QUALITY,
++		MIIM_BCM5461S_SHD_LED_RCVLED,
++		MIIM_BCM5461S_SHD_LED_RESERVED1,
++		MIIM_BCM5461S_SHD_LED_MULTICOLOR1,
++		MIIM_BCM5461S_SHD_LED_OPENSHORT,
++		MIIM_BCM5461S_SHD_LED_RESERVED2,
++		MIIM_BCM5461S_SHD_LED_RESERVED3,
++		MIIM_BCM5461S_SHD_LED_OFF,
++		MIIM_BCM5461S_SHD_LED_ON,
++	};
++
++	enum {
++		MIIM_BCM5461S_LED1_SHIFT = 0,
++		MIIM_BCM5461S_LED2_SHIFT = 4,
++		MIIM_BCM5461S_LED3_SHIFT = 4,
++		MIIM_BCM5461S_LED4_SHIFT = 0,
++	};
++
++	if (phydev->drv->config)
++		phydev->drv->config(phydev);
++
++	/*
++	** Step 1 -- via the shadow control register (0x1c) access the
++	** "MODE CONTROL" register, selecting the 1000Base-X register
++	** set (SGMII side, facing eTSEC).  Future accesses to offsets
++	** 0x0 - 0xF will hit the 1000Base-X registers.
++	*/
++	shdw = MIIM_BCM54XX_SHD_VAL(MIIM_BCM54XX_SHD_MODE_CTRL);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	shdw = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD);
++	shdw |= MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG;
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_MODE_CTRL,
++					   shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	/*
++	** Step 2 -- Disable Auto-Neg.  This is a regular access to
++	** the MII control register (0x0), however the 1000Base-X
++	** register set is selected from step 1.
++	*/
++	ctrl = phy_read(phydev, MDIO_DEVAD_NONE, MII_BMCR);
++	ctrl &= ~BMCR_ANENABLE;
++	phy_write(phydev, MDIO_DEVAD_NONE, MII_BMCR, ctrl);
++
++	/*
++	** Step 3 -- Restore the access to the 1000Base-T register set
++	** (copper, network side) via the shadow control register
++	** (0x1c).  Future accesses to offsets 0x0 - 0xF will hit the
++	** 1000Base-T registers.
++	*/
++	shdw &= ~MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG;
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_MODE_CTRL,
++					   shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	/*
++	** Configure PHY LEDs
++	*/
++
++	/* Step 1 - disable left 'Link LED' */
++	led = 0xef;
++	led = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_SEL_1,
++					  led);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, led);
++
++	/* Step 2 - on the right 'Activity LED' drive link and activity */
++	shdw = MIIM_BCM54XX_SHD_VAL(MIIM_BCM54XX_SHD_LED_CTRL);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	shdw = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD);
++	shdw |= MIIM_BCM54XX_SHD_LED_CTRL_ACT_LINK_EN;
++	shdw |= MIIM_BCM54XX_SHD_LED_CTRL_ACT_EN;
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_CTRL,
++					   shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	return 0;
++}
++
++#ifdef CONFIG_TSEC_ENET
++int board_eth_init(bd_t *bis)
++{
++	struct fsl_pq_mdio_info mdio_info;
++	struct tsec_info_struct tsec_info[4];
++	int num = 0;
++
++#ifdef CONFIG_TSEC1
++	SET_STD_TSEC_INFO(tsec_info[num], 1);
++	num++;
++#endif
++#ifdef CONFIG_TSEC2
++	SET_STD_TSEC_INFO(tsec_info[num], 2);
++	if (is_serdes_configured(SGMII_TSEC2)) {
++		puts("eTSEC2 is in sgmii mode.\n");
++		tsec_info[num].flags |= TSEC_SGMII;
++	}
++	num++;
++#endif
++#ifdef CONFIG_TSEC3
++	SET_STD_TSEC_INFO(tsec_info[num], 3);
++	if (is_serdes_configured(SGMII_TSEC3)) {
++		puts("eTSEC3 is in sgmii mode.\n");
++		tsec_info[num].flags |= TSEC_SGMII;
++	}
++	num++;
++#endif
++
++	if (!num) {
++		printf("No TSECs initialized\n");
++		return 0;
++	}
++
++
++	mdio_info.regs = (struct tsec_mii_mng *)CONFIG_SYS_MDIO_BASE_ADDR;
++	mdio_info.name = DEFAULT_MII_NAME;
++
++	fsl_pq_mdio_init(bis, &mdio_info);
++
++	tsec_eth_init(bis, tsec_info, num);
++
++	return pci_eth_init(bis);
++}
++#endif
++
++void board_reset(void)
++{
++	printf("Using CPLD to reset board\n");
++	/* active low reset */
++	cpld_wr(DNI7448_CPLD_RESET_OFFSET, 0x0);
++
++	while (1);
++
++}
++
++/*
++ * Set idle fan speed.  We want all 4 fans at 6000 RPM.
++ *
++ * Run in closed loop mode.
++ * prescalar = 4 (POR default)
++ *
++ * Calculate speed register value as follows, from the
++ * MAX6650/MAX6651 spec:
++ *
++ * (KTACH) may be calculated as:
++ * tTACH = 1 / (2 x Fan Speed)
++ * KTACH = [tTACH x KSCALE x (fCLK / 128)] - 1
++ * fCLK = 256kHz
++ * Fan Speed in rotations per second
++ *
++ * We want fan_speed = 6000 RPM = 100 RPS.
++ *
++ * Plug all that in for KTACH:
++ * KTACH = ( (1 / (2 * 100 RPS)) * 4 * (256kHz / 128)) - 1
++ * KTACH = 39 decimal = 0x27
++ *
++ */
++
++#define DNI_7448_FAN_SPEED_RPM (6000)
++
++static inline u8 calc_speed_reg(int rpm)
++{
++	return  ((4 * 256 * 1000) / (2 * 128 * (rpm/60))) - 1;
++}
++
++static void set_fan_speed(void)
++{
++	int fan_addr[4] = { 0x1b, 0x1f, 0x48, 0x4b };
++	int i, fan;
++	int i2c_bus;
++	u8  data;
++
++	enum {
++		MAX6651_SPPED_REG      = 0x00,
++		MAX6651_CONFIG_REG     = 0x02,
++		MAX6651_TACH_COUNT_REG = 0x16,
++	};
++
++	i2c_bus = i2c_get_bus_num();
++
++	/* fan control is on bus 1 */
++	i2c_set_bus_num(1);
++
++	for (i = 0; i < 4; i++) {
++		fan = fan_addr[i];
++		/* CONFIG_REG: set closed-loop, 12V, prescalar=4 */
++		data = 0x2a;
++		i2c_write(fan, MAX6651_CONFIG_REG, 1, &data, 1);
++		/* TACH_COUNT_REG: set tach count time to 0.5 sec */
++		data = 0x01;
++		i2c_write(fan, MAX6651_TACH_COUNT_REG, 1, &data, 1);
++		/* SPEED_REG: set speed for 6000 RPM */
++		data = calc_speed_reg(DNI_7448_FAN_SPEED_RPM);
++		i2c_write(fan, MAX6651_SPPED_REG, 1, &data, 1);
++	}
++	/* restore original bus number */
++	i2c_set_bus_num(i2c_bus);
++}
++
++/*******************************************************************************
++ *
++ * MISC initializations after relocating to RAM.  Full C environment available.
++ * Before configuring network interfaces.
++ *
++ */
++int misc_init_r(void)
++{
++	u8 val;
++
++	/*
++	 * Check for old EEPROM format.
++	 */
++	handle_old_eeprom();
++
++	/*
++	 * Take a few things out of reset:
++	 *   BCM56845
++	 *   10G PHYs
++	 *   OOB PHY
++	 */
++
++	/* Step 1 - put SOC and PHY in reset */
++	val = cpld_rd(DNI7448_CPLD_RESET_OFFSET);
++	val &= ~DNI7448_CPLD_RESET_NET_SOC_L;
++	val &= ~DNI7448_CPLD_RESET_NET_PHY_L;
++	val &= ~DNI7448_CPLD_RESET_OOB_PHY_L;
++	cpld_wr(DNI7448_CPLD_RESET_OFFSET, val);
++	udelay(10000);
++
++	/* Step 2 - take PHYs out of reset */
++	val |= DNI7448_CPLD_RESET_NET_PHY_L;
++	val |= DNI7448_CPLD_RESET_OOB_PHY_L;
++	cpld_wr(DNI7448_CPLD_RESET_OFFSET, val);
++	udelay(10000);
++
++	/* Step 2 - take SOC out of reset */
++	val |= DNI7448_CPLD_RESET_NET_SOC_L;
++	cpld_wr(DNI7448_CPLD_RESET_OFFSET, val);
++	udelay(10000);
++
++	set_fan_speed();
++
++	return 0;
++}
++
++/*******************************************************************************
++ *
++ * MISC initializations after relocating to RAM.  Full C environment available.
++ *
++ * Go through the CPLD register spec and set interesting bits here.
++ */
++
++int last_stage_init(void)
++{
++	uint8_t led, fan_tray_led;
++	uint8_t fan_status;
++	uint8_t fan_0_absent;
++	uint8_t fan_1_absent;
++	uint8_t psu_status;
++	uint8_t psu_0_status;
++	uint8_t psu_1_status;
++	uint8_t sys_err = 0;
++	uint8_t pwr_status;
++	uint8_t pwr_good;
++	uint8_t psu_err = 0;
++
++	/*
++	 * Set front panel LEDs to reasonable values:
++	 *
++	 *   Status    Blinkging Green
++	 *   Fan       Operational Status (Green/Yellow)
++	 *   Power     Operational Status (Green/Blinking yellow)
++	 *   Master    Off
++	 */
++	fan_status = cpld_rd(DNI7448_CPLD_FAN_STATUS_OFFSET);
++
++	/* Start with all status LEDs off */
++	led = 0;
++
++	/* Set fan LEDs depending on presence. */
++	fan_0_absent = fan_status & DNI7448_CPLD_FAN_0_PRESENT_L;
++	fan_1_absent = fan_status & DNI7448_CPLD_FAN_1_PRESENT_L;
++
++	/*
++	 * If either of the system fans is absent set front panel fan
++	 * LED to yellow, otherwise green.
++	 */
++	if (fan_0_absent || fan_1_absent) {
++		printf("WARNING:  System fan is absent or bad.\n");
++		led |= DNI7448_CPLD_FAN_LED_YELLOW;
++		sys_err++;
++	} else {
++		led |= DNI7448_CPLD_FAN_LED_GREEN;
++	}
++
++	fan_tray_led = cpld_rd(DNI7448_CPLD_FAN_TRAY_LED_CTRL_OFFSET);
++	fan_tray_led &= ~(DNI7448_CPLD_FAN_TRAY_1_LED_MASK | DNI7448_CPLD_FAN_TRAY_0_LED_MASK);
++	if (fan_0_absent) {
++		fan_tray_led |= DNI7448_CPLD_FAN_TRAY_0_LED_RED;
++	} else {
++		fan_tray_led |= DNI7448_CPLD_FAN_TRAY_0_LED_GREEN;
++	}
++	if (fan_1_absent) {
++		fan_tray_led |= DNI7448_CPLD_FAN_TRAY_1_LED_RED;
++	} else {
++		fan_tray_led |= DNI7448_CPLD_FAN_TRAY_1_LED_GREEN;
++	}
++	cpld_wr(DNI7448_CPLD_FAN_TRAY_LED_CTRL_OFFSET, fan_tray_led);
++
++	/* Set power depending on status. */
++	psu_status = cpld_rd(DNI7448_CPLD_BULK_PS_OFFSET);
++	psu_0_status = psu_status & DNI7448_CPLD_BULK_PS_0_MASK;
++	psu_1_status = psu_status & DNI7448_CPLD_BULK_PS_1_MASK;
++
++	/*
++	 * If a PSU is present and has bad status then note power is
++	 * bad.
++	 */
++	if (!(psu_0_status & DNI7448_CPLD_BULK_PS_0_PRESENT_L)) {
++		if ((psu_0_status & DNI7448_CPLD_BULK_PS_0_OK_L)     ||
++		    !(psu_0_status & DNI7448_CPLD_BULK_PS_0_TEMP_OK) ||
++		    !(psu_0_status & DNI7448_CPLD_BULK_PS_0_FAN_OK)) {
++			printf("WARNING:  Power Supply 0 is bad.\n");
++			psu_err++;
++		}
++	} else {
++		printf("INFO: Power Supply 0 is not present.\n");
++	}
++
++	if (!(psu_1_status & DNI7448_CPLD_BULK_PS_1_PRESENT_L)) {
++		if ((psu_1_status & DNI7448_CPLD_BULK_PS_1_OK_L)     ||
++		    !(psu_1_status & DNI7448_CPLD_BULK_PS_1_TEMP_OK) ||
++		    !(psu_1_status & DNI7448_CPLD_BULK_PS_1_FAN_OK)) {
++			printf("WARNING:  Power Supply 1 is bad.\n");
++			psu_err++;
++		}
++	} else {
++		printf("INFO: Power Supply 1 is not present.\n");
++	}
++
++	if (psu_err) {
++		led |= DNI7448_CPLD_PSU_LED_YELLOW_BLINK;
++	} else {
++		led |= DNI7448_CPLD_PSU_LED_GREEN;
++	}
++
++	/*
++	 * Check base board power
++	 */
++	pwr_status = cpld_rd(DNI7448_CPLD_BOARD_PWR_STATUS_OFFSET);
++	pwr_good = DNI7448_CPLD_VCC_3V3_GOOD    |
++		DNI7448_CPLD_NET_SOC_1V_GOOD    |
++		DNI7448_CPLD_DDR_1V5_GOOD       |
++		DNI7448_CPLD_PHY_1V_1to24_GOOD  |
++		DNI7448_CPLD_PHY_1V_25to52_GOOD;
++	if ((pwr_status & DNI7448_CPLD_BOARD_PWR_STATUS_MASK) != pwr_good) {
++		printf("WARNING:  Board power error detected.\n");
++		sys_err++;
++	}
++
++	if (sys_err || psu_err) {
++		led |= DNI7448_CPLD_STATUS_LED_GREEN_BLINK;
++	} else {
++		led |= DNI7448_CPLD_STATUS_LED_GREEN;
++	}
++
++	/*
++	 * Note: The OS must set the master LED
++	 */
++	led |= DNI7448_CPLD_MASTER_LED_OFF;
++	cpld_wr(DNI7448_CPLD_SYSTEM_LED_OFFSET, led);
++
++	return 0;
++}
++
++void fdt_fixup_board(void *fdt)
++{
++}
+diff --git a/board/dni/dni_7448/dni_7448_cpld.h b/board/dni/dni_7448/dni_7448_cpld.h
+new file mode 100644
+index 0000000..fd50369
+--- /dev/null
++++ b/board/dni/dni_7448/dni_7448_cpld.h
+@@ -0,0 +1,175 @@
++/*
++ * DNI 7448 CPLD Platform Definitions
++ *
++ * Curt Brune <curt@cumulusnetworks.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
++ */
++
++#ifndef DNI_7448_H__
++#define DNI_7448_H__
++
++
++/*------------------------------------------------------------------------------
++ *
++ * Device data and driver data structures
++ *
++ * register info from ET-7448BF-V2_HW_SPEC_REV0_1R.pdf from DNI (July 10, 2010)
++ */
++
++#define DNI7448_CPLD_BOARD_REV_OFFSET		0x10
++#define	 DNI7448_CPLD_BOARD_TYPE_MASK		0xf0
++#define	 DNI7448_CPLD_BOARD_TYPE_SHIFT		4
++#define	 DNI7448_CPLD_BOARD_REV_MASK		0x0f
++#define	 DNI7448_CPLD_BOARD_REV_SHIFT		0
++
++#define	DNI7448_CPLD_RESET_OFFSET		0x20
++#define	DNI7448_CPLD_RESET_SYSTEM_L		(1 << 7)
++#define	 DNI7448_CPLD_RESET_CPU_HARD_L		(1 << 6)
++#define	 DNI7448_CPLD_RESET_CPU_SOFT_L		(1 << 5)
++#define	 DNI7448_CPLD_RESET_DDR3_L		(1 << 4)
++#define	 DNI7448_CPLD_RESET_FLASH_L		(1 << 3)
++#define	 DNI7448_CPLD_RESET_NET_SOC_L		(1 << 2)
++#define	 DNI7448_CPLD_RESET_NET_PHY_L		(1 << 1)
++#define	 DNI7448_CPLD_RESET_OOB_PHY_L		(1 << 0)
++
++#define DNI7448_CPLD_BULK_PS_OFFSET		0x30
++#define	 DNI7448_CPLD_BULK_PS_0_MASK		0xf0
++#define	  DNI7448_CPLD_BULK_PS_0_PRESENT_L	(1 << 7)
++#define	  DNI7448_CPLD_BULK_PS_0_OK_L		(1 << 6)
++#define	  DNI7448_CPLD_BULK_PS_0_TEMP_OK	(1 << 5)
++#define	  DNI7448_CPLD_BULK_PS_0_FAN_OK		(1 << 4)
++#define	 DNI7448_CPLD_BULK_PS_1_MASK		0x0f
++#define	  DNI7448_CPLD_BULK_PS_1_PRESENT_L	(1 << 3)
++#define	  DNI7448_CPLD_BULK_PS_1_OK_L		(1 << 2)
++#define	  DNI7448_CPLD_BULK_PS_1_TEMP_OK	(1 << 1)
++#define	  DNI7448_CPLD_BULK_PS_1_FAN_OK		(1 << 0)
++
++#define DNI7448_CPLD_PHY_IRQ_EN_0to7_OFFSET	0x40
++#define	 DNI7448_CPLD_PHY7_IRQ_EN_L		(1 << 7)
++#define	 DNI7448_CPLD_PHY6_IRQ_EN_L		(1 << 6)
++#define	 DNI7448_CPLD_PHY5_IRQ_EN_L		(1 << 5)
++#define	 DNI7448_CPLD_PHY4_IRQ_EN_L		(1 << 4)
++#define	 DNI7448_CPLD_PHY3_IRQ_EN_L		(1 << 3)
++#define	 DNI7448_CPLD_PHY2_IRQ_EN_L		(1 << 2)
++#define	 DNI7448_CPLD_PHY1_IRQ_EN_L		(1 << 1)
++#define	 DNI7448_CPLD_PHY0_IRQ_EN_L		(1 << 0)
++
++#define DNI7448_CPLD_PHY_IRQ_EN_8to15_OFFSET	0x50
++#define	 DNI7448_CPLD_QPHY3_IRQ_EN_L		(1 << 7)
++#define	 DNI7448_CPLD_QPHY2_IRQ_EN_L		(1 << 6)
++#define	 DNI7448_CPLD_QPHY1_IRQ_EN_L		(1 << 5)
++#define	 DNI7448_CPLD_QPHY0_IRQ_EN_L		(1 << 4)
++#define	 DNI7448_CPLD_PHY11_IRQ_EN_L		(1 << 3)
++#define	 DNI7448_CPLD_PHY10_IRQ_EN_L		(1 << 2)
++#define	 DNI7448_CPLD_PHY9_IRQ_EN_L		(1 << 1)
++#define	 DNI7448_CPLD_PHY8_IRQ_EN_L		(1 << 0)
++
++#define DNI7448_CPLD_BOARD_PWR_OFFSET		0x60
++#define	 DNI7448_CPLD_FLASH_ERASE		(1 << 7)
++#define	 DNI7448_CPLD_FLASH_WRITE		(1 << 6)
++#define	 DNI7448_CPLD_CPU_1V_L			(1 << 4)
++#define	 DNI7448_CPLD_NET_SOC_1V		(1 << 3)
++#define	 DNI7448_CPLD_DDR_1V5			(1 << 2)
++#define	 DNI7448_CPLD_PHY_1V_L			(1 << 1)
++#define	 DNI7448_CPLD_PHY_1V_R			(1 << 0)
++
++#define DNI7448_CPLD_BOARD_PWR_STATUS_OFFSET	0x70
++#define  DNI7448_CPLD_BOARD_PWR_STATUS_MASK	0x7F
++#define	 DNI7448_CPLD_VCC_3V3_GOOD		(1 << 6)
++#define	 DNI7448_CPLD_CPU_1V_GOOD_L		(1 << 5)
++#define	 DNI7448_CPLD_NET_SOC_1V_GOOD		(1 << 4)
++#define	 DNI7448_CPLD_DDR_1V5_GOOD		(1 << 3)
++#define	 DNI7448_CPLD_PHY_1V5_GOOD_L		(1 << 2)
++#define	 DNI7448_CPLD_PHY_1V_1to24_GOOD		(1 << 1)
++#define	 DNI7448_CPLD_PHY_1V_25to52_GOOD	(1 << 0)
++
++#define DNI7448_CPLD_SYSTEM_LED_OFFSET		0x80
++#define  DNI7448_CPLD_FAN_LED			0xc0
++#define   DNI7448_CPLD_FAN_LED_GREEN		0x40
++#define   DNI7448_CPLD_FAN_LED_YELLOW		0x80
++#define   DNI7448_CPLD_FAN_LED_OFF		0x00
++#define  DNI7448_CPLD_PSU_LED			0x30
++#define   DNI7448_CPLD_PSU_LED_GREEN		0x20
++#define   DNI7448_CPLD_PSU_LED_YELLOW		0x10
++#define   DNI7448_CPLD_PSU_LED_YELLOW_BLINK	0x30
++#define   DNI7448_CPLD_PSU_LED_OFF		0x00
++#define  DNI7448_CPLD_MASTER_LED		0x08
++#define   DNI7448_CPLD_MASTER_LED_GREEN		0x00
++#define   DNI7448_CPLD_MASTER_LED_OFF		0x08
++#define  DNI7448_CPLD_STATUS_LED		0x07
++#define   DNI7448_CPLD_STATUS_LED_GREEN		0x02
++#define   DNI7448_CPLD_STATUS_LED_GREEN_BLINK	0x01
++#define   DNI7448_CPLD_STATUS_LED_RED		0x03
++#define   DNI7448_CPLD_STATUS_LED_RED_BLINK	0x04
++#define   DNI7448_CPLD_STATUS_LED_OFF		0x00
++
++#define DNI7448_CPLD_FAN_STATUS_OFFSET		0x90
++#define  DNI7448_CPLD_FAN_0_MASK		0x2c
++#define   DNI7448_CPLD_FAN_0_PRESENT_L		(1 << 5)
++#define   DNI7448_CPLD_FAN_0_A_OK		(1 << 3)
++#define   DNI7448_CPLD_FAN_0_B_OK		(1 << 2)
++#define  DNI7448_CPLD_FAN_1_MASK		0x13
++#define   DNI7448_CPLD_FAN_1_PRESENT_L		(1 << 4)
++#define   DNI7448_CPLD_FAN_1_A_OK		(1 << 1)
++#define   DNI7448_CPLD_FAN_1_B_OK		(1 << 0)
++
++#define DNI7448_CPLD_REV_OFFSET			0xa0
++
++#define DNI7448_CPLD_BOARD_IRQ_CTRL_OFFSET	0xb0
++#define  DNI7448_CPLD_POWER_IRQ_EN_L		(1 << 6)
++#define  DNI7448_CPLD_PHY_IRQ_EN_L		(3 << 4)
++#define  DNI7448_CPLD_HOT_SWAP_IRQ_EN_L		(1 << 3)
++#define  DNI7448_CPLD_THERMAL_IRQ_EN_L		(1 << 2)
++#define  DNI7448_CPLD_FAN_IRQ_EN_L		(1 << 1)
++#define  DNI7448_CPLD_OOB_PHY_IRQ_EN_L		(1 << 0)
++
++#define	DNI7448_CPLD_WATCHDOG_OFFSET		0xc0
++#define  DNI7448_CPLD_WATCHDOG_TIME		0x70
++#define  DNI7448_CPLD_WATCHDOG_15_SEC		0x00
++#define  DNI7448_CPLD_WATCHDOG_20_SEC		0x10
++#define  DNI7448_CPLD_WATCHDOG_30_SEC		0x20
++#define  DNI7448_CPLD_WATCHDOG_40_SEC		0x30
++#define  DNI7448_CPLD_WATCHDOG_50_SEC		0x40
++#define  DNI7448_CPLD_WATCHDOG_60_SEC		0x50
++#define  DNI7448_CPLD_WATCHDOG_EN		(1 << 3)
++#define  DNI7448_CPLD_WATCHDOG_CPLD_RESET_L	(1 << 2)
++#define  DNI7448_CPLD_WATCHDOG_RTC_RESET_L	(1 << 1)
++#define  DNI7448_CPLD_WATCHDOG_FLAG		(1 << 0)
++
++#define DNI7448_CPLD_FAN_TRAY_LED_CTRL_OFFSET	0xd0
++#define  DNI7448_CPLD_PORT_LED_EN		(1 << 7)
++#define  DNI7448_CPLD_FAN_TRAY_1_LED_MASK	0x0c
++#define   DNI7448_CPLD_FAN_TRAY_1_LED_GREEN	0x04
++#define   DNI7448_CPLD_FAN_TRAY_1_LED_RED	0x08
++#define   DNI7448_CPLD_FAN_TRAY_1_LED_OFF	0x00
++#define  DNI7448_CPLD_FAN_TRAY_0_LED_MASK	0x03
++#define   DNI7448_CPLD_FAN_TRAY_0_LED_GREEN	0x01
++#define   DNI7448_CPLD_FAN_TRAY_0_LED_RED	0x02
++#define   DNI7448_CPLD_FAN_TRAY_0_LED_OFF	0x00
++
++#define DNI7448_CPLD_AIRFLOW_OFFSET		0xe0
++
++#define DNI7448_CPLD_BOARD_IRQ_MASK_OFFSET	0xf0
++#define  DNI7448_CPLD_POWER_IRQ_MASK_EN_L	(1 << 6)
++#define  DNI7448_CPLD_PHY_IRQ_MASK_EN_L		(3 << 4)
++#define  DNI7448_CPLD_HOT_SWAP_IRQ_MASK_EN_L	(1 << 3)
++#define  DNI7448_CPLD_THERMAL_IRQ_MASK_EN_L	(1 << 2)
++#define  DNI7448_CPLD_FAN_IRQ_MASK_EN_L		(1 << 1)
++#define  DNI7448_CPLD_OOB_PHY_IRQ_MASK_EN_L	(1 << 0)
++
++#define DNI7448_CPLD_STRING_NAME_SIZE 20
++
++#endif /* DNI_7448_H__ */
+diff --git a/board/dni/dni_7448/law.c b/board/dni/dni_7448/law.c
+new file mode 100644
+index 0000000..36d31e2
+--- /dev/null
++++ b/board/dni/dni_7448/law.c
+@@ -0,0 +1,51 @@
++/*
++ * Copyright 2008-2010 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <asm/fsl_law.h>
++#include <asm/mmu.h>
++
++
++/*
++ * LAW(Local Access Window) configuration:
++ *
++ * 0  LAW0  FLASH                  0xF800_0000~0xFFFF_FFFF	  128 Mbyte
++ * 1  LAW1  CPLD		   0xA000_0000~0xB00F_FFFF	  1   Mbyte
++ * 2  LAW2  PCI Express 1	   0xB000_0000~0xCFFF_FFFF	  256 MByte
++ * 3  LAW3  PCI Express 2	   0xC000_0000~0xDFFF_FFFF	  256 Mbyte
++ * 4  LAW4  PCI Express 3	   0xD000_0000~0xDFFF_FFFF	  256 Mbyte
++ *
++ * Notes:
++ *    CCSRBAR and L2-as-SRAM don't need a configured Local Access Window.
++ *    If flash is 8M at default position (last 8M), no LAW needed.
++ *
++ */
++
++struct law_entry law_table[] = {
++	SET_LAW(CONFIG_SYS_FLASH_BASE, LAW_SIZE_128M, LAW_TRGT_IF_LBC),
++	SET_LAW(CONFIG_SYS_CPLD_BASE, LAW_SIZE_4K, LAW_TRGT_IF_LBC),
++};
++
++int num_law_entries = ARRAY_SIZE(law_table);
+diff --git a/board/dni/dni_7448/old_eeprom.c b/board/dni/dni_7448/old_eeprom.c
+new file mode 100644
+index 0000000..f8e86d0
+--- /dev/null
++++ b/board/dni/dni_7448/old_eeprom.c
+@@ -0,0 +1,383 @@
++/*
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#include <common.h>
++#include <command.h>
++#include <i2c.h>
++#include <linux/ctype.h>
++#include <sys_eeprom.h>
++
++/* Set to 1 if we've read EEPROM into memory */
++static int has_been_read;
++
++/**
++ * static eeprom: EEPROM layout for DNI-7448
++ *
++ * See their spec for details.
++ *
++ * The strings are NULL padded to the field width.
++ *
++ */
++#define DNI_FIELD_SZ (32)
++#define MAC_FIELD_SZ (6)
++static struct __attribute__ ((__packed__)) eeprom {
++	u8 vendor_id     [DNI_FIELD_SZ];
++	u8 country_code  [DNI_FIELD_SZ];
++	u8 date_code     [DNI_FIELD_SZ];
++	u8 serial_number [DNI_FIELD_SZ];
++	u8 part_number   [DNI_FIELD_SZ];
++	u8 revision      [DNI_FIELD_SZ];
++	u8 order_number  [DNI_FIELD_SZ];
++	u8 component_type[DNI_FIELD_SZ];
++	u8 component_id  [DNI_FIELD_SZ];
++	u8 start_mac     [MAC_FIELD_SZ];  /* binary */
++	u8 end_mac       [MAC_FIELD_SZ];  /* binary */
++	u8 resv          [DNI_FIELD_SZ - (2*MAC_FIELD_SZ)];
++	u8 csum;
++} e;
++
++/*
++** Keep this enum in sync with the above eeprom struct.
++*/
++enum {
++	FLD_vendor_id = 0,
++	FLD_country_code,
++	FLD_date_code,
++	FLD_serial_number,
++	FLD_part_number,
++	FLD_revision,
++	FLD_order_number,
++	FLD_component_type,
++	FLD_component_id,
++	FLD_start_mac,
++	FLD_end_mac,
++	FLD_resv,
++	__FLD_MAX,
++};
++
++struct fld_desc {
++	char *m_name;
++	u32   m_len;
++	u32   m_off;
++};
++
++#define EDOT e.
++#define _MK_FLD(X, Y) [FLD_ ## X] =			\
++	{						\
++		m_name: #X,				\
++		m_len: sizeof(Y),			\
++		m_off: offsetof(struct eeprom, X),	\
++	}
++#define MK_FLD(X) _MK_FLD(X, e.X)
++
++static struct fld_desc eeprom_desc[] = {
++	MK_FLD(vendor_id),
++	MK_FLD(country_code),
++	MK_FLD(date_code),
++	MK_FLD(serial_number),
++	MK_FLD(part_number),
++	MK_FLD(revision),
++	MK_FLD(order_number),
++	MK_FLD(component_type),
++	MK_FLD(component_id),
++	MK_FLD(start_mac),
++	MK_FLD(end_mac),
++	MK_FLD(resv),
++};
++
++static inline u8 calc_2s_comp(u8 *data, u32 len)
++{
++	u32 csum = 0;
++	u32 i;
++	u32 t = 1 << 8;
++
++	for (i = 0; i < len - 1; i++)
++		csum += data[i];
++
++	return (t - csum) & (t - 1);
++}
++
++/**
++ * show_eeprom - display the contents of the EEPROM
++ */
++static void show_eeprom(void)
++{
++	unsigned int csum, i;
++	char buf[256];
++
++	for (i = 0; i < __FLD_MAX; i++) {
++		if (i == FLD_resv) {
++			/* do not bother printing the reserved field */
++			continue;
++		}
++		if ((i == FLD_start_mac) || (i == FLD_end_mac)) {
++			u8 *p = ((u8 *)&e) + eeprom_desc[i].m_off;
++			sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x", p[0], p[1],
++				p[2], p[3], p[4], p[5]);
++			buf[17] = '\0';
++		} else {
++			strncpy(buf, ((char *)&e) + eeprom_desc[i].m_off,
++				eeprom_desc[i].m_len);
++			buf[eeprom_desc[i].m_len] = '\0';
++		}
++		printf("[%2d] %-20s: %s\n", i, eeprom_desc[i].m_name, buf);
++	}
++
++	csum = calc_2s_comp((void *)&e, sizeof(e));
++
++	if (csum == e.csum) {
++		printf("CRC: 0x%02X\n", e.csum);
++	} else {
++		printf("CRC: 0x%02X (should be 0x%02X)\n",
++		       e.csum, csum);
++	}
++
++#ifdef DEBUG
++	printf("EEPROM dump: (0x%x bytes)\n", sizeof(e));
++	for (i = 0; i < sizeof(e); i++) {
++		if ((i % 16) == 0)
++			printf("%02X: ", i);
++		printf("%02X ", ((u8 *)&e)[i]);
++		if (((i % 16) == 15) || (i == sizeof(e) - 1))
++			printf("\n");
++	}
++#endif
++}
++
++/**
++ * read_old_eeprom - read the old EEPROM format into memory
++ */
++static int read_old_eeprom(void)
++{
++	int ret;
++	int i;
++	void *p;
++	u32 csum;
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	unsigned int bus;
++#endif
++
++	if (has_been_read)
++		return 0;
++
++	puts("Legacy EEPROM Format: ");
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	bus = i2c_get_bus_num();
++	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
++#endif
++
++	/*
++	** For the 8Kbit device the lower 2 bits of the i2c device
++	** address are the 2 MSB of the 10-bit data address.
++	*/
++	for (i = 0, p = &e; i < sizeof(e); i += 8, p += 8) {
++		ret = i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR + ((i >> 8) & 0x3),
++			       i & 0xFF, CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
++			       p, min((sizeof(e) - i), 8));
++		if (ret)
++			break;
++	}
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	i2c_set_bus_num(bus);
++#endif
++
++	csum = calc_2s_comp((void *)&e, sizeof(e));
++	if (csum != e.csum) {
++		printf("CRC mismatch (%02X != %02X)\n", csum, e.csum);
++		ret = -1;
++	} else {
++		printf("OK\n");
++	}
++
++	has_been_read = (ret == 0) ? 1 : 0;
++
++	return ret;
++}
++
++/**
++ * get_mac_from_eeprom - read the MAC addresses from EEPROM
++ *
++ * This function reads the MAC addresses from EEPROM and sets the
++ * appropriate environment variables for each one read.
++ *
++ * The environment variables are only set if they haven't been set already.
++ * This ensures that any user-saved variables are never overwritten.
++ *
++ * This function must be called after relocation.
++ */
++static int get_mac_from_eeprom(void)
++{
++	u8 *p;
++
++	if (getenv("ethaddr"))
++		return 0;
++
++	p = &e.start_mac[0];
++	if (is_valid_ether_addr(p)) {
++		char ethaddr[18];
++		sprintf(ethaddr, "%02x:%02x:%02x:%02x:%02x:%02x", p[0], p[1],
++			p[2], p[3], p[4], p[5]);
++		ethaddr[17] = '\0';
++		setenv("ethaddr", ethaddr);
++	}
++
++	return 0;
++}
++
++/**
++ * get_serial_number_from_eeprom - read the serial number from EEPROM
++ *
++ * This function reads the serial number from the EEPROM and sets the
++ * appropriate environment variable.
++ *
++ * The environment variable is only set if it has not been set
++ * already.  This ensures that any user-saved variables are never
++ * overwritten.
++ *
++ * This function must be called after relocation.
++ */
++int get_serial_number_from_eeprom(void)
++{
++	if (getenv("serial#"))
++		return 0;
++
++	setenv("serial#", (char *)e.serial_number);
++
++	return 0;
++}
++
++
++/**
++ * probe_tlv_offset - detect the offset of TLV EEPROM data
++ *
++ * The 7448 has two locations in the 1024 byte EEPROM that could
++ * contain TLV EEPROM data.  First check at offset
++ * CONFIG_SYS_EEPROM_OFFSET and then check offset
++ * EEPROM_LEGACY_OFFSET.
++ *
++ * Returns whatever eeprom_read() returns.
++ */
++
++#define EEPROM_LEGACY_OFFSET	0x0
++
++static int probe_tlv_offset(int* tlv_offset)
++{
++	int ret;
++	tlvinfo_header_t eeprom_hdr;
++	int offsets[] = {CONFIG_SYS_EEPROM_OFFSET, EEPROM_LEGACY_OFFSET};
++	int i;
++
++	*tlv_offset = EEPROM_LEGACY_OFFSET;
++	for (i = 0; i < sizeof(offsets)/sizeof(offsets[0]); i++) {
++		ret = eeprom_read(CONFIG_SYS_I2C_EEPROM_ADDR, offsets[i],
++				  (uchar*)&eeprom_hdr, sizeof(eeprom_hdr));
++		if (ret) {
++			break;
++		}
++		else if (is_valid_tlvinfo_header(&eeprom_hdr)) {
++			*tlv_offset = offsets[i];
++			break;
++		}
++	}
++
++	return ret;
++}
++
++/**
++ * read_sys_eeprom - call back from the core TLV EEPROM code
++ */
++int read_sys_eeprom(void *eeprom, int offset, int len)
++{
++	int ret = 0;
++	int tlv_offset;
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	unsigned int bus;
++#endif
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	bus = i2c_get_bus_num();
++	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
++#endif
++
++	ret = probe_tlv_offset(&tlv_offset);
++	if (ret)
++		return ret;
++
++	ret = eeprom_read(CONFIG_SYS_I2C_EEPROM_ADDR,
++			  tlv_offset + offset,
++			  eeprom, len);
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	i2c_set_bus_num(bus);
++#endif
++
++	return ret;
++}
++
++/**
++ * write_sys_eeprom - call back from the core TLV EEPROM code
++ *
++ * Even though the TLV EEPROM could potentially be read from multiple
++ * offsets, the only correct offset to write the data is
++ * CONFIG_SYS_EEPROM_OFFSET.
++ */
++int write_sys_eeprom(void *eeprom, int len)
++{
++	int ret = 0;
++	int i;
++	void *p;
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	unsigned int bus;
++#endif
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	bus = i2c_get_bus_num();
++	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
++#endif
++
++	ret = eeprom_write(CONFIG_SYS_I2C_EEPROM_ADDR,
++			   CONFIG_SYS_EEPROM_OFFSET,
++			   eeprom, len);
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	i2c_set_bus_num(bus);
++#endif
++
++	return ret;
++}
++
++/**
++ *  Check if the hardware EEPROM data is the new TLV format.
++ *
++ *  If the hardware format is valid do nothing.
++ *
++ *  If the hardware contents are bad try the old EEPROM format.
++ *  Attempt to populate the base MAC address and the serial number
++ *  environment variables.
++ */
++int handle_old_eeprom(void)
++{
++	/* Check if the EEPROM contents is the new format */
++	if (is_sys_eeprom_valid())
++		return 0;
++
++	if (read_old_eeprom()) {
++		printf("Read failed.\n");
++		return -1;
++	}
++
++	show_eeprom();
++
++	get_mac_from_eeprom();
++
++	get_serial_number_from_eeprom();
++
++	return 0;
++}
+diff --git a/board/dni/dni_7448/tlb.c b/board/dni/dni_7448/tlb.c
+new file mode 100644
+index 0000000..dd278db
+--- /dev/null
++++ b/board/dni/dni_7448/tlb.c
+@@ -0,0 +1,88 @@
++/*
++ * Copyright 2008-2009 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <asm/mmu.h>
++
++struct fsl_e_tlb_entry tlb_table[] = {
++	/* TLB 0 - for temp stack in cache */
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 4 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 4 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 8 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 8 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 12 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 12 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++
++	/* TLB 1 */
++	/* *I*** - Covers boot page */
++	SET_TLB_ENTRY(1, 0xfffff000, 0xfffff000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 0, BOOKE_PAGESZ_4K, 1),
++
++	/* *I*G* - CCSRBAR */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CCSRBAR, CONFIG_SYS_CCSRBAR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 1, BOOKE_PAGESZ_1M, 1),
++
++	/* W**G* - Flash, localbus */
++	/* This will be changed to *I*G* after relocation to RAM. */
++	SET_TLB_ENTRY(1, CONFIG_SYS_FLASH_BASE, CONFIG_SYS_FLASH_BASE_PHYS,
++		      MAS3_SX|MAS3_SR, MAS2_W|MAS2_G,
++		      0, 2, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCIe1 MEM -- first 256M */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_MEM_VIRT, CONFIG_SYS_PCIE1_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 3, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCIe1 MEM -- second 256M */
++	SET_TLB_ENTRY(1, (CONFIG_SYS_PCIE1_MEM_VIRT + 0x10000000),
++		      (CONFIG_SYS_PCIE1_MEM_PHYS + 0x10000000),
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 4, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCI I/O */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_IO_VIRT, CONFIG_SYS_PCIE1_IO_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 5, BOOKE_PAGESZ_256K, 1),
++
++	/* *I*G* - CPLD */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CPLD_BASE, CONFIG_SYS_CPLD_BASE,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 6, BOOKE_PAGESZ_4K, 1),
++
++};
++
++int num_tlb_entries = ARRAY_SIZE(tlb_table);
+diff --git a/boards.cfg b/boards.cfg
+index e4b0d44..34c8850 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -703,6 +703,8 @@ kmvect1                      powerpc     mpc83xx     km83xx              keymile
+ tuge1                        powerpc     mpc83xx     km83xx              keymile        -           tuxx1:KM_DISABLE_APP2,TUGE1
+ tuxx1                        powerpc     mpc83xx     km83xx              keymile
+ kmsupx5                      powerpc     mpc83xx     km83xx              keymile        -           tuxx1:KM_DISABLE_APP2,KMSUPX5
++DNI_7448                     powerpc     mpc85xx     dni_7448            dni            -           -
++DNI_7448-R0                  powerpc     mpc85xx     dni_7448            dni            -           DNI_7448:ONIE_PLATFORM_REV=0
+ sbc8548                      powerpc     mpc85xx     sbc8548             -              -           sbc8548
+ sbc8548_PCI_33               powerpc     mpc85xx     sbc8548             -              -           sbc8548:PCI,33
+ sbc8548_PCI_33_PCIE          powerpc     mpc85xx     sbc8548             -              -           sbc8548:PCI,33,PCIE
+diff --git a/include/configs/DNI_7448.h b/include/configs/DNI_7448.h
+new file mode 100644
+index 0000000..16c3c07
+--- /dev/null
++++ b/include/configs/DNI_7448.h
+@@ -0,0 +1,421 @@
++/*
++ * Curt Brune <curt@cumulusnetworks.com>
++ * Vidya Ravipati <vidya@cumulusnetworks.com>
++ *
++ * Portions Copyright 2007-2009 Freescale Semiconductor, Inc.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++/*
++ * DNI 7448 network switch board configuration file
++ */
++#ifndef __CONFIG_H
++#define __CONFIG_H
++
++#include "configs/common_config.h"
++
++/* High Level Configuration Options */
++#define CONFIG_BOOKE		1	/* BOOKE */
++#define CONFIG_E500		1	/* BOOKE e500 family */
++#define CONFIG_MPC85xx		1	/* MPC8540/60/55/41/48 */
++#define CONFIG_P2020		1	/* P2020 specific */
++#define CONFIG_DNI_7448		1	/* DNI_7448 board specific */
++#define CONFIG_BOARDNAME        "DNI 7448"
++#define CONFIG_MP		1	/* support multiple processors */
++
++#define CONFIG_FSL_ELBC		1	/* Has Enhanced localbus controller */
++#define CONFIG_PCI		1	/* enable any pci type devices */
++#define CONFIG_PCIE1		1	/* PCIE controller 1 */
++#undef  CONFIG_PCIE2			/* PCIE controller 2 */
++#undef	CONFIG_PCIE3			/* PCIE controller 3 */
++#define CONFIG_FSL_PCI_INIT	1	/* Use common FSL init code */
++#define CONFIG_FSL_PCIE_RESET	1	/* need PCIe reset errata */
++#define CONFIG_SYS_PCI_64BIT	1	/* enable 64-bit PCI resources */
++
++#define CONFIG_FSL_LAW		1	/* Use common FSL init code */
++
++#define CONFIG_TSEC_ENET		/* tsec ethernet support */
++
++#ifndef __ASSEMBLY__
++extern unsigned long get_clock_freq(void);
++#endif
++
++#define CONFIG_SYS_CLK_FREQ	100000000	/* sysclk for P2020 */
++#define CONFIG_DDR_CLK_FREQ	66000000
++
++/*
++ * These can be toggled for performance analysis, otherwise use default.
++ */
++#define CONFIG_L2_CACHE			/* toggle L2 cache */
++#define CONFIG_BTB			/* toggle branch predition */
++
++/*
++ * Only possible on E500 Version 2 or newer cores.
++ */
++#define CONFIG_ENABLE_36BIT_PHYS	1
++
++#define CONFIG_PANIC_HANG		1    /* do not reset board on panic */
++
++/*
++ * Base addresses -- Note these are effective addresses where the
++ * actual resources get mapped (not physical addresses)
++ */
++#define CONFIG_SYS_CCSRBAR		0xffe00000	/* relocated CCSRBAR */
++/* physical addr of CCSRBAR */
++#define CONFIG_SYS_CCSRBAR_PHYS_LOW	CONFIG_SYS_CCSRBAR
++
++/* DDR DRAM Setup */
++
++#define CONFIG_FSL_DDR3			1
++#undef	CONFIG_FSL_DDR_INTERACTIVE
++#define CONFIG_SPD_EEPROM		/* Use SPD EEPROM for DDR setup*/
++#define CONFIG_DDR_SPD
++#define CONFIG_SYS_SPD_BUS_NUM		0
++#define SPD_EEPROM_ADDRESS		0x52	/* CTLR 0 DIMM 0 */
++#ifndef CONFIG_SPD_EEPROM
++#error ("CONFIG_SPD_EEPROM is required")
++#endif
++
++#undef	CONFIG_DDR_ECC
++#define CONFIG_MEM_INIT_VALUE		0xdeadbeef
++
++/* DDR is system memory*/
++#define CONFIG_SYS_DDR_SDRAM_BASE	0x00000000
++#define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
++#define CONFIG_SYS_MEMTEST_START	0x00200000	/* memtest works on */
++#define CONFIG_SYS_MEMTEST_END		0x00400000
++
++#define CONFIG_NUM_DDR_CONTROLLERS	1
++#define CONFIG_DIMM_SLOTS_PER_CTLR	1
++#define CONFIG_CHIP_SELECTS_PER_CTRL	(2 * CONFIG_DIMM_SLOTS_PER_CTLR)
++
++#define CONFIG_SYS_SDRAM_SIZE		2048		/* DDR is 2GB */
++
++#undef CONFIG_CLOCKS_IN_MHZ
++
++/*
++ * Memory map
++ *
++ * 0x0000_0000	0x7fff_ffff	DDR			2G Cacheable
++ * 0x8000_0000	0x9fff_ffff	PCI Express Mem 3	512M non-cacheable
++ * 0xa000_0000	0xbfff_ffff	PCI Express Mem 1	512M non-cacheable
++ * 0xffc0_0000	0xffc1_ffff	PCI Express IO		64K * 2
++ *
++ * Localbus non-cacheable
++ * 0xe000_0000  0xe7ff_ffff	FLASH                   128M non-cacheable
++ * 0xffd0_0000	0xffd0_3fff	L1 for stack		16K Cacheable TLB0
++ * 0xffe0_0000	0xffef_ffff	CCSR			1M non-cacheable
++ */
++
++/*
++ * Local Bus Definitions
++ */
++
++/*
++ * FLASH on the Local Bus - CS0
++ * One bank, 64M, with 32-bit data width
++ * Boot from BR0/OR0 bank at 0xe800_0000
++ *
++ * BR0:
++ *    Base address 0 = 0xe800_0000 = BR0[0:16] = 1110 1000 0000 0000 0
++ *    Port Size = 16 bits = BRx[19:20] = 10
++ *    Use GPCM = BRx[24:26] = 000
++ *    Valid = BRx[31] = 1
++ *
++ * 0	4    8	  12   16   20	 24   28
++ * 1110 1000 0000 0000 0001 0000 0000 0001 = e8001001	 BR0
++ *
++ * OR0:
++ *    Addr Mask = 64M = ORx[0:16] = 1111 1000 0000 0000 0
++ *    Reserved ORx[17:18] = 00
++ *    BCTLD = LBCTL not asserted = ORx[19] = 0
++ *    CSNT = ORx[20] = 1
++ *    ACS = half cycle delay = ORx[21:22] = 11
++ *    XACS = no extra setup = ORx[23] = 1
++ *    SCY = 2 = ORx[24:27] = 1111
++ *    SETA = cycle terminated internaly = ORx[28] = 0
++ *    TRLX = use relaxed timing = ORx[29] = 1
++ *    EHTR = use relaxed timing = ORx[30] = 1
++ *    EAD = use external address latch delay = OR[31] = 1
++ *
++ * 0	4    8	  12   16   20	 24   28
++ * 1111 1000 0000 0000 0000 1111 1111 0111 = f8000FF7    OR0
++ */
++
++/* start of FLASH 128M */
++#define CONFIG_SYS_FLASH_BASE		0xe8000000
++#define	CONFIG_SYS_FLASH_BASE_PHYS	CONFIG_SYS_FLASH_BASE
++
++#define CONFIG_FLASH_BR_PRELIM \
++	(BR_PHYS_ADDR(CONFIG_SYS_FLASH_BASE_PHYS) | BR_PS_16 | BR_V)
++#define CONFIG_FLASH_OR_PRELIM		0xf8000ff7	/* slow */
++
++#define CONFIG_SYS_FLASH_BANKS_LIST	{CONFIG_SYS_FLASH_BASE}
++
++#define CONFIG_SYS_MAX_FLASH_BANKS	1		/* number of banks */
++/* sectors per device  sectors) */
++#define CONFIG_SYS_MAX_FLASH_SECT	1027
++/* Flash Erase Timeout (ms) */
++#define CONFIG_SYS_FLASH_ERASE_TOUT	60000
++/* Flash Write Timeout (ms) */
++#define CONFIG_SYS_FLASH_WRITE_TOUT	500
++/* Flash Full Buffer Write Timeout (ms) */
++#define CONFIG_SYS_FLASH_BUFFER_WRITE_TOUT	500
++
++#ifndef CONFIG_SYS_TEXT_BASE
++#define CONFIG_SYS_TEXT_BASE    0xeff80000
++#endif
++
++#ifndef CONFIG_RESET_VECTOR_ADDRESS
++#define CONFIG_RESET_VECTOR_ADDRESS 0xeffffffc
++#endif
++
++#ifndef CONFIG_SYS_MONITOR_BASE
++#define CONFIG_SYS_MONITOR_BASE CONFIG_SYS_TEXT_BASE    /* start of monitor */
++#endif
++
++#define CONFIG_FLASH_CFI_DRIVER
++#define CONFIG_SYS_FLASH_CFI
++#define CONFIG_SYS_FLASH_EMPTY_INFO
++#define CONFIG_FLASH_SHOW_PROGRESS	45
++#define CONFIG_SYS_FLASH_USE_BUFFER_WRITE
++#define CONFIG_SYS_WRITE_SWAPPED_DATA
++#define CONFIG_SYS_FLASH_PROTECTION
++
++#define	CONFIG_BOARD_EARLY_INIT_R	1	/* Call board_pre_init_r */
++#define	CONFIG_BOARD_EARLY_INIT_F	1	/* Call board_pre_init_f */
++#define CONFIG_LAST_STAGE_INIT		1	/* Last minute info/fixups */
++/* FDT fixups before handing to the kernel */
++#define CONFIG_FDT_BOARD_FIXUPS		1
++
++#define CONFIG_SYS_INIT_RAM_LOCK	1
++#define CONFIG_SYS_INIT_RAM_ADDR	0xffd00000	/* Initial L1 address */
++/* End of used area in RAM */
++#define CONFIG_SYS_INIT_RAM_SIZE	0x00004000
++/* Initial L1  address */
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS   CONFIG_SYS_INIT_RAM_ADDR
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH 0
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW CONFIG_SYS_INIT_RAM_ADDR_PHYS
++
++/* num bytes initial data */
++#define CONFIG_SYS_GBL_DATA_SIZE	1024
++#define CONFIG_SYS_GBL_DATA_OFFSET \
++	(CONFIG_SYS_INIT_RAM_SIZE - CONFIG_SYS_GBL_DATA_SIZE)
++#define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
++
++/* Reserve 512 kB for Mon */
++#define CONFIG_SYS_MONITOR_LEN		(512 * 1024)
++/* Reserved for malloc */
++#define CONFIG_SYS_MALLOC_LEN		(256 * 1024)
++
++/* Nor Base Address */
++#define CONFIG_SYS_BR0_PRELIM		CONFIG_FLASH_BR_PRELIM
++/* Nor Options */
++#define CONFIG_SYS_OR0_PRELIM		CONFIG_FLASH_OR_PRELIM
++
++/* Serial Port */
++#define CONFIG_CONS_INDEX		1
++#define CONFIG_SYS_NS16550
++#define CONFIG_SYS_NS16550_SERIAL
++#define CONFIG_SYS_NS16550_REG_SIZE	1
++#define CONFIG_SYS_NS16550_CLK		get_bus_freq(0)
++
++#define CONFIG_SYS_NS16550_COM1	(CONFIG_SYS_CCSRBAR+0x4500)
++#define CONFIG_SYS_NS16550_COM2	(CONFIG_SYS_CCSRBAR+0x4600)
++
++/* I2C  */
++#define CONFIG_FSL_I2C		/* Use FSL common I2C driver */
++#define CONFIG_HARD_I2C		/* I2C with hardware support*/
++#undef	CONFIG_SOFT_I2C		/* I2C bit-banged */
++/* I2C speed and slave address */
++#define CONFIG_SYS_I2C_SPEED		400000
++#define CONFIG_SYS_I2C_OFFSET		0x3000
++#define CONFIG_SYS_I2C2_OFFSET		0x3100
++
++#define CONFIG_I2C_MULTI_BUS
++#define	CONFIG_SYS_MAX_I2C_BUS		2
++#define	CONFIG_I2C_CMD_TREE
++
++/*
++ * CPLD on the Local Bus - CS3
++ *
++ * BR3:
++ *    Base address = 0xFFDF_0000 = BRx[0:16] = 1111 1111 1101 1111 0
++ *    Port Size = 8 bits = BRx[19:20] = 01
++ *    Use GPCM = BRx[24:26] = 000
++ *    Valid = BRx[31] = 1
++ *
++ * 0    4    8    12   16   20   24   28
++ * 1111 1111 1101 1111 0000 1000 0000 0001 = FFDF0801    BR1
++ *
++ * OR3:
++ *    Addr Mask = 64K = ORx[0:16] = 1111 1100 0000 0000 0
++ *    Reserved ORx[17:18] = 11, confusion here?
++ *    BCTLD = LBCTL not asserted = ORx[19] = 1
++ *    CSNT = ORx[20] = 0
++ *    ACS = half cycle delay = ORx[21:22] = 11
++ *    XACS = no extra setup = ORx[23] = 0
++ *    SCY = 6 = ORx[24:27] = 0110
++ *    SETA = cycle terminated internaly = ORx[28] = 0
++ *    TRLX = use relaxed timing = ORx[29] = 1
++ *    EHTR = use relaxed timing = ORx[30] = 0
++ *    EAD = use external address latch delay = OR[31] = 1
++ *
++ * 0    4    8    12   16   20   24   28
++ * 1111 1111 0000 0000 0111 0110 0110 0101 = ff007665    ORx
++ */
++
++#define CFG_CPLD_BASE_ADDR	0xffdf0000
++#define CONFIG_SYS_CPLD_BASE	0xffdf0000
++
++#define CONFIG_SYS_BR3_PRELIM		0xffdf0801
++/*
++ * use bus timing parms from original boot code
++ */
++#define CONFIG_SYS_OR3_PRELIM		0xffff8ff7
++
++/*
++ * General PCI
++ * Memory space is mapped 1-1, but I/O space must start from 0.
++ */
++
++/*
++ * Keep these sizes in sync with the LAWs
++ */
++#ifdef CONFIG_PCIE1
++#define CONFIG_SYS_PCIE1_MEM_VIRT	0xc0000000
++#define CONFIG_SYS_PCIE1_MEM_BUS	0xc0000000
++#define CONFIG_SYS_PCIE1_MEM_PHYS	0xc0000000
++#define CONFIG_SYS_PCIE1_MEM_SIZE	0x20000000	/* 512M */
++#define CONFIG_SYS_PCIE1_IO_VIRT	0xffc20000
++#define CONFIG_SYS_PCIE1_IO_BUS		0x00000000
++#define CONFIG_SYS_PCIE1_IO_PHYS	0xffc20000
++#define CONFIG_SYS_PCIE1_IO_SIZE	0x00010000	/* 64K */
++#endif
++
++#define CONFIG_PCI_SCAN_SHOW        /* show pci devices on startup */
++
++/*
++ * Networking
++ */
++
++#if defined(CONFIG_TSEC_ENET)
++
++#define CONFIG_MII		1	/* MII PHY management */
++#undef	CONFIG_MII_DEFAULT_TSEC		/* Don't allow unregistered phys */
++#undef CONFIG_TSEC1
++#undef CONFIG_TSEC2
++#define CONFIG_TSEC3			/* Ethernet  */
++#define	CONFIG_TSEC3_NAME	"eth0"
++
++#define TSEC3_PHY_ADDR		1
++#define TSEC3_FLAGS		(TSEC_GIGABIT | TSEC_SGMII)
++
++#define CONFIG_ETHPRIME		"eth0"
++
++#define CONFIG_PHY_GIGE		1	/* Include GbE speed/duplex detection */
++#endif	/* CONFIG_TSEC_ENET */
++
++/*
++ * In-band SGMII auto-negotiation between TBI and BCM5461S PHY fails, force
++ * 1000mbps SGMII link
++ */
++#define CONFIG_TSEC_TBICR_SETTINGS (  \
++		TBICR_PHY_RESET	    | \
++		TBICR_FULL_DUPLEX   | \
++		TBICR_SPEED1_SET      \
++		)
++
++/*
++ * Environment
++ */
++#define CONFIG_ENV_IS_IN_FLASH	1
++#define CONFIG_ENV_ADDR		0xeff60000
++#define CONFIG_ENV_SECT_SIZE	0x00020000	/* 128K (one sector) */
++
++/*
++ * eSDHC - Enhanced Secure Digial Host Controller
++ */
++#define CONFIG_MMC
++#define CONFIG_CMD_MMC
++#define CONFIG_FSL_ESDHC
++#define CONFIG_GENERIC_MMC
++#define CONFIG_SYS_FSL_ESDHC_ADDR	CONFIG_SYS_MPC85xx_ESDHC_ADDR
++
++/*
++ * I2C2 EEPROM
++ */
++#define CONFIG_CMD_EEPROM			/* EEPROM read/write support */
++#define CONFIG_SYS_I2C_MAC_OFFSET
++#define CONFIG_SYS_EEPROM_BUS_NUM		0
++#define CONFIG_SYS_EEPROM_PAGE_WRITE_BITS	3
++#define CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS	5
++#define CONFIG_SYS_I2C_EEPROM_ADDR		0x54
++#define CONFIG_SYS_I2C_EEPROM_ADDR_LEN		1
++#define CONFIG_CMD_SYS_EEPROM			/* TLV EEPROM format */
++/* Use the last 256 bytes of the 1024 byte eeprom */
++#define CONFIG_SYS_EEPROM_OFFSET		0x300
++#define CONFIG_SYS_EEPROM_MAX_SIZE		0x100
++#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
++#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	1
++
++#undef	CONFIG_WATCHDOG		/* watchdog disabled */
++
++/*
++ * Miscellaneous configurable options
++ */
++#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address */
++#define CONFIG_SYS_PROMPT	"dni_7448-> "	/* Monitor Command Prompt */
++/* enable platform specific init */
++#define CONFIG_MISC_INIT_R      1
++
++#if defined(CONFIG_CMD_KGDB)
++#define CONFIG_KGDB_BAUDRATE	230400	/* speed to run kgdb serial port */
++#define CONFIG_KGDB_SER_INDEX	2	/* which serial port to use */
++#endif
++
++/*
++ * Environment Configuration
++ */
++
++#if defined(CONFIG_TSEC_ENET)
++#define CONFIG_HAS_ETH0
++#endif
++
++#define CONFIG_HOSTNAME		dni-7448-unknown
++
++/*default location for tftp and bootm*/
++#define CONFIG_LOADADDR		0x08000000
++
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS0\0"	\
++	"onie_start=0xefb60000\0"	\
++	"onie_sz.b=0x00400000\0"
++
++#define	CONFIG_EXTRA_ENV_SETTINGS		\
++	CONFIG_PLATFORM_ENV			\
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++#endif	/* __CONFIG_H */
