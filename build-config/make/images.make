@@ -141,8 +141,11 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin ] ; then	\
 		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin/* $(SYSROOTDIR)/bin ; \
 	     fi
-	$(Q) if [ -d $(MACHINEDIR)/rootconf ] ; then \
-		$(ROOTCONFDIR)/install $(MACHINEDIR)/rootconf $(SYSROOTDIR) ; \
+	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-lib-onie ] ; then \
+		cp $(MACHINEDIR)/rootconf/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
+	     fi
+	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-bin ] ; then \
+		cp $(MACHINEDIR)/rootconf/sysroot-bin/* $(SYSROOTDIR)/bin ; \
 	     fi
 	$(Q) cd $(SYSROOTDIR) && ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
