@@ -100,7 +100,7 @@ $(E2FSPROGS_BUILD_STAMP): $(E2FSPROGS_NEW_FILES) $(E2FSPROGS_CONFIGURE_STAMP)
 	$(Q) touch $@
 
 e2fsprogs-install: $(E2FSPROGS_INSTALL_STAMP)
-$(E2FSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(E2FSPROGS_BUILD_STAMP)
+$(E2FSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(E2FSPROGS_BUILD_STAMP) $(BUSYBOX_INSTALL_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing e2fsprogs in $(DEV_SYSROOT) ===="
 	$(Q) for dir in $(E2FSPROGS_LIB_DIRS) ; do \
@@ -113,11 +113,19 @@ $(E2FSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(E2FSPROGS_BUILD_STAMP)
 ifeq ($(EXT3_4_ENABLE),yes)
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(E2FSPROGS_DIR)/misc install
-	$(Q) rm -f $(SYSROOTDIR)/sbin/mke2fs $(SYSROOTDIR)/sbin/mkfs.ext2
+	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
+		$(MAKE) -C $(E2FSPROGS_DIR)/e2fsck install
+	$(Q) rm -f $(SYSROOTDIR)/sbin/mke2fs $(SYSROOTDIR)/sbin/mkfs.ext[234]
+	$(Q) rm -f $(SYSROOTDIR)/sbin/fsck $(SYSROOTDIR)/sbin/fsck.ext[234]
 	$(Q) cp -av $(DEV_SYSROOT)/usr/sbin/mke2fs $(SYSROOTDIR)/usr/sbin/ 
+	$(Q) cp -av $(DEV_SYSROOT)/usr/sbin/tune2fs $(SYSROOTDIR)/usr/sbin/ 
+	$(Q) cp -av $(DEV_SYSROOT)/usr/sbin/{e2fsck,fsck} $(SYSROOTDIR)/usr/sbin/ 
 	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext2
 	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext3
 	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext4
+	$(Q) ln -sf e2fsck $(SYSROOTDIR)/usr/sbin/fsck.ext2
+	$(Q) ln -sf e2fsck $(SYSROOTDIR)/usr/sbin/fsck.ext3
+	$(Q) ln -sf e2fsck $(SYSROOTDIR)/usr/sbin/fsck.ext4
 endif
 	$(Q) touch $@
 
