@@ -53,6 +53,10 @@ ifeq ($(GPT_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(GPTFDISK_INSTALL_STAMP)
 endif
 
+ifeq ($(PARTED_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(PARTED_INSTALL_STAMP)
+endif
+
 ifeq ($(GRUB_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(GRUB_INSTALL_STAMP)
 endif
@@ -165,6 +169,8 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_config_version=$(ONIE_CONFIG_VERSION)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_build_date=\"$$(date -Imin)\"" >> $(MACHINE_CONF)
+	$(Q) echo "onie_partition_type=$(PARTITION_TYPE)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_kernel_version=$(LINUX_SUBVERSION)" >> $(MACHINE_CONF)
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf

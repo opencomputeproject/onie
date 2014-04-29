@@ -27,6 +27,9 @@ UPDATER_IMAGE_PARTS_COMPLETE = $(KERNEL_INSTALL_STAMP) $(UPDATER_INITRD) $(UPDAT
 DEMO_IMAGE_PARTS = $(DEMO_KERNEL_VMLINUZ) $(DEMO_SYSROOT_CPIO_XZ)
 DEMO_IMAGE_PARTS_COMPLETE = $(DEMO_KERNEL_COMPLETE_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
 
+# Default to GPT on x86.  A particular machine.make can override this.
+PARTITION_TYPE ?= gpt
+
 # Include the GPT partitioning tools
 GPT_ENABLE = yes
 
@@ -54,7 +57,7 @@ LVM2_ENABLE = yes
 
 # Update this if the GRUB configuration mechanism changes from one
 # release to the next.
-ONIE_CONFIG_VERSION = 0
+ONIE_CONFIG_VERSION = 1
 
 #-------------------------------------------------------------------------------
 #

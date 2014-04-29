@@ -157,6 +157,12 @@ endif
 
 PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
 
+# Verify partition type
+ifneq ($(filter-out gpt msdos, $(PARTITION_TYPE)),)
+  $(warning Unsupported partition type: $(PARTITION_TYPE))
+  $(error Supported partition types: gpt, msdos)
+endif
+
 TREE_STAMP  = $(STAMPDIR)/tree
 tree-stamp: $(TREE_STAMP)
 $(TREE_STAMP): $(PROJECT_STAMP)
