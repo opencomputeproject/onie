@@ -66,7 +66,7 @@ mount_kernelfs()
     }
 }
 
-log_begin_msg "Mounting kernel filesystems"
+log_begin_msg "Info: Mounting kernel filesystems"
 mount_kernelfs
 log_end_msg
 
