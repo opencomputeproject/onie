@@ -15,52 +15,117 @@ blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' | sed -e 's/[0-9]://' | head
     exit 1
 }
 
-# Check that no partitions on this device are currently mounted
-if grep -q "$blk_dev" /proc/mounts ; then
-    echo "ERROR: Partitions on target device ($blk_dev) are currently mounted."
-    grep "$blk_dev" /proc/mounts
+demo_volume_label="ONIE-DEMO"
+
+# determine ONIE partition type
+onie_partition_type=$(onie-sysinfo -t)
+# demo partition size in MB
+demo_part_size=128
+if [ "$onie_partition_type" = "gpt" ] ; then
+    create_demo_partition="create_demo_gpt_partition"
+    grub_part_type="gpt"
+elif [ "$onie_partition_type" = "msdos" ] ; then
+    create_demo_partition="create_demo_msdos_partition"
+    grub_part_type="msdos"
+else
+    echo "ERROR: Unsupported partition type: $onie_partition_type"
     exit 1
 fi
 
-demo_part_name="demo-$machine"
+# Creates a new partition for the DEMO OS.
+# 
+# arg $1 -- base block device
+#
+# Returns the created partition number in $demo_part
+demo_part=
+create_demo_gpt_partition()
+{
+    blk_dev="$1"
 
-# See if demo partition already exists
-demo_part=$(sgdisk -p $blk_dev | grep "$demo_part_name" | awk '{print $1}')
-if [ -z "$demo_part" ] ; then
-
-    echo "Creating new demo partition ..."
+    demo_gpt_part_name="demo-$machine"
+    
+    # See if demo partition already exists
+    demo_part=$(sgdisk -p $blk_dev | grep "$demo_gpt_part_name" | awk '{print $1}')
+    if [ -n "$demo_part" ] ; then
+        # delete existing partition
+        sgdisk -d $demo_part $blk_dev || {
+            echo "Error: Unable to delete partition $demo_part on $blk_dev"
+            exit 1
+        }
+        partprobe
+    fi
     # Find next available partition
     last_part=$(sgdisk -p $blk_dev | tail -n 1 | awk '{print $1}')
     demo_part=$(( $last_part + 1 ))
 
     # Create new partition
-    sgdisk --new=${demo_part}::+128MB \
-        --change-name=${demo_part}:$demo_part_name $blk_dev || {
+    echo "Creating new demo partition ${blk_dev}$demo_part ..."
+    sgdisk --new=${demo_part}::+${demo_part_size}MB \
+        --change-name=${demo_part}:$demo_gpt_part_name $blk_dev || {
         echo "Error: Unable to create partition $demo_part on $blk_dev"
         exit 1
     }
+    partprobe
+}
 
-else
-    echo "Using existing demo partition ..."
-fi
+create_demo_msdos_partition()
+{
+    blk_dev="$1"
 
+    # See if demo partition already exists -- look for the filesystem
+    # label.
+    part_info="$(blkid | grep $demo_volume_label | awk -F: '{print $1}')"
+    if [ -n "$part_info" ] ; then
+        # delete existing partition
+        demo_part="$(echo -n $part_info | sed -e s#${blk_dev}##)"
+        parted -s $blk_dev rm $demo_part || {
+            echo "Error: Unable to delete partition $demo_part on $blk_dev"
+            exit 1
+        }
+        partprobe
+    fi
+
+    # Find next available partition
+    last_part_info="$(parted -s -m $blk_dev unit s print | tail -n 1)"
+    last_part_num="$(echo -n $last_part_info | awk -F: '{print $1}')"
+    last_part_end="$(echo -n $last_part_info | awk -F: '{print $3}')"
+    # Remove trailing 's'
+    last_part_end=${last_part_end%s}
+    demo_part=$(( $last_part_num + 1 ))
+    demo_part_start=$(( $last_part_end + 1 ))
+    # sectors_per_mb = (1024 * 1024) / 512 = 2048
+    sectors_per_mb=2048
+    demo_part_end=$(( $demo_part_start + ( $demo_part_size * $sectors_per_mb ) - 1 ))
+
+    # Create new partition
+    echo "Creating new demo partition ${blk_dev}$demo_part ..."
+    parted -s --align optimal $blk_dev unit s \
+      mkpart primary $demo_part_start $demo_part_end set $demo_part boot on || {
+        echo "ERROR: Problems creating demo msdos partition $demo_part on: $blk_dev"
+        exit 1
+    }
+    partprobe
+
+}
+
+eval $create_demo_partition $blk_dev
 demo_dev="${blk_dev}$demo_part"
+partprobe
 
 # Create filesystem on demo partition with a label
-demo_volume_label="ONIE-DEMO"
-mkfs.ext2 -L $demo_volume_label $demo_dev || {
+mkfs.ext4 -L $demo_volume_label $demo_dev || {
     echo "Error: Unable to create file system on $demo_dev"
     exit 1
 }
 
 # Mount demo filesystem
-demo_mnt="/mnt/demo"
+demo_mnt="/boot"
 
 mkdir -p $demo_mnt || {
     echo "Error: Unable to create demo file system mount point: $demo_mnt"
     exit 1
 }
-mount -t ext2 -o defaults $demo_dev $demo_mnt || {
+mount -t ext4 -o defaults,rw $demo_dev $demo_mnt || {
     echo "Error: Unable to mount $demo_dev on $demo_mnt"
     exit 1
 }
@@ -71,48 +136,79 @@ cp demo.vmlinuz demo.initrd $demo_mnt
 # store installation log in demo file system
 onie-support $demo_mnt
 
-umount $demo_mnt
+# Pretend we are a major distro and install GRUB into the MBR of
+# $blk_dev.
+grub-install --boot-directory="$demo_mnt" --recheck "$blk_dev" || {
+    echo "ERROR: grub-install failed on: $blk_dev"
+    exit 1
+}
 
-# Add GRUB menu entry for the demo OS
-#   1. Create a GRUB menu entry in a temporary file
-#   2. Use onie-boot-add to add the entry to the GRUB config
-#   3. Use onie-boot-default to set the default boot entry
-#   4. Use onie-boot-update to generate new grub.cfg file
+# Create a minimal grub.cfg that allows for:
+#   - configure the serial console
+#   - allows for grub-reboot to work
+#   - a menu entry for the DEMO OS
+#   - menu entries for ONIE
 
-demo_grub_entry="Demo NOS"
-tmp_entry=$(mktemp)
+grub_cfg=$(mktemp)
+
+
+# Set a few GRUB_xxx environment variables that will be picked up and
+# used by the 50_onie_grub script.  This is similiar to what an OS
+# would specify in /etc/default/grub.
+#
+# GRUB_SERIAL_COMMAND
+# GRUB_CMDLINE_LINUX
+
+export GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
+export GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"
+
+# Add common configuration, like the timeout and serial console.
 (cat <<EOF
-DEMO_CMDLINE="\$CMDLINE_LINUX_SERIAL \$ONIE_PLATFORM_ARGS \$ONIE_DEBUG_ARGS"
-menuentry '$demo_grub_entry' --class gnu-linux --class gnu --class os {
-        set root='(hd0,gpt${demo_part})'
+$GRUB_SERIAL_COMMAND
+terminal_input serial
+terminal_output serial
+
+set timeout=5
+
+EOF
+) > $grub_cfg
+
+# Add the logic to support grub-reboot
+(cat <<EOF
+if [ -s \$prefix/grubenv ]; then
+  load_env
+fi
+if [ "\${next_entry}" ] ; then
+   set default="\${next_entry}"
+   set next_entry=
+   save_env next_entry
+fi
+
+EOF
+) >> $grub_cfg
+
+# Add a menu entry for the DEMO OS
+demo_grub_entry="Demo NOS"
+(cat <<EOF
+menuentry '$demo_grub_entry' {
         search --no-floppy --label --set=root $demo_volume_label
         echo    'Loading ONIE Demo OS ...'
-        linux   /demo.vmlinuz \$DEMO_CMDLINE
+        linux   /demo.vmlinuz $GRUB_CMDLINE_LINUX
         echo    'Loading ONIE initial ramdisk ...'
         initrd  /demo.initrd
 }
 EOF
-) > $tmp_entry
+) >> $grub_cfg
 
-onie-boot-entry-add -v -n 30_onie_demo -c $tmp_entry || {
-    echo "Error: Unable to add boot menu entry"
-    exit 1
+# Add menu entries for ONIE -- use the grub fragment provided by the
+# ONIE distribution.
+/mnt/onie-boot/onie/grub.d/50_onie_grub >> $grub_cfg
+
+cp $grub_cfg $demo_mnt/grub/grub.cfg
+
+# clean up
+umount $demo_mnt || {
+    echo "Error: Problems umounting $demo_mnt"
 }
 
-# Clear any ONIE boot mode
-onie-boot-default -v -o none || {
-    echo "Error: Unable to clear ONIE boot mode"
-    exit 1
-}
-
-# Set default menu entry
-onie-boot-default -v -d "$demo_grub_entry"  || {
-    echo "Error: Unable to set default boot entry: $demo_grub_entry"
-    exit 1
-}
-
-# Update GRUB configuration
-onie-boot-update -v || {
-    echo "Error: Unable to update boot configuration"
-    exit 1
-}
+cd /
