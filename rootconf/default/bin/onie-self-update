@@ -8,12 +8,62 @@
 
 import_cmdline
 
+args="evh"
+
+usage()
+{
+    echo "usage: $this_script [-${args}] <URL>"
+    cat <<EOF
+Download and run an ONIE updater image.  Supported URL types: http,
+ftp, tftp, file.
+
+COMMAND LINE OPTIONS
+
+	-h
+		Help.  Print this message.
+
+	-v
+		Be verbose.  Print what is happening.
+
+	-e
+
+		Embed ONIE in the hard disk.
+
+                *Warning* -- This operation is destructive to the data
+		on the hard disk.  This operation will reformat the
+		hard disk and install ONIE.
+
+EOF
+}
+
+verbose=no
+embed=no
+
+while getopts "$args" a ; do
+    case $a in
+        h)
+            usage
+            exit 0
+            ;;
+        e)
+            embed=yes
+            ;;
+        v)
+            export verbose=yes
+            export onie_verbose=y
+            ;;
+        *)
+            echo "Unknown argument: $a"
+            usage
+            exit 1
+    esac
+done
+shift $(expr $OPTIND - 1)
 cli_static_update_url=$1
 
 [ -n "$cli_static_update_url" ] || {
     echo "Error: ONIE updater URL not specified."
-    echo "Usage: $0 <URL>"
-    echo "  URL types:   http, ftp, tftp"
+    usage
     exit 1
 }
 
@@ -24,7 +74,11 @@ onie_disco=$(add_parm "$onie_disco" onie_cli_static_update_url $cli_static_updat
 /etc/init.d/discover.sh stop > /dev/null 2>&1
 sleep 1
 
-export onie_boot_reason="update"
+if [ "$embed" = "yes" ] ; then
+    export onie_boot_reason="embed"
+else
+    export onie_boot_reason="update"
+fi
 
 update_parms_file="/tmp/.update_url_parms"
 echo "$onie_disco" > $update_parms_file

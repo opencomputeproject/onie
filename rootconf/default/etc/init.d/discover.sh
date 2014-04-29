@@ -55,9 +55,9 @@ do_start() {
             /bin/onie-uninstaller
             exit 0
             ;;
-        update)
+        update|embed)
             # pass through to discover
-            echo "$daemon: ONIE update mode detected.  Running updater." > /dev/console
+            echo "$daemon: ONIE $onie_boot_reason mode detected.  Running updater." > /dev/console
             echo "** ONIE Update Mode Enabled **" >> /etc/issue
             ;;
         install)

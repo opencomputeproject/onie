@@ -118,4 +118,5 @@ xz -d -c onie-update.tar.xz | tar -xf -
 install_onie "$@"
 
 echo "Rebooting..."
+cd /
 reboot

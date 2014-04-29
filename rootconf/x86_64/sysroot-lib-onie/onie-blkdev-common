@@ -1,84 +1,113 @@
 
 onie_boot_mnt="/mnt/onie-boot"
-onie_config_mnt="/mnt/onie-config"
+onie_root_dir="${onie_boot_mnt}/onie"
+onie_config_dir="${onie_root_dir}/config"
 
-onie_tmp_mnt="/mnt/tmp"
+grub_root_dir="${onie_boot_mnt}/grub"
+grub_env_file="${grub_root_dir}/grubenv"
 
 # gfdisk types and GPT UUIDs from gptfdisk-0.8.8/parttypes.cc
 grub_boot_gfdisk_type="0xEF02"
 onie_boot_gfdisk_type="0x3000"
-onie_config_gfdisk_type="0x3001"
 
 grub_boot_gpt_uuid="21686148-6449-6E6F-744E-656564454649"
 onie_boot_gpt_uuid="7412F7D5-A156-4B13-81DC-867174929325"
-onie_config_gpt_uuid="D4E6E2CD-4469-46F3-B5CB-1BFF57AFC149"
 
 onie_boot_fs_type="ext4"
-onie_config_fs_type="ext4"
 
 grub_boot_label="GRUB-BOOT"
 onie_boot_label="ONIE-BOOT"
-onie_config_label="ONIE-CONFIG"
 
-onie_umount_partitions()
+# Return the /dev device corresponding to $onie_boot_label if it
+# exists.
+onie_get_boot_dev()
 {
-    rc=0
-
-    [ -d "$onie_boot_mnt" ] && {
-        umount $onie_boot_mnt > /dev/null 2>&1
-        rmdir $onie_boot_mnt || {
-            echo "ERROR: Problems removing directory: $onie_boot_mnt"
-            rc=$(( $rc + 1 ))
-        }
-    }        
-
-    [ -d "$onie_config_mnt" ] && {
-        umount $onie_config_mnt > /dev/null 2>&1
-        rmdir $onie_config_mnt || {
-            echo "ERROR: Problems removing directory: $onie_config_mnt"
-            rc=$(( $rc + 1 ))
-        }
-    }
-
-    [ -d "$onie_tmp_mnt" ] && {
-        rmdir $onie_tmp_mnt || {
-            echo "ERROR: Problems removing directory: $onie_tmp_mnt"
-            rc=$(( $rc + 1 ))
-        }
-    }
-
-    return $rc
+    device=$(blkid | grep "$onie_boot_label" | sed -e 's/:.*$//')
+    [ -n "$device" ] && echo -n "$device"
 }
 
-# Mount the ONIE partitions.
 #
-# When this function returns success the ONIE partitions are mounted
-# and the following variables are set:
+# FSCK the given partition with retries.
 #
-#   onie_boot_mnt   -- filesystem mount point for the ONIE-BOOT partition (read-only)
-#   onie_config_mnt -- filesystem mount point for the ONIE-CONFIG partition (read-write)
-onie_mount_partitions()
+run_fsck()
 {
-    mkdir -p $onie_tmp_mnt
-    onie_boot_mnt="$onie_tmp_mnt/boot"
-    onie_config_mnt="$onie_tmp_mnt/config"
 
-    trap onie_umount_partitions EXIT
+    DEV="$1"
 
-    mkdir -p $onie_boot_mnt
-    mount -o defaults,ro -t $onie_boot_fs_type "LABEL=$onie_boot_label" $onie_boot_mnt || {
-        echo "ERROR: Problems mounting $onie_boot_label on $onie_boot_mnt"
-        return 1
-    }
+    if grep -s -w -i "forcefsck" /proc/cmdline >& /dev/null ; then
+        force="-f"
+    else
+        force=""
+    fi
 
-    mkdir -p $onie_config_mnt
-    mount -o defaults,rw -t $onie_config_fs_type "LABEL=$onie_config_label" $onie_config_mnt || {
-        echo "ERROR: Problems mounting $onie_config_label on $onie_config_mnt"
-        return 1
-    }
+    if [ "$FSCKFIX" = yes ] ; then
+        fix="-y"
+    else
+        fix="-p"
+    fi
+
+    FSCK=/usr/sbin/fsck
+    if [ "$verbose" = "yes" ] ; then
+        echo "Running fsck on $DEV ..."
+        $FSCK $force $fix $DEV
+        retval=$?
+    else
+        $FSCK $force $fix $DEV > /dev/null 2>&1
+        retval=$?
+    fi
+
+    if [ $retval -gt 3 ]; then
+        echo "ERROR  : fsck encountered fatal errors"
+        echo "WARNING: Retrying fsck with -y option on $DEV"
+        $FSCK -f -y $DEV
+        retval=$?
+        if [ $retval -gt 2 ]; then
+            echo "ERROR: RUN fsck MANUALLY on $DEV without -y or -p options"
+            return 1
+        fi
+    elif [ $retval -eq 2 ]; then
+        echo "ERROR: fsck corrected errors, reboot requested."
+    elif [ $retval -eq 1 ]; then
+        echo "ERROR: fsck corrected errors."
+    fi
 
     return 0
 }
+
+# Set ONIE environment variables.  The underlying store uses grubenv.
+#
+# arg $1 - variable name
+# arg $2 - variable value [optional]
+#
+# If the variable value is not specified the effect is to delete the
+# named variable.
+onie_setenv()
+{
+    var="$1"
+    val="$2"
+    if [ -n "$val" ] ; then
+        grub-editenv $grub_env_file set "$var"="$val"
+    else
+        # delete $var
+        grub-editenv $grub_env_file unset "$var"
+    fi
+}
+
+# Get an ONIE environment variable.  The underlying store uses
+# grubenv.
+#
+# arg $1 - variable name
+#
+# If the variable name is not found the empty string "" is returned.
+onie_getenv()
+{
+    var="$1"
+    val=$(grub-editenv $grub_env_file list | grep "${var}=")
+    val=${val#*=}
+    echo -n $val
+}
+
+
 
 # Local Variables:
 # mode: shell-script

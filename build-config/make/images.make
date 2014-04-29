@@ -20,12 +20,7 @@ UPDATER_IMAGE		= $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
 
 ONIE_TOOLS_LIST = \
 	lib/onie \
-	bin/onie-boot-default \
-	bin/onie-boot-entry-add \
-	bin/onie-boot-entry-remove \
-	bin/onie-boot-entry-show \
-	bin/onie-boot-init \
-	bin/onie-boot-update
+	bin/onie-boot-mode
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
 IMAGE_UPDATER_STAMP	= $(STAMPDIR)/image-updater
