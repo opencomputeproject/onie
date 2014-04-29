@@ -224,8 +224,6 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(SCRIPTDIR)/onie-mk-ins
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS)
 	$(Q) touch $@
 
-ifeq ($(PXE_EFI64_ENABLE),yes)
-
 PXE_EFI64_IMAGE		= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).efi64.pxe
 RECOVERY_ISO_IMAGE	= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).iso
 
@@ -267,6 +265,7 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 		echo "ERROR:  Is the syslinux-common package installed on your build host??" ;	\
 		exit 1; }
 	$(Q) cp /usr/lib/syslinux/isolinux.bin $(RECOVERY_ISO_SYSROOT)
+	$(Q) cp /usr/lib/syslinux/menu.c32 $(RECOVERY_ISO_SYSROOT)
 	$(Q) cp $(RECOVERY_CONF_DIR)/syslinux.cfg $(RECOVERY_ISO_SYSROOT)
 	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)/boot/grub
 	$(Q) cat $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
@@ -288,7 +287,6 @@ $(PXE_EFI64_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_ISO_STAMP) $(RECOVERY_
 	    --output=$(PXE_EFI64_IMAGE) --memdisk=$(RECOVERY_ISO_IMAGE)		\
 	    $$(cat $(PXE_EFI64_GRUB_MODS))
 	$(Q) touch $@
-endif
 
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
