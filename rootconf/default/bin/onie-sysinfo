@@ -67,7 +67,7 @@ get_ethaddr()
 [ -r $lib_dir/sysinfo-arch ]     && . $lib_dir/sysinfo-arch
 [ -r $lib_dir/sysinfo-platform ] && . $lib_dir/sysinfo-platform
 
-args="sevimrpcfda"
+args="sevimrpcfdat"
 
 usage()
 {
@@ -112,6 +112,9 @@ COMMAND LINE OPTIONS
 	-d
 		ONIE build date
 
+	-t
+		ONIE partition type
+
 	-a
 		Dump all information.
 EOF
@@ -127,6 +130,7 @@ platform=no
 arch=no
 config_version=no
 build_date=no
+partition_type=no
 all=no
 
 [ $# -eq 0 ] && platform=yes
@@ -167,6 +171,9 @@ while getopts "$args" a ; do
         d)
             build_date=yes
             ;;
+        t)
+            partition_type=yes
+            ;;
         a)
             all=yes
             ;;
@@ -177,13 +184,18 @@ while getopts "$args" a ; do
     esac
 done
 
+count=1
 print_val()
 {
-    if [ -n "$1" ] ; then
-        echo -n "$1 "
-    else
-        echo -n "unknown "
+    if [ $count -gt 1 ] ; then
+        echo -n " "
     fi
+    if [ -n "$1" ] ; then
+        echo -n "$1"
+    else
+        echo -n "unknown"
+    fi
+    count=$(( $count + 1 ))
 }
 
 if [ "$sn" = "yes" ] || [ "$all" = "yes" ] ; then
@@ -196,7 +208,7 @@ if [ "$mac" = "yes" ] || [ "$all" = "yes" ] ; then
     print_val $val
 fi
 
-for v in version vendor_id machine machine_rev platform arch config_version build_date ; do
+for v in version vendor_id machine machine_rev platform arch config_version partition_type build_date ; do
     eval dump='$'$v
     if [ "$dump" = "yes" ] || [ "$all" = "yes" ] ; then
         eval val='$onie'_$v
