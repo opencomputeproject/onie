@@ -9,29 +9,31 @@ system provisioning and maintainance operations, including:
 
 - Installing the NOS into the hardware
 - Reinstalling a different NOS
-- Uninstalling, or wiping the system clean
+- Uninstalling the current NOS
+- Embeding ONIE (wipes out everything, leaving only the new ONIE)
+- Updating ONIE (updates the current ONIE with a new version)
 - Rescue and recovery
-- Updating ONIE
 
 This environment forms an interface between ONIE and the NOS.
 
-ONIE communicates with the NOS via U-Boot environment variables.  Both ONIE 
-and the NOS must be able to read and write U-Boot environment variables.
+.. _nos_intf_installer:
 
 NOS Installer
 =============
 
-The only requirement ONIE has for the NOS is that the NOS **must** update the 
-``nos_bootcmd`` U-Boot environment variable described in 
-:ref:`platform_ind_vars`. This signal tells U-Boot to load the NOS on 
-subsequent boots, bypassing ONIE.
+The only requirement ONIE has for the NOS installer is that the
+installer **must** update the boot environment so that the NOS boots
+at the next reboot.
 
-What goes into the ``nos_bootcmd`` is entirely up to the NOS vendor, but
-generally it will contain commands to load and boot the NOS image from
-NOR flash or from an SD card.
+How this is done depends on the specific CPU architecture.  See these
+sections for the corresponding CPU architectures:
 
-Other than that, the NOS installer will do whatever is necessary 
-to persistently install the operating system into the hardware; the
+- :ref:`powerpc_nos_intf_installer`
+
+- :ref:`x86_nos_intf_installer`
+
+Other than that, the NOS installer can do whatever is necessary to
+persistently install the operating system into the hardware; the
 installer has a lot of flexibility.
 
 Some examples of what an installer could do:
@@ -41,6 +43,67 @@ Some examples of what an installer could do:
 - Download a new kernel+initramfs and `kexec(8)
   <http://linux.die.net/man/8/kexec>`_ into it
 
+.. _cmd_onie_sysinfo:
+
+System Information
+------------------
+
+Within the running ONIE context an installer often needs to know
+various information about the running system.  ONIE provides the
+``onie-sysinfo`` command for this purpose.
+
+For details the complete help for ``onie-sysinfo`` follows::
+
+  ONIE:/ # onie-sysinfo -h
+  onie-sysinfo [-sevimrpcfdat]
+  Dump ONIE system information.
+   
+  COMMAND LINE OPTIONS
+   
+          The default is to dump the ONIE platform (-p).
+   
+          -h
+                  Help.  Print this message.
+   
+          -s
+                  Serial Number
+   
+          -e
+                  Management Ethernet MAC address
+   
+          -v
+                  ONIE version string
+   
+          -i
+                  ONIE vendor ID.  Print the ONIE vendor's IANA enterprise number.
+   
+          -m
+                  ONIE machine string
+   
+          -r
+                  ONIE machine revision string
+   
+          -p
+                  ONIE platform string.  This is the default.
+   
+          -c
+                  ONIE CPU architecture
+   
+          -f
+                  ONIE configuration version
+   
+          -d
+                  ONIE build date
+   
+          -t
+                  ONIE partition type
+   
+          -a
+                  Dump all information.
+
+
+.. _nos_intf_reinstaller:
+
 Reinstalling or Installing a Different NOS
 ==========================================
 
@@ -48,44 +111,36 @@ From the running NOS, it is possible to instruct ONIE to return to the
 initial discovery and installation phase.  This could be used to
 reinstall the current NOS or to install a different NOS.
 
-To invoke the install operation, the running NOS sets the
-``onie_boot_reason`` U-Boot environment variable to the value
-``install`` (see :ref:`platform_ind_vars`), and then reboots the
-system.  When the system starts up again, ONIE will see the
-``onie_boot_reason`` and restart the discovery and installation phase.
+How to invoke the install operation depends on the specific CPU
+architecture.  See these sections for the corresponding CPU
+architectures:
 
-.. note::
+- :ref:`powerpc_nos_intf_reinstaller`
 
-  From the U-Boot prompt, you can also boot ONIE into the discovery and
-  installation phase by typing::
+- :ref:`x86_nos_intf_reinstaller`
 
-    => run onie_bootcmd
+.. _nos_intf_uninstall:
 
-Uninstalling
-============
+NOS Uninstall
+=============
 
 ONIE has an uninstall operation that wipes out the unused portions of
-NOR flash and the attached mass storage device (like an SD card or USB NAND
-flash). The only thing untouched is ONIE itself. This is a
+the attached mass storage devices (like an mSATA card or USB NAND
+flash). The only thing untouched is ONIE itself.  This is a
 "reset to factory defaults"-like operation.
 
-To invoke the uninstall operation, the running NOS sets the
-``onie_boot_reason`` U-Boot environment variable to the value
-``uninstall`` (see :ref:`platform_ind_vars`), and then reboots the
-system.  When the system starts up again ONIE, will see the
-``onie_boot_reason`` and start the uninstall process.
+How to invoke the uninstall operation depends on the specific CPU
+architecture.  See these sections for the corresponding CPU
+architectures:
 
-Following the uninstall process, the system returns to the
-discovery and installation phase.
+- :ref:`powerpc_nos_intf_uninstall`
 
-.. note::
+- :ref:`x86_nos_intf_uninstall`
 
-  From the U-Boot prompt you can also boot ONIE into the uninstall
-  mode by typing::
+Following the uninstall process, the system returns to the discovery
+and installation phase.
 
-    => run onie_uninstall
-
-.. _rescue_recovery:
+.. _nos_intf_rescue:
 
 Rescue and Recovery
 ===================
@@ -110,8 +165,8 @@ A few useful commands included with ONIE are:
   command downloads and installs from the URL, just as if it had been
   *discovered*.
 
-- ``onie-self-update`` -- It takes one argument, a URL to an ONIE updater.  This
-  command downloads and runs the updater, just as if it had been
+- ``onie-self-update`` -- It takes a URL to an ONIE updater image.
+  This command downloads and runs the updater, just as if it had been
   *discovered*.  See the :ref:`updating_onie` section for more about
   updating ONIE.
 
@@ -120,39 +175,42 @@ A few useful commands included with ONIE are:
   with the debug.  With the discovery process disabled the system is
   quiet and you can poke around.
 
-To invoke the rescue operation, the running NOS sets the ``onie_boot_reason`` 
-U-Boot environment variable to the value ``rescue`` 
-(see :ref:`platform_ind_vars`), and then reboots the system.  When the system 
-starts up again, ONIE will see the ``onie_boot_reason`` and enter rescue mode.
+How to invoke the rescue operation depends on the specific CPU
+architecture.  See these sections for the corresponding CPU
+architectures:
 
-.. note::
+- :ref:`powerpc_nos_intf_rescue`
 
-  From the U-Boot prompt you can also boot ONIE into rescue mode by
-  typing::
+- :ref:`x86_nos_intf_rescue`
 
-    => run onie_rescue
+.. _nos_intf_update:
 
-.. _nos_intf_updating_onie:
-
-Updating ONIE
-=============
+Updating and Embedding ONIE
+===========================
 
 ONIE provides a way to update itself, including the boot loader and
 Linux kernel.  In many ways, this behaves similarly to the discovery
 and installation phase, except that ONIE is looking for a different
 kind of image.  
 
+The update operation comes in two flavors: ``update`` and ``embed``.
+
+The ``update`` operation will upgrade ONIE and is **not** destructive
+to the currently installed NOS.
+
+The ``embed`` operation, on the other hand, is **destructive**.  This
+operation will wipe out everything (including any installed NOS) and
+install a new version of ONIE.
+
+For more details on the ``update`` and ``embed`` operations see the
+CURT-FIXME sections for the corresponding CPU architectures:
+
 See the :ref:`updating_onie` section for more about updating ONIE.
 
-To invoke the ONIE update operation, the running NOS sets the
-``onie_boot_reason`` U-Boot environment variable to the value
-``update`` (see :ref:`platform_ind_vars`), and then reboots the
-system.  When the system starts up again, ONIE will see the
-``onie_boot_reason`` and enter ONIE self-update mode.
+How to invoke the ``update`` and ``embed`` operations depends on the
+specific CPU architecture.  See these sections for the corresponding
+CPU architectures:
 
-.. note::
+- :ref:`powerpc_nos_intf_update`
 
-  From the U-Boot prompt you can also boot ONIE into ONIE self-update mode by
-  typing::
-
-    => run onie_update
+- :ref:`x86_nos_intf_update`

@@ -1,25 +1,15 @@
-***********
-Boot Loader
-***********
+*******************
+PowerPC Boot Loader
+*******************
 
-U-Boot provides the startup environment for loading and running the
-ONIE kernel and the network operation system (NOS) kernel.
+On PowerPC platforms U-Boot provides the startup environment for
+loading and running the ONIE kernel and the network operation system
+(NOS) kernel.
 
-ONIE uses U-Boot for base services and builds on top of it.
+ONIE uses U-Boot for basic services and builds on top of it.
 
 The U-Boot functionality consists of platform dependent
 responsibilities as well as platform independent features.
-
-.. note:: ONIE has no specific CPU architecture requirements -- it is
-  Linux.
-   
-  The dominant architecture today, however, is Freescale's `QorIQ PowerPC
-  <http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME>`_.
-   
-  The documentation in this section currently focuses on that architecture and 
-  the associated `U-Boot <http://www.denx.de/wiki/U-Boot>`_ boot loader.
-   
-  Supporting the x86 architecture is on the roadmap.
 
 .. note:: The examples throughout this section reference a
   hypothetical machine, called *MACHINE*, manufactured by a hypothetical
@@ -74,7 +64,7 @@ U-Boot is responsible for initializing the following devices for the operating s
 ===================   ========
 Device                Comments
 ===================   ========
-System Fans	      Set system idle fan speed to 50%. The switching ASIC is not running.
+System Fans	      Set system idle fan speed to 100%. The switching ASIC is not running.
 Ethernet Management   Initialize the PHY and network devices for possible DHCP/TFTP downloads.
 Front Panel LEDs      Set front panel system status LEDs to a known state.
 PCIe root complex     Initialize PCIe root complex corresponding to the switching ASIC.
@@ -240,16 +230,16 @@ An example implementation looks like:
 Platform-Independent U-Boot Features
 ====================================
 
-ONIE relies on two fundamental features of U-Boot:
+ONIE-powerpc relies on two fundamental features of U-Boot:
 
 * Reading and writing the NOR boot flash.
 * Reading and writing U-Boot environment variables.
 
-The ONIE kernel and ``initramfs`` reside in the NOR boot flash, which is why ONIE 
-relies on U-Boot's NOR flash I/O.
+The ONIE kernel and ``initramfs`` reside in the NOR boot flash, which
+is why ONIE relies on U-Boot's NOR flash I/O.
 
-What's more interesting is the use of U-Boot environment variables in an ONIE-enabled
-system, as described in the next section.
+What's more interesting is the use of U-Boot environment variables in
+an ONIE-enabled system, as described in the next section.
 
 .. _platform_ind_vars:
 

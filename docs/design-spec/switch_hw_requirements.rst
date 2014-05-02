@@ -1,6 +1,8 @@
-*********************
-Hardware Requirements
-*********************
+.. _switch_hw_requirements:
+
+****************************
+Switch Hardware Requirements
+****************************
 
 ONIE has modest hardware requirements. The NOS definitely has
 additional hardware requirements.
@@ -8,36 +10,20 @@ additional hardware requirements.
 .. note::
   ONIE has no specific CPU architecture requirements -- it is Linux.
 
-  The dominant architecture today, however, is Freescale's `QorIQ PowerPC 
-  <http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME>`_.
+  Currently ONIE supports x86 and PowerPC CPU architectures.
 
-  The documentation in this section currently focuses on that
-  architecture and the associated `U-Boot <http://www.denx.de/wiki/U-Boot>`_ 
-  boot loader.
+This section lists the switch hardware requirements for an ONIE
+compatible switching platform.
 
-  Supporting the x86 architecture is on the roadmap.
+For CPU architecture specific details see these sections:
 
-====================================  =========================================
-Required Hardware                     Purpose
-====================================  =========================================
-U-Boot compatible CPU complex         The CPU complex must be supported by
-                                      U-Boot. For example,  PowerPC, ARM, MIPS.
-1GB (min) CPU DRAM                    The DRAM used by the CPU.
-NOR Boot flash 8MB (min), 32MB (rec)  U-Boot and the ONIE kernel and
-                                      applications reside in NOR flash.
-                                      Although 8 MB is the minimum size of
-                                      this flash, 32 MB is the recommended
-                                      size.
-Non-volatile board information        An EEPROM to store board information and
-                                      manufacturing data, like the device
-                                      serial number and network MAC address.
-Ethernet management port              Required to download an operating system
-                                      installer.
-====================================  =========================================
+- :ref:`powerpc_hw_requirements`
+
+- :ref:`x86_hw_requirements`
 
 .. _non_volatile_board_info:
 
-Board Information EEPROM Format
+Board EEPROM Information Format
 ===============================
 
 Each ONIE system must include an EEPROM which contains various system parameters
@@ -156,10 +142,13 @@ Type Code  Length      Description       Format
                                          this includes <arch>-<machine>-<machine_revision>.
 0x29       Variable    ONIE Version      An ASCII string containing the version of the
                                          ONIE software installed by the manufacturer.
-0x2A       2 bytes     MAC #1 Size       A two-byte big-endian unsigned number of sequential
-                                         MAC addresses allocated to this device, starting
-                                         with the value specified in the MAC #1 Base TLV.
-                                         Valid values for this field range from 1 to 65535.
+
+0x2A       2 bytes     Num MACs          A two-byte big-endian unsigned integer describing
+                                         the number of sequential MAC addresses allocated
+                                         to this device, starting with the value specified
+                                         in the MAC #1 Base TLV (code 0x2A).  Valid values
+                                         for this field range from 1 to 65535.
+
 0x2B       Variable    Manufacturer      An ASCII string containing the name of the entity
                                          that manufactured the device.
 0x2C       2 bytes     Country Code      A two-byte ASCII string containing the ISO 3166-1
@@ -197,6 +186,44 @@ Type Code  Length      Description       Format
                                          the EEPROM is erased.
 =========  ==========  ================  ==================================================
 
-Maintanence of this EEPROM format specification and allocation of the TLV type
-codes is handled by the `ONIE Foundation <http://http://onie.github.io/onie/>`_.
+Note about MAC Addresses
+------------------------
 
+A very critical characteristic of a switching platform EEPROM is the
+number of MAC addresses allocated to the machine.  The ONIE project
+requires allocating 1 MAC address for every *serdes* on the box.
+
+For example consider a machine that has one Ethernet management port
+and a switching ASIC with 48x10G ports plus 6x40G ports.  Each 40G
+port could be broken out into 4x10G ports.  Therefore the total number
+of MAC addresses this machines requires is::
+
+  1  -- Ethernet management port
+  48 -- 1 for each 48x10G port
+  24 -- 4 for each 6x40G port
+  -----------------------------
+  73 Total MACs
+
+To encode that in the EEPROM set TLV code 0x24 (MAC #1 Base) to and
+code 0x2A (Num MACs) to 73.
+
+Maintenance of this EEPROM format specification and allocation of the TLV type
+codes is handled by the `ONIE Project <http://www.onie.org/>`_.
+
+Hardware Face Plate and FRU Numbering
+=====================================
+
+The ONIE project recommends the following conventions for the sheet
+metal silk screen on the machine:
+
+#. Switch ports are labeled starting with the number "1".
+
+#. Switch ports are labeled top to bottom, left to right.  For example
+   consider a 48 port switch with two rows of switch ports (two rows
+   of 24 ports).  The ports along the top row are labeled "1, 3, 5
+   ... 47" and the bottom row is labeled "2, 4, 8 ... 48".
+
+#. Field Replaceable Units (FRUs) are labeled starting with the number
+   "1".  This typically applies to field pluggable power supplies and
+   fan modules.  For example a system with 2 PSUs and 3 fan modules
+   would label the PSUs "1, 2" and the fans "1, 2, 3".

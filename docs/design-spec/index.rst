@@ -5,13 +5,11 @@ Design Specification
 ********************
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :titlesonly:
 
    overview
-   hw_requirements
-   boot_loader
-   kernel
-   discovery
-   nos_interface
-   updater
+   switch_hw_requirements
+   operating_sw_design
+   powerpc_arch_design
+   x86_arch_design
