@@ -1,0 +1,173 @@
+.. _testing_guide:
+
+Testing Guide
+=============
+
+When porting ONIE to a new platform use the tests in this section to
+verify the ONIE implementation.  The demo NOS described previously can
+be used to exercise the ONIE functionality.
+
+The tests in this section assume you have compiled ONIE and installed
+it on the target hardware.
+
+ONIE Install Operations
+-----------------------
+
+These tests exercise the ability of ONIE to locate and install a NOS.
+
+.. _locally_attached_network_test:
+
+Locally Attached Network Install
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This test exercises the ability of ONIE to locate an installer image
+over the network.
+
+Using a locally attached HTTP server verify the following:
+
+#. the machine boots
+#. the Ethernet management interface is configured
+#. the machine downloads the demo NOS installer
+#. the machine installs the demo NOS
+#. the machine reboots into the demo NOS
+
+See :ref:`quick_start_guide` for more on how to configure a HTTP
+server and setup the directly attached network.
+
+Locally Attached File System Install (USB Memory Stick)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If the platform does **not** have a USB port skip this test.
+
+This test exercises the ability of ONIE to locate an installer image
+on a locally attached file system.  The primary use case is when an
+installer image is located on the root directory of a USB memory
+stick.
+
+Follow these steps:
+
+#. Power off the switch
+#. Copy the demo NOS installer to the root directory of a USB memory
+   stick.  Use the file names described in :ref:`default_file_name`.
+#. Insert the USB memory stick into the switch's USB port.
+#. Turn on the switch power
+
+Verify the following:
+
+#. the machine boots
+#. the USB memory stick is detected
+#. the machine installs the demo NOS from the USB memory stick
+#. the machine reboots into the demo NOS
+
+To verify the memory stick is detected you can inspect the output of
+the ``dmesg`` command looking for your USB device.  Also you can
+inspect the contents of the ``/proc/partitions`` file.
+
+ONIE / NOS Interface Commands
+-----------------------------
+
+These tests exercise the interfaces between the NOS and ONIE.  See
+:ref:`nos_interface` for more on these interfaces.
+
+Use the previously described demo NOS commands to exercise the
+ONIE-NOS interface.
+
+Install / Re-Provision
+^^^^^^^^^^^^^^^^^^^^^^
+
+From the demo NOS prompt verify the ``install`` command works
+correctly.  See :ref:`demo_nos_reinstall` for more about this command.
+
+After issuing this command you should verify the following happens:
+
+#. the machine reboots
+#. after the reboot ONIE starts in ONIE installer mode
+
+Rescue Mode
+^^^^^^^^^^^
+
+From the demo NOS prompt verify the ``rescue`` command works
+correctly.  See :ref:`demo_nos_rescue` for more about this command.
+
+After issuing this command you should verify the following happens:
+
+#. the machine reboots
+#. after the reboot ONIE starts in ONIE rescue mode
+
+Uninstall
+^^^^^^^^^
+
+From the demo NOS prompt verify the ``uninstall`` command works
+correctly.  See :ref:`demo_nos_uninstall` for more about this command.
+
+After issuing this command you should verify the following happens:
+
+#. the machine reboots
+#. after the reboot ONIE starts in ONIE uninstall mode
+#. the mass storage device(s) are erased
+#. after uninstalling the machine reboots again
+#. the machine detects a corrupt u-boot environment and writes a new
+   default environment
+#. the machine boots into ONIE installer mode
+
+ONIE Update
+^^^^^^^^^^^
+
+This test is very similar to the :ref:`locally_attached_network_test`,
+except in this case ONIE is trying to locate and run an ONIE updater
+instead of a NOS installer.
+
+For more on updating ONIE and the default ONIE updater file names see
+:ref:`updating_onie`.
+
+From the demo NOS prompt verify the ``update`` command works
+correctly.  See :ref:`demo_nos_update` for more about this command.
+
+After issuing this command you should verify the following happens:
+
+#. the machine reboots
+#. after the reboot ONIE starts in ONIE update mode
+#. the Ethernet management interface is configured
+#. the machine downloads the ONIE updater
+#. the machine installs the ONIE updater
+#. the machine reboots into the demo NOS
+
+Testing Infrastructure
+======================
+
+A testing framework is located in the ``test`` sub-directory.  At the
+moment documentation is sparse.  Here's the layout::
+
+  test
+  ├── bin
+  │   └── test-onie.py
+  ├── lib
+  │   ├── connection.py
+  │   ├── dut.py
+  │   ├── power.py
+  │   ├── test_base.py
+  │   └── test_utils.py
+  ├── site.conf
+  └── tests
+      ├── __init__.py
+      └── test_u_boot.py
+
+=========================    =======
+File                         Purpose
+=========================    =======
+test/bin/test-onie.py        the main program entry point
+test/lib                     some base classes for DUTs, connections, power
+test/lib/connection.py       class for connections, serial console servers
+test/lib/dut.py              DUT base class
+test/lib/power.py            class for dealing with remote PDUs
+test/lib/test_base.py        base class for tests
+test/lib/test_utils.py       misc utility functions
+test/tests                   the "tests"
+test/tests/test_u_boot.py    tests involving u-boot
+test/site.conf               config file for various DUTs and options
+=========================    =======
+
+The Makefile in ``build-config/Makefile`` contains a ``test`` target
+that runs ``bin/test-onie.py`` with various parameters.
+
+See ``test/tests/test_u_boot.py`` for an example of writing a test.

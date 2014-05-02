@@ -1,0 +1,294 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>x86 Interface Details &mdash; Open Network Install Environment 2014.05-rc1 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '2014.05-rc1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-45248701-1']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://' : 'http://') + 'stats.g.doubleclick.net/dc.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment 2014.05-rc1 documentation" href="../index.html" />
+    <link rel="up" title="x86 CPU Architecture Design" href="x86_arch_design.html" />
+    <link rel="next" title="x86 Initial Install and Recovery" href="x86_recovery.html" />
+    <link rel="prev" title="x86 Linux Kernel and Integration" href="x86_kernel.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="x86_recovery.html" title="x86 Initial Install and Recovery"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="x86_kernel.html" title="x86 Linux Kernel and Integration"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li><a href="x86_arch_design.html" accesskey="U">x86 CPU Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="x86-interface-details">
+<h1>x86 Interface Details<a class="headerlink" href="#x86-interface-details" title="Permalink to this headline">¶</a></h1>
+<p>This section describes the x86 specific methods used to implement the
+NOS interface.  See the <a class="reference internal" href="nos_interface.html#nos-interface"><em>Network Operating System Interface</em></a> section for more about
+the NOS interface.</p>
+<div class="section" id="x86-nos-interface">
+<span id="cmd-onie-boot-mode"></span><h2>x86 NOS Interface<a class="headerlink" href="#x86-nos-interface" title="Permalink to this headline">¶</a></h2>
+<p>On x86 the NOS and ONIE communicates using GRUB environment variables
+stored in the <tt class="docutils literal"><span class="pre">ONIE-BOOT</span></tt> partition.</p>
+<p>ONIE provides a tool called <tt class="docutils literal"><span class="pre">onie-boot-mode</span></tt> that a NOS uses to set
+the ONIE boot mode to one of:</p>
+<ul class="simple">
+<li><tt class="docutils literal"><span class="pre">install</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">uninstall</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">rescue</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">update</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">embed</span></tt></li>
+</ul>
+<p>The complete help for the tool is:</p>
+<div class="highlight-python"><pre>ONIE:/ # onie-boot-mode -h
+usage: onie-boot-mode [-o &lt;onie_mode&gt;] [-lhvq]
+Get or set the default GRUB boot entry.  The default is to show
+the current default entry.
+
+COMMAND LINE OPTIONS
+
+        -o
+                Set the default GRUB boot entry to a particular "ONIE
+                mode".  Available ONIE modes are:
+
+                install   -- ONIE OS installer mode
+                rescue    -- ONIE rescue mode
+                uninstall -- ONIE OS uninstall mode
+                update    -- ONIE self update mode
+                embed     -- ONIE self update mode and embed ONIE
+                none      -- Use system default boot mode
+
+                Some platforms may offer additional modes.  Check with
+                your hardware vendor.
+
+                The 'none' mode will use the first ONIE boot menu entry.
+
+        -l
+                List the current default entry.  This is the default.
+
+        -h
+                Help.  Print this message.
+
+        -q
+                Quiet.  No printing, except for errors.
+
+        -v
+                Be verbose.  Print what is happening.</pre>
+</div>
+<p>The tool is located in the <tt class="docutils literal"><span class="pre">ONIE-BOOT</span></tt> partition in the
+<tt class="docutils literal"><span class="pre">onie/tools/bin/onie-boot-mode</span></tt> directory.  The NOS can easily mount
+the <tt class="docutils literal"><span class="pre">ONIE-BOOT</span></tt> partition by using the disk volume label
+&#8220;ONIE-BOOT&#8221;, e.g. the following mounts the ONIE-BOOT partition from a
+Linux based NOS:</p>
+<div class="highlight-python"><pre>NOS:/ # mkdir /mnt/onie-boot
+NOS:/ # mount LABEL=ONIE-BOOT /mnt/onie-boot</pre>
+</div>
+<p>After that the <tt class="docutils literal"><span class="pre">onie-boot-mode</span></tt> tool is available in:</p>
+<div class="highlight-python"><pre>NOS:/ # /mnt/onie-boot/onie/tools/bin/onie-boot-mode</pre>
+</div>
+<p>The tool is a thin wrapper around the <a class="reference external" href="http://man.he.net/man1/grub-editenv">grub-editenv</a> command that sets the
+<tt class="docutils literal"><span class="pre">onie_mode</span></tt> variable to the desired value.</p>
+<div class="section" id="x86-nos-installer">
+<span id="x86-nos-intf-installer"></span><h3>x86 NOS Installer<a class="headerlink" href="#x86-nos-installer" title="Permalink to this headline">¶</a></h3>
+<p>The main duties of a NOS installer on x86 are:</p>
+<ul class="simple">
+<li>Create partitions and format file systems</li>
+<li>Install the NOS software in the new partitions</li>
+<li>Install GRUB in the MBR</li>
+<li>Set its GRUB configuration</li>
+</ul>
+<p>Installing GRUB and setting up the GRUB configuration are the most
+important steps to describe here.</p>
+<p>The walk through of installing GRUB and setting up the GRUB
+configuration is described in the <a class="reference internal" href="x86_boot_loader.html#x86-boot-loader"><em>x86 Boot Loader (GRUB2)</em></a> section.</p>
+<p>Also the provided demo OS installer exercises all of the steps
+described in this section.  See the <a class="reference internal" href="../demo_os/index.html#demo-os"><em>Demo OS Installer and OS Runtime</em></a> section for more
+about the Demo OS.</p>
+<p>In subsequent sections the following assumptions about the NOS are made:</p>
+<ol class="arabic simple">
+<li>The NOS is Linux based</li>
+<li>The NOS has mounted the <tt class="docutils literal"><span class="pre">ONIE-BOOT</span></tt> partition read-write on
+<tt class="docutils literal"><span class="pre">/mnt/onie-boot</span></tt></li>
+<li>The NOS has created a GRUB menu entry named <tt class="docutils literal"><span class="pre">ONIE</span></tt> to chainload
+into ONIE</li>
+<li>The NOS has the <tt class="docutils literal"><span class="pre">grub-reboot</span></tt> command available</li>
+</ol>
+<p>The <tt class="docutils literal"><span class="pre">grub-reboot</span></tt> command allows the NOS&#8217;s GRUB to boot the ONIE
+chainload entry once.  After one boot the NOS&#8217;s GRUB will revert back
+to the NOS default GRUB menu entry.</p>
+</div>
+<div class="section" id="x86-reinstalling-or-installing-a-different-nos">
+<span id="x86-nos-intf-reinstaller"></span><h3>x86 Reinstalling or Installing a Different NOS<a class="headerlink" href="#x86-reinstalling-or-installing-a-different-nos" title="Permalink to this headline">¶</a></h3>
+<p>To invoke the install operation, the NOS runs the following commands:</p>
+<div class="highlight-python"><pre>NOS:/ # grub-reboot ONIE
+NOS:/ # /mnt/onie-boot/onie/tools/bin/onie-boot-mode -o install</pre>
+</div>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-reinstaller"><em>Reinstalling or Installing a Different NOS</em></a> section for more about the NOS
+reinstaller interface.</p>
+</div>
+<div class="section" id="x86-nos-uninstall">
+<span id="x86-nos-intf-uninstall"></span><h3>x86 NOS Uninstall<a class="headerlink" href="#x86-nos-uninstall" title="Permalink to this headline">¶</a></h3>
+<p>To invoke the uninstall operation, the NOS runs the following
+commands:</p>
+<div class="highlight-python"><pre>NOS:/ # grub-reboot ONIE
+NOS:/ # /mnt/onie-boot/onie/tools/bin/onie-boot-mode -o uninstall</pre>
+</div>
+<p>Following the uninstall process, the system returns to the
+discovery and installation phase.</p>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-uninstall"><em>NOS Uninstall</em></a> section for more about the NOS
+uninstall interface.</p>
+</div>
+<div class="section" id="x86-rescue-and-recovery">
+<span id="x86-nos-intf-rescue"></span><h3>x86 Rescue and Recovery<a class="headerlink" href="#x86-rescue-and-recovery" title="Permalink to this headline">¶</a></h3>
+<p>To invoke the rescue operation, the NOS runs the following commands:</p>
+<div class="highlight-python"><pre>NOS:/ # grub-reboot ONIE
+NOS:/ # /mnt/onie-boot/onie/tools/bin/onie-boot-mode -o rescue</pre>
+</div>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-rescue"><em>Rescue and Recovery</em></a> section for more about the NOS rescue
+interface.</p>
+</div>
+<div class="section" id="x86-updating-and-embedding-onie">
+<span id="x86-nos-intf-update"></span><h3>x86 Updating and Embedding ONIE<a class="headerlink" href="#x86-updating-and-embedding-onie" title="Permalink to this headline">¶</a></h3>
+<p>On x86 a distinction is made between the <tt class="docutils literal"><span class="pre">update</span></tt> operation and the
+<tt class="docutils literal"><span class="pre">embed</span></tt> operation.</p>
+<p>The <tt class="docutils literal"><span class="pre">embed</span></tt> operation is <strong>destructive</strong> and will wipe out
+everything (including any installed NOS) and install a new version of
+ONIE.  Typically this is done in manufacturing before the customer
+receives the unit.</p>
+<p>The <tt class="docutils literal"><span class="pre">update</span></tt> operation is <strong>not</strong> destructive.  This operation will
+only update the <tt class="docutils literal"><span class="pre">ONIE-BOOT</span></tt> partition.  Typically this would be used
+in the field to update the current ONIE version, while leaving the
+installed NOS intact.</p>
+<p>To invoke the update operation, the NOS runs the following commands:</p>
+<div class="highlight-python"><pre>NOS:/ # grub-reboot ONIE
+NOS:/ # /mnt/onie-boot/onie/tools/bin/onie-boot-mode -o update</pre>
+</div>
+<p>To invoke the embed operation, the NOS runs the following commands:</p>
+<div class="highlight-python"><pre>NOS:/ # grub-reboot ONIE
+NOS:/ # /mnt/onie-boot/onie/tools/bin/onie-boot-mode -o embed</pre>
+</div>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-update"><em>Updating and Embedding ONIE</em></a> section for more about the NOS update
+interface.</p>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/ONIE-logo-green-160x60.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">x86 Interface Details</a><ul>
+<li><a class="reference internal" href="#x86-nos-interface">x86 NOS Interface</a><ul>
+<li><a class="reference internal" href="#x86-nos-installer">x86 NOS Installer</a></li>
+<li><a class="reference internal" href="#x86-reinstalling-or-installing-a-different-nos">x86 Reinstalling or Installing a Different NOS</a></li>
+<li><a class="reference internal" href="#x86-nos-uninstall">x86 NOS Uninstall</a></li>
+<li><a class="reference internal" href="#x86-rescue-and-recovery">x86 Rescue and Recovery</a></li>
+<li><a class="reference internal" href="#x86-updating-and-embedding-onie">x86 Updating and Embedding ONIE</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="x86_kernel.html"
+                        title="previous chapter">x86 Linux Kernel and Integration</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="x86_recovery.html"
+                        title="next chapter">x86 Initial Install and Recovery</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="../_sources/design-spec/x86_nos_interface.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="x86_recovery.html" title="x86 Initial Install and Recovery"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="x86_kernel.html" title="x86 Linux Kernel and Integration"
+             >previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li><a href="x86_arch_design.html" >x86 CPU Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright .
+    </div>
+  </body>
+</html>

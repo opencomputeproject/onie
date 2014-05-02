@@ -1,0 +1,263 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>PowerPC Interface Details &mdash; Open Network Install Environment 2014.05-rc1 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '2014.05-rc1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-45248701-1']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://' : 'http://') + 'stats.g.doubleclick.net/dc.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment 2014.05-rc1 documentation" href="../index.html" />
+    <link rel="up" title="PowerPC CPU Architecture Design" href="powerpc_arch_design.html" />
+    <link rel="next" title="x86 CPU Architecture Design" href="x86_arch_design.html" />
+    <link rel="prev" title="PowerPC Linux Kernel and Device Tree Source" href="powerpc_kernel.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="x86_arch_design.html" title="x86 CPU Architecture Design"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="powerpc_kernel.html" title="PowerPC Linux Kernel and Device Tree Source"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li><a href="powerpc_arch_design.html" accesskey="U">PowerPC CPU Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="powerpc-interface-details">
+<h1>PowerPC Interface Details<a class="headerlink" href="#powerpc-interface-details" title="Permalink to this headline">¶</a></h1>
+<p>This section describes the PowerPC specific methods used to implement
+the NOS interface.  See the <a class="reference internal" href="nos_interface.html#nos-interface"><em>Network Operating System Interface</em></a> section for more
+about the NOS interface.</p>
+<div class="section" id="powerpc-adding-kernel-command-arguments">
+<h2>PowerPC Adding Kernel Command Arguments<a class="headerlink" href="#powerpc-adding-kernel-command-arguments" title="Permalink to this headline">¶</a></h2>
+<p>In the case of U-Boot and Linux the user can set additional kernel
+command line arguments by setting the <tt class="docutils literal"><span class="pre">onie_debugargs</span></tt> U-Boot
+environment variable.</p>
+<p>The <tt class="docutils literal"><span class="pre">install_url</span></tt> kernel command line argument can be used to boot
+into ONIE and automatically use the URL as an install URL.  For
+example:</p>
+<div class="highlight-python"><pre>=&gt; setenv onie_debugargs 'install_url=http://10.0.1.249/nos_installer.bin'
+=&gt; run onie_bootcmd</pre>
+</div>
+</div>
+<div class="section" id="powerpc-nos-interface">
+<h2>PowerPC NOS Interface<a class="headerlink" href="#powerpc-nos-interface" title="Permalink to this headline">¶</a></h2>
+<p>On PowerPC ONIE communicates with the NOS via U-Boot environment
+variables.  Both ONIE and the NOS must be able to read and write
+U-Boot environment variables.  See the <a class="reference internal" href="nos_interface.html#nos-interface"><em>Network Operating System Interface</em></a> section
+for more about the NOS interface.</p>
+<div class="section" id="powerpc-nos-installer">
+<span id="powerpc-nos-intf-installer"></span><h3>PowerPC NOS Installer<a class="headerlink" href="#powerpc-nos-installer" title="Permalink to this headline">¶</a></h3>
+<p>The only requirement ONIE has for the NOS installer is that the NOS
+<strong>must</strong> update the <tt class="docutils literal"><span class="pre">nos_bootcmd</span></tt> U-Boot environment variable
+described in <a class="reference internal" href="powerpc_boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>. This signals U-Boot to load the
+NOS on subsequent boots, bypassing ONIE.</p>
+<p>What goes into the <tt class="docutils literal"><span class="pre">nos_bootcmd</span></tt> is entirely up to the NOS vendor, but
+generally it will contain commands to load and boot the NOS image from
+NOR flash or from an SD card.</p>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-installer"><em>NOS Installer</em></a> section for more about the NOS
+installer interface.</p>
+</div>
+<div class="section" id="powerpc-reinstalling-or-installing-a-different-nos">
+<span id="powerpc-nos-intf-reinstaller"></span><h3>PowerPC Reinstalling or Installing a Different NOS<a class="headerlink" href="#powerpc-reinstalling-or-installing-a-different-nos" title="Permalink to this headline">¶</a></h3>
+<p>To invoke the install operation, the running NOS sets the
+<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
+<tt class="docutils literal"><span class="pre">install</span></tt> (see <a class="reference internal" href="powerpc_boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
+system.  When the system starts up again, ONIE will see the
+<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and restart the discovery and installation phase.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>From the U-Boot prompt, you can also boot ONIE into the discovery and
+installation phase by typing:</p>
+<div class="last highlight-python"><pre>=&gt; run onie_bootcmd</pre>
+</div>
+</div>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-reinstaller"><em>Reinstalling or Installing a Different NOS</em></a> section for more about the NOS
+reinstaller interface.</p>
+</div>
+<div class="section" id="powerpc-nos-uninstall">
+<span id="powerpc-nos-intf-uninstall"></span><h3>PowerPC NOS Uninstall<a class="headerlink" href="#powerpc-nos-uninstall" title="Permalink to this headline">¶</a></h3>
+<p>ONIE has an uninstall operation that wipes out the unused portions of
+NOR flash and the attached mass storage device (like an SD card or USB NAND
+flash). The only thing untouched is ONIE itself. This is a
+&#8220;reset to factory defaults&#8221;-like operation.</p>
+<p>To invoke the uninstall operation, the running NOS sets the
+<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
+<tt class="docutils literal"><span class="pre">uninstall</span></tt> (see <a class="reference internal" href="powerpc_boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
+system.  When the system starts up again ONIE, will see the
+<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and start the uninstall process.</p>
+<p>Following the uninstall process, the system returns to the
+discovery and installation phase.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>From the U-Boot prompt you can also boot ONIE into the uninstall
+mode by typing:</p>
+<div class="last highlight-python"><pre>=&gt; run onie_uninstall</pre>
+</div>
+</div>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-uninstall"><em>NOS Uninstall</em></a> section for more about the NOS
+uninstall interface.</p>
+</div>
+<div class="section" id="powerpc-rescue-and-recovery">
+<span id="powerpc-nos-intf-rescue"></span><h3>PowerPC Rescue and Recovery<a class="headerlink" href="#powerpc-rescue-and-recovery" title="Permalink to this headline">¶</a></h3>
+<p>To invoke the rescue operation, the running NOS sets the <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt>
+U-Boot environment variable to the value <tt class="docutils literal"><span class="pre">rescue</span></tt>
+(see <a class="reference internal" href="powerpc_boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the system.  When the system
+starts up again, ONIE will see the <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and enter rescue mode.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>From the U-Boot prompt you can also boot ONIE into rescue mode by
+typing:</p>
+<div class="last highlight-python"><pre>=&gt; run onie_rescue</pre>
+</div>
+</div>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-rescue"><em>Rescue and Recovery</em></a> section for more about the NOS rescue
+interface.</p>
+</div>
+<div class="section" id="powerpc-updating-and-embedding-onie">
+<span id="powerpc-nos-intf-update"></span><h3>PowerPC Updating and Embedding ONIE<a class="headerlink" href="#powerpc-updating-and-embedding-onie" title="Permalink to this headline">¶</a></h3>
+<p>On PowerPC only the <tt class="docutils literal"><span class="pre">update</span></tt> operation is supported, i.e. <tt class="docutils literal"><span class="pre">update</span></tt>
+and <tt class="docutils literal"><span class="pre">embed</span></tt> do the same thing.  The <tt class="docutils literal"><span class="pre">update</span></tt> operation is <strong>not</strong>
+descructive to the currently installed NOS.</p>
+<p>The update operation installs a new version of ONIE in the NOR flash,
+including:</p>
+<ul class="simple">
+<li>An updated U-Boot image</li>
+<li>An updated ONIE kernel and initramfs</li>
+</ul>
+<p>To invoke the ONIE update operation, the running NOS sets the
+<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
+<tt class="docutils literal"><span class="pre">update</span></tt> (see <a class="reference internal" href="powerpc_boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
+system.  When the system starts up again, ONIE will see the
+<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and enter ONIE self-update mode.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>From the U-Boot prompt you can also boot ONIE into ONIE self-update mode by
+typing:</p>
+<div class="last highlight-python"><pre>=&gt; run onie_update</pre>
+</div>
+</div>
+<p>See the <a class="reference internal" href="nos_interface.html#nos-intf-update"><em>Updating and Embedding ONIE</em></a> section for more about the NOS update
+interface.</p>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/ONIE-logo-green-160x60.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">PowerPC Interface Details</a><ul>
+<li><a class="reference internal" href="#powerpc-adding-kernel-command-arguments">PowerPC Adding Kernel Command Arguments</a></li>
+<li><a class="reference internal" href="#powerpc-nos-interface">PowerPC NOS Interface</a><ul>
+<li><a class="reference internal" href="#powerpc-nos-installer">PowerPC NOS Installer</a></li>
+<li><a class="reference internal" href="#powerpc-reinstalling-or-installing-a-different-nos">PowerPC Reinstalling or Installing a Different NOS</a></li>
+<li><a class="reference internal" href="#powerpc-nos-uninstall">PowerPC NOS Uninstall</a></li>
+<li><a class="reference internal" href="#powerpc-rescue-and-recovery">PowerPC Rescue and Recovery</a></li>
+<li><a class="reference internal" href="#powerpc-updating-and-embedding-onie">PowerPC Updating and Embedding ONIE</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="powerpc_kernel.html"
+                        title="previous chapter">PowerPC Linux Kernel and Device Tree Source</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="x86_arch_design.html"
+                        title="next chapter">x86 CPU Architecture Design</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="../_sources/design-spec/powerpc_nos_interface.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="x86_arch_design.html" title="x86 CPU Architecture Design"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="powerpc_kernel.html" title="PowerPC Linux Kernel and Device Tree Source"
+             >previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li><a href="powerpc_arch_design.html" >PowerPC CPU Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright .
+    </div>
+  </body>
+</html>

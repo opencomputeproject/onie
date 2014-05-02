@@ -1,0 +1,198 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Porting Guide &mdash; Open Network Install Environment 2014.05-rc1 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '2014.05-rc1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-45248701-1']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://' : 'http://') + 'stats.g.doubleclick.net/dc.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment 2014.05-rc1 documentation" href="../index.html" />
+    <link rel="up" title="Developer Documentation" href="index.html" />
+    <link rel="next" title="Testing Guide" href="testing.html" />
+    <link rel="prev" title="Contributing to ONIE" href="contributing.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="testing.html" title="Testing Guide"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="contributing.html" title="Contributing to ONIE"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="porting-guide">
+<h1>Porting Guide<a class="headerlink" href="#porting-guide" title="Permalink to this headline">¶</a></h1>
+<p>This section describes requirements and general guidelines to follow
+when porting ONIE to a new platform.  Also the <a class="reference internal" href="testing.html#testing-guide"><em>Testing Guide</em></a>
+should be used to validate the ONIE implementation.</p>
+<div class="section" id="porting-u-boot">
+<h2>Porting U-Boot<a class="headerlink" href="#porting-u-boot" title="Permalink to this headline">¶</a></h2>
+<p>When porting U-Boot the following items should be checked and
+verified:</p>
+<ul class="simple">
+<li>Ethernet management PHY LEDs function correctly</li>
+<li>Front panel status LEDs are set appropriately - check power, fans
+and set any corresponding LEDs</li>
+<li>Fan speeds set to 40-50% duty cycle</li>
+<li>Verify MAC address and Serial # are exported as environment variables</li>
+<li>Confirm CONFIG_SYS_CLK_FREQ and CONFIG_DDR_CLK_FREQ oscillators by
+visual inspection.  For example if an oscillator is 66.666MHz use
+66666000 not 66666666.  That will lead to skew.</li>
+<li>Issue &#8220;INFO&#8221; message if a PSU is not detected or is in a failed state</li>
+<li>Verify the &#8220;INSTALL&#8221; instructions from the machine directory work.
+These are the instructions used to install ONIE from the u-boot
+prompt.  If the INSTALL instructions need updating then fix them.</li>
+</ul>
+</div>
+<div class="section" id="onie-dts-device-tree">
+<h2>ONIE DTS (Device Tree)<a class="headerlink" href="#onie-dts-device-tree" title="Permalink to this headline">¶</a></h2>
+<p>When porting the ONIE kernel the following .dts (device tree) entries
+should be checked and verified:</p>
+<ul class="simple">
+<li>The RTC is in the .dts file and works correctly</li>
+<li>The MDIO/PHY interrupts are correct in .dts</li>
+<li>Disable unused serial consoles in .dts</li>
+<li>Verify all EEPROMs (including SPDs) are accessible via sysfs using
+hexdump.  Set the &#8220;label&#8221; property accordingly:<ul>
+<li>board_eeprom – for the board EEPROM</li>
+<li>psu1_eeprom / psu2_eeprom – for the power supply unit (PSU) eeproms</li>
+<li>port1, port2, ... port52 – for the SFP+/QSFP eeproms</li>
+</ul>
+</li>
+<li>For PCA95xx I2C muxes use the &#8216;deselect-on-exit&#8217; property</li>
+<li>I2C nodes use the &#8216;fsl,preserve-clocking&#8217; property</li>
+</ul>
+</div>
+<div class="section" id="onie-kernel">
+<h2>ONIE Kernel<a class="headerlink" href="#onie-kernel" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>Inspect the boot log and dmesg output looking for any errors or
+anything unusual</li>
+<li>Inspect <tt class="docutils literal"><span class="pre">cat</span> <span class="pre">/proc/interrupts</span></tt> – are the expected interrutps
+enabled?</li>
+<li>If the platform has CPLDs try acessing some registers using the
+<tt class="docutils literal"><span class="pre">iorw</span></tt> command.  Can you read a version register?</li>
+<li>Verify the demo NOS compiles and installs OK</li>
+<li>If the box has USB ports plug in a USB stick and see if you can
+mount a partition</li>
+<li>Verify the <tt class="docutils literal"><span class="pre">onie-nos-install</span> <span class="pre">&lt;demo</span> <span class="pre">NOS</span> <span class="pre">installer</span> <span class="pre">URL&gt;</span></tt> command works from
+rescue mode</li>
+<li>Verify the <tt class="docutils literal"><span class="pre">onie-self-update</span> <span class="pre">&lt;ONIE</span> <span class="pre">updater</span> <span class="pre">URL&gt;</span></tt> command works from
+rescue mode</li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/ONIE-logo-green-160x60.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Porting Guide</a><ul>
+<li><a class="reference internal" href="#porting-u-boot">Porting U-Boot</a></li>
+<li><a class="reference internal" href="#onie-dts-device-tree">ONIE DTS (Device Tree)</a></li>
+<li><a class="reference internal" href="#onie-kernel">ONIE Kernel</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="contributing.html"
+                        title="previous chapter">Contributing to ONIE</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="testing.html"
+                        title="next chapter">Testing Guide</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="../_sources/developers/porting.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="testing.html" title="Testing Guide"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="contributing.html" title="Contributing to ONIE"
+             >previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Developer Documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright .
+    </div>
+  </body>
+</html>

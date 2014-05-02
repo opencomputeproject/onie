@@ -1,0 +1,531 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Build Instructions &mdash; Open Network Install Environment 2014.05-rc1 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '2014.05-rc1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-45248701-1']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://' : 'http://') + 'stats.g.doubleclick.net/dc.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment 2014.05-rc1 documentation" href="../index.html" />
+    <link rel="up" title="Developer Documentation" href="index.html" />
+    <link rel="next" title="Contributing to ONIE" href="contributing.html" />
+    <link rel="prev" title="Developer Documentation" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="contributing.html" title="Contributing to ONIE"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Developer Documentation"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="build-instructions">
+<h1>Build Instructions<a class="headerlink" href="#build-instructions" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="machine-definition-files">
+<h2>Machine Definition Files<a class="headerlink" href="#machine-definition-files" title="Permalink to this headline">¶</a></h2>
+<p>In order to compile ONIE for a particular platform, you need the
+platform&#8217;s machine definition, located in <tt class="docutils literal"><span class="pre">$ONIE_ROOT/machine/&lt;platform&gt;</span></tt>.</p>
+<p>If you received a machine definition tarball separately, you must first
+untar it in the <tt class="docutils literal"><span class="pre">$ONIE_ROOT</span></tt> directory.  For example:</p>
+<div class="highlight-python"><pre>$ cd onie
+$ tar xJf /path/to/tarball/onie-&lt;platform&gt;.tar.xz</pre>
+</div>
+<p>See the README file in <tt class="docutils literal"><span class="pre">machine/&lt;platform&gt;</span></tt> for additional information
+about a particular platform.</p>
+</div>
+<div class="section" id="preparing-a-new-build-machine">
+<h2>Preparing a New Build Machine<a class="headerlink" href="#preparing-a-new-build-machine" title="Permalink to this headline">¶</a></h2>
+<p>To prepare a new build machine for compiling, ONIE must first install a
+number of standard development packages.</p>
+<p>For a <a class="reference external" href="http://www.debian.org/">Debian-based system</a>, a Makefile
+target exists that installs the required packages on your build
+machine.  This target requires the use of <tt class="docutils literal"><span class="pre">sudo(8)</span></tt>, since package
+installation requires root privileges:</p>
+<div class="highlight-python"><pre>$ cd build-config
+$ sudo apt-get update
+$ sudo apt-get install build-essential
+$ make debian-prepare-build-host</pre>
+</div>
+<p>For a different Linux distribution, look at the Makefile and the
+<tt class="docutils literal"><span class="pre">$(DEBIAN_BUILD_HOST_PACKAGES)</span></tt> variable.  Then install packages for
+your distribution that provide the same tools.</p>
+</div>
+<div class="section" id="cross-compiler-toolchain">
+<h2>Cross-Compiler Toolchain<a class="headerlink" href="#cross-compiler-toolchain" title="Permalink to this headline">¶</a></h2>
+<p>The ONIE build process generates and uses a cross compiling toolchain
+based on <a class="reference external" href="http://gcc.gnu.org/">gcc</a> and <a class="reference external" href="http://www.uclibc.org/">uClibc</a>.  The <a class="reference external" href="http://crosstool-ng.org/">crosstool-NG</a> project is used to manage the build the
+of the toolchain.</p>
+<p>A number of packages are downloaded from the Internet by the ONIE
+build process and cached for subsequent builds.  You can setup your
+own local mirror for these packages by setting up
+<tt class="docutils literal"><span class="pre">onie/build-config/local.make</span></tt>.  See the sample file,
+<tt class="docutils literal"><span class="pre">onie/build-config/local.make.example</span></tt>, and the <tt class="docutils literal"><span class="pre">ONIE_MIRROR</span></tt> and
+<tt class="docutils literal"><span class="pre">CROSSTOOL_ONIE_MIRROR</span></tt> variables for examples.</p>
+</div>
+<div class="section" id="cross-compiling-onie">
+<h2>Cross-Compiling ONIE<a class="headerlink" href="#cross-compiling-onie" title="Permalink to this headline">¶</a></h2>
+<p>To compile ONIE, first change directories to <tt class="docutils literal"><span class="pre">build-config</span></tt> and then
+type <tt class="docutils literal"><span class="pre">make</span> <span class="pre">MACHINE=&lt;platform&gt;</span> <span class="pre">all</span></tt>, specifying the target machine.
+For example:</p>
+<div class="highlight-python"><pre>$ cd build-config
+$ make -j4 MACHINE=&lt;platform&gt; all</pre>
+</div>
+<p>When complete, the following ONIE binaries are created in the <tt class="docutils literal"><span class="pre">build/images</span></tt>
+directory:</p>
+<table border="1" class="docutils" id="onie-build-products">
+<caption>ONIE Build Products</caption>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">File</th>
+<th class="head">Purpose</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>onie-&lt;platform&gt;-&lt;revision&gt;.bin</td>
+<td>Raw binary, suitable for NOR flash programming</td>
+</tr>
+<tr class="row-odd"><td>onie-updater-&lt;platform&gt;-&lt;revision&gt;</td>
+<td>ONIE updater, for use with the ONIE update mechanism</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="installing-the-onie-binary">
+<h2>Installing the ONIE binary<a class="headerlink" href="#installing-the-onie-binary" title="Permalink to this headline">¶</a></h2>
+<p>See the INSTALL file in <tt class="docutils literal"><span class="pre">machine/&lt;platform&gt;</span></tt> for additional information
+about how to install the ONIE binary on a particular platform.</p>
+</div>
+</div>
+<div class="section" id="source-code-description">
+<h1>Source Code Description<a class="headerlink" href="#source-code-description" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="source-code-layout">
+<h2>Source Code Layout<a class="headerlink" href="#source-code-layout" title="Permalink to this headline">¶</a></h2>
+<p>The ONIE source code layout is as follows:</p>
+<div class="highlight-python"><pre>onie
+├── build
+│   └── docs
+│       ├── doctrees
+│       └── html
+├── build-config
+│   ├── arch
+│   ├── conf
+│   ├── make
+│   └── scripts
+├── contrib
+│   └── onie-server
+├── demo
+├── docs
+├── installer
+├── machine
+│   └──&lt;platform&gt;
+│       ├── demo
+│       ├── kernel
+│       ├── test
+│       └── u-boot
+├── patches
+│   ├── busybox
+│   ├── crosstool-NG
+│   ├── e2fsprogs
+│   ├── kernel
+│   └── u-boot
+├── rootconf
+│   └── default
+│       ├── bin
+│       ├── etc
+│       │   ├── init.d
+│       │   ├── rc3.d
+│       │   └── rcS.d
+│       ├── root
+│       ├── sbin
+│       └── scripts
+├── test
+│   ├── bin
+│   ├── lib
+│   └── tests
+└── upstream</pre>
+</div>
+<table border="1" class="docutils">
+<colgroup>
+<col width="22%" />
+<col width="78%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Directory</th>
+<th class="head">Purpose</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>build/docs</td>
+<td>The final documentation is placed here.</td>
+</tr>
+<tr class="row-odd"><td>build-config</td>
+<td>Builds are launched from this directory.  The main Makefile is here.</td>
+</tr>
+<tr class="row-even"><td>build-config/arch</td>
+<td>Contains configurations for CPU architectures.</td>
+</tr>
+<tr class="row-odd"><td>build-config/conf</td>
+<td>Contains configurations common to all platforms.</td>
+</tr>
+<tr class="row-even"><td>build-config/make</td>
+<td>Contains makefile fragments included by the main Makefile.</td>
+</tr>
+<tr class="row-odd"><td>build-config/scripts</td>
+<td>Scripts used by the build process.</td>
+</tr>
+<tr class="row-even"><td>contrib/onie-server</td>
+<td>A stand alone DHCP+HTTP python based server to simple installs.</td>
+</tr>
+<tr class="row-odd"><td>demo</td>
+<td>A sample ONIE-compliant installer and OS.  See README.demo for details.</td>
+</tr>
+<tr class="row-even"><td>docs</td>
+<td>What you are reading now.</td>
+</tr>
+<tr class="row-odd"><td>installer</td>
+<td>Files for building an ONIE update installer.</td>
+</tr>
+<tr class="row-even"><td>machine</td>
+<td>Contains platform-specific machine definition files.  More details below.</td>
+</tr>
+<tr class="row-odd"><td>patches</td>
+<td>Patch sets applied to upstream projects, common to all platforms.</td>
+</tr>
+<tr class="row-even"><td>rootconf</td>
+<td>Files copied into the final sysroot image. The main ONIE discovery
+and execution application lives here.  More details below.</td>
+</tr>
+<tr class="row-odd"><td>test/bin</td>
+<td>Contains the ONIE testing harness (python unittest based).</td>
+</tr>
+<tr class="row-even"><td>test/lib</td>
+<td>Common python classes for writing ONIE tests.</td>
+</tr>
+<tr class="row-odd"><td>test/tests</td>
+<td>ONIE tests.</td>
+</tr>
+<tr class="row-even"><td>upstream</td>
+<td>Local cache of upstream project tarballs.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="machine-definition-directory">
+<h2>Machine Definition Directory<a class="headerlink" href="#machine-definition-directory" title="Permalink to this headline">¶</a></h2>
+<p>The <tt class="docutils literal"><span class="pre">machine</span></tt> directory layout is as follows:</p>
+<div class="highlight-python"><pre>onie/machine
+└── &lt;platform&gt;
+    ├── demo
+    │   └── platform.conf
+    ├── INSTALL
+    ├── kernel
+    │   ├── config
+    │   ├── platform-&lt;platform&gt;.patch
+    │   └── series
+    ├── machine.make
+    ├── onie-rom.conf
+    └── u-boot
+        ├── platform-&lt;platform&gt;.patch
+        └── series</pre>
+</div>
+<p>This directory contains all the files necessary to build ONIE for the
+Freescale P2020RBD-PCA reference platform.</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="35%" />
+<col width="65%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">File</th>
+<th class="head">Purpose</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>demo/platform.conf</td>
+<td>Platform-specific codes for creating the demo OS.</td>
+</tr>
+<tr class="row-odd"><td>INSTALL</td>
+<td>Platform-specific ONIE installation instructions.</td>
+</tr>
+<tr class="row-even"><td>kernel/config</td>
+<td>Additional kernel config appended to the core kernel config.</td>
+</tr>
+<tr class="row-odd"><td>kernel/platform-&lt;platform&gt;.patch</td>
+<td>Kernel platform-specific patch(es).</td>
+</tr>
+<tr class="row-even"><td>kernel/series</td>
+<td>List of kernel platform-specific patch(es) in order.</td>
+</tr>
+<tr class="row-odd"><td>machine.make</td>
+<td>Platform-specific make file.</td>
+</tr>
+<tr class="row-even"><td>onie-&lt;platform&gt;-rom.conf</td>
+<td>Layout of the ONIE binary image(s).</td>
+</tr>
+<tr class="row-odd"><td>u-boot/platform-&lt;platform&gt;.patch</td>
+<td>U-Boot platform-specific patch(es).</td>
+</tr>
+<tr class="row-even"><td>u-boot/series</td>
+<td>List of U-Boot platform-specific patch(es) in order.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="rootconf-directory">
+<h2><tt class="docutils literal"><span class="pre">rootconf</span></tt> Directory<a class="headerlink" href="#rootconf-directory" title="Permalink to this headline">¶</a></h2>
+<p>The <tt class="docutils literal"><span class="pre">rootconf</span></tt> directory layout is as follows:</p>
+<div class="highlight-python"><pre>onie/rootconf
+├── default
+│   ├── bin
+│   │   ├── discover
+│   │   ├── exec_installer
+│   │   ├── onie-nos-install
+│   │   ├── onie-console
+│   │   ├── support
+│   │   ├── uninstaller
+│   │   ├── onie-self-update
+│   │   └── onie-stop
+│   ├── etc
+│   │   ├── init.d
+│   │   │   ├── discover.sh
+│   │   │   ├── dropbear.sh
+│   │   │   ├── makedev.sh
+│   │   │   ├── networking.sh
+│   │   │   ├── rc
+│   │   │   ├── rc.local
+│   │   │   ├── syslogd.sh
+│   │   │   └── telnetd.sh
+│   │   ├── inittab
+│   │   ├── issue
+│   │   ├── issue.null
+│   │   ├── mtab
+│   │   ├── passwd
+│   │   ├── profile
+│   │   ├── rc3.d
+│   │   │   ├── S10dropbear.sh -&gt; ../init.d/dropbear.sh
+│   │   │   ├── S10telnetd.sh -&gt; ../init.d/telnetd.sh
+│   │   │   └── S50discover.sh -&gt; ../init.d/discover.sh
+│   │   ├── rcS.d
+│   │   │   ├── S01makedev.sh -&gt; ../init.d/makedev.sh
+│   │   │   ├── S05rc.local -&gt; ../init.d/rc.local
+│   │   │   ├── S10networking.sh -&gt; ../init.d/networking.sh
+│   │   │   └── S20syslogd.sh -&gt; ../init.d/syslogd.sh
+│   │   └── syslog.conf
+│   ├── root
+│   ├── sbin
+│   │   └── boot-failure
+│   └── scripts
+│       ├── functions
+│       ├── udhcp4_net
+│       └── udhcp4_sd
+└── install</pre>
+</div>
+<p>The contents of the <tt class="docutils literal"><span class="pre">default</span></tt> directory are copied to the sysroot
+verbatim during the build process.</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="26%" />
+<col width="74%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">File</th>
+<th class="head">Purpose</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>bin/discover</td>
+<td>Image discovery script. Feeds into exec_installer.</td>
+</tr>
+<tr class="row-odd"><td>bin/exec_installer</td>
+<td>Downloads and executes an installer image.</td>
+</tr>
+<tr class="row-even"><td>bin/onie-nos-install</td>
+<td>CLI for explicitly specifying a NOS URL to use for the install.</td>
+</tr>
+<tr class="row-odd"><td>bin/support</td>
+<td>CLI that generates a tarball of useful system information.</td>
+</tr>
+<tr class="row-even"><td>bin/uninstaller</td>
+<td>Executed during uninstall operations.</td>
+</tr>
+<tr class="row-odd"><td>bin/onie-self-update</td>
+<td>CLI for explicit specifying an ONIE update URL to use for the install.</td>
+</tr>
+<tr class="row-even"><td>bin/onie-stop</td>
+<td>CLI for disabling discovery mode.  Terminates the discovery process.</td>
+</tr>
+<tr class="row-odd"><td>etc/init.d</td>
+<td>Various initialization scripts.</td>
+</tr>
+<tr class="row-even"><td>etc/inittab</td>
+<td>Standard Linux initialization script.</td>
+</tr>
+<tr class="row-odd"><td>etc/issue</td>
+<td>Standard Linux logon customization file.</td>
+</tr>
+<tr class="row-even"><td>etc/mtab</td>
+<td>Standard Linux file listing mounted file systems.</td>
+</tr>
+<tr class="row-odd"><td>etc/passwd</td>
+<td>Standard Linux database file listing users authorized to access the system.</td>
+</tr>
+<tr class="row-even"><td>etc/profile</td>
+<td>Standard Linux file listing users of the system.</td>
+</tr>
+<tr class="row-odd"><td>etc/rcS.d/S01makedev.sh</td>
+<td>Creates the usual Linux kernel devices and file systems.</td>
+</tr>
+<tr class="row-even"><td>etc/rcS.d/S05rc.local</td>
+<td>Standard Linux script to start rc.local.</td>
+</tr>
+<tr class="row-odd"><td>etc/rcS.d/S10networking.sh</td>
+<td>Brings up the Ethernet management interface.</td>
+</tr>
+<tr class="row-even"><td>etc/rcS.d/S20syslogd.sh</td>
+<td>Starts the syslogd service.</td>
+</tr>
+<tr class="row-odd"><td>etc/rc3.c/S10dropbear.sh</td>
+<td>Starts the dropbear SSH service.</td>
+</tr>
+<tr class="row-even"><td>etc/rc3.d/S10telnetd.sh</td>
+<td>Starts the telnet service.</td>
+</tr>
+<tr class="row-odd"><td>etc/rc3.d/S50discover.sh</td>
+<td>Starts the ONIE discovery service.</td>
+</tr>
+<tr class="row-even"><td>install</td>
+<td>The installer file.</td>
+</tr>
+<tr class="row-odd"><td>scripts</td>
+<td>General helper scripts, sourced by other scripts.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/ONIE-logo-green-160x60.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Build Instructions</a><ul>
+<li><a class="reference internal" href="#machine-definition-files">Machine Definition Files</a></li>
+<li><a class="reference internal" href="#preparing-a-new-build-machine">Preparing a New Build Machine</a></li>
+<li><a class="reference internal" href="#cross-compiler-toolchain">Cross-Compiler Toolchain</a></li>
+<li><a class="reference internal" href="#cross-compiling-onie">Cross-Compiling ONIE</a></li>
+<li><a class="reference internal" href="#installing-the-onie-binary">Installing the ONIE binary</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#source-code-description">Source Code Description</a><ul>
+<li><a class="reference internal" href="#source-code-layout">Source Code Layout</a></li>
+<li><a class="reference internal" href="#machine-definition-directory">Machine Definition Directory</a></li>
+<li><a class="reference internal" href="#rootconf-directory"><tt class="docutils literal"><span class="pre">rootconf</span></tt> Directory</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Developer Documentation</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="contributing.html"
+                        title="next chapter">Contributing to ONIE</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="../_sources/developers/building.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="contributing.html" title="Contributing to ONIE"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Developer Documentation"
+             >previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Developer Documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright .
+    </div>
+  </body>
+</html>
