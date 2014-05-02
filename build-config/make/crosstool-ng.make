@@ -47,8 +47,8 @@ $(CROSSTOOL_NG_SOURCE_STAMP): $(CROSSTOOL_NG_DOWNLOAD_STAMP)
 	$(Q) echo "==== Extracting upstream $(CROSSTOOL_NG_DESC) ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(CROSSTOOL_NG_BUILD_DIR) $(DOWNLOADDIR)/$(CROSSTOOL_NG_TARBALL)
 	$(Q) mkdir -p $(CROSSTOOL_NG_STAMP_DIR)
-	$(Q) cp $(PATCHDIR)/$(CROSSTOOL_NG_DESC)/100-gcc-4.7.2-powerpc-uclibc-math-library.patch \
-		$(CROSSTOOL_NG_DIR)/patches/gcc/4.7.2
+	$(Q) cp $(PATCHDIR)/$(CROSSTOOL_NG_DESC)/100-gcc-4.7.3-powerpc-uclibc-math-library.patch \
+		$(CROSSTOOL_NG_DIR)/patches/gcc/4.7.3
 	$(Q) touch $@
 
 crosstool-ng-configure: $(CROSSTOOL_NG_CONFIGURE_STAMP)

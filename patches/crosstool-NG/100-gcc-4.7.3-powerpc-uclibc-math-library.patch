@@ -1,4 +1,4 @@
-gcc powerpc uclibc math library patch
+gcc-4.7.3 powerpc uclibc math library patch
 
 From: Curt Brune <curt@cumulusnetworks.com>
 
@@ -8,15 +8,14 @@ in libm.
 
 Add a configure test that adds -lm to the linker libraries for
 powerpc-*-uclibc targets.
-
 ---
  libgcc/Makefile.in      |    4 +++-
  libgcc/config/t-slibgcc |    2 +-
- libgcc/configure        |   40 ++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 44 insertions(+), 2 deletions(-)
+ libgcc/configure        |   39 +++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 43 insertions(+), 2 deletions(-)
 
 diff --git a/libgcc/Makefile.in b/libgcc/Makefile.in
-index f38d5b4..8f7e042 100644
+index e1cac49..63a8f98 100644
 --- a/libgcc/Makefile.in
 +++ b/libgcc/Makefile.in
 @@ -41,6 +41,7 @@ long_double_type_size = @long_double_type_size@
@@ -27,9 +26,9 @@ index f38d5b4..8f7e042 100644
  
  host_noncanonical = @host_noncanonical@
  target_noncanonical = @target_noncanonical@
-@@ -928,9 +929,10 @@ libgcc_s$(SHLIB_EXT): $(libgcc-s-objects) $(extra-parts)
+@@ -928,9 +929,10 @@ libgcc_s$(SHLIB_EXT): $(libgcc-s-objects) $(extra-parts) libgcc.a
  		@multilib_dir@,$(MULTIDIR),$(subst \
- 		@shlib_objs@,$(objects),$(subst \
+ 		@shlib_objs@,$(objects) libgcc.a,$(subst \
  		@shlib_base_name@,libgcc_s,$(subst \
 +		@libgcc_libm@,$(LIBGCC_LIBM),$(subst \
  		@shlib_map_file@,$(mapfile),$(subst \
@@ -53,7 +52,7 @@ index 3727244..aa7f265 100644
  SHLIB_INSTALL_SOLINK = $(LN_S) $(SHLIB_SONAME) \
  	$(DESTDIR)$(slibdir)$(SHLIB_SLIBDIR_QUAL)/$(SHLIB_SOLINK)
 diff --git a/libgcc/configure b/libgcc/configure
-index d01dbbf..d1fe0da 100644
+index d01dbbf..c62e084 100644
 --- a/libgcc/configure
 +++ b/libgcc/configure
 @@ -555,6 +555,7 @@ ac_unique_file="static-object.mk"
@@ -64,9 +63,9 @@ index d01dbbf..d1fe0da 100644
  asm_hidden_op
  extra_parts
  cpu_type
-@@ -4446,6 +4447,45 @@ if test -z "${sfp_machine_header}"; then
+@@ -4445,6 +4446,44 @@ if test -z "${sfp_machine_header}"; then
+ 	fi
  fi
- 
  
 +# On powerpc libgcc_s references copysignl which is a libm function but
 +# glibc apparently also provides it via libc as opposed to uClibc where
@@ -106,7 +105,6 @@ index d01dbbf..d1fe0da 100644
 +  *) LIBGCC_LIBM= ;;
 +esac
 +
-+
+ 
  # Conditionalize the makefile for this target machine.
  tmake_file_=
- for f in ${tmake_file}
