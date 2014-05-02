@@ -7,7 +7,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Network Operating System Interface &mdash; Open Network Install Environment 2014.02 documentation</title>
+    <title>Network Operating System Interface &mdash; Open Network Install Environment 2014.05-rc1 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -15,7 +15,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '2014.02',
+        VERSION:     '2014.05-rc1',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -37,8 +37,8 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="Open Network Install Environment 2014.02 documentation" href="../index.html" />
-    <link rel="up" title="Design Specification" href="index.html" />
+    <link rel="top" title="Open Network Install Environment 2014.05-rc1 documentation" href="../index.html" />
+    <link rel="up" title="Operating Software Design" href="operating_sw_design.html" />
     <link rel="next" title="Updating ONIE" href="updater.html" />
     <link rel="prev" title="Image Discovery and Execution" href="discovery.html" /> 
   </head>
@@ -55,8 +55,9 @@
         <li class="right" >
           <a href="discovery.html" title="Image Discovery and Execution"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">Open Network Install Environment 2014.02 documentation</a> &raquo;</li>
-          <li><a href="index.html" accesskey="U">Design Specification</a> &raquo;</li> 
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li><a href="operating_sw_design.html" accesskey="U">Operating Software Design</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -72,24 +73,25 @@ system provisioning and maintainance operations, including:</p>
 <ul class="simple">
 <li>Installing the NOS into the hardware</li>
 <li>Reinstalling a different NOS</li>
-<li>Uninstalling, or wiping the system clean</li>
+<li>Uninstalling the current NOS</li>
+<li>Embeding ONIE (wipes out everything, leaving only the new ONIE)</li>
+<li>Updating ONIE (updates the current ONIE with a new version)</li>
 <li>Rescue and recovery</li>
-<li>Updating ONIE</li>
 </ul>
 <p>This environment forms an interface between ONIE and the NOS.</p>
-<p>ONIE communicates with the NOS via U-Boot environment variables.  Both ONIE
-and the NOS must be able to read and write U-Boot environment variables.</p>
 <div class="section" id="nos-installer">
-<h2>NOS Installer<a class="headerlink" href="#nos-installer" title="Permalink to this headline">¶</a></h2>
-<p>The only requirement ONIE has for the NOS is that the NOS <strong>must</strong> update the
-<tt class="docutils literal"><span class="pre">nos_bootcmd</span></tt> U-Boot environment variable described in
-<a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>. This signal tells U-Boot to load the NOS on
-subsequent boots, bypassing ONIE.</p>
-<p>What goes into the <tt class="docutils literal"><span class="pre">nos_bootcmd</span></tt> is entirely up to the NOS vendor, but
-generally it will contain commands to load and boot the NOS image from
-NOR flash or from an SD card.</p>
-<p>Other than that, the NOS installer will do whatever is necessary
-to persistently install the operating system into the hardware; the
+<span id="nos-intf-installer"></span><h2>NOS Installer<a class="headerlink" href="#nos-installer" title="Permalink to this headline">¶</a></h2>
+<p>The only requirement ONIE has for the NOS installer is that the
+installer <strong>must</strong> update the boot environment so that the NOS boots
+at the next reboot.</p>
+<p>How this is done depends on the specific CPU architecture.  See these
+sections for the corresponding CPU architectures:</p>
+<ul class="simple">
+<li><a class="reference internal" href="powerpc_nos_interface.html#powerpc-nos-intf-installer"><em>PowerPC NOS Installer</em></a></li>
+<li><a class="reference internal" href="x86_nos_interface.html#x86-nos-intf-installer"><em>x86 NOS Installer</em></a></li>
+</ul>
+<p>Other than that, the NOS installer can do whatever is necessary to
+persistently install the operating system into the hardware; the
 installer has a lot of flexibility.</p>
 <p>Some examples of what an installer could do:</p>
 <ul class="simple">
@@ -97,48 +99,92 @@ installer has a lot of flexibility.</p>
 <li>Chat with inventory control systems via HTTP</li>
 <li>Download a new kernel+initramfs and <a class="reference external" href="http://linux.die.net/man/8/kexec">kexec(8)</a> into it</li>
 </ul>
+<div class="section" id="system-information">
+<span id="cmd-onie-sysinfo"></span><h3>System Information<a class="headerlink" href="#system-information" title="Permalink to this headline">¶</a></h3>
+<p>Within the running ONIE context an installer often needs to know
+various information about the running system.  ONIE provides the
+<tt class="docutils literal"><span class="pre">onie-sysinfo</span></tt> command for this purpose.</p>
+<p>For details the complete help for <tt class="docutils literal"><span class="pre">onie-sysinfo</span></tt> follows:</p>
+<div class="highlight-python"><pre>ONIE:/ # onie-sysinfo -h
+onie-sysinfo [-sevimrpcfdat]
+Dump ONIE system information.
+
+COMMAND LINE OPTIONS
+
+        The default is to dump the ONIE platform (-p).
+
+        -h
+                Help.  Print this message.
+
+        -s
+                Serial Number
+
+        -e
+                Management Ethernet MAC address
+
+        -v
+                ONIE version string
+
+        -i
+                ONIE vendor ID.  Print the ONIE vendor's IANA enterprise number.
+
+        -m
+                ONIE machine string
+
+        -r
+                ONIE machine revision string
+
+        -p
+                ONIE platform string.  This is the default.
+
+        -c
+                ONIE CPU architecture
+
+        -f
+                ONIE configuration version
+
+        -d
+                ONIE build date
+
+        -t
+                ONIE partition type
+
+        -a
+                Dump all information.</pre>
+</div>
+</div>
 </div>
 <div class="section" id="reinstalling-or-installing-a-different-nos">
-<h2>Reinstalling or Installing a Different NOS<a class="headerlink" href="#reinstalling-or-installing-a-different-nos" title="Permalink to this headline">¶</a></h2>
+<span id="nos-intf-reinstaller"></span><h2>Reinstalling or Installing a Different NOS<a class="headerlink" href="#reinstalling-or-installing-a-different-nos" title="Permalink to this headline">¶</a></h2>
 <p>From the running NOS, it is possible to instruct ONIE to return to the
 initial discovery and installation phase.  This could be used to
 reinstall the current NOS or to install a different NOS.</p>
-<p>To invoke the install operation, the running NOS sets the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
-<tt class="docutils literal"><span class="pre">install</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
-system.  When the system starts up again, ONIE will see the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and restart the discovery and installation phase.</p>
-<div class="admonition note">
-<p class="first admonition-title">Note</p>
-<p>From the U-Boot prompt, you can also boot ONIE into the discovery and
-installation phase by typing:</p>
-<div class="last highlight-python"><pre>=&gt; run onie_bootcmd</pre>
+<p>How to invoke the install operation depends on the specific CPU
+architecture.  See these sections for the corresponding CPU
+architectures:</p>
+<ul class="simple">
+<li><a class="reference internal" href="powerpc_nos_interface.html#powerpc-nos-intf-reinstaller"><em>PowerPC Reinstalling or Installing a Different NOS</em></a></li>
+<li><a class="reference internal" href="x86_nos_interface.html#x86-nos-intf-reinstaller"><em>x86 Reinstalling or Installing a Different NOS</em></a></li>
+</ul>
 </div>
-</div>
-</div>
-<div class="section" id="uninstalling">
-<h2>Uninstalling<a class="headerlink" href="#uninstalling" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="nos-uninstall">
+<span id="nos-intf-uninstall"></span><h2>NOS Uninstall<a class="headerlink" href="#nos-uninstall" title="Permalink to this headline">¶</a></h2>
 <p>ONIE has an uninstall operation that wipes out the unused portions of
-NOR flash and the attached mass storage device (like an SD card or USB NAND
-flash). The only thing untouched is ONIE itself. This is a
+the attached mass storage devices (like an mSATA card or USB NAND
+flash). The only thing untouched is ONIE itself.  This is a
 &#8220;reset to factory defaults&#8221;-like operation.</p>
-<p>To invoke the uninstall operation, the running NOS sets the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
-<tt class="docutils literal"><span class="pre">uninstall</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
-system.  When the system starts up again ONIE, will see the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and start the uninstall process.</p>
-<p>Following the uninstall process, the system returns to the
-discovery and installation phase.</p>
-<div class="admonition note">
-<p class="first admonition-title">Note</p>
-<p>From the U-Boot prompt you can also boot ONIE into the uninstall
-mode by typing:</p>
-<div class="last highlight-python"><pre>=&gt; run onie_uninstall</pre>
-</div>
-</div>
+<p>How to invoke the uninstall operation depends on the specific CPU
+architecture.  See these sections for the corresponding CPU
+architectures:</p>
+<ul class="simple">
+<li><a class="reference internal" href="powerpc_nos_interface.html#powerpc-nos-intf-uninstall"><em>PowerPC NOS Uninstall</em></a></li>
+<li><a class="reference internal" href="x86_nos_interface.html#x86-nos-intf-uninstall"><em>x86 NOS Uninstall</em></a></li>
+</ul>
+<p>Following the uninstall process, the system returns to the discovery
+and installation phase.</p>
 </div>
 <div class="section" id="rescue-and-recovery">
-<span id="rescue-recovery"></span><h2>Rescue and Recovery<a class="headerlink" href="#rescue-and-recovery" title="Permalink to this headline">¶</a></h2>
+<span id="nos-intf-rescue"></span><h2>Rescue and Recovery<a class="headerlink" href="#rescue-and-recovery" title="Permalink to this headline">¶</a></h2>
 <p>ONIE provides a rescue and recovery mode, which is useful mostly during
 development, but is potentially useful when trying to recover a broken
 system.</p>
@@ -155,8 +201,8 @@ more tools and files.</p>
 <li><tt class="docutils literal"><span class="pre">onie-nos-install</span></tt> &#8211; It takes one argument, a URL to a NOS installer.  This
 command downloads and installs from the URL, just as if it had been
 <em>discovered</em>.</li>
-<li><tt class="docutils literal"><span class="pre">onie-self-update</span></tt> &#8211; It takes one argument, a URL to an ONIE updater.  This
-command downloads and runs the updater, just as if it had been
+<li><tt class="docutils literal"><span class="pre">onie-self-update</span></tt> &#8211; It takes a URL to an ONIE updater image.
+This command downloads and runs the updater, just as if it had been
 <em>discovered</em>.  See the <a class="reference internal" href="updater.html#updating-onie"><em>Updating ONIE</em></a> section for more about
 updating ONIE.</li>
 <li><tt class="docutils literal"><span class="pre">onie-discovery-stop</span></tt> &#8211; Stop the discovery process.  This can be
@@ -164,37 +210,36 @@ useful in debugging cases where the discovery process is interfering
 with the debug.  With the discovery process disabled the system is
 quiet and you can poke around.</li>
 </ul>
-<p>To invoke the rescue operation, the running NOS sets the <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt>
-U-Boot environment variable to the value <tt class="docutils literal"><span class="pre">rescue</span></tt>
-(see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the system.  When the system
-starts up again, ONIE will see the <tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and enter rescue mode.</p>
-<div class="admonition note">
-<p class="first admonition-title">Note</p>
-<p>From the U-Boot prompt you can also boot ONIE into rescue mode by
-typing:</p>
-<div class="last highlight-python"><pre>=&gt; run onie_rescue</pre>
+<p>How to invoke the rescue operation depends on the specific CPU
+architecture.  See these sections for the corresponding CPU
+architectures:</p>
+<ul class="simple">
+<li><a class="reference internal" href="powerpc_nos_interface.html#powerpc-nos-intf-rescue"><em>PowerPC Rescue and Recovery</em></a></li>
+<li><a class="reference internal" href="x86_nos_interface.html#x86-nos-intf-rescue"><em>x86 Rescue and Recovery</em></a></li>
+</ul>
 </div>
-</div>
-</div>
-<div class="section" id="updating-onie">
-<span id="nos-intf-updating-onie"></span><h2>Updating ONIE<a class="headerlink" href="#updating-onie" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="updating-and-embedding-onie">
+<span id="nos-intf-update"></span><h2>Updating and Embedding ONIE<a class="headerlink" href="#updating-and-embedding-onie" title="Permalink to this headline">¶</a></h2>
 <p>ONIE provides a way to update itself, including the boot loader and
 Linux kernel.  In many ways, this behaves similarly to the discovery
 and installation phase, except that ONIE is looking for a different
 kind of image.</p>
+<p>The update operation comes in two flavors: <tt class="docutils literal"><span class="pre">update</span></tt> and <tt class="docutils literal"><span class="pre">embed</span></tt>.</p>
+<p>The <tt class="docutils literal"><span class="pre">update</span></tt> operation will upgrade ONIE and is <strong>not</strong> destructive
+to the currently installed NOS.</p>
+<p>The <tt class="docutils literal"><span class="pre">embed</span></tt> operation, on the other hand, is <strong>destructive</strong>.  This
+operation will wipe out everything (including any installed NOS) and
+install a new version of ONIE.</p>
+<p>For more details on the <tt class="docutils literal"><span class="pre">update</span></tt> and <tt class="docutils literal"><span class="pre">embed</span></tt> operations see the
+CURT-FIXME sections for the corresponding CPU architectures:</p>
 <p>See the <a class="reference internal" href="updater.html#updating-onie"><em>Updating ONIE</em></a> section for more about updating ONIE.</p>
-<p>To invoke the ONIE update operation, the running NOS sets the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> U-Boot environment variable to the value
-<tt class="docutils literal"><span class="pre">update</span></tt> (see <a class="reference internal" href="boot_loader.html#platform-ind-vars"><em>Platform-Independent Environment Variables</em></a>), and then reboots the
-system.  When the system starts up again, ONIE will see the
-<tt class="docutils literal"><span class="pre">onie_boot_reason</span></tt> and enter ONIE self-update mode.</p>
-<div class="admonition note">
-<p class="first admonition-title">Note</p>
-<p>From the U-Boot prompt you can also boot ONIE into ONIE self-update mode by
-typing:</p>
-<div class="last highlight-python"><pre>=&gt; run onie_update</pre>
-</div>
-</div>
+<p>How to invoke the <tt class="docutils literal"><span class="pre">update</span></tt> and <tt class="docutils literal"><span class="pre">embed</span></tt> operations depends on the
+specific CPU architecture.  See these sections for the corresponding
+CPU architectures:</p>
+<ul class="simple">
+<li><a class="reference internal" href="powerpc_nos_interface.html#powerpc-nos-intf-update"><em>PowerPC Updating and Embedding ONIE</em></a></li>
+<li><a class="reference internal" href="x86_nos_interface.html#x86-nos-intf-update"><em>x86 Updating and Embedding ONIE</em></a></li>
+</ul>
 </div>
 </div>
 
@@ -210,11 +255,14 @@ typing:</p>
   <h3><a href="../index.html">Table Of Contents</a></h3>
   <ul>
 <li><a class="reference internal" href="#">Network Operating System Interface</a><ul>
-<li><a class="reference internal" href="#nos-installer">NOS Installer</a></li>
+<li><a class="reference internal" href="#nos-installer">NOS Installer</a><ul>
+<li><a class="reference internal" href="#system-information">System Information</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#reinstalling-or-installing-a-different-nos">Reinstalling or Installing a Different NOS</a></li>
-<li><a class="reference internal" href="#uninstalling">Uninstalling</a></li>
+<li><a class="reference internal" href="#nos-uninstall">NOS Uninstall</a></li>
 <li><a class="reference internal" href="#rescue-and-recovery">Rescue and Recovery</a></li>
-<li><a class="reference internal" href="#updating-onie">Updating ONIE</a></li>
+<li><a class="reference internal" href="#updating-and-embedding-onie">Updating and Embedding ONIE</a></li>
 </ul>
 </li>
 </ul>
@@ -259,8 +307,9 @@ typing:</p>
         <li class="right" >
           <a href="discovery.html" title="Image Discovery and Execution"
              >previous</a> |</li>
-        <li><a href="../index.html">Open Network Install Environment 2014.02 documentation</a> &raquo;</li>
-          <li><a href="index.html" >Design Specification</a> &raquo;</li> 
+        <li><a href="../index.html">Open Network Install Environment 2014.05-rc1 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li><a href="operating_sw_design.html" >Operating Software Design</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">

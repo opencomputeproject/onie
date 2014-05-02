@@ -5,6 +5,31 @@ Image Discovery and Execution
 The primary responsibility of ONIE is to locate a network operating system 
 (NOS) installer and execute it.
 
+.. _platform_name:
+
+Platform Name and Identification
+================================
+
+For identifying the running platform ONIE uses the following
+definitions:
+
+- arch -- the CPU architecture.  The currently supported architectures are:
+
+  - powerpc
+  - x86
+
+- machine -- a string of the form ``<VENDOR>_<MODEL>``.
+
+- machine-revision -- a string of the form ``r<NUMBER>``, used to track
+  different hardware revision of a machine
+
+- platform -- a string of the form ``<ARCH>-<MACHINE>-<MACHINE-REVISION>``
+
+At runtime ONIE provides the ``onie-sysinfo`` command, which can be
+used to dump this information and more.  See the
+:ref:`cmd_onie_sysinfo` section for more about the ``onie-sysinfo``
+command.
+
 .. _installer_discovery:
 
 Installer Discovery Methods
@@ -46,13 +71,13 @@ The default installer file names are searched for in the following order:
 #. ``onie-installer-<arch>``
 #. ``onie-installer``
 
-For our hypothetical PowerPC machine, the default installer file names
+For a hypothetical x86_64 machine, the default installer file names
 would be::
 
-  onie-installer-powerpc-VENDOR_MACHINE-r0
-  onie-installer-powerpc-VENDOR_MACHINE
+  onie-installer-x86_64-VENDOR_MACHINE-r0
+  onie-installer-x86_64-VENDOR_MACHINE
   onie-installer-VENDOR_MACHINE
-  onie-installer-powerpc
+  onie-installer-x86_64
   onie-installer
 
 .. note:: In the case of ONIE *self-update mode*, the file name prefix is
@@ -65,17 +90,10 @@ would be::
 Static Configuration Method
 ---------------------------
 
-This method is intended for engineering use only; for example, during the
-porting of ONIE to a new platform.  In the boot loader, the user can
-statically configure an installer URL that ONIE will use.
-
-In the case of U-Boot and Linux, the user can set the ``install_url``
-kernel command line argument prior to booting ONIE.  Additional kernel
-command line arguments can be added by setting the ``onie_debugargs``
-environment variable. For example::
-
-  => setenv onie_debugargs 'install_url=http://10.0.1.249/nos_installer.bin'
-  => run onie_bootcmd
+This method is intended for engineering use only; for example, during
+the porting of ONIE to a new platform.  In the boot loader, the user
+can statically configure an installer URL that ONIE will use by
+setting the ``install_url`` kernel command line argument.
 
 Local File System Method
 ------------------------
@@ -140,20 +158,15 @@ strings, separated by the colon ``:`` character:
 #.  The static string ``onie_vendor``
 #.  <arch>-<vendor>_<machine>-r<machine_revision>
 
-For example, using the example PowerPC machine, the string would be::
+For example, using the example x86_64 machine, the string would be::
 
-  onie_vendor:powerpc-VENDOR_MACHINE-r0
+  onie_vendor:x86_64-VENDOR_MACHINE-r0
 
 .. note:: For the exact DHCP Vendor Class Identifier used for your
           specific hardware platform please contact your NOS vendor or
           your hardware vendor.
 
-Valid values for the CPU architecture string currently are:
-
--  powerpc
--  x86
-
-See the :ref:`u_boot_platform_vars` table for more about the platform name.
+See the :ref:`platform_name` table for more about the platform name.
 
 User Class -- Option 77
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -188,7 +201,7 @@ Within this namespace, the following option codes are defined:
   1 | Installer URL | string | \http://10.0.1.205/nos_installer.bin
   2 | Updater URL | string | \http://10.0.1.205/onie_update.bin
   3 | Platform Name | string | VENDOR_MACHINE
-  4 | CPU Architecture | string | powerpc
+  4 | CPU Architecture | string | x86_64
   5 | Machine Revision | string | 0
 
 See the :ref:`u_boot_platform_vars` table for more information about the platform
@@ -238,7 +251,7 @@ each HTTP request are:
   ONIE-VENDOR-ID: | 32-bit IANA Private Enterprise Number in decimal | 12345
   ONIE-MACHINE: | <vendor>_<machine> | VENDOR_MACHINE
   ONIE-MACHINE-REV: | <machine_revision> | 0
-  ONIE-ARCH: | CPU architecture | powerpc
+  ONIE-ARCH: | CPU architecture | x86_64
   ONIE-SECURITY-KEY: | Security key | d3b07384d-ac-6238ad5ff00
   ONIE-OPERATION: | ONIE mode of operation | ``os-install`` or ``onie-update``
 
@@ -329,7 +342,7 @@ The ``$path_prefix`` is determined in the following manner:
 #. Finally, look for the list of default file names at the root of the TFTP server.
 
 Here is a complete list of the bootfile paths attempted using the
-example MAC address, IP address and the example PowerPC platform::
+example MAC address, IP address and the example x86_64 platform::
 
   55-66-aa-bb-cc-dd/onie-installer-<arch>-<vendor>_<machine>
   C0A801B2/onie-installer-<arch>-<vendor>_<machine>
@@ -363,20 +376,20 @@ installer.  The general algorithm follows:
 
 Here is an example the URLs used by this method::
 
-  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc-VENDOR_MACHINE-r0
-  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc-VENDOR_MACHINE
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-x86_64-VENDOR_MACHINE-r0
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-x86_64-VENDOR_MACHINE
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE
-  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-powerpc
+  http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-x86_64
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer
-  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc-VENDOR_MACHINE-r0
-  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc-VENDOR_MACHINE
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-x86_64-VENDOR_MACHINE-r0
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-x86_64-VENDOR_MACHINE
   http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-VENDOR_MACHINE
-  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-powerpc
+  http://fe80::4638:39ff:fe00:2659%eth0/onie-installer-x86_64
   http://fe80::4638:39ff:fe00:2659%eth0/onie-installer
-  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc-VENDOR_MACHINE-r0
-  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc-VENDOR_MACHINE
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-x86_64-VENDOR_MACHINE-r0
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-x86_64-VENDOR_MACHINE
   http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-VENDOR_MACHINE
-  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-powerpc
+  http://fe80::230:48ff:fe9f:1547%eth0/onie-installer-x86_64
   http://fe80::230:48ff:fe9f:1547%eth0/onie-installer
 
 This makes it very simple to walk up to a switch and directly connect
