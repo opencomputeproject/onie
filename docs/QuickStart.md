@@ -53,8 +53,8 @@ multistrapping.
 The install-build-host step installed two tools into your
 host build machine:
 
-    `mkws`
-    `chws`
+    `onl-mkws`
+    `onl-chws`
 
 The mkws tool creates a build workspace.
 The chws tool enters a build workspace.
@@ -63,7 +63,7 @@ Create a build workspace and name it ws.amd64.
 Do this in your work directory, not the ONL tree:
 ------------------------------------------------------------
     #> cd ..		# should be in ~/work or equivalent
-    #> mkws -a amd64 ws.amd64
+    #> onl-mkws -a amd64 ws.amd64
 
 
 
@@ -74,7 +74,7 @@ Afterwards you will be in the chrooted, network-isolated
 workspace.
 ------------------------------------------------------------
     #> cd ws.amd
-    #> chws         # enter workspace
+    #> onl-chws         # enter workspace
 
 
 ------------------------------------------------------------
