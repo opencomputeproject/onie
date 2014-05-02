@@ -318,7 +318,10 @@ machine-prefix:
 
 # Install required build packages for a debian based build host
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf \
-				  gperf device-tree-compiler python-all-dev genisoimage syslinux-common
+				  gperf device-tree-compiler python-all-dev genisoimage \
+				  syslinux-common autoconf automake bison flex texinfo libtool \
+				  lib32ncurses5-dev
+
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update
