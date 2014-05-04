@@ -134,7 +134,7 @@ emdebian-update:
 # Install required native packages
 #
 install-native-deps: emdebian-update
-	sudo apt-get install libedit-dev ncurses-dev gcc make xapt cdbs debhelper pkg-config devscripts bison flex texinfo wget cpio multistrap squashfs-tools zip binfmt-support autoconf automake1.9 autotools-dev libtool apt-file file genisoimage syslinux dosfstools mtools bc python-yaml mtd-utils gcc-4.7-multilib uboot-mkimage
+	sudo apt-get install libedit-dev ncurses-dev gcc make xapt cdbs debhelper pkg-config devscripts bison flex texinfo wget cpio multistrap squashfs-tools zip binfmt-support autoconf automake1.9 autotools-dev libtool apt-file file genisoimage syslinux dosfstools mtools bc python-yaml mtd-utils gcc-4.7-multilib uboot-mkimage kmod
 
 #
 # Install required cross compiler packages.
