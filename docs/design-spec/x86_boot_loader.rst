@@ -129,6 +129,15 @@ installer will take over.
   **owns** everything in ``/dev/sda2``.  As long as the NOS installer
   leaves ``/dev/sda2`` intact we are good.
 
+.. note::
+
+  For GPT disk labels the ONIE-BOOT partition type GUID is
+  ``7412F7D5-A156-4B13-81DC-867174929325``.  This GUID is recognized
+  by the ``gdisk`` and ``sgdisk`` utilities from the `GPT fdisk
+  package <http://www.rodsbooks.com/gdisk/>`_.  See `commit b784e0c95a11
+  <http://sourceforge.net/p/gptfdisk/code/ci/b784e0c95a11cdaad05b0f62806114ead678a2b0/>`_
+  for details.
+
 The initial GRUB menu looks like this::
 
        GNU GRUB  version 2.02~beta2+e4a1fe391
