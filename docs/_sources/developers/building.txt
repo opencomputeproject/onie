@@ -52,6 +52,8 @@ own local mirror for these packages by setting up
 ``onie/build-config/local.make.example``, and the ``ONIE_MIRROR`` and
 ``CROSSTOOL_ONIE_MIRROR`` variables for examples.
 
+Also see the FAQ entry :ref:`cache_packages`.
+
 Cross-Compiling ONIE
 --------------------
 

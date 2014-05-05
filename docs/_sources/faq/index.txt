@@ -39,6 +39,8 @@ Is there a virtual machine implementation?
 
 Yes.  See the :ref:`x86_virtual_machine` section for details.
 
+.. _cache_packages:
+
 Can I set up a local cache of downloaded packages ONIE needs?
 =============================================================
 
