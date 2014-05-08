@@ -82,7 +82,7 @@ INSTALL_DIR=${INSTALL_AUTOBUILD_DIR}/$ONL_BUILD_TIMESTAMP.$SHA1
 # Remount the current workspace to /build/onl
 #
 pwd
-cat <<EOF > .chwsrc
+cat <<EOF > .onl-chwsrc
 bind_mount_dst $ONL_ROOT $ONL
 EOF
 
@@ -91,22 +91,22 @@ rm -rf $ONL_ROOT/builds/BUILDS
 #
 # Optimized parallel build setups
 #
-(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel0 -j $JOBS) || true
-(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel1 -j $JOBS) || true
-(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel2 -j $JOBS) || true
-(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel3 -j $JOBS) || true
-(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel4 -j $JOBS) || true
-(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel5 -j $JOBS) || true
-(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel6 -j $JOBS) || true
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel0 -j $JOBS) || true
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel1 -j $JOBS) || true
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel2 -j $JOBS) || true
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel3 -j $JOBS) || true
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel4 -j $JOBS) || true
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel5 -j $JOBS) || true
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel6 -j $JOBS) || true
 
 #
 # Anything that still needs to be built (this shouldn't fail).
 #
-(chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache components)
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache components)
 
 function build_and_install {
     # Build Requested
-    chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache $@
+    onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache $@
 
     # Make the install directory
     ssh $INSTALL_SERVER mkdir -p $INSTALL_DIR
