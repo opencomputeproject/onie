@@ -265,7 +265,7 @@ installer_platform_bootconfig() {
     # Use the default. 
     else
         if [ "${installer_mode_standalone}" ]; then
-            bootconfig="SWI=flash2:onl-${installer_arch}.swi\nNETDEV=ma1\nNETAUTO=dhcp\n"
+            bootconfig="SWI=flash2:onl-${installer_arch}.swi\nNETDEV=ma1\n"
         else
             bootconfig='SWI=flash2:.ztn-onl.swi\nNETDEV=ma1\nNETAUTO=dhcp\n'
         fi
