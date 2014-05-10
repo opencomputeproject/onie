@@ -7,19 +7,19 @@ Open Source Development Process
 -------------------------------
 
 The description is somewhat informal, but captures the spirit of the
-effort.  It is based on how other projects (Linux Kernel and U-Boot
+effort.  It is based on how other projects (Linux kernel and U-Boot,
 for example) manage.
 
 Please read `The Lifecycle of a Patch
 <http://www.linuxfoundation.org/content/22-lifecycle-patch>`_.
 
-Here is how git "open source" development works.  Everything I write
-below you could (mostly) replace the word "ONIE" with "Linux Kernel".
+Here is how git "open source" development works. For nearly everything written
+below, you could replace the word "ONIE" with "Linux kernel".
 
 1.  There is a public git repo for ONIE.
 
 2.  A few people have commit privilege to the repo, also known as
-    "maintainers" or "custodians" -- at the moment for ONIE that a few
+    "maintainers" or "custodians" -- at the moment for ONIE that's a few
     people from Cumulus Networks and a few people from Big Switch.
 
 3.  The entire world has read privilege to the repo.
@@ -51,10 +51,10 @@ code quality, sound design and being open.
 
 .. _creating_stg_patches:
 
-Patching ONIE using stgit
+Patching ONIE Using stgit
 -------------------------
 
-This technical note describes the work flow we use at Cumulus to
+This technical note describes the workflow used at Cumulus Networks to
 develop and maintain the patches that comprise the bulk of ONIE.
 
 By way of example, patching U-Boot for the Freescale P2020RDB-PCA
@@ -70,7 +70,7 @@ Background
 The ONIE project itself is comprised of several upstream sub-projects,
 like U-Boot, the Linux kernel, uClibc, BusyBox, etc.  Without these
 sub-projects ONIE would not exist.  A large portion of the ONIE source
-code are patches applied to the various sub-projects.
+code is patches applied to the various sub-projects.
 
 Working with and managing these patches forms a big part of
 "developing ONIE".
@@ -91,12 +91,12 @@ These files are in the onie/patches directory::
 U-Boot Patch Files
 ^^^^^^^^^^^^^^^^^^
 
-The tool we use to manage patch stacks is called "stg", short for
+The tool we use to manage patch stacks is called ``stg``, short for
 `stacked git <https://gna.org/projects/stgit>`_.  It lets us manage a
-stack of patches against an upstream project.  You can google "stgit"
-for more info and proper tutorials.
+stack of patches against an upstream project.  You can search the Web for "stgit"
+for more information and proper tutorials.
 
-For U-Boot we have these files in the ONIE repo, onie/patches/u-boot::
+For U-Boot we have these files in the ONIE repo, ``onie/patches/u-boot``::
 
   build-04:~/onie/patches$ ls -l u-boot
   total 104
@@ -137,13 +137,13 @@ applied.  Its contents looks like::
   platform-onie-common-env.patch
   platform-common-env.patch
 
-These files are the "core ONIE" u-boot patches.
+These files are the "core ONIE" U-Boot patches.
 
 Each specific machine also adds one (or more) patches to the end.  The
-machine specific patch adds machine specific details like memory
+machine-specific patch adds machine-specific details like memory
 controller configuration, NOR flash layout, etc.
 
-The machine specific patch for the Freescale P2020RDB-PCA evaluation
+The machine-specific patch for the Freescale P2020RDB-PCA evaluation
 board is here::
 
   build-04:~/onie$ ls -l machine/fsl_p2020rdbpca/u-boot/
@@ -154,17 +154,17 @@ board is here::
 Patching U-Boot
 ^^^^^^^^^^^^^^^
 
-Now I will admit using stgit is a little confusing at first.  Here is
+Using ``stgit`` can be a little confusing at first.  Here is
 the basic work flow when building ONIE:
 
-When compiling U-Boot (see build-config/make/u-boot.make for details)
-the 'u-boot-patch' target does the following:
+When compiling U-Boot (see ``build-config/make/u-boot.make`` for details)
+the ``u-boot-patch`` target does the following:
 
-1. untars the base upstream u-boot source
+1. Untars the base upstream U-Boot source.
 
-2. applies the core ONIE u-boot patch stack
+2. Applies the core ONIE U-Boot patch stack.
 
-3. applies the machine specific u-boot patch stack
+3. Applies the machine-specific U-Boot patch stack.
 
 You can try this out yourself, like this::
 
@@ -191,12 +191,12 @@ You can try this out yourself, like this::
   Now at patch "platform-fsl-p2020rdb-pca.patch"
 
 After this step the patched U-Boot source is available in
-build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01.
+``build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01``.
 
-Now go make your changes to the U-Boot files.
+Now, make your changes to the U-Boot files.
 
-For this example let's say all we wanted to do is change the board
-name that is printed when the machine boots.  The fsl_p2020rdbpca
+For this example let's say we only wanted to change the board
+name that is printed when the machine boots. The fsl_p2020rdbpca
 board currently prints this::
 
   Board: P2020RDB-PCA CPLD: V4.1 PCBA: V4.0
@@ -205,16 +205,16 @@ Let's change the board name to "ONIE-P2020RDB-PCA".
 
 In the U-Boot source the board name is controlled by the
 ``CONFIG_BOARDNAME`` #define, located in
-build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01/include/configs/p1_p2_rdb_pc.h.
+``build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01/include/configs/p1_p2_rdb_pc.h``.
 
-After making the change use the "stg status" command to see what is
-happening.  You should see something like::
+After making the change use the ``stg status`` command to see what is
+happening. You should see something like::
 
   build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg status
   M include/configs/p1_p2_rdb_pc.h
 
-Similar to the "git status" command, the "stg status" command shows
-the modified files.  You can also use "stg diff" to see a diff::
+Similar to the ``git status`` command, the ``stg status`` command shows
+the modified files.  You can also use ``stg diff`` to see a diff::
 
   build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg diff
   diff --git a/include/configs/p1_p2_rdb_pc.h b/include/configs/p1_p2_rdb_pc.h
@@ -231,7 +231,7 @@ the modified files.  You can also use "stg diff" to see a diff::
    #define CONFIG_P2020
    #define CONFIG_SPI_FLASH
 
-To see the active patch stack type "stg series".  Should look like::
+To see the active patch stack, run ``stg series``. It should look like this::
 
   $ stg status
   + git-ignore.patch
@@ -250,33 +250,33 @@ To see the active patch stack type "stg series".  Should look like::
   + platform-common-env.patch
   > platform-fsl-p2020rdb-pca.patch
 
-The patch with the ">" is the active patch.
+The patch prefaced with the ">" is the active patch.
 
-In this case we want to add the changes to the
-platform-fsl-p2020rdb-pca.patch patch, which is already the active
-patch.  To do that use the "stg refresh" command, like this::
+In this case, we want to add the changes to the
+``platform-fsl-p2020rdb-pca.patch`` patch, which is already the active
+patch. To do so, run the ``stg refresh`` command, like this::
 
   build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg refresh
   Now at patch "platform-fsl-p2020rdb-pca.patch"
 
 That will put the "modified" file into the
-platform-fsl-p2020rdb-pca.patch, which is what we want.
+``platform-fsl-p2020rdb-pca.patch``, which is what we want.
 
 .. note::
 
-  If we were changing a patch deeper in the patch stack we would use::
+  If you were changing a patch deeper in the patch stack you would use::
 
     stg refresh -p <patch_name>
 
   to add the changes to a patch buried in the patch stack.
 
-Now the "stg status" command will show no changes::
+Now the ``stg status`` command will show no changes::
 
   build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg status
 
-Next we want to "export" the platform-fsl-p2020rdb-pca.patch back out
-to the onie/machine/fsl_p2020rdbpca/u-boot directory, by way of a temp
-directory.  Like this::
+Next we want to "export" the ``platform-fsl-p2020rdb-pca.patch`` back out
+to the ``onie/machine/fsl_p2020rdbpca/u-boot directory``, by way of a temp
+directory, like this::
 
   build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg export -d /tmp
   Checking for changes in the working directory ... done
@@ -286,8 +286,8 @@ Wrapping Up
 ^^^^^^^^^^^
 
 At this point the U-Boot patch is ready.  Now change directories to
-the top level onie directory and check the output of 'git status' and
-'git diff'::
+the top level ``onie`` directory and check the output of ``git status`` and
+``git diff``::
 
   build-04:~/onie$ git status
   # On branch master
@@ -328,7 +328,7 @@ the top level onie directory and check the output of 'git status' and
     #define CONFIG_BOOTCOMMAND    CONFIG_HDBOOT
 
 The modified
-machine/fsl_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch is what
+``machine/fsl_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch`` is what
 you would commit to your local git repo.
 
 Commit these changes to your local git tree.  This is local, not going
@@ -348,8 +348,8 @@ The commit message should contain at least the following:
 
 - How the patch was tested
 
-Now your "ONIE patch" is completely ready.  To make it suitable for
-emailing to ONIE mailing list use the "git format-patch" command, like
+Now your ONIE patch is completely ready.  To make it suitable for
+emailing to ONIE mailing list use the ``git format-patch`` command, like
 this::
 
   $ git format-patch --signoff -1

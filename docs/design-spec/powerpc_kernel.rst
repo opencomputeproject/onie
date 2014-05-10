@@ -125,7 +125,7 @@ Compare this partitioning scheme to the picture in :ref:`nor_flash_memory_layout
              ONIE application and operating system installers rely on
              these names.
 	
-.. warning:: The env_size property of the uboot-env partition
+.. warning:: The ``env_size`` property of the ``uboot-env`` partition
              indicates how much of the sector is used to store U-Boot
              environment variables. This value must match the
              ``CONFIG_ENV_SIZE`` macro defined in the U-Boot source

@@ -21,22 +21,21 @@ File                                                         Purpose
                                                              compile when the platform is selected.
 ======================================================       =======
 
-What needs to go into the platform specific kernel files varies from
+What needs to go into the platform-specific kernel files varies from
 platform to platform.  Some common reasons for adding platform
 specific kernel code:
 
-- Special reset sequence.  Perhaps requiring access to a specific
-  CPLD.
+- Special reset sequence, perhaps requiring access to a specific CPLD.
 
-- Mapping GPIO lines to specific things, like i2c muxes or front panel
+- Mapping GPIO lines to specific things, like I2C multiplexers or front panel
   LEDs.
 
-The resulting stg kernel patches are stored in the ``$MACHINE/kernel``
+The resulting ``stg`` kernel patches are stored in the ``$MACHINE/kernel``
 directory.  Patches placed here will automatically be applied by the
 build system.
 
 See the :ref:`creating_stg_patches` section for information about how
-to create stg patches.
+to create ``stg`` patches.
 
 Board EEPROM Access -- onie-syseeprom
 =====================================
@@ -64,26 +63,23 @@ See the :ref:`non_volatile_board_info` section for more about the
 format of the EEPROM data and available TLV fields.
 
 In order for the tool to work, however, each platform must define how
-to access its EEPROM.  At a minimum each platform must define the
-following in sys_eeprom_platform.h::
+to access its EEPROM.  At a minimum, each platform must define the
+following in ``sys_eeprom_platform.h``::
 
   SYS_EEPROM_SIZE       : size of usable eeprom
   SYS_EEPROM_I2C_DEVICE : i2c-bus
   SYS_EEPROM_I2C_ADDR   : address on the bus
 
-The following may also be defined in sys_eeprom_platform.h, else
+The following may also be defined in ``sys_eeprom_platform.h``, or else
 the defaults will take over::
 
   SYS_EEPROM_MAX_SIZE : Total size of the eeprom
   SYS_EEPROM_OFFSET   : offset from where the ONIE TLV header starts
 
-See the ``onie-syseeprom`` patch for details,
+For details, see the ``onie-syseeprom`` patch, 
 ``onie/patches/i2ctools/i2ctools-sys-eeprom.patch``.
 
 On the x86 architecture the ``onie-sysinfo`` command uses the
 ``onie-syseeprom`` command to generate parts of its output.  See the
 :ref:`cmd_onie_sysinfo` section for more about the ``onie-sysinfo``
 command.
-
-See the :ref:`creating_stg_patches` section for information about how
-to create stg patches.

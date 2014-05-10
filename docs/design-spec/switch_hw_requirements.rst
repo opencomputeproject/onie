@@ -12,8 +12,8 @@ additional hardware requirements.
 
   Currently ONIE supports x86 and PowerPC CPU architectures.
 
-This section lists the switch hardware requirements for an ONIE
-compatible switching platform.
+This section lists the switch hardware requirements for an ONIE-compatible 
+switching platform.
 
 For CPU architecture specific details see these sections:
 
@@ -193,9 +193,9 @@ A very critical characteristic of a switching platform EEPROM is the
 number of MAC addresses allocated to the machine.  The ONIE project
 requires allocating 1 MAC address for every *serdes* on the box.
 
-For example consider a machine that has one Ethernet management port
+For example, consider a machine that has one Ethernet management port
 and a switching ASIC with 48x10G ports plus 6x40G ports.  Each 40G
-port could be broken out into 4x10G ports.  Therefore the total number
+port could be broken out into 4x10G ports.  Therefore, the total number
 of MAC addresses this machines requires is::
 
   1  -- Ethernet management port
@@ -204,7 +204,7 @@ of MAC addresses this machines requires is::
   -----------------------------
   73 Total MACs
 
-To encode that in the EEPROM set TLV code 0x24 (MAC #1 Base) to and
+To encode that in the EEPROM, set TLV code 0x24 (MAC #1 Base) to and
 code 0x2A (Num MACs) to 73.
 
 Maintenance of this EEPROM format specification and allocation of the TLV type
@@ -214,16 +214,16 @@ Hardware Face Plate and FRU Numbering
 =====================================
 
 The ONIE project recommends the following conventions for the sheet
-metal silk screen on the machine:
+metal silkscreen on the machine:
 
 #. Switch ports are labeled starting with the number "1".
 
-#. Switch ports are labeled top to bottom, left to right.  For example
+#. Switch ports are labeled top to bottom, left to right.  For example,
    consider a 48 port switch with two rows of switch ports (two rows
    of 24 ports).  The ports along the top row are labeled "1, 3, 5
    ... 47" and the bottom row is labeled "2, 4, 8 ... 48".
 
 #. Field Replaceable Units (FRUs) are labeled starting with the number
    "1".  This typically applies to field pluggable power supplies and
-   fan modules.  For example a system with 2 PSUs and 3 fan modules
+   fan modules.  For example, a system with 2 PSUs and 3 fan modules
    would label the PSUs "1, 2" and the fans "1, 2, 3".

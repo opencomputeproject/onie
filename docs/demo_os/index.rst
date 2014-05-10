@@ -5,7 +5,7 @@ Demo OS Installer and OS Runtime
 ********************************
 
 The demo OS installer and runtime illustrate a number of ONIE
-concepts, useful for OS vendors creating their own ONIE compatible
+concepts, useful for OS vendors creating their own ONIE-compatible
 installers:
 
 *  How to make an installer compatible with ONIE.
@@ -14,7 +14,7 @@ installers:
    rescue, update and embed.
 
 .. note:: The ONIE binary must previously be installed on the machine.
-   See the INSTALL file for details.
+   See the ``INSTALL`` file for details.
 
 Building the Demo Installer
 ---------------------------
@@ -33,8 +33,8 @@ Using the Installer with ONIE
 -----------------------------
 
 The installer needs to be located where the ONIE discovery mechanisms
-can find it.  See the main ONIE documentation for more on the
-discovery mechanisms and usage models.
+can find it.  See the `main ONIE documentation <http://onie.github.io/onie/docs/index.html>`_ 
+for more on the discovery mechanisms and usage models.
 
 For a quick lab demo, the IPv6 neighbor discovery method is described
 next.
@@ -54,7 +54,7 @@ Copy the demo installer to the HTTP server root, using the name
 
   $ cp build/images/demo-installer-<platform>.bin /var/www/onie-installer-<platform>-<arch>
 
-Currently the only supported ``<arch>`` is ``powerpc``.
+Currently the only supported ``<arch>`` are ``powerpc`` and ``x86``.
 
 Powering on the Network Switch
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -110,7 +110,7 @@ The example OS is running BusyBox, so feel free to look around.
 Re-installing or Installing a Different OS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If you want to install a new operating system you can re-run the ONIE
+If you want to install a new operating system, you can re-run the ONIE
 installation process.  The demo NOS has a command to do just that::
 
   PLATFORM:/ # install
@@ -154,7 +154,7 @@ This command will reboot the machine and ONIE will enter rescue mode.
 Updating ONIE
 ^^^^^^^^^^^^^
 
-If you want to upgrade the ONIE version on the system use the
+If you want to upgrade the ONIE version on the system, use the
 ``update`` command.  This will restart the machine in ONIE update
 mode::
 

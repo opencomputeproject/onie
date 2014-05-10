@@ -10,22 +10,21 @@ The primary responsibility of ONIE is to locate a network operating system
 Platform Name and Identification
 ================================
 
-For identifying the running platform ONIE uses the following
-definitions:
+For identifying the running platform. ONIE uses the following definitions:
 
-- arch -- the CPU architecture.  The currently supported architectures are:
+- arch -- The CPU architecture.  The currently supported architectures are:
 
   - powerpc
   - x86
 
-- machine -- a string of the form ``<VENDOR>_<MODEL>``.
+- machine -- A string of the form ``<VENDOR>_<MODEL>``.
 
-- machine-revision -- a string of the form ``r<NUMBER>``, used to track
+- machine-revision -- A string of the form ``r<NUMBER>``, used to track
   different hardware revision of a machine
 
-- platform -- a string of the form ``<ARCH>-<MACHINE>-<MACHINE-REVISION>``
+- platform -- A string of the form ``<ARCH>-<MACHINE>-<MACHINE-REVISION>``
 
-At runtime ONIE provides the ``onie-sysinfo`` command, which can be
+At runtime, ONIE provides the ``onie-sysinfo`` command, which can be
 used to dump this information and more.  See the
 :ref:`cmd_onie_sysinfo` section for more about the ``onie-sysinfo``
 command.

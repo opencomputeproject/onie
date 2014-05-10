@@ -47,18 +47,18 @@ Can I set up a local cache of downloaded packages ONIE needs?
 The problem is ONIE downloads various packages as it builds.  Can we
 avoid downloading things all time?  Yes we can.
 
-To avoid downloading the packages from across the ocean you can setup
-a local cache of the packages.  You would need a HTTP server on your
+To avoid downloading the packages from across the ocean you can set up
+a local cache of the packages.  You would need an HTTP server on your
 local development network.
 
-To setup the local cache read the documentation in the
-onie/build-config/local.make.example file.  Rename this file to
-local.make and the build system will use it.
+To set up the local cache, read the documentation in the
+``onie/build-config/local.make.example`` file.  Rename this file to
+``local.make`` and the build system will use it.
 
-In that file set the ``ONIE_MIRROR`` variable to point at your local
+In that file, set the ``ONIE_MIRROR`` variable to point at your local
 HTTP server.
 
-To set up the cache do this:: 
+To set up the cache, do this:: 
 
   build-04:~/onie/build-config$ make download-clean 
   build-04:~/onie/build-config$ make download 
@@ -68,9 +68,9 @@ Now copy all the \*.gz \*.bz2 \*.xz files to your HTTP server.
 Next set the ``ONIE_MIRROR`` variable in ``onie/build-config/local.make``
 to match your HTTP server.
 
-The crosstools-ng component also downloads a lot of packages.  It has
-it's own config variable, ``CROSSTOOL_ONIE_MIRROR``.  After building
-kvm_x86_64 ONIE once you can find the downloaded packages here:
+The ``crosstools-ng`` component also downloads a lot of packages.  It has
+its own config variable, ``CROSSTOOL_ONIE_MIRROR``.  After building
+kvm_x86_64 ONIE once you can find the downloaded packages here::
 
   onie/build/x-tools/x86_64/build/build/tarballs 
 
@@ -87,41 +87,40 @@ Can I copy an ONIE source tree work space to another location?
 
 No.  The build environment does not allow copying or moving trees
 around.  When building, "stamp" files are created that use the
-*absolute* path names of files.  If you move a ONIE tree to a another
-location the build system will be confused, with unexpected results.
+*absolute* path names of files. Moving an ONIE tree to another
+location confuses the build system, with unexpected results.
 
-If you do move an ONIE tree (which I don't recommend) you must first
-clean out the tree by building the "distclean" target.  Like this::
+If you do move an ONIE tree (which isn't recommended) you must first
+clean out the tree by building the ``distclean`` target, like this::
 
   build-04:~/onie/build-config$ make distclean 
 
 That will wipe out everything and you can proceed. 
 
-.. note::
+.. note:: 
 
-  The "clean" target will *not* clean up everything.  It will leave
-  behind the toolchain and the downloaded packages.  The "distclean"
-  target wipes out everything.
+   The ``clean`` target will *not* clean up everything.  It will leave
+   behind the toolchain and the downloaded packages.  The ``distclean``
+   target wipes out everything.
 
 Are there any interesting Makefile targets lurking around?
 ==========================================================
 
 
-- download -- downloads all the source packages, storing them in
-  ``build/download``
+- download -- Downloads all the source packages, storing them in
+  ``build/download``.
 
-- demo -- builds the demo OS and demo OS installer
+- demo -- Builds the demo OS and demo OS installer.
 
-- docs -- generates the HTML and PDF documentation 
+- docs -- Generates the HTML and PDF documentation.
 
-- clean -- wipes out all build products for a particular
+- clean -- Wipes out all build products for a particular
   machine. Downloads and the toolchain are *preserved*.
 
-- download-clean -- wipes out all the downloaded packages
+- download-clean -- Wipes out all the downloaded packages.
 
-- distclean -- wipes out everything including downloads and the
-  toolchain.
+- distclean -- Wipes out everything, including downloads and the toolchain.
 
 - debian-prepare-build-host -- Installs various packages needed to
-  compile ONIE on a Debian based system, using "apt-get install".
+  compile ONIE on a Debian-based system, using ``apt-get install``.
 

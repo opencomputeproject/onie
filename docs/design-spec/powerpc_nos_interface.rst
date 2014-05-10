@@ -2,14 +2,14 @@
 PowerPC Interface Details
 *************************
 
-This section describes the PowerPC specific methods used to implement
+This section describes the PowerPC-specific methods used to implement
 the NOS interface.  See the :ref:`nos_interface` section for more
 about the NOS interface.
 
 PowerPC Adding Kernel Command Arguments
 ---------------------------------------
 
-In the case of U-Boot and Linux the user can set additional kernel
+In the case of U-Boot and Linux, the user can set additional kernel
 command line arguments by setting the ``onie_debugargs`` U-Boot
 environment variable.
 
@@ -23,7 +23,7 @@ example::
 PowerPC NOS Interface
 ---------------------
 
-On PowerPC ONIE communicates with the NOS via U-Boot environment
+On PowerPC, ONIE communicates with the NOS via U-Boot environment
 variables.  Both ONIE and the NOS must be able to read and write
 U-Boot environment variables.  See the :ref:`nos_interface` section
 for more about the NOS interface.
@@ -79,7 +79,7 @@ flash). The only thing untouched is ONIE itself. This is a
 To invoke the uninstall operation, the running NOS sets the
 ``onie_boot_reason`` U-Boot environment variable to the value
 ``uninstall`` (see :ref:`platform_ind_vars`), and then reboots the
-system.  When the system starts up again ONIE, will see the
+system.  When the system starts up again, ONIE will see the
 ``onie_boot_reason`` and start the uninstall process.
 
 Following the uninstall process, the system returns to the
@@ -120,7 +120,7 @@ interface.
 PowerPC Updating and Embedding ONIE
 ===================================
 
-On PowerPC only the ``update`` operation is supported, i.e. ``update``
+On PowerPC, only the ``update`` operation is supported; thus, ``update``
 and ``embed`` do the same thing.  The ``update`` operation is **not**
 descructive to the currently installed NOS.
 
