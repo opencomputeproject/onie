@@ -4,7 +4,7 @@
 x86 Virtual Machine
 *******************
 
-The ONIE distribution comes with a KVM based virtual machine.
+The ONIE distribution comes with a KVM-based virtual machine.
 
 See the instructions in the ONIE source tree for more information on
 using the virtual machine.  The instructions are located in the

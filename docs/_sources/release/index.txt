@@ -15,7 +15,7 @@ Source Code Release Cycle
 
 - ONIE will be released (approximately) every 3 months.
 
-- Under normal conditions the release date will be a Wednesday around
+- Under normal conditions, the release date will be a Wednesday around
   mid-month.
 
 - Immediately following each release, there will be a "merge window"
@@ -29,19 +29,19 @@ Source Code Release Cycle
   and regressions.  During this stabilization period, only patches
   that contain bug fixes get applied.
 
-- After the merge window the release cycle allows for about 2 months
+- After the merge window, the release cycle allows for about 2 months
   of testing before generating the next release.
 
-Note: While we try to adhere to the release schedule, we will not
-hesitate to delay a release for good reasons.  The code will be
-released when it is considered ready without caring too much about the
-announced deadline.
+.. note:: While we try to adhere to the release schedule, we will not
+   hesitate to delay a release for good reasons.  The code will be
+   released when it is considered ready without caring too much about the
+   announced deadline.
 
 Version Numbers
 ---------------
 
 Starting with the release in November 2013, the names of the releases
-changed from numerical release numbers into a time stamp based
+changed from numerical release numbers into timestamp-based
 numbering. Regular releases are identified by names consisting of the
 calendar year and month of the release date.
 

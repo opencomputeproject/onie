@@ -1,4 +1,3 @@
-
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
@@ -68,48 +67,46 @@
             
   <div class="section" id="x86-boot-loader-grub2">
 <span id="x86-boot-loader"></span><h1>x86 Boot Loader (GRUB2)<a class="headerlink" href="#x86-boot-loader-grub2" title="Permalink to this headline">¶</a></h1>
-<p>On x86 ONIE uses <a class="reference external" href="http://www.gnu.org/software/grub/">GRUB2</a>
+<p>On x86, ONIE uses <a class="reference external" href="http://www.gnu.org/software/grub/">GRUB2</a>
 as the boot loader.  This section describes how ONIE uses GRUB and how
 the disk is partitioned.</p>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
-<p class="last">At a high level the philosophy is that the NOS <strong>owns</strong> the boot
+<p class="last">At a high level, the philosophy is that the NOS <strong>owns</strong> the boot
 loader and the NOS <strong>must</strong> install its own GRUB (or some other boot
 loader) itself.</p>
 </div>
-<p>The ONIE kernel and initramfs resides in a single, self-contained
-partition.  The installed NOS controls how it manages the MBR and
-GRUB.</p>
+<p>The ONIE kernel and <tt class="docutils literal"><span class="pre">initramfs</span></tt> reside in a single, self-contained
+partition. The installed NOS controls how it manages the MBR and GRUB.</p>
 <div class="section" id="disk-partition-layout">
 <h2>Disk Partition Layout<a class="headerlink" href="#disk-partition-layout" title="Permalink to this headline">¶</a></h2>
 <p>The disk partition layout plays a critical role in how ONIE and the
-installed NOS co-operate.  This section describes the layout and lays
+installed NOS cooperate. This section describes the layout and lays
 down the guidelines by which ONIE and the NOS must abide.</p>
 <p>All of the steps described in this section are exercised by the Demo
 OS Installer and Demo OS Runtime that ships with ONIE.  See the
 <a class="reference internal" href="../demo_os/index.html#demo-os"><em>Demo OS Installer and OS Runtime</em></a> section for more about the Demo OS.</p>
 <div class="section" id="disk-partition-type">
 <h3>Disk Partition Type<a class="headerlink" href="#disk-partition-type" title="Permalink to this headline">¶</a></h3>
-<p>Each machine can choose whether to use <a class="reference external" href="http://en.wikipedia.org/wiki/GUID_Partition_Table">GUID Partition Table</a> (GPT) or <a class="reference external" href="http://en.wikipedia.org/wiki/Master_boot_record">MSDOS</a> disk labels.  The
+<p>Each machine can choose whether to use <a class="reference external" href="http://en.wikipedia.org/wiki/GUID_Partition_Table">GUID Partition Table</a> (GPT) or <a class="reference external" href="http://en.wikipedia.org/wiki/Master_boot_record">MS-DOS</a> disk labels.  The
 choice is made in the <tt class="docutils literal"><span class="pre">$MACHINE/machine.make</span></tt> file by setting
 <tt class="docutils literal"><span class="pre">PARTITION_TYPE</span></tt> to <tt class="docutils literal"><span class="pre">msdos</span></tt> or <tt class="docutils literal"><span class="pre">gpt</span></tt>.</p>
-<p>The choice is up to the hardware vendor.  The &#8220;<tt class="docutils literal"><span class="pre">onie-sysinfo</span> <span class="pre">-t</span></tt>&#8221;
-command reports the disk label used by the running machine.  A NOS
+<p>The choice is up to the hardware vendor.  The <tt class="docutils literal"><span class="pre">onie-sysinfo</span> <span class="pre">-t</span></tt>
+command reports the disk label used by the running machine.  An NOS
 installer can use this command to determine how to partition the disk
 for itself.</p>
-<p>If not specified the default partition table type is GPT.</p>
+<p>If not specified, the default partition table type is GPT.</p>
 </div>
 <div class="section" id="initial-onie-install-embed">
 <h3>Initial ONIE Install (embed)<a class="headerlink" href="#initial-onie-install-embed" title="Permalink to this headline">¶</a></h3>
-<p>When ONIE is initially installed in the factory the hard disk is
+<p>When ONIE is initially installed in the factory, the hard disk is
 blank.  Assume PXE boot (or a USB stick) was used to install ONIE for
 the first time.</p>
-<p>The below examples use GPT as the disk label.  The mechanics for MSDOS
+<p>The below examples use GPT as the disk label.  The mechanics for MS-DOS
 disk labels are nearly the same, the only difference being GPT needs
-to create the &#8220;BIOS GRUB&#8221; partition which MSDOS does not.</p>
-<p>For sake of example assume the hard disk is available as /dev/sda from
-Linux.</p>
-<p>After <strong>embedding</strong> ONIE the disk layout looks like:</p>
+to create the &#8220;BIOS GRUB&#8221; partition while MS-DOS does not.</p>
+<p>For example, assume the hard disk is available as <tt class="docutils literal"><span class="pre">/dev/sda</span></tt> from Linux.</p>
+<p>After <strong>embedding</strong> ONIE, the disk layout looks like:</p>
 <div class="highlight-python"><pre>+========================+
 |                        |
 |  Sector LBA 0 aka MBR  |  &lt;-- 1st stage boot loader in LBA-0.  Installed by ONIE
@@ -120,7 +117,7 @@ Linux.</p>
 |                        |
 |  /dev/sda1 GRUB        |  &lt;-- Additional data stored and used by GRUB for GPT disk
 |                        |      labels.  Installed by ONIE during grub-install.
-|  BIOS GRUB             |      MSDOS partition type does not have this.
+|  BIOS GRUB             |      MS-DOS partition type does not have this.
 |                        |
 +========================+
 |                        |
@@ -139,12 +136,12 @@ Linux.</p>
 <p>During the initial disk provisioning the ONIE installer does the
 following:</p>
 <ol class="arabic simple">
-<li>Since the disk is blank we are <strong>embedding</strong> ONIE and need to the
-create partition table.  The installer creates a disk label (either
-msdos or gpt depending on machine config).  gpt is used in this
+<li>Since the disk is blank we are <strong>embedding</strong> ONIE and need to
+create the partition table.  The installer creates a disk label (either
+<tt class="docutils literal"><span class="pre">msdos</span></tt> or <tt class="docutils literal"><span class="pre">gpt</span></tt> depending on machine config).  <tt class="docutils literal"><span class="pre">gpt</span></tt> is used in this
 example.</li>
-<li>Creates needed partitions (two for gpt, one for msdos).  The
-<tt class="docutils literal"><span class="pre">ONIE-BOOT</span></tt> partition is created either way.</li>
+<li>Creates needed partitions (two for <tt class="docutils literal"><span class="pre">gpt</span></tt>, one for <tt class="docutils literal"><span class="pre">msdos</span></tt>).  The
+<tt class="docutils literal"><span class="pre">ONIE-BOOT</span></tt> partition is created in either case.</li>
 <li>Installs ONIE kernel+initramfs into the <tt class="docutils literal"><span class="pre">ONIE-BOOT</span></tt> partition.</li>
 <li>Installs GRUB into <tt class="docutils literal"><span class="pre">/dev/sda</span></tt>, using <tt class="docutils literal"><span class="pre">/dev/sda2</span></tt> as the GRUB
 <tt class="docutils literal"><span class="pre">--boot-directory</span></tt>.  This allows the system to boot initially
@@ -153,12 +150,12 @@ with no NOS installed.</li>
 partition.  This facilitates chainloading ONIE.</li>
 </ol>
 <p>An OS normally installs the GRUB 1st stage loader into <tt class="docutils literal"><span class="pre">/dev/sda</span></tt>
-(and for GPT also in <tt class="docutils literal"><span class="pre">/dev/sda1</span></tt>).  The grub configuration and
+(and for GPT also in <tt class="docutils literal"><span class="pre">/dev/sda1</span></tt>).  The GRUB configuration and
 related files go into <tt class="docutils literal"><span class="pre">/dev/sda2</span></tt>, typically mounted as <tt class="docutils literal"><span class="pre">/boot</span></tt>.</p>
 <p>Another supported option is to install the GRUB 1st stage loader into
 a partition, like <tt class="docutils literal"><span class="pre">/dev/sda2</span></tt>.  Using this approach you can
 chainload the ONIE OS from the NOS&#8217;s GRUB menu.</p>
-<p>When ONIE is installed in the factory the ONIE installer installs the
+<p>When ONIE is installed in the factory, the ONIE installer installs the
 GRUB 1st stage loader into <strong>both</strong> <tt class="docutils literal"><span class="pre">/dev/sda</span></tt> and <tt class="docutils literal"><span class="pre">/dev/sda2</span></tt>.
 The 1st stage loader in <tt class="docutils literal"><span class="pre">/dev/sda</span></tt> is &#8220;disposable&#8221; and is over
 written by the NOS when it installs GRUB.  The disposable 1st stage
@@ -169,11 +166,11 @@ installer will take over.</p>
 <p class="last">The philosophy here is that the installed NOS <strong>owns</strong> the
 <tt class="docutils literal"><span class="pre">/dev/sda</span></tt> MBR for installing the GRUB 1st stage loader.  ONIE
 <strong>owns</strong> everything in <tt class="docutils literal"><span class="pre">/dev/sda2</span></tt>.  As long as the NOS installer
-leaves <tt class="docutils literal"><span class="pre">/dev/sda2</span></tt> intact we are good.</p>
+leaves <tt class="docutils literal"><span class="pre">/dev/sda2</span></tt> intact, we are good.</p>
 </div>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
-<p class="last">For GPT disk labels the ONIE-BOOT partition type GUID is
+<p class="last">For GPT disk labels, the ONIE-BOOT partition type GUID is
 <tt class="docutils literal"><span class="pre">7412F7D5-A156-4B13-81DC-867174929325</span></tt>.  This GUID is recognized
 by the <tt class="docutils literal"><span class="pre">gdisk</span></tt> and <tt class="docutils literal"><span class="pre">sgdisk</span></tt> utilities from the <a class="reference external" href="http://www.rodsbooks.com/gdisk/">GPT fdisk
 package</a>.  See <a class="reference external" href="http://sourceforge.net/p/gptfdisk/code/ci/b784e0c95a11cdaad05b0f62806114ead678a2b0/">commit b784e0c95a11</a>
@@ -233,7 +230,7 @@ space.</p>
 <tt class="docutils literal"><span class="pre">/dev/sda</span></tt>, overwriting what ONIE installed in the factory.  This
 is OK.</p>
 </div>
-<p>The CentOS GRUB will reference grub config files and modules from
+<p>The CentOS GRUB will reference GRUB config files and modules from
 <tt class="docutils literal"><span class="pre">/dev/sda3</span></tt>.  It does not involve ONIE installed on <tt class="docutils literal"><span class="pre">/dev/sda2</span></tt> at
 all.</p>
 </div>
@@ -249,7 +246,7 @@ section for more about the <tt class="docutils literal"><span class="pre">onie-b
 <p>The use of <a class="reference external" href="man.he.net/man8/grub-reboot">grub-reboot</a> is helpful
 here to reboot and chainload ONIE for one boot, returning to the
 default GRUB menu entry after that.</p>
-<p>With the ONIE chainload menu entry in place the GRUB menu looks
+<p>With the ONIE chainload menu entry in place, the GRUB menu looks
 something like this after a reboot:</p>
 <div class="highlight-python"><pre>     GNU GRUB  version 2.02~beta2+e4a1fe391
 

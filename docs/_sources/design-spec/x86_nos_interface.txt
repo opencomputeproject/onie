@@ -2,7 +2,7 @@
 x86 Interface Details
 *********************
 
-This section describes the x86 specific methods used to implement the
+This section describes the x86-specific methods used to implement the
 NOS interface.  See the :ref:`nos_interface` section for more about
 the NOS interface.
 
@@ -11,10 +11,10 @@ the NOS interface.
 x86 NOS Interface
 -----------------
 
-On x86 the NOS and ONIE communicates using GRUB environment variables
+On x86 the NOS and ONIE communicate using GRUB environment variables
 stored in the ``ONIE-BOOT`` partition.
 
-ONIE provides a tool called ``onie-boot-mode`` that a NOS uses to set
+ONIE provides a tool called ``onie-boot-mode`` that an NOS uses to set
 the ONIE boot mode to one of:
 
 - ``install``
@@ -67,8 +67,8 @@ The complete help for the tool is::
 The tool is located in the ``ONIE-BOOT`` partition in the
 ``onie/tools/bin/onie-boot-mode`` directory.  The NOS can easily mount
 the ``ONIE-BOOT`` partition by using the disk volume label
-"ONIE-BOOT", e.g. the following mounts the ONIE-BOOT partition from a
-Linux based NOS::
+``ONIE-BOOT``; for example, the following mounts the ONIE-BOOT partition from a
+Linux-based NOS::
 
   NOS:/ # mkdir /mnt/onie-boot
   NOS:/ # mount LABEL=ONIE-BOOT /mnt/onie-boot
@@ -86,7 +86,7 @@ The tool is a thin wrapper around the `grub-editenv
 x86 NOS Installer
 =================
 
-The main duties of a NOS installer on x86 are:
+The main duties of an NOS installer on x86 are:
 
 - Create partitions and format file systems
 
@@ -99,16 +99,16 @@ The main duties of a NOS installer on x86 are:
 Installing GRUB and setting up the GRUB configuration are the most
 important steps to describe here.
 
-The walk through of installing GRUB and setting up the GRUB
+The walk through for installing GRUB and setting up the GRUB
 configuration is described in the :ref:`x86_boot_loader` section.
 
 Also the provided demo OS installer exercises all of the steps
 described in this section.  See the :ref:`demo_os` section for more
 about the Demo OS.
 
-In subsequent sections the following assumptions about the NOS are made:
+In subsequent sections, the following assumptions about the NOS are made:
 
-#. The NOS is Linux based
+#. The NOS is Linux-based
 
 #. The NOS has mounted the ``ONIE-BOOT`` partition read-write on
    ``/mnt/onie-boot``
@@ -119,7 +119,7 @@ In subsequent sections the following assumptions about the NOS are made:
 #. The NOS has the ``grub-reboot`` command available
 
 The ``grub-reboot`` command allows the NOS's GRUB to boot the ONIE
-chainload entry once.  After one boot the NOS's GRUB will revert back
+chainload entry once.  After one boot, the NOS's GRUB will revert back
 to the NOS default GRUB menu entry.
 
 .. _x86_nos_intf_reinstaller:

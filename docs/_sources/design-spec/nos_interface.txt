@@ -48,11 +48,11 @@ Some examples of what an installer could do:
 System Information
 ------------------
 
-Within the running ONIE context an installer often needs to know
+Within the running ONIE context, an installer often needs to know
 various information about the running system.  ONIE provides the
 ``onie-sysinfo`` command for this purpose.
 
-For details the complete help for ``onie-sysinfo`` follows::
+For details, here is the complete help for ``onie-sysinfo`` follows::
 
   ONIE:/ # onie-sysinfo -h
   onie-sysinfo [-sevimrpcfdat]

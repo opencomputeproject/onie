@@ -2,7 +2,7 @@
 PowerPC Boot Loader
 *******************
 
-On PowerPC platforms U-Boot provides the startup environment for
+On PowerPC platforms, U-Boot provides the startup environment for
 loading and running the ONIE kernel and the network operation system
 (NOS) kernel.
 
