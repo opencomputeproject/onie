@@ -54,7 +54,7 @@ Copy the demo installer to the HTTP server root, using the name
 
   $ cp build/images/demo-installer-<platform>.bin /var/www/onie-installer-<platform>-<arch>
 
-Currently the only supported ``<arch>`` are ``powerpc`` and ``x86``.
+Currently the only supported ``<arch>`` are ``powerpc`` and ``x86_64``.
 
 Powering on the Network Switch
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
