@@ -204,8 +204,7 @@ of MAC addresses this machines requires is::
   -----------------------------
   73 Total MACs
 
-To encode that in the EEPROM, set TLV code 0x24 (MAC #1 Base) to and
-code 0x2A (Num MACs) to 73.
+To encode that in the EEPROM, set TLV code 0x2A (Num MACs) to 73.
 
 Maintenance of this EEPROM format specification and allocation of the TLV type
 codes is handled by the `ONIE Project <http://www.onie.org/>`_.

@@ -120,8 +120,8 @@ interface.
 PowerPC Updating and Embedding ONIE
 ===================================
 
-On PowerPC, only the ``update`` operation is supported; thus, ``update``
-and ``embed`` do the same thing.  The ``update`` operation is **not**
+On PowerPC, only the ``update`` operation is supported; there is no ``embed`` 
+command on the PowerPC platform.  The ``update`` operation is **not**
 descructive to the currently installed NOS.
 
 The update operation installs a new version of ONIE in the NOR flash,

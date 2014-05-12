@@ -202,6 +202,9 @@ The ``embed`` operation, on the other hand, is **destructive**.  This
 operation will wipe out everything (including any installed NOS) and
 install a new version of ONIE.
 
+.. note:: At this time, the ``embed`` operation is available only on the x86
+   platform.
+
 For more details on the ``update`` and ``embed`` operations see the
 CURT-FIXME sections for the corresponding CPU architectures:
 
