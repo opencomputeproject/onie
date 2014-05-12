@@ -262,6 +262,9 @@ endif
 ifeq ($(DMIDECODE_ENABLE),yes)
   include make/dmidecode.make
 endif
+ifeq ($(ETHTOOL_ENABLE),yes)
+  include make/ethtool.make
+endif
 include make/images.make
 include make/demo.make
 include make/docs.make
