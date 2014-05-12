@@ -188,10 +188,11 @@ sub devices
 	makedev("i2c-${i}", "c", 89, ${i}, ${root}, ${root}, 0660);
     }
 
-    print "Miscellaneous devices: shm rtc\n";
+    print "Miscellaneous devices: shm rtc nvram\n";
     mkdir "${devdir}shm", 0777;
     makedev("rtc0", "c", 254, 0, ${root}, ${root}, 0660);
     symlink "./rtc0", "${devdir}rtc";
+    makedev("nvram", "c", 10, 144, ${root}, ${root}, 0660);
 
     print "SCSI Devices: sda sdb\n";
     makedev("sda", "b", 8, 0, ${root}, ${disk}, 0660);
