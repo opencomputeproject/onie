@@ -226,3 +226,52 @@ metal silkscreen on the machine:
    "1".  This typically applies to field pluggable power supplies and
    fan modules.  For example, a system with 2 PSUs and 3 fan modules
    would label the PSUs "1, 2" and the fans "1, 2, 3".
+
+Hardware Documentation
+======================
+
+The ONIE project recommends that the switch packaging include a one
+page (two sides printed) **Quick Start Guide** flyer.  This is similar
+to what is included with most commercial products.
+
+Such a flyer would include the following:
+
+* ONIE version number and certification number/date
+
+* Stencil of front & rear switch view with call outs or arrows to
+  ``eth0`` "management Ethernet" and "out of band" serial console.
+
+* A geographic layout of the temperature sensors, i.e. where are the
+  temperature sensors located on the board.
+
+* Console port pin out, baud rate / settings information (115200 baud
+  default).
+
+* Generic ONIE installation instructions (visual of network waterfall,
+  file name discovery) -- pointers to ONIE website or similar tiny URL
+  with more verbose instructions.
+
+* Generic ONIE debugging (ssh/telnet access, syslog) -- pointers to
+  ONIE website or similar tiny URL with more verbose instructions.
+
+Following these recommendations will improve the operational
+experience of the end customer.
+
+Asset Tracking and Labeling
+===========================
+
+The ONIE project recommends the following regarding asset tracking
+labels:
+
+* Human and machine readable barcodes that represent the eth0 base MAC
+  address, serial number, product identification and CPU ID.
+
+* For racked environments these labels should be place on the sides of
+  the switch, **not** on the top or bottom of the switch.
+
+* On platforms that support `dmidecode
+  <http://www.nongnu.org/dmidecode/>`_, the stickers should encode the
+  data in the same format as the SMBIOS/DMI standard.
+
+Following these recommendations will improve the operational
+experience of the end customer.
