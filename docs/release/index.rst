@@ -55,17 +55,17 @@ Examples:
   :delim: |
 
   ONIE v2013.11-rc1 | Release candidate 1 for November 2013
-  ONIE v2013.11.00  | Stable Release for November 2013
+  ONIE v2013.11     | Stable Release for November 2013
   ONIE v2013.11.01  | Bug fix release 01 for November 2013
 
 Current Status
 --------------
 
-The Merge Window for the next release (v2014.05) is :red:`closed`.
+The Merge Window for the next release (v2014.08) is :green:`open`.
 
-Release "v2014.02" went out on February 14, 2014.
+Release "v2014.05" went out on May 14, 2014.
 
-Release "v2024.05" is scheduled to go out on May 14, 2014.
+Release "v2014.08" is scheduled to go out on August 13, 2014.
 
 Future Releases
 ---------------
@@ -77,7 +77,7 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  v2014.05 | Wed, Mar 12, 2014 | Wed, May 14, 2014
-  v2014.08 | Wed, Jun 11, 2014 | Wed, Aug 13, 2014
-  v2014.11 | Wed, Sep 10, 2014 | Wed, Nov 12, 2014
-  v2015.02 | Wed, Dec 17, 2014 | Wed, Feb 11, 2015
+  v2014.08 | Wed, Jul 16, 2014 | Wed, Aug 13, 2014
+  v2014.11 | Wed, Oct 15, 2014 | Wed, Nov 12, 2014
+  v2015.02 | Wed, Jan 14, 2015 | Wed, Feb 11, 2015
+  v2015.05 | Wed, Apr 15, 2015 | Wed, May 13, 2015
