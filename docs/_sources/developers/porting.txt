@@ -14,7 +14,7 @@ verified:
 * Ethernet management PHY LEDs should function correctly.
 * Front panel status LEDs are set appropriately - check power, fans
   and set any corresponding LEDs.
-* Fan speeds set to 40-50% duty cycle.
+* Fan speeds set to 100% duty cycle.
 * Verify MAC address and serial number are exported as environment variables.
 * Confirm CONFIG_SYS_CLK_FREQ and CONFIG_DDR_CLK_FREQ oscillators by
   visual inspection.  For example, if an oscillator is 66.666MHz use
