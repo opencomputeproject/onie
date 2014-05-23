@@ -25,8 +25,8 @@ Accton/Edge-Core
      <th> Device                  <th> Ports            <th> CPU                 <th> Forwarding             		<th> Support Status         </tr>
 </thead>
 <tr> <td> Accton AS4600-54T       <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56540 (Apollo2)       <td> Supported and Tested   </tr>
-<tr> <td> Accton AS5600-52X       <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56846 (Trident+)      <td> Supported and Tested   </tr>
-<tr> <td> Accton AS5610-52X       <td> 48x1G  + 4x10G   <td> P2020               <td> Broadcom BCM56846 (Trident+)      <td> Supported and Tested   </tr>
+<tr> <td> Accton AS5600-52X       <td> 48x10G  + 4x40G   <td> P2020               <td> Broadcom BCM56846 (Trident+)      <td> Supported and Tested   </tr>
+<tr> <td> Accton AS5610-52X       <td> 48x10G  + 4x40G   <td> P2020               <td> Broadcom BCM56846 (Trident+)      <td> Supported and Tested   </tr>
 <tr> <td> Accton AS5710-54X       <td> 48x10G + 6x40G   <td> P2041               <td> Broadcom BCM56854 (Trident2)      <td> Supported and Tested   </tr>
 <tr> <td> Accton AS6700-32X       <td> 32x40G           <td> P2041               <td> Broadcom BCM56850 (Trident2)      <td> Supported and Tested   </tr>
 
