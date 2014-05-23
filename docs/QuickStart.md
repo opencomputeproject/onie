@@ -11,7 +11,7 @@ Build Host:
 - sudo access with no password required.
 - $HOSTNAME is resolvable to an IP address
 - IP forwarding enabled on build machine
-	* in /etc/sysctl.conf, set ipv4.ip_forward=1
+	* in /etc/sysctl.conf, set net.ipv4.ip_forward=1
 	* sudo sysctl -p
 - NetworkManager (or similar utilities) is disabled
     * Either disable via `sudo service networkmanager stop`
