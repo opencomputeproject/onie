@@ -1,5 +1,78 @@
 Platform support for the DELL S6000 with the Centerton S1220 CPU module
 
+diff --git a/arch/x86/include/asm/emergency-restart.h b/arch/x86/include/asm/emergency-restart.h
+index cc70c1c..441a910 100644
+--- a/arch/x86/include/asm/emergency-restart.h
++++ b/arch/x86/include/asm/emergency-restart.h
+@@ -11,6 +11,7 @@ enum reboot_type {
+ 	BOOT_EFI = 'e',
+ 	BOOT_CF9 = 'p',
+ 	BOOT_CF9_COND = 'q',
++	BOOT_CF9_COLD = 'd',
+ };
+ 
+ extern enum reboot_type reboot_type;
+diff --git a/arch/x86/kernel/reboot.c b/arch/x86/kernel/reboot.c
+index e61f79c..b1a63c7 100644
+--- a/arch/x86/kernel/reboot.c
++++ b/arch/x86/kernel/reboot.c
+@@ -96,6 +96,7 @@ static int __init reboot_setup(char *str)
+ 		case 'k':
+ 		case 't':
+ 		case 'e':
++		case 'd':
+ 		case 'p':
+ 			reboot_type = *str;
+ 			break;
+@@ -395,6 +396,16 @@ static int __init set_pci_reboot(const struct dmi_system_id *d)
+ 	return 0;
+ }
+ 
++static int __init set_pci_cold_reboot(const struct dmi_system_id *d)
++{
++	if (reboot_type != BOOT_CF9_COLD) {
++		reboot_type = BOOT_CF9_COLD;
++		printk(KERN_INFO "%s series board detected. "
++		       "Selecting PCI COLD reboot.\n", d->ident);
++	}
++	return 0;
++}
++
+ static struct dmi_system_id __initdata pci_reboot_dmi_table[] = {
+ 	{	/* Handle problems with rebooting on Apple MacBook5 */
+ 		.callback = set_pci_reboot,
+@@ -468,6 +479,14 @@ static struct dmi_system_id __initdata pci_reboot_dmi_table[] = {
+ 			DMI_MATCH(DMI_PRODUCT_NAME, "Precision M6600"),
+ 		},
+ 	},
++	{	/* Handle problems with warm rebooting on the S6000. */
++		.callback = set_pci_cold_reboot,
++		.ident = "Dell S6000",
++		.matches = {
++			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc"),
++			DMI_MATCH(DMI_PRODUCT_NAME, "S6000"),
++		},
++	},
+ 	{ }
+ };
+ 
+@@ -625,6 +644,16 @@ static void native_machine_emergency_restart(void)
+ 			}
+ 			reboot_type = BOOT_KBD;
+ 			break;
++		case BOOT_CF9_COLD:
++			{
++				u8 cf9 = inb(0xcf9) & ~6;
++				outb(cf9|0x8, 0xcf9); /* Request cold reboot */
++				udelay(50);
++				outb(cf9|0xc, 0xcf9); /* Actually do the reset */
++				udelay(50);
++				reboot_type = BOOT_KBD;
++			}
++			break;
+ 		}
+ 	}
+ }
 diff --git a/drivers/platform/x86/Kconfig b/drivers/platform/x86/Kconfig
 index 7f43cf8..b1acf68 100644
 --- a/drivers/platform/x86/Kconfig
