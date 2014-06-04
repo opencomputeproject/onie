@@ -61,6 +61,11 @@ ONL_SUBMODULE_COMMON 	 := $(ONL)/submodules/common
 ONL_LOCAL_SUBMODULES += common
 endif
 
+ifndef ONL_SUBMODULE_BIGCODE
+ONL_SUBMODULE_BIGCODE 	 := $(ONL)/submodules/bigcode
+ONL_LOCAL_SUBMODULES += bigcode
+endif
+
 #
 # These are the required derivations from the ONL settings:
 #
@@ -132,7 +137,7 @@ endif
 # This turns out to  be terribly hacky wrt the component makefiles.
 # This should be a temporary solution.
 #
-ALL_SUBMODULES = INFRA COMMON
+ALL_SUBMODULES = INFRA COMMON BIGCODE
 MODULE_DIRS := $(foreach submodule,$(ALL_SUBMODULES),$(ONL_SUBMODULE_$(submodule))/modules)
 MODULE_DIRS_TOUCH := $(foreach sd,$(MODULE_DIRS),$(shell mkdir -p $(sd) && touch $(sd)/Manifest.mk))
 
