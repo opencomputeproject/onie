@@ -1,0 +1,103 @@
+Platform support for the DELL S6000 with the Centerton S1220 CPU module
+
+diff --git a/drivers/platform/x86/Kconfig b/drivers/platform/x86/Kconfig
+index 7f43cf8..b1acf68 100644
+--- a/drivers/platform/x86/Kconfig
++++ b/drivers/platform/x86/Kconfig
+@@ -779,4 +779,17 @@ config SAMSUNG_Q10
+ 	  This driver provides support for backlight control on Samsung Q10
+ 	  and related laptops, including Dell Latitude X200.
+ 
++config DELL_S6000_S1220
++	tristate "DELL S6000_S1220 Platform Support"
++	depends on X86 && PCI
++	select I2C_ISCH
++	select I2C_ISMT
++	select GPIO_SCH
++	select MFD_CORE
++	select LPC_SCH
++	---help---
++	 Enable support for DELL S6000 switching platform.  This
++	 platform has a S1220 Atom (Centerton) CPU module, a Broadcom
++	 Trident2 switch ASIC and 32x40G QSFP ports.
++
+ endif # X86_PLATFORM_DEVICES
+diff --git a/drivers/platform/x86/Makefile b/drivers/platform/x86/Makefile
+index 293a320..08ca7e9 100644
+--- a/drivers/platform/x86/Makefile
++++ b/drivers/platform/x86/Makefile
+@@ -45,3 +45,4 @@ obj-$(CONFIG_MXM_WMI)		+= mxm-wmi.o
+ obj-$(CONFIG_INTEL_MID_POWER_BUTTON)	+= intel_mid_powerbtn.o
+ obj-$(CONFIG_INTEL_OAKTRAIL)	+= intel_oaktrail.o
+ obj-$(CONFIG_SAMSUNG_Q10)	+= samsung-q10.o
++obj-$(CONFIG_DELL_S6000_S1220)	+= dell-s6000-s1220.o
+diff --git a/drivers/platform/x86/dell-s6000-s1220.c b/drivers/platform/x86/dell-s6000-s1220.c
+new file mode 100644
+index 0000000..3d7aac9
+--- /dev/null
++++ b/drivers/platform/x86/dell-s6000-s1220.c
+@@ -0,0 +1,64 @@
++/*
++ * dell-s6000.c - DELL S6000-S1220 Platform Support.
++ *
++ * Author: Curt Brune (curt@cumulusnetworks.com)
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2 of the License, or
++ *  (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful, but
++ *  WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
++ *  General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
++ *  02110-1301, USA.
++ *
++ */
++
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/gpio.h>
++#include <linux/i2c.h>
++
++#define DRIVER_NAME	"dell_s6000_s1220"
++#define DRIVER_VERSION	"0.1"
++
++static struct gpio dell_s6000_i2c_mux_gpios[] = {
++	{1, GPIOF_OUT_INIT_LOW, "I2C_MUX_0" },
++	{2, GPIOF_OUT_INIT_LOW, "I2C_MUX_1" },
++};
++
++static int __init dell_s6000_init(void)
++{
++	int err = 0;
++
++	err = gpio_request_array(dell_s6000_i2c_mux_gpios,
++				 ARRAY_SIZE(dell_s6000_i2c_mux_gpios));
++	if (err) {
++		pr_err("gpio request array failed\n");
++		return err;
++	}
++	pr_info(DRIVER_NAME": version "DRIVER_VERSION" successfully loaded\n");
++	return 0;
++}
++
++static void __exit dell_s6000_cleanup(void)
++{
++	gpio_free_array(dell_s6000_i2c_mux_gpios, ARRAY_SIZE(
++				dell_s6000_i2c_mux_gpios));
++	pr_err("Driver unloaded\n");
++}
++
++module_init(dell_s6000_init);
++module_exit(dell_s6000_cleanup);
++
++MODULE_AUTHOR("Curt Brune (curt@cumulusnetworks.com)");
++MODULE_DESCRIPTION("DELL S6000-S1220 Platform Support");
++MODULE_VERSION(DRIVER_VERSION);
++MODULE_LICENSE("GPL");
