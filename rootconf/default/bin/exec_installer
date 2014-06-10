@@ -53,7 +53,7 @@ wget_run()
     # Shell variable substituion
     bb_ver=$(busybox | head -1 | sed -e 's/ (.*//' -e 's/ /-/')
     os_ver=$(uname -r -s | sed -e 's/ /-/')
-    user_agent="-U onie/1.0 ($os_ver; $bb_ver)"
+    user_agent="onie/1.0 (${os_ver}$onie_version; $bb_ver)"
 
     header_serial_num="ONIE-SERIAL-NUMBER: $onie_serial_num"
     header_eth_addr="ONIE-ETH-ADDR: $onie_eth_addr"
@@ -63,10 +63,11 @@ wget_run()
     header_arch="ONIE-ARCH: $onie_arch"
     header_security_key="ONIE-SECURITY-KEY: $onie_sec_key"
     header_operation="ONIE-OPERATION: $onie_operation"
+    header_version="ONIE-VERSION: $onie_version"
 
     log_debug_msg "Running wget with: $user_agent $wget_args $URL\n"
     log_info_msg "Fetching $URL ..."
-    wget "$user_agent" $wget_args       \
+    wget -U "$user_agent" $wget_args       \
         --header "$header_serial_num"   \
         --header "$header_eth_addr"     \
         --header "$header_vendor_id"    \
@@ -75,6 +76,7 @@ wget_run()
         --header "$header_arch"         \
         --header "$header_security_key" \
         --header "$header_operation"    \
+        --header "$header_version"      \
         "$URL" > $out_file 2>&1 && run_installer "$URL" && return 0
 
     return 1
