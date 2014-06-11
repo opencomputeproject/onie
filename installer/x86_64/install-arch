@@ -357,8 +357,13 @@ install_onie()
 
     echo "Installing ONIE on: $onie_dev"
     
-    [ -n "$pre_install_hook" ] && eval $pre_install_hook
-    
+    if [ -n "$pre_install_hook" ]; then
+        eval $pre_install_hook || {
+            echo "Error: pre-install failed"
+            exit 1
+        }
+    fi
+ 
     if [ "$onie_boot_reason" = "embed" ] ; then
         # umount any partitions that might be mounted on this disk
         for p in $(seq 8) ; do
@@ -449,7 +454,12 @@ install_onie()
         exit 1
     }
 
-    [ -n "$post_install_hook" ] && eval $post_install_hook
+    if [ -n "$post_install_hook" ]; then
+        eval $post_install_hook || {
+            echo "Error: post-install failed"
+            exit 1
+        }
+    fi
 }
 
 # Local Variables:
