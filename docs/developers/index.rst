@@ -7,6 +7,7 @@ Developer Documentation
    :titlesonly:
 
    building
+   debugging
    contributing
    porting
    testing
