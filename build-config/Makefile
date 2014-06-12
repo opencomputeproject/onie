@@ -343,4 +343,20 @@ test-onie:
 		--dut-name=$(DUT_NAME) --log-level=INFO \
 		--console-log=$(DUT_LOG)
 
+PHONY += ldd
+
+# Run the cross ldd for the target platform
+ifeq ($(word 1, $(MAKECMDGOALS)),ldd)
+  ifeq ($(LDD_TARGET),)
+    $(error "When using the `ldd' target you must also set the LDD_TARGET variable")
+  endif
+  LDD_FILE := $(SYSROOTDIR)/$(LDD_TARGET)
+endif
+
+ldd:
+	$(Q) [ -e $(LDD_FILE) ]
+	$(Q) echo "Running cross-ldd on file: $(LDD_FILE)"
+	$(Q) echo "Using SYSROOT directory  : $(SYSROOT)"
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(CROSSBIN)/$(CROSSPREFIX)ldd --root $(SYSROOTDIR) $(LDD_FILE)
+
 .PHONY: $(PHONY)
