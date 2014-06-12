@@ -25,3 +25,10 @@ I2CTOOLS_ENABLE = no
 # Local Variables:
 # mode: makefile-gmake
 # End:
+
+#
+# Console unit and speed can be overwrite here.
+# For example,
+# 
+# CONSOLE_SPEED = 9600
+# CONSOLE_UNIT = 0

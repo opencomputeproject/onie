@@ -292,8 +292,13 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 	$(Q) cp /usr/lib/syslinux/isolinux.bin $(RECOVERY_ISO_SYSROOT)
 	$(Q) cp /usr/lib/syslinux/menu.c32 $(RECOVERY_ISO_SYSROOT)
 	$(Q) cp $(RECOVERY_CONF_DIR)/syslinux.cfg $(RECOVERY_ISO_SYSROOT)
+	$(Q) sed -i -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
+	$(Q) sed -i -e 's/<CONSOLE_UNIT>/$(CONSOLE_UNIT)/g' $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
 	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)/boot/grub
-	$(Q) cat $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
+	$(Q) cat $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg   \
+		| sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
+		| sed -e 's/<CONSOLE_UNIT>/$(CONSOLE_UNIT)/g' \
+		> $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
 	$(Q) genisoimage -r -V "ONIE-RECOVERY" -cache-inodes -J -l -b isolinux.bin	\
 		-c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table		\
 		-o $(RECOVERY_ISO_IMAGE) $(RECOVERY_ISO_SYSROOT)
