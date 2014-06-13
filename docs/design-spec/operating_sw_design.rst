@@ -12,6 +12,7 @@ Operating Software Design
    discovery
    nos_interface
    updater
+   diag
 
 This section describes the runtime ONIE software.  The information
 here applies to all CPU architectures unless otherwise noted.

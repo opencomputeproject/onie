@@ -12,7 +12,8 @@ DEMO_SYSROOT_CPIO	= $(MBUILDDIR)/demo-sysroot.cpio
 DEMO_SYSROOT_CPIO_XZ	= $(MBUILDDIR)/demo.initrd
 DEMO_KERNEL_VMLINUZ	= $(MBUILDDIR)/demo.vmlinuz
 DEMO_UIMAGE		= $(IMAGEDIR)/demo-$(PLATFORM).itb
-DEMO_BIN		= $(IMAGEDIR)/demo-installer-$(PLATFORM).bin
+DEMO_OS_BIN		= $(IMAGEDIR)/demo-installer-$(PLATFORM).bin
+DEMO_DIAG_BIN		= $(IMAGEDIR)/demo-diag-installer-$(PLATFORM).bin
 
 DEMO_SYSROOT_COMPLETE_STAMP	= $(STAMPDIR)/demo-sysroot-complete
 DEMO_KERNEL_COMPLETE_STAMP	= $(STAMPDIR)/demo-kernel-complete
@@ -85,28 +86,35 @@ $(DEMO_KERNEL_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP)
 
 ifndef MAKE_CLEAN
 DEMO_INSTALLER_FILES = $(shell test -d $(IMAGEDIR) && test -f $(DEMO_SYSROOT_CPIO_XZ) && \
-	              find -L $(DEMO_INSTALLER_DIR) -mindepth 1 -cnewer $(DEMO_BIN) \
+	              find -L $(DEMO_INSTALLER_DIR) -mindepth 1 -cnewer $(DEMO_OS_BIN) \
 			-type f -print -quit 2>/dev/null)
   ifneq ($(strip $(DEMO_INSTALLER_FILES)),)
-    $(shell rm -f $(DEMO_IMAGE_COMPLETE_STAMP) $(DEMO_BIN))
+    $(shell rm -f $(DEMO_IMAGE_COMPLETE_STAMP) $(DEMO_OS_BIN) $(DEMO_DIAG_BIN))
   endif
 endif
 
-# $(IMAGEDIR)/demo-installer-%.bin : $(DEMO_IMAGE_PARTS_COMPLETE) $(MACHINE_DEMO_DIR)/*
-$(DEMO_BIN) : $(DEMO_IMAGE_PARTS_COMPLETE) $(MACHINE_DEMO_DIR)/*
-	$(Q) echo "==== Create demo $(PLATFORM) self-extracting archive ===="
-	$(Q) ./scripts/onie-mk-demo.sh $(ONIE_ARCH) $(MACHINE) $(PLATFORM) \
-		$(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf $@ $(DEMO_IMAGE_PARTS)
+define demo_MKIMAGE
+	./scripts/onie-mk-demo.sh $(ONIE_ARCH) $(MACHINE) $(PLATFORM) \
+		$(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf $(1) $(2) $(DEMO_IMAGE_PARTS) 
+endef
+
+$(DEMO_OS_BIN) : $(DEMO_IMAGE_PARTS_COMPLETE) $(MACHINE_DEMO_DIR)/*
+	$(Q) echo "==== Create demo OS $(PLATFORM) self-extracting archive ===="
+	$(Q) $(call demo_MKIMAGE, $@, OS)
+
+$(DEMO_DIAG_BIN) : $(DEMO_OS_BIN)
+	$(Q) echo "==== Create demo DIAG $(PLATFORM) self-extracting archive ===="
+	$(Q) $(call demo_MKIMAGE, $@, DIAG)
 
 PHONY += demo-image-complete
 demo-image-complete: $(DEMO_IMAGE_COMPLETE_STAMP)
-$(DEMO_IMAGE_COMPLETE_STAMP): $(DEMO_BIN)
+$(DEMO_IMAGE_COMPLETE_STAMP): $(DEMO_ARCH_BINS)
 	$(Q) touch $@
 
 CLEAN += demo-clean
 demo-clean:
 	$(Q) rm -rf $(DEMO_SYSROOTDIR)
-	$(Q) rm -f $(MBUILDDIR)/demo-* $(DEMO_IMAGE_PARTS) $(DEMO_BIN)
+	$(Q) rm -f $(MBUILDDIR)/demo-* $(DEMO_IMAGE_PARTS) $(DEMO_OS_BIN) $(DEMO_DIAG_BIN)
 	$(Q) rm -f $(DEMO_SYSROOT_COMPLETE_STAMP) $(DEMO_IMAGE_COMPLETE_STAMP)
 	$(Q) rm -f $(DEMO_IMAGE_PARTS_COMPLETE)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"

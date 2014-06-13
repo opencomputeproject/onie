@@ -1,6 +1,7 @@
 #!/bin/sh
 
 . /lib/onie/functions
+. /lib/demo/functions
 
 # Mount demo filesystem
 demo_mnt="/boot"
@@ -10,8 +11,16 @@ mkdir -p $demo_mnt || {
     exit 1
 }
 
-mount -t ext4 -o defaults LABEL=ONIE-DEMO $demo_mnt || {
-    echo "Error: Unable to mount $demo_dev on $demo_mnt"
+demo_type=$(demo_type_get)
+label="ONIE-DEMO-${demo_type}"
+
+[ -n "$label" ] || {
+    echo "Error: Unable to find DEMO_TYPE on kernel command line"
+    exit 1
+}
+
+mount -t ext4 -o defaults LABEL=$label $demo_mnt || {
+    echo "Error: Unable to mount LABEL=$label on $demo_mnt"
     exit 1
 }
 

@@ -146,3 +146,29 @@ system.  When the system starts up again, ONIE will see the
 
 See the :ref:`nos_intf_update` section for more about the NOS update
 interface.
+
+.. _powerpc_hw_diag:
+
+*************************************************
+PowerPC Hardware Diagnostics Interface [Optional]
+*************************************************
+
+This section describes a method for providing a hardware diagnostic
+for PowerPC platforms.  See the :ref:`hw_diag` section for more about
+providing a hardware diagnostic.
+
+The preferred storage location for the hardware diagnostic image is in
+a NOR flash partition.  See the :ref:`nor_flash_partition` section for
+more information on the NOR flash partitioning.
+
+The diag image is located in the NOR flash in a specific ``diag``
+partition.  This allows the NOS installer to clearly identify the
+partition and avoid overwriting it.
+
+In order to boot the diagnostic image, the implementation must create
+a new U-Boot environment variable called ``boot_diag``.  This variable
+contains all the U-Boot commands necessary to load and boot the
+diagnostic image.
+
+To invoke the diagnostic image the user would type ``run boot_diag``
+from the U-Boot loader prompt.
