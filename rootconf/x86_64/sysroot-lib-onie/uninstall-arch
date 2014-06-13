@@ -93,6 +93,16 @@ should_delete_gpt_partition()
             # echo "skipping ONIE part"
             return 1
             ;;
+        *-DIAG)
+            # check system attributes
+            attr=$(sgdisk -i $2 /dev/$1 | grep 'Attribute flags')
+            attr=${attr##*: }
+            if [ "$attr" = "0000000000000001" ] ; then
+                # system attribute is set, skip this part
+                # echo "skipping DIAG part"
+                return 1
+            fi
+            ;;
         *)
             return 0
             ;;
@@ -110,7 +120,7 @@ should_delete_gpt_partition()
 should_delete_msdos_partition()
 {
     # check for ONIE-BOOT file system volume label
-    blkid /dev/${1}$2 | grep -q ONIE-BOOT && return 1
+    blkid /dev/${1}$2 | egrep -q '(ONIE-BOOT|-DIAG$)' && return 1
     return 0
 }
 
@@ -118,15 +128,16 @@ uninstall_system()
 {
 
     # Clean up block device that contains ONIE
-    blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' | sed -e 's/[0-9]://' | head -n 1 | sed -e 's#/dev/##')
+    onie_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' | sed -e 's/:.*$//')
+    blk_dev=$(echo $onie_dev | sed -e 's/[0-9]//' | sed -e 's#/dev/##')
 
     [ -b "/dev/$blk_dev" ] || {
         echo "Error: Unable to determine block device of ONIE install"
         exit 1
     }
 
-    # Wipe out and delete all partitions, except for the ONIE and GRUB
-    # partitions.
+    # Wipe out and delete all partitions, except for important ones,
+    # like GRUB, ONIE and possibly a DIAG.
     ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev//" | while read part ; do
         if eval $should_delete_partition $blk_dev $part ; then
             erase_part $blk_dev $part
@@ -137,12 +148,35 @@ uninstall_system()
     # probably installed there.
 
     boot_dev="/dev/$blk_dev"
+
+    # Install ONIE GRUB in MBR and ONIE partition
     core_img="$onie_boot_mnt/grub/i386-pc/core.img"
     [ -f "$core_img" ] && chattr -i $core_img
     grub-install --boot-directory="$onie_boot_mnt" --recheck "$boot_dev" || {
         echo "ERROR: grub-install failed on: $boot_dev"
         exit 1
     }
+    grub_install_log=$(mktemp)
+    grub-install --force --boot-directory="$onie_boot_mnt" \
+        --recheck "$onie_dev" > /$grub_install_log 2>&1 || {
+        echo "ERROR: grub-install failed on: $onie_dev"
+        cat $grub_install_log && rm -f $grub_install_log
+        exit 1
+    }
+    rm -f $grub_install_log
+    [ -f "$core_img" ] && chattr +i $core_img
+
+    # If there is a diag partition add a chainload entry for it.
+    diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
+    if [ -n "$diag_label" ] ; then
+        cat <<EOF >> $grub_root_dir/grub.cfg
+menuentry '$diag_label $onie_platform' {
+        search --no-floppy --label --set=root $diag_label
+        echo    'Loading $diag_label $onie_platform ...'
+        chainloader +1
+}
+EOF
+    fi
 
     # Return to install mode on the next boot
     onie-boot-mode -q -o install
