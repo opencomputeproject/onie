@@ -15,7 +15,7 @@ For identifying the running platform. ONIE uses the following definitions:
 - arch -- The CPU architecture.  The currently supported architectures are:
 
   - powerpc
-  - x86
+  - x86_64
 
 - machine -- A string of the form ``<VENDOR>_<MODEL>``.
 
