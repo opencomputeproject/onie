@@ -103,6 +103,16 @@ ifeq ($(REQUIRE_CXX_LIBS),yes)
   SYSROOT_LIBS += libstdc++.so libstdc++.so.6 libstdc++.so.6.0.17
 endif
 
+# Optionally add debug utilities
+DEBUG_UTILS =
+
+# Add strace to the distribution by default
+STRACE_ENABLE ?= yes
+
+ifeq ($(STRACE_ENABLE),yes)
+DEBUG_UTILS += $(XTOOLS_DEBUG_ROOT)/usr/bin/strace
+endif
+
 # sysroot-check does the following:
 #
 # - strip the ELF binaries (grub moduels and kernel)
@@ -115,6 +125,10 @@ sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
 		cp -av $(DEV_SYSROOT)/lib/$$file $(SYSROOTDIR)/lib/ || exit 1 ; \
+	done
+	$(Q) for file in $(DEBUG_UTILS) ; do \
+		cp -av $$file $(SYSROOTDIR)/usr/bin || exit 1 ; \
+		chmod +w $(SYSROOTDIR)/usr/bin/$$(basename $$file) ; \
 	done
 	$(Q) find $(SYSROOTDIR) -path */lib/grub/* -prune -o \( -type f -print0 \) | xargs -0 file | \
 		grep ELF | awk -F':' '{ print $$1 }' | xargs $(CROSSBIN)/$(CROSSPREFIX)strip
