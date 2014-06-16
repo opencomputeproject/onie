@@ -63,16 +63,16 @@ uclibc-install: $(UCLIBC_INSTALL_STAMP)
 $(UCLIBC_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(UCLIBC_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing runtime uclibc in $(SYSROOTDIR) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'	\
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	\
 		$(MAKE) -C $(UCLIBC_DIR) $(UCLIBC_VERBOSE) \
 		EXTRA_CFLAGS=-Wl,--hash-style=sysv \
 		KERNEL_HEADERS=$(KERNEL_HEADERS)  \
 		CROSS=$(CROSSPREFIX)	\
 		PREFIX=$(SYSROOTDIR) install_runtime install_utils
-	$(Q) sudo $(CROSSBIN)/$(CROSSPREFIX)strip $(SYSROOTDIR)/{usr/bin/getconf,usr/bin/ldd,sbin/ldconfig} # fixup for unstripped binaries
-	$(Q) sudo ln -fs ld-uClibc.so.0 $(SYSROOTDIR)/lib/ld.so.1 # fixup for ldd, getconf and ldconfig
+	$(Q) $(CROSSBIN)/$(CROSSPREFIX)strip $(SYSROOTDIR)/{usr/bin/getconf,usr/bin/ldd,sbin/ldconfig} # fixup for unstripped binaries
+	$(Q) ln -fs ld-uClibc.so.0 $(SYSROOTDIR)/lib/ld.so.1 # fixup for ldd, getconf and ldconfig
 	$(Q) echo "==== Installing development uclibc in $(UCLIBC_DEV_SYSROOT) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)' 	\
+	$(Q) PATH='$(CROSSBIN):$(PATH)' 	\
 		$(MAKE) -C $(UCLIBC_DIR) $(UCLIBC_VERBOSE) \
 		EXTRA_CFLAGS=-Wl,--hash-style=sysv \
 		KERNEL_HEADERS=$(KERNEL_HEADERS) \
@@ -81,12 +81,12 @@ $(UCLIBC_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(UCLIBC_BUILD_STAMP)
 	$(Q) [ -d $(CROSSCOMPILER_LIBS) ] || \
 		(echo "Unable to find cross compiler libraries in $(CROSSCOMPILER_LIBS)" && \
 		exit 1)
-	$(Q) sudo ln -fs $(CROSSCOMPILER_LIBS) $(UCLIBC_DEV_SYSROOT)/usr/lib/
+	$(Q) ln -fs $(CROSSCOMPILER_LIBS) $(UCLIBC_DEV_SYSROOT)/usr/lib/
 	$(Q) touch $@
 
 CLEAN += uclibc-clean
 uclibc-clean:
-	$(Q) sudo rm -rf $(UCLIBC_DEV_SYSROOT)
+	$(Q) rm -rf $(UCLIBC_DEV_SYSROOT)
 	$(Q) rm -rf $(UCLIBC_BUILD_DIR)
 	$(Q) rm -f $(UCLIBC_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"

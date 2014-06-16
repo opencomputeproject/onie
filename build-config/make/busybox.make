@@ -76,15 +76,13 @@ busybox-install: $(BUSYBOX_INSTALL_STAMP)
 $(BUSYBOX_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(BUSYBOX_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing busybox in $(SYSROOTDIR) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'			\
+	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(BUSYBOX_DIR)			\
 		CONFIG_SYSROOT=$(UCLIBC_DEV_SYSROOT)		\
 		CONFIG_EXTRA_CFLAGS="-Os -muclibc -I$(KERNEL_HEADERS)"	\
 		CONFIG_PREFIX=$(SYSROOTDIR)			\
 		CROSS_COMPILE=$(CROSSPREFIX)			\
 		install
-	$(Q) sudo chown root.root $(SYSROOTDIR)/bin/busybox
-	$(Q) sudo chmod 4755 $(SYSROOTDIR)/bin/busybox
 	$(Q) touch $@
 
 CLEAN += busybox-clean

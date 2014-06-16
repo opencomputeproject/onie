@@ -65,7 +65,7 @@ lzo-install: $(LZO_INSTALL_STAMP)
 $(LZO_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(LZO_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing lzo in $(UCLIBC_DEV_SYSROOT) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'			\
+	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(LZO_DIR) install
 	$(Q) touch $@
 

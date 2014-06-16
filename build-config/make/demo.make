@@ -45,23 +45,25 @@ DEMO_TRIM = \
 PHONY += demo-sysroot-complete
 demo-sysroot-complete: $(DEMO_SYSROOT_COMPLETE_STAMP)
 $(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_COMPLETE_STAMP)
-	$(Q) sudo rm -rf $(DEMO_SYSROOTDIR)
+	$(Q) rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) echo "==== Copying existing ONIE sysroot ===="
-	$(Q) sudo cp -a $(SYSROOTDIR) $(DEMO_SYSROOTDIR)
-	$(Q) cd $(DEMO_SYSROOTDIR) && sudo rm $(DEMO_TRIM)
-	$(Q) sudo sed -i -e '/onie/d' $(DEMO_SYSROOTDIR)/etc/syslog.conf
-	$(Q) cd $(DEMO_OS_DIR) && sudo ./install $(DEMO_SYSROOTDIR)
+	$(Q) cp -a $(SYSROOTDIR) $(DEMO_SYSROOTDIR)
+	$(Q) cd $(DEMO_SYSROOTDIR) && rm $(DEMO_TRIM)
+	$(Q) sed -i -e '/onie/d' $(DEMO_SYSROOTDIR)/etc/syslog.conf
+	$(Q) cd $(DEMO_OS_DIR) && ./install $(DEMO_SYSROOTDIR)
 	$(Q) t=`mktemp`; echo "machine=$(MACHINE)" > $$t ; \
 		echo "platform=$(PLATFORM)" >> $$t ; \
-		sudo cp $$t $(DEMO_SYSROOTDIR)/scripts/machine.conf && rm -f $$t
-	$(Q) sudo cp $(MACHINEDIR)/demo/platform.conf $(DEMO_SYSROOTDIR)/scripts
+		cp $$t $(DEMO_SYSROOTDIR)/scripts/machine.conf && rm -f $$t
+	$(Q) cp $(MACHINEDIR)/demo/platform.conf $(DEMO_SYSROOTDIR)/scripts
 	$(Q) touch $@
 
 # This step creates the cpio archive and compresses it
 $(DEMO_SYSROOT_CPIO_XZ) : $(DEMO_SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for demo OS ===="
-	$(Q) ( cd $(DEMO_SYSROOTDIR) && \
-		sudo find . | sudo cpio --create -H newc > $(DEMO_SYSROOT_CPIO) )
+	$(Q) cp -p $(SYSROOT_DEV_CPIO) $(DEMO_SYSROOT_CPIO)
+	$(Q) fakeroot /bin/sh -c \
+		"cd $(DEMO_SYSROOTDIR) && \
+		find . | cpio --create -H newc --append -O $(DEMO_SYSROOT_CPIO)"
 	$(Q) xz --compress --force --check=crc32 -8 $(DEMO_SYSROOT_CPIO)
 
 $(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
@@ -91,7 +93,7 @@ $(DEMO_IMAGE_COMPLETE_STAMP): $(DEMO_BIN)
 
 CLEAN += demo-clean
 demo-clean:
-	$(Q) sudo rm -rf $(DEMO_SYSROOTDIR)
+	$(Q) rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) rm -f $(MBUILDDIR)/demo-* $(DEMO_UIMAGE) $(DEMO_BIN)
 	$(Q) rm -f $(DEMO_SYSROOT_COMPLETE_STAMP) $(DEMO_IMAGE_COMPLETE_STAMP)
 	$(Q) rm -f $(DEMO_UIMAGE_COMPLETE_STAMP)

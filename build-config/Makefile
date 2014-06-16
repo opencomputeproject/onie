@@ -113,7 +113,7 @@ UCLIBC_FLAGS=--sysroot=$(UCLIBC_DEV_SYSROOT) -muclibc -L$(CROSSCOMPILER_LIBS) -L
 #  Target Platform -- Usually specified on command line
 #
 MACHINE  ?= fsl_p2020rdbpca
-MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
+MACHINE_PREFIX = $(MACHINE)
 PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
 
 #-------------------------------------------------------------------------------
@@ -250,12 +250,12 @@ demo: $(KERNEL) $(DEMO_IMAGE)
 docs: html pdf
 
 clean: 	$(CLEAN)
-	$(Q) sudo rm -rf $(BUILDDIR)/images/*$(MACHINE_PREFIX)*
-	$(Q) sudo rm -rf $(MBUILDDIR)
+	$(Q) rm -rf $(BUILDDIR)/images/*$(MACHINE_PREFIX)*
+	$(Q) rm -rf $(MBUILDDIR)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM) ==="
 
 clean-all:
-	$(Q) sudo rm -rf $(BUILDDIR)/*
+	$(Q) rm -rf $(BUILDDIR)/*
 	$(Q) echo "=== Finished making $@ ==="
 
 PHONY += lsb-release-tag

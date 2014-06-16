@@ -9,6 +9,8 @@
 ROOTCONFDIR		= $(CONFDIR)
 SYSROOT_CPIO		= $(MBUILDDIR)/sysroot.cpio
 SYSROOT_CPIO_XZ		= $(SYSROOT_CPIO).xz
+SYSROOT_DEV_CPIO	= $(MBUILDDIR)/sysroot-dev.cpio
+IMAGE_VERSION		= $(LSB_RELEASE_TAG).$(ACC_ONIE_REV)
 UIMAGE			= $(IMAGEDIR)/$(MACHINE_PREFIX).uImage
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
@@ -28,7 +30,7 @@ PACKAGES_INSTALL_STAMPS = \
 	$(UCLIBC_INSTALL_STAMP) \
 	$(ZLIB_INSTALL_STAMP) \
 	$(BUSYBOX_INSTALL_STAMP) \
-	$(MTDUTILS_INSTALL_STAMP) \
+	$(E2FSPROGS_INSTALL_STAMP) \
 	$(DROPBEAR_INSTALL_STAMP)
 
 ifndef MAKE_CLEAN
@@ -46,11 +48,15 @@ endif
 PHONY += sysroot-complete
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
 $(SYSROOT_COMPLETE_STAMP): $(PACKAGES_INSTALL_STAMPS) $(RC_LOCAL_DEP)
-	$(Q) sudo rm -f $(SYSROOTDIR)/linuxrc
+	$(Q) rm -f $(SYSROOTDIR)/linuxrc
 	$(Q) echo "==== Installing the basic set of devices ===="
-	$(Q) sudo $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR)
-	$(Q) cd $(ROOTCONFDIR) && sudo ./install $(SYSROOTDIR)
-	$(Q) cd $(SYSROOTDIR) && sudo ln -fs sbin/init ./init
+	$(Q) fakeroot /bin/sh -c \
+		"$(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR) && \
+		cd $(SYSROOTDIR) && \
+		find ./dev | cpio --create -H newc > $(SYSROOT_DEV_CPIO)"
+	$(Q) rm -rf $(SYSROOTDIR)/dev && mkdir -p $(SYSROOTDIR)/dev
+	$(Q) cd $(ROOTCONFDIR) && ./install $(SYSROOTDIR)
+	$(Q) cd $(SYSROOTDIR) && ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_ID=onie" >> $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_RELEASE=$(LSB_RELEASE_TAG)" >> $(LSB_RELEASE_FILE)
@@ -66,34 +72,36 @@ $(SYSROOT_COMPLETE_STAMP): $(PACKAGES_INSTALL_STAMPS) $(RC_LOCAL_DEP)
 	$(Q) echo "onie_machine=$(MACHINE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_machine_rev=$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(MACHINE_CONF)
-	$(Q) sudo cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
-	$(Q) sudo cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
-	$(Q) sudo cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
+	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
+	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
+	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
 	$(Q) if [ -r $(RC_LOCAL) ] ; then \
-		sudo cp -a $(RC_LOCAL) $(SYSROOTDIR)/etc/rc.local ; \
+		cp -a $(RC_LOCAL) $(SYSROOTDIR)/etc/rc.local ; \
 	     fi
 	$(Q) touch $@
 
 # This step creates the cpio archive and compresses it
 $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for bootstrap ===="
-	$(Q) ( cd $(SYSROOTDIR) && \
-		sudo find . | sudo cpio --create -H newc > $(SYSROOT_CPIO) )
+	$(Q) cp -p $(SYSROOT_DEV_CPIO) $(SYSROOT_CPIO)
+	$(Q) fakeroot /bin/sh -c \
+		"cd $(SYSROOTDIR) && \
+		find . | cpio --create -H newc --append -O $(SYSROOT_CPIO)"
 	$(Q) xz --compress --force --check=crc32 -8 $(SYSROOT_CPIO)
 
 .SECONDARY: $(IMAGEDIR)/$(MACHINE_PREFIX).uImage
 
 $(IMAGEDIR)/%.uImage : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ)
 	$(Q) echo "==== Create $* u-boot multi-file initramfs uImage ===="
-	$(Q) ( cd $(IMAGEDIR) && mkimage -T multi -C gzip -a 0 -e 0 -n "$*" \
+	$(Q) ( cd $(IMAGEDIR) && mkimage -T multi -C gzip -a 0 -e 0 -n "$*.$(IMAGE_VERSION)" \
 		-d $(LINUXDIR)/vmlinux.bin.gz:$(SYSROOT_CPIO_XZ):$*.dtb $*.uImage )
 
 PHONY += image-bin
 image-bin: $(IMAGE_BIN_STAMP)
-$(IMAGE_BIN_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).uImage $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-bin.sh
+$(IMAGE_BIN_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).uImage $(SCRIPTDIR)/onie-mk-bin.sh
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE binary image ===="
 	$(Q) $(SCRIPTDIR)/onie-mk-bin.sh $(MACHINE_PREFIX) $(IMAGEDIR) \
-		$(MACHINEDIR) $(UBOOT_DIR) $(IMAGEDIR)/onie-$(MACHINE_PREFIX).bin
+		$(MACHINEDIR) $(UBOOT_DIR) $(IMAGEDIR)/onie-$(MACHINE_PREFIX).$(IMAGE_VERSION).bin
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
@@ -111,7 +119,7 @@ image-updater: $(IMAGE_UPDATER_STAMP)
 $(IMAGE_UPDATER_STAMP): $(IMAGEDIR)/$(MACHINE_PREFIX).uImage $(UBOOT_INSTALL_STAMP) $(SCRIPTDIR)/onie-mk-installer.sh
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE updater ===="
 	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh $(MACHINE_PREFIX) $(MACHINE_CONF) \
-		$(INSTALLER_DIR) $(IMAGEDIR) $(MACHINEDIR) $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
+		$(INSTALLER_DIR) $(IMAGEDIR) $(MACHINEDIR) $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX).$(IMAGE_VERSION)
 	$(Q) touch $@
 
 PHONY += image-complete
@@ -121,7 +129,7 @@ $(IMAGE_COMPLETE_STAMP): $(IMAGE_BIN_STAMP) $(IMAGE_UPDATER_STAMP)
 
 CLEAN += image-clean
 image-clean:
-	$(Q) rm -f $(IMAGEDIR)/onie-$(MACHINE_PREFIX).bin $(IMAGEDIR)/onie-installer-$(MACHINE_PREFIX).sh \
+	$(Q) rm -f $(IMAGEDIR)/onie-$(MACHINE_PREFIX).$(IMAGE_VERSION).bin $(IMAGEDIR)/onie-installer-$(MACHINE_PREFIX).$(IMAGE_VERSION).sh \
 		$(IMAGEDIR)/$(MACHINE_PREFIX).uImage $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 

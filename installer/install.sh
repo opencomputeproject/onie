@@ -16,6 +16,14 @@ cd $(dirname $0)
 true ${onie_machine_rev=0}
 
 fail=
+if [ "$onie_machine" = "es5652bt1-flf-zz" ] || [ "$onie_machine" = "accton_5652" ] ; then
+    onie_machine=as5600_52x
+elif [ "$onie_machine" = "es5652bt2-flf-zz" ] || [ "$onie_machine" = "accton_5652" ] ; then
+    onie_machine=as5610_52x
+elif [ "$onie_machine" = "es4654bf-flf-zz" ] || [ "$onie_machine" = "accton_4654" ] ; then
+    onie_machine=as4600_54t
+fi
+
 if [ "$onie_machine" != "$image_machine" ] ; then
     fail=yes
 fi

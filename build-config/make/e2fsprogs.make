@@ -57,28 +57,32 @@ $(E2FSPROGS_CONFIGURE_STAMP): $(UCLIBC_INSTALL_STAMP) $(ZLIB_INSTALL_STAMP) \
 			      $(LZO_INSTALL_STAMP) $(E2FSPROGS_PATCH_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure e2fsprogs-$(E2FSPROGS_VERSION) ===="
-	$(Q) cd $(E2FSPROGS_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
-		$(E2FSPROGS_DIR)/configure			\
-		--prefix=$(UCLIBC_DEV_SYSROOT)/usr		\
-		--host=$(TARGET)				\
-		--disable-tls					\
-		CC=$(CROSSPREFIX)gcc				\
-		CFLAGS="-Os -I$(KERNEL_HEADERS) $(UCLIBC_FLAGS)"
+	$(Q) cd $(E2FSPROGS_DIR) && PATH='$(CROSSBIN):$(PATH)'   \
+		$(E2FSPROGS_DIR)/configure			 \
+		--prefix=$(UCLIBC_DEV_SYSROOT)/usr     		 \
+		--host=$(TARGET)				 \
+		--disable-tls					 \
+		CC=$(CROSSPREFIX)gcc				 \
+		CFLAGS="-Os -I$(KERNEL_HEADERS) $(UCLIBC_FLAGS)" \
+		LDFLAGS="$(UCLIBC_FLAGS)"
 	$(Q) touch $@
 
 e2fsprogs-build: $(E2FSPROGS_BUILD_STAMP)
 $(E2FSPROGS_BUILD_STAMP): $(E2FSPROGS_NEW_FILES) $(E2FSPROGS_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building e2fsprogs-$(E2FSPROGS_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(E2FSPROGS_DIR)/lib/uuid
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(E2FSPROGS_DIR)
 	$(Q) touch $@
 
 e2fsprogs-install: $(E2FSPROGS_INSTALL_STAMP)
 $(E2FSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(E2FSPROGS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing e2fsprogs in $(UCLIBC_DEV_SYSROOT) ===="
-	$(Q) sudo PATH='$(CROSSBIN):$(PATH)'			\
-		$(MAKE) -C $(E2FSPROGS_DIR)/lib/uuid install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(E2FSPROGS_DIR) install
+	$(Q) cp $(UCLIBC_DEV_SYSROOT)/usr/sbin/mke2fs $(SYSROOTDIR)/sbin
+	$(Q) $(CROSSBIN)/$(CROSSPREFIX)strip $(SYSROOTDIR)/sbin/mke2fs
+	$(Q) cd $(SYSROOTDIR)/sbin && ln -fs mke2fs mkfs.ext2
+	$(Q) cd $(SYSROOTDIR)/sbin && ln -fs mke2fs mkfs.ext3
 	$(Q) touch $@
 
 CLEAN += e2fsprogs-clean
