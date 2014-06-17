@@ -1,0 +1,182 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Basic Debugging &mdash; Open Network Install Environment 2014.05 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '2014.05',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-45248701-1']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://' : 'http://') + 'stats.g.doubleclick.net/dc.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment 2014.05 documentation" href="../index.html" />
+    <link rel="up" title="Developer Documentation" href="index.html" />
+    <link rel="next" title="Contributing to ONIE" href="contributing.html" />
+    <link rel="prev" title="Build Instructions" href="building.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="contributing.html" title="Contributing to ONIE"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="building.html" title="Build Instructions"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="basic-debugging">
+<h1>Basic Debugging<a class="headerlink" href="#basic-debugging" title="Permalink to this headline">¶</a></h1>
+<p>When developing new software for ONIE sometimes you need a little
+help.</p>
+<div class="section" id="strace-1">
+<h2><tt class="docutils literal"><span class="pre">strace(1)</span></tt><a class="headerlink" href="#strace-1" title="Permalink to this headline">¶</a></h2>
+<p>The <a class="reference external" href="http://linux.die.net/man/1/strace">strace(1)</a> utility is very
+handy when developing and debugging programs.  Use it at runtime on
+the target platform to trace the system calls made by a program.</p>
+</div>
+<div class="section" id="dynamic-libraries">
+<h2>Dynamic Libraries<a class="headerlink" href="#dynamic-libraries" title="Permalink to this headline">¶</a></h2>
+<p>When trying to debug which dynamic libraries a program is trying to
+load the <a class="reference external" href="http://linux.die.net/man/1/ldd">ldd(1)</a> utility is very
+handy.  Doing this in an embedded cross-compile environment, however,
+can be a little challenging.  The ONIE project does not have <tt class="docutils literal"><span class="pre">ldd</span></tt>
+exactly, but we offer something very close.</p>
+<p>At runtime on the target platform you can get basic LDD information by
+setting the environment variable LD_TRACE_LOADED_OBJECTS=1.  For
+example:</p>
+<div class="highlight-python"><pre>ONIE:/ # LD_TRACE_LOADED_OBJECTS=1 /usr/bin/grub-mkimage
+        libdevmapper.so.1.02 =&gt; /usr/lib/libdevmapper.so.1.02 (0x7fc806c29000)
+        libgcc_s.so.1 =&gt; /lib/libgcc_s.so.1 (0x7fc806a14000)
+        libc.so.0 =&gt; /lib/libc.so.0 (0x7fc8067c8000)
+        libpthread.so.0 =&gt; /lib/libpthread.so.0 (0x7fc8065b0000)
+        libm.so.0 =&gt; /lib/libm.so.0 (0x7fc8063a3000)
+        libdl.so.0 =&gt; /lib/libdl.so.0 (0x7fc80619f000)
+        ld64-uClibc.so.0 =&gt; /lib/ld64-uClibc.so.0 (0x7fc806e62000)</pre>
+</div>
+<p>For debugging LDD at build time the ONIE project includes a
+<tt class="docutils literal"><span class="pre">cross-ldd</span></tt> you can run on your build host.  The cross-ldd is
+implemented as a Makefile target.  The core of cross-ldd comes from
+the <a class="reference external" href="http://crosstool-ng.org/">crosstool-NG project</a>.</p>
+<p>For example to inspect the PowerPC /usr/bin/dropbearmulti binary from
+your x86_64 build host you would invoke the Makefile &#8216;ldd&#8217; target like
+this:</p>
+<div class="highlight-python"><pre>monster-04:~/onie-cn/onie/build-config$ gmake -j48 MACHINEROOT=../machine MACHINE=fsl_p2020rdbpca ldd LDD_TARGET=usr/bin/dropbearmulti
+        libcrypt.so.0 =&gt; /lib/libcrypt.so.0 (0xdeadbeef)
+        libc.so.0 =&gt; /lib/libc.so.0 (0xdeadbeef)
+        ld-uClibc.so.0 =&gt; /lib/ld-uClibc.so.0 (0xdeadbeef)
+        libutil.so.0 =&gt; /lib/libutil.so.0 (0xdeadbeef)
+        libz.so.1 =&gt; /usr/lib/libz.so.1 (0xdeadbeef)
+        libgcc_s.so.1 =&gt; /lib/libgcc_s.so.1 (0xdeadbeef)
+        libm.so.0 =&gt; /lib/libm.so.0 (0xdeadbeef)</pre>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/ONIE-logo-green-160x60.png" alt="Logo"/>
+            </a></p>
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Basic Debugging</a><ul>
+<li><a class="reference internal" href="#strace-1"><tt class="docutils literal"><span class="pre">strace(1)</span></tt></a></li>
+<li><a class="reference internal" href="#dynamic-libraries">Dynamic Libraries</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="building.html"
+                        title="previous chapter">Build Instructions</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="contributing.html"
+                        title="next chapter">Contributing to ONIE</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="../_sources/developers/debugging.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="contributing.html" title="Contributing to ONIE"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="building.html" title="Build Instructions"
+             >previous</a> |</li>
+        <li><a href="../index.html">Open Network Install Environment 2014.05 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Developer Documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright .
+    </div>
+  </body>
+</html>

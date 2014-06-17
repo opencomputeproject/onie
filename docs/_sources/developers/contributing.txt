@@ -49,12 +49,43 @@ Step #6 can seem kind of brutal at first -- your code gets beat up in
 public on the mailing list.  But it is not personal.  It is all about
 code quality, sound design and being open.
 
+General Patching Philosophy
+---------------------------
+
+One of the ONIE project goals is to maintain high standards for
+software quality and engineering discipline.  In that spirit, here are
+some general comments regarding patch submission:
+
+1. Each patch should only contain *one* logical change.  A patch
+   should not contain multiple, unrelated changes.
+
+2. Each patch commit message must have the following:
+
+  - a short one line summary
+
+  - what problem the patch solves (why do we need the patch)
+
+  - how you tested the patch
+
+3. For sending patches to the mailing list please send the output of
+   `git format-patch
+   <https://www.kernel.org/pub/software/scm/git/docs/git-format-patch.html>`_.
+   This ensures the patch is appropriately attributed to you.
+
+4. Alternatively you can use GitHub `git pull requests
+   <https://help.github.com/articles/using-pull-requests>`_ for
+   upstreaming your patches.  The ONIE project is following the *fork
+   and pull* model.
+
+Pull request can be easier to use then sending patches via email, as
+some email client mangle patch attachments.
+
 .. _creating_stg_patches:
 
 Patching ONIE Using stgit
 -------------------------
 
-This technical note describes the workflow used at Cumulus Networks to
+This section describes the workflow used at Cumulus Networks to
 develop and maintain the patches that comprise the bulk of ONIE.
 
 By way of example, patching U-Boot for the Freescale P2020RDB-PCA
