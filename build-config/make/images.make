@@ -157,6 +157,9 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-bin ] ; then \
 		cp $(MACHINEDIR)/rootconf/sysroot-bin/* $(SYSROOTDIR)/bin ; \
 	     fi
+	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-etc ] ; then \
+		cp $(MACHINEDIR)/rootconf/sysroot-etc/* $(SYSROOTDIR)/etc ; \
+	     fi
 	$(Q) cd $(SYSROOTDIR) && ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_ID=onie" >> $(LSB_RELEASE_FILE)
@@ -167,7 +170,11 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) echo "VERSION=\"$(LSB_RELEASE_TAG)\"" >> $(OS_RELEASE_FILE)
 	$(Q) echo "ID=linux" >> $(OS_RELEASE_FILE)
 	$(Q) rm -f $(MACHINE_CONF)
+ifdef ACCTON_REV
+	$(Q) echo "onie_version=$(ACCTON_VERSION)" >> $(MACHINE_CONF)
+else
 	$(Q) echo "onie_version=$(LSB_RELEASE_TAG)" >> $(MACHINE_CONF)
+endif
 	$(Q) echo "onie_vendor_id=$(VENDOR_ID)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_platform=$(RUNTIME_ONIE_PLATFORM)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_machine=$(RUNTIME_ONIE_MACHINE)" >> $(MACHINE_CONF)
@@ -249,6 +256,14 @@ RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
 RECOVERY_ISO_STAMP	= $(STAMPDIR)/recovery-iso
 PXE_EFI64_STAMP		= $(STAMPDIR)/pxe-efi64
 
+RECOVERY_SYSLINUX_CFG	= $(shell if test -r $(MACHINEDIR)/recovery/syslinux.cfg; then \
+			  echo $(MACHINEDIR)/recovery/syslinux.cfg; else \
+			  echo $(RECOVERY_CONF_DIR)/syslinux.cfg; fi )
+
+RECOVERY_GRUBPXE_CFG	= $(shell if test -r $(MACHINEDIR)/recovery/grub-pxe.cfg; then \
+			  echo $(MACHINEDIR)/recovery/grub-pxe.cfg; else \
+			  echo $(RECOVERY_CONF_DIR)/grub-pxe.cfg; fi )
+
 PHONY += pxe-efi64 recovery-initrd recovery-iso
 
 # Make an initrd based on the ONIE sysroot that also includes the ONIE
@@ -265,7 +280,7 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 
 # Make hybrid .iso image containing the ONIE kernel and recovery intrd
 recovery-iso: $(RECOVERY_ISO_STAMP)
-$(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cfg $(RECOVERY_CONF_DIR)/syslinux.cfg
+$(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_GRUBPXE_CFG) $(RECOVERY_SYSLINUX_CFG)
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery Hybrid iso ===="
 	$(Q) rm -rf $(RECOVERY_ISO_SYSROOT)
 	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)
@@ -277,9 +292,9 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 		exit 1; }
 	$(Q) cp /usr/lib/syslinux/isolinux.bin $(RECOVERY_ISO_SYSROOT)
 	$(Q) cp /usr/lib/syslinux/menu.c32 $(RECOVERY_ISO_SYSROOT)
-	$(Q) cp $(RECOVERY_CONF_DIR)/syslinux.cfg $(RECOVERY_ISO_SYSROOT)
+	$(Q) cp $(RECOVERY_SYSLINUX_CFG) $(RECOVERY_ISO_SYSROOT)
 	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)/boot/grub
-	$(Q) cat $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
+	$(Q) cat $(MACHINE_CONF) $(RECOVERY_GRUBPXE_CFG) > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
 	$(Q) genisoimage -r -V "ONIE-RECOVERY" -cache-inodes -J -l -b isolinux.bin	\
 		-c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table		\
 		-o $(RECOVERY_ISO_IMAGE) $(RECOVERY_ISO_SYSROOT)

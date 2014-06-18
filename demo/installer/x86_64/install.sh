@@ -159,8 +159,19 @@ grub_cfg=$(mktemp)
 # GRUB_SERIAL_COMMAND
 # GRUB_CMDLINE_LINUX
 
-export GRUB_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
-export GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"
+[ -r ./platform.conf ] && {
+. ./platform.conf
+}
+
+[ -n "${GRUB_SERIAL_COMMAND}" ] || {
+    GRUB_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
+}
+export GRUB_SERIAL_COMMAND
+
+[ -n "${GRUB_CMDLINE_LINUX}" ] || {
+    GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"
+}
+export GRUB_CMDLINE_LINUX
 
 # Add common configuration, like the timeout and serial console.
 (cat <<EOF
