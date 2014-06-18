@@ -14,8 +14,8 @@ endif
 # http://www.iana.org/assignments/enterprise-numbers
 VENDOR_ID = 259
 
-ACC_ONIE_REV	?= 5
-ACC_UBOOT_REV	?= 3.0.1.7
+ACC_ONIE_REV	?= 6
+ACC_UBOOT_REV	?= 3.0.1.8
 
 #-------------------------------------------------------------------------------
 #
