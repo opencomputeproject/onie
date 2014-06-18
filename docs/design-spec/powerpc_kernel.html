@@ -161,11 +161,11 @@ boot time to invoke the correct platform initialization routines. For example:</
 <p>See how the <tt class="docutils literal"><span class="pre">compatible</span></tt> property is used in <a class="reference internal" href="#platform-support-c-file"><em>Platform Support C File</em></a> below.</p>
 </div>
 <div class="section" id="nor-flash-partitioning">
-<h3>NOR Flash Partitioning<a class="headerlink" href="#nor-flash-partitioning" title="Permalink to this headline">¶</a></h3>
+<span id="nor-flash-partition"></span><h3>NOR Flash Partitioning<a class="headerlink" href="#nor-flash-partitioning" title="Permalink to this headline">¶</a></h3>
 <p>The NOR flash partitioning scheme is very important for U-Boot and
 ONIE.  For the QorIQ platform, the <tt class="docutils literal"><span class="pre">/localbus/nor</span></tt> node defines how the
 NOR flash is partitioned.</p>
-<p>For an ONIE system with a 32MB NOR flash, the partitioning looks like:</p>
+<p>For an ONIE system the partitioning looks like:</p>
 <table border="1" class="docutils">
 <colgroup>
 <col width="15%" />
@@ -180,18 +180,22 @@ NOR flash is partitioned.</p>
 </thead>
 <tbody valign="top">
 <tr class="row-even"><td>open</td>
-<td>~ 28MB</td>
+<td>&#8212;</td>
 <td>Leftover space for use by the operating system.</td>
 </tr>
-<tr class="row-odd"><td>onie</td>
+<tr class="row-odd"><td>diag</td>
+<td>&#8212;</td>
+<td>Space occupied by hardware diagnostics [optional].</td>
+</tr>
+<tr class="row-even"><td>onie</td>
 <td>4MB</td>
 <td>Space occupied by the ONIE kernel and <tt class="docutils literal"><span class="pre">initramfs</span></tt>.</td>
 </tr>
-<tr class="row-even"><td>uboot-env</td>
+<tr class="row-odd"><td>uboot-env</td>
 <td>64KB (1 sector)</td>
 <td>Space occupied by the U-Boot environment variables.</td>
 </tr>
-<tr class="row-odd"><td>uboot</td>
+<tr class="row-even"><td>uboot</td>
 <td>512KB</td>
 <td>Space occupied by the U-Boot binary.</td>
 </tr>
@@ -207,22 +211,27 @@ NOR flash is partitioned.</p>
         device-width = &lt;0x2&gt;;
         byteswap;
         partition@0 {
-                /* Entire flash minus (u-boot + onie) */
-                reg = &lt;0x00000000 0x07b60000&gt;;
+                /* Entire flash minus (u-boot + onie + diag) */
+                reg = &lt;0x00000000 0x07760000&gt;;
                 label = "open";
         };
         partition@1 {
+                /* Optional hardware diagnostic image, 4MB */
+                reg = &lt;0x07760000 0x00400000&gt;;
+                label = "diag";
+        };
+        partition@2 {
                 /* 4MB onie */
                 reg = &lt;0x07b60000 0x00400000&gt;;
                 label = "onie";
         };
-        partition@2 {
+        partition@3 {
                 /* 128KB, 1 sector */
                 reg = &lt;0x07f60000 0x00020000&gt;;
                 label = "uboot-env";
                 env_size = &lt;0x2000&gt;;
         };
-        partition@3 {
+        partition@4 {
                 /* 512KB u-boot */
                 reg = &lt;0x07f80000 0x00080000&gt;;
                 label = "uboot";
@@ -247,6 +256,13 @@ file <tt class="docutils literal"><span class="pre">include/configs/onie_common_
 is used at runtime to facilitate the reading and writing
 of U-Boot environment variables by an operating system
 installer.</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The <tt class="docutils literal"><span class="pre">diag</span></tt> partition is optional and is intended to be
+used by the hardware vendor to provide a diagnostic image.
+The size of the diagnostic partition is only constrained by
+the total size of the NOR flash.</p>
 </div>
 </div>
 </div>

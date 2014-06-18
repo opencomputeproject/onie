@@ -66,6 +66,8 @@ boot time to invoke the correct platform initialization routines. For example::
 
 See how the ``compatible`` property is used in :ref:`platform_support_c_file` below.
 
+.. _nor_flash_partition:
+
 NOR Flash Partitioning
 ----------------------
 
@@ -73,12 +75,13 @@ The NOR flash partitioning scheme is very important for U-Boot and
 ONIE.  For the QorIQ platform, the ``/localbus/nor`` node defines how the
 NOR flash is partitioned.
 
-For an ONIE system with a 32MB NOR flash, the partitioning looks like:
+For an ONIE system the partitioning looks like:
 
 ============   ===============   =======
 Region Label   Typical Size      Purpose
 ============   ===============   =======
-open           ~ 28MB            Leftover space for use by the operating system.
+open           ---               Leftover space for use by the operating system.
+diag           ---               Space occupied by hardware diagnostics [optional].
 onie           4MB               Space occupied by the ONIE kernel and ``initramfs``.
 uboot-env      64KB (1 sector)   Space occupied by the U-Boot environment variables.
 uboot          512KB             Space occupied by the U-Boot binary.
@@ -95,22 +98,27 @@ Here is an example NOR flash node where the NOR flash is 128MB in size::
           device-width = <0x2>;
           byteswap;
           partition@0 {
-                  /* Entire flash minus (u-boot + onie) */
-                  reg = <0x00000000 0x07b60000>;
+                  /* Entire flash minus (u-boot + onie + diag) */
+                  reg = <0x00000000 0x07760000>;
                   label = "open";
           };      
           partition@1 {
+                  /* Optional hardware diagnostic image, 4MB */
+                  reg = <0x07760000 0x00400000>;
+                  label = "diag";
+          };      
+          partition@2 {
                   /* 4MB onie */
                   reg = <0x07b60000 0x00400000>;
                   label = "onie";
           };
-          partition@2 {
+          partition@3 {
                   /* 128KB, 1 sector */
                   reg = <0x07f60000 0x00020000>;
                   label = "uboot-env";
                   env_size = <0x2000>;
           };
-          partition@3 {
+          partition@4 {
                   /* 512KB u-boot */
                   reg = <0x07f80000 0x00080000>;
                   label = "uboot";
@@ -133,6 +141,11 @@ Compare this partitioning scheme to the picture in :ref:`nor_flash_memory_layout
              is used at runtime to facilitate the reading and writing
              of U-Boot environment variables by an operating system
              installer.
+
+.. note:: The ``diag`` partition is optional and is intended to be
+          used by the hardware vendor to provide a diagnostic image.
+          The size of the diagnostic partition is only constrained by
+          the total size of the NOR flash.
 
 Kconfig and Makefile
 ====================

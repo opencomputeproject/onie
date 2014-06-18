@@ -195,3 +195,75 @@ To invoke the embed operation, the NOS runs the following commands::
 
 See the :ref:`nos_intf_update` section for more about the NOS update
 interface.
+
+.. _x86_hw_diag:
+
+*********************************************
+x86 Hardware Diagnostics Interface [Optional]
+*********************************************
+
+This section describes the method for providing a hardware diagnostic
+for x86 platforms.  See the :ref:`hw_diag` section for more about
+providing a hardware diagnostic.
+
+Installing the diag should be like installing a NOS.  Use the NOS
+installer mechanism to install the diag image into its own partition.
+This will allow hardware vendors to update the diag image
+independently from ONIE.
+
+All of the requirements specified in this section are illustrated by
+the ``Demo Diag OS``, which comes with the ONIE source code.  See the
+:ref:`demo_diag_os` section for more information.
+
+Disk Partitioning
+-----------------
+
+The diagnostic image resides on a hard disk partition.  This sections
+describes properties of the disk partition.
+
+GPT Partition Table
+===================
+
+A diagnostic image installer on a GPT based machine must implement the
+following:
+
+* name the diag partition ``<SOMETHING>-DIAG``.  See the `sgdisk
+  <http://www.rodsbooks.com/gdisk/sgdisk.html>`_ program and the
+  ``--change-name`` option for details.  The ``<SOMETHING>`` can be
+  any string that makes sense for the hardware vendor.
+
+* set the GPT ``system partition`` attribute bit (bit 0).  See the
+  `sgdisk <http://www.rodsbooks.com/gdisk/sgdisk.html>`_ program and
+  the ``--attributes`` option.
+
+* when creating the file system on the diag partition set the file
+  system label to ``<SOMETHING>-DIAG``, the same string as used for
+  the GPT partition label.  See the `mkfs.ext4
+  <http://linux.die.net/man/8/mkfs.ext4>`_ program and the ``-L``
+  option.
+
+The ``-DIAG`` suffix and the ``system partition`` bit will help a NOS
+installer recognize the partitions as *special* and leave them alone.
+This is how NOS installers can be sure to leave the diag partition
+intact.
+
+MSDOS Partition Table
+=====================
+
+For machines that use the MSDOS partition table, all we can do is use
+the file system label.  When creating the file system on the diag
+partition set the file system label to ``<SOMETHING>-DIAG``.  See the
+`mkfs.ext4 <http://linux.die.net/man/8/mkfs.ext4>`_ program and the
+``-L`` option.
+
+GRUB Considerations
+-------------------
+
+When installing the diagnostic image, install GRUB into the MBR, just
+like a normal OS would do.
+
+In addition, install GRUB into the diag partition.  This will allow a
+NOS to *chainload* the diag OS with low friction.
+
+The ``grub.cfg`` for the diag partition must contain all the GRUB menu
+entries the diag OS needs, plus one entry to chainload ONIE.

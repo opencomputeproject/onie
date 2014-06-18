@@ -42,6 +42,11 @@ The typical layout of a 32MB NOR flash for an ONIE system looks like this
   |                           |
   +---------------------------+
   |                           |
+  |   HW Diagnostic Image     |
+  |   Size: xx MB             |
+  |                           |
+  +---------------------------+
+  |                           |
   |                           |
   |                           |
   /   Unused, left for OS     /
@@ -50,6 +55,10 @@ The typical layout of a 32MB NOR flash for an ONIE system looks like this
   |                           |
   |                           |
   +---------------------------+  Low Memory Address
+
+.. note:: The hardware diagnostic partition is optional.  It is
+          intended to be used by hardware vendors to provide a
+          diagnostic image.
 
 Platform-Dependent Hardware Initialization
 ==========================================

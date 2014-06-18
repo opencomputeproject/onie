@@ -147,7 +147,7 @@ important steps to describe here.</p>
 <p>The walk through for installing GRUB and setting up the GRUB
 configuration is described in the <a class="reference internal" href="x86_boot_loader.html#x86-boot-loader"><em>x86 Boot Loader (GRUB2)</em></a> section.</p>
 <p>Also the provided demo OS installer exercises all of the steps
-described in this section.  See the <a class="reference internal" href="../demo_os/index.html#demo-os"><em>Demo OS Installer and OS Runtime</em></a> section for more
+described in this section.  See the <a class="reference internal" href="../demo_os/demo_os.html#demo-os"><em>Demo OS Installer and OS Runtime</em></a> section for more
 about the Demo OS.</p>
 <p>In subsequent sections, the following assumptions about the NOS are made:</p>
 <ol class="arabic simple">
@@ -217,6 +217,62 @@ interface.</p>
 </div>
 </div>
 </div>
+<div class="section" id="x86-hardware-diagnostics-interface-optional">
+<span id="x86-hw-diag"></span><h1>x86 Hardware Diagnostics Interface [Optional]<a class="headerlink" href="#x86-hardware-diagnostics-interface-optional" title="Permalink to this headline">¶</a></h1>
+<p>This section describes the method for providing a hardware diagnostic
+for x86 platforms.  See the <a class="reference internal" href="diag.html#hw-diag"><em>Hardware Diagnostics [Optional]</em></a> section for more about
+providing a hardware diagnostic.</p>
+<p>Installing the diag should be like installing a NOS.  Use the NOS
+installer mechanism to install the diag image into its own partition.
+This will allow hardware vendors to update the diag image
+independently from ONIE.</p>
+<p>All of the requirements specified in this section are illustrated by
+the <tt class="docutils literal"><span class="pre">Demo</span> <span class="pre">Diag</span> <span class="pre">OS</span></tt>, which comes with the ONIE source code.  See the
+<a class="reference internal" href="../demo_os/demo_diag.html#demo-diag-os"><em>Demo Diagnostic OS Installer</em></a> section for more information.</p>
+<div class="section" id="disk-partitioning">
+<h2>Disk Partitioning<a class="headerlink" href="#disk-partitioning" title="Permalink to this headline">¶</a></h2>
+<p>The diagnostic image resides on a hard disk partition.  This sections
+describes properties of the disk partition.</p>
+<div class="section" id="gpt-partition-table">
+<h3>GPT Partition Table<a class="headerlink" href="#gpt-partition-table" title="Permalink to this headline">¶</a></h3>
+<p>A diagnostic image installer on a GPT based machine must implement the
+following:</p>
+<ul class="simple">
+<li>name the diag partition <tt class="docutils literal"><span class="pre">&lt;SOMETHING&gt;-DIAG</span></tt>.  See the <a class="reference external" href="http://www.rodsbooks.com/gdisk/sgdisk.html">sgdisk</a> program and the
+<tt class="docutils literal"><span class="pre">--change-name</span></tt> option for details.  The <tt class="docutils literal"><span class="pre">&lt;SOMETHING&gt;</span></tt> can be
+any string that makes sense for the hardware vendor.</li>
+<li>set the GPT <tt class="docutils literal"><span class="pre">system</span> <span class="pre">partition</span></tt> attribute bit (bit 0).  See the
+<a class="reference external" href="http://www.rodsbooks.com/gdisk/sgdisk.html">sgdisk</a> program and
+the <tt class="docutils literal"><span class="pre">--attributes</span></tt> option.</li>
+<li>when creating the file system on the diag partition set the file
+system label to <tt class="docutils literal"><span class="pre">&lt;SOMETHING&gt;-DIAG</span></tt>, the same string as used for
+the GPT partition label.  See the <a class="reference external" href="http://linux.die.net/man/8/mkfs.ext4">mkfs.ext4</a> program and the <tt class="docutils literal"><span class="pre">-L</span></tt>
+option.</li>
+</ul>
+<p>The <tt class="docutils literal"><span class="pre">-DIAG</span></tt> suffix and the <tt class="docutils literal"><span class="pre">system</span> <span class="pre">partition</span></tt> bit will help a NOS
+installer recognize the partitions as <em>special</em> and leave them alone.
+This is how NOS installers can be sure to leave the diag partition
+intact.</p>
+</div>
+<div class="section" id="msdos-partition-table">
+<h3>MSDOS Partition Table<a class="headerlink" href="#msdos-partition-table" title="Permalink to this headline">¶</a></h3>
+<p>For machines that use the MSDOS partition table, all we can do is use
+the file system label.  When creating the file system on the diag
+partition set the file system label to <tt class="docutils literal"><span class="pre">&lt;SOMETHING&gt;-DIAG</span></tt>.  See the
+<a class="reference external" href="http://linux.die.net/man/8/mkfs.ext4">mkfs.ext4</a> program and the
+<tt class="docutils literal"><span class="pre">-L</span></tt> option.</p>
+</div>
+</div>
+<div class="section" id="grub-considerations">
+<h2>GRUB Considerations<a class="headerlink" href="#grub-considerations" title="Permalink to this headline">¶</a></h2>
+<p>When installing the diagnostic image, install GRUB into the MBR, just
+like a normal OS would do.</p>
+<p>In addition, install GRUB into the diag partition.  This will allow a
+NOS to <em>chainload</em> the diag OS with low friction.</p>
+<p>The <tt class="docutils literal"><span class="pre">grub.cfg</span></tt> for the diag partition must contain all the GRUB menu
+entries the diag OS needs, plus one entry to chainload ONIE.</p>
+</div>
+</div>
 
 
           </div>
@@ -238,6 +294,15 @@ interface.</p>
 <li><a class="reference internal" href="#x86-updating-and-embedding-onie">x86 Updating and Embedding ONIE</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li><a class="reference internal" href="#x86-hardware-diagnostics-interface-optional">x86 Hardware Diagnostics Interface [Optional]</a><ul>
+<li><a class="reference internal" href="#disk-partitioning">Disk Partitioning</a><ul>
+<li><a class="reference internal" href="#gpt-partition-table">GPT Partition Table</a></li>
+<li><a class="reference internal" href="#msdos-partition-table">MSDOS Partition Table</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#grub-considerations">GRUB Considerations</a></li>
 </ul>
 </li>
 </ul>
