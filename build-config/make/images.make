@@ -30,7 +30,6 @@ IMAGE			= $(IMAGE_COMPLETE_STAMP)
 LSB_RELEASE_FILE = $(MBUILDDIR)/lsb-release
 OS_RELEASE_FILE	 = $(MBUILDDIR)/os-release
 MACHINE_CONF	 = $(MBUILDDIR)/machine.conf
-RC_LOCAL	 = $(abspath $(MACHINEDIR)/rc.local)
 
 INSTALLER_DIR	= $(abspath ../installer)
 
@@ -76,7 +75,6 @@ SYSROOT_NEW_FILES += $(shell \
   ifneq ($(strip $(SYSROOT_NEW_FILES)),)
     $(shell rm -f $(SYSROOT_COMPLETE_STAMP))
   endif
-  RC_LOCAL_DEP = $(shell test -r $(RC_LOCAL) && echo $(RC_LOCAL))
 endif
 
 PHONY += sysroot-check sysroot-complete
@@ -156,7 +154,7 @@ RUNTIME_ONIE_MACHINE	?= $(MACHINE)
 RUNTIME_ONIE_PLATFORM	?= $(ARCH)-$(RUNTIME_ONIE_MACHINE)-r$(MACHINE_REV)
 
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
-$(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
+$(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) rm -f $(SYSROOTDIR)/linuxrc
 	$(Q) cd $(ROOTCONFDIR) && ./install default $(SYSROOTDIR)
 	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie ] ; then \
@@ -194,9 +192,6 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP) $(RC_LOCAL_DEP)
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
-	$(Q) if [ -r $(RC_LOCAL) ] ; then \
-		cp -a $(RC_LOCAL) $(SYSROOTDIR)/etc/rc.local ; \
-	     fi
 	$(Q) touch $@
 
 # This step creates the cpio archive and compresses it
