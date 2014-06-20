@@ -319,11 +319,11 @@ PHONY += machine-prefix
 machine-prefix:
 	$(Q) echo $(MACHINE_PREFIX)
 
-# Install required build packages for a debian based build host
+# Install required build packages for a x86_64 debian based build host
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf \
 				  gperf device-tree-compiler python-all-dev genisoimage \
 				  syslinux-common autoconf automake bison flex texinfo libtool \
-				  lib32ncurses5-dev realpath gawk
+				  realpath gawk
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
