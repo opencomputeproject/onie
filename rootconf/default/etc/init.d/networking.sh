@@ -36,9 +36,9 @@ config_ethmgmt_dhcp4()
     # no default args
     udhcp_args="$(udhcpc_args) -n -o"
     if [ "$1" = "discover" ] ; then
-        udhcp_args="$udhcp_args -t 3 -T 3"
-    else
         udhcp_args="$udhcp_args -t 5 -T 3"
+    else
+        udhcp_args="$udhcp_args -t 15 -T 3"
     fi
     udhcp_request_opts=
     for o in subnet broadcast router domain hostname ntpsrv dns logsrv ; do
