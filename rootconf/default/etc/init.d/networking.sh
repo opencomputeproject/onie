@@ -6,8 +6,6 @@ PATH=/usr/bin:/usr/sbin:/bin:/sbin
 
 import_cmdline
 
-fallback_active=/var/run/.fallback_active
-
 # Static ethernet management configuration
 config_ethmgmt_static()
 {
@@ -27,18 +25,12 @@ config_ethmgmt_dhcp6()
     # TODO
     # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
 
-    # If already using the fallback IP stop
-    [ -r "$fallback_active" ] && return 1
-
     return 1
 }
 
 # DHCPv4 ethernet management configuration
 config_ethmgmt_dhcp4()
 {
-    # If already using the fallback IP stop
-    [ -r "$fallback_active" ] && return 1
-
     intf_list=$(net_intf)
 
     # no default args
@@ -88,8 +80,6 @@ config_ethmgmt_fallback()
 
     hostname $default_hn
 
-    touch $fallback_active
-
 }
 
 # Configure the management interface
@@ -111,9 +101,5 @@ config_ethmgmt()
     config_ethmgmt_dhcp4 "$*"  && return
     config_ethmgmt_fallback "$*"
 }
-
-if [ "$1" = "start" ] ; then
-    rm -f $fallback_active
-fi
 
 config_ethmgmt "$*"
