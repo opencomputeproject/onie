@@ -142,7 +142,7 @@ INITRAMFSDIR	=  $(MBUILDDIR)/initramfs
 TREEDIRS     += $(STAMPDIR) $(STAGE_SYSROOT) $(INITRAMFSDIR)
 
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter lsb-release-tag help distclean %build-host doc% %html %pdf, $(MAKECMDGOALS)))
+  ifeq (,$(filter onie-release-tag help distclean %build-host doc% %html %pdf, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINEDIR)')
       $(warning You must set the MACHINE= variable when invoking make.)
@@ -171,28 +171,63 @@ $(TREE_STAMP): $(PROJECT_STAMP)
 
 #-------------------------------------------------------------------------------
 #
-# Determine build id tag
+# Determine the final ONIE version string, stored in the variable
+# $(LSB_RELEASE_TAG).
 #
-# - The version is derived from the current git branch and the build
-# - date.
+# This string is constructed from two parts:
 #
-LSB_RELEASE_TAG	?= $(shell [ -r ./conf/lsb-release ] && cat ./conf/lsb-release)
-ifeq ($(LSB_RELEASE_TAG),)
+# Part 1 -- This is the "core ONIE" version string, identifying the
+# particular ONIE release.  This string is stored in
+# $(ONIE_RELEASE_TAG).
+#
+# Part 2 -- This optional string contains additional information a
+# hardware vendor wants to append to the $(ONIE_RELEASE_TAG) variable.
+#
+# The $(ONIE_RELEASE_TAG) string is built as follows, in priority
+# order:
+#
+# 1. When running 'make' you can specify the $(ONIE_RELEASE_TAG)
+#    variable on the command line.
+#
+# 2. If the file onie/build-config/local.make exists it can optionally
+#    contain a definition of $(ONIE_RELEASE_TAG).  See the comments in
+#    that file for more details on how to use local.make.
+#
+# 3. If the file onie/build-config/conf/onie-release exists then use
+#    the contents of that file.  The quarterly release branches of
+#    ONIE use this method, i.e. the branch contains the file
+#    onie/build-config/conf/onie-release.
+#
+#    Note: The development master branch does not contain this file.
+#
+# 4. During development $(ONIE_RELEASE_TAG) is constructed from the
+#    current branch name and the current build date.
+#
+# To form the final version string, $(LSB_RELEASE_TAG), the following
+# strings are appended to $(ONIE_RELEASE_TAG).
+#
+# 1. The value of $(VENDOR_VERSION) is appended to
+#    $(ONIE_RELEASE_TAG).  This allows hardware vendors to apply their
+#    own versioning information to each machine.
+#
+# 2. If the current branch has uncommitted files then the string
+#    "-dirty" is appended to the final string.
+
+ONIE_RELEASE_TAG	?= $(shell [ -r ./conf/onie-release ] && cat ./conf/onie-release)
+ifeq ($(ONIE_RELEASE_TAG),)
   GIT_BRANCH = $(shell cd $(MACHINEDIR) && git rev-parse --abbrev-ref HEAD)
   BUILD_DATE = $(shell date +%Y%m%d%H%M)
   ifneq ($(RELEASE),)
     # Optional: If RELEASE specified on the command line insert the
     # string after the branch name.
-    LSB_RELEASE_TAG = $(GIT_BRANCH)-$(RELEASE)-$(BUILD_DATE)
+    ONIE_RELEASE_TAG = $(GIT_BRANCH)-$(RELEASE)-$(BUILD_DATE)
   else
-    LSB_RELEASE_TAG = $(GIT_BRANCH)-$(BUILD_DATE)
-  endif
-  DIRTY  = $(shell cd $(MACHINEDIR) && git status | \
-		egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo dirty)
-  ifneq ($(DIRTY),)
-    LSB_RELEASE_TAG := $(LSB_RELEASE_TAG)-$(DIRTY)
+    ONIE_RELEASE_TAG = $(GIT_BRANCH)-$(BUILD_DATE)
   endif
 endif
+DIRTY  = $(shell cd $(MACHINEDIR) && git status | \
+		egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo -dirty)
+LSB_RELEASE_TAG := $(ONIE_RELEASE_TAG)$(VENDOR_VERSION)$(DIRTY)
 
 #-------------------------------------------------------------------------------
 #
@@ -310,6 +345,10 @@ distclean: download-clean $(DIST_CLEAN)
 		echo " done ===" ; done
 	$(Q) rm -f $(PROJECT_STAMP)
 	$(Q) echo "=== Finished making $@ ==="
+
+PHONY += onie-release-tag
+onie-release-tag:
+	$(Q) echo $(ONIE_RELEASE_TAG)
 
 PHONY += lsb-release-tag
 lsb-release-tag:
