@@ -27,5 +27,7 @@ touch "$cpio_archive" || {
 rm -f $cpio_archive
 
 echo "==== Installing the basic set of devices ===="
+rm -rf ${sysroot}/dev
+mkdir -p ${sysroot}/dev
 $device_script $sysroot
 cd $sysroot && find . | cpio --create -H newc > $cpio_archive
