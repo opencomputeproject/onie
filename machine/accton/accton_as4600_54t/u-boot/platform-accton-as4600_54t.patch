@@ -1,0 +1,3676 @@
+Platform support for the Accton as4600_54t
+
+diff --git a/arch/powerpc/cpu/mpc85xx/ddr-gen3.c b/arch/powerpc/cpu/mpc85xx/ddr-gen3.c
+index ef0dd1d..429274a 100644
+--- a/arch/powerpc/cpu/mpc85xx/ddr-gen3.c
++++ b/arch/powerpc/cpu/mpc85xx/ddr-gen3.c
+@@ -306,6 +306,8 @@ void fsl_ddr_set_memctl_regs(const fsl_ddr_cfg_regs_t *regs,
+ 			>> SDRAM_CFG_DBW_SHIFT);
+ 	timeout = ((total_gb_size_per_controller << (6 - bus_width)) * 100 /
+ 		(get_ddr_freq(0) >> 20)) << 1;
++
++	timeout *= 2;	/*Kenny Cheng: to prevent D_INIT*/
+ #ifdef CONFIG_SYS_FSL_ERRATUM_DDR111_DDR134
+ 	timeout_save = timeout;
+ #endif
+@@ -390,6 +392,7 @@ void fsl_ddr_set_memctl_regs(const fsl_ddr_cfg_regs_t *regs,
+ 
+ 	/* 9. Poll until dinit is cleared */
+ 	timeout = timeout_save;
++	timeout *= 2;	/*Kenny Cheng: to prevent timeout*/
+ 	debug("Need to wait up to %d * 10ms\n", timeout);
+ 	while ((in_be32(&ddr->sdram_cfg_2) & SDRAM_CFG2_D_INIT) &&
+ 		(timeout >= 0)) {
+diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
+index 5595329..6a7bf4b 100644
+--- a/arch/powerpc/lib/board.c
++++ b/arch/powerpc/lib/board.c
+@@ -851,15 +851,10 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	sc3_read_eeprom();
+ #endif
+ 
+-#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET) || \
+-    defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
++#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET)
+ 	mac_read_from_eeprom();
+ #endif
+ 
+-#ifdef CONFIG_POPULATE_SERIAL_NUMBER
+-	populate_serial_number();
+-#endif
+-
+ #ifdef	CONFIG_HERMES
+ 	if ((gd->board_type >> 16) == 2)
+ 		bd->bi_ethspeed = gd->board_type & 0xFFFF;
+@@ -1008,11 +1003,6 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	last_stage_init();
+ #endif
+ 
+-#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
+-	WATCHDOG_RESET();
+-	env_write_default_if_crc_bad();
+-#endif
+-
+ #if defined(CONFIG_CMD_BEDBUG)
+ 	WATCHDOG_RESET();
+ 	bedbug_init();
+diff --git a/board/accton/as4600_54t/Makefile b/board/accton/as4600_54t/Makefile
+new file mode 100644
+index 0000000..28e3733
+--- /dev/null
++++ b/board/accton/as4600_54t/Makefile
+@@ -0,0 +1,59 @@
++#
++# Copyright 2004 Freescale Semiconductor.
++# (C) Copyright 2001-2006
++# Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++#
++# See file CREDITS for list of people who contributed to this
++# project.
++#
++# This program is free software; you can redistribute it and/or
++# modify it under the terms of the GNU General Public License as
++# published by the Free Software Foundation; either version 2 of
++# the License, or (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++# MA 02111-1307 USA
++#
++
++include $(TOPDIR)/config.mk
++
++LIB	= $(obj)lib$(BOARD).o
++
++COBJS-y	+= $(BOARD).o $(BOARD)_misc.o
++COBJS-y	+= law.o
++COBJS-y	+= tlb.o
++COBJS-y	+= usb.o
++COBJS-y	+= ddr.o
++COBJS-y	+= cmd_dram_test.o
++COBJS-$(CONFIG_FASTPATH) += bootf.o
++
++COBJS-y += fan_read_cmd.o
++
++SRCS	:= $(SOBJS-y:.o=.S) $(COBJS-y:.o=.c)
++OBJS	:= $(addprefix $(obj),$(COBJS-y))
++SOBJS	:= $(addprefix $(obj),$(SOBJS-y))
++
++$(LIB):	$(obj).depend $(OBJS) $(SOBJS)
++	$(call cmd_link_o_target, $(OBJS))
++
++clean:
++	rm -f $(OBJS) $(SOBJS)
++
++distclean:	clean
++	rm -f $(LIB) core *.bak $(obj).depend
++
++#########################################################################
++
++# defines $(obj).depend target
++include $(SRCTREE)/rules.mk
++
++sinclude $(obj).depend
++
++#########################################################################
+diff --git a/board/accton/as4600_54t/as4600_54t.c b/board/accton/as4600_54t/as4600_54t.c
+new file mode 100644
+index 0000000..85f7182
+--- /dev/null
++++ b/board/accton/as4600_54t/as4600_54t.c
+@@ -0,0 +1,599 @@
++/*
++ * Copyright 2004, 2007, 200 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2002 Scott McNutt <smcnutt@artesyncp.com>
++ *
++ * Curt Brune <curt@cumulusnetworks.com>
++ * Vidya Ravipati <vidya@cumulusnetworks.com>
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <command.h>
++#include <config.h>
++#include <pci.h>
++#include <asm/processor.h>
++#include <asm/mmu.h>
++#include <asm/cache.h>
++#include <asm/immap_85xx.h>
++#include <asm/fsl_pci.h>
++#include <asm/fsl_ddr_sdram.h>
++#include <asm/io.h>
++#include <asm/fsl_serdes.h>
++#include <miiphy.h>
++#include <libfdt.h>
++#include <fdt_support.h>
++#include <fsl_mdio.h>
++#include <tsec.h>
++#include <broadcom_phy.h>
++#include <asm/fsl_law.h>
++#include <asm/mp.h>
++#include <netdev.h>
++
++#include <spd_sdram.h>
++#include <i2c.h>
++#include <sys_eeprom.h>
++#include "board.h"
++#include <version.h>
++
++DECLARE_GLOBAL_DATA_PTR;
++
++static int boot_ok_flag=1;      /*1 OK, 0 fail*/
++int get_boot_ok(void)
++{
++        return boot_ok_flag;
++}
++
++void set_boot_ok(void)
++{
++        boot_ok_flag = 1;
++}
++
++void set_boot_flag_fail(void)
++{
++        boot_ok_flag = 0;
++}
++
++
++extern int check_fix_env(void);
++extern void GPIO_init(void);
++extern void BCM54616S_init(void);
++
++
++/*******************************************************************************
++ *
++ * Early initialization
++ *
++ */
++int board_early_init_f(void)
++{
++#if 0 /* change WDT disable to last_stage_init() */
++    u8 val;
++
++    /* disable watchdog */
++    val = cpld_rd(CPLD_REG_SYS_CONTROL);
++    val &= ~CPLD_WDT_ENABLE;
++    cpld_wr(CPLD_REG_SYS_CONTROL, val);
++#endif
++
++    return 0;
++}
++
++/*******************************************************************************
++ *
++ * Initialize board and the local bus
++ */
++void
++local_bus_init(void)
++{
++    volatile ccsr_gur_t *gur = (void *)(CONFIG_SYS_MPC85xx_GUTS_ADDR);
++    volatile fsl_lbc_t *lbc = LBC_BASE_ADDR;
++
++    uint clkdiv;
++    sys_info_t sysinfo;
++
++    get_sys_info(&sysinfo);
++    clkdiv = (lbc->lcrr & LCRR_CLKDIV) * 2;
++
++    gur->lbiuiplldcr1 = 0x00078080;
++    if (clkdiv == 16) {
++        gur->lbiuiplldcr0 = 0x7c0f1bf0;
++    } else if (clkdiv == 8) {
++        gur->lbiuiplldcr0 = 0x6c0f1bf0;
++    } else if (clkdiv == 4) {
++        gur->lbiuiplldcr0 = 0x5c0f1bf0;
++    }
++
++    lbc->lcrr |= 0x00030000;
++
++    asm("sync;isync;msync");
++
++    lbc->ltesr = 0xffffffff;	/* Clear LBC error interrupts */
++    lbc->lteir = 0xffffffff;	/* Enable LBC error interrupts */
++}
++
++int checkboard(void)
++{
++
++    u8    cpld_ver;
++
++    cpld_ver = cpld_rd(CPLD_REG_VERSION);
++
++    printf("Board: Accton %s (cpld_ver: %X.%X)\n", CONFIG_BOARDNAME,
++           cpld_ver >> 4, cpld_ver & 0xf);
++
++    local_bus_init();
++
++    return 0;
++}
++
++
++int board_early_init_r(void)
++{
++    const unsigned int flashbase = CONFIG_SYS_FLASH_BASE;
++    const u8 flash_esel = find_tlb_idx((void *)flashbase, 1);
++    char *env;
++    int speed;
++
++    /*
++     * Remap Boot flash region to caching-inhibited
++     * so that flash can be erased properly.
++     */
++
++    /* Flush d-cache and invalidate i-cache of any FLASH data */
++    flush_dcache();
++    invalidate_icache();
++
++    /* invalidate existing TLB entry for flash */
++    disable_tlb(flash_esel);
++
++    set_tlb(1, flashbase, CONFIG_SYS_FLASH_BASE_PHYS,
++            MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++            0, flash_esel, CONFIG_SYS_FLASH_TLB_SIZE, 1);
++
++
++    /* Init system fan, Set system fan duty cycle*/
++    env = getenv("config_fan_speed");
++    speed = DEFAULT_FAN_DUTY_CYCLE;
++    if(env) {
++        speed = simple_strtoul(env, NULL, 10);
++    }
++    board_fan_init(speed);
++
++    return 0;
++}
++
++
++/*
++ *
++ * setup PCI
++ *
++ * Cribbed from board/freescale/mpc8536ds/mpc8536ds.c
++ *
++ */
++
++#ifdef CONFIG_PCI
++void pci_init_board(void)
++{
++    fsl_pcie_init_board(0);
++}
++#endif
++
++/*******************************************************************************
++ *
++ * PCI device tree massaging
++ */
++#if defined(CONFIG_OF_BOARD_SETUP)
++void ft_board_setup(void *blob, bd_t *bd)
++{
++
++    ft_cpu_setup(blob, bd);
++
++#ifdef CONFIG_HAS_FSL_DR_USB
++    fdt_fixup_dr_usb(blob, bd);
++#endif
++
++    FT_FSL_PCI_SETUP;
++}
++#endif
++
++/* apply errata for the front panel mgmt phy */
++int board_phy_config(struct phy_device *phydev)
++{
++    unsigned short shdw;
++    unsigned short ctrl;
++    unsigned short led;
++
++    /*
++     * Overall goal is to disable Auto-Neg in the 1000Base-X MII
++     * Control register.  Need to wind our way through the MII
++     * register indirections to get there.
++     *
++     * See CONFIG_TSEC_TBICR_SETTINGS in board header file.
++     */
++    enum {
++        MIIM_BCM54XX_SHD_LED_SEL_1		= 0x0D,
++        MIIM_BCM54XX_SHD_LED_SEL_2		= 0x0E,
++        MIIM_BCM54XX_SHD_MODE_CTRL		= 0x1f,
++        MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG	= 0x0001,
++    };
++
++    enum {
++        MIIM_BCM5461S_SHD_LED_LINKSPD1		= 0x0,
++        MIIM_BCM5461S_SHD_LED_LINKSPD2,
++        MIIM_BCM5461S_SHD_LED_XMITLED,
++        MIIM_BCM5461S_SHD_LED_ACTIVITYLED,
++        MIIM_BCM5461S_SHD_LED_FXLED,
++        MIIM_BCM5461S_SHD_LED_SLAVE,
++        MIIM_BCM5461S_SHD_LED_INTR,
++        MIIM_BCM5461S_SHD_LED_QUALITY,
++        MIIM_BCM5461S_SHD_LED_RCVLED,
++        MIIM_BCM5461S_SHD_LED_RESERVED1,
++        MIIM_BCM5461S_SHD_LED_MULTICOLOR1,
++        MIIM_BCM5461S_SHD_LED_OPENSHORT,
++        MIIM_BCM5461S_SHD_LED_RESERVED2,
++        MIIM_BCM5461S_SHD_LED_RESERVED3,
++        MIIM_BCM5461S_SHD_LED_OFF,
++        MIIM_BCM5461S_SHD_LED_ON,
++    };
++
++    enum {
++        MIIM_BCM5461S_LED1_SHIFT = 0,
++        MIIM_BCM5461S_LED2_SHIFT = 4,
++        MIIM_BCM5461S_LED3_SHIFT = 4,
++        MIIM_BCM5461S_LED4_SHIFT = 0,
++    };
++
++    if (phydev->drv->config)
++        phydev->drv->config(phydev);
++
++    /*
++     * Step 1 -- via the shadow control register (0x1c) access the
++     * "MODE CONTROL" register, selecting the 1000Base-X register
++     * set (SGMII side, facing eTSEC).  Future accesses to offsets
++     * 0x0 - 0xF will hit the 1000Base-X registers.
++     */
++    shdw = MIIM_BCM54XX_SHD_VAL(MIIM_BCM54XX_SHD_MODE_CTRL);
++    phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++    shdw = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD);
++    shdw |= MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG;
++    shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_MODE_CTRL,
++                                      shdw);
++    phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++    /*
++     * Step 2 -- Disable Auto-Neg.  This is a regular access to
++     * the MII control register (0x0), however the 1000Base-X
++     * register set is selected from step 1.
++     */
++    ctrl = phy_read(phydev, MDIO_DEVAD_NONE, MII_BMCR);
++    ctrl &= ~BMCR_ANENABLE;
++    phy_write(phydev, MDIO_DEVAD_NONE, MII_BMCR, ctrl);
++
++    /*
++     * Step 3 -- Restore the access to the 1000Base-T register set
++     * (copper, network side) via the shadow control register
++     * (0x1c).  Future accesses to offsets 0x0 - 0xF will hit the
++     * 1000Base-T registers.
++     */
++    shdw &= ~MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG;
++    shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_MODE_CTRL,
++                                      shdw);
++    phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++    /*
++     * Configure PHY LEDs
++     *
++     * The result is the right LED is used for link activity and
++     * the left LED is off.
++     */
++    led = 0xef;
++    led = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_SEL_1,
++                                     led);
++    phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, led);
++
++    return 0;
++}
++
++#ifdef CONFIG_TSEC_ENET
++int board_eth_init(bd_t *bis)
++{
++    struct fsl_pq_mdio_info mdio_info;
++    struct tsec_info_struct tsec_info[4];
++    int num = 0;
++
++#ifdef CONFIG_TSEC1
++    SET_STD_TSEC_INFO(tsec_info[num], 1);
++    num++;
++#endif
++#ifdef CONFIG_TSEC2
++    SET_STD_TSEC_INFO(tsec_info[num], 2);
++    if (is_serdes_configured(SGMII_TSEC2)) {
++        puts("eTSEC2 is in sgmii mode.\n");
++        tsec_info[num].flags |= TSEC_SGMII;
++    }
++    num++;
++#endif
++#ifdef CONFIG_TSEC3
++    SET_STD_TSEC_INFO(tsec_info[num], 3);
++    if (is_serdes_configured(SGMII_TSEC3)) {
++        puts("eTSEC3 is in sgmii mode.\n");
++        tsec_info[num].flags |= TSEC_SGMII;
++    }
++    num++;
++#endif
++
++    if (!num) {
++        printf("No TSECs initialized\n");
++        return 0;
++    }
++
++    mdio_info.regs = (struct tsec_mii_mng *)CONFIG_SYS_MDIO_BASE_ADDR;
++    mdio_info.name = DEFAULT_MII_NAME;
++
++    fsl_pq_mdio_init(bis, &mdio_info);
++
++    tsec_eth_init(bis, tsec_info, num);
++
++    return pci_eth_init(bis);
++}
++#endif
++
++void board_reset(void)
++{
++    printf("Using CPLD to reset board\n");
++
++    /* active low reset */
++    cpld_wr(CPLD_REG_RESET_CTRL_0, ~CPLD_RESET_SYSTEM_L && 0xFF);
++
++    while (1);
++
++}
++
++
++/*******************************************************************************
++ *
++ * MISC initializations after relocating to RAM.  Full C environment available.
++ * Before configuring network interfaces.
++ *
++ */
++
++int misc_init_r(void)
++{
++    u8 val;
++
++    /*
++     * Take a few things out of reset:
++     *   MGMT 1G PHY
++     *   USB PHY
++     *   USB HUB
++     *   I2C Expander
++     *   I2C Switch
++     */
++
++    /* Step 1 - put 1G mgmt phy, usb and i2c devices into reset */
++    val = cpld_rd(CPLD_REG_RESET_CTRL_0);
++    val &= ~CPLD_RESET_BCM54616S_L;
++    val &= ~CPLD_RESET_USB_PHY_L;
++    cpld_wr(CPLD_REG_RESET_CTRL_0, val);
++
++    val = cpld_rd(CPLD_REG_RESET_CTRL_1);
++    val &= ~CPLD_RESET_I2C_BUFFER_L;
++    cpld_wr(CPLD_REG_RESET_CTRL_1, val);
++
++    val = cpld_rd(CPLD_REG_RESET_CTRL_2);
++    val &= ~CPLD_RESET_USB_FLASH_CTRL_L;
++    val &= ~CPLD_RESET_USB_HUB_L;
++    cpld_wr(CPLD_REG_RESET_CTRL_2, val);
++    udelay(10000);
++
++    /* Step 2 - take 1G mgmt phy, usb and i2c devices out of reset */
++    val = cpld_rd(CPLD_REG_RESET_CTRL_0);
++    val |= CPLD_RESET_BCM54616S_L;
++    val |= CPLD_RESET_USB_PHY_L;
++    cpld_wr(CPLD_REG_RESET_CTRL_0, val);
++
++    val = cpld_rd(CPLD_REG_RESET_CTRL_1);
++    val |= CPLD_RESET_I2C_BUFFER_L;
++    cpld_wr(CPLD_REG_RESET_CTRL_1, val);
++
++    val = cpld_rd(CPLD_REG_RESET_CTRL_2);
++    val |= CPLD_RESET_USB_FLASH_CTRL_L;
++    val |= CPLD_RESET_USB_HUB_L;
++    cpld_wr(CPLD_REG_RESET_CTRL_2, val);
++
++    udelay(10000);
++
++    return 0;
++}
++
++/*******************************************************************************
++ *
++ * MISC initializations after relocating to RAM.  Full C environment available.
++ *
++ * Go through the CPLD register spec and set interesting bits here.
++ */
++extern int populate_env(char *env_name,  u8 type_code);
++extern void env_write_default_if_crc_bad(void);
++
++int last_stage_init(void)
++{
++    u8 led;
++    /*
++     * Set u-boot env which is required by ONIE:
++     */
++
++#if defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
++    mac_read_from_eeprom();
++#endif
++
++#ifdef CONFIG_POPULATE_SERIAL_NUMBER
++    /* serial# */
++    /*populate_serial_number();*/
++    populate_env("serial#", TLV_CODE_SERIAL_NUMBER);
++
++    /* onie_platform */
++    populate_env("onie_platform", TLV_CODE_PLATFORM_NAME);
++
++    /* onie_version */
++    populate_env("onie_version", TLV_CODE_ONIE_VERSION);
++
++#endif
++
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++    /* Check u-boot environment variable.
++     * If the env in flash is corrupt then
++     * write the default env with a valid CRC.
++     */
++    env_write_default_if_crc_bad();
++#endif
++
++//#ifdef CONFIG_FIX_VARIABLE
++    /* Update fix env if its value is incorrect */
++    check_fix_env();
++//#endif /* CONFIG_FIX_VARIABLE */
++
++    /* Disable WDT because DUT is in bootloader, not runtime. */
++    board_WDT_set(0);
++    board_ExpMod_set(1);
++    GPIO_init();
++    BCM54616S_init();
++
++    /*
++     * Set the 10 front panel LEDs + 7-segment stack ID to
++     * reasonable values:
++     *
++     *   Diag
++     *   Fan 1/2
++     *   PSU 1/2
++     *   POE
++     *   Module 1/2
++     *   Stack master/slave
++     *   Stack link
++     */
++
++    /*PSU*/
++/*
++PWR 0 (LED_G)	1	1: Power module 0 is not presented
++0: Power module 0 is presented and work well
++PWR 0 (LED_A)	1	1: Power module 0 is not presented
++0: Power module 0 is presented but power good is fail
++*/
++	led = (cpld_rd(CPLD_REG_SYSTEM_LED_CTRL_0) | CPLD_SYS_LED_PWR_0_MASK);	/*Read and set 0x11(off)*/
++	if( (cpld_rd(CPLD_REG_PSU_0_STATUS) & CPLD_PSU_PRESENT_L) == 0)	/*is present*/
++	{
++		if(
++			//((cpld_rd(CPLD_REG_PSU_0_STATUS) & CPLD_PSU_56V_GOOD_L ) != 0) /*not good*/
++			((cpld_rd(CPLD_REG_PSU_0_STATUS) & CPLD_PSU_AC_FAIL_L  ) == 0)	||/*not good*/
++			((cpld_rd(CPLD_REG_PSU_0_STATUS) & CPLD_PSU_12V_GOOD_L ) != 0)	/*not good*/
++		  )
++		{
++			led &= (~CPLD_SYS_LED_PWR_0_AMBER_L);
++		}
++		else	/*good*/
++		{
++			led &= (~CPLD_SYS_LED_PWR_0_GREEN_L);
++		}
++	}
++	cpld_wr(CPLD_REG_SYSTEM_LED_CTRL_0, led);
++
++	led = (cpld_rd(CPLD_REG_SYSTEM_LED_CTRL_0) | CPLD_SYS_LED_PWR_1_MASK);	/*Read and set 0x11(off)*/
++	if( (cpld_rd(CPLD_REG_PSU_1_STATUS) & CPLD_PSU_PRESENT_L) == 0)	/*is present*/
++	{
++		if(
++			//((cpld_rd(CPLD_REG_PSU_1_STATUS) & CPLD_PSU_56V_GOOD_L ) != 0) /*not good*/
++			((cpld_rd(CPLD_REG_PSU_1_STATUS) & CPLD_PSU_AC_FAIL_L  ) == 0)	||/*not good*/
++			((cpld_rd(CPLD_REG_PSU_1_STATUS) & CPLD_PSU_12V_GOOD_L ) != 0)	/*not good*/
++		  )
++		{
++			led &= (~CPLD_SYS_LED_PWR_1_AMBER_L);
++		}
++		else	/*good*/
++		{
++			led &= (~CPLD_SYS_LED_PWR_1_GREEN_L);
++		}
++	}
++
++	cpld_wr(CPLD_REG_SYSTEM_LED_CTRL_0, led);
++
++    /*Module*/
++	led = (cpld_rd(CPLD_REG_SYSTEM_LED_CTRL_1) | CPLD_SYS_LED_MODULE_0_MASK);	/*Read and set 0x11(off)*/
++	if( (cpld_rd(CPLD_REG_MODULE_0_STATUS) & CPLD_MODULE_PRESENT_L) == 0)	/*is present*/
++	{
++		led &= (~CPLD_SYS_LED_MODULE_0_GREEN_L);
++	}
++	else
++	{
++		led &= (~CPLD_SYS_LED_MODULE_0_AMBER_L);
++	}
++	cpld_wr(CPLD_REG_SYSTEM_LED_CTRL_1, led);
++
++
++	led = (cpld_rd(CPLD_REG_SYSTEM_LED_CTRL_1) | CPLD_SYS_LED_MODULE_1_MASK);	/*Read and set 0x11(off)*/
++	if( (cpld_rd(CPLD_REG_MODULE_1_STATUS) & CPLD_MODULE_PRESENT_L) == 0)	/*is present*/
++	{
++		led &= (~CPLD_SYS_LED_MODULE_1_GREEN_L);
++	}
++	else
++	{
++		led &= (~CPLD_SYS_LED_MODULE_1_AMBER_L);
++	}
++	cpld_wr(CPLD_REG_SYSTEM_LED_CTRL_1, led);
++
++    /*FAN*/
++	led = (cpld_rd(CPLD_REG_SYSTEM_LED_CTRL_1) | CPLD_SYS_LED_FAN_0_MASK);	/*Read and set 0x11(off)*/
++	if( (cpld_rd(CPLD_REG_FAN_STATUS) & CPLD_FAN_PRESENT_0_L) == 0)	/*is present*/
++	{
++		led &= (~CPLD_SYS_LED_FAN_0_GREEN_L);
++	}
++	else
++	{
++		led &= (~CPLD_SYS_LED_FAN_0_AMBER_L);
++	}
++	cpld_wr(CPLD_REG_SYSTEM_LED_CTRL_1, led);
++
++	led = (cpld_rd(CPLD_REG_SYSTEM_LED_CTRL_1) | CPLD_SYS_LED_FAN_1_MASK);	/*Read and set 0x11(off)*/
++	if( (cpld_rd(CPLD_REG_FAN_STATUS) & CPLD_FAN_PRESENT_1_L) == 0)	/*is present*/
++	{
++		led &= (~CPLD_SYS_LED_FAN_1_GREEN_L);
++	}
++	else
++	{
++		led &= (~CPLD_SYS_LED_FAN_1_AMBER_L);
++	}
++	cpld_wr(CPLD_REG_SYSTEM_LED_CTRL_1, led);
++
++    /*Everything is ok, Diag LED Green ON*/
++    led = cpld_rd(CPLD_REG_SYSTEM_LED_CTRL_0);
++    led |= CPLD_SYS_LED_DIAG_MASK;
++    if(get_boot_ok())
++	led &= (~CPLD_SYS_LED_DIAG_GREEN_L);
++    else
++	led &= (~CPLD_SYS_LED_DIAG_AMBER_L);
++
++    cpld_wr(CPLD_REG_SYSTEM_LED_CTRL_0, led);
++
++    return 0;
++}
++
++void fdt_fixup_board(void *fdt)
++{
++
++}
+diff --git a/board/accton/as4600_54t/as4600_54t_misc.c b/board/accton/as4600_54t/as4600_54t_misc.c
+new file mode 100644
+index 0000000..80001fe
+--- /dev/null
++++ b/board/accton/as4600_54t/as4600_54t_misc.c
+@@ -0,0 +1,420 @@
++/*
++ * File:        $(BOARD)_misc.c
++ * Purpose:     To define the specific command and
++ *              function of this board.
++ *
++ * Notes:
++ * History:
++ *  2013/08/26    -- Aaron Lien, Initial version
++ *
++ * Copyright (C) 2013  Accton Corporation
++ */
++#include <stdarg.h>
++#include <common.h>
++#include <command.h>
++#include <miiphy.h>
++#include <linux/ctype.h>
++#include <linux/stddef.h>
++#include "board.h"
++#include <version.h>
++#include <asm/mpc85xx_gpio.h>
++#include "configs/onie_version.h"
++#if 0   //local debug print
++#undef debug
++#define debug(fmt,args...)	printf (fmt ,##args)
++#endif	/* local debug print*/
++
++extern int i2c_set_bus_num(unsigned int bus);
++extern int i2c_probe(uchar chip);
++extern int i2c_write(u8 dev, uint addr, int alen, u8 *data, int length);
++extern int i2c_read(u8 dev, uint addr, int alen, u8 *data, int length);
++
++/*******************************************************************************
++ *
++ * CPU Core
++ *
++ */
++
++/* clock ratio table, (e500 core/CCB) x 10 */
++int TBL_core_ccb_ratio[8]= { 40, 45, 10, 15, 20, 25, 30, 35 };
++
++#define SYSCLK_66	     66666667
++#define SYSCLK_83	     83333333
++#define SYSCLK_100      100000000
++#define DDRCLK_166  	166666666 /* DDRCLK on P1_P2 RDB */
++#define DDRCLK_200  	200000000 /* DDRCLK on P1_P2 RDB */
++#define DDRCLK_333  	333333333 /* DDRCLK on P1_P2 RDB */
++#define DDRCLK_400  	400000000 /* DDRCLK on P1_P2 RDB */
++
++unsigned long get_board_sys_clk(void)
++{
++    int core_ratio, ccb_ratio, core_speed, r, f;
++
++    /* Core clock : CCB clock */
++    core_ratio = (*(uint *)CCSR_GBLUTI_PORPLLSR >> 16) & 0x3F;
++    core_ratio &= 0x07;
++    r = TBL_core_ccb_ratio[core_ratio];
++
++    /* CCB clock : SYSCLK */
++    ccb_ratio = (*(uint *)CCSR_GBLUTI_PORPLLSR >> 1) & 0x1F;
++    r *= ccb_ratio;
++
++    /* Core Speed, MHz */
++    core_speed = (*(uint *)CCSR_GBLUTI_PORDEVSR2 >> 19) & 0x1;
++
++    f = core_speed ? 1200 : 1000;
++    f = (f*10)/r;
++
++    if(f < 70)
++        return SYSCLK_66;
++    else if(f < 90)
++        return SYSCLK_83;
++    else
++        return SYSCLK_100;
++
++}
++
++/*******************************************************************************
++ *
++ * CPLD I/O
++ *
++ */
++u8 cpld_rd(u32 reg)
++{
++    return in_8(((u8 *)CONFIG_SYS_CPLD_BASE + reg));
++}
++
++void cpld_wr(u32 reg, u8 data)
++{
++    out_8(((u8 *)CONFIG_SYS_CPLD_BASE + reg), data);
++}
++
++static void CPLD_write_WDT(uchar bit_mask, uchar val)
++{
++    u8 d;
++
++    d = cpld_rd(CPLD_REG_SYS_CONTROL);
++    d = (d & (~bit_mask)) | val;
++    cpld_wr(CPLD_REG_SYS_CONTROL, d);
++}
++
++/* ------------------------------------------------------------------------
++ * FUNCTION: board_WDT_set
++ * PURPOSE:	Enable/disable watch dog timer.
++ * INPUT:
++ *          state -  0 = disable, 1 = enable.
++ * OUTPUT:	None
++ * RETURN:  None
++ * NOTES:
++ */
++void board_WDT_set(int state)
++{
++    if(state) {
++        CPLD_write_WDT(CPLD_WDT_ENABLE, 1);
++    } else {
++        CPLD_write_WDT(CPLD_WDT_ENABLE, 0);
++    }
++}
++
++/* ------------------------------------------------------------------------
++ * FUNCTION: board_MOD_set
++ * PURPOSE:	Enable/disable Expend Module GPIO
++ * INPUT:
++ *          state -  0 = disable, 1 = enable.
++ * OUTPUT:  None
++ * RETURN:  None
++ * NOTES:
++ */
++void board_ExpMod_set(int state)
++{
++        /*
++         * GPIO
++         * 5 : Output pin, ExpMod0 Power EN_L, low(enable Mod) high(disable Mod);
++         * 6 : Output pin, ExpMod1 Power EN_L, low(enable Mod) high(disable Mod);
++         */
++	if(state)
++	{
++		mpc85xx_gpio_set_low(GPIO_PORT(5));	/*low = enable*/
++		mpc85xx_gpio_set_low(GPIO_PORT(6));
++	}
++	else
++	{ 	mpc85xx_gpio_set_high(GPIO_PORT(5));	/*high = disable*/
++		mpc85xx_gpio_set_high(GPIO_PORT(6));
++	}
++}
++
++/* ------------------------------------------------------------------------
++ * FUNCTION: GPIO_init()
++ * PURPOSE:  Init GPIO
++ * INPUT:   None
++ * OUTPUT:  None
++ * RETURN:  None
++ * NOTES:
++ */
++void GPIO_init(void)
++{
++	/*Set JTAG GPIO to input (High Impedence) while unuse*/
++	/*
++	 * TCK output   GPIO 12
++	 * TDO input    GPIO 13
++	 * TMS output   GPIO 14
++	 * TDI output   GPIO 15
++	 */
++	mpc85xx_gpio_set_in(GPIO_PORT(12));
++	mpc85xx_gpio_set_in(GPIO_PORT(13));
++	mpc85xx_gpio_set_in(GPIO_PORT(14));
++	mpc85xx_gpio_set_in(GPIO_PORT(15));
++}
++
++void BCM54616S_init(void)
++{
++	const char* devname = miiphy_get_current_dev();
++	miiphy_write(devname, 1 ,0x1C, 0xB4E3);/*LED2:always high, 	  LED1:LED- low active*/
++	miiphy_write(devname, 1 ,0x1C, 0xB8EE);/*LED4:LED-A+ 10/100 high, LED3:LED-G+ 1000 high*/
++}
++
++/*******************************************************************************
++ *
++ * Fan control
++ *
++ */
++/* ------------------------------------------------------------------------
++ * FUNCTION: board_get_system_fan_rate
++ * PURPOSE:	Get system fan rate.
++ * INPUT:
++ *          id = system fan ID. (1=FAN1, 2=FAN2)
++ *
++ * OUTPUT:	None
++ * RETURN:
++ *          0 ~ 100 = duty cycle
++ *          -1  = Fail
++ * NOTES:
++ */
++int board_get_system_fan_rate(int id)
++{
++    uchar val, reg;
++    int duty_cycle;
++
++    /* Fan controller, ADT7473 @ channel #2 */
++    i2c_set_bus_num(I2C_CHANNEL_2); /* channel #2 */
++
++
++    if (i2c_probe(I2C_ADDR_FAN) != 0) {
++        printf("[Error] Cannot find fan controller I2C device, slave address = 0x%02X\n", I2C_ADDR_FAN);
++        return -1;
++    }
++    udelay(1000);
++
++    reg = (id == ID_SYS_FAN1) ? I2C_ADT7473_REG_PWM1 : I2C_ADT7473_REG_PWM3;
++
++    /* ADT7473 PWM duty cycle */
++    i2c_read(I2C_ADDR_FAN, reg ,1, &val, 1);
++
++    duty_cycle = ((int)val*100)/255;
++    debug("[duty_cycle] %d\n", duty_cycle);
++
++    return duty_cycle;
++}
++
++/* ------------------------------------------------------------------------
++ * FUNCTION: board_set_system_fan_rate
++ * PURPOSE:	Set system fan rate.
++ * INPUT:
++ *          id = system fan ID. (1=FAN1, 2=FAN2)
++ *          rate = duty cycle (0 ~ 100).
++ *
++ * OUTPUT:	None
++ * RETURN:
++ *          0   = Success
++ *          -1  = Fail
++ *          1   = Abort
++ * NOTES:
++ */
++int board_set_system_fan_rate(int id, int duty_cycle)
++{
++    uchar val, reg;
++
++    if( (duty_cycle < 0) || (duty_cycle > 100)) {
++        duty_cycle = DEFAULT_FAN_DUTY_CYCLE;
++    }
++
++    /* Fan controller, ADT7473 @ channel #2 */
++    i2c_set_bus_num(I2C_CHANNEL_2); /* channel #2 */
++
++    if (i2c_probe(I2C_ADDR_FAN) != 0) {
++        printf("[Error] Cannot find fan controller I2C device, slave address = 0x%02X\n", I2C_ADDR_FAN);
++        return -1;
++    }
++    udelay(1000);
++
++    reg = (id == ID_SYS_FAN1) ? I2C_ADT7473_REG_PWM1 : I2C_ADT7473_REG_PWM3;
++
++    /* ADT7473 PWM duty cycle */
++    val = (uchar)((duty_cycle*255)/100);
++    val = (val == 255) ? val : val+1;  /* round it to the nearest whole number */
++    debug("[val] 0x%02X\n", val);
++    i2c_write(I2C_ADDR_FAN, reg,1,&val,1);
++    udelay(1000);
++
++    return 0;
++}
++
++/* ------------------------------------------------------------------------
++ * FUNCTION: board_fan_init
++ * PURPOSE:	Initialize system fan controller.
++ * INPUT:
++ *          rate = duty cycle (0 ~ 100).
++ *
++ * OUTPUT:	None
++ * RETURN:
++ *          0   = Success
++ *          -1  = Fail
++ *          1   = Abort
++ * NOTES:
++ */
++int board_fan_init(int rate)
++{
++    unsigned char write_data;
++
++    /* Fan controller, ADT7473 @ channel #2 */
++    i2c_set_bus_num(I2C_CHANNEL_2);
++
++    if (i2c_probe(I2C_ADDR_FAN) != 0) {
++        printf("[Error] Cannot find fan controller I2C device, slave address = 0x%02X\n", I2C_ADDR_FAN);
++        return -1;
++    }
++    udelay(1000);
++
++    /* config system */
++    write_data = 0xE2;  /* PWMx configuration value, manual mode.*/
++    i2c_write(I2C_ADDR_FAN,I2C_ADT7473_REG_PWM1_CONF,1,&write_data,1);  /* config system FAN1 @ PWM1 */
++    udelay(1000);
++    i2c_write(I2C_ADDR_FAN,I2C_ADT7473_REG_PWM3_CONF,1,&write_data,1);  /* config system FAN2 @ PWM3 */
++    udelay(1000);
++
++    /* set system fan duty cycle */
++    if(rate > 0) {
++        board_set_system_fan_rate(ID_SYS_FAN1, rate);
++        board_set_system_fan_rate(ID_SYS_FAN2, rate);
++    }
++
++    return 0;
++}
++
++/* ------------------------------------------------------------------------
++ * FUNCTION: check_ver_env
++ * PURPOSE:  check ver in env, fix it if it is not correct.
++ * INPUT:      None
++ *
++ * OUTPUT:     None
++ * RETURN:
++ *          0   = Success
++ *          -1  = Fail
++ *          1   = Abort
++ * NOTES:
++ */
++
++int check_ver_env(void)
++{
++    char *ver_string = getenv("ver");
++    if(ver_string != NULL)
++    {
++        if(strcmp(ver_string,U_BOOT_VERSION_STRING)==0)
++            return 0;
++    }
++
++    printf("- Writing new $ver -\n");
++    setenv("ver",U_BOOT_VERSION_STRING);
++    saveenv();
++    return -1;
++}
++
++/* ------------------------------------------------------------------------
++ * FUNCTION: check_fix_env
++ * PURPOSE:  check env, fix it if it is not correct.
++ * INPUT:      None
++ *
++ * OUTPUT:     None
++ * RETURN:
++ *          0   = Success
++ *          -1  = Fail
++ *          1   = Abort
++ * NOTES:
++ */
++
++#define CHECK_ENV(ENV_NAME,ENV_STRING) \
++    while(1)	\
++    {	\
++	env_string = getenv(ENV_NAME);	\
++	if(env_string != NULL)	\
++	{	\
++		if(strcmp(env_string,ENV_STRING) == 0)	\
++			break;	\
++	}	\
++	need_update = 1;	\
++	setenv(ENV_NAME,ENV_STRING);	\
++	printf("- Updating $" ENV_NAME " -\n");	\
++    }
++
++int check_fix_env(void)
++{
++    int need_update = 0;
++    char *env_string = NULL;
++
++    CHECK_ENV("ver",U_BOOT_VERSION_STRING)
++    CHECK_ENV("platform",PLATFORM_STRING)
++
++    if(need_update == 1)
++	saveenv();
++
++    return 0;
++}
++
++/*******************************************************************************
++ * u-boot command to show system clock infornation.
++ */
++
++static int do_show_clock_info(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
++{
++    int core_ratio, ccb_ratio, ddr_ratio, core_speed, r, f;
++    sys_info_t sysinfo;
++    char buf[32];
++
++    printf("PORPLLSR = 0x%08X\n", *(uint *)CCSR_GBLUTI_PORPLLSR);
++    printf("PORDEVSR2 = 0x%08X\n", *(uint *)CCSR_GBLUTI_PORDEVSR2);
++
++    /* Core clock : CCB clock */
++    core_ratio = (*(uint *)CCSR_GBLUTI_PORPLLSR >> 16) & 0x3F;
++    printf("Clock ratio of CPU core and CCB = 0x%08X\n", core_ratio);
++    core_ratio &= 0x07;
++    r = TBL_core_ccb_ratio[core_ratio];
++
++    /* CCB clock : SYSCLK */
++    ccb_ratio = (*(uint *)CCSR_GBLUTI_PORPLLSR >> 1) & 0x1F;
++    printf("Clock ratio of CCB and SYSCLK = 0x%08X\n", ccb_ratio);
++    r *= ccb_ratio;
++
++    /* Core Speed, MHz */
++    core_speed = (*(uint *)CCSR_GBLUTI_PORDEVSR2 >> 19) & 0x1;
++    printf("CPU core speed = %sHz\n", core_speed ? "1.2G" : "1G");
++
++    f = core_speed ? 1200 : 1000;
++    printf("System Clock(SYSCLK) = %d MHz\n", (f*10)/r);
++
++    /* DDR clock : DDRCLK */
++    ddr_ratio = (*(uint *)CCSR_GBLUTI_PORPLLSR >> 9) & 0x1F;
++    printf("Clock ratio of DDR complex and DDRCLK = 0x%08X\n", ddr_ratio);
++
++    /* DDR data rate */
++    get_sys_info(&sysinfo);
++    printf("Configuration of DDR data rate = %s MT/s\n",
++           strmhz(buf, sysinfo.freqDDRBus));
++
++    return 0;
++}
++
++U_BOOT_CMD(
++    clkinfo, CONFIG_SYS_MAXARGS, 1,	do_show_clock_info,
++    "clkinfo\t- show clock information.",
++    ""
++);
+diff --git a/board/accton/as4600_54t/board.h b/board/accton/as4600_54t/board.h
+new file mode 100644
+index 0000000..c0db3ca
+--- /dev/null
++++ b/board/accton/as4600_54t/board.h
+@@ -0,0 +1,235 @@
++/*
++ * File:        board.h
++ * Purpose:     To define the specific function call of this board.
++ *
++ * Notes:
++ * History:
++ *  2013/08/26    -- Aaron Lien, Initial version
++ *
++ * Copyright (C) 2013  Accton Corporation
++ */
++
++#ifndef __BOARD_H__
++#define __BOARD_H__
++
++/////////////////////////////////////////////////////////////////////////
++/* CPU */
++#define CONFIG_CPU_GBLUTI_BAR (CONFIG_SYS_CCSRBAR+0xE0000)
++#define CCSR_GBLUTI_PORPLLSR     CONFIG_CPU_GBLUTI_BAR
++#define CCSR_GBLUTI_PORDEVSR2    (CONFIG_CPU_GBLUTI_BAR+0x14)
++
++/////////////////////////////////////////////////////////////////////////
++/* CPLD */
++#define CPLD_REG_VERSION           (0x00)
++#  define CPLD_VERSION_H_MASK        (0xF0)
++#  define CPLD_VERSION_H_SHIFT       (4)
++#  define CPLD_VERSION_L_MASK        (0x0F)
++#  define CPLD_VERSION_L_SHIFT       (0)
++
++#define CPLD_REG_RESET_CTRL_0      (0x01) /* all resets active low */
++#  define CPLD_RESET_SYSTEM_L		(1 << 7)
++#  define CPLD_RESET_CPU_HRESET_L	(1 << 6)
++#  define CPLD_RESET_CPU_SRESET_L	(1 << 5)
++#  define CPLD_RESET_CPU_TRST_L		(1 << 4)
++#  define CPLD_RESET_NOR_FLASH_L	(1 << 3)
++#  define CPLD_RESET_USB_PHY_L		(1 << 1)
++#  define CPLD_RESET_BCM54616S_L	(1 << 0) /* Front panel mgmt PHY */
++
++#define CPLD_REG_RESET_CTRL_1      (0x02) /* all resets active low */
++#  define CPLD_RESET_I2C_BUFFER_L	(1 << 7)
++#  define CPLD_RESET_RTC_L		(1 << 6)
++#  define CPLD_RESET_POE_CONTROLLER_L	(1 << 5)
++#  define CPLD_RESET_LED_SHIFTER_L	(1 << 4)
++#  define CPLD_RESET_BCM56540_L		(1 << 3) /* Switch ASIC */
++#  define CPLD_RESET_BCM84754_L		(1 << 2) /* 4x10G PHY */
++#  define CPLD_RESET_BCM54280_0_L	(1 << 1) /* 8x1G PHY BCM54280 0, 1, 2 */
++#  define CPLD_RESET_BCM54280_1_L	(1 << 0) /* 8x1G PHY BCM54280 3, 4, 5 */
++
++#define CPLD_REG_RESET_CTRL_2      (0x03) /* all resets active low */
++#  define CPLD_RESET_MODULE_0_L		(1 << 7)
++#  define CPLD_RESET_MODULE_1_L		(1 << 6)
++#  define CPLD_RESET_MODULE_0_QSFP_L	(1 << 5)
++#  define CPLD_RESET_MODULE_1_QSFP_L	(1 << 4)
++#  define CPLD_RESET_DDR_GROUP0_L	(1 << 3)
++#  define CPLD_RESET_DDR_GROUP1_L	(1 << 2)
++#  define CPLD_RESET_USB_FLASH_CTRL_L	(1 << 1)
++#  define CPLD_RESET_USB_HUB_L		(1 << 0)
++
++/* LEDs are active low */
++#define CPLD_REG_SYSTEM_LED_CTRL_0  (0x04)
++#  define CPLD_SYS_LED_DIAG_MASK	(0xC0)
++#    define CPLD_SYS_LED_DIAG_GREEN_L		(1 << 7)
++#    define CPLD_SYS_LED_DIAG_AMBER_L		(1 << 6)
++#  define CPLD_SYS_LED_POE_MASK		(0x30)
++#    define CPLD_SYS_LED_POE_GREEN_L		(1 << 5)
++#    define CPLD_SYS_LED_POE_AMBER_L		(1 << 4)
++#  define CPLD_SYS_LED_PWR_0_MASK	(0x0C)
++#    define CPLD_SYS_LED_PWR_0_GREEN_L		(1 << 3)
++#    define CPLD_SYS_LED_PWR_0_AMBER_L		(1 << 2)
++#  define CPLD_SYS_LED_PWR_1_MASK	(0x03)
++#    define CPLD_SYS_LED_PWR_1_GREEN_L		(1 << 1)
++#    define CPLD_SYS_LED_PWR_1_AMBER_L		(1 << 0)
++
++#define CPLD_REG_SYSTEM_LED_CTRL_1  (0x05)
++#  define CPLD_SYS_LED_FAN_0_MASK	(0xC0)
++#    define CPLD_SYS_LED_FAN_0_GREEN_L		(1 << 7)
++#    define CPLD_SYS_LED_FAN_0_AMBER_L		(1 << 6)
++#  define CPLD_SYS_LED_FAN_1_MASK	(0x30)
++#    define CPLD_SYS_LED_FAN_1_GREEN_L		(1 << 5)
++#    define CPLD_SYS_LED_FAN_1_AMBER_L		(1 << 4)
++#  define CPLD_SYS_LED_MODULE_0_MASK	(0x0C)
++#    define CPLD_SYS_LED_MODULE_0_GREEN_L	(1 << 3)
++#    define CPLD_SYS_LED_MODULE_0_AMBER_L	(1 << 2)
++#  define CPLD_SYS_LED_MODULE_1_MASK	(0x03)
++#    define CPLD_SYS_LED_MODULE_1_GREEN_L	(1 << 1)
++#    define CPLD_SYS_LED_MODULE_1_AMBER_L	(1 << 0)
++
++#define CPLD_REG_SYSTEM_LED_CTRL_2  (0x06)
++#  define CPLD_SYS_LED_STACKING_1_MASK	(0xC0)
++#    define CPLD_SYS_LED_STACKING_GREEN_L	(1 << 7)
++#    define CPLD_SYS_LED_STACKING_AMBER_L	(1 << 6)
++#  define CPLD_SYS_LED_STACK_LINK_MASK	(0x30)
++#    define CPLD_SYS_LED_STACK_LINK_GREEN_L	(1 << 5)
++#    define CPLD_SYS_LED_STACK_LINK_AMBER_L	(1 << 4)
++
++#define CPLD_REG_SYS_CONTROL		(0x07)
++#  define CPLD_WDT_ENABLE			(1 << 7)
++#  define CPLD_WDT_STATUS			(1 << 6)
++#  define CPLD_WDT_KICK				(1 << 5)
++
++#define CPLD_REG_7SEGMENT_LED		(0x09)
++
++#define CPLD_REG_SFPP_PRESENT		(0x0a)
++#  define CPLD_SFPP_PRESENT_PORT_0		(1 << 7)
++#  define CPLD_SFPP_PRESENT_PORT_1		(1 << 6)
++#  define CPLD_SFPP_PRESENT_PORT_2		(1 << 5)
++#  define CPLD_SFPP_PRESENT_PORT_3		(1 << 4)
++
++#define CPLD_REG_SFPP_RX_LOS		(0x0b)
++#  define CPLD_SFPP_RX_LOS_PORT_0		(1 << 7)
++#  define CPLD_SFPP_RX_LOS_PORT_1		(1 << 6)
++#  define CPLD_SFPP_RX_LOS_PORT_2		(1 << 5)
++#  define CPLD_SFPP_RX_LOS_PORT_3		(1 << 4)
++
++#define CPLD_REG_SFPP_TX_FAIL		(0x0c)
++#  define CPLD_SFPP_TX_FAIL_PORT_0		(1 << 7)
++#  define CPLD_SFPP_TX_FAIL_PORT_1		(1 << 6)
++#  define CPLD_SFPP_TX_FAIL_PORT_2		(1 << 5)
++#  define CPLD_SFPP_TX_FAIL_PORT_3		(1 << 4)
++
++#define CPLD_REG_SFPP_TX_DISABLE	(0x0d)
++#  define CPLD_SFPP_TX_DISABLE_PORT_0		(1 << 7)
++#  define CPLD_SFPP_TX_DISABLE_PORT_1		(1 << 6)
++#  define CPLD_SFPP_TX_DISABLE_PORT_2		(1 << 5)
++#  define CPLD_SFPP_TX_DISABLE_PORT_3		(1 << 4)
++
++#define CPLD_REG_SFPP_SPEED		(0x0e)
++#  define CPLD_SFPP_SPEED_PORT_0		(1 << 7)  /* 0 - 1G, 1 - 10G */
++#  define CPLD_SFPP_SPEED_PORT_1		(1 << 6)
++#  define CPLD_SFPP_SPEED_PORT_2		(1 << 5)
++#  define CPLD_SFPP_SPEED_PORT_3		(1 << 4)
++
++#define CPLD_REG_FAN_STATUS		(0x0f)
++/*Kenny Cheng: Not follow HW spec*/
++//#  define CPLD_FAN_PRESENT_0_L			(1 << 7) /* 0 - present */
++//#  define CPLD_FAN_PRESENT_1_L			(1 << 6) /* 1 - not present */
++#  define CPLD_FAN_PRESENT_1_L			(1 << 7) /* 0 - present */
++#  define CPLD_FAN_PRESENT_0_L			(1 << 6) /* 1 - not present */
++#  define CPLD_FAN_DIRECTION_0_L		(1 << 5) /* 0 - back to front */
++#  define CPLD_FAN_DIRECTION_1_L		(1 << 4) /* 1 - front to back */
++
++#define CPLD_REG_PUSH_BUTTON_STATUS	(0x10)
++#  define CPLD_PB_STATUS_NON_STACKING		(1 << 7)
++#  define CPLD_PB_STATUS_STACKING_MASTER	(1 << 6)
++#  define CPLD_PB_STATUS_STACKING_SLAVE		(1 << 5)
++
++#define CPLD_REG_POE_STATUS		(0x11)
++#  define CPLD_POE_SYSTEM_VALID_L		(1 << 7)
++
++#define CPLD_REG_POE_CONTROL		(0x12)
++#  define CPLD_POE_ENABLE			(1 << 7)
++
++#define CPLD_REG_PSU_1_STATUS		(0x13)
++#  define CPLD_PSU_PRESENT_L			(1 << 7)
++#  define CPLD_PSU_AC_FAIL_L			(1 << 6) /* 0 - input fail */
++#  define CPLD_PSU_56V_GOOD_L			(1 << 5)
++#  define CPLD_PSU_12V_GOOD_L			(1 << 4)
++#  define CPLD_PSU_FAN_FAIL_L			(1 << 3) /* 0 - fan fail */
++#  define CPLD_PSU_ALERT_L			(1 << 2) /* 0 - need to read module EEPROM */
++
++#define CPLD_REG_PSU_0_STATUS		(0x14)
++#  define CPLD_PSU_PRESENT_L			(1 << 7)
++#  define CPLD_PSU_AC_FAIL_L			(1 << 6) /* 0 - input fail */
++#  define CPLD_PSU_56V_GOOD_L			(1 << 5)
++#  define CPLD_PSU_12V_GOOD_L			(1 << 4)
++#  define CPLD_PSU_FAN_FAIL_L			(1 << 3) /* 0 - fan fail */
++#  define CPLD_PSU_ALERT_L			(1 << 2) /* 0 - need to read module EEPROM */
++
++#define CPLD_REG_RPS_POWER_STATUS	(0x15)
++#  define CPLD_RPS_PRESENT_L			(1 << 7)
++#  define CPLD_RPS_FAIL_L			(1 << 6) /* 0 - RPS fail */
++
++#define CPLD_REG_MODULE_0_STATUS	(0x16)
++#  define CPLD_MODULE_PRESENT_L			(1 << 7)
++
++#define CPLD_REG_MODULE_1_STATUS	(0x17)
++#  define CPLD_MODULE_PRESENT_L			(1 << 7)
++
++u8 cpld_rd(u32 reg);
++void cpld_wr(u32 reg, u8 data);
++void board_WDT_set(int state);
++void board_ExpMod_set(int state);
++
++/////////////////////////////////////////////////////////////////////////
++/* I2C */
++#define I2C_CHANNEL_1               0x00
++#define I2C_CHANNEL_2               0x01
++
++/* I2C bus switch */
++#define I2C_ADDR_PCA9548            0x70
++
++/* channel 1 devices */
++#define I2C_ADDR_SFP                0x50    /* port 49~52 */
++#define I2C_ADDR_DS100BR            0x56
++#define I2C_ADDR_PD69100            0x20
++#define I2C_ADDR_TMP75              0x49
++#define I2C_ADDR_ADT7473            0x2E
++
++/* channel 2 devices */
++#define I2C_ADDR_FAN                0x2E
++#define I2C_ADDR_EXPMOD_0           0x54
++#define I2C_ADDR_EXPMOD_1           0x55
++#define I2C_ADDR_PSU_0              0x51
++#define I2C_ADDR_PSU_1              0x52
++#define I2C_ADDR_RTC_DS1672         0x68
++
++/////////////////////////////////////////////////////////////////////////
++/* FAN */
++enum FAN_ID_E{
++    ID_SYS_FAN1=1,
++    ID_SYS_FAN2,
++    ID_SYS_FAN_TOTAL
++};
++
++#define DEFAULT_FAN_DUTY_CYCLE 100
++
++#define FAN_DUTY_CYCLE_LOW          25
++#define FAN_DUTY_CYCLE_1            50
++#define FAN_DUTY_CYCLE_2            75
++#define FAN_DUTY_CYCLE_MAX          100
++
++#define I2C_ADT7473_REG_PWM1        0x30
++#define I2C_ADT7473_REG_PWM2        0x31
++#define I2C_ADT7473_REG_PWM3        0x32
++#define I2C_ADT7473_REG_PWM1_CONF   0x5C
++#define I2C_ADT7473_REG_PWM2_CONF   0x5D
++#define I2C_ADT7473_REG_PWM3_CONF   0x5E
++
++
++int board_fan_init(int rate);
++int board_get_system_fan_rate(int id);
++int board_set_system_fan_rate(int id, int duty_cycle);
++
++#define GPIO_PORT(x) (0x80000000>>(x))
++
++#endif /* __BOARD_H__ */
+diff --git a/board/accton/as4600_54t/bootf.c b/board/accton/as4600_54t/bootf.c
+new file mode 100644
+index 0000000..72b40b1
+--- /dev/null
++++ b/board/accton/as4600_54t/bootf.c
+@@ -0,0 +1,54 @@
++/*
++* File:        bootf.c
++* Purpose:     To boot the fastpath application image.
++*
++* Notes:
++* History:
++*  2012/03/08    -- Aaron Lien, Initial version
++*
++* Copyright (C) 2012  Accton Corporation & authors.
++*/
++#include <common.h>
++#include "fastpath.h"
++
++
++/* STK image = {STK header + uImage}*/
++static int do_bootf(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
++{
++    char * local_argv[3];
++    ulong	addr;
++    char str_addr[30], tmp[30];
++    stkFileHeader_t *header;
++
++    /* <addr> */
++    addr = CONFIG_SYS_LOAD_ADDR;		/* Default Load Address */
++    if(argc >= 2)
++        addr = simple_strtoul(argv[1], NULL, 16);
++
++    header = (stkFileHeader_t *)addr;
++
++    addr += header->stk_header_size;    /* uImage start address */
++    sprintf(str_addr, "0x%08lX", addr);
++
++    /* <fdt#> */
++    if(argc >=3)
++        sprintf(tmp, "-f%s", argv[2]);
++    else
++        sprintf(tmp, "-f%d", CONFIG_FDT_INDEX);
++
++    /* <ex.> bootm 0x1000074 -f<fdt#> */
++    local_argv[0] = "bootm";
++    local_argv[1] = str_addr;
++    local_argv[2] = tmp;
++
++    return do_bootm(NULL, 0, 3, local_argv);
++}
++
++U_BOOT_CMD(
++    bootf, CONFIG_SYS_MAXARGS, 1,	do_bootf,
++    "bootf\t- boot FASTPATH application image from memory.",
++    "[<addr> [<fdt#>]] - boot FASTPATH application image stored in memory.\n"
++    "\taddr: image address in memory.\n"
++    "\tfdt#: image# of flat device tree in FASTPATH image.\n"
++    "\n\tThe default fdt# is 4 which indicates the fdt is at image#4."
++);
+diff --git a/board/accton/as4600_54t/cmd_dram_test.c b/board/accton/as4600_54t/cmd_dram_test.c
+new file mode 100644
+index 0000000..0200ca0
+--- /dev/null
++++ b/board/accton/as4600_54t/cmd_dram_test.c
+@@ -0,0 +1,487 @@
++#include <common.h>
++#include <command.h>
++
++#define diag_printf printf
++
++/**************************************************************
++ * diag_mem
++ *************************************************************/
++#define DIAG_MEM_TOTAL_SIZE         (0x80000000UL)
++#define DIAG_MEM_BASE_ADDR          (0x0UL)
++#define DIAG_MEM_MAX_ADDR           (DIAG_MEM_BASE_ADDR + DIAG_MEM_TOTAL_SIZE)
++
++#define DIAG_MEM_ADDRESS_ALIGN_WORD (4UL)
++#define DIAG_MEM_BACKUP_BUF_SIZE    (128UL*1024UL)
++
++#define DIAG_MEM_PATTERN_FIVE       (0x55555555UL)
++#define DIAG_MEM_PATTERN_ALPHA      (0xAAAAAAAAUL)
++
++static char diag_mem_backup_buf[DIAG_MEM_BACKUP_BUF_SIZE];
++static int last_percent = 0;
++static ulong timer_keep = 0;
++static ulong timer_change = 0;
++void show_progress(ulong startAddr, ulong endAddr, ulong currentAddr)
++{
++	ulong current_timer = get_timer(0);
++	//printf("%08X",currentAddr);
++	if((current_timer - timer_keep) > timer_change)
++	{
++		int percent = ((currentAddr - startAddr)) / (((endAddr-startAddr))/100);
++		if(percent != last_percent || (current_timer - timer_keep) > 1000)
++		{
++			printf("\r%08lX : %d%%",currentAddr,percent);
++			last_percent = percent;
++
++			if(timer_change == 0)
++			{
++				timer_change = (current_timer - timer_keep);//first timer range
++			}
++
++			timer_keep = current_timer;
++		}
++	}
++}
++
++int diagMemAddressBusTest(ulong startAddr, ulong endAddr)
++{
++    register ulong blockStartAddr;
++    register ulong blockSize;
++
++    register ulong pattern     = (ulong) DIAG_MEM_PATTERN_ALPHA;
++    register ulong antipattern = (ulong) DIAG_MEM_PATTERN_FIVE;
++
++    register ulong currAddr;
++    register ulong* ptrBackup;
++
++    register ulong ret = 0;
++	register ulong errorAddr = 0;
++
++    for(blockStartAddr=startAddr; blockStartAddr<endAddr; blockStartAddr+=DIAG_MEM_BACKUP_BUF_SIZE)
++    {
++        if(endAddr-blockStartAddr > DIAG_MEM_BACKUP_BUF_SIZE)
++        {
++            blockSize = DIAG_MEM_BACKUP_BUF_SIZE;
++        }
++        else
++        {
++            blockSize = endAddr-blockStartAddr;
++        }
++
++        ptrBackup = (ulong*)diag_mem_backup_buf;
++        for(currAddr=blockStartAddr; currAddr<blockStartAddr+blockSize; currAddr+=4, ptrBackup++)
++        {
++			if( (currAddr >= 0)
++                && (currAddr < 0x1000) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diagMemAddressBusTest))
++                && (currAddr < (ulong)(0x1000+diagMemAddressBusTest)) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diag_mem_backup_buf))
++                && (currAddr < (ulong)(DIAG_MEM_BACKUP_BUF_SIZE+diag_mem_backup_buf)) )
++            {
++                continue;
++            }
++
++			if( (currAddr >= (ulong)(0x7Fd00000)) 	/*Skip U-boot, might be protected*/
++                && (currAddr < (ulong)(0x80000000)) )
++            {
++                continue;
++            }
++
++            *ptrBackup = *((ulong*)currAddr);
++
++            *((ulong*)currAddr) = pattern;
++        }
++
++        //ptrBackup = (ulong*)diag_mem_backup_buf;	/*Kenny Cheng remove*/
++        for(currAddr=blockStartAddr; currAddr<blockStartAddr+blockSize; currAddr+=4)//, ptrBackup++) /*Kenny Cheng Remove */
++        {
++			if( (currAddr >= 0)
++                && (currAddr < 0x1000) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diagMemAddressBusTest))
++                && (currAddr < (ulong)(0x1000+diagMemAddressBusTest)) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diag_mem_backup_buf))
++                && (currAddr < (ulong)(DIAG_MEM_BACKUP_BUF_SIZE+diag_mem_backup_buf)) )
++            {
++                continue;
++            }
++
++			if( (currAddr >= (ulong)(0x7Fd00000)) 	/*Skip U-boot, might be protected*/
++                && (currAddr < (ulong)(0x80000000)) )
++            {
++                continue;
++            }
++
++            if( pattern != *((ulong*)currAddr) )
++            {
++				errorAddr = currAddr;
++                ret++;
++            }
++
++            *((ulong*)currAddr) = antipattern;
++        }
++
++        ptrBackup = (ulong*)diag_mem_backup_buf;
++        for(currAddr=blockStartAddr; currAddr<blockStartAddr+blockSize; currAddr+=4, ptrBackup++)
++        {
++			if( (currAddr >= 0)
++                && (currAddr < 0x1000) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diagMemAddressBusTest))
++                && (currAddr < (ulong)(0x1000+diagMemAddressBusTest)) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diag_mem_backup_buf))
++                && (currAddr < (ulong)(DIAG_MEM_BACKUP_BUF_SIZE+diag_mem_backup_buf)) )
++            {
++                continue;
++            }
++
++			if( (currAddr >= (ulong)(0x7Fd00000)) 	/*Skip U-boot, might be protected*/
++                && (currAddr < (ulong)(0x80000000)) )
++            {
++                continue;
++            }
++
++            if( antipattern != *((ulong*)currAddr) )
++            {
++				errorAddr = currAddr;
++                ret++;
++            }
++
++            *((ulong*)currAddr) = *ptrBackup;
++        }
++
++        if(ctrlc())
++        {
++            return -1;
++        }
++		else
++		{
++			/*show_progress(startAddr,endAddr,currAddr);*/
++		}
++    }
++
++	/*show_progress(startAddr,endAddr,blockStartAddr);*/
++
++    if(ret != 0)
++	{
++		diag_printf("errorAddr = 0x%08lX\n",errorAddr);
++        return -1;
++    }
++	else
++        return 0;
++}
++
++int diagMemDataBusTest(ulong startAddr, ulong endAddr)
++{
++    register ulong currAddr;
++    register ulong backup;
++    register ulong pattern;
++
++    /* Data Bust Test */
++    for(currAddr=startAddr; currAddr<endAddr; currAddr+=4)
++    {
++		if( (currAddr >= 0)
++         && (currAddr < 0x1000) )
++        {
++              continue;
++        }
++
++        if( (currAddr >= (ulong)(diagMemDataBusTest))
++            && (currAddr < (ulong)(0x1000+diagMemDataBusTest)) )
++        {
++            continue;
++        }
++
++        /* Perform a walking 1's test at the given address. */
++        for(pattern=1; pattern!=0; pattern<<=1)
++        {
++            backup = *((ulong*)currAddr);
++
++            /* Write the test pattern. */
++            *((ulong*)currAddr) = pattern;
++
++            /* Read it back (immediately is okay for this test). */
++            if(*((ulong*)currAddr) != pattern)
++            {
++                *((ulong*)currAddr) = backup;
++
++                diag_printf("(pattern = 0x%08lX)...", pattern);
++                return -1;
++            }
++
++            *((ulong*)currAddr) = backup;
++        }
++
++        if(ctrlc())
++        {
++            return -1;
++        }
++		else
++		{
++				/*show_progress(startAddr,endAddr,currAddr);*/
++		}
++    }
++
++	/*show_progress(startAddr,endAddr,currAddr);*/
++
++    return 0;
++}
++
++int do_diag_dram_func(ulong startAddr, ulong endAddr)
++{
++    /* address alignment */
++    startAddr -= (startAddr % DIAG_MEM_ADDRESS_ALIGN_WORD);
++    endAddr -= (endAddr % DIAG_MEM_ADDRESS_ALIGN_WORD);
++    //startAddr = (startAddr & ~(DIAG_MEM_ADDRESS_ALIGN_WORD-1));
++    //endAddr = (endAddr & ~(DIAG_MEM_ADDRESS_ALIGN_WORD-1));
++
++    diag_printf("START Address: 0x%08lX\n", startAddr);
++    diag_printf("END Address: 0x%08lX\n", endAddr);
++	last_percent = 0;
++	timer_change = 0;
++	timer_keep = get_timer(0);
++    diag_printf("Data Bus Test...\n");
++
++    if(diagMemDataBusTest(startAddr, endAddr) == 0)
++    {
++        diag_printf("\r%08lx~%08lx 100%% OK!\n",startAddr,endAddr);
++    }
++    else
++    {
++        diag_printf("FAIL!\n");
++	return -2;
++    }
++
++    last_percent = 0;
++    timer_change = 0;
++	timer_keep = get_timer(0);
++    diag_printf("Address Bus Test...\n");
++
++    if(diagMemAddressBusTest(startAddr, endAddr) == 0)
++    {
++        diag_printf("\r%08lx~%08lx 100%% OK!\n",startAddr,endAddr);
++    }
++    else
++    {
++        diag_printf("FAIL!\n");
++	return -3;
++    }
++
++	return 0;
++
++
++}
++
++int do_diag_dram_func_quick(ulong startAddr, ulong endAddr)
++{
++	register ulong blockStartAddr;
++    register ulong blockSize;
++
++    register ulong currAddr;
++    register ulong* ptrBackup;
++
++    register ulong ret = 0;
++	register ulong errorAddr = 0;
++
++    /* alignment */
++    startAddr -= (startAddr % DIAG_MEM_ADDRESS_ALIGN_WORD);
++    endAddr -= (endAddr % DIAG_MEM_ADDRESS_ALIGN_WORD);
++    //startAddr = (startAddr & ~(DIAG_MEM_ADDRESS_ALIGN_WORD-1));
++    //endAddr = (endAddr & ~(DIAG_MEM_ADDRESS_ALIGN_WORD-1));
++
++    for(blockStartAddr=startAddr; blockStartAddr<endAddr; blockStartAddr+=DIAG_MEM_BACKUP_BUF_SIZE)
++    {
++        if(endAddr-blockStartAddr > DIAG_MEM_BACKUP_BUF_SIZE)
++        {
++            blockSize = DIAG_MEM_BACKUP_BUF_SIZE;
++        }
++        else
++        {
++            blockSize = endAddr-blockStartAddr;
++        }
++
++        ptrBackup = (ulong*)diag_mem_backup_buf;
++        for(currAddr=blockStartAddr; currAddr<blockStartAddr+blockSize; currAddr+=4, ptrBackup++)
++        {
++	    if( (currAddr >= 0)
++                && (currAddr < 0x1000) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diagMemAddressBusTest))
++                && (currAddr < (ulong)(0x1000+diagMemAddressBusTest)) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diag_mem_backup_buf))
++                && (currAddr < (ulong)(DIAG_MEM_BACKUP_BUF_SIZE+diag_mem_backup_buf)) )
++            {
++                continue;
++            }
++
++	    if( (currAddr >= (ulong)(0x7Fd00000)) 	/*Skip diag log area*/
++                && (currAddr < (ulong)(0x80000000)) )
++            {
++                continue;
++            }
++
++            *ptrBackup = *((ulong*)currAddr);
++
++            *((ulong*)currAddr) = 0xAAAAAAAA;
++        }
++
++        ptrBackup = (ulong*)diag_mem_backup_buf;
++        for(currAddr=blockStartAddr; currAddr<blockStartAddr+blockSize; currAddr+=4, ptrBackup++)
++        {
++			if( (currAddr >= 0)
++                && (currAddr < 0x1000) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diagMemAddressBusTest))
++                && (currAddr < (ulong)(0x1000+diagMemAddressBusTest)) )
++            {
++                continue;
++            }
++
++            if( (currAddr >= (ulong)(diag_mem_backup_buf))
++                && (currAddr < (ulong)(DIAG_MEM_BACKUP_BUF_SIZE+diag_mem_backup_buf)) )
++            {
++                continue;
++            }
++
++			if( (currAddr >= (ulong)(0x7Fd00000)) 	/*Skip diag log area*/
++                && (currAddr < (ulong)(0x80000000)) )
++            {
++                continue;
++            }
++
++            if( 0xAAAAAAAA != *((ulong*)currAddr) )
++            {
++				errorAddr = currAddr;
++                ret++;
++            }
++
++            *((ulong*)currAddr) = *ptrBackup;
++        }
++
++        if(ctrlc())
++        {
++            return -1;
++        }
++		else
++		{
++			//diag_printf("\r%08X : %d%%",blockStartAddr,((blockStartAddr - startAddr)) / (((endAddr-startAddr))/100));
++		}
++    }
++
++	//diag_printf("\r%08X : %d%%",blockStartAddr,((blockStartAddr - startAddr)) / (((endAddr-startAddr))/100));
++
++    if(ret != 0)
++	{
++		diag_printf("\rerrorAddr = 0x%08lX\n",errorAddr);
++        return -1;
++    }
++	else
++	{
++		diag_printf("\r%08lX~%08lX 100%% OK!\n",startAddr,endAddr);
++        return 0;
++	}
++}
++
++int do_diag_dram_cmd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
++{
++    ulong start = 0;
++    ulong end = 0;
++    int ret = 0;
++	ulong time_start = get_timer(0);
++    ulong time_end = 0;
++
++    if(argc < 3)
++    {
++        diag_printf("Usage:\n%s\n", cmdtp->usage);
++        return -1;
++    }
++	else if(argc >= 4)
++	{
++		if(strcmp("full",argv[3]) == 0)
++		{
++			start = simple_strtoul(argv[1], NULL, 16);
++			end = simple_strtoul(argv[2], NULL, 16);
++
++			if( start>DIAG_MEM_MAX_ADDR || end>DIAG_MEM_MAX_ADDR || start>=end)
++			{
++				diag_printf("invalid range");
++				return -1;
++			}
++
++			ret = do_diag_dram_func(start, end);
++		}
++		else
++		{
++			diag_printf("Usage:\n%s\n", cmdtp->usage);
++			return -1;
++		}
++	}
++	else
++	{
++		start = simple_strtoul(argv[1], NULL, 16);
++		end = simple_strtoul(argv[2], NULL, 16);
++
++		if( start>DIAG_MEM_MAX_ADDR || end>DIAG_MEM_MAX_ADDR || start>=end)
++		{
++			diag_printf("invalid range");
++			return -1;
++		}
++
++		ret = do_diag_dram_func_quick(start, end);
++	}
++
++
++    if(ret == 0)
++    {
++        diag_printf("DRAM test Success!\n");
++    }
++    else
++    {
++        diag_printf("DRAM test Fail!\n");
++    }
++
++	time_end = get_timer(0);
++	diag_printf("\nTime spend = %ldms\n",time_end-time_start);
++	return ret;
++}
++
++U_BOOT_CMD(
++    dram_test, 4, 0, do_diag_dram_cmd,
++    "memory test from startAddr to endAddr",
++    "dram_test <startAddr> <endAddr> [full]\n"
++    "Syntax:\n"
++    "    diag_dram <startAddr> <endAddr> [full]\n"
++    "Example:\n"
++    "    diag_dram 0x2000 0x1ffffffc\n"
++);
+diff --git a/board/accton/as4600_54t/ddr.c b/board/accton/as4600_54t/ddr.c
+new file mode 100644
+index 0000000..b15e1b4
+--- /dev/null
++++ b/board/accton/as4600_54t/ddr.c
+@@ -0,0 +1,184 @@
++/*
++ * Copyright 2009-2010 Freescale Semiconductor, Inc.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <asm/mmu.h>
++#include <asm/immap_85xx.h>
++#include <asm/processor.h>
++#include <asm/fsl_ddr_sdram.h>
++#include <asm/io.h>
++#include <asm/fsl_law.h>
++
++DECLARE_GLOBAL_DATA_PTR;
++
++extern void fsl_ddr_set_memctl_regs(const fsl_ddr_cfg_regs_t *regs,
++				   unsigned int ctrl_num);
++
++#define DATARATE_400MHZ 400000000
++#define DATARATE_533MHZ 533333333
++#define DATARATE_667MHZ 666666666
++#define DATARATE_800MHZ 800000000
++
++
++/* Default settings for "stable" mode */
++#define CONFIG_SYS_DDR_CS0_BNDS		0x0000007F
++#define CONFIG_SYS_DDR_CS0_CONFIG	0x80044302
++#define CONFIG_SYS_DDR_TIMING_3		0x00030000
++#define CONFIG_SYS_DDR_TIMING_0		0x003a0104
++#define CONFIG_SYS_DDR_TIMING_1_667	0x6f6b0644      /* DDR data rate = 667MHz */
++#define CONFIG_SYS_DDR_TIMING_1_800	0x6f6bf644      /* DDR data rate = 800MHz */
++#define CONFIG_SYS_DDR_TIMING_2		0x0fa888d0
++#define CONFIG_SYS_DDR_MODE_1		0x00421222
++#define CONFIG_SYS_DDR_MODE_2		0x04000000
++#define CONFIG_SYS_DDR_MODE_CTRL	0x00000000
++#define CONFIG_SYS_DDR_INTERVAL		0x0a280100
++#define CONFIG_SYS_DDR_DATA_INIT	0xDEADBEEF
++#define CONFIG_SYS_DDR_CLK_CTRL		0x02000000
++#define CONFIG_SYS_DDR_TIMING_4		0x00220001
++#define CONFIG_SYS_DDR_TIMING_5		0x03402400
++#define CONFIG_SYS_DDR_ZQ_CNTL		0x00000000 /* double check */
++#define CONFIG_SYS_DDR_WRLVL_CNTL	0x8645f607
++#define CONFIG_SYS_DDR_CONTROL		0xe7000000 /* ECC enable, Type = DDR3 */
++#define CONFIG_SYS_DDR_CONTROL_2		0x24401011
++#define CONFIG_SYS_DDR_CDR1		0x00000000
++#define CONFIG_SYS_DDR_CDR2		0x00000000
++#define CONFIG_SYS_DDR_ERR_INT_EN	0x00000000
++#define CONFIG_SYS_DDR_ERR_DIS		0x00000000
++#define CONFIG_SYS_DDR_SBE		0x00000000 /* should be 0x00010000 */
++
++fsl_ddr_cfg_regs_t ddr_cfg_regs_667 = {
++	.cs[0].bnds = CONFIG_SYS_DDR_CS0_BNDS,
++	.cs[0].config = CONFIG_SYS_DDR_CS0_CONFIG,
++	.timing_cfg_3 = CONFIG_SYS_DDR_TIMING_3,
++	.timing_cfg_0 = CONFIG_SYS_DDR_TIMING_0,
++	.timing_cfg_1 = CONFIG_SYS_DDR_TIMING_1_667,
++	.timing_cfg_2 = CONFIG_SYS_DDR_TIMING_2,
++	.ddr_sdram_cfg = CONFIG_SYS_DDR_CONTROL,
++	.ddr_sdram_cfg_2 = CONFIG_SYS_DDR_CONTROL_2,
++	.ddr_sdram_mode = CONFIG_SYS_DDR_MODE_1,
++	.ddr_sdram_mode_2 = CONFIG_SYS_DDR_MODE_2,
++	.ddr_sdram_md_cntl = CONFIG_SYS_DDR_MODE_CTRL,
++	.ddr_sdram_interval = CONFIG_SYS_DDR_INTERVAL,
++	.ddr_data_init = CONFIG_SYS_DDR_DATA_INIT,
++	.ddr_sdram_clk_cntl = CONFIG_SYS_DDR_CLK_CTRL,
++	.timing_cfg_4 = CONFIG_SYS_DDR_TIMING_4,
++	.timing_cfg_5 = CONFIG_SYS_DDR_TIMING_5,
++	.ddr_zq_cntl = CONFIG_SYS_DDR_ZQ_CNTL,
++	.ddr_wrlvl_cntl = CONFIG_SYS_DDR_WRLVL_CNTL,
++	.ddr_cdr1 = CONFIG_SYS_DDR_CDR1,
++    .ddr_cdr2 = CONFIG_SYS_DDR_CDR2,
++    .err_int_en = CONFIG_SYS_DDR_ERR_INT_EN,
++    .err_disable = CONFIG_SYS_DDR_ERR_DIS
++};
++
++fsl_ddr_cfg_regs_t ddr_cfg_regs_800 = {
++	.cs[0].bnds = CONFIG_SYS_DDR_CS0_BNDS,
++	.cs[0].config = CONFIG_SYS_DDR_CS0_CONFIG,
++	.timing_cfg_3 = CONFIG_SYS_DDR_TIMING_3,
++	.timing_cfg_0 = CONFIG_SYS_DDR_TIMING_0,
++	.timing_cfg_1 = CONFIG_SYS_DDR_TIMING_1_800,
++	.timing_cfg_2 = CONFIG_SYS_DDR_TIMING_2,
++	.ddr_sdram_cfg = CONFIG_SYS_DDR_CONTROL,
++	.ddr_sdram_cfg_2 = CONFIG_SYS_DDR_CONTROL_2,
++	.ddr_sdram_mode = CONFIG_SYS_DDR_MODE_1,
++	.ddr_sdram_mode_2 = CONFIG_SYS_DDR_MODE_2,
++	.ddr_sdram_md_cntl = CONFIG_SYS_DDR_MODE_CTRL,
++	.ddr_sdram_interval = CONFIG_SYS_DDR_INTERVAL,
++	.ddr_data_init = CONFIG_SYS_DDR_DATA_INIT,
++	.ddr_sdram_clk_cntl = CONFIG_SYS_DDR_CLK_CTRL,
++	.timing_cfg_4 = CONFIG_SYS_DDR_TIMING_4,
++	.timing_cfg_5 = CONFIG_SYS_DDR_TIMING_5,
++	.ddr_zq_cntl = CONFIG_SYS_DDR_ZQ_CNTL,
++	.ddr_wrlvl_cntl = CONFIG_SYS_DDR_WRLVL_CNTL,
++	.ddr_cdr1 = CONFIG_SYS_DDR_CDR1,
++    .ddr_cdr2 = CONFIG_SYS_DDR_CDR2,
++    .err_int_en = CONFIG_SYS_DDR_ERR_INT_EN,
++    .err_disable = CONFIG_SYS_DDR_ERR_DIS
++};
++
++/*
++ * Fixed sdram init -- doesn't use serial presence detect.
++ */
++
++phys_size_t fixed_sdram (void)
++{
++	sys_info_t sysinfo;
++	char buf[32];
++	fsl_ddr_cfg_regs_t ddr_cfg_regs;
++	phys_size_t ddr_size;
++	struct cpu_type *cpu;
++
++	get_sys_info(&sysinfo);
++	printf("fixed_sdram Configuring DDR for %s MT/s data rate\n",
++				strmhz(buf, sysinfo.freqDDRBus));
++
++	if(sysinfo.freqDDRBus <= DATARATE_667MHZ)
++		memcpy(&ddr_cfg_regs, &ddr_cfg_regs_667, sizeof(ddr_cfg_regs));
++	else if(sysinfo.freqDDRBus <= DATARATE_800MHZ)
++		memcpy(&ddr_cfg_regs, &ddr_cfg_regs_800, sizeof(ddr_cfg_regs));
++	else
++		panic("Unsupported DDR data rate %s MT/s data rate\n",
++					strmhz(buf, sysinfo.freqDDRBus));
++
++	cpu = gd->cpu;
++	ddr_size = CONFIG_SYS_SDRAM_SIZE * (1UL<<20);
++
++
++	fsl_ddr_set_memctl_regs(&ddr_cfg_regs, 0);
++
++    /* DDR LAW */
++	if (set_ddr_laws(CONFIG_SYS_DDR_SDRAM_BASE,
++			 CONFIG_SYS_SDRAM_SIZE * (1U<<20),
++			 LAW_TRGT_IF_DDR) < 0) {
++		printf("ERROR setting Local Access Windows for DDR\n");
++		return 0;
++	};
++
++
++	return ddr_size;
++}
++
++#if 0
++phys_size_t initdram(int board_type)
++{
++	phys_size_t dram_size = 0;
++	struct cpu_type *cpu;
++#if defined(CONFIG_SYS_RAMBOOT) && defined(CONFIG_SYS_FSL_BOOT_DDR)
++	cpu = gd->cpu;
++	/* P1020 and it's derivatives support max 32bit DDR width */
++	if (cpu->soc_ver == SVR_P1020 || cpu->soc_ver == SVR_P1020_E ||
++		cpu->soc_ver == SVR_P1011 || cpu->soc_ver == SVR_P1011_E)
++		return (CONFIG_SYS_SDRAM_SIZE * 1024 * 1024) / 2;
++	else
++		return CONFIG_SYS_SDRAM_SIZE * 1024 * 1024;
++#endif
++	dram_size = fixed_sdram();
++
++	set_ddr_laws(0, dram_size, LAW_TRGT_IF_DDR_1);
++
++	dram_size = setup_ddr_tlbs(dram_size / 0x100000);
++	dram_size *= 0x100000;
++
++	puts("DDR: ");
++	return dram_size;
++}
++#endif
+diff --git a/board/accton/as4600_54t/fan_read_cmd.c b/board/accton/as4600_54t/fan_read_cmd.c
+new file mode 100644
+index 0000000..918e9d3
+--- /dev/null
++++ b/board/accton/as4600_54t/fan_read_cmd.c
+@@ -0,0 +1,471 @@
++
++
++#include <common.h>
++#include <i2c.h>
++
++u8 cpld_rd(u32 reg);
++void cpld_wr(u32 reg, u8 data);
++
++#define I2C_ADDR_ADT7473 0x2E
++#define I2C_ADDR_W83782G 0x29
++#define CPLD_REG_SYSTEM 0x3
++#define CPLD_REG_PSU1 0x2
++#define CPLD_REG_PSU2 0x1
++
++#define I2C_ADDR_REAR_FAN_DIR 0x73
++/**
++ * FAN test interface
++ * 1) get pwm
++ * 2) set pwm
++ * 3) show rpm
++ * 4) show fan status
++ * 5) *set direction
++ */
++static int ADT7473_get_pwm(int *pwm)
++{
++	//if(i2c_path_open(&i2c_root,"/PCA9548_A/ADT7473") != MSG_I2C_PASS)
++	//{
++	//	printf("ADT7473 i2c device Not Present\n");
++	//	return 1;
++	//}
++	i2c_read(I2C_ADDR_ADT7473, 0x30,1,(unsigned char *)pwm, 1);
++
++	return 0;
++}
++
++static int ADT7473_set_pwm(int pwm)
++{
++	//if(i2c_path_open(&i2c_root,"/PCA9548_A/ADT7473") != MSG_I2C_PASS)
++	//{
++	//	printf("ADT7473 i2c device Not Present\n");
++	//	return 1;
++	//}
++	unsigned char write_data = 0xE2;
++	write_data = 0xE2;  /* PWMx configuration value, manual mode.*/
++	i2c_write(I2C_ADDR_ADT7473,0x5C,1,&write_data,1);  /* config FAN @ PWM1 */
++	udelay(1000000);
++	write_data=pwm;
++	i2c_write(I2C_ADDR_ADT7473,0x30,1,&write_data,1);  /* FAN @ PWM1 */
++	i2c_write(I2C_ADDR_ADT7473,0x32,1,&write_data,1);  /* FAN @ PWM1 */
++	return 0;
++}
++
++static int ADT7473_show_rpm(void)
++{
++	//if(i2c_path_open(&i2c_root,"/PCA9548_A/ADT7473") != MSG_I2C_PASS)
++	//{
++	//	printf("ADT7473 i2c device Not Present\n");
++	//	return 1;
++	//}
++
++	unsigned char taco_L=0,taco_H=0;
++	int TACO = 0;
++	int stop_fan=0;
++
++	udelay(100000);
++
++	i2c_read(I2C_ADDR_ADT7473, 0x28,1,&taco_L,1);
++	i2c_read(I2C_ADDR_ADT7473, 0x29,1,&taco_H,1);
++	udelay(100000);
++	i2c_read(I2C_ADDR_ADT7473, 0x28,1,&taco_L,1);
++	i2c_read(I2C_ADDR_ADT7473, 0x29,1,&taco_H,1);
++	TACO = ((taco_H<<8) | taco_L);
++	printf("TACO1=(%02x %02x) RPM=%u\n",taco_H,taco_L,(TACO==0xFFFF)? 0 : 90000*60/TACO);
++	if(TACO == 0xFFFF)
++		stop_fan += 1;
++
++	udelay(100000);
++
++	i2c_read(I2C_ADDR_ADT7473, 0x2A,1,&taco_L,1);
++	i2c_read(I2C_ADDR_ADT7473, 0x2B,1,&taco_H,1);
++	udelay(100000);
++	i2c_read(I2C_ADDR_ADT7473, 0x2A,1,&taco_L,1);
++	i2c_read(I2C_ADDR_ADT7473, 0x2B,1,&taco_H,1);
++	TACO = ((taco_H<<8) | taco_L);
++	printf("TACO2=(%02x %02x) RPM=%u\n",taco_H,taco_L,(TACO==0xFFFF)? 0 : 90000*60/TACO);
++	if(TACO == 0xFFFF)
++		stop_fan += 1;
++
++	udelay(100000);
++
++	i2c_read(I2C_ADDR_ADT7473, 0x2C,1,&taco_L,1);
++	i2c_read(I2C_ADDR_ADT7473, 0x2D,1,&taco_H,1);
++	udelay(100000);
++	i2c_read(I2C_ADDR_ADT7473, 0x2C,1,&taco_L,1);
++	i2c_read(I2C_ADDR_ADT7473, 0x2D,1,&taco_H,1);
++	TACO = ((taco_H<<8) | taco_L);
++	printf("TACO3=(%02x %02x) RPM=%u\n",taco_H,taco_L,(TACO==0xFFFF)? 0 : 90000*60/TACO);
++	if(TACO == 0xFFFF)
++		stop_fan += 1;
++
++	udelay(100000);
++
++	i2c_read(I2C_ADDR_ADT7473, 0x2E,1,&taco_L,1);
++	i2c_read(I2C_ADDR_ADT7473, 0x2F,1,&taco_H,1);
++	udelay(100000);
++	i2c_read(I2C_ADDR_ADT7473, 0x2E,1,&taco_L,1);
++	i2c_read(I2C_ADDR_ADT7473, 0x2F,1,&taco_H,1);
++	TACO = ((taco_H<<8) | taco_L);
++	printf("TACO4=(%02x %02x) RPM=%u\n",taco_H,taco_L,(TACO==0xFFFF)? 0 : 90000*60/TACO);
++	if(TACO == 0xFFFF)
++		stop_fan += 1;
++
++	if(stop_fan == 0)
++		return 0;
++	else	/*some fans are stop*/
++	{
++		unsigned char read_data = 0;
++		i2c_read(I2C_ADDR_ADT7473,0x30,1,&read_data,1);  /* FAN @ PWM1 */
++		if(read_data >=0 && read_data <= 10)	/*allowd min pwm*/
++			return 0;
++		else
++			return 1;
++	}
++}
++
++static int I2C_show_fan_status(void)
++{
++	//if(i2c_path_open(&i2c_root,"/PCA9548_A/REAR_FAN_DIR") != MSG_I2C_PASS)
++	//{
++	//	printf("REAR_FAN_DIR i2c device Not Present\n");
++	//	return 1;
++	//}
++
++	unsigned char direction,i;
++	i2c_read(I2C_ADDR_REAR_FAN_DIR, 0,1,&direction,1);	/*Input port register 0, Output port register 1, Configuration register 3: 0=output,1=input(default)*/
++
++	for(i=0;i<4;i++)
++	{
++		printf("FAN %d: %s\n",i,(direction&0x1)?"FtoR(1)":"RtoF(0)");
++		direction >>= 1;
++	}
++
++	return 0;
++}
++
++/*
++static int I2C_set_fan_direction(int id, int dir)
++{
++	if(i2c_path_open(&i2c_root,"/PCA9548_A/REAR_FAN_DIR") != MSG_I2C_PASS)
++	{
++		printf("REAR_FAN_DIR i2c device Not Present\n");
++		return 1;
++	}
++
++
++	char rw_data = 0;
++	i2c_read(I2C_ADDR_REAR_FAN_DIR, 1,1,&rw_data,1);
++
++	if(dir == 0)
++		rw_data &= ~(1<<(id-1));
++	else
++		rw_data |= (1<<(id-1));
++
++	i2c_write(I2C_ADDR_REAR_FAN_DIR, 1, 1, &rw_data, 1);
++}*/
++
++#ifdef W8372G
++static int W83782G_set_pwm(int pwm)
++{
++	unsigned char val;
++
++    if( (pwm < 0) || (pwm > 100))
++        pwm = 100;
++
++	/*check i2c path*/
++	//if(i2c_path_open(&i2c_root,"/PCA9548_A/HW Monitor(W83782G)") != MSG_I2C_PASS)
++	//	return DIAG_FAIL;
++
++    /* W83782G I2C slave addr=0x29 @ channel #1-7 */
++    //i2c_set_bus_num(I2C_CHANNEL_1); /* channel #1 */
++    //val= 0x80;
++    //i2c_write(I2C_ADDR_PCA9548,0,1,&val,1);
++    //udelay(1000);
++
++	//if (i2c_probe(I2C_ADDR_W83782G) != 0){
++    //    debug("[Error] Cannot find W83782G device, slave address = 0x%02X\n", I2C_ADDR_W83782G);
++    //    return -1;
++    //}
++    //udelay(1000);
++
++    /* W83782G PWMOUT1 - 0x5B (bank 0) */
++    i2c_read(I2C_ADDR_W83782G, 0x4e,1, &val, 1);
++    val &= ~0x07;
++    udelay(1000);
++    i2c_write(I2C_ADDR_W83782G, 0x4e,1,&val,1);
++    udelay(1000);
++
++    val = (unsigned char)((pwm*255)/100);
++    val = (val == 255) ? val : val+1;  /* round it to the nearest whole number */
++    debug("[val] 0x%02X\n", val);
++    i2c_write(I2C_ADDR_W83782G, 0x5B,1,&val,1);
++    udelay(1000);
++
++	return 0;
++}
++#endif
++
++#ifdef W8372G
++static int W83782G_get_pwm(int *pwm)
++{
++	unsigned char val;
++    int duty_cycle;
++
++	/*check i2c path*/
++	//if(i2c_path_open(&i2c_root,"/PCA9548_A/HW Monitor(W83782G)") != MSG_I2C_PASS)
++	//	return 1;
++
++    /* W83782G I2C slave addr=0x29 @ channel #1-7 */
++    //i2c_set_bus_num(I2C_CHANNEL_1); /* channel #1 */
++    //val= 0x80;
++    //i2c_write(I2C_ADDR_PCA9548,0,1,&val,1);
++    //udelay(1000);
++
++
++	//if (i2c_probe(I2C_ADDR_W83782G) != 0){
++    //     debug("[Error] Cannot find W83782G device, slave address = 0x%02X\n", I2C_ADDR_W83782G);
++    //     return -1;
++    // }
++    // udelay(1000);
++
++    /* W83782G PWMOUT1 - 0x5B (bank 0) */
++    i2c_read(I2C_ADDR_W83782G, 0x4e,1, &val, 1);
++    val &= ~0x07;
++    udelay(1000);
++    i2c_write(I2C_ADDR_W83782G, 0x4e,1,&val,1);
++    udelay(1000);
++
++    i2c_read(I2C_ADDR_W83782G, 0x5B,1,&val,1);
++
++    duty_cycle = ((int)val*100)/255;
++    debug("[duty_cycle] %d\n", duty_cycle);
++
++    return duty_cycle;
++}
++
++#endif
++
++#ifdef W8372G
++int W83782G_show_rpm(int n)
++{
++	int rpm=0;
++	unsigned char val=0;
++	int total_counter=0;
++	unsigned char fan_divisor = 0;
++	//if(i2c_path_open(&i2c_root,"/PCA9548_A/HW Monitor(W83782G)") != MSG_I2C_PASS)
++	//	return DIAG_FAIL;
++
++	i2c_read(I2C_ADDR_W83782G, 0x47,1, &val, 1);/*read FAN1 devisor bit 0 and 1*/
++	fan_divisor = (val&0x30)>>4;
++	i2c_read(I2C_ADDR_W83782G, 0x5D,1, &val, 1);/*read FAN1 devisor bit 2*/
++	fan_divisor |= ((val&0x20)>>3);
++
++	printf("divisor = %d\n",fan_divisor);
++	switch(fan_divisor)
++	{
++		case 0:
++			rpm = 8800;
++			break;
++		case 1:
++			rpm = 4400;
++			break;
++		case 2:
++			rpm = 2200;
++			break;
++		case 3:
++			rpm = 1100;
++			break;
++		case 4:
++			rpm = 550;
++			break;
++		case 5:
++			rpm = 275;
++			break;
++		case 6:
++			rpm = 137;
++			break;
++		case 7:
++			rpm = 68;
++			break;
++	}
++
++	int i=0;
++	for(i=0;i<20;i++)
++	{
++		i2c_read(I2C_ADDR_W83782G, 0x28,1, &val, 1);/*read counter 20 times*/
++		total_counter += val;
++	}
++	rpm = total_counter/20;
++
++	return rpm;
++
++}
++
++#endif
++/* ------------------------------------------------------------------------
++ * FUNCTION NAME: board_test_fan
++ * PURPOSE:	To verify RTC function.
++ * INPUT:
++ *          n - (reserved)
++ * OUTPUT:	None
++ * RETURN:
++ *          0   = Success
++ *          -1  = Fail
++ *          1   = Abort
++ * NOTES:
++ */
++int CPLD_show_fan_status(int n)
++{
++    int s, ret;
++
++    ret = 0;
++
++//------------
++	s = cpld_rd(CPLD_REG_SYSTEM);
++
++	printf("CPLD[SYSFAN]=0x%.2x SYS FAN ",s);
++	if((s&0x4) == 0)
++	{
++		printf("Present ");
++		if((s&0x8) == 0)
++		{
++			printf("Status:Normal ");
++			if(s&0x10)
++				printf("[FtoR]\n");
++			else
++				printf("[RtoF]\n");
++		}
++		else
++		{
++			printf("Status:Fail\n");
++			ret = 1;
++		}
++	}
++	else
++	{
++		printf("NOT present\n");
++		ret = 1;
++	}
++//----------
++#if 0	/*Don't care power fan*/
++	s = CPLD_read(CPLD_REG_PSU1);
++	printf("CPLD[PSU1]=0x%.2x PSU1 FAN ",s);
++	if((s&0x1) == 0)
++	{
++		printf("Present ");
++		if(s&0x4)
++		{
++			printf("Status:Normal ");
++			if(s&0x10)
++				printf("[FtoR]\n");
++			else
++				printf("[RtoF]\n");
++		}
++		else
++		{
++			printf("Status:Fail\n");
++			ret = 1;
++		}
++	}
++	else
++	{
++		printf("NOT present\n");
++		ret = 1;
++	}
++//-----------
++	s = CPLD_read(CPLD_REG_PSU2);
++	printf("CPLD[PSU2]=0x%.2x PSU2 FAN ",s);
++	if((s&0x1) == 0)
++	{
++		printf("Present ");
++		if(s&0x4)
++		{
++			printf("Status:Normal ");
++			if(s&0x10)
++				printf("[FtoR]\n");
++			else
++				printf("[RtoF]\n");
++		}
++		else
++		{
++			printf("Status:Fail\n");
++			ret = 1;
++		}
++	}
++	else
++	{
++		printf("NOT present\n");
++		ret = 1;
++	}
++#endif
++    return ret;
++}
++
++int bgsf(int *duty_cycle)
++{
++	int pwm=0;
++	ADT7473_get_pwm(&pwm);
++	//W83782G_get_pwm(&pwm);
++	*duty_cycle = (pwm * 100 / 255);
++	return 0;
++}
++
++int bssf(int duty_cycle)
++{
++	int pwm = (int)((duty_cycle*255)/100);	/*pwm = 0~255*/
++	return ADT7473_set_pwm(pwm);
++	//W83782G_set_pwm(pwm);
++}
++
++int board_show_system_fan_rpm(void)
++{
++	//printf("rpm=%d",W83782G_show_rpm(0));
++	return ADT7473_show_rpm();
++}
++
++int board_show_system_fan_status(void)
++{
++	//return CPLD_show_fan_status(0);
++	return I2C_show_fan_status();
++}
++
++int do_diag_fan_cmd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
++{
++	int ret = 0;
++	int speed = 0;
++	ret = board_show_system_fan_status();
++
++	if(ret == 0)
++		board_show_system_fan_rpm();
++
++	if(argc == 2 && ret == 0)
++	{
++			speed = simple_strtoul(argv[1], NULL, 10);
++			if(speed >= 0 && speed <= 100)
++			{
++				printf("Set fan rate %d %%\n",speed);
++				ret += bssf(speed);
++				udelay(3000000);
++
++				board_show_system_fan_rpm();
++			}
++			else
++			{
++				ret = 1;
++				printf("Usage:\n%s\n", cmdtp->help);
++			}
++	}
++
++	return ret;
++}
++
++
++U_BOOT_CMD(
++    diag_fan, 3, 0, do_diag_fan_cmd,
++    "Check FAN status and/or Set Control Speed",
++    "diag_fan <0~100>\n"
++    "Syntax:\n"
++    "    diag_fan <0~100>\n"
++    "Example:\n"
++    "    diag_fan 70\n"
++);
+diff --git a/board/accton/as4600_54t/fastpath.h b/board/accton/as4600_54t/fastpath.h
+new file mode 100644
+index 0000000..d0cd09b
+--- /dev/null
++++ b/board/accton/as4600_54t/fastpath.h
+@@ -0,0 +1,54 @@
++/*
++ * File:        fastpath.h
++ * Purpose:     Fastpath boot image data structure.
++ *
++ * Notes:
++ * History:
++ *  2013/08/23    -- Aaron Lien, Initial version
++ *
++ * Copyright (C) 2013  Accton Corporation & authors.
++ */
++
++#ifndef __FASTPATH_
++#define __FASTPATH_
++
++#define DIM_MAX_BOOTCFG_LINE_SIZE       128
++#define DIM_MAX_FILENAME_SIZE           40
++
++/* boot Image descriptor. Each Image is described as below */
++typedef struct _dim_image
++{
++    /* Mandatory information */
++    char    currentState[15];                   /* active / backup */
++    char    nextState[15];                      /* active / backup */
++    char    fileName[DIM_MAX_FILENAME_SIZE];    /* on the fs */
++    char    numErrors[5];           /* Num of tries w/ errors    */
++    char    descr[DIM_MAX_BOOTCFG_LINE_SIZE]; /* text description */
++} dimImageInfo_t;
++
++
++/* STK image header */
++typedef struct stkFileHeader_s{
++ unsigned short crc;
++ unsigned short tag1;
++ unsigned long tag2;
++
++ unsigned long num_components; /* Number of OPR and tgz files in the STK image (may be 0) */
++
++ unsigned long file_size; /* Total number of bytes in the STK file */
++
++ unsigned char rel;
++ unsigned char ver;
++ unsigned char maint_level;
++ unsigned char build_num;
++
++ unsigned long stk_header_size; /* Number of bytes in the STk header */
++
++ unsigned char reserved[64];    /* Reserved for future use */
++
++}stkFileHeader_t;
++
++#define STK_TAG1    0xAA55
++#define STK_TAG2    0x2288BB66
++
++#endif  /* __FASTPATH_ */
+diff --git a/board/accton/as4600_54t/law.c b/board/accton/as4600_54t/law.c
+new file mode 100644
+index 0000000..530d65f
+--- /dev/null
++++ b/board/accton/as4600_54t/law.c
+@@ -0,0 +1,50 @@
++/*
++ * Copyright 2008-2010 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <asm/fsl_law.h>
++#include <asm/mmu.h>
++
++
++/*
++ * LAW(Local Access Window) configuration:
++ *
++ * 0  LAW0  FLASH                     0xef80_0000~0xefff_ffff	     8 Mbyte
++ * 1  LAW1  CPLD		      0xea00_0000~0xea00_00FF	     < 4K
++ * 2  LAW2  PCIe1 MEM		      0xa000_0000~0xbfff_ffff	     512 MByte
++ * 3  LAW3  PCIe1 IO		      0xffc2_0000~0xffc2_ffff	     64 K
++ *
++ * Notes:
++ *    CCSRBAR and L2-as-SRAM don't need a configured Local Access Window.
++ *    If flash is 8M at default position (last 8M), no LAW needed.
++ *
++ */
++
++struct law_entry law_table[] = {
++	SET_LAW(CONFIG_SYS_FLASH_BASE,     LAW_SIZE_8M,   LAW_TRGT_IF_LBC),
++	SET_LAW(CONFIG_SYS_CPLD_BASE,      LAW_SIZE_4K,   LAW_TRGT_IF_LBC),
++};
++
++int num_law_entries = ARRAY_SIZE(law_table);
+diff --git a/board/accton/as4600_54t/tlb.c b/board/accton/as4600_54t/tlb.c
+new file mode 100644
+index 0000000..0c95c5f
+--- /dev/null
++++ b/board/accton/as4600_54t/tlb.c
+@@ -0,0 +1,88 @@
++/*
++ * Copyright 2008-2009 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <asm/mmu.h>
++
++struct fsl_e_tlb_entry tlb_table[] = {
++	/* TLB 0 - for temp stack in cache */
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 4 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 4 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 8 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 8 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 12 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 12 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++
++	/* TLB 1 */
++	/* *I*** - Covers boot page */
++	SET_TLB_ENTRY(1, 0xfffff000, 0xfffff000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 0, BOOKE_PAGESZ_4K, 1),
++
++	/* *I*G* - CCSRBAR */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CCSRBAR, CONFIG_SYS_CCSRBAR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 1, BOOKE_PAGESZ_1M, 1),
++
++	/* W**G* - Flash, localbus */
++	/* This will be changed to *I*G* after relocation to RAM. */
++	SET_TLB_ENTRY(1, CONFIG_SYS_FLASH_BASE, CONFIG_SYS_FLASH_BASE_PHYS,
++		      MAS3_SX|MAS3_SR, MAS2_W|MAS2_G,
++		      0, 2, CONFIG_SYS_FLASH_TLB_SIZE, 1),
++
++	/* *I*G* - PCIe1 MEM -- first 256M */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_MEM_VIRT, CONFIG_SYS_PCIE1_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 3, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCIe1 MEM -- second 256M */
++	SET_TLB_ENTRY(1, (CONFIG_SYS_PCIE1_MEM_VIRT + 0x10000000),
++		      (CONFIG_SYS_PCIE1_MEM_PHYS + 0x10000000),
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 4, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCIe1 I/O */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_IO_VIRT, CONFIG_SYS_PCIE1_IO_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 5, BOOKE_PAGESZ_256K, 1),
++
++	/* *I*G* - CPLD */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CPLD_BASE, CONFIG_SYS_CPLD_BASE,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 6, BOOKE_PAGESZ_1K, 1),
++
++};
++
++int num_tlb_entries = ARRAY_SIZE(tlb_table);
+diff --git a/board/accton/as4600_54t/usb.c b/board/accton/as4600_54t/usb.c
+new file mode 100644
+index 0000000..c1f6d26
+--- /dev/null
++++ b/board/accton/as4600_54t/usb.c
+@@ -0,0 +1,78 @@
++/*
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <command.h>
++#include <environment.h>
++#include <usb.h>
++#include <i2c.h>
++#include <part.h>
++
++static int do_usbiddev(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
++{
++	int devno;
++	int target = -1;
++	block_dev_desc_t *blk_dev;
++	char val[2];
++
++	/*
++	 * The internal USB NAND flash drive is connected to the
++	 * internal hub such that the NAND device always appears as
++	 * the *last* mass storage device.
++	 *
++	 * Sure this is dependent on the depth-first USB topology
++	 * enumeration strategy, but that is not going to change.
++	 */
++	for (devno = 0; ; ++devno) {
++		blk_dev = usb_stor_get_dev(devno);
++		if (blk_dev == NULL)
++			break;
++		if ( (blk_dev->if_type == IF_TYPE_USB) &&
++		     !blk_dev->removable &&
++		     ((blk_dev->type & 0x1F) == DEV_TYPE_HARDDISK) ) {
++			target = devno;
++		}
++	}
++
++	if (target == -1) {
++		printf("Error: Unable to detect internal USB flash device.\n");
++		printf("Perhaps you forgot to run 'usb start' ?\n");
++		return 1;
++	}
++
++	if (target > 9) {
++		printf("Error: Unexpectedly large device number: %d.\n", target);
++		return 1;
++	}
++
++	val[0] = '0' + target;
++	val[1] = 0;
++
++	setenv("usbdev", val);
++
++	return 0;
++}
++
++U_BOOT_CMD(
++	usbiddev,	3,	1,	do_usbiddev,
++	"Identify internal USB NAND flash device number and set\n"
++	"environment variable 'usbdev' to that number.",
++	""
++);
+diff --git a/boards.cfg b/boards.cfg
+index e4b0d44..4e75ca6 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -703,6 +703,7 @@ kmvect1                      powerpc     mpc83xx     km83xx              keymile
+ tuge1                        powerpc     mpc83xx     km83xx              keymile        -           tuxx1:KM_DISABLE_APP2,TUGE1
+ tuxx1                        powerpc     mpc83xx     km83xx              keymile
+ kmsupx5                      powerpc     mpc83xx     km83xx              keymile        -           tuxx1:KM_DISABLE_APP2,KMSUPX5
++AS4600_54T                   powerpc     mpc85xx     as4600_54t          accton         -           AS4600_54T:ONIE_PLATFORM_REV=0
+ sbc8548                      powerpc     mpc85xx     sbc8548             -              -           sbc8548
+ sbc8548_PCI_33               powerpc     mpc85xx     sbc8548             -              -           sbc8548:PCI,33
+ sbc8548_PCI_33_PCIE          powerpc     mpc85xx     sbc8548             -              -           sbc8548:PCI,33,PCIE
+diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
+index a1824f4..9b3e0a8 100644
+--- a/common/cmd_sys_eeprom.c
++++ b/common/cmd_sys_eeprom.c
+@@ -2,7 +2,20 @@
+  * See file CREDITS for list of people who contributed to this
+  * project.
+  *
+- * SPDX-License-Identifier:	GPL-2.0+
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
+  */
+ 
+ #include <common.h>
+@@ -12,6 +25,8 @@
+ 
+ #include "sys_eeprom.h"
+ 
++DECLARE_GLOBAL_DATA_PTR;
++
+ /* File scope function prototypes */
+ static bool is_checksum_valid(u8 *eeprom);
+ static int read_eeprom(u8 *eeprom);
+@@ -207,8 +222,8 @@ static struct tlv_code_desc tlv_code_list[] = {
+ 	{ TLV_CODE_DEVICE_VERSION, "Device Version"},
+ 	{ TLV_CODE_LABEL_REVISION, "Label Revision"},
+ 	{ TLV_CODE_PLATFORM_NAME , "Platform Name"},
+-	{ TLV_CODE_ONIE_VERSION	 , "Loader Version"},
+-	{ TLV_CODE_MAC_SIZE	 , "MAC Addresses"},
++	{ TLV_CODE_ONIE_VERSION	 , "ONIE Version"},
++	{ TLV_CODE_MAC_SIZE	 , "MAC Address Size"},
+ 	{ TLV_CODE_MANUF_NAME	 , "Manufacturer"},
+ 	{ TLV_CODE_MANUF_COUNTRY , "Country Code"},
+ 	{ TLV_CODE_VENDOR_NAME	 , "Vendor Name"},
+@@ -1038,8 +1053,6 @@ int mac_read_from_eeprom(void)
+ 	u8 macbase[6];
+ 	tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
+ 
+-	puts("EEPROM: ");
+-
+ 	if (read_eeprom(eeprom)) {
+ 		printf("Read failed.\n");
+ 		return -1;
+@@ -1059,18 +1072,35 @@ int mac_read_from_eeprom(void)
+ 
+ 	for (i = 0; i < min(maccount, CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS); i++) {
+ 		if (is_valid_ether_addr(macbase)) {
+-			char ethaddr[18];
++			char ethaddr[18], *env;
+ 			char enetvar[11];
+ 
+ 			sprintf(ethaddr, "%02X:%02X:%02X:%02X:%02X:%02X",
+ 				macbase[0], macbase[1], macbase[2],
+ 				macbase[3], macbase[4], macbase[5]);
+ 			sprintf(enetvar, i ? "eth%daddr" : "ethaddr", i);
++
++#if 1
++			/* aaron_lien, 2013/08/05,
++			 * Initialize $ethaddr if it is blank or
++			 * if the current value is different from non-volatile board information
++			 * then change it.
++			 */
++			env = getenv(enetvar);
++			if (!env) {
++				setenv(enetvar, ethaddr);
++			} else {
++				if(strcmp(env, ethaddr))
++					setenv(enetvar, ethaddr);
++			}
++
++#else
+ 			/* Only initialize environment variables that are blank
+ 			 * (i.e. have not yet been set)
+ 			 */
+ 			if (!getenv(enetvar))
+ 				setenv(enetvar, ethaddr);
++#endif
+ 
+ 			macbase[5]++;
+ 			if (macbase[5] == 0) {
+@@ -1087,7 +1117,7 @@ int mac_read_from_eeprom(void)
+ 		}
+ 	}
+ 
+-	printf("%s v%u len=%u\n", eeprom_hdr->signature, eeprom_hdr->version,
++	debug("%s v%u len=%u\n", eeprom_hdr->signature, eeprom_hdr->version,
+ 	       be16_to_cpu(eeprom_hdr->totallen));
+ 
+ 	return 0;
+@@ -1095,6 +1125,7 @@ int mac_read_from_eeprom(void)
+ 
+ #endif /* CONFIG_SYS_EEPROM_LOAD_ENV_MAC */
+ 
++#if 0
+ #ifdef CONFIG_POPULATE_SERIAL_NUMBER
+ 
+ /**
+@@ -1134,3 +1165,65 @@ int populate_serial_number(void)
+ }
+ 
+ #endif /* CONFIG_POPULATE_SERIAL_NUMBER */
++#else
++/* ------------------------------------------------------------------------
++ * FUNCTION NAME: populate_mac_address
++ * PURPOSE:	Read the MAC addresses from non-volatile device and
++ *          set the appropriate environment variables for each one read.
++ * INPUT:   None
++ * OUTPUT:	None
++ * RETURN:
++ *          0   = Success
++ *          -1  = Fail
++ * NOTES:
++ *  The environment variables are only set if they haven't been set already or
++ *  if the current value is different from non-volatile board information.
++ */
++int populate_mac_address(void)
++{
++    char * env;
++    int ret = -1;
++
++    if(mac_read_from_eeprom())
++        return -1;
++
++    env = getenv("ethaddr");
++    if (!env)
++        ret = eth_getenv_enetaddr("ethaddr", gd->bd->bi_enetaddr);
++
++    return ret;
++}
++
++/* ------------------------------------------------------------------------
++ * FUNCTION NAME: populate_env
++ * PURPOSE:	Read the board information from non-volatile device and
++ *          set the appropriate environment variable.
++ * INPUT:   None
++ * OUTPUT:	None
++ * RETURN:
++ *          0   = Success
++ *          -1  = Fail
++ * NOTES:
++ *  The environment variable is set always.
++ */
++int populate_env(char *env_name,  u8 type_code)
++{
++    char env_str_buf[257];
++    int index;
++    tlvinfo_tlv_t * tlv_item;
++
++    if (read_eeprom(eeprom)) {
++        printf("[Error] Failed to read board information.\n");
++        return -1;
++    }
++
++    if (tlvinfo_find_tlv(eeprom, type_code, &index)) {
++        tlv_item = (tlvinfo_tlv_t *) &eeprom[index];
++        memcpy(env_str_buf, tlv_item->value, tlv_item->length);
++        env_str_buf[tlv_item->length] = 0;
++        setenv(env_name, env_str_buf);
++    }
++
++    return 0;
++}
++#endif
+diff --git a/common/image.c b/common/image.c
+index 95498e6..2edd747 100644
+--- a/common/image.c
++++ b/common/image.c
+@@ -830,6 +830,16 @@ int boot_get_ramdisk(int argc, char * const argv[], bootm_headers_t *images,
+ 	*rd_start = 0;
+ 	*rd_end = 0;
+ 
++#ifdef CONFIG_FASTPATH
++	if(argc >= 3 && strncmp(argv[2], "-f", 2) ==  0) {
++		/* Look for a "-f" which indicates to skip FASTPATH image block.*/
++		debug ("## Using FASTPATH application image\n");
++
++		/* At next line, we expect this image is a legacy mult-component image. */
++		argc=2;
++     }
++#endif
++
+ 	/*
+ 	 * Look for a '-' which indicates to ignore the
+ 	 * ramdisk argument
+@@ -1675,7 +1685,7 @@ int boot_get_fdt(int flag, int argc, char * const argv[],
+ 			image_check_type(&images->legacy_hdr_os_copy,
+ 						IH_TYPE_MULTI)) {
+ 
+-		ulong fdt_data, fdt_len;
++		ulong fdt_data, fdt_len, fdt_idx;
+ 
+ 		/*
+ 		 * Now check if we have a legacy multi-component image,
+@@ -1685,8 +1695,14 @@ int boot_get_fdt(int flag, int argc, char * const argv[],
+ 			"component Image at %08lX\n",
+ 			(ulong)images->legacy_hdr_os);
+ 
+-		image_multi_getimg(images->legacy_hdr_os, 2, &fdt_data,
+-					&fdt_len);
++		fdt_idx=2;  /* default fdt index = 2 */
++#ifdef CONFIG_FASTPATH
++		if (argc >= 3 && strncmp(argv[2], "-f", 2) ==  0) {
++			fdt_idx = simple_strtoul(&argv[2][2], NULL, 10);  /* fdt image # */
++			debug("fdt is at image#%ld, argv[2]=%s\n", fdt_idx, argv[2]);
++		}
++#endif
++		image_multi_getimg(images->legacy_hdr_os, fdt_idx, &fdt_data, &fdt_len);
+ 		if (fdt_len) {
+ 
+ 			fdt_blob = (char *)fdt_data;
+diff --git a/common/main.c b/common/main.c
+index d43c6ae..782a28d 100644
+--- a/common/main.c
++++ b/common/main.c
+@@ -399,12 +399,6 @@ void main_loop (void)
+ 	}
+ #endif  /* CONFIG_MODEM_SUPPORT */
+ 
+-#ifdef CONFIG_VERSION_VARIABLE
+-	{
+-		setenv ("ver", version_string);  /* set version variable */
+-	}
+-#endif /* CONFIG_VERSION_VARIABLE */
+-
+ #ifdef CONFIG_SYS_HUSH_PARSER
+ 	u_boot_hush_start ();
+ #endif
+diff --git a/common/usb_storage.c b/common/usb_storage.c
+index fb322b4..e54e98a 100644
+--- a/common/usb_storage.c
++++ b/common/usb_storage.c
+@@ -162,7 +162,8 @@ struct us_data {
+  * enough free heap space left, but the SCSI READ(10) and WRITE(10) commands are
+  * limited to 65535 blocks.
+  */
+-#define USB_MAX_XFER_BLK	65535
++/*#define USB_MAX_XFER_BLK	65535*/
++#define USB_MAX_XFER_BLK	20 /*Use smallest XFER BLK*/
+ #else
+ #define USB_MAX_XFER_BLK	20
+ #endif
+diff --git a/drivers/usb/host/ehci-fsl.c b/drivers/usb/host/ehci-fsl.c
+index f54b408..8032693 100644
+--- a/drivers/usb/host/ehci-fsl.c
++++ b/drivers/usb/host/ehci-fsl.c
+@@ -104,6 +104,9 @@ int ehci_hcd_init(int index, struct ehci_hccr **hccr, struct ehci_hcor **hcor)
+ 		out_le32(&(*hcor)->or_portsc[0], PORT_PTS_ULPI);
+ 	}
+ 
++	/*Fix 2nd usb start hang problem*/
++	setbits_be32(&ehci->control, USB_EN);
++
+ 	out_be32(&ehci->prictrl, 0x0000000c);
+ 	out_be32(&ehci->age_cnt_limit, 0x00000040);
+ 	out_be32(&ehci->sictrl, 0x00000001);
+diff --git a/drivers/usb/host/ehci-hcd.c b/drivers/usb/host/ehci-hcd.c
+index 7f98a63..c65faf0 100644
+--- a/drivers/usb/host/ehci-hcd.c
++++ b/drivers/usb/host/ehci-hcd.c
+@@ -30,6 +30,13 @@
+ 
+ #include "ehci.h"
+ 
++#ifdef  USB_HOST_DEBUG
++#define USB_EHCI_DEBUG   1
++#define debug(fmt, args...)        debug_cond(USB_EHCI_DEBUG, fmt, ##args)
++#else
++#define USB_EHCI_DEBUG   0
++#endif
++
+ #ifndef CONFIG_USB_MAX_CONTROLLER_COUNT
+ #define CONFIG_USB_MAX_CONTROLLER_COUNT 1
+ #endif
+@@ -862,7 +869,6 @@ int usb_lowlevel_init(int index, void **controller)
+ 	if (ehci_hcd_init(index, &ehcic[index].hccr, &ehcic[index].hcor))
+ 		return -1;
+ 
+-	/* EHCI spec section 4.1 */
+ 	if (ehci_reset(index))
+ 		return -1;
+ 
+diff --git a/include/common.h b/include/common.h
+index a29f6a6..4ad17ea 100644
+--- a/include/common.h
++++ b/include/common.h
+@@ -308,7 +308,6 @@ int	checkdram     (void);
+ int	last_stage_init(void);
+ extern ulong monitor_flash_len;
+ int mac_read_from_eeprom(void);
+-int populate_serial_number(void);
+ extern u8 _binary_dt_dtb_start[];	/* embedded device tree blob */
+ int set_cpu_clk_info(void);
+ 
+diff --git a/include/configs/AS4600_54T.h b/include/configs/AS4600_54T.h
+new file mode 100644
+index 0000000..412f3de
+--- /dev/null
++++ b/include/configs/AS4600_54T.h
+@@ -0,0 +1,431 @@
++/*
++ * Curt Brune <curt@cumulusnetworks.com>
++ * Vidya Ravipati <vidya@cumulusnetworks.com>
++ *
++ * Portions Copyright 2007-2009 Freescale Semiconductor, Inc.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++/*
++ * Accton AS4600_54T network switch board configuration file
++ */
++#ifndef __CONFIG_H
++#define __CONFIG_H
++
++#include "configs/common_config.h"
++#include "version.h"
++
++/* High Level Configuration Options */
++#define CONFIG_BOOKE		1	/* BOOKE */
++#define CONFIG_E500		1	/* BOOKE e500 family */
++#define CONFIG_MPC85xx		1	/* MPC8540/60/55/41/48 */
++#define CONFIG_P2020		1	/* P2020 specific */
++#define CONFIG_AS4600_54T	1	/* AS4600_54T board specific */
++#define CONFIG_BOARDNAME		"AS4600_54T"
++#define CONFIG_MP		1	/* support multiple processors */
++
++#define CONFIG_FSL_ELBC		1	/* Has Enhanced localbus controller */
++#define CONFIG_PCI		1	/* enable any pci type devices */
++#define CONFIG_PCIE1		1	/* PCIE controller 1 */
++#undef  CONFIG_PCIE2			/* PCIE controller 2 */
++#undef	CONFIG_PCIE3			/* PCIE controller 3 */
++#define CONFIG_FSL_PCI_INIT	1	/* Use common FSL init code */
++#define CONFIG_FSL_PCIE_RESET	1	/* need PCIe reset errata */
++#define CONFIG_SYS_PCI_64BIT	1	/* enable 64-bit PCI resources */
++
++#define CONFIG_FSL_LAW		1	/* Use common FSL init code */
++
++#define CONFIG_TSEC_ENET		/* tsec ethernet support */
++
++#ifndef __ASSEMBLY__
++extern unsigned long get_clock_freq(void);
++#endif
++
++#define CONFIG_SYS_CLK_FREQ	100000000
++#define CONFIG_DDR_CLK_FREQ	100000000
++
++/*
++ * These can be toggled for performance analysis, otherwise use default.
++ */
++#define CONFIG_L2_CACHE			/* toggle L2 cache */
++#define CONFIG_BTB			/* toggle branch predition */
++
++/*
++ * Only possible on E500 Version 2 or newer cores.
++ */
++#define CONFIG_ENABLE_36BIT_PHYS	1
++
++#define CONFIG_SYS_MEMTEST_START	0x00000000	/* memtest works on */
++#define CONFIG_SYS_MEMTEST_END		0x7fffffff
++/* do not reset board on panic */
++#define CONFIG_PANIC_HANG		1
++
++/*
++ * Base addresses -- Note these are effective addresses where the
++ * actual resources get mapped (not physical addresses)
++ */
++#define CONFIG_SYS_CCSRBAR		0xff700000	/* relocated CCSRBAR */
++#define CONFIG_SYS_CCSRBAR_PHYS_LOW CONFIG_SYS_CCSRBAR
++
++/* DDR DRAM Setup */
++#define CONFIG_FSL_DDR3			1
++#undef	CONFIG_FSL_DDR_INTERACTIVE
++
++/* ECC will be enabled based on perf_mode environment variable */
++#define	CONFIG_DDR_ECC
++#define CONFIG_ECC_INIT_VIA_DDRCONTROLLER
++#define CONFIG_MEM_INIT_VALUE		0xdeadbeef
++
++#define CONFIG_SYS_DDR_SDRAM_BASE	0x00000000    /* DDR is system memory*/
++#define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
++
++#define CONFIG_NUM_DDR_CONTROLLERS	1
++#define CONFIG_DIMM_SLOTS_PER_CTLR	1
++#define CONFIG_CHIP_SELECTS_PER_CTRL	(1 * CONFIG_DIMM_SLOTS_PER_CTLR)
++
++#define CONFIG_SYS_SDRAM_SIZE		2048		/* DDR is 2GB */
++
++#undef CONFIG_CLOCKS_IN_MHZ
++
++
++/*
++ * Local Bus Definitions
++ */
++
++/*
++ * FLASH on the Local Bus - CS0
++ * One bank, 8M, with 8-bit data width
++ * Boot from BR0/OR0 bank at 0xef80_0000
++ *
++ * BR0:
++ *    Base address 0 = 0xef80_0000 = BR0[0:16] = 1110 1111 1000 0000 0
++ *    Port Size = 8 bits = BRx[19:20] = 01
++ *    Use GPCM = BRx[24:26] = 000
++ *    Valid = BRx[31] = 1
++ *
++ * 0	4    8	   12   16   20	   24   28
++ * 1110 1111 1100 0000 0000 1000 0000 0001 = ef800801	 BR0
++ *
++ * OR0:
++ *    Addr Mask = 8M = ORx[0:16] = 1111 1111 1000 0000 0
++ *    Reserved ORx[17:18] = 00
++ *    BCTLD = LBCTL not asserted = ORx[19] = 0
++ *    CSNT = ORx[20] = 1
++ *    ACS = half cycle delay = ORx[21:22] = 11
++ *    XACS = no extra setup = ORx[23] = 1
++ *    SCY = 2 = ORx[24:27] = 1111
++ *    SETA = cycle terminated internaly = ORx[28] = 0
++ *    TRLX = use relaxed timing = ORx[29] = 1
++ *    EHTR = use relaxed timing = ORx[30] = 1
++ *    EAD = use external address latch delay = OR[31] = 1
++ *
++ * 0	4    8	   12   16   20	   24   28
++ * 1111 1000 0000 0000 0000 1111 1111 0111 = ff800FF7    OR0
++ */
++
++#define CONFIG_SYS_FLASH_BASE		0xef800000	/* start of FLASH 8M */
++#define	CONFIG_SYS_FLASH_BASE_PHYS	CONFIG_SYS_FLASH_BASE
++#define CONFIG_SYS_FLASH_TLB_SIZE	BOOKE_PAGESZ_16M
++
++#define CONFIG_FLASH_BR_PRELIM \
++	(BR_PHYS_ADDR(CONFIG_SYS_FLASH_BASE_PHYS) | BR_PS_8 | BR_V)
++#define CONFIG_FLASH_OR_PRELIM		0xff800ff7	/* slow */
++
++#define CONFIG_SYS_FLASH_BANKS_LIST	{CONFIG_SYS_FLASH_BASE}
++#define CONFIG_SYS_MAX_FLASH_BANKS	1	/* number of banks */
++/* sectors per device  sectors) */
++#define CONFIG_SYS_MAX_FLASH_SECT	128
++#define CONFIG_FLASH_CFI_DRIVER
++#define CONFIG_SYS_FLASH_CFI
++#define CONFIG_SYS_FLASH_EMPTY_INFO
++#define CONFIG_FLASH_SHOW_PROGRESS	45
++#define CONFIG_SYS_FLASH_USE_BUFFER_WRITE
++#define CONFIG_SYS_FLASH_ERASE_TOUT	30000	/* Flash Erase Timeout (ms) */
++#define CONFIG_SYS_FLASH_WRITE_TOUT	500	/* Flash Write Timeout (ms) */
++/* Flash Full Buffer Write Timeout (ms) */
++#define CONFIG_SYS_FLASH_BUFFER_WRITE_TOUT	500
++#define CONFIG_CMD_LOADS	/* loads */
++
++#ifndef CONFIG_SYS_TEXT_BASE
++#define CONFIG_SYS_TEXT_BASE    0xeff80000
++#endif
++
++#ifndef CONFIG_RESET_VECTOR_ADDRESS
++#define CONFIG_RESET_VECTOR_ADDRESS 0xeffffffc
++#endif
++
++#ifndef CONFIG_SYS_MONITOR_BASE
++#define CONFIG_SYS_MONITOR_BASE CONFIG_SYS_TEXT_BASE    /* start of monitor */
++#endif
++
++#define	CONFIG_BOARD_EARLY_INIT_R	1	/* Call board_pre_init_r */
++#define	CONFIG_BOARD_EARLY_INIT_F	1	/* Call board_pre_init_f */
++#define CONFIG_LAST_STAGE_INIT		1	/* Last minute info/fixups */
++/* FDT fixups before handing to the kernel */
++#define CONFIG_FDT_BOARD_FIXUPS		1
++
++#define CONFIG_SYS_INIT_RAM_LOCK	1
++#define CONFIG_SYS_INIT_RAM_ADDR	0xffd00000	/* Initial L1 address */
++/* Initial L1 address */
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS   CONFIG_SYS_INIT_RAM_ADDR
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH 0
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW CONFIG_SYS_INIT_RAM_ADDR_PHYS
++/* End of used area in RAM */
++#define CONFIG_SYS_INIT_RAM_SIZE	0x00004000
++
++/* num bytes initial data */
++#define CONFIG_SYS_GBL_DATA_SIZE	1024
++#define CONFIG_SYS_GBL_DATA_OFFSET \
++	(CONFIG_SYS_INIT_RAM_SIZE - CONFIG_SYS_GBL_DATA_SIZE)
++#define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
++
++/* Reserve 512 kB for Mon */
++#define CONFIG_SYS_MONITOR_LEN		(512 * 1024)
++/* Reserved for malloc */
++#define CONFIG_SYS_MALLOC_LEN		(256 * 1024)
++
++/* Nor Base Address */
++#define CONFIG_SYS_BR0_PRELIM		CONFIG_FLASH_BR_PRELIM
++/* Nor Options */
++#define CONFIG_SYS_OR0_PRELIM		CONFIG_FLASH_OR_PRELIM
++
++/* Serial Port */
++#define CONFIG_CONS_INDEX		1
++#define CONFIG_SYS_NS16550
++#define CONFIG_SYS_NS16550_SERIAL
++#define CONFIG_SYS_NS16550_REG_SIZE	1
++#define CONFIG_SYS_NS16550_CLK		get_bus_freq(0)
++
++#define CONFIG_SYS_NS16550_COM1	(CONFIG_SYS_CCSRBAR+0x4500)
++#define CONFIG_SYS_NS16550_COM2	(CONFIG_SYS_CCSRBAR+0x4600)
++
++/* I2C  */
++#define CONFIG_FSL_I2C		/* Use FSL common I2C driver */
++#define CONFIG_HARD_I2C		/* I2C with hardware support*/
++#undef	CONFIG_SOFT_I2C		/* I2C bit-banged */
++/* I2C speed and slave address */
++#define CONFIG_SYS_I2C_SPEED		400000
++#define CONFIG_SYS_I2C_OFFSET		0x3000
++#define CONFIG_SYS_I2C2_OFFSET		0x3100
++
++#define CONFIG_I2C_MULTI_BUS
++#define	CONFIG_SYS_MAX_I2C_BUS		2
++#define	CONFIG_I2C_CMD_TREE
++
++/*
++ * CPLD on the Local Bus - CS1
++ *
++ * BR1:
++ *    Base address = 0xEA00_0000 = BRx[0:16] = 1110 1010 0000 0000 0
++ *    Port Size = 8 bits = BRx[19:20] = 01
++ *    Use GPCM = BRx[24:26] = 000
++ *    Valid = BRx[31] = 1
++ *
++ * 0    4    8    12   16   20   24   28
++ * 1110 1010 0000 0000 0000 1000 0000 0001 = EA000801    BR1
++ *
++ * OR1:
++ *    Addr Mask = 32K = ORx[0:16] = 1111 1111 1111 1111 1
++ *    Reserved ORx[17:18] = 00
++ *    BCTLD = LBCTL not asserted = ORx[19] = 0
++ *    CSNT = ORx[20] = 1
++ *    ACS = half cycle delay = ORx[21:22] = 11
++ *    XACS = no extra setup = ORx[23] = 1
++ *    SCY = 6 = ORx[24:27] = 1111
++ *    SETA = cycle terminated internaly = ORx[28] = 0
++ *    TRLX = use relaxed timing = ORx[29] = 1
++ *    EHTR = use relaxed timing = ORx[30] = 1
++ *    EAD = use external address latch delay = OR[31] = 1
++ *
++ * 0    4    8    12   16   20   24   28
++ * 1111 1111 1111 1111 1000 1111 1111 0111 = ffff8ff7    OR1
++ */
++
++#define CONFIG_SYS_CPLD_BASE	0xea000000
++
++#define CONFIG_CPLD_BR_PRELIM \
++	(BR_PHYS_ADDR(CONFIG_SYS_CPLD_BASE) | BR_PS_8 | BR_V)
++/*
++ * use bus timing parms from original boot code
++ */
++#define CONFIG_CPLD_OR_PRELIM	0xffff8ff7 /* slow */
++
++#define CONFIG_SYS_BR1_PRELIM		CONFIG_CPLD_BR_PRELIM
++#define CONFIG_SYS_OR1_PRELIM		CONFIG_CPLD_OR_PRELIM
++
++/*
++ * General PCI
++ * Memory space is mapped 1-1, but I/O space must start from 0.
++ */
++
++/*
++ * Keep these sizes in sync with the LAWs
++ */
++
++#ifdef CONFIG_PCIE1
++#define CONFIG_SYS_PCIE1_MEM_VIRT	0xa0000000
++#define CONFIG_SYS_PCIE1_MEM_BUS	0xa0000000
++#define CONFIG_SYS_PCIE1_MEM_PHYS	0xa0000000
++#define CONFIG_SYS_PCIE1_MEM_SIZE	0x20000000	/* 512M */
++#define CONFIG_SYS_PCIE1_IO_VIRT	0xffc20000
++#define CONFIG_SYS_PCIE1_IO_BUS		0x00000000
++#define CONFIG_SYS_PCIE1_IO_PHYS	0xffc20000
++#define CONFIG_SYS_PCIE1_IO_SIZE	0x00010000	/* 64K */
++#endif
++
++#if defined(CONFIG_PCI) || defined(CONFIG_PCI1)
++#define CONFIG_PCI_PNP			/* do pci plug-and-play */
++#define CONFIG_PCI_SCAN_SHOW		/* show pci devices on startup */
++#endif	/* CONFIG_PCI */
++
++
++/*
++ * Networking
++ */
++
++#if defined(CONFIG_TSEC_ENET)
++
++#define CONFIG_MII		1	/* MII PHY management */
++/* TODO: Don't allow unregistered phys */
++#undef CONFIG_MII_DEFAULT_TSEC
++#undef CONFIG_TSEC1
++#undef CONFIG_TSEC3
++
++#define CONFIG_TSEC2			/* Ethernet  */
++#define	CONFIG_TSEC2_NAME	"eth0"
++
++#define TSEC2_PHY_ADDR		1
++#define TSEC2_PHYIDX		0
++#define TSEC2_FLAGS		(TSEC_GIGABIT | TSEC_SGMII)
++
++#define CONFIG_ETHPRIME		"eth0"
++
++#define CONFIG_PHY_GIGE		1	/* Include GbE speed/duplex detection */
++#endif	/* CONFIG_TSEC_ENET */
++
++/*
++ * In-band SGMII auto-negotiation between TBI and BCM54616S PHY fails, force
++ * 1000mbps SGMII link
++ */
++#define CONFIG_TSEC_TBICR_SETTINGS (  \
++		TBICR_PHY_RESET	    | \
++		TBICR_FULL_DUPLEX   | \
++		TBICR_SPEED1_SET      \
++		)
++
++/*
++ * Environment
++ */
++#define CONFIG_ENV_IS_IN_FLASH	1
++#define CONFIG_ENV_ADDR		0xeff60000
++#define CONFIG_ENV_SECT_SIZE	0x00010000	/* 64K (one sector) */
++#ifdef CONFIG_ENV_SIZE
++#undef CONFIG_ENV_SIZE
++#endif
++#define CONFIG_ENV_SIZE         0x00010000      /* re-define env size */
++
++/*
++ * Board hardware information, stored in flash.
++ */
++#define CONFIG_CMD_SYS_EEPROM
++#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
++#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	1
++
++#define CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO   /* sys_eeprom read/write function */
++#define CONFIG_SYS_FLASH_HWINFO_ADDR		0xeff70000
++/* 64K(one sector) for HWINFO */
++#define CONFIG_SYS_FLASH_HWINFO_SECT_SIZE	0x00010000
++#define CONFIG_SYS_EEPROM_MAX_SIZE              CONFIG_SYS_FLASH_HWINFO_SECT_SIZE
++
++/*
++ * Enable USB support
++ */
++#define CONFIG_CMD_USB		1	/* USB Support			      */
++#define CONFIG_USB_EHCI         1	/* USB EHCI host controller	      */
++#define CONFIG_USB_EHCI_FSL     1	/* Freescale USB EHCI host controller */
++#define CONFIG_USB_STORAGE      1	/* support for USB storage devices    */
++#define CONFIG_EHCI_HCD_INIT_AFTER_RESET
++
++#undef	CONFIG_WATCHDOG		/* watchdog disabled */
++
++/*
++ * Miscellaneous configurable options
++ */
++#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address */
++#define CONFIG_SYS_PROMPT	"LOADER=> "		/* Monitor Command Prompt */
++/* enable platform specific init */
++#define CONFIG_MISC_INIT_R      1
++#define CONFIG_SYS_LOADS_BAUD_CHANGE	1	/* allow baudrate change */
++
++#if defined(CONFIG_CMD_KGDB)
++/* speed to run kgdb serial port */
++#define CONFIG_KGDB_BAUDRATE	CONFIG_BAUDRATE
++#define CONFIG_KGDB_SER_INDEX	1	/* which serial port to use */
++#endif
++
++/*
++ * Environment Configuration
++ */
++
++#if defined(CONFIG_TSEC_ENET)
++#define CONFIG_HAS_ETH0
++#endif
++
++#define CONFIG_HOSTNAME		as4600_54t-unknown
++#define CONFIG_IPADDR	    192.168.1.10
++#define CONFIG_SERVERIP	    192.168.1.99
++#define CONFIG_GATEWAYIP    192.168.1.10
++#define CONFIG_NETMASK	    255.255.255.0
++
++/*default location for tftp and bootm*/
++#define CONFIG_LOADADDR		CONFIG_SYS_LOAD_ADDR
++
++#define CONFIG_BOOTARGS     "root=/dev/ram rw console=ttyS0,115200 quiet"
++
++#ifdef CONFIG_VERSION_VARIABLE
++	#define VER_VARIABLE "ver=" U_BOOT_VERSION " (" U_BOOT_DATE " - " U_BOOT_TIME ")" CONFIG_IDENT_STRING
++#else
++	#define VER_VARIABLE "\0"
++#endif
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS0\0"	\
++	"onie_start=0xefB60000\0"	\
++	"onie_sz.b=0x00400000\0"
++
++#define	CONFIG_EXTRA_ENV_SETTINGS	\
++	CONFIG_PLATFORM_ENV		\
++	CONFIG_ONIE_COMMON_UBOOT_ENV 	\
++	VER_VARIABLE
++
++/* ICOS Fastpath app image file support */
++#define CONFIG_FASTPATH
++
++#ifdef CONFIG_FASTPATH
++#define CONFIG_FDT_INDEX        4
++#endif
++
++#define CONFIG_CMD_REGINFO      /* register information of TLB and LAW */
++
++#endif	/* __CONFIG_H */
+diff --git a/include/environment.h b/include/environment.h
+index 82e1c0d..e64b43d 100644
+--- a/include/environment.h
++++ b/include/environment.h
+@@ -193,10 +193,6 @@ int set_default_vars(int nvars, char * const vars[]);
+ /* Import from binary representation into hash table */
+ int env_import(const char *buf, int check);
+ 
+-#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
+-void env_write_default_if_crc_bad(void);
+-#endif
+-
+ #endif /* DO_DEPS_ONLY */
+ 
+ #endif /* _ENVIRONMENT_H_ */

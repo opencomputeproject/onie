@@ -1,0 +1,608 @@
+platform accton 4654 patch
+
+Support for the Accton AS4600_54T networking platform.
+
+diff --git a/arch/powerpc/boot/dts/as4600_54t.dts b/arch/powerpc/boot/dts/as4600_54t.dts
+new file mode 100644
+index 0000000..2589797
+--- /dev/null
++++ b/arch/powerpc/boot/dts/as4600_54t.dts
+@@ -0,0 +1,355 @@
++/*
++ * Accton Technology AS4600_54T Device Tree Source
++ *
++ * This program is free software; you can redistribute	it and/or modify it
++ * under  the terms of	the GNU General	 Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *
++ */
++
++/dts-v1/;
++
++/ {
++	model = "accton,as4600_54t";
++	compatible = "accton,4654";
++	#address-cells = <0x2>;
++	#size-cells = <0x2>;
++	interrupt-parent = <&MPIC>;
++	aliases {
++		ethernet0 = &ENET1;
++		serial0 = &SERIAL0;
++		pci1	= &PCI1;
++	};
++	cpus {
++		#address-cells = <0x1>;
++		#size-cells = <0x0>;
++		PowerPC,P2020@0 {
++			device_type = "cpu";
++			reg = <0x0>;
++			next-level-cache = <0x1>;
++		};
++		PowerPC,P2020@1 {
++			device_type = "cpu";
++			reg = <0x1>;
++			next-level-cache = <0x1>;
++		};
++	};
++	memory {
++		device_type = "memory";
++	};
++	bcm_dma {
++		compatible = "early-dma-alloc";
++		// 64MB DMA region, aligned to 1MB
++		region_size = <0x04000000>;
++		alignment   = <0x00100000>;
++	};
++	localbus@ff705000 {
++		#address-cells = <0x2>;
++		#size-cells = <0x1>;
++		compatible = "fsl,p2020-elbc", "fsl,elbc", "simple-bus";
++		reg = <0x0 0xff705000 0x0 0x00001000>;
++		interrupts = <19 0x2>;
++		ranges = <0x0 0x0 0x0 0xef800000 0x00800000
++			  0x1 0x0 0x0 0xea000000 0x00000100>;
++		flash@0,0 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x00800000>;
++			bank-width = <0x1>;
++			device-width = <0x1>;
++			partition@0 {
++				/* Entire flash minus (u-boot + onie) */
++				reg = <0x00000000 0x00360000>;
++				label = "open";
++			};
++			partition@1 {
++				/* 4MB onie */
++				reg = <0x00360000 0x00400000>;
++				label = "onie";
++			};
++			partition@2 {
++				reg = <0x00760000 0x00010000>;
++				label = "uboot-env";
++				env_size = <0x10000>;
++			};
++			partition@3 {
++				reg = <0x00770000 0x00010000>;
++				label = "board_eeprom";
++			};
++			partition@4 {
++				reg = <0x00780000 0x00080000>;
++				label = "uboot";
++			};
++		};
++		cpld@1,0 {
++			compatible = "accton,4654-cpld";
++			reg = <0x1 0x0 0x0000100>;
++		};
++	};
++
++	soc@ff700000 {
++		#address-cells = <0x1>;
++		#size-cells = <0x1>;
++		device_type = "soc";
++		compatible = "fsl,p2020-immr", "simple-bus";
++		ranges = <0x0 0x0 0xff700000 0x100000>;
++		bus-frequency = <0x0>;
++		memory-controller@2000 {
++			compatible = "fsl,p2020-memory-controller";
++			reg = <0x2000 0x1000>;
++			interrupts = <0x12 0x2>;
++		};
++		I2C0: i2c@3000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			cell-index = <0x0>;
++			compatible = "fsl-i2c";
++			reg = <0x3000 0x100>;
++			interrupts = <0x2b 0x2>;
++			dfsrr;
++			clock-frequency = <400000>;
++			fsl,timeout = <10000>;
++			mux@70 {
++				compatible = "ti,pca9548";
++				reg = <0x70>;
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				// SFP+ 0
++				i2c@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++				};
++
++				// SFP+ 1
++				i2c@1 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <1>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++				};
++
++				// SFP+ 2
++				i2c@2 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <2>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++				};
++
++				// SFP+ 3
++				i2c@3 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <3>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++				};
++
++				/* Nothing on 4 through 6 */
++				i2c@4 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <4>;
++				};
++				i2c@5 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <5>;
++				};
++				i2c@6 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <6>;
++				};
++				i2c@7 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <7>;
++					tmon@49 {
++					       compatible = "ti,tmp75";
++					       reg = <0x49>;
++					};
++				};
++			};
++		};
++		I2C1: i2c@3100 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			cell-index = <0x1>;
++			compatible = "fsl-i2c";
++			reg = <0x3100 0x100>;
++			interrupts = <0x2b 0x2>;
++			dfsrr;
++			// unknown@19 {
++				/* do not know what this is */
++				// reg = <0x19>;
++			//};
++			hwmon@2e {
++				compatible = "onsemi,adt7473";
++				reg = <0x2e>;
++			};
++			psu_eeprom@51 {
++				compatible = "at,24c02";
++				reg = <0x51>;
++				label = "psu1_eeprom";
++				read-only;
++			};
++			psu_eeprom@52 {
++				compatible = "at,24c02";
++				reg = <0x52>;
++				label = "psu2_eeprom";
++				read-only;
++			};
++			rtc@68 {
++			       compatible = "maxim,ds1672";
++			       reg = <0x68>;
++			};
++		};
++
++		SERIAL0: serial@4500 {
++			cell-index = <0x0>;
++			device_type = "serial";
++			compatible = "ns16550";
++			reg = <0x4500 0x100>;
++			clock-frequency = <0x0>;
++			interrupts = <0x2a 0x2>;
++		};
++
++		L2: l2-cache-controller@20000 {
++			compatible = "fsl,p2020-l2-cache-controller";
++			reg = <0x20000 0x1000>;
++			cache-line-size = <0x20>;
++			cache-size = <0x80000>;
++			interrupts = <0x10 0x2>;
++		};
++
++		USB: usb@22000 {
++			compatible = "fsl-usb2-dr";
++			reg = <0x22000 0x1000>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++			interrupts = <28 0x2>;
++			phy_type = "ulpi";
++			dr_mode = "host";
++		};
++
++		MDIO0: mdio@24520 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x24520 0x20>;
++			PHY1: ethernet-phy@1 {
++				interrupt-parent = <&MPIC>;
++				interrupts = <3 1>;
++				reg = <0x1>;
++				device_type = "ethernet-phy";
++			};
++		};
++
++		ENET1: ethernet@25000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			cell-index = <0x1>;
++			device_type = "network";
++			model = "eTSEC";
++			compatible = "gianfar";
++			reg = <0x25000 0x1000>;
++			ranges = <0x0 0x25000 0x1000>;
++			interrupts = <
++				   0x23 0x2
++				   0x24 0x2
++				   0x28 0x2>;
++			interrupt-parent = <&MPIC>;
++			tbi-handle = <&TBI1>;
++			phy-handle = <&PHY1>;
++			phy-connection-type = "sgmii";
++		};
++
++		MDIO1: mdio@25520 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			compatible = "fsl,gianfar-tbi";
++			reg = <0x520 0x20>;
++			TBI1: tbi-phy@11 {
++				reg = <0x11>;
++				device_type = "tbi-phy";
++			};
++		};
++
++		MPIC: pic@40000 {
++			interrupt-controller;
++			#address-cells = <0x0>;
++			#interrupt-cells = <0x2>;
++			reg = <0x40000 0x40000>;
++			compatible = "chrp,open-pic";
++			device_type = "open-pic";
++		};
++
++		global-utilities@e0000 {
++			compatible = "fsl,p2020-guts", "fsl,mpc8548-guts";
++			reg = <0xe0000 0x1000>;
++			fsl,has-rstcr;
++		};
++	};
++
++	PCI1: pcie@ff70a000 {
++		compatible = "fsl,mpc8548-pcie";
++		device_type = "pci";
++		#interrupt-cells = <0x1>;
++		#size-cells = <0x2>;
++		#address-cells = <0x3>;
++		reg = <0x0 0xff70a000 0x0 0x1000>;
++		bus-range = <0x0 0xff>;
++		ranges = <0x2000000 0x0 0xa0000000 0x0 0xa0000000 0x0 0x20000000
++			  0x1000000 0x0 0x00000000 0x0 0xffc20000 0x0 0x00010000>;
++		clock-frequency = <0x5f5e100>;
++		interrupts = <0x1a 0x2>;
++		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++		interrupt-map = <
++			      /* IDSEL 0x0 */
++			      0x0 0x0 0x0 0x1 &MPIC 0x0 0x1
++			      0x0 0x0 0x0 0x2 &MPIC 0x0 0x1
++			      0x0 0x0 0x0 0x3 &MPIC 0x0 0x1
++			      0x0 0x0 0x0 0x4 &MPIC 0x0 0x1>;
++		pcie@0 {
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#size-cells = <0x2>;
++			#address-cells = <0x3>;
++			device_type = "pci";
++			ranges = <0x2000000 0x0 0xa0000000 0x2000000 0x0 0xa0000000 0x0 0x20000000
++				  0x1000000 0x0 0x00000000 0x1000000 0x0 0x00000000 0x0 0x10000>;
++		};
++	};
++};
+diff --git a/arch/powerpc/platforms/85xx/Kconfig b/arch/powerpc/platforms/85xx/Kconfig
+index d7946be..1ab2307 100644
+--- a/arch/powerpc/platforms/85xx/Kconfig
++++ b/arch/powerpc/platforms/85xx/Kconfig
+@@ -222,6 +222,12 @@ config P4080_DS
+ 	help
+ 	  This option enables support for the P4080 DS board
+ 
++config AS4600_54T
++       bool "Accton Technology Corporation AS4600_54T"
++       select DEFAULT_UIMAGE
++       help
++	 This option enables support for the ACCTON AS4600_54T networking platform
++
+ endif # PPC32
+ 
+ config P5020_DS
+diff --git a/arch/powerpc/platforms/85xx/Makefile b/arch/powerpc/platforms/85xx/Makefile
+index bc5acb9..77f64d3 100644
+--- a/arch/powerpc/platforms/85xx/Makefile
++++ b/arch/powerpc/platforms/85xx/Makefile
+@@ -25,3 +25,4 @@ obj-$(CONFIG_SBC8548)     += sbc8548.o
+ obj-$(CONFIG_SOCRATES)    += socrates.o socrates_fpga_pic.o
+ obj-$(CONFIG_KSI8560)	  += ksi8560.o
+ obj-$(CONFIG_XES_MPC85xx) += xes_mpc85xx.o
++obj-$(CONFIG_AS4600_54T) += as4600_54t.o
+diff --git a/arch/powerpc/platforms/85xx/as4600_54t.c b/arch/powerpc/platforms/85xx/as4600_54t.c
+new file mode 100644
+index 0000000..b66db55
+--- /dev/null
++++ b/arch/powerpc/platforms/85xx/as4600_54t.c
+@@ -0,0 +1,211 @@
++/*
++ * Accton as4600_54t setup and early boot code plus other random bits.
++ *
++ * This program is free software; you can redistribute	it and/or modify it
++ * under  the terms of	the GNU General	 Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#include <linux/stddef.h>
++#include <linux/kernel.h>
++#include <linux/pci.h>
++#include <linux/kdev_t.h>
++#include <linux/delay.h>
++#include <linux/seq_file.h>
++#include <linux/interrupt.h>
++#include <linux/of_platform.h>
++
++#include <asm/system.h>
++#include <asm/time.h>
++#include <asm/machdep.h>
++#include <asm/pci-bridge.h>
++#include <mm/mmu_decl.h>
++#include <asm/prom.h>
++#include <asm/udbg.h>
++#include <asm/mpic.h>
++
++#include <sysdev/fsl_soc.h>
++#include <sysdev/fsl_pci.h>
++
++// #undef DEBUG
++
++#ifdef DEBUG
++#define DBG(fmt, args...) printk(KERN_ERR "%s: " fmt, __func__, ## args)
++#else
++#define DBG(fmt, args...)
++#endif
++
++/*
++ * Enough of the CPLD to reset the system... full driver loads as a module
++*/
++static uint8_t __iomem * cpld_regs;
++static uint32_t CPLD_RESET_REG = 0x01;
++
++/*******************************************************************************
++ *
++ * Platform initialization functions
++ *
++ *******************************************************************************
++*/
++
++/*
++ * Initialize the interrupt controller
++ */
++static void __init as4600_54t_pic_init(void)
++{
++	struct mpic *mpic;
++	struct resource r;
++	struct device_node *np;
++
++	np = of_find_node_by_type(NULL, "open-pic");
++	if (np == NULL) {
++		printk(KERN_ERR "Could not find open-pic node\n");
++		return;
++	}
++
++	if (of_address_to_resource(np, 0, &r)) {
++		printk(KERN_ERR "Failed to map mpic register space\n");
++		of_node_put(np);
++		return;
++	}
++
++	mpic = mpic_alloc(np, r.start,
++		  MPIC_PRIMARY | MPIC_WANTS_RESET |
++		  MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS |
++		  MPIC_SINGLE_DEST_CPU,
++		  0, 256, " OpenPIC  ");
++
++	BUG_ON(mpic == NULL);
++	of_node_put(np);
++
++	mpic_init(mpic);
++}
++
++/*
++ * Setup the architecture
++ */
++#ifdef CONFIG_SMP
++extern void __init mpc85xx_smp_init(void);
++#endif
++
++static void __init as4600_54t_setup_arch(void)
++{
++	struct device_node *cpu;
++	const unsigned int *fp;
++#ifdef CONFIG_PCI
++	struct device_node *np;
++#endif
++	struct device_node *cpld;
++
++	if (ppc_md.progress)
++		ppc_md.progress("as4600_54t_setup_arch()", 0);
++
++	cpu = of_find_node_by_type(NULL, "cpu");
++	if (cpu != 0) {
++	     fp = of_get_property(cpu, "clock-frequency", NULL);
++	     if (fp != 0)
++		  loops_per_jiffy = *fp / HZ;
++	     else
++		  loops_per_jiffy = 500000000 / HZ;
++	     of_node_put(cpu);
++	}
++
++#ifdef CONFIG_PCI
++	for_each_node_by_type(np, "pci") {
++		if (of_device_is_compatible(np, "fsl,mpc8548-pcie"))
++			fsl_add_bridge(np, 0);
++	}
++#endif
++
++	cpld = of_find_compatible_node(NULL, NULL, "accton,4654-cpld");
++	if (!cpld) {
++		printk(KERN_ERR "Can not find accton,4654-cpld node in device tree\n");
++		cpld_regs = NULL;
++	} else {
++		cpld_regs = of_iomap(cpld, 0);
++		of_node_put(cpld);
++	}
++
++	powersave_nap = 0;
++
++#ifdef CONFIG_SMP
++	mpc85xx_smp_init();
++#endif
++
++}
++
++static struct of_device_id __initdata as4600_54t_ids[] = {
++	{ .type = "soc", },
++	{ .compatible = "soc", },
++	{ .compatible = "simple-bus", },
++	{ .compatible = "gianfar", },
++	{},
++};
++
++static int __init as4600_54t_publish_devices(void)
++{
++	return of_platform_bus_probe(NULL, as4600_54t_ids, NULL);
++}
++machine_device_initcall(as4600_54t, as4600_54t_publish_devices);
++
++static void as4600_54t_show_cpuinfo(struct seq_file *m)
++{
++	uint pvid, svid, phid1;
++	uint memsize = total_memory;
++
++	pvid = mfspr(SPRN_PVR);
++	svid = mfspr(SPRN_SVR);
++
++	seq_printf(m, "Vendor\t\t: Freescale Semiconductor\n");
++	seq_printf(m, "PVR\t\t: 0x%x\n", pvid);
++	seq_printf(m, "SVR\t\t: 0x%x\n", svid);
++
++	/* Display cpu Pll setting */
++	phid1 = mfspr(SPRN_HID1);
++	seq_printf(m, "PLL setting\t: 0x%x\n", ((phid1 >> 24) & 0x3f));
++
++	/* Display the amount of memory */
++	seq_printf(m, "Memory\t\t: %d MB\n", memsize / (1024 * 1024));
++}
++
++/*
++ * Platform specific restart... need to use the CPLD
++ */
++static void as4600_54t_restart(char *cmd)
++{
++	printk (KERN_EMERG "Reset via the platform CPLD\n");
++
++	local_irq_disable();
++	writeb(0x7F, (cpld_regs + CPLD_RESET_REG));
++	while (1);
++}
++
++/*
++ * Called very early, device-tree isn't unflattened
++ */
++static int __init as4600_54t_probe(void)
++{
++	unsigned long root = of_get_flat_dt_root();
++
++	if (of_flat_dt_is_compatible(root, "accton,4654"))
++		return 1;
++
++	return 0;
++}
++
++define_machine(as4600_54t) {
++	.name		= "Accton Technology Corporation AS4600_54T",
++	.probe		= as4600_54t_probe,
++	.setup_arch	= as4600_54t_setup_arch,
++	.init_IRQ	= as4600_54t_pic_init,
++	.show_cpuinfo	= as4600_54t_show_cpuinfo,
++#ifdef CONFIG_PCI
++	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
++#endif
++	.get_irq	= mpic_get_irq,
++	.power_save	= e500_idle,
++	.restart	= as4600_54t_restart,
++	.calibrate_decr = generic_calibrate_decr,
++	.progress	= udbg_progress,
++};
