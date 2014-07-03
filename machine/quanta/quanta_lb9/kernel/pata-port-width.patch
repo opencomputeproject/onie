@@ -1,0 +1,270 @@
+Support port width and no data swap for OF ata devices
+
+diff --git a/drivers/ata/libata-sff.c b/drivers/ata/libata-sff.c
+index 4cadfa2..50a570c 100644
+--- a/drivers/ata/libata-sff.c
++++ b/drivers/ata/libata-sff.c
+@@ -561,12 +561,27 @@ unsigned int ata_sff_data_xfer(struct ata_device *dev, unsigned char *buf,
+ 	struct ata_port *ap = dev->link->ap;
+ 	void __iomem *data_addr = ap->ioaddr.data_addr;
+ 	unsigned int words = buflen >> 1;
++	unsigned int word;
+ 
+ 	/* Transfer multiple of 2 bytes */
+-	if (rw == READ)
++	if (rw == READ) {
+ 		ioread16_rep(data_addr, buf, words);
+-	else
++        } else {
++                for (word = 0; word < words; word++) {
++                    unsigned char tmp;
++                    tmp = buf[word * 2];
++                    buf[word * 2] = buf[word * 2 + 1];
++                    buf[word * 2 + 1] = tmp;
++                }
+ 		iowrite16_rep(data_addr, buf, words);
++        }
++
++        for (word = 0; word < words; word++) {
++            unsigned char tmp;
++            tmp = buf[word * 2];
++            buf[word * 2] = buf[word * 2 + 1];
++            buf[word * 2 + 1] = tmp;
++        }
+ 
+ 	/* Transfer trailing byte, if any. */
+ 	if (unlikely(buflen & 0x01)) {
+@@ -581,9 +596,9 @@ unsigned int ata_sff_data_xfer(struct ata_device *dev, unsigned char *buf,
+ 		 */
+ 		if (rw == READ) {
+ 			ioread16_rep(data_addr, pad, 1);
+-			*buf = pad[0];
++			*buf = pad[1];
+ 		} else {
+-			pad[0] = *buf;
++			pad[1] = *buf;
+ 			iowrite16_rep(data_addr, pad, 1);
+ 		}
+ 		words++;
+diff --git a/drivers/ata/pata_of_platform.c b/drivers/ata/pata_of_platform.c
+index 2a472c5..7128350 100644
+--- a/drivers/ata/pata_of_platform.c
++++ b/drivers/ata/pata_of_platform.c
+@@ -23,9 +23,11 @@ static int __devinit pata_of_platform_probe(struct platform_device *ofdev)
+ 	struct resource io_res;
+ 	struct resource ctl_res;
+ 	struct resource irq_res;
+-	unsigned int reg_shift = 0;
++	unsigned int port_width = 1;
++	bool port_bswap = 0;
+ 	int pio_mode = 0;
+ 	int pio_mask;
++	const u32 *reg_shift_prop, *port_width_prop;
+ 	const u32 *prop;
+ 
+ 	ret = of_address_to_resource(dn, 0, &io_res);
+@@ -57,26 +59,31 @@ static int __devinit pata_of_platform_probe(struct platform_device *ofdev)
+ 	else
+ 		irq_res.flags = 0;
+ 
+-	prop = of_get_property(dn, "reg-shift", NULL);
+-	if (prop)
+-		reg_shift = be32_to_cpup(prop);
++	reg_shift_prop = of_get_property(dn, "reg-shift", NULL);
++	port_width_prop = of_get_property(dn, "port-width", NULL);
++        if (reg_shift_prop && port_width_prop) {
++		dev_err(&ofdev->dev, "invalid configuration, reg-shift and port-width "
++			"are mutually exclusive\n");
++		return -EINVAL;
++	}
++
++	if (reg_shift_prop) {
++	        unsigned int reg_shift = be32_to_cpup(reg_shift_prop);
++		port_width = (reg_shift ? (reg_shift << 1) : 1);
++	} else if (port_width_prop) {
++		port_width = be32_to_cpup(port_width_prop);
++	}
+ 
+-	prop = of_get_property(dn, "pio-mode", NULL);
++	prop = of_get_property(dn, "port-bswap", NULL);
+ 	if (prop) {
+-		pio_mode = be32_to_cpup(prop);
+-		if (pio_mode > 6) {
+-			dev_err(&ofdev->dev, "invalid pio-mode\n");
+-			return -EINVAL;
+-		}
+-	} else {
+-		dev_info(&ofdev->dev, "pio-mode unspecified, assuming PIO0\n");
++		port_bswap = (be32_to_cpup(prop) != 0);
+ 	}
+ 
+ 	pio_mask = 1 << pio_mode;
+ 	pio_mask |= (1 << pio_mode) - 1;
+ 
+ 	return __pata_platform_probe(&ofdev->dev, &io_res, &ctl_res, &irq_res,
+-				     reg_shift, pio_mask);
++				     port_width, port_bswap, pio_mask);
+ }
+ 
+ static int __devexit pata_of_platform_remove(struct platform_device *ofdev)
+diff --git a/drivers/ata/pata_platform.c b/drivers/ata/pata_platform.c
+index 2067308..e493501 100644
+--- a/drivers/ata/pata_platform.c
++++ b/drivers/ata/pata_platform.c
+@@ -55,20 +55,83 @@ static struct ata_port_operations pata_platform_port_ops = {
+ 	.set_mode		= pata_platform_set_mode,
+ };
+ 
++static void bswap_buf16(unsigned char *buf, unsigned int words)
++{
++        u16 *wbuf = (u16 *)buf;
++        unsigned int word;
++
++        for (word = 0; word < words; word++) {
++            *wbuf = (*wbuf << 8) | ((*wbuf >> 8) & 0xff);
++	    wbuf++;
++        }
++}
++
++static unsigned int pata_platform_data_xfer_bswap(struct ata_device *dev, unsigned char *buf,
++                                                  unsigned int buflen, int rw)
++{
++	struct ata_port *ap = dev->link->ap;
++	void __iomem *data_addr = ap->ioaddr.data_addr;
++	unsigned int words = buflen >> 1;
++
++	if (ap->pflags & ATA_PFLAG_PIO32) {
++		dev_err(&dev->tdev, "32-bit PIO with port-bswap not impelemented\n");
++		return 0;
++        }
++
++	/* Transfer multiple of 2 bytes */
++	if (rw == READ) {
++		ioread16_rep(data_addr, buf, words);
++        } else {
++		bswap_buf16(buf, words);
++		iowrite16_rep(data_addr, buf, words);
++        }
++
++	bswap_buf16(buf, words);
++
++	/* Transfer trailing byte, if any. */
++	if (unlikely(buflen & 0x01)) {
++		unsigned char pad[2] = { };
++
++		/* Point buf to the tail of buffer */
++		buf += buflen - 1;
++
++		if (rw == READ) {
++			ioread16_rep(data_addr, pad, 1);
++			*buf = pad[1];
++		} else {
++			pad[1] = *buf;
++			iowrite16_rep(data_addr, pad, 1);
++		}
++		words++;
++	}
++
++	return words << 1;
++}
++
+ static void pata_platform_setup_port(struct ata_ioports *ioaddr,
+-				     unsigned int shift)
++				     unsigned int port_width,
++				     bool port_bswap)
+ {
++        unsigned int port_shift = port_width >> 1;
++        unsigned int data_offset = 0;
++        unsigned int ctl_offset = 0;
++
++        if (port_bswap) {
++            data_offset = (port_width - 2);
++            ctl_offset = (port_width - 1);
++        }
++
+ 	/* Fixup the port shift for platforms that need it */
+-	ioaddr->data_addr	= ioaddr->cmd_addr + (ATA_REG_DATA    << shift);
+-	ioaddr->error_addr	= ioaddr->cmd_addr + (ATA_REG_ERR     << shift);
+-	ioaddr->feature_addr	= ioaddr->cmd_addr + (ATA_REG_FEATURE << shift);
+-	ioaddr->nsect_addr	= ioaddr->cmd_addr + (ATA_REG_NSECT   << shift);
+-	ioaddr->lbal_addr	= ioaddr->cmd_addr + (ATA_REG_LBAL    << shift);
+-	ioaddr->lbam_addr	= ioaddr->cmd_addr + (ATA_REG_LBAM    << shift);
+-	ioaddr->lbah_addr	= ioaddr->cmd_addr + (ATA_REG_LBAH    << shift);
+-	ioaddr->device_addr	= ioaddr->cmd_addr + (ATA_REG_DEVICE  << shift);
+-	ioaddr->status_addr	= ioaddr->cmd_addr + (ATA_REG_STATUS  << shift);
+-	ioaddr->command_addr	= ioaddr->cmd_addr + (ATA_REG_CMD     << shift);
++	ioaddr->data_addr    = ioaddr->cmd_addr + (ATA_REG_DATA    << port_shift) + data_offset;
++	ioaddr->error_addr   = ioaddr->cmd_addr + (ATA_REG_ERR     << port_shift) + ctl_offset;
++	ioaddr->feature_addr = ioaddr->cmd_addr + (ATA_REG_FEATURE << port_shift) + ctl_offset;
++	ioaddr->nsect_addr   = ioaddr->cmd_addr + (ATA_REG_NSECT   << port_shift) + ctl_offset;
++	ioaddr->lbal_addr    = ioaddr->cmd_addr + (ATA_REG_LBAL    << port_shift) + ctl_offset;
++	ioaddr->lbam_addr    = ioaddr->cmd_addr + (ATA_REG_LBAM    << port_shift) + ctl_offset;
++	ioaddr->lbah_addr    = ioaddr->cmd_addr + (ATA_REG_LBAH    << port_shift) + ctl_offset;
++	ioaddr->device_addr  = ioaddr->cmd_addr + (ATA_REG_DEVICE  << port_shift) + ctl_offset;
++	ioaddr->status_addr  = ioaddr->cmd_addr + (ATA_REG_STATUS  << port_shift) + ctl_offset;
++	ioaddr->command_addr = ioaddr->cmd_addr + (ATA_REG_CMD     << port_shift) + ctl_offset;
+ }
+ 
+ /**
+@@ -102,7 +165,8 @@ int __devinit __pata_platform_probe(struct device *dev,
+ 				    struct resource *io_res,
+ 				    struct resource *ctl_res,
+ 				    struct resource *irq_res,
+-				    unsigned int ioport_shift,
++				    unsigned int port_width,
++				    bool port_bswap,
+ 				    int __pio_mask)
+ {
+ 	struct ata_host *host;
+@@ -166,7 +230,12 @@ int __devinit __pata_platform_probe(struct device *dev,
+ 
+ 	ap->ioaddr.altstatus_addr = ap->ioaddr.ctl_addr;
+ 
+-	pata_platform_setup_port(&ap->ioaddr, ioport_shift);
++	pata_platform_setup_port(&ap->ioaddr, port_width, port_bswap);
++        if (port_bswap) {
++		 pata_platform_port_ops.sff_data_xfer = pata_platform_data_xfer_bswap;
++        }
++	dev_info(dev, "port width: %u byte swap %s\n",
++                 port_width, port_bswap ? "enabled" : "disabled");
+ 
+ 	ata_port_desc(ap, "%s cmd 0x%llx ctl 0x%llx", mmio ? "mmio" : "ioport",
+ 		      (unsigned long long)io_res->start,
+@@ -238,7 +307,8 @@ static int __devinit pata_platform_probe(struct platform_device *pdev)
+ 		irq_res->flags = pp_info ? pp_info->irq_flags : 0;
+ 
+ 	return __pata_platform_probe(&pdev->dev, io_res, ctl_res, irq_res,
+-				     pp_info ? pp_info->ioport_shift : 0,
++				     pp_info ? pp_info->port_width : 1,
++				     pp_info ? pp_info->port_bswap : false,
+ 				     pio_mask);
+ }
+ 
+diff --git a/include/linux/ata_platform.h b/include/linux/ata_platform.h
+index 9a26c83..b38ab9c 100644
+--- a/include/linux/ata_platform.h
++++ b/include/linux/ata_platform.h
+@@ -7,7 +7,12 @@ struct pata_platform_info {
+ 	 * constantly spaced and need larger than the 1-byte
+ 	 * spacing used by ata_std_ports().
+ 	 */
+-	unsigned int ioport_shift;
++	unsigned int port_width;
++        /*
++         * Handle data byte swapping for platforms with byte-swapped
++         * ports.
++         */
++	bool port_bswap;
+ 	/* 
+ 	 * Indicate platform specific irq types and initial
+ 	 * IRQ flags when call request_irq()
+@@ -19,7 +24,8 @@ extern int __devinit __pata_platform_probe(struct device *dev,
+ 					   struct resource *io_res,
+ 					   struct resource *ctl_res,
+ 					   struct resource *irq_res,
+-					   unsigned int ioport_shift,
++					   unsigned int port_width,
++					   bool port_bswap,
+ 					   int __pio_mask);
+ 
+ extern int __devexit __pata_platform_remove(struct device *dev);

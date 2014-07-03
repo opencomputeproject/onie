@@ -1,0 +1,790 @@
+Quanta LB9
+
+diff --git a/arch/powerpc/boot/dts/quanta_lb9.dts b/arch/powerpc/boot/dts/quanta_lb9.dts
+new file mode 100644
+index 0000000..ad7673e
+--- /dev/null
++++ b/arch/powerpc/boot/dts/quanta_lb9.dts
+@@ -0,0 +1,498 @@
++/*
++ * Quanta LB9 Device Tree Source
++ *
++ * Copyright 2013 Cumulus Networks, Inc.
++ * Copyright 2006, 2008 Freescale Semiconductor Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++/dts-v1/;
++
++/ {
++	model = "quanta,lb9";
++	compatible = "quanta,lb9";
++	reset-gpio = <&cpm_pio_a 24 1>;
++	#address-cells = <1>;
++	#size-cells = <1>;
++
++	aliases {
++		ethernet0 = &enet0;
++		ethernet1 = &enet1;
++		serial0 = &serial0;
++		serial1 = &serial1;
++		pci0 = &pci0;
++		pci1 = &pci1;
++	};
++
++	cpus {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		PowerPC,8541@0 {
++			device_type = "cpu";
++			reg = <0x0>;
++			d-cache-line-size = <32>;	// 32 bytes
++			i-cache-line-size = <32>;	// 32 bytes
++			d-cache-size = <0x8000>;	// L1, 32K
++			i-cache-size = <0x8000>;	// L1, 32K
++			timebase-frequency = <0>;	//  33 MHz, from uboot
++			bus-frequency = <0>;	// 166 MHz
++			clock-frequency = <0>;	// 825 MHz, from uboot
++			next-level-cache = <&L2>;
++		};
++	};
++
++	memory {
++		device_type = "memory";
++	};
++
++	bcm_dma {
++		compatible = "early-dma-alloc";
++		// 64MB DMA region, aligned to 1MB
++		region_size = <0x04000000>;
++		alignment   = <0x00100000>;
++	};
++
++	mass_storage {
++		device = "sda";
++	};
++
++	soc8541@e0000000 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		device_type = "soc";
++		compatible = "simple-bus";
++		ranges = <0x0 0xe0000000 0x100000>;
++		bus-frequency = <0>;
++
++		ecm-law@0 {
++			compatible = "fsl,ecm-law";
++			reg = <0x0 0x1000>;
++			fsl,num-laws = <8>;
++		};
++
++		ecm@1000 {
++			compatible = "fsl,mpc8541-ecm", "fsl,ecm";
++			reg = <0x1000 0x1000>;
++			interrupts = <17 2>;
++			interrupt-parent = <&mpic>;
++		};
++
++		memory-controller@2000 {
++			compatible = "fsl,mpc8541-memory-controller";
++			reg = <0x2000 0x1000>;
++			interrupt-parent = <&mpic>;
++			interrupts = <18 2>;
++		};
++
++		L2: l2-cache-controller@20000 {
++			compatible = "fsl,mpc8541-l2-cache-controller";
++			reg = <0x20000 0x1000>;
++			cache-line-size = <32>;	// 32 bytes
++			cache-size = <0x40000>;	// L2, 256K
++			interrupt-parent = <&mpic>;
++			interrupts = <16 2>;
++		};
++
++		I2C0: i2c@3000 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			cell-index = <0>;
++			compatible = "fsl-i2c";
++			reg = <0x3000 0x100>;
++			interrupts = <43 2>;
++			interrupt-parent = <&mpic>;
++			dfsrr;
++
++			rtc@68 {
++				compatible = "dallas,ds1339";
++				reg = <0x68>;
++			};
++
++			board_eeprom@53 {
++				compatible = "at,24c02";
++				reg = <0x53>;
++				label = "board_eeprom";
++			};
++
++			spd@57 {
++				compatible = "";
++				reg = <0x57>;
++			};
++
++			mux@70 {
++				compatible = "ti,pca9548";
++				reg = <0x70>;
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				// 10G SFP+ 0
++				i2c@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++				};
++				// 10G SFP+ 1
++				i2c@1 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <1>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++				};
++				// 10G SFP+ 2
++				i2c@2 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <2>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++				};
++				// 10G SFP+ 3
++				i2c@3 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <3>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++				};
++				i2c@4 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <4>;
++					fancontrol-fb@2C {
++						compatible = "on,adt7470";
++						reg = <0x2C>;
++						label = "temp fan 1";
++					};
++				};
++				i2c@5 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <5>;
++					fancontrol-fb@2F {
++						compatible = "on,adt7470";
++						reg = <0x2F>;
++						label = "temp fan 2";
++					};
++				};
++			};
++
++			pca9555@24 {
++				compatible = "nxp,pca9555";
++				reg = <0x24>;
++				label = "PSU  Status 1";
++			};
++			pca9555@25 {
++				compatible = "nxp,pca9555";
++				reg = <0x25>;
++				label = "PSU  Status 2";
++			};
++			pca9555@20 {
++				compatible = "nxp,pca9555";
++				reg = <0x20>;
++				label = "8727";
++			};
++		};
++
++		dma@21300 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,mpc8541-dma", "fsl,eloplus-dma";
++			reg = <0x21300 0x4>;
++			ranges = <0x0 0x21100 0x200>;
++			cell-index = <0>;
++			dma-channel@0 {
++				compatible = "fsl,mpc8541-dma-channel",
++						"fsl,eloplus-dma-channel";
++				reg = <0x0 0x80>;
++				cell-index = <0>;
++				interrupt-parent = <&mpic>;
++				interrupts = <20 2>;
++			};
++			dma-channel@80 {
++				compatible = "fsl,mpc8541-dma-channel",
++						"fsl,eloplus-dma-channel";
++				reg = <0x80 0x80>;
++				cell-index = <1>;
++				interrupt-parent = <&mpic>;
++				interrupts = <21 2>;
++			};
++			dma-channel@100 {
++				compatible = "fsl,mpc8541-dma-channel",
++						"fsl,eloplus-dma-channel";
++				reg = <0x100 0x80>;
++				cell-index = <2>;
++				interrupt-parent = <&mpic>;
++				interrupts = <22 2>;
++			};
++			dma-channel@180 {
++				compatible = "fsl,mpc8541-dma-channel",
++						"fsl,eloplus-dma-channel";
++				reg = <0x180 0x80>;
++				cell-index = <3>;
++				interrupt-parent = <&mpic>;
++				interrupts = <23 2>;
++			};
++		};
++
++		enet0: ethernet@24000 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			cell-index = <0>;
++			device_type = "network";
++			model = "TSEC";
++			compatible = "gianfar";
++			reg = <0x24000 0x1000>;
++			ranges = <0x0 0x24000 0x1000>;
++			local-mac-address = [ 00 00 00 00 00 00 ];
++			interrupts = <29 2 30 2 34 2>;
++			interrupt-parent = <&mpic>;
++			phy-handle = <&phy0>;
++
++			mdio@520 {
++				#address-cells = <1>;
++				#size-cells = <0>;
++				compatible = "fsl,gianfar-mdio";
++				reg = <0x520 0x20>;
++
++				phy0: ethernet-phy@0 {
++					reg = <0x0>;
++					interrupt-parent = <&mpic>;
++					interrupts = <9 1>;
++					device_type = "ethernet-phy";
++				};
++			};
++		};
++
++		enet1: ethernet@25000 {
++			status = "disabled";
++		};
++
++		serial0: serial@4500 {
++			cell-index = <0>;
++			device_type = "serial";
++			compatible = "ns16550";
++			reg = <0x4500 0x100>;
++			clock-frequency = <0>;
++			interrupts = <42 2>;
++			interrupt-parent = <&mpic>;
++		};
++
++		serial1: serial@4600 {
++			status = "disabled";
++			cell-index = <1>;
++			device_type = "serial";
++			compatible = "ns16550";
++			reg = <0x4600 0x100>;
++			clock-frequency = <0>;
++			interrupts = <42 2>;
++			interrupt-parent = <&mpic>;
++		};
++
++		crypto@30000 {
++			compatible = "fsl,sec2.0";
++			reg = <0x30000 0x10000>;
++			interrupts = <45 2>;
++			interrupt-parent = <&mpic>;
++			fsl,num-channels = <4>;
++			fsl,channel-fifo-len = <24>;
++			fsl,exec-units-mask = <0x7e>;
++			fsl,descriptor-types-mask = <0x01010ebf>;
++		};
++
++		mpic: pic@40000 {
++			interrupt-controller;
++			#address-cells = <0>;
++			#interrupt-cells = <2>;
++			reg = <0x40000 0x40000>;
++			compatible = "chrp,open-pic";
++			device_type = "open-pic";
++		};
++
++		cpm@919c0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,mpc8541-cpm", "fsl,cpm2";
++			reg = <0x919c0 0x30>;
++			ranges;
++
++			muram@80000 {
++				#address-cells = <1>;
++				#size-cells = <1>;
++				ranges = <0x0 0x80000 0x10000>;
++
++				data@0 {
++					compatible = "fsl,cpm-muram-data";
++					reg = <0x0 0x2000 0x9000 0x1000>;
++				};
++			};
++
++			brg@919f0 {
++				compatible = "fsl,mpc8541-brg",
++					     "fsl,cpm2-brg",
++					     "fsl,cpm-brg";
++				reg = <0x919f0 0x10 0x915f0 0x10>;
++			};
++
++			cpmpic: pic@90c00 {
++				interrupt-controller;
++				#address-cells = <0>;
++				#interrupt-cells = <2>;
++				interrupts = <46 2>;
++				interrupt-parent = <&mpic>;
++				reg = <0x90c00 0x80>;
++				compatible = "fsl,mpc8541-cpm-pic", "fsl,cpm2-pic";
++			};
++		};
++
++		cpm_pio_a: gpio-controller@90d00 {
++			#gpio-cells = <2>;
++			compatible = "fsl,cpm2-pario-bank";
++			reg = <0x90d00 0x14>;
++			gpio-controller;
++		};
++
++		cpm_pio_b: gpio-controller@90d20 {
++			#gpio-cells = <2>;
++			compatible = "fsl,cpm2-pario-bank";
++			reg = <0x90d20 0x14>;
++			gpio-controller;
++		};
++
++		cpm_pio_c: gpio-controller@90d40 {
++			#gpio-cells = <2>;
++			compatible = "fsl,cpm2-pario-bank";
++			reg = <0x90d40 0x14>;
++			gpio-controller;
++		};
++
++		cpm_pio_d: gpio-controller@90d60 {
++			#gpio-cells = <2>;
++			compatible = "fsl,cpm2-pario-bank";
++			reg = <0x90d60 0x14>;
++			gpio-controller;
++		};
++	};
++
++	pci0: pci@e0008000 {
++		interrupt-map-mask = <0x1f800 0x0 0x0 0x7>;
++		interrupt-map = <0x9000 0x0 0x0 0x1 &mpic 0x3 0x1>;
++		interrupt-parent = <&mpic>;
++		interrupts = <24 2>;
++		bus-range = <0 0>;
++		ranges = <0x2000000 0x0 0x80000000 0x80000000 0x0 0x20000000
++			  0x1000000 0x0 0x0 0xe2000000 0x0 0x100000>;
++		clock-frequency = <66666666>;
++		#interrupt-cells = <1>;
++		#size-cells = <2>;
++		#address-cells = <3>;
++		reg = <0xe0008000 0x1000>;
++		compatible = "fsl,mpc8540-pci";
++		device_type = "pci";
++	};
++
++	pci1: pci@e0009000 {
++		status = "disabled";
++	};
++
++	localbus@e0005000 {
++		#address-cells = <0x2>;
++		#size-cells = <0x1>;
++		compatible = "fsl,mpc8541-localbus", "fsl,pq2-localbus", "simple-bus";
++		reg = <0xe0005000 0x1000>;
++		ranges = <0x0 0x0 0xfe000000 0x2000000
++			  0x1 0x0 0xfc000000 0x2000000
++			  0x2 0x0 0xf0010000 0x10000
++			  0x4 0x0 0xf2000000 0x100000
++			  0x5 0x0 0xf0000000 0x10000>;
++		interrupt-parent = <&mpic>;
++		interrupts = <19 2>;
++
++		nor@0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x02000000>;
++			bank-width = <2>;
++			partition@0 {
++				/* Entire flash minus (u-boot + onie) */
++				reg = <0x00000000 0x01b60000>;
++				label = "open";
++			};
++			partition@1 {
++				/* 4MB onie */
++				reg = <0x01b60000 0x00400000>;
++				label = "onie";
++			};
++			partition@2 {
++				/* 128KB, 1 sector */
++				reg = <0x01f60000 0x00020000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++			partition@3 {
++				/* 512KB u-boot */
++				reg = <0x01f80000 0x00080000>;
++				label = "uboot";
++			};
++		};
++
++		nor@1 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "cfi-flash";
++			reg = <0x1 0x0 0x02000000>;
++			bank-width = <2>;
++			partition@0 {
++				/* Entire 32MB */
++				reg = <0x00000000 0x02000000>;
++				label = "open2";
++			};
++		};
++
++		cfcard@1 {
++			compatible = "ata-generic";
++			device_type = "ide";
++			reg = <0x5 0x0 0x10000
++			       0x2 0x0 0x10000>;
++			port-width = <4>;
++			port-bswap;
++			/* XXX - broken at the moment, use poll mode
++			#interrupt-cells = <0x1>;
++			interrupts = <20 2>;
++			interrupt-parent = <&mpic>;
++			*/
++		};
++	};
++};
+diff --git a/arch/powerpc/platforms/85xx/Kconfig b/arch/powerpc/platforms/85xx/Kconfig
+index d7946be..cc9e0bd 100644
+--- a/arch/powerpc/platforms/85xx/Kconfig
++++ b/arch/powerpc/platforms/85xx/Kconfig
+@@ -222,6 +222,12 @@ config P4080_DS
+ 	help
+ 	  This option enables support for the P4080 DS board
+ 
++config QUANTA_LB9
++	bool "Quanta Computer LB9"
++	select DEFAULT_UIMAGE
++	help
++	  This option enables support for the Quanta Computer LB9 switch platform
++
+ endif # PPC32
+ 
+ config P5020_DS
+diff --git a/arch/powerpc/platforms/85xx/Makefile b/arch/powerpc/platforms/85xx/Makefile
+index bc5acb9..68a2a36 100644
+--- a/arch/powerpc/platforms/85xx/Makefile
++++ b/arch/powerpc/platforms/85xx/Makefile
+@@ -25,3 +25,4 @@ obj-$(CONFIG_SBC8548)     += sbc8548.o
+ obj-$(CONFIG_SOCRATES)    += socrates.o socrates_fpga_pic.o
+ obj-$(CONFIG_KSI8560)	  += ksi8560.o
+ obj-$(CONFIG_XES_MPC85xx) += xes_mpc85xx.o
++obj-$(CONFIG_QUANTA_LB9)  += quanta_lb9.o
+diff --git a/arch/powerpc/platforms/85xx/quanta_lb9.c b/arch/powerpc/platforms/85xx/quanta_lb9.c
+new file mode 100644
+index 0000000..2ceef2b
+--- /dev/null
++++ b/arch/powerpc/platforms/85xx/quanta_lb9.c
+@@ -0,0 +1,252 @@
++/*
++ * Quanta LB9 setup and early boot code plus other random bits.
++ *
++ * Copyright 2013 Cumulus Networks, Inc.
++ * Copyright 2005 Freescale Semiconductor Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#include <linux/stddef.h>
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/errno.h>
++#include <linux/reboot.h>
++#include <linux/pci.h>
++#include <linux/kdev_t.h>
++#include <linux/major.h>
++#include <linux/console.h>
++#include <linux/delay.h>
++#include <linux/seq_file.h>
++#include <linux/initrd.h>
++#include <linux/interrupt.h>
++#include <linux/fsl_devices.h>
++#include <linux/of_platform.h>
++#include <linux/of_gpio.h>
++
++#include <asm/system.h>
++#include <asm/pgtable.h>
++#include <asm/page.h>
++#include <linux/atomic.h>
++#include <asm/time.h>
++#include <asm/io.h>
++#include <asm/machdep.h>
++#include <asm/ipic.h>
++#include <asm/pci-bridge.h>
++#include <asm/irq.h>
++#include <mm/mmu_decl.h>
++#include <asm/prom.h>
++#include <asm/udbg.h>
++#include <asm/mpic.h>
++#include <asm/i8259.h>
++
++#include <sysdev/fsl_soc.h>
++#include <sysdev/fsl_pci.h>
++
++static unsigned int gpio_reset_handle;
++static bool gpio_reset_valid;
++
++static int quanta_lb9_find_reset_gpio(unsigned int *handle)
++{
++	struct device_node *gpio = NULL;
++	struct gpio_chip *gpiochip = NULL;
++	unsigned int gpio_handle = 0;
++	struct device_node *root;
++	enum of_gpio_flags flags;
++	const void *gpio_spec;
++	int rv;
++
++	root = of_find_node_by_path("/");
++	rv = of_parse_phandles_with_args(root, "reset-gpio",
++					 "#gpio-cells", 0, &gpio, &gpio_spec);
++	if (rv < 0) {
++		printk(KERN_ERR "can't determine reset GPIO from device tree (/reset-gpio)\n");
++		goto done;
++	}
++
++	gpiochip = of_node_to_gpiochip(gpio);
++	if (!gpiochip) {
++		printk(KERN_ERR "gpio controller %s isn't registered\n",
++		       gpio->full_name);
++		rv = -ENODEV;
++		goto done;
++	}
++
++	gpio_handle = of_gpio_simple_xlate(gpiochip, root, gpio_spec, &flags);
++	if (gpio_handle < 0) {
++		rv = -ENODEV;
++		goto done;
++	}
++
++	gpio_handle += gpiochip->base;
++
++done:
++	if (gpio) {
++		of_node_put(gpio);
++	}
++	if (rv >= 0) {
++		*handle = gpio_handle;
++	}
++	return rv;
++}
++
++static int __init quanta_lb9_reset_probe(void)
++{
++	int rv;
++
++	if (gpio_reset_valid) {
++		return 0;
++	}
++
++	rv = quanta_lb9_find_reset_gpio(&gpio_reset_handle);
++	if (rv < 0) {
++		printk(KERN_ERR "GPIO reset unavailable\n");
++		goto done;
++	}
++
++
++	rv = gpio_request(gpio_reset_handle, "reset");
++	if (rv < 0) {
++		printk(KERN_ERR "GPIO reset pin unavailable\n");
++		goto done;
++	}
++
++	rv = gpio_direction_output(gpio_reset_handle, 1);
++	if (rv < 0) {
++		printk(KERN_ERR "Unable to set GPIO reset pin direction\n");
++		goto done;
++	}
++
++	printk(KERN_INFO "RESET: registered GPIO device: %d\n", gpio_reset_handle);
++	gpio_reset_valid = true;
++
++done:
++	if (rv < 0) {
++		gpio_free(gpio_reset_handle);
++		gpio_reset_handle = 0;
++	}
++	return rv;
++}
++machine_device_initcall(quanta_lb9, quanta_lb9_reset_probe);
++
++static void quanta_lb9_restart(char *cmd)
++{
++	quanta_lb9_reset_probe();
++	if (gpio_reset_handle) {
++		gpio_set_value(gpio_reset_handle, 0);
++	} else {
++		printk(KERN_ERR "RESET: GPIO not available, power off now.\n");
++	}
++}
++
++static void __init quanta_lb9_pic_init(void)
++{
++	struct mpic *mpic;
++	struct resource r;
++	struct device_node *np = NULL;
++
++	np = of_find_node_by_type(np, "open-pic");
++
++	if (np == NULL) {
++		printk(KERN_ERR "Could not find open-pic node\n");
++		return;
++	}
++
++	if (of_address_to_resource(np, 0, &r)) {
++		printk(KERN_ERR "Failed to map mpic register space\n");
++		of_node_put(np);
++		return;
++	}
++
++	mpic = mpic_alloc(np, r.start,
++			MPIC_PRIMARY | MPIC_WANTS_RESET | MPIC_BIG_ENDIAN,
++			0, 256, " OpenPIC  ");
++	BUG_ON(mpic == NULL);
++
++	/* Return the mpic node */
++	of_node_put(np);
++
++	mpic_init(mpic);
++}
++
++/*
++ * Setup the architecture
++ */
++static void __init quanta_lb9_setup_arch(void)
++{
++#ifdef CONFIG_PCI
++	struct device_node *np;
++#endif
++
++	if (ppc_md.progress)
++		ppc_md.progress("quanta_lb9_setup_arch()", 0);
++
++#ifdef CONFIG_PCI
++	for_each_node_by_type(np, "pci") {
++		if (of_device_is_compatible(np, "fsl,mpc8540-pci") ||
++		    of_device_is_compatible(np, "fsl,mpc8548-pcie")) {
++			struct resource rsrc;
++			of_address_to_resource(np, 0, &rsrc);
++			if ((rsrc.start & 0xfffff) == 0x8000)
++				fsl_add_bridge(np, 1);
++			else
++				fsl_add_bridge(np, 0);
++		}
++	}
++#endif
++}
++
++static void quanta_lb9_show_cpuinfo(struct seq_file *m)
++{
++	uint pvid, svid, phid1;
++
++	pvid = mfspr(SPRN_PVR);
++	svid = mfspr(SPRN_SVR);
++
++	seq_printf(m, "Vendor\t\t: Freescale Semiconductor\n");
++	seq_printf(m, "Machine\t\t: Quanta LB9\n");
++	seq_printf(m, "PVR\t\t: 0x%x\n", pvid);
++	seq_printf(m, "SVR\t\t: 0x%x\n", svid);
++
++	/* Display cpu Pll setting */
++	phid1 = mfspr(SPRN_HID1);
++	seq_printf(m, "PLL setting\t: 0x%x\n", ((phid1 >> 24) & 0x3f));
++}
++
++/*
++ * Called very early, device-tree isn't unflattened
++ */
++static int __init quanta_lb9_probe(void)
++{
++        unsigned long root = of_get_flat_dt_root();
++        return of_flat_dt_is_compatible(root, "quanta,lb9");
++}
++
++static struct of_device_id __initdata of_bus_ids[] = {
++	{ .type = "soc", },
++	{ .compatible = "soc", },
++	{ .compatible = "simple-bus", },
++	{ .compatible = "gianfar", },
++	{},
++};
++
++static int __init declare_of_platform_devices(void)
++{
++	return of_platform_bus_probe(NULL, of_bus_ids, NULL);
++}
++machine_device_initcall(quanta_lb9, declare_of_platform_devices);
++
++define_machine(quanta_lb9) {
++	.name		= "Quanta LB9",
++	.probe		= quanta_lb9_probe,
++	.setup_arch	= quanta_lb9_setup_arch,
++	.init_IRQ	= quanta_lb9_pic_init,
++	.show_cpuinfo	= quanta_lb9_show_cpuinfo,
++	.get_irq	= mpic_get_irq,
++	.restart        = quanta_lb9_restart,
++	.calibrate_decr = generic_calibrate_decr,
++	.progress	= udbg_progress,
++};
