@@ -86,6 +86,8 @@ $(UBOOT_PATCH_STAMP): $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOUR
 		" > $(UBOOT_DIR)/include/configs/onie_version.h
 	$(Q) echo '#define CONFIG_IDENT_STRING " - ONIE $(LSB_RELEASE_TAG)"' \
 		>> $(UBOOT_DIR)/include/configs/onie_version.h
+	$(Q) echo '#define PLATFORM_STRING "$(PLATFORM)"' \
+		>> $(UBOOT_DIR)/include/configs/onie_version.h
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
