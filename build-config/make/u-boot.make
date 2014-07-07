@@ -32,6 +32,8 @@ UBOOT_BIN		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.bin
 UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE_PREFIX).u-boot
 UPDATER_UBOOT		= $(MBUILDDIR)/u-boot.bin
 
+UBOOT_IDENT_STRING	?= ONIE $(LSB_RELEASE_TAG)
+
 PHONY += u-boot u-boot-download u-boot-source u-boot-patch u-boot-build \
 	 u-boot-install u-boot-clean u-boot-download-clean
 
@@ -84,7 +86,7 @@ $(UBOOT_PATCH_STAMP): $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOUR
 		\"dhcp_vendor-class-identifier=$(PLATFORM)\\0\"	\
 		\"dhcp_user-class=$(PLATFORM)_uboot\\0\"	\
 		" > $(UBOOT_DIR)/include/configs/onie_version.h
-	$(Q) echo '#define CONFIG_IDENT_STRING " - ONIE $(LSB_RELEASE_TAG)"' \
+	$(Q) echo '#define CONFIG_IDENT_STRING " - $(UBOOT_IDENT_STRING)"' \
 		>> $(UBOOT_DIR)/include/configs/onie_version.h
 	$(Q) echo '#define PLATFORM_STRING "$(PLATFORM)"' \
 		>> $(UBOOT_DIR)/include/configs/onie_version.h
