@@ -1,0 +1,781 @@
+platform accton as6701_32x patch
+
+Support for the Accton AS6701_32X networking platform.
+
+diff --git a/arch/powerpc/boot/dts/as6701_32x.dts b/arch/powerpc/boot/dts/as6701_32x.dts
+new file mode 100644
+index 0000000..92131f6
+--- /dev/null
++++ b/arch/powerpc/boot/dts/as6701_32x.dts
+@@ -0,0 +1,556 @@
++/*
++ * Accton Technology AS6701_32X Device Tree Source
++ *
++ * This program is free software; you can redistribute	it and/or modify it
++ * under  the terms of	the GNU General	 Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *
++ */
++
++/dts-v1/;
++
++/ {
++	compatible = "accton,as6701_32x";
++	#address-cells = <0x2>;
++	#size-cells = <0x2>;
++	interrupt-parent = <0x1>;
++	model = "accton,as6701_32x";
++
++	cpus {
++		power-isa-version = "2.03";
++		power-isa-b;
++		power-isa-e;
++		power-isa-atb;
++		power-isa-cs;
++		power-isa-e.le;
++		power-isa-e.pm;
++		power-isa-ecl;
++		power-isa-mmc;
++		power-isa-sp;
++		power-isa-sp.fd;
++		power-isa-sp.fs;
++		power-isa-sp.fv;
++		mmu-type = "power-embedded";
++		#address-cells = <0x1>;
++		#size-cells = <0x0>;
++
++		PowerPC,P2020@0 {
++			device_type = "cpu";
++			reg = <0x0>;
++			next-level-cache = <0x2>;
++		};
++
++		PowerPC,P2020@1 {
++			device_type = "cpu";
++			reg = <0x1>;
++			next-level-cache = <0x2>;
++		};
++	};
++
++	aliases {
++		serial0 = "/soc@ffe00000/serial@4500";
++		serial1 = "/soc@ffe00000/serial@4600";
++		ethernet0 = "/soc@ffe00000/ethernet@25000";
++		pci0 = "/pcie@ffe0a000";
++		pci1 = "/pcie@ffe09000";
++		pci2 = "/pcie@ffe08000";
++	};
++
++	memory {
++		device_type = "memory";
++	};
++
++	localbus@ffe05000 {
++		reg = <0x0 0xffe05000 0x0 0x1000>;
++		ranges = <0x0 0x0 0x0 0xec000000 0x4000000>;
++		#address-cells = <0x2>;
++		#size-cells = <0x1>;
++		compatible = "fsl,p2020-elbc", "fsl,elbc", "simple-bus";
++		interrupts = <0x13 0x2 0x0 0x0>;
++
++		nor@0,0 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x4000000>;
++			bank-width = <0x2>;
++			device-width = <0x1>;
++
++			partition@0 {
++				reg = <0x0 0x20000>;
++				label = "Reserved mtd-0";
++			};
++
++			partition@1 {
++				reg = <0x20000 0x20000>;
++				label = "hw-info";
++			};
++
++			partition@2 {
++				reg = <0x40000 0xd00000>;
++				label = "onie";
++			};
++
++			partition@3 {
++				reg = <0xd40000 0x2000000>;
++				label = "diag";
++			};
++
++			partition@4 {
++				reg = <0x2d40000 0x1200000>;
++				label = "open";
++			};
++
++			partition@5 {
++				reg = <0x3f40000 0x20000>;
++				label = "Reserved mtd-5";
++			};
++
++			partition@6 {
++				reg = <0x3f60000 0x20000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++
++			partition@7 {
++				reg = <0x3f80000 0x80000>;
++				label = "uboot";
++			};
++		};
++	};
++
++	soc@ffe00000 {
++		ranges = <0x0 0x0 0xffe00000 0x100000>;
++		#address-cells = <0x1>;
++		#size-cells = <0x1>;
++		device_type = "soc";
++		compatible = "fsl,p2020-immr", "simple-bus";
++		bus-frequency = <0x0>;
++
++		i2c@3000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			cell-index = <0x0>;
++			compatible = "fsl-i2c";
++			reg = <0x3000 0x100>;
++			interrupts = <0x2b 0x2 0x0 0x0>;
++			dfsrr;
++
++			pca9548@70 {
++				compatible = "pca9548";
++				reg = <0x70>;
++				#address-cells = <0x1>;
++				#size-cells = <0x0>;
++
++				mux@0 {
++					#address-cells = <0x1>;
++					#size-cells = <0x0>;
++					reg = <0x0>;
++
++					rtc-8564je@51 {
++						compatible = "rtc8564";
++						reg = <0x51>;
++					};
++				};
++			};
++		};
++
++		usb@22000 {
++			phy_type = "ulpi";
++			compatible = "fsl-usb2-dr-v1.6", "fsl-usb2-dr";
++			reg = <0x22000 0x1000>;
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			interrupts = <0x1c 0x2 0x0 0x0>;
++		};
++
++		mdio@24520 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x24520 0x20>;
++
++			ethernet-phy@1 {
++				interrupts = <0x2 0x1 0x0 0x0>;
++				reg = <0x1>;
++				linux,phandle = <0x4>;
++				phandle = <0x4>;
++			};
++		};
++
++		mdio@25520 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			compatible = "fsl,gianfar-tbi";
++			reg = <0x25520 0x20>;
++
++			tbi-phy@11 {
++				reg = <0x11>;
++				device_type = "tbi-phy";
++				linux,phandle = <0x3>;
++				phandle = <0x3>;
++			};
++		};
++
++		mdio@26520 {
++			status = "disabled";
++		};
++
++		ptp_clock@24e00 {
++			fsl,tclk-period = <0x5>;
++			fsl,tmr-prsc = <0xc8>;
++			fsl,tmr-add = <0xcccccccd>;
++			fsl,tmr-fiper1 = <0x3b9ac9fb>;
++			fsl,tmr-fiper2 = <0x1869b>;
++			fsl,max-adj = <0xee6b27f>;
++			compatible = "fsl,etsec-ptp";
++			reg = <0x24e00 0xb0>;
++			interrupts = <0x44 0x2 0x0 0x0 0x45 0x2 0x0 0x0 0x46 0x2 0x0 0x0>;
++		};
++
++		ptimer@24e00 {
++			compatible = "fsl,gianfar-ptp-timer";
++			reg = <0x24e00 0xb0>;
++			fsl,ts-to-buffer;
++			fsl,tmr-prsc = <0x2>;
++			fsl,clock-source-select = <0x1>;
++			linux,phandle = <0x5>;
++			phandle = <0x5>;
++		};
++
++		ethernet@25000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			cell-index = <0x1>;
++			device_type = "network";
++			model = "eTSEC";
++			compatible = "gianfar";
++			reg = <0x25000 0x1000>;
++			ranges = <0x0 0x25000 0x1000>;
++			fsl,magic-packet;
++			interrupts = <0x23 0x2 0x0 0x0 0x24 0x2 0x0 0x0 0x28 0x2 0x0 0x0>;
++			tbi-handle = <0x3>;
++			phy-handle = <0x4>;
++			phy-connection-type = "sgmii";
++			ptimer-handle = <0x5>;
++		};
++
++		ecm-law@0 {
++			compatible = "fsl,ecm-law";
++			reg = <0x0 0x1000>;
++			fsl,num-laws = <0xc>;
++		};
++
++		ecm@1000 {
++			compatible = "fsl,p2020-ecm", "fsl,ecm";
++			reg = <0x1000 0x1000>;
++			interrupts = <0x11 0x2 0x0 0x0>;
++		};
++
++		memory-controller@2000 {
++			compatible = "fsl,p2020-memory-controller";
++			reg = <0x2000 0x1000>;
++			interrupts = <0x12 0x2 0x0 0x0>;
++		};
++
++		i2c@3100 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			cell-index = <0x1>;
++			compatible = "fsl-i2c";
++			reg = <0x3100 0x100>;
++			interrupts = <0x2b 0x2 0x0 0x0>;
++			dfsrr;
++		};
++
++		serial@4500 {
++			cell-index = <0x0>;
++			device_type = "serial";
++			compatible = "fsl,ns16550", "ns16550";
++			reg = <0x4500 0x100>;
++			clock-frequency = <0x0>;
++			interrupts = <0x2a 0x2 0x0 0x0>;
++		};
++
++		serial@4600 {
++			cell-index = <0x1>;
++			device_type = "serial";
++			compatible = "fsl,ns16550", "ns16550";
++			reg = <0x4600 0x100>;
++			clock-frequency = <0x0>;
++			interrupts = <0x2a 0x2 0x0 0x0>;
++		};
++
++		spi@7000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			compatible = "fsl,mpc8536-espi";
++			reg = <0x7000 0x1000>;
++			interrupts = <0x3b 0x2 0x0 0x0>;
++			fsl,espi-num-chipselects = <0x4>;
++		};
++
++		dma@c300 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			compatible = "fsl,eloplus-dma";
++			reg = <0xc300 0x4>;
++			ranges = <0x0 0xc100 0x200>;
++			cell-index = <0x1>;
++
++			dma-channel@0 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x0 0x80>;
++				cell-index = <0x0>;
++				interrupts = <0x4c 0x2 0x0 0x0>;
++			};
++
++			dma-channel@80 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x80 0x80>;
++				cell-index = <0x1>;
++				interrupts = <0x4d 0x2 0x0 0x0>;
++			};
++
++			dma-channel@100 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x100 0x80>;
++				cell-index = <0x2>;
++				interrupts = <0x4e 0x2 0x0 0x0>;
++			};
++
++			dma-channel@180 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x180 0x80>;
++				cell-index = <0x3>;
++				interrupts = <0x4f 0x2 0x0 0x0>;
++			};
++		};
++
++		gpio-controller@f000 {
++			#gpio-cells = <0x2>;
++			compatible = "fsl,pq3-gpio";
++			reg = <0xf000 0x100>;
++			interrupts = <0x2f 0x2 0x0 0x0>;
++			gpio-controller;
++		};
++
++		l2-cache-controller@20000 {
++			compatible = "fsl,p2020-l2-cache-controller";
++			reg = <0x20000 0x1000>;
++			cache-line-size = <0x20>;
++			cache-size = <0x80000>;
++			interrupts = <0x10 0x2 0x0 0x0>;
++			linux,phandle = <0x2>;
++			phandle = <0x2>;
++		};
++
++		dma@21300 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			compatible = "fsl,eloplus-dma";
++			reg = <0x21300 0x4>;
++			ranges = <0x0 0x21100 0x200>;
++			cell-index = <0x0>;
++
++			dma-channel@0 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x0 0x80>;
++				cell-index = <0x0>;
++				interrupts = <0x14 0x2 0x0 0x0>;
++			};
++
++			dma-channel@80 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x80 0x80>;
++				cell-index = <0x1>;
++				interrupts = <0x15 0x2 0x0 0x0>;
++			};
++
++			dma-channel@100 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x100 0x80>;
++				cell-index = <0x2>;
++				interrupts = <0x16 0x2 0x0 0x0>;
++			};
++
++			dma-channel@180 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x180 0x80>;
++				cell-index = <0x3>;
++				interrupts = <0x17 0x2 0x0 0x0>;
++			};
++		};
++
++		usb@23000 {
++			compatible = "fsl-usb2-dr";
++			reg = <0x23000 0x1000>;
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			interrupts = <0x2e 0x2 0x0 0x0>;
++		};
++
++		sdhc@2e000 {
++			compatible = "fsl,p2020-esdhc", "fsl,esdhc";
++			reg = <0x2e000 0x1000>;
++			interrupts = <0x48 0x2 0x0 0x0>;
++			clock-frequency = <0x0>;
++		};
++
++		crypto@30000 {
++			compatible = "fsl,sec3.1", "fsl,sec3.0", "fsl,sec2.4", "fsl,sec2.2", "fsl,sec2.1", "fsl,sec2.0";
++			reg = <0x30000 0x10000>;
++			interrupts = <0x2d 0x2 0x0 0x0 0x3a 0x2 0x0 0x0>;
++			fsl,num-channels = <0x4>;
++			fsl,channel-fifo-len = <0x18>;
++			fsl,exec-units-mask = <0xbfe>;
++			fsl,descriptor-types-mask = <0x3ab0ebf>;
++		};
++
++		pic@40000 {
++			interrupt-controller;
++			#address-cells = <0x0>;
++			#interrupt-cells = <0x4>;
++			reg = <0x40000 0x40000>;
++			compatible = "fsl,mpic";
++			device_type = "open-pic";
++			big-endian;
++			single-cpu-affinity;
++			last-interrupt-source = <0xff>;
++			linux,phandle = <0x1>;
++			phandle = <0x1>;
++		};
++
++		timer@41100 {
++			compatible = "fsl,mpic-global-timer";
++			reg = <0x41100 0x100 0x41300 0x4>;
++			interrupts = <0x0 0x0 0x3 0x0 0x1 0x0 0x3 0x0 0x2 0x0 0x3 0x0 0x3 0x0 0x3 0x0>;
++		};
++
++		message@41400 {
++			compatible = "fsl,mpic-v3.1-msgr";
++			reg = <0x41400 0x200>;
++			interrupts = <0xb0 0x2 0x0 0x0 0xb1 0x2 0x0 0x0 0xb2 0x2 0x0 0x0 0xb3 0x2 0x0 0x0>;
++		};
++
++		msi@41600 {
++			compatible = "fsl,mpic-msi";
++			reg = <0x41600 0x80>;
++			msi-available-ranges = <0x0 0x100>;
++			interrupts = <0xe0 0x0 0x0 0x0 0xe1 0x0 0x0 0x0 0xe2 0x0 0x0 0x0 0xe3 0x0 0x0 0x0 0xe4 0x0 0x0 0x0 0xe5 0x0 0x0 0x0 0xe6 0x0 0x0 0x0 0xe7 0x0 0x0 0x0>;
++		};
++
++		timer@42100 {
++			compatible = "fsl,mpic-global-timer";
++			reg = <0x42100 0x100 0x42300 0x4>;
++			interrupts = <0x4 0x0 0x3 0x0 0x5 0x0 0x3 0x0 0x6 0x0 0x3 0x0 0x7 0x0 0x3 0x0>;
++		};
++
++		global-utilities@e0000 {
++			compatible = "fsl,p2020-guts";
++			reg = <0xe0000 0x1000>;
++			fsl,has-rstcr;
++		};
++
++		power@e0070 {
++			compatible = "fsl,mpc8548-pmc";
++			reg = <0xe0070 0x20>;
++
++			soc-clk@8 {
++				fsl,pmcdr-mask = <0x8000000>;
++			};
++
++			soc-clk@9 {
++				fsl,pmcdr-mask = <0x4000000>;
++			};
++
++			soc-clk@10 {
++				fsl,pmcdr-mask = <0x2000000>;
++			};
++
++			soc-clk@24 {
++				fsl,pmcdr-mask = <0x80>;
++			};
++
++			soc-clk@25 {
++				fsl,pmcdr-mask = <0x40>;
++			};
++
++			soc-clk@26 {
++				fsl,pmcdr-mask = <0x20>;
++			};
++		};
++	};
++
++	pcie@ffe08000 {
++		reg = <0x0 0xffe08000 0x0 0x1000>;
++		status = "disabled";
++		compatible = "fsl,mpc8548-pcie";
++		device_type = "pci";
++		#size-cells = <0x2>;
++		#address-cells = <0x3>;
++		bus-range = <0x0 0xff>;
++		clock-frequency = <0x1fca055>;
++		interrupts = <0x18 0x2 0x0 0x0>;
++
++		pcie@0 {
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#interrupt-cells = <0x1>;
++			#size-cells = <0x2>;
++			#address-cells = <0x3>;
++			device_type = "pci";
++			interrupts = <0x18 0x2 0x0 0x0>;
++			interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++			interrupt-map = <0x0 0x0 0x0 0x1 0x1 0x8 0x1 0x0 0x0 0x0 0x0 0x0 0x2 0x1 0x9 0x1 0x0 0x0 0x0 0x0 0x0 0x3 0x1 0xa 0x1 0x0 0x0 0x0 0x0 0x0 0x4 0x1 0xb 0x1 0x0 0x0>;
++		};
++	};
++
++	pcie@ffe09000 {
++		reg = <0x0 0xffe09000 0x0 0x1000>;
++		ranges = <0x2000000 0x0 0xa0000000 0x0 0xa0000000 0x0 0x20000000 0x1000000 0x0 0x0 0x0 0xffc10000 0x0 0x10000>;
++		compatible = "fsl,mpc8548-pcie";
++		device_type = "pci";
++		#size-cells = <0x2>;
++		#address-cells = <0x3>;
++		bus-range = <0x0 0xff>;
++		clock-frequency = <0x1fca055>;
++		interrupts = <0x19 0x2 0x0 0x0>;
++
++		pcie@0 {
++			ranges = <0x2000000 0x0 0xa0000000 0x2000000 0x0 0xa0000000 0x0 0x20000000 0x1000000 0x0 0x0 0x1000000 0x0 0x0 0x0 0x100000>;
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#interrupt-cells = <0x1>;
++			#size-cells = <0x2>;
++			#address-cells = <0x3>;
++			device_type = "pci";
++			interrupts = <0x19 0x2 0x0 0x0>;
++			interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++			interrupt-map = <0x0 0x0 0x0 0x1 0x1 0x4 0x1 0x0 0x0 0x0 0x0 0x0 0x2 0x1 0x5 0x1 0x0 0x0 0x0 0x0 0x0 0x3 0x1 0x6 0x1 0x0 0x0 0x0 0x0 0x0 0x4 0x1 0x7 0x1 0x0 0x0>;
++		};
++	};
++
++	pcie@ffe0a000 {
++		reg = <0x0 0xffe0a000 0x0 0x1000>;
++		ranges = <0x2000000 0x0 0x80000000 0x0 0x80000000 0x0 0x20000000 0x1000000 0x0 0x0 0x0 0xffc00000 0x0 0x10000>;
++		compatible = "fsl,mpc8548-pcie";
++		device_type = "pci";
++		#size-cells = <0x2>;
++		#address-cells = <0x3>;
++		bus-range = <0x0 0xff>;
++		clock-frequency = <0x1fca055>;
++		interrupts = <0x1a 0x2 0x0 0x0>;
++
++		pcie@0 {
++			ranges = <0x2000000 0x0 0x80000000 0x2000000 0x0 0x80000000 0x0 0x20000000 0x1000000 0x0 0x0 0x1000000 0x0 0x0 0x0 0x100000>;
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#interrupt-cells = <0x1>;
++			#size-cells = <0x2>;
++			#address-cells = <0x3>;
++			device_type = "pci";
++			interrupts = <0x1a 0x2 0x0 0x0>;
++			interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++			interrupt-map = <0x0 0x0 0x0 0x1 0x1 0x0 0x1 0x0 0x0 0x0 0x0 0x0 0x2 0x1 0x1 0x1 0x0 0x0 0x0 0x0 0x0 0x3 0x1 0x2 0x1 0x0 0x0 0x0 0x0 0x0 0x4 0x1 0x3 0x1 0x0 0x0>;
++		};
++	};
++};
+diff --git a/arch/powerpc/platforms/85xx/Kconfig b/arch/powerpc/platforms/85xx/Kconfig
+index d7946be..057f1b9 100644
+--- a/arch/powerpc/platforms/85xx/Kconfig
++++ b/arch/powerpc/platforms/85xx/Kconfig
+@@ -222,6 +222,12 @@ config P4080_DS
+ 	help
+ 	  This option enables support for the P4080 DS board
+ 
++config AS6701_32X
++       bool "Accton Technology Corporation AS6701_32X"
++       select DEFAULT_UIMAGE
++       help
++	 This option enables support for the ACCTON AS6701_32X networking platform
++
+ endif # PPC32
+ 
+ config P5020_DS
+diff --git a/arch/powerpc/platforms/85xx/Makefile b/arch/powerpc/platforms/85xx/Makefile
+index bc5acb9..fc213c4 100644
+--- a/arch/powerpc/platforms/85xx/Makefile
++++ b/arch/powerpc/platforms/85xx/Makefile
+@@ -25,3 +25,4 @@ obj-$(CONFIG_SBC8548)     += sbc8548.o
+ obj-$(CONFIG_SOCRATES)    += socrates.o socrates_fpga_pic.o
+ obj-$(CONFIG_KSI8560)	  += ksi8560.o
+ obj-$(CONFIG_XES_MPC85xx) += xes_mpc85xx.o
++obj-$(CONFIG_AS6701_32X) += as6701_32x.o
+diff --git a/arch/powerpc/platforms/85xx/as6701_32x.c b/arch/powerpc/platforms/85xx/as6701_32x.c
+new file mode 100644
+index 0000000..766dead
+--- /dev/null
++++ b/arch/powerpc/platforms/85xx/as6701_32x.c
+@@ -0,0 +1,183 @@
++/*
++ * Accton as6701_32x setup and early boot code plus other random bits.
++ *
++ * This program is free software; you can redistribute	it and/or modify it
++ * under  the terms of	the GNU General	 Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#include <linux/stddef.h>
++#include <linux/kernel.h>
++#include <linux/pci.h>
++#include <linux/kdev_t.h>
++#include <linux/delay.h>
++#include <linux/seq_file.h>
++#include <linux/interrupt.h>
++#include <linux/of_platform.h>
++
++#include <asm/system.h>
++#include <asm/time.h>
++#include <asm/machdep.h>
++#include <asm/pci-bridge.h>
++#include <mm/mmu_decl.h>
++#include <asm/prom.h>
++#include <asm/udbg.h>
++#include <asm/mpic.h>
++
++#include <sysdev/fsl_soc.h>
++#include <sysdev/fsl_pci.h>
++
++// #undef DEBUG
++
++#ifdef DEBUG
++#define DBG(fmt, args...) printk(KERN_ERR "%s: " fmt, __func__, ## args)
++#else
++#define DBG(fmt, args...)
++#endif
++
++/*******************************************************************************
++ *
++ * Platform initialization functions
++ *
++ *******************************************************************************
++*/
++
++/*
++ * Initialize the interrupt controller
++ */
++static void __init as6701_32x_pic_init(void)
++{
++	struct mpic *mpic;
++	struct resource r;
++	struct device_node *np;
++
++	np = of_find_node_by_type(NULL, "open-pic");
++	if (np == NULL) {
++		printk(KERN_ERR "Could not find open-pic node\n");
++		return;
++	}
++
++	if (of_address_to_resource(np, 0, &r)) {
++		printk(KERN_ERR "Failed to map mpic register space\n");
++		of_node_put(np);
++		return;
++	}
++
++	mpic = mpic_alloc(np, r.start,
++		  MPIC_PRIMARY | MPIC_WANTS_RESET |
++		  MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS |
++		  MPIC_SINGLE_DEST_CPU,
++		  0, 256, " OpenPIC  ");
++
++	BUG_ON(mpic == NULL);
++	of_node_put(np);
++
++	mpic_init(mpic);
++}
++
++/*
++ * Setup the architecture
++ */
++#ifdef CONFIG_SMP
++extern void __init mpc85xx_smp_init(void);
++#endif
++
++static void __init as6701_32x_setup_arch(void)
++{
++	struct device_node *cpu;
++	const unsigned int *fp;
++#ifdef CONFIG_PCI
++	struct device_node *np;
++#endif
++
++	if (ppc_md.progress)
++		ppc_md.progress("as6701_32x_setup_arch()", 0);
++
++	cpu = of_find_node_by_type(NULL, "cpu");
++	if (cpu != 0) {
++	     fp = of_get_property(cpu, "clock-frequency", NULL);
++	     if (fp != 0)
++		  loops_per_jiffy = *fp / HZ;
++	     else
++		  loops_per_jiffy = 500000000 / HZ;
++	     of_node_put(cpu);
++	}
++
++#ifdef CONFIG_PCI
++	for_each_node_by_type(np, "pci") {
++		if (of_device_is_compatible(np, "fsl,mpc8548-pcie"))
++			fsl_add_bridge(np, 0);
++	}
++#endif
++
++	powersave_nap = 0;
++
++#ifdef CONFIG_SMP
++	mpc85xx_smp_init();
++#endif
++
++}
++
++static struct of_device_id __initdata as6701_32x_ids[] = {
++	{ .type = "soc", },
++	{ .compatible = "soc", },
++	{ .compatible = "simple-bus", },
++	{ .compatible = "gianfar", },
++	{},
++};
++
++static int __init as6701_32x_publish_devices(void)
++{
++	return of_platform_bus_probe(NULL, as6701_32x_ids, NULL);
++}
++machine_device_initcall(as6701_32x, as6701_32x_publish_devices);
++
++static void as6701_32x_show_cpuinfo(struct seq_file *m)
++{
++	uint pvid, svid, phid1;
++	uint memsize = total_memory;
++
++	pvid = mfspr(SPRN_PVR);
++	svid = mfspr(SPRN_SVR);
++
++	seq_printf(m, "Vendor\t\t: Freescale Semiconductor\n");
++	seq_printf(m, "PVR\t\t: 0x%x\n", pvid);
++	seq_printf(m, "SVR\t\t: 0x%x\n", svid);
++
++	/* Display cpu Pll setting */
++	phid1 = mfspr(SPRN_HID1);
++	seq_printf(m, "PLL setting\t: 0x%x\n", ((phid1 >> 24) & 0x3f));
++
++	/* Display the amount of memory */
++	seq_printf(m, "Memory\t\t: %d MB\n", memsize / (1024 * 1024));
++}
++
++/*
++ * Called very early, device-tree isn't unflattened
++ */
++static int __init as6701_32x_probe(void)
++{
++	unsigned long root = of_get_flat_dt_root();
++
++	if (of_flat_dt_is_compatible(root, "accton,as6701_32x"))
++		return 1;
++
++	return 0;
++}
++
++define_machine(as6701_32x) {
++	.name		= "Accton Technology Corporation AS6701_32X",
++	.probe		= as6701_32x_probe,
++	.setup_arch	= as6701_32x_setup_arch,
++	.init_IRQ	= as6701_32x_pic_init,
++	.show_cpuinfo	= as6701_32x_show_cpuinfo,
++#ifdef CONFIG_PCI
++	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
++#endif
++	.get_irq	= mpic_get_irq,
++	.power_save	= e500_idle,
++	.restart	= fsl_rstcr_restart,
++	.calibrate_decr = generic_calibrate_decr,
++	.progress	= udbg_progress,
++};
