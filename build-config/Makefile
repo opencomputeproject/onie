@@ -228,6 +228,7 @@ endif
 DIRTY  = $(shell cd $(MACHINEDIR) && git status | \
 		egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo -dirty)
 LSB_RELEASE_TAG := $(ONIE_RELEASE_TAG)$(VENDOR_VERSION)$(DIRTY)
+export LSB_RELEASE_TAG
 
 #-------------------------------------------------------------------------------
 #
