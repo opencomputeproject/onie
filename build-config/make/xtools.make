@@ -16,7 +16,8 @@
 #
 
 XTOOLS_CONFIG		= conf/crosstool/uClibc-$(UCLIBC_VERSION)/crosstool.$(ONIE_ARCH).config
-XTOOLS_DIR		= $(BUILDDIR)/x-tools/$(ONIE_ARCH)-linux-$(LINUX_RELEASE)-uClibc-$(UCLIBC_VERSION)
+XTOOLS_ROOT		= $(BUILDDIR)/x-tools
+XTOOLS_DIR		= $(XTOOLS_ROOT)/$(ONIE_ARCH)-linux-$(LINUX_RELEASE)-uClibc-$(UCLIBC_VERSION)
 XTOOLS_BUILD_DIR	= $(XTOOLS_DIR)/build
 XTOOLS_INSTALL_DIR	= $(XTOOLS_DIR)/install
 XTOOLS_DEBUG_ROOT	= $(XTOOLS_INSTALL_DIR)/$(TARGET)/$(TARGET)/debug-root
@@ -56,10 +57,15 @@ $(XTOOLS_BUILD_STAMP): $(XTOOLS_BUILD_DIR)/.config $(CROSSTOOL_NG_BUILD_STAMP)
 	$(Q) cd $(XTOOLS_BUILD_DIR) && $(CROSSTOOL_NG_DIR)/ct-ng build
 	$(Q) touch $@
 
-DIST_CLEAN += xtools-clean
-xtools-clean: kernel-download-clean uclibc-download-clean
+xtools-clean:
 	$(Q) ( [ -d $(XTOOLS_DIR) ] && chmod +w -R $(XTOOLS_DIR) ) || true
 	$(Q) rm -rf $(XTOOLS_DIR) 
+	$(Q) echo "=== Finished making $@ ==="
+
+DIST_CLEAN += xtools-distclean
+xtools-distclean:
+	$(Q) ( [ -d $(XTOOLS_ROOT) ] && chmod +w -R $(XTOOLS_ROOT) ) || true
+	$(Q) rm -rf $(XTOOLS_ROOT)
 	$(Q) echo "=== Finished making $@ ==="
 
 #-------------------------------------------------------------------------------
