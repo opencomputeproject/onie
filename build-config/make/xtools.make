@@ -15,7 +15,7 @@
 #   CT_DEBUG_CT_SAVE_STEPS_GZIP=y
 #
 
-XTOOLS_CONFIG		= conf/crosstool.$(ONIE_ARCH).config
+XTOOLS_CONFIG		= conf/crosstool/uClibc-$(UCLIBC_VERSION)/crosstool.$(ONIE_ARCH).config
 XTOOLS_DIR		= $(BUILDDIR)/x-tools/$(ONIE_ARCH)-linux-$(LINUX_RELEASE)-uClibc-$(UCLIBC_VERSION)
 XTOOLS_BUILD_DIR	= $(XTOOLS_DIR)/build
 XTOOLS_INSTALL_DIR	= $(XTOOLS_DIR)/install
