@@ -7,11 +7,12 @@
 
 #-------------------------------------------------------------------------------
 
-LINUX_CONFIG 		= conf/linux.$(ONIE_ARCH).config
+LINUX_CONFIG 		= conf/kernel/$(LINUX_RELEASE)/linux.$(ONIE_ARCH).config
 KERNELDIR   		= $(MBUILDDIR)/kernel
 LINUXDIR   		= $(KERNELDIR)/linux
 
-KERNEL_SRCPATCHDIR	= $(PATCHDIR)/kernel
+KERNEL_SRCPATCHDIR	= $(PATCHDIR)/kernel/$(LINUX_RELEASE)
+MACHINE_KERNEL_PATCHDIR	?= $(MACHINEDIR)/kernel
 KERNEL_PATCHDIR		= $(KERNELDIR)/patch
 
 KERNEL_SOURCE_STAMP	= $(STAMPDIR)/kernel-source
@@ -49,7 +50,7 @@ $(KERNEL_SOURCE_STAMP): $(TREE_STAMP) | $(KERNEL_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting Linux ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(KERNELDIR) $(DOWNLOADDIR)/$(LINUX_TARBALL)
-	$(Q) cd $(KERNELDIR) && ln -s linux-$(LINUX_SUBVERSION) linux
+	$(Q) cd $(KERNELDIR) && ln -s linux-$(LINUX_RELEASE) linux
 	$(Q) touch $@
 
 #
@@ -58,24 +59,24 @@ $(KERNEL_SOURCE_STAMP): $(TREE_STAMP) | $(KERNEL_DOWNLOAD_STAMP)
 # top.
 #
 kernel-patch: $(KERNEL_PATCH_STAMP)
-$(KERNEL_PATCH_STAMP): $(KERNEL_SRCPATCHDIR)/* $(MACHINEDIR)/kernel/* $(KERNEL_SOURCE_STAMP)
+$(KERNEL_PATCH_STAMP): $(KERNEL_SRCPATCHDIR)/* $(MACHINE_KERNEL_PATCHDIR)/* $(KERNEL_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== patching  Linux ===="
-	$(Q) [ -r $(MACHINEDIR)/kernel/series ] || \
-		(echo "Unable to find machine dependent kernel patch series: $(MACHINEDIR)/kernel/series" && \
+	$(Q) [ -r $(MACHINE_KERNEL_PATCHDIR)/series ] || \
+		(echo "Unable to find machine dependent kernel patch series: $(MACHINE_KERNEL_PATCHDIR)/series" && \
 		exit 1)
 	$(Q) mkdir -p $(KERNEL_PATCHDIR)
 	$(Q) cp $(KERNEL_SRCPATCHDIR)/* $(KERNEL_PATCHDIR)
-	$(Q) cat $(MACHINEDIR)/kernel/series >> $(KERNEL_PATCHDIR)/series
-	$(Q) $(SCRIPTDIR)/cp-machine-patches $(KERNEL_PATCHDIR) $(MACHINEDIR)/kernel/series	\
-		$(MACHINEDIR)/kernel $(MACHINEROOT)/kernel
+	$(Q) cat $(MACHINE_KERNEL_PATCHDIR)/series >> $(KERNEL_PATCHDIR)/series
+	$(Q) $(SCRIPTDIR)/cp-machine-patches $(KERNEL_PATCHDIR) $(MACHINE_KERNEL_PATCHDIR)/series	\
+		$(MACHINE_KERNEL_PATCHDIR) $(MACHINEROOT)/kernel
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(KERNEL_PATCHDIR)/series $(LINUXDIR)
 	$(Q) touch $@
 
 $(LINUXDIR)/.config : $(LINUX_CONFIG) $(KERNEL_PATCH_STAMP)
 	$(Q) echo "==== Copying $(LINUX_CONFIG) to $(LINUXDIR)/.config ===="
 	$(Q) cp -v $< $@
-	$(Q) cat $(MACHINEDIR)/kernel/config >> $(LINUXDIR)/.config
+	$(Q) cat $(MACHINE_KERNEL_PATCHDIR)/config >> $(LINUXDIR)/.config
 
 kernel-old-config: $(LINUXDIR)/.config
 	$(Q) $(MAKE) -C $(LINUXDIR) ARCH=$(KERNEL_ARCH) oldconfig
