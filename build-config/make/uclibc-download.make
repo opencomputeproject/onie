@@ -6,12 +6,12 @@
 # This is a makefile fragment that defines the download of uClibc
 #
 
-UCLIBC_VERSION		= 0.9.32.1
+UCLIBC_VERSION		?= 0.9.32.1
 UCLIBC_TARBALL		= uClibc-$(UCLIBC_VERSION).tar.xz
 UCLIBC_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.uclibc.org/downloads
-UCLIBC_CONFIG		= $(realpath conf/uclibc.$(ONIE_ARCH).config)
+UCLIBC_CONFIG		= $(realpath conf)/uclibc/$(UCLIBC_VERSION)/uclibc.$(ONIE_ARCH).config
 
-UCLIBC_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/uclibc-download
+UCLIBC_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/uclibc-download-$(UCLIBC_VERSION)
 
 # The exported variables are used by the crosstool-NG configuration
 # file.
