@@ -135,7 +135,7 @@ e2fsprogs-clean:
 	$(Q) rm -f $(E2FSPROGS_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
-CLEAN_DOWNLOAD += e2fsprogs-download-clean
+DOWNLOAD_CLEAN += e2fsprogs-download-clean
 e2fsprogs-download-clean:
 	$(Q) rm -f $(E2FSPROGS_DOWNLOAD_STAMP) $(DOWNLOADDIR)/e2fsprogs*
 

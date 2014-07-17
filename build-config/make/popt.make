@@ -100,7 +100,7 @@ popt-clean:
 	$(Q) rm -f $(POPT_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
-CLEAN_DOWNLOAD += popt-download-clean
+DOWNLOAD_CLEAN += popt-download-clean
 popt-download-clean:
 	$(Q) rm -f $(POPT_DOWNLOAD_STAMP) $(DOWNLOADDIR)/popt*
 

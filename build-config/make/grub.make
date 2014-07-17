@@ -108,7 +108,7 @@ grub-clean:
 	$(Q) rm -f $(GRUB_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
-CLEAN_DOWNLOAD += grub-download-clean
+DOWNLOAD_CLEAN += grub-download-clean
 grub-download-clean:
 	$(Q) rm -f $(GRUB_DOWNLOAD_STAMP) $(DOWNLOADDIR)/grub*
 

@@ -94,7 +94,7 @@ parted-clean:
 	$(Q) rm -f $(PARTED_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
-CLEAN_DOWNLOAD += parted-download-clean
+DOWNLOAD_CLEAN += parted-download-clean
 parted-download-clean:
 	$(Q) rm -f $(PARTED_DOWNLOAD_STAMP) $(DOWNLOADDIR)/parted*
 

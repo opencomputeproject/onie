@@ -30,7 +30,7 @@ $(UCLIBC_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 		$(UCLIBC_TARBALL) $(UCLIBC_TARBALL_URLS)
 	$(Q) touch $@
 
-CLEAN_DOWNLOAD += uclibc-download-clean
+DOWNLOAD_CLEAN += uclibc-download-clean
 uclibc-download-clean:
 	$(Q) rm -f $(UCLIBC_DOWNLOAD_STAMP) $(DOWNLOADDIR)/$(UCLIBC_TARBALL)
 
