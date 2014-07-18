@@ -29,6 +29,9 @@ I2CTOOLS_ENABLE = no
 LINUX_VERSION		= 3.14
 LINUX_MINOR_VERSION	= 16
 
+# Set the desired uClibc version
+UCLIBC_VERSION = 0.9.33.2
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
