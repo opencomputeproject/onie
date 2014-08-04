@@ -277,7 +277,9 @@ include make/busybox.make
 include make/zlib.make
 include make/lzo.make
 include make/e2fsprogs.make
-include make/mtdutils.make
+ifeq ($(MTDUTILS_ENABLE),yes)
+  include make/mtdutils.make
+endif
 include make/dropbear.make
 ifeq ($(GPT_ENABLE),yes)
   include make/popt.make
