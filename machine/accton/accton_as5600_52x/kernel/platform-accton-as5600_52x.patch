@@ -1,0 +1,1487 @@
+platform Accton AS5600_52X patch
+
+Support for the Accton AS5600_52X networking platform.
+
+diff --git a/arch/powerpc/boot/dts/as5600_52x.dts b/arch/powerpc/boot/dts/as5600_52x.dts
+new file mode 100644
+index 0000000..cccc013
+--- /dev/null
++++ b/arch/powerpc/boot/dts/as5600_52x.dts
+@@ -0,0 +1,1234 @@
++/*
++ * Accton Technology AS5600_52X Device Tree Source
++ *
++ * This program is free software; you can redistribute	it and/or modify it
++ * under  the terms of	the GNU General	 Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *
++ * Note: On current rev of Accton box eth mgmt PHY does not work at 1Gb.
++ *	 See PHY property accton,broken_1000 and use in gianfar.c.
++ */
++
++/dts-v1/;
++
++/ {
++	model = "accton,es5652bt1";
++	compatible = "accton,5652";
++	#address-cells = <0x2>;
++	#size-cells = <0x2>;
++	interrupt-parent = <&MPIC>;
++	aliases {
++		ethernet0 = &ENET0;
++		serial0 = &SERIAL0;
++		pci1	= &PCI1;
++	};
++	cpus {
++		#address-cells = <0x1>;
++		#size-cells = <0x0>;
++		PowerPC,P2020@0 {
++			device_type = "cpu";
++			reg = <0x0>;
++			next-level-cache = <0x1>;
++		};
++		PowerPC,P2020@1 {
++			device_type = "cpu";
++			reg = <0x1>;
++			next-level-cache = <0x1>;
++		};
++	};
++	memory {
++		device_type = "memory";
++	};
++	bcm_dma {
++		compatible = "early-dma-alloc";
++		// 64MB DMA region, aligned to 1MB
++		region_size = <0x04000000>;
++		alignment   = <0x00100000>;
++	};
++	localbus@ff705000 {
++		#address-cells = <0x2>;
++		#size-cells = <0x1>;
++		compatible = "fsl,p2020-elbc", "fsl,elbc", "simple-bus";
++		reg = <0x0 0xff705000 0x0 0x00001000>;
++		interrupts = <19 0x2>;
++		ranges = <0x0 0x0 0x0 0xefc00000 0x00400000
++			  0x1 0x0 0x0 0xea000000 0x00000100>;
++		flash@0,0 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x00400000>;
++			bank-width = <0x1>;
++			device-width = <0x1>;
++			partition@0 {
++				/* Entire flash minus (u-boot + info) */
++				reg = <0x00000000 0x00360000>;
++				label = "onie";
++			};
++			partition@1 {
++				reg = <0x00360000 0x00010000>;
++				label = "uboot-env";
++				env_size = <0x10000>;
++			};
++			partition@2 {
++				reg = <0x00370000 0x00010000>;
++				label = "board_eeprom";
++			};
++			partition@3 {
++				reg = <0x00380000 0x00080000>;
++				label = "uboot";
++			};
++		};
++		cpld@1,0 {
++			compatible = "accton,5652-cpld";
++			reg = <0x1 0x0 0x0000100>;
++		};
++	};
++
++	soc@ff700000 {
++		#address-cells = <0x1>;
++		#size-cells = <0x1>;
++		device_type = "soc";
++		compatible = "fsl,p2020-immr", "simple-bus";
++		ranges = <0x0 0x0 0xff700000 0x100000>;
++		bus-frequency = <0x0>;
++		memory-controller@2000 {
++			compatible = "fsl,p2020-memory-controller";
++			reg = <0x2000 0x1000>;
++			interrupts = <0x12 0x2>;
++		};
++		I2C0: i2c@3000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			cell-index = <0x0>;
++			compatible = "fsl-i2c";
++			reg = <0x3000 0x100>;
++			interrupts = <0x2b 0x2>;
++			dfsrr;
++			clock-frequency = <400000>;
++			fsl,timeout = <10000>;
++			mux@70 {
++			       compatible = "ti,pca9548";
++			       reg = <0x70>;
++			       #address-cells = <1>;
++			       #size-cells = <0>;
++
++			       i2c@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++
++					rtc@51 {
++					       compatible = "epson,rtc8564";
++					       reg = <0x51>;
++					};
++
++			       };
++			       i2c@1 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <1>;
++					/* Not sure what the two addr per PSU are for */
++					/*
++					** The eeprom utilities look for a label that
++					** ends with "_eeprom".
++					*/
++					psu_eeprom@39 {
++						compatible = "at,24c02";
++						reg = <0x39>;
++						/* Haven't seen this one work yet */
++						label = "psu1_eeprom";
++						read-only;
++					};
++					psu_unknown@3d {
++						compatible = "at,24c02";
++						reg = <0x3d>;
++						/* Haven't seen this one work yet */
++						// label = "psu1_eeprom2";
++						read-only;
++					};
++					psu_eeprom@3a {
++						compatible = "at,24c02";
++						reg = <0x3a>;
++						/* This one contains valid data */
++						label = "psu2_eeprom";
++						read-only;
++					};
++					psu_unknown@3e {
++						compatible = "at,24c02";
++						reg = <0x3e>;
++						/* This one is unformatted */
++						// label = "psu2_eeprom2";
++						read-only;
++					};
++
++			       };
++			       // No devices on bus 2
++			       i2c@2 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <2>;
++			       };
++			       // No devices on bus 3
++			       i2c@3 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <3>;
++			       };
++			       i2c@4 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <4>;
++					// SMSC USB2513i - USB Hub.
++					// Handled by u-boot, leave blank here.
++					// addr 0x2C
++			       };
++			       i2c@5 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <5>;
++					// VT1165M Voltage monitor
++					// Leave blank here.
++					// addr 0x71
++			       };
++			       i2c@6 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <6>;
++					// ICS83905I PCIe clock buffer
++					// Leave blank here.
++					// addr 0x6E
++			       };
++			       i2c@7 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <7>;
++
++					hwmon@29 {
++					       compatible = "winbond,w83782d";
++					       reg = <0x29>;
++					       // write 0 to 0x5c and 0x45c
++					       accton,as5600_52x,clksel = <1>;
++					};
++					tmon@18 {
++					       compatible = "nxp,max1617";
++					       reg = <0x18>;
++					};
++					tmon@1a {
++					       compatible = "nxp,max1617";
++					       reg = <0x1a>;
++					};
++					tmon@4c {
++					       compatible = "nxp,max1617";
++					       reg = <0x4c>;
++					};
++			       };
++		       };
++		};
++		I2C1: i2c@3100 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			cell-index = <0x1>;
++			compatible = "fsl-i2c";
++			reg = <0x3100 0x100>;
++			interrupts = <0x2b 0x2>;
++			dfsrr;
++			mux@75 {
++			       compatible = "ti,pca9546";
++			       reg = <0x75>;
++			       deselect-on-exit;
++			       #address-cells = <1>;
++			       #size-cells = <0>;
++			       i2c@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++					// SFP+ 0-7
++					mux@74 {
++						compatible = "ti,pca9548";
++						reg = <0x74>;
++						#address-cells = <1>;
++						#size-cells = <0>;
++						// SFP+ 0
++						i2c@0 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <0>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 1
++						i2c@1 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <1>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 2
++						i2c@2 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <2>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 3
++						i2c@3 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <3>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 4
++						i2c@4 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <4>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 5
++						i2c@5 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <5>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 6
++						i2c@6 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <6>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 7
++						i2c@7 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <7>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++					};
++			       };
++			       i2c@1 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <1>;
++					// SFP+ 8-15
++					mux@74 {
++						compatible = "ti,pca9548";
++						reg = <0x74>;
++						#address-cells = <1>;
++						#size-cells = <0>;
++						// SFP+ 8
++						i2c@0 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <0>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 9
++						i2c@1 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <1>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 10
++						i2c@2 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <2>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 11
++						i2c@3 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <3>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 12
++						i2c@4 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <4>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 13
++						i2c@5 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <5>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 14
++						i2c@6 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <6>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 15
++						i2c@7 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <7>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++					};
++			       };
++			       i2c@2 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <2>;
++					// SFP+ 16-23
++					mux@74 {
++						compatible = "ti,pca9548";
++						reg = <0x74>;
++						#address-cells = <1>;
++						#size-cells = <0>;
++						// SFP+ 16
++						i2c@0 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <0>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 17
++						i2c@1 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <1>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 18
++						i2c@2 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <2>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 19
++						i2c@3 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <3>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 20
++						i2c@4 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <4>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 21
++						i2c@5 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <5>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 22
++						i2c@6 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <6>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 23
++						i2c@7 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <7>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++					};
++			       };
++			       i2c@3 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <3>;
++					// SFP+ 24-31
++					mux@74 {
++						compatible = "ti,pca9548";
++						reg = <0x74>;
++						#address-cells = <1>;
++						#size-cells = <0>;
++						// SFP+ 24
++						i2c@0 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <0>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 25
++						i2c@1 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <1>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 26
++						i2c@2 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <2>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 27
++						i2c@3 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <3>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 28
++						i2c@4 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <4>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 29
++						i2c@5 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <5>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 30
++						i2c@6 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <6>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 31
++						i2c@7 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <7>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++					};
++			       };
++			};
++			mux@76 {
++			       // 4 channel mux
++			       compatible = "ti,pca9546";
++			       reg = <0x76>;
++			       deselect-on-exit;
++			       #address-cells = <1>;
++			       #size-cells = <0>;
++			       i2c@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++					// SFP+ 32-39
++					mux@74 {
++						// 8 channel mux
++						compatible = "ti,pca9548";
++						reg = <0x74>;
++						#address-cells = <1>;
++						#size-cells = <0>;
++						// SFP+ 32
++						i2c@0 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <0>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 33
++						i2c@1 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <1>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 34
++						i2c@2 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <2>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 35
++						i2c@3 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <3>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 36
++						i2c@4 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <4>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 37
++						i2c@5 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <5>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 38
++						i2c@6 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <6>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 39
++						i2c@7 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <7>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++					};
++			       };
++			       i2c@1 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <1>;
++					// SFP+ 40-47
++					mux@74 {
++						// 8 channel mux
++						compatible = "ti,pca9548";
++						reg = <0x74>;
++						#address-cells = <1>;
++						#size-cells = <0>;
++						// SFP+ 40
++						i2c@0 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <0>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 41
++						i2c@1 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <1>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 42
++						i2c@2 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <2>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 43
++						i2c@3 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <3>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 44
++						i2c@4 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <4>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 45
++						i2c@5 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <5>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 46
++						i2c@6 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <6>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++						// SFP+ 47
++						i2c@7 {
++							#address-cells = <1>;
++							#size-cells = <0>;
++							reg = <7>;
++							sfp_eeprom@50 {
++								compatible = "at,24c02";
++								reg = <0x50>;
++							};
++							sfp_eeprom@51 {
++								compatible = "at,24c02";
++								reg = <0x51>;
++							};
++						};
++					};
++			       };
++			       i2c@2 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <2>;
++					gpio@20 {
++						// SFP+ RX/TX rate select 0..19
++						compatible = "ti,pca9506";
++						reg = <0x20>;
++					};
++					gpio@21 {
++						// SFP+ RX/TX rate select 20..39
++						compatible = "ti,pca9506";
++						reg = <0x21>;
++					};
++					gpio@70 {
++						// LPMODE QSFP+ 0..3
++						compatible = "ti,pca9538";
++						reg = <0x70>;
++					};
++					gpio@71 {
++						// RESET QSFP+ 0..3, MDOESEL QSFP+ 0..3
++						compatible = "ti,pca9538";
++						reg = <0x71>;
++					};
++					gpio@72 {
++						// SFP+ RX rate select 40..47
++						compatible = "ti,pca9538";
++						reg = <0x72>;
++					};
++					gpio@73 {
++						// SFP+ TX rate select 40..47
++						compatible = "ti,pca9538";
++						reg = <0x73>;
++					};
++			       };
++			       i2c@3 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <3>;
++					gpio@20 {
++						// SFP+ MOD_ABS 0..39
++						compatible = "ti,pca9506";
++						reg = <0x20>;
++					};
++					gpio@22 {
++						// SFP+ OPRXLOSS 0..39
++						compatible = "ti,pca9506";
++						reg = <0x22>;
++					};
++					gpio@71 {
++						// SFP+ MOD_ABS 40..47
++						compatible = "ti,pca9538";
++						reg = <0x71>;
++					};
++					gpio@72 {
++						// QSFP+ PRSNT 0..3
++						compatible = "ti,pca9538";
++						reg = <0x72>;
++					};
++					gpio@73 {
++						// SFP+ OPRXLOSS 40..47
++						compatible = "ti,pca9538";
++						reg = <0x73>;
++					};
++			       };
++			};
++			mux@77 {
++			       // 4 channel mux
++			       compatible = "ti,pca9546";
++			       reg = <0x77>;
++			       deselect-on-exit;
++			       #address-cells = <1>;
++			       #size-cells = <0>;
++			       // QSFP+ 0
++			       i2c@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++			       };
++			       // QSFP+ 1
++			       i2c@1 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <1>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++			       };
++			       // QSFP+ 2
++			       i2c@2 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <2>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++			       };
++			       // QSFP+ 3
++			       i2c@3 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <3>;
++					sfp_eeprom@50 {
++						compatible = "at,24c02";
++						reg = <0x50>;
++					};
++					sfp_eeprom@51 {
++						compatible = "at,24c02";
++						reg = <0x51>;
++					};
++			       };
++			};
++		};
++		SERIAL0: serial@4500 {
++			cell-index = <0x0>;
++			device_type = "serial";
++			compatible = "ns16550";
++			reg = <0x4500 0x100>;
++			clock-frequency = <0x0>;
++			interrupts = <0x2a 0x2>;
++		};
++/*
++		SERIAL1: serial@4600 {
++			cell-index = <0x1>;
++			device_type = "serial";
++			compatible = "ns16550";
++			reg = <0x4600 0x100>;
++			clock-frequency = <0x0>;
++			interrupts = <0x2a 0x2>;
++		};
++*/
++		L2: l2-cache-controller@20000 {
++			compatible = "fsl,p2020-l2-cache-controller";
++			reg = <0x20000 0x1000>;
++			cache-line-size = <0x20>;
++			cache-size = <0x80000>;
++			interrupts = <0x10 0x2>;
++		};
++
++		USB: usb@22000 {
++			compatible = "fsl-usb2-dr";
++			reg = <0x22000 0x1000>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++			interrupts = <28 0x2>;
++			phy_type = "ulpi";
++			dr_mode = "host";
++		};
++
++		MDIO1: mdio@24520 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x24520 0x20>;
++			PHY1: ethernet-phy@1 {
++				reg = <0x1>;
++				device_type = "ethernet-phy";
++			};
++		};
++
++		ENET0: ethernet@24000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			cell-index = <0x1>;
++			device_type = "network";
++			model = "eTSEC";
++			compatible = "gianfar";
++			reg = <0x24000 0x1000>;
++			ranges = <0x0 0x24000 0x1000>;
++			interrupts = <
++				   0x1d 0x2
++				   0x1e 0x2
++				   0x22 0x2>;
++			phy-handle = <&PHY1>;
++			phy-connection-type = "rgmii";
++		};
++		MPIC: pic@40000 {
++			interrupt-controller;
++			#address-cells = <0x0>;
++			#interrupt-cells = <0x2>;
++			reg = <0x40000 0x40000>;
++			compatible = "chrp,open-pic";
++			device_type = "open-pic";
++		};
++		global-utilities@e0000 {
++			compatible = "fsl,p2020-guts", "fsl,mpc8548-guts";
++			reg = <0xe0000 0x1000>;
++			fsl,has-rstcr;
++		};
++	};
++
++	PCI1: pcie@ff70a000 {
++		compatible = "fsl,mpc8548-pcie";
++		device_type = "pci";
++		#interrupt-cells = <0x1>;
++		#size-cells = <0x2>;
++		#address-cells = <0x3>;
++		reg = <0x0 0xff70a000 0x0 0x1000>;
++		bus-range = <0x0 0xff>;
++		ranges = <0x2000000 0x0 0xa0000000 0x0 0xa0000000 0x0 0x20000000
++			  0x1000000 0x0 0x00000000 0x0 0xffc20000 0x0 0x00010000>;
++		clock-frequency = <0x5f5e100>;
++		interrupts = <0x1a 0x2>;
++		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++		interrupt-map = <
++			      /* IDSEL 0x0 */
++			      0x0 0x0 0x0 0x1 &MPIC 0x0 0x1
++			      0x0 0x0 0x0 0x2 &MPIC 0x0 0x1
++			      0x0 0x0 0x0 0x3 &MPIC 0x0 0x1
++			      0x0 0x0 0x0 0x4 &MPIC 0x0 0x1>;
++		pcie@0 {
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#size-cells = <0x2>;
++			#address-cells = <0x3>;
++			device_type = "pci";
++			ranges = <0x2000000 0x0 0xa0000000 0x2000000 0x0 0xa0000000 0x0 0x20000000
++				  0x1000000 0x0 0x00000000 0x1000000 0x0 0x00000000 0x0 0x10000>;
++		};
++	};
++};
+diff --git a/arch/powerpc/platforms/85xx/Kconfig b/arch/powerpc/platforms/85xx/Kconfig
+index d7946be..08015f2 100644
+--- a/arch/powerpc/platforms/85xx/Kconfig
++++ b/arch/powerpc/platforms/85xx/Kconfig
+@@ -222,6 +222,12 @@ config P4080_DS
+ 	help
+ 	  This option enables support for the P4080 DS board
+ 
++config AS5600_52X
++       bool "Accton Technology Corporation AS5600_52X"
++       select DEFAULT_UIMAGE
++       help
++	 This option enables support for the ACCTON AS5600_52X networking platform
++
+ endif # PPC32
+ 
+ config P5020_DS
+diff --git a/arch/powerpc/platforms/85xx/Makefile b/arch/powerpc/platforms/85xx/Makefile
+index bc5acb9..0afa867 100644
+--- a/arch/powerpc/platforms/85xx/Makefile
++++ b/arch/powerpc/platforms/85xx/Makefile
+@@ -25,3 +25,4 @@ obj-$(CONFIG_SBC8548)     += sbc8548.o
+ obj-$(CONFIG_SOCRATES)    += socrates.o socrates_fpga_pic.o
+ obj-$(CONFIG_KSI8560)	  += ksi8560.o
+ obj-$(CONFIG_XES_MPC85xx) += xes_mpc85xx.o
++obj-$(CONFIG_AS5600_52X) += as5600_52x.o
+diff --git a/arch/powerpc/platforms/85xx/as5600_52x.c b/arch/powerpc/platforms/85xx/as5600_52x.c
+new file mode 100644
+index 0000000..59ba8a4
+--- /dev/null
++++ b/arch/powerpc/platforms/85xx/as5600_52x.c
+@@ -0,0 +1,211 @@
++/*
++ * Accton as5600_52x setup and early boot code plus other random bits.
++ *
++ * This program is free software; you can redistribute	it and/or modify it
++ * under  the terms of	the GNU General	 Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#include <linux/stddef.h>
++#include <linux/kernel.h>
++#include <linux/pci.h>
++#include <linux/kdev_t.h>
++#include <linux/delay.h>
++#include <linux/seq_file.h>
++#include <linux/interrupt.h>
++#include <linux/of_platform.h>
++
++#include <asm/system.h>
++#include <asm/time.h>
++#include <asm/machdep.h>
++#include <asm/pci-bridge.h>
++#include <mm/mmu_decl.h>
++#include <asm/prom.h>
++#include <asm/udbg.h>
++#include <asm/mpic.h>
++
++#include <sysdev/fsl_soc.h>
++#include <sysdev/fsl_pci.h>
++
++// #undef DEBUG
++
++#ifdef DEBUG
++#define DBG(fmt, args...) printk(KERN_ERR "%s: " fmt, __func__, ## args)
++#else
++#define DBG(fmt, args...)
++#endif
++
++/*
++ * Enough of the CPLD to reset the system... full driver loads as a module
++*/
++static uint8_t __iomem * cpld_regs;
++static uint32_t CPLD_RESET_REG = 0x10;
++
++/*******************************************************************************
++ *
++ * Platform initialization functions
++ *
++ *******************************************************************************
++*/
++
++/*
++ * Initialize the interrupt controller
++ */
++static void __init as5600_52x_pic_init(void)
++{
++	struct mpic *mpic;
++	struct resource r;
++	struct device_node *np;
++
++	np = of_find_node_by_type(NULL, "open-pic");
++	if (np == NULL) {
++		printk(KERN_ERR "Could not find open-pic node\n");
++		return;
++	}
++
++	if (of_address_to_resource(np, 0, &r)) {
++		printk(KERN_ERR "Failed to map mpic register space\n");
++		of_node_put(np);
++		return;
++	}
++
++	mpic = mpic_alloc(np, r.start,
++		  MPIC_PRIMARY | MPIC_WANTS_RESET |
++		  MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS |
++		  MPIC_SINGLE_DEST_CPU,
++		  0, 256, " OpenPIC  ");
++
++	BUG_ON(mpic == NULL);
++	of_node_put(np);
++
++	mpic_init(mpic);
++}
++
++/*
++ * Setup the architecture
++ */
++#ifdef CONFIG_SMP
++extern void __init mpc85xx_smp_init(void);
++#endif
++
++static void __init as5600_52x_setup_arch(void)
++{
++	struct device_node *cpu;
++	const unsigned int *fp;
++#ifdef CONFIG_PCI
++	struct device_node *np;
++#endif
++	struct device_node *cpld;
++
++	if (ppc_md.progress)
++		ppc_md.progress("as5600_52x_setup_arch()", 0);
++
++	cpu = of_find_node_by_type(NULL, "cpu");
++	if (cpu != 0) {
++	     fp = of_get_property(cpu, "clock-frequency", NULL);
++	     if (fp != 0)
++		  loops_per_jiffy = *fp / HZ;
++	     else
++		  loops_per_jiffy = 500000000 / HZ;
++	     of_node_put(cpu);
++	}
++
++#ifdef CONFIG_PCI
++	for_each_node_by_type(np, "pci") {
++		if (of_device_is_compatible(np, "fsl,mpc8548-pcie"))
++			fsl_add_bridge(np, 0);
++	}
++#endif
++
++	cpld = of_find_compatible_node(NULL, NULL, "accton,5652-cpld");
++	if (!cpld) {
++		printk(KERN_ERR "Can not find accton,5652-cpld node in device tree\n");
++		cpld_regs = NULL;
++	} else {
++		cpld_regs = of_iomap(cpld, 0);
++		of_node_put(cpld);
++	}
++
++	powersave_nap = 0;
++
++#ifdef CONFIG_SMP
++	mpc85xx_smp_init();
++#endif
++
++}
++
++static struct of_device_id __initdata as5600_52x_ids[] = {
++	{ .type = "soc", },
++	{ .compatible = "soc", },
++	{ .compatible = "simple-bus", },
++	{ .compatible = "gianfar", },
++	{},
++};
++
++static int __init as5600_52x_publish_devices(void)
++{
++	return of_platform_bus_probe(NULL, as5600_52x_ids, NULL);
++}
++machine_device_initcall(as5600_52x, as5600_52x_publish_devices);
++
++static void as5600_52x_show_cpuinfo(struct seq_file *m)
++{
++	uint pvid, svid, phid1;
++	uint memsize = total_memory;
++
++	pvid = mfspr(SPRN_PVR);
++	svid = mfspr(SPRN_SVR);
++
++	seq_printf(m, "Vendor\t\t: Freescale Semiconductor\n");
++	seq_printf(m, "PVR\t\t: 0x%x\n", pvid);
++	seq_printf(m, "SVR\t\t: 0x%x\n", svid);
++
++	/* Display cpu Pll setting */
++	phid1 = mfspr(SPRN_HID1);
++	seq_printf(m, "PLL setting\t: 0x%x\n", ((phid1 >> 24) & 0x3f));
++
++	/* Display the amount of memory */
++	seq_printf(m, "Memory\t\t: %d MB\n", memsize / (1024 * 1024));
++}
++
++/*
++ * Platform specific restart... need to use the CPLD
++ */
++static void as5600_52x_restart(char *cmd)
++{
++	printk (KERN_EMERG "Reset via the platform CPLD\n");
++
++	local_irq_disable();
++	writeb(0, (cpld_regs + CPLD_RESET_REG));
++	while (1);
++}
++
++/*
++ * Called very early, device-tree isn't unflattened
++ */
++static int __init as5600_52x_probe(void)
++{
++	unsigned long root = of_get_flat_dt_root();
++
++	if (of_flat_dt_is_compatible(root, "accton,5652"))
++		return 1;
++
++	return 0;
++}
++
++define_machine(as5600_52x) {
++	.name		= "Accton Technology Corporation AS5600_52X",
++	.probe		= as5600_52x_probe,
++	.setup_arch	= as5600_52x_setup_arch,
++	.init_IRQ	= as5600_52x_pic_init,
++	.show_cpuinfo	= as5600_52x_show_cpuinfo,
++#ifdef CONFIG_PCI
++	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
++#endif
++	.get_irq	= mpic_get_irq,
++	.power_save	= e500_idle,
++	.restart	= as5600_52x_restart,
++	.calibrate_decr = generic_calibrate_decr,
++	.progress	= udbg_progress,
++};
