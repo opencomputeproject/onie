@@ -1,0 +1,30 @@
+Patch for not printing flash sectors error message due to swizzle feature
+
+diff --git a/drivers/mtd/cfi_flash.c b/drivers/mtd/cfi_flash.c
+index 60dbb78..e0d04d7 100644
+--- a/drivers/mtd/cfi_flash.c
++++ b/drivers/mtd/cfi_flash.c
+@@ -2153,7 +2153,9 @@ ulong flash_get_size (phys_addr_t base, int banknum)
+ 				if (sector - base >= info->size)
+ 					break;
+ 				if (sect_cnt >= CONFIG_SYS_MAX_FLASH_SECT) {
++#ifndef CONFIG_SYS_FLASH_NUM_SECTORS_BROKEN
+ 					printf("ERROR: too many flash sectors\n");
++#endif
+ 					break;
+ 				}
+ 				info->start[sect_cnt] =
+diff --git a/drivers/mtd/jedec_flash.c b/drivers/mtd/jedec_flash.c
+index 2350f36..6436758 100644
+--- a/drivers/mtd/jedec_flash.c
++++ b/drivers/mtd/jedec_flash.c
+@@ -424,7 +424,9 @@ static inline void fill_info(flash_info_t *info, const struct amd_flash_info *je
+ 		       erase_region_count, erase_region_size);
+ 		for (j = 0; j < erase_region_count; j++) {
+ 			if (sect_cnt >= CONFIG_SYS_MAX_FLASH_SECT) {
++#ifndef CONFIG_SYS_FLASH_NUM_SECTORS_BROKEN
+ 				printf("ERROR: too many flash sectors\n");
++#endif
+ 				break;
+ 			}
+ 			info->start[sect_cnt] = base;
