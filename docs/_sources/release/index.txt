@@ -19,7 +19,7 @@ Source Code Release Cycle
   mid-month.
 
 - Immediately following each release, there will be a "merge window"
-  of normally 4 weeks.
+  of normally 8 weeks.
 
 - While this merge window is open, new features can be added to the
   ONIE source tree.
@@ -29,7 +29,7 @@ Source Code Release Cycle
   and regressions.  During this stabilization period, only patches
   that contain bug fixes get applied.
 
-- After the merge window, the release cycle allows for about 2 months
+- After the merge window, the release cycle allows for about 4 weeks
   of testing before generating the next release.
 
 .. note:: While we try to adhere to the release schedule, we will not
