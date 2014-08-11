@@ -1,3 +1,5 @@
+.. _powerpc_kernel:
+
 *******************************************
 PowerPC Linux Kernel and Device Tree Source
 *******************************************

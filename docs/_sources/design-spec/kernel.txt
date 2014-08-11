@@ -8,8 +8,13 @@ installer.  This places a number of requirements on the Linux kernel configurati
 
 Every platform must add platform support to the Linux kernel.  What
 needs to be added exactly depends on the specific platform and CPU
-architecture.  The general CPU architecture requirements are described
-in the associated CURT-FIXME sections:
+architecture.
+
+For CPU architecture specific details see these sections:
+
+- :ref:`powerpc_kernel`
+
+- :ref:`x86_kernel`
 
 Generic Kernel Configuration
 ============================
