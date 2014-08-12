@@ -18,7 +18,7 @@ VENDOR_VERSION = .0.1
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
-# Open Compute Project IANA number
+# Alpha Networks Inc.
 VENDOR_ID = 31874
 
 # Skip the i2ctools and the onie-syseeprom command for this platform
