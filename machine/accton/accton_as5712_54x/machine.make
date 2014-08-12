@@ -14,7 +14,7 @@ endif
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
-# Open Compute Project IANA number
+# Accton Technology Corporation IANA number
 VENDOR_ID = 259
 
 I2CTOOLS_ENABLE = yes
