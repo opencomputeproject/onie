@@ -21,8 +21,8 @@ VENDOR_VERSION = .0.1
 # Alpha Networks Inc.
 VENDOR_ID = 31874
 
-# Skip the i2ctools and the onie-syseeprom command for this platform
-I2CTOOLS_ENABLE = no
+# Enable the i2ctools and the onie-syseeprom command for this platform
+I2CTOOLS_ENABLE = yes
 
 # Console unit and speed can be overwrite here.
 CONSOLE_SPEED = 115200
