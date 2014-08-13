@@ -19,11 +19,9 @@ VENDOR_ID = 259
 
 I2CTOOLS_ENABLE = yes
 
-# Console unit and speed can be overwrite here.
-CONSOLE_SPEED = 115200
-CONSOLE_UNIT = 1
+# Console parameters
+CONSOLE_DEV = 1
 CONSOLE_FLAG = 1
-CONSOLE_PORT = 0x2f8
 
 VENDOR_VERSION = .0.2
 

@@ -79,6 +79,14 @@ echo -n "."
 cp $installer_dir/install.sh $tmp_installdir || exit 1
 echo -n "."
 cp -r $installer_dir/$arch/* $tmp_installdir
+# Massage install-arch
+if [ "$arch" = "x86_64" ] ; then
+    sed -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/" \
+        -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/" \
+        -e "s/%%CONSOLE_FLAG%%/$CONSOLE_FLAG/" \
+        -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
+	-i $tmp_installdir/install-arch
+fi
 echo -n "."
 
 # Add optional installer configuration file

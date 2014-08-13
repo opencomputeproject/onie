@@ -239,7 +239,11 @@ PHONY += image-updater
 image-updater: $(IMAGE_UPDATER_STAMP)
 $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(SCRIPTDIR)/onie-mk-installer.sh
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE updater ===="
-	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh $(ONIE_ARCH) $(MACHINEDIR) \
+	$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
+	     CONSOLE_DEV=$(CONSOLE_DEV) \
+	     CONSOLE_FLAG=$(CONSOLE_FLAG) \
+	     CONSOLE_PORT=$(CONSOLE_PORT) \
+	     $(SCRIPTDIR)/onie-mk-installer.sh $(ONIE_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS)
 	$(Q) touch $@
@@ -286,16 +290,19 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 		exit 1; }
 	$(Q) cp /usr/lib/syslinux/isolinux.bin $(RECOVERY_ISO_SYSROOT)
 	$(Q) cp /usr/lib/syslinux/menu.c32 $(RECOVERY_ISO_SYSROOT)
-	$(Q) cp $(RECOVERY_CONF_DIR)/syslinux.cfg $(RECOVERY_ISO_SYSROOT)
-	$(Q) sed -i -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
-	$(Q) sed -i -e 's/<CONSOLE_UNIT>/$(CONSOLE_UNIT)/g' $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
-	$(Q) sed -i -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
+	$(Q) sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
+		 -e 's/<CONSOLE_DEV>/$(CONSOLE_DEV)/g' \
+		 -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' \
+		 -e 's/<CONSOLE_PORT>/$(CONSOLE_PORT)/g' \
+	         $(RECOVERY_CONF_DIR)/syslinux.cfg \
+		 > $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
 	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)/boot/grub
-	$(Q) cat $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg   \
-		| sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
-		| sed -e 's/<CONSOLE_UNIT>/$(CONSOLE_UNIT)/g' \
-		| sed -e 's/<CONSOLE_PORT>/$(CONSOLE_PORT)/g' \
-		> $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
+	$(Q) sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
+		 -e 's/<CONSOLE_DEV>/$(CONSOLE_DEV)/g' \
+		 -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' \
+		 -e 's/<CONSOLE_PORT>/$(CONSOLE_PORT)/g' \
+	         $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg \
+		 > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
 	$(Q) genisoimage -r -V "ONIE-RECOVERY" -cache-inodes -J -l -b isolinux.bin	\
 		-c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table		\
 		-o $(RECOVERY_ISO_IMAGE) $(RECOVERY_ISO_SYSROOT)

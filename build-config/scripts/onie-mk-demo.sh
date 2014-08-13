@@ -61,7 +61,12 @@ mkdir $tmp_installdir || clean_up 1
 
 cp $installer_dir/$arch/install.sh $tmp_installdir || clean_up 1
 # Tailor the demo installer for OS mode or DIAG mode
-sed -i -e "s/%%DEMO_TYPE%%/$demo_type/g" $tmp_installdir/install.sh || clean_up 1
+sed -i -e "s/%%DEMO_TYPE%%/$demo_type/g" \
+       -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/g" \
+       -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/g" \
+       -e "s/%%CONSOLE_FLAG%%/$CONSOLE_FLAG/g" \
+       -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/g" \
+    $tmp_installdir/install.sh || clean_up 1
 echo -n "."
 cp $* $tmp_installdir || clean_up 1
 echo -n "."

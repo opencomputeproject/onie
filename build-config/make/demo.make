@@ -94,6 +94,10 @@ DEMO_INSTALLER_FILES = $(shell test -d $(IMAGEDIR) && test -f $(DEMO_SYSROOT_CPI
 endif
 
 define demo_MKIMAGE
+	CONSOLE_SPEED=$(CONSOLE_SPEED) \
+	CONSOLE_DEV=$(CONSOLE_DEV) \
+	CONSOLE_FLAG=$(CONSOLE_FLAG) \
+	CONSOLE_PORT=$(CONSOLE_PORT) \
 	./scripts/onie-mk-demo.sh $(ONIE_ARCH) $(MACHINE) $(PLATFORM) \
 		$(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf $(1) $(2) $(DEMO_IMAGE_PARTS) 
 endef

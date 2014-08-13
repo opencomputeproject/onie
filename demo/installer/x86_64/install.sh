@@ -211,12 +211,10 @@ grub_cfg=$(mktemp)
 
 [ -r ./platform.conf ] && . ./platform.conf
 
-DEFAULT_GRUB_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
-DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"
+DEFAULT_GRUB_SERIAL_COMMAND="serial --port=%%CONSOLE_PORT%% --speed=%%CONSOLE_SPEED%% --word=8 --parity=no --stop=1"
+DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8"
 GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
 GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
-export GRUB_SERIAL_COMMAND
-export GRUB_CMDLINE_LINUX
 
 # Add common configuration, like the timeout and serial console.
 (cat <<EOF

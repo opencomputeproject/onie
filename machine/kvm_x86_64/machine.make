@@ -32,17 +32,17 @@ LINUX_MINOR_VERSION	= 16
 # Set the desired uClibc version
 UCLIBC_VERSION = 0.9.33.2
 
+#
+# Console parameters can be defined here (default values are in
+# build-config/arch/x86_64.make).
+# For example,
+# 
+# CONSOLE_SPEED = 9600
+# CONSOLE_DEV = 0
+# CONSOLE_FLAG = 0
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
 # mode: makefile-gmake
 # End:
-
-#
-# Console unit and speed can be overwrite here.
-# For example,
-# 
-# CONSOLE_SPEED = 9600
-# CONSOLE_UNIT = 0
-# CONSOLE_FLAG = 0
-# CONSOLE_PORT = 0x3f8
