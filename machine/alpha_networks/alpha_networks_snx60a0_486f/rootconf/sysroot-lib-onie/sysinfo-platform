@@ -1,0 +1,31 @@
+
+get_serial_num()
+{
+    # Switch the MUX to syseeprom channel.
+    i2cset -y 0 0x70 0x4
+    
+    # Get serial number from syseeprom.
+    if [ -x /usr/bin/onie-syseeprom ] ; then
+        sn="$(onie-syseeprom -g 0x23)"
+        if [ -n "$sn" ] ; then
+            echo $sn
+        else
+            log_console "Unable to find 'Serial Number' TLV in EEPROM data."
+        fi
+    fi
+    
+    # Switch the MUX to default channel.
+    i2cset -y 0 0x70 0x0
+}
+
+# Use the contents of /sys/class/net/eth0/address
+
+get_ethaddr()
+{
+    [ -r /sys/class/net/eth0/address ] && cat /sys/class/net/eth0/address
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
