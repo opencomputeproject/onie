@@ -172,6 +172,13 @@ if [ "$1" = "start" ] ; then
         fi
         intf_counter=$(( $intf_counter + 1))
     done
+
+    # Configure all interfaces using static IP up.
+    if [ -n "$onie_ip" ] ; then
+        for intf in $intf_list ; do
+            cmd_run ifconfig $intf up
+        done
+    fi
 fi
 
 config_ethmgmt "$*"
