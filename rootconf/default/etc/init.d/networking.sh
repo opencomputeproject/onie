@@ -9,10 +9,13 @@ import_cmdline
 # Static ethernet management configuration
 config_ethmgmt_static()
 {
+    local intf=$1
+    shift
+
     if [ -n "$onie_ip" ] ; then
         # ip= was set on the kernel command line and configured by the
         # kernel already.  Do no more.
-        log_console_msg "Using static IP config: ip=$onie_ip"
+        log_console_msg "${intf}: Using static IP config: ip=$onie_ip"
         return 0
     fi
 
@@ -127,8 +130,6 @@ config_ethmgmt()
     intf_counter=0
     return_value=0
 
-    config_ethmgmt_static "$*" && return
-
     # Bring up all the interfaces for the subsequent methods.
     for intf in $intf_list ; do
         cmd_run ifconfig $intf up
@@ -139,7 +140,11 @@ config_ethmgmt()
             eval "result_${intf}=1"
             continue
         }
-        config_ethmgmt_dhcp6 $params  || config_ethmgmt_dhcp4 $params || config_ethmgmt_fallback $intf_counter $params || eval "result_${intf}=1"
+        config_ethmgmt_static    $params || \
+            config_ethmgmt_dhcp6 $params || \
+            config_ethmgmt_dhcp4 $params || \
+            config_ethmgmt_fallback $intf_counter $params || \
+            eval "result_${intf}=1"
         intf_counter=$(( $intf_counter + 1))
     done
     for intf in $intf_list ; do
