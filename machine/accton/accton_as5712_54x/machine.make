@@ -1,5 +1,11 @@
 # Accton AS5712_54X
 
+# Vendor's version number can be defined here.
+# Available variable is 'VENDOR_VERSION'.
+# e.g.,
+# VENDOR_VERSION = .00.01
+
+
 ONIE_ARCH ?= x86_64
 
 VENDOR_REV ?= 0
@@ -22,8 +28,6 @@ I2CTOOLS_ENABLE = yes
 # Console parameters
 CONSOLE_DEV = 1
 CONSOLE_FLAG = 1
-
-VENDOR_VERSION = .0.2
 
 #-------------------------------------------------------------------------------
 #

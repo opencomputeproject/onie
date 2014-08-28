@@ -1,4 +1,11 @@
-# Makefile fragment for Accton 4654
+# Makefile fragment for Accton AS4600_54T
+
+# Vendor's version number can be defined here.
+# Available variables are 'VENDOR_VERSION' and 'UBOOT_IDENT_STRING'.
+# e.g.,
+# VENDOR_VERSION = .00.01
+# UBOOT_IDENT_STRING = 1.4.0.1
+
 
 ONIE_ARCH ?= powerpc-softfloat
 
@@ -20,9 +27,6 @@ KERNEL_DTB = as4600_54t.dtb
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
 VENDOR_ID = 259
-
-VENDOR_VERSION = .0.6
-UBOOT_IDENT_STRING = 3.0.1.8
 
 #-------------------------------------------------------------------------------
 #
