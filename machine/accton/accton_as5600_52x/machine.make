@@ -1,5 +1,12 @@
 # Makefile fragment for Accton AS5600_52X
 
+# Vendor's version number can be defined here.
+# Available variables are 'VENDOR_VERSION' and 'UBOOT_IDENT_STRING'.
+# e.g.,
+# VENDOR_VERSION = .00.01
+# UBOOT_IDENT_STRING = 1.4.0.1
+
+
 ONIE_ARCH ?= powerpc-softfloat
 
 VENDOR_REV ?= r01a
@@ -25,9 +32,6 @@ KERNEL_DTB = as5600_52x.dtb
 # http://www.iana.org/assignments/enterprise-numbers
 # Accton Technology Corporation IANA number
 VENDOR_ID = 259
-
-VENDOR_VERSION = .00.03
-UBOOT_INDENT_STRING = 3.0.4.6
 
 #-------------------------------------------------------------------------------
 #
