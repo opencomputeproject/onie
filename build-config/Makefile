@@ -365,7 +365,7 @@ machine-prefix:
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf \
 				  gperf device-tree-compiler python-all-dev genisoimage \
 				  syslinux-common autoconf automake bison flex texinfo libtool \
-				  realpath gawk
+				  realpath gawk libncurses5 libncurses5-dev bc
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
