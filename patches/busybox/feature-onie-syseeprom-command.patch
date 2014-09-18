@@ -1,0 +1,2027 @@
+Add to support onie-syseeprom command.
+
+diff --git a/include/24cXX.h b/include/24cXX.h
+new file mode 100644
+index 0000000..c304273
+--- /dev/null
++++ b/include/24cXX.h
+@@ -0,0 +1,57 @@
++/***************************************************************************
++    copyright            : (C) by 2002-2003 Stefano Barbato
++    email                : stefano@codesink.org
++
++    $Id: 24cXX.h 6048 2012-04-26 10:10:22Z khali $
++ ***************************************************************************/
++
++/***************************************************************************
++ *                                                                         *
++ *   This program is free software; you can redistribute it and/or modify  *
++ *   it under the terms of the GNU General Public License as published by  *
++ *   the Free Software Foundation; either version 2 of the License, or     *
++ *   (at your option) any later version.                                   *
++ *                                                                         *
++ ***************************************************************************/
++#ifndef _24CXX_H_
++#define _24CXX_H_
++#include <linux/types.h>
++
++#define EEPROM_TYPE_UNKNOWN	0
++#define EEPROM_TYPE_8BIT_ADDR	1
++#define EEPROM_TYPE_16BIT_ADDR 	2
++
++struct eeprom
++{
++	char *dev; 	// device file i.e. /dev/i2c-N
++	int addr;	// i2c address
++	int fd;		// file descriptor
++	int type; 	// eeprom type
++};
++
++/*
++ * opens the eeprom device at [dev_fqn] (i.e. /dev/i2c-N) whose address is
++ * [addr] and set the eeprom_24c32 [e]
++ */
++int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom*);
++/*
++ * closees the eeprom device [e]
++ */
++int eeprom_close(struct eeprom *e);
++/*
++ * read and returns the eeprom byte at memory address [mem_addr]
++ * Note: eeprom must have been selected by ioctl(fd,I2C_SLAVE,address)
++ */
++int eeprom_read_byte(struct eeprom* e, __u16 mem_addr);
++/*
++ * read the current byte
++ * Note: eeprom must have been selected by ioctl(fd,I2C_SLAVE,address)
++ */
++int eeprom_read_current_byte(struct eeprom *e);
++/*
++ * writes [data] at memory address [mem_addr]
++ * Note: eeprom must have been selected by ioctl(fd,I2C_SLAVE,address)
++ */
++int eeprom_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data);
++
++#endif
+diff --git a/include/applets.src.h b/include/applets.src.h
+index 5c3f6d6..1c8e0cb 100644
+--- a/include/applets.src.h
++++ b/include/applets.src.h
+@@ -416,6 +416,7 @@ IF_XZ(APPLET_ODDNAME(xz, unxz, BB_DIR_USR_BIN, BB_SUID_DROP, xz))
+ IF_YES(APPLET_NOFORK(yes, yes, BB_DIR_USR_BIN, BB_SUID_DROP, yes))
+ IF_GUNZIP(APPLET_ODDNAME(zcat, gunzip, BB_DIR_BIN, BB_SUID_DROP, zcat))
+ IF_ZCIP(APPLET(zcip, BB_DIR_SBIN, BB_SUID_DROP))
++IF_SYS_EEPROM(APPLET_ODDNAME(onie-syseeprom, onie_syseeprom, BB_DIR_USR_BIN, BB_SUID_DROP, onie_syseeprom))
+ 
+ #if !defined(PROTOTYPES) && !defined(NAME_MAIN_CNAME) && !defined(MAKE_USAGE)
+ };
+diff --git a/include/i2c-dev.h b/include/i2c-dev.h
+new file mode 100644
+index 0000000..23f7c2c
+--- /dev/null
++++ b/include/i2c-dev.h
+@@ -0,0 +1,330 @@
++/*
++    i2c-dev.h - i2c-bus driver, char device interface
++
++    Copyright (C) 1995-97 Simon G. Vogl
++    Copyright (C) 1998-99 Frodo Looijaard <frodol@dds.nl>
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 2 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program; if not, write to the Free Software
++    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
++    MA 02110-1301 USA.
++*/
++
++#ifndef _LINUX_I2C_DEV_H
++#define _LINUX_I2C_DEV_H
++
++#include <linux/types.h>
++#include <sys/ioctl.h>
++#include <stddef.h>
++
++
++/* -- i2c.h -- */
++
++
++/*
++ * I2C Message - used for pure i2c transaction, also from /dev interface
++ */
++struct i2c_msg {
++	__u16 addr;	/* slave address			*/
++	unsigned short flags;
++#define I2C_M_TEN	0x10	/* we have a ten bit chip address	*/
++#define I2C_M_RD	0x01
++#define I2C_M_NOSTART	0x4000
++#define I2C_M_REV_DIR_ADDR	0x2000
++#define I2C_M_IGNORE_NAK	0x1000
++#define I2C_M_NO_RD_ACK		0x0800
++	short len;		/* msg length				*/
++	char *buf;		/* pointer to msg data			*/
++};
++
++/* To determine what functionality is present */
++
++#define I2C_FUNC_I2C			0x00000001
++#define I2C_FUNC_10BIT_ADDR		0x00000002
++#define I2C_FUNC_PROTOCOL_MANGLING	0x00000004 /* I2C_M_{REV_DIR_ADDR,NOSTART,..} */
++#define I2C_FUNC_SMBUS_PEC		0x00000008
++#define I2C_FUNC_SMBUS_BLOCK_PROC_CALL	0x00008000 /* SMBus 2.0 */
++#define I2C_FUNC_SMBUS_QUICK		0x00010000
++#define I2C_FUNC_SMBUS_READ_BYTE	0x00020000
++#define I2C_FUNC_SMBUS_WRITE_BYTE	0x00040000
++#define I2C_FUNC_SMBUS_READ_BYTE_DATA	0x00080000
++#define I2C_FUNC_SMBUS_WRITE_BYTE_DATA	0x00100000
++#define I2C_FUNC_SMBUS_READ_WORD_DATA	0x00200000
++#define I2C_FUNC_SMBUS_WRITE_WORD_DATA	0x00400000
++#define I2C_FUNC_SMBUS_PROC_CALL	0x00800000
++#define I2C_FUNC_SMBUS_READ_BLOCK_DATA	0x01000000
++#define I2C_FUNC_SMBUS_WRITE_BLOCK_DATA 0x02000000
++#define I2C_FUNC_SMBUS_READ_I2C_BLOCK	0x04000000 /* I2C-like block xfer  */
++#define I2C_FUNC_SMBUS_WRITE_I2C_BLOCK	0x08000000 /* w/ 1-byte reg. addr. */
++
++#define I2C_FUNC_SMBUS_BYTE (I2C_FUNC_SMBUS_READ_BYTE | \
++                             I2C_FUNC_SMBUS_WRITE_BYTE)
++#define I2C_FUNC_SMBUS_BYTE_DATA (I2C_FUNC_SMBUS_READ_BYTE_DATA | \
++                                  I2C_FUNC_SMBUS_WRITE_BYTE_DATA)
++#define I2C_FUNC_SMBUS_WORD_DATA (I2C_FUNC_SMBUS_READ_WORD_DATA | \
++                                  I2C_FUNC_SMBUS_WRITE_WORD_DATA)
++#define I2C_FUNC_SMBUS_BLOCK_DATA (I2C_FUNC_SMBUS_READ_BLOCK_DATA | \
++                                   I2C_FUNC_SMBUS_WRITE_BLOCK_DATA)
++#define I2C_FUNC_SMBUS_I2C_BLOCK (I2C_FUNC_SMBUS_READ_I2C_BLOCK | \
++                                  I2C_FUNC_SMBUS_WRITE_I2C_BLOCK)
++
++/* Old name, for compatibility */
++#define I2C_FUNC_SMBUS_HWPEC_CALC	I2C_FUNC_SMBUS_PEC
++
++/*
++ * Data for SMBus Messages
++ */
++#define I2C_SMBUS_BLOCK_MAX	32	/* As specified in SMBus standard */
++#define I2C_SMBUS_I2C_BLOCK_MAX	32	/* Not specified but we use same structure */
++union i2c_smbus_data {
++	__u8 byte;
++	__u16 word;
++	__u8 block[I2C_SMBUS_BLOCK_MAX + 2]; /* block[0] is used for length */
++	                                            /* and one more for PEC */
++};
++
++/* smbus_access read or write markers */
++#define I2C_SMBUS_READ	1
++#define I2C_SMBUS_WRITE	0
++
++/* SMBus transaction types (size parameter in the above functions)
++   Note: these no longer correspond to the (arbitrary) PIIX4 internal codes! */
++#define I2C_SMBUS_QUICK		    0
++#define I2C_SMBUS_BYTE		    1
++#define I2C_SMBUS_BYTE_DATA	    2
++#define I2C_SMBUS_WORD_DATA	    3
++#define I2C_SMBUS_PROC_CALL	    4
++#define I2C_SMBUS_BLOCK_DATA	    5
++#define I2C_SMBUS_I2C_BLOCK_BROKEN  6
++#define I2C_SMBUS_BLOCK_PROC_CALL   7		/* SMBus 2.0 */
++#define I2C_SMBUS_I2C_BLOCK_DATA    8
++
++
++/* /dev/i2c-X ioctl commands.  The ioctl's parameter is always an
++ * unsigned long, except for:
++ *	- I2C_FUNCS, takes pointer to an unsigned long
++ *	- I2C_RDWR, takes pointer to struct i2c_rdwr_ioctl_data
++ *	- I2C_SMBUS, takes pointer to struct i2c_smbus_ioctl_data
++ */
++#define I2C_RETRIES	0x0701	/* number of times a device address should
++				   be polled when not acknowledging */
++#define I2C_TIMEOUT	0x0702	/* set timeout in units of 10 ms */
++
++/* NOTE: Slave address is 7 or 10 bits, but 10-bit addresses
++ * are NOT supported! (due to code brokenness)
++ */
++#define I2C_SLAVE	0x0703	/* Use this slave address */
++#define I2C_SLAVE_FORCE	0x0706	/* Use this slave address, even if it
++				   is already in use by a driver! */
++#define I2C_TENBIT	0x0704	/* 0 for 7 bit addrs, != 0 for 10 bit */
++
++#define I2C_FUNCS	0x0705	/* Get the adapter functionality mask */
++
++#define I2C_RDWR	0x0707	/* Combined R/W transfer (one STOP only) */
++
++#define I2C_PEC		0x0708	/* != 0 to use PEC with SMBus */
++#define I2C_SMBUS	0x0720	/* SMBus transfer */
++
++
++/* This is the structure as used in the I2C_SMBUS ioctl call */
++struct i2c_smbus_ioctl_data {
++	__u8 read_write;
++	__u8 command;
++	__u32 size;
++	union i2c_smbus_data *data;
++};
++
++/* This is the structure as used in the I2C_RDWR ioctl call */
++struct i2c_rdwr_ioctl_data {
++	struct i2c_msg *msgs;	/* pointers to i2c_msgs */
++	__u32 nmsgs;			/* number of i2c_msgs */
++};
++
++#define  I2C_RDRW_IOCTL_MAX_MSGS	42
++
++
++static inline __s32 i2c_smbus_access(int file, char read_write, __u8 command,
++                                     int size, union i2c_smbus_data *data)
++{
++	struct i2c_smbus_ioctl_data args;
++
++	args.read_write = read_write;
++	args.command = command;
++	args.size = size;
++	args.data = data;
++	return ioctl(file,I2C_SMBUS,&args);
++}
++
++
++static inline __s32 i2c_smbus_write_quick(int file, __u8 value)
++{
++	return i2c_smbus_access(file,value,0,I2C_SMBUS_QUICK,NULL);
++}
++
++static inline __s32 i2c_smbus_read_byte(int file)
++{
++	union i2c_smbus_data data;
++	if (i2c_smbus_access(file,I2C_SMBUS_READ,0,I2C_SMBUS_BYTE,&data))
++		return -1;
++	else
++		return 0x0FF & data.byte;
++}
++
++static inline __s32 i2c_smbus_write_byte(int file, __u8 value)
++{
++	return i2c_smbus_access(file,I2C_SMBUS_WRITE,value,
++	                        I2C_SMBUS_BYTE,NULL);
++}
++
++static inline __s32 i2c_smbus_read_byte_data(int file, __u8 command)
++{
++	union i2c_smbus_data data;
++	if (i2c_smbus_access(file,I2C_SMBUS_READ,command,
++	                     I2C_SMBUS_BYTE_DATA,&data))
++		return -1;
++	else
++		return 0x0FF & data.byte;
++}
++
++static inline __s32 i2c_smbus_write_byte_data(int file, __u8 command,
++                                              __u8 value)
++{
++	union i2c_smbus_data data;
++	data.byte = value;
++	return i2c_smbus_access(file,I2C_SMBUS_WRITE,command,
++	                        I2C_SMBUS_BYTE_DATA, &data);
++}
++
++static inline __s32 i2c_smbus_read_word_data(int file, __u8 command)
++{
++	union i2c_smbus_data data;
++	if (i2c_smbus_access(file,I2C_SMBUS_READ,command,
++	                     I2C_SMBUS_WORD_DATA,&data))
++		return -1;
++	else
++		return 0x0FFFF & data.word;
++}
++
++static inline __s32 i2c_smbus_write_word_data(int file, __u8 command,
++                                              __u16 value)
++{
++	union i2c_smbus_data data;
++	data.word = value;
++	return i2c_smbus_access(file,I2C_SMBUS_WRITE,command,
++	                        I2C_SMBUS_WORD_DATA, &data);
++}
++
++static inline __s32 i2c_smbus_process_call(int file, __u8 command, __u16 value)
++{
++	union i2c_smbus_data data;
++	data.word = value;
++	if (i2c_smbus_access(file,I2C_SMBUS_WRITE,command,
++	                     I2C_SMBUS_PROC_CALL,&data))
++		return -1;
++	else
++		return 0x0FFFF & data.word;
++}
++
++
++/* Returns the number of read bytes */
++static inline __s32 i2c_smbus_read_block_data(int file, __u8 command,
++                                              __u8 *values)
++{
++	union i2c_smbus_data data;
++	int i;
++	if (i2c_smbus_access(file,I2C_SMBUS_READ,command,
++	                     I2C_SMBUS_BLOCK_DATA,&data))
++		return -1;
++	else {
++		for (i = 1; i <= data.block[0]; i++)
++			values[i-1] = data.block[i];
++		return data.block[0];
++	}
++}
++
++static inline __s32 i2c_smbus_write_block_data(int file, __u8 command,
++                                               __u8 length, const __u8 *values)
++{
++	union i2c_smbus_data data;
++	int i;
++	if (length > 32)
++		length = 32;
++	for (i = 1; i <= length; i++)
++		data.block[i] = values[i-1];
++	data.block[0] = length;
++	return i2c_smbus_access(file,I2C_SMBUS_WRITE,command,
++	                        I2C_SMBUS_BLOCK_DATA, &data);
++}
++
++/* Returns the number of read bytes */
++/* Until kernel 2.6.22, the length is hardcoded to 32 bytes. If you
++   ask for less than 32 bytes, your code will only work with kernels
++   2.6.23 and later. */
++static inline __s32 i2c_smbus_read_i2c_block_data(int file, __u8 command,
++                                                  __u8 length, __u8 *values)
++{
++	union i2c_smbus_data data;
++	int i;
++
++	if (length > 32)
++		length = 32;
++	data.block[0] = length;
++	if (i2c_smbus_access(file,I2C_SMBUS_READ,command,
++	                     length == 32 ? I2C_SMBUS_I2C_BLOCK_BROKEN :
++	                      I2C_SMBUS_I2C_BLOCK_DATA,&data))
++		return -1;
++	else {
++		for (i = 1; i <= data.block[0]; i++)
++			values[i-1] = data.block[i];
++		return data.block[0];
++	}
++}
++
++static inline __s32 i2c_smbus_write_i2c_block_data(int file, __u8 command,
++                                                   __u8 length,
++                                                   const __u8 *values)
++{
++	union i2c_smbus_data data;
++	int i;
++	if (length > 32)
++		length = 32;
++	for (i = 1; i <= length; i++)
++		data.block[i] = values[i-1];
++	data.block[0] = length;
++	return i2c_smbus_access(file,I2C_SMBUS_WRITE,command,
++	                        I2C_SMBUS_I2C_BLOCK_BROKEN, &data);
++}
++
++/* Returns the number of read bytes */
++static inline __s32 i2c_smbus_block_process_call(int file, __u8 command,
++                                                 __u8 length, __u8 *values)
++{
++	union i2c_smbus_data data;
++	int i;
++	if (length > 32)
++		length = 32;
++	for (i = 1; i <= length; i++)
++		data.block[i] = values[i-1];
++	data.block[0] = length;
++	if (i2c_smbus_access(file,I2C_SMBUS_WRITE,command,
++	                     I2C_SMBUS_BLOCK_PROC_CALL,&data))
++		return -1;
++	else {
++		for (i = 1; i <= data.block[0]; i++)
++			values[i-1] = data.block[i];
++		return data.block[0];
++	}
++}
++
++
++#endif /* _LINUX_I2C_DEV_H */
+diff --git a/include/onie_tlvinfo.h b/include/onie_tlvinfo.h
+new file mode 100644
+index 0000000..6fcdca7
+--- /dev/null
++++ b/include/onie_tlvinfo.h
+@@ -0,0 +1,178 @@
++/*
++ *  The Definition of the TlvInfo EEPROM format can be found at onie.org or
++ *  github.com/onie
++ */
++#include "libbb.h"
++#include <asm/byteorder.h>
++
++#define be16_to_cpu(x)  __be16_to_cpu(x)
++#define cpu_to_be16(x)   __cpu_to_be16(x)
++
++#ifndef FALSE
++#define FALSE   0
++#endif
++
++#ifndef TRUE
++#define TRUE    (!FALSE)
++#endif
++
++//typedef unsigned char bool;
++
++#define min(x, y)          ((x) > (y) ? (y) : (x))
++
++/*
++ * Tlvinf header: Layout of the header for the TlvInfo format
++ *
++ * See the end of this file for details of this eeprom format
++ */
++struct __attribute__ ((__packed__)) tlvinfo_header_s {
++    char    signature[8];   /* 0x00 - 0x07 EEPROM Tag "TlvInfo" */
++    u_int8_t      version;  /* 0x08        Structure version */
++    u_int16_t     totallen; /* 0x09 - 0x0A Length of all data which follows */
++};
++typedef struct tlvinfo_header_s tlvinfo_header_t;
++
++// Header Field Constants
++#define TLV_INFO_ID_STRING      "TlvInfo"
++#define TLV_INFO_VERSION        0x01
++#define TLV_TOTAL_LEN_MAX       (SYS_EEPROM_SIZE - sizeof(tlvinfo_header_t))
++
++/*
++ * TlvInfo TLV: Layout of a TLV field
++ */
++struct __attribute__ ((__packed__)) tlvinfo_tlv_s {
++    u_int8_t  type;
++    u_int8_t  length;
++    u_int8_t  value[0];
++};
++typedef struct tlvinfo_tlv_s tlvinfo_tlv_t;
++
++/* Maximum length of a TLV value in bytes */
++#define TLV_VALUE_MAX_LEN        255
++
++/**
++ *  The TLV Types.
++ *
++ *  Keep these in sync with tlv_code_list in cmd_sys_eeprom.c
++ */
++#define TLV_CODE_PRODUCT_NAME   0x21
++#define TLV_CODE_PART_NUMBER    0x22
++#define TLV_CODE_SERIAL_NUMBER  0x23
++#define TLV_CODE_MAC_BASE       0x24
++#define TLV_CODE_MANUF_DATE     0x25
++#define TLV_CODE_DEVICE_VERSION 0x26
++#define TLV_CODE_LABEL_REVISION 0x27
++#define TLV_CODE_PLATFORM_NAME  0x28
++#define TLV_CODE_ONIE_VERSION   0x29
++#define TLV_CODE_MAC_SIZE       0x2A
++#define TLV_CODE_MANUF_NAME     0x2B
++#define TLV_CODE_MANUF_COUNTRY  0x2C
++#define TLV_CODE_VENDOR_NAME    0x2D
++#define TLV_CODE_DIAG_VERSION   0x2E
++#define TLV_CODE_SERVICE_TAG    0x2F
++#define TLV_CODE_VENDOR_EXT     0xFD
++#define TLV_CODE_CRC_32         0xFE
++
++/*
++ *  Struct for displaying the TLV codes and names.
++ */
++struct tlv_code_desc {
++    u_int8_t m_code;
++    char* m_name;
++};
++
++/*
++ *  List of TLV codes and names.
++ */
++static const struct tlv_code_desc tlv_code_list[] = {
++    { TLV_CODE_PRODUCT_NAME	 , "Product Name"},
++    { TLV_CODE_PART_NUMBER	 , "Part Number"},
++    { TLV_CODE_SERIAL_NUMBER     , "Serial Number"},
++    { TLV_CODE_MAC_BASE	         , "Base MAC Address"},
++    { TLV_CODE_MANUF_DATE	 , "Manufacture Date"},
++    { TLV_CODE_DEVICE_VERSION    , "Device Version"},
++    { TLV_CODE_LABEL_REVISION    , "Label Revision"},
++    { TLV_CODE_PLATFORM_NAME     , "Platform Name"},
++    { TLV_CODE_ONIE_VERSION	 , "Loader Version"},
++    { TLV_CODE_MAC_SIZE	         , "MAC Addresses"},
++    { TLV_CODE_MANUF_NAME	 , "Manufacturer"},
++    { TLV_CODE_MANUF_COUNTRY     , "Country Code"},
++    { TLV_CODE_VENDOR_NAME	 , "Vendor Name"},
++    { TLV_CODE_DIAG_VERSION	 , "Diag Version"},
++    { TLV_CODE_SERVICE_TAG       , "Service Tag"},
++    { TLV_CODE_VENDOR_EXT	 , "Vendor Extension"},
++    { TLV_CODE_CRC_32	         , "CRC-32"},
++};
++
++static inline const char* tlv_type2name(u_int8_t type)
++{
++    char* name = "Unknown";
++    int   i;
++
++    for (i = 0; i < sizeof(tlv_code_list)/sizeof(tlv_code_list[0]); i++) {
++	if (tlv_code_list[i].m_code == type) {
++	    name = tlv_code_list[i].m_name;
++	    break;
++	}
++    }
++    return name;
++}
++
++/*
++ * The max decode value is currently for the 'raw' type or the 'vendor
++ * extension' type, both of which have the same decode format.  The
++ * max decode string size is computed as follows:
++ *
++ *   strlen(" 0xFF") * TLV_VALUE_MAX_LEN + 1
++ *
++ */
++#define TLV_DECODE_VALUE_MAX_LEN    ((5 * TLV_VALUE_MAX_LEN) + 1)
++
++
++/*
++ * SYS_EEPROM_SIZE: size of usable eeprom
++ * SYS_EEPROM_I2C_DEVICE: i2c-bus
++ * SYS_EEPROM_I2C_ADDR: address on the bus
++ * SYS_EEPROM_MTD_DEVICE: MTD device name of the eeprom
++ * SYS_EEPROM_ERASE_SIZE: erase size of the eeprom
++ * SYS_EEPROM_MAX_SIZE: Total size of the eeprom
++ * SYS_EEPROM_OFFSET: offset from where the ONIE header starts
++ */
++#define SYS_EEPROM_SIZE       CONFIG_SYS_EEPROM_SIZE
++#define SYS_EEPROM_I2C_DEVICE CONFIG_SYS_EEPROM_I2C_DEVICE
++#define SYS_EEPROM_I2C_ADDR   CONFIG_SYS_EEPROM_I2C_ADDR
++#define SYS_EEPROM_MTD_DEVICE CONFIG_SYS_EEPROM_MTD_DEVICE
++#define SYS_EEPROM_ERASE_SIZE CONFIG_SYS_EEPROM_ERASE_SIZE
++#define SYS_EEPROM_MAX_SIZE   CONFIG_SYS_EEPROM_MAX_SIZE
++#define SYS_EEPROM_OFFSET     CONFIG_SYS_EEPROM_OFFSET
++
++#if CONFIG_SYS_EEPROM_SIZE == 0
++  #error CONFIG_SYS_EEPROM_SIZE not specified!
++#endif
++
++#ifdef CONFIG_SYS_EEPROM_DEVICE_I2C
++  #if CONFIG_SYS_EEPROM_I2C_ADDR == 0
++    #error CONFIG_SYS_EEPROM_I2C_ADDR not specified!
++  #endif
++#endif
++
++#ifdef CONFIG_SYS_EEPROM_DEVICE_MTD
++  #if CONFIG_SYS_EEPROM_ERASE_SIZE == 0
++    #error CONFIG_SYS_EEPROM_ERASE_SIZE not specified!
++  #endif
++#endif
++
++#if (SYS_EEPROM_SIZE + SYS_EEPROM_OFFSET > SYS_EEPROM_MAX_SIZE)
++  #error SYS_EEPROM_SIZE + SYS_EEPROM_OFFSET is greater than SYS_EEPROM_MAX_SIZE
++#endif
++
++// Access functions to onie_tlvinfo
++void show_eeprom(u_int8_t *eeprom);
++int read_eeprom(u_int8_t *eeprom);
++int prog_eeprom(u_int8_t * eeprom);
++void update_eeprom_header(u_int8_t *eeprom);
++bool tlvinfo_find_tlv(u_int8_t *eeprom, u_int8_t tcode, int *eeprom_index);
++bool tlvinfo_delete_tlv(u_int8_t * eeprom, u_int8_t code);
++bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval);
++bool tlvinfo_decode_tlv(u_int8_t *eeprom, u_int8_t tcode, char* value);
++void show_tlv_code_list(void);
+diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
+new file mode 100644
+index 0000000..94dfd5a
+--- /dev/null
++++ b/include/sys_eeprom.h
+@@ -0,0 +1,2 @@
++int read_sys_eeprom(void *eeprom_data, int offset, int len);
++int write_sys_eeprom(void *eeprom_data, int len);
+diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
+new file mode 100644
+index 0000000..b448761
+--- /dev/null
++++ b/miscutils/24cXX.c
+@@ -0,0 +1,182 @@
++/***************************************************************************
++    copyright            : (C) by 2002-2003 Stefano Barbato
++    email                : stefano@codesink.org
++
++    $Id: 24cXX.c 6228 2014-02-20 08:37:15Z khali $
++ ***************************************************************************/
++
++/***************************************************************************
++ *                                                                         *
++ *   This program is free software; you can redistribute it and/or modify  *
++ *   it under the terms of the GNU General Public License as published by  *
++ *   the Free Software Foundation; either version 2 of the License, or     *
++ *   (at your option) any later version.                                   *
++ *                                                                         *
++ ***************************************************************************/
++#include <stdio.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <linux/fs.h>
++#include "i2c-dev.h"
++#include <sys/types.h>
++#include <sys/ioctl.h>
++#include <errno.h>
++#include <assert.h>
++#include <string.h>
++#include "24cXX.h"
++
++static int i2c_write_1b(struct eeprom *e, __u8 buf)
++{
++	int r;
++	// we must simulate a plain I2C byte write with SMBus functions
++	r = i2c_smbus_write_byte(e->fd, buf);
++	if(r < 0)
++		fprintf(stderr, "Error i2c_write_1b: %s\n", strerror(errno));
++	usleep(10);
++	return r;
++}
++
++static int i2c_write_2b(struct eeprom *e, __u8 buf[2])
++{
++	int r;
++	// we must simulate a plain I2C byte write with SMBus functions
++	r = i2c_smbus_write_byte_data(e->fd, buf[0], buf[1]);
++	if(r < 0)
++		fprintf(stderr, "Error i2c_write_2b: %s\n", strerror(errno));
++	usleep(1000);
++	return r;
++}
++
++static int i2c_write_3b(struct eeprom *e, __u8 buf[3])
++{
++	int r;
++	// we must simulate a plain I2C byte write with SMBus functions
++	// the __u16 data field will be byte swapped by the SMBus protocol
++	r = i2c_smbus_write_word_data(e->fd, buf[0], buf[2] << 8 | buf[1]);
++	if(r < 0)
++		fprintf(stderr, "Error i2c_write_3b: %s\n", strerror(errno));
++	usleep(10);
++	return r;
++}
++
++
++#define CHECK_I2C_FUNC( var, label ) \
++	do { 	if(0 == (var & label)) { \
++		fprintf(stderr, "\nError: " \
++			#label " function is required. Program halted.\n\n"); \
++		exit(1); } \
++	} while(0);
++
++int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
++{
++	int fd, r;
++	unsigned long funcs;
++	e->fd = e->addr = 0;
++	e->dev = 0;
++
++	fd = open(dev_fqn, O_RDWR);
++	if(fd <= 0)
++		return -1;
++
++	// get funcs list
++	if((r = ioctl(fd, I2C_FUNCS, &funcs) < 0))
++		return r;
++
++
++	// check for req funcs
++	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_BYTE );
++	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_BYTE );
++	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_BYTE_DATA );
++	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_BYTE_DATA );
++	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_WORD_DATA );
++	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_WORD_DATA );
++
++	// set working device
++	if( ( r = ioctl(fd, I2C_SLAVE, addr)) < 0)
++		return r;
++	e->fd = fd;
++	e->addr = addr;
++	e->dev = dev_fqn;
++	e->type = type;
++	return 0;
++}
++
++int eeprom_close(struct eeprom *e)
++{
++	close(e->fd);
++	e->fd = -1;
++	e->dev = 0;
++	e->type = EEPROM_TYPE_UNKNOWN;
++	return 0;
++}
++
++#if 0
++int eeprom_24c32_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data)
++{
++	__u8 buf[3] = { (mem_addr >> 8) & 0x00ff, mem_addr & 0x00ff, data };
++	return i2c_write_3b(e, buf);
++}
++
++
++int eeprom_24c32_read_current_byte(struct eeprom* e)
++{
++	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
++	return i2c_smbus_read_byte(e->fd);
++}
++
++int eeprom_24c32_read_byte(struct eeprom* e, __u16 mem_addr)
++{
++	int r;
++	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
++	__u8 buf[2] = { (mem_addr >> 8) & 0x0ff, mem_addr & 0x0ff };
++	r = i2c_write_2b(e, buf);
++	if (r < 0)
++		return r;
++	r = i2c_smbus_read_byte(e->fd);
++	return r;
++}
++#endif
++
++
++int eeprom_read_current_byte(struct eeprom* e)
++{
++	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
++	return i2c_smbus_read_byte(e->fd);
++}
++
++int eeprom_read_byte(struct eeprom* e, __u16 mem_addr)
++{
++	int r;
++	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
++	if(e->type == EEPROM_TYPE_8BIT_ADDR)
++	{
++		__u8 buf =  mem_addr & 0x0ff;
++		r = i2c_write_1b(e, buf);
++	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
++		__u8 buf[2] = { (mem_addr >> 8) & 0x0ff, mem_addr & 0x0ff };
++		r = i2c_write_2b(e, buf);
++	} else {
++		fprintf(stderr, "ERR: unknown eeprom type\n");
++		return -1;
++	}
++	if (r < 0)
++		return r;
++	r = i2c_smbus_read_byte(e->fd);
++	return r;
++}
++
++int eeprom_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data)
++{
++	if(e->type == EEPROM_TYPE_8BIT_ADDR) {
++		__u8 buf[2] = { mem_addr & 0x00ff, data };
++		return i2c_write_2b(e, buf);
++	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
++		__u8 buf[3] =
++			{ (mem_addr >> 8) & 0x00ff, mem_addr & 0x00ff, data };
++		return i2c_write_3b(e, buf);
++	} else {
++		fprintf(stderr, "ERR: unknown eeprom type\n");
++		return -1;
++	}
++}
+diff --git a/miscutils/Config.src b/miscutils/Config.src
+index 4a1928d..cf048af 100644
+--- a/miscutils/Config.src
++++ b/miscutils/Config.src
+@@ -625,4 +625,82 @@ config WATCHDOG
+ 	  certain amount of time, the watchdog device assumes the system has
+ 	  hung, and will cause the hardware to reboot.
+ 
++config SYS_EEPROM
++	bool "ONIE system EEPROM"
++	default n
++	help
++	  Display and program the system EEPROM data block.
++	  The onie-syseeprom tool is included.
++
++menu "ONIE system EEPROM config"
++	depends on SYS_EEPROM
++
++choice
++	prompt "Choose which device type of EEPROM"
++	depends on SYS_EEPROM
++	help
++	  Choose which device type of EEPROM.
++
++config SYS_EEPROM_DEVICE_I2C
++	bool "i2c"
++
++config SYS_EEPROM_DEVICE_MTD
++	bool "MTD"
++
++endchoice
++
++config SYS_EEPROM_I2C_DEVICE
++	string "i2c bus"
++	default "/dev/i2c-1"
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  i2c bus name of the eeprom. e.g., /dev/i2c-1.
++
++config SYS_EEPROM_I2C_ADDR
++	hex "device address on the bus"
++	default 0
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  i2c device address of the eeprom. e.g., 0x57.
++
++config SYS_EEPROM_MTD_DEVICE
++	string "MTD device"
++	default "/dev/mtd-hw-info"
++	depends on SYS_EEPROM_DEVICE_MTD
++	help
++	  MTD device name of the eeprom. e.g., /dev/mtd-hw-info.
++
++config SYS_EEPROM_ERASE_SIZE
++	hex "erase size in hexadecimal"
++	default 0
++	depends on SYS_EEPROM_DEVICE_MTD
++	help
++	  Erase size of the eeprom. e.g., 0x20000.
++
++config SYS_EEPROM_OFFSET
++	int "offset"
++	range 0 1023
++	default 0
++	depends on SYS_EEPROM
++	help
++	  Offset from where the ONIE header starts.
++
++config SYS_EEPROM_SIZE
++	int "usable eeprom size in byte"
++	range 0 2048
++	default 0
++	depends on SYS_EEPROM
++	help
++	  Size of usable eeprom.
++
++config SYS_EEPROM_MAX_SIZE
++	int "total size in byte"
++	range 256 2048
++	default 2048
++	depends on SYS_EEPROM
++	help
++	  Total size of the eeprom.
++
++endmenu
++
+ endmenu
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index a2a860b..13d8cc3 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -50,3 +50,6 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
+ lib-$(CONFIG_VOLNAME)     += volname.o
+ lib-$(CONFIG_WALL)        += wall.o
+ lib-$(CONFIG_WATCHDOG)    += watchdog.o
++lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
++lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
++lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
+new file mode 100644
+index 0000000..95a46e1
+--- /dev/null
++++ b/miscutils/onie_tlvinfo.c
+@@ -0,0 +1,753 @@
++#include "libbb.h"
++#include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
++
++/* Set to 1 if we've read EEPROM into memory */
++static int has_been_read = 0;
++/* Set to 1 if the EEPROM contents were valid when read from hardware */
++static int hw_eeprom_valid = 1;
++
++unsigned long crc32 (unsigned long crc, const unsigned char *buf, unsigned len)
++{
++    if (!global_crc32_table) {
++        global_crc32_table = crc32_filltable(NULL, 0);
++    }
++    return crc32_block_endian0( crc ^ 0xffffffffL, buf, len, global_crc32_table) ^ 0xffffffffL;
++}
++
++static inline int is_multicast_ether_addr(const u_int8_t *addr)
++{
++    return 0x01 & addr[0];
++}
++
++static inline int is_zero_ether_addr(const u_int8_t *addr)
++{
++    return !(addr[0] | addr[1] | addr[2] | addr[3] | addr[4] | addr[5]);
++}
++
++static inline int is_valid_ether_addr(const u_int8_t *addr)
++{
++    return !is_multicast_ether_addr(addr) && !is_zero_ether_addr(addr);
++}
++
++static int set_bytes(char *buf, const char *string, int * converted_accum)
++{
++    char *p = (char *) string;
++    int   i;
++    uint  byte;
++
++    if (!p) {
++	printf("ERROR: NULL string passed in.\n");
++	return -1;
++    }
++    /* Convert string to bytes */
++    for (i = 0, p = (char *)string; (i < TLV_VALUE_MAX_LEN) && (*p != 0);
++	 i++) {
++	while ((*p == ' ') || (*p == '\t') || (*p == ',') ||
++	       (*p == ';')) {
++	    p++;
++	}
++	if (*p != 0) {
++	    if (!isdigit(*p)) {
++		printf("ERROR: Non-digit found in byte string: (%s)\n", string);
++		return -1;
++	    }
++	    byte = strtoul(p, &p, 0);
++	    if (byte >= 256) {
++		printf("ERROR: The value specified is greater than 255: (%u) " \
++		       "in string: %s\n", byte, string);
++		return -1;
++	    }
++	    buf[i] = byte & 0xFF;
++	}
++    }
++    if ((i == TLV_VALUE_MAX_LEN) && (*p != 0)) {
++	printf("ERROR: Trying to assign too many bytes "
++	       "(max: %d) in string: %s\n", TLV_VALUE_MAX_LEN, string);
++	return -1;
++    }
++    *converted_accum = i;
++    return 0;
++}
++
++/*
++ *  set_date
++ *
++ *  Validates the format of the data string
++ *
++ *  This function takes a pointer to a date string (i.e. MM/DD/YYYY hh:mm:ss)
++ *  and validates that the format is correct. If so the string is copied
++ *  to the supplied buffer.
++ */
++static int set_date(char *buf, const char *string)
++{
++    int i;
++
++    if (!string) {
++	printf("ERROR: NULL date string passed in.\n");
++	return -1;
++    }
++    if (strlen(string) != 19) {
++	printf("ERROR: Date strlen() != 19 -- %d\n", strlen(string));
++	printf("ERROR: Bad date format (MM/DD/YYYY hh:mm:ss): %s\n", string);
++	return -1;
++    }
++    for (i = 0; string[i] != 0; i++) {
++	switch (i) {
++	case 2:
++	case 5:
++	    if (string[i] != '/') {
++		printf("ERROR: Bad date format (MM/DD/YYYY hh:mm:ss): %s\n",
++		       string);
++		return -1;
++	    }
++	    break;
++	case 10:
++	    if (string[i] != ' ') {
++		printf("ERROR: Bad date format (MM/DD/YYYY hh:mm:ss): %s\n",
++		       string);
++		return -1;
++	    }
++	    break;
++	case 13:
++	case 16:
++	    if (string[i] != ':') {
++		printf("ERROR: Bad date format (MM/DD/YYYY hh:mm:ss): %s\n",
++		       string);
++		return -1;
++	    }
++	    break;
++	default:
++	    if (!isdigit(string[i])) {
++		printf("ERROR: Bad date format (MM/DD/YYYY hh:mm:ss): %s\n",
++		       string);
++		return -1;
++	    }
++	    break;
++	}
++    }
++    strcpy(buf, string);
++    return 0;
++}
++
++/*
++ *  is_valid_tlv
++ *
++ *  Perform basic sanity checks on a TLV field. The TLV is pointed to
++ *  by the parameter provided.
++ *      1. The type code is not reserved (0x00 or 0xFF)
++ */
++static inline bool is_valid_tlv(tlvinfo_tlv_t *tlv)
++{
++    return((tlv->type != 0x00) && (tlv->type != 0xFF));
++}
++
++/*
++ *  is_hex
++ *
++ *  Tests if character is an ASCII hex digit
++ */
++static inline char is_hex(char p)
++{
++    return (((p >= '0') && (p <= '9')) ||
++	    ((p >= 'A') && (p <= 'F')) ||
++	    ((p >= 'a') && (p <= 'f')));
++}
++
++/*
++ *  set_mac
++ *
++ *  Converts a string MAC address into a binary buffer.
++ *
++ *  This function takes a pointer to a MAC address string
++ *  (i.e."XX:XX:XX:XX:XX:XX", where "XX" is a two-digit hex number).
++ *  The string format is verified and then converted to binary and
++ *  stored in a buffer.
++ */
++static int set_mac(char *buf, const char *string)
++{
++    char *p = (char *) string;
++    int   i;
++    int   err = 0;
++    char *end;
++
++    if (!p) {
++	printf("ERROR: NULL mac addr string passed in.\n");
++	return -1;
++    }
++    if (strlen(p) != 17) {
++	printf("ERROR: MAC address strlen() != 17 -- %d\n", strlen(p));
++	printf("ERROR: Bad MAC address format: %s\n", string);
++	return -1;
++    }
++    for (i = 0; i < 17; i++) {
++	if ((i % 3) == 2) {
++	    if (p[i] != ':') {
++		err++;
++		printf("ERROR: mac: p[%i] != :, found: `%c'\n",
++		       i, p[i]);
++		break;
++	    }
++	    continue;
++	} else if (!is_hex(p[i])) {
++	    err++;
++	    printf("ERROR: mac: p[%i] != hex digit, found: `%c'\n",
++		   i, p[i]);
++	    break;
++	}
++    }
++    if (err != 0) {
++	printf("ERROR: Bad MAC address format: %s\n", string);
++	return -1;
++    }
++    /* Convert string to binary */
++    for (i = 0, p = (char *)string; i < 6; i++) {
++	buf[i] = p ? strtoul(p, &end, 16) : 0;
++	if (p) {
++	    p = (*end) ? end + 1 : end;
++	}
++    }
++    if (!is_valid_ether_addr((char *)buf)) {
++	printf("ERROR: MAC address must not be 00:00:00:00:00:00, "
++	       "a multicast address or FF:FF:FF:FF:FF:FF.\n");
++	printf("ERROR: Bad MAC address format: %s\n", string);
++	return -1;
++    }
++    return 0;
++}
++
++/*
++ *  is_valid_tlvinfo_header
++ *
++ *  Perform sanity checks on the first 11 bytes of the TlvInfo EEPROM
++ *  data pointed to by the parameter:
++ *      1. First 8 bytes contain null-terminated ASCII string "TlvInfo"
++ *      2. Version byte is 1
++ *      3. Total length bytes contain value which is less than or equal
++ *         to the allowed maximum (2048-11)
++ *
++ */
++static inline bool is_valid_tlvinfo_header(tlvinfo_header_t *hdr)
++{
++    int max_size = TLV_TOTAL_LEN_MAX;
++    return((strcmp(hdr->signature, TLV_INFO_ID_STRING) == 0) &&
++	   (hdr->version == TLV_INFO_VERSION) &&
++	   (be16_to_cpu(hdr->totallen) <= max_size) );
++}
++
++/*
++ *  decode_tlv_value
++ *
++ *  Decode a single TLV value into a string.
++
++ *  The validity of EEPROM contents and the TLV field have been verified
++ *  prior to calling this function.
++ */
++#define DECODE_NAME_MAX     20
++
++static void decode_tlv_value(tlvinfo_tlv_t * tlv, char* value)
++{
++    int i;
++
++    switch (tlv->type) {
++    case TLV_CODE_PRODUCT_NAME:
++    case TLV_CODE_PART_NUMBER:
++    case TLV_CODE_SERIAL_NUMBER:
++    case TLV_CODE_MANUF_DATE:
++    case TLV_CODE_LABEL_REVISION:
++    case TLV_CODE_PLATFORM_NAME:
++    case TLV_CODE_ONIE_VERSION:
++    case TLV_CODE_MANUF_NAME:
++    case TLV_CODE_MANUF_COUNTRY:
++    case TLV_CODE_VENDOR_NAME:
++    case TLV_CODE_DIAG_VERSION:
++    case TLV_CODE_SERVICE_TAG:
++	memcpy(value, tlv->value, tlv->length);
++	value[tlv->length] = 0;
++	break;
++    case TLV_CODE_MAC_BASE:
++	sprintf(value, "%02X:%02X:%02X:%02X:%02X:%02X",
++		tlv->value[0], tlv->value[1], tlv->value[2],
++		tlv->value[3], tlv->value[4], tlv->value[5]);
++	break;
++    case TLV_CODE_DEVICE_VERSION:
++	sprintf(value, "%u", tlv->value[0]);
++	break;
++    case TLV_CODE_MAC_SIZE:
++	sprintf(value, "%u", (tlv->value[0] << 8) | tlv->value[1]);
++	break;
++    case TLV_CODE_VENDOR_EXT:
++	value[0] = 0;
++	for (i = 0; (i < (TLV_DECODE_VALUE_MAX_LEN/5)) && (i < tlv->length);
++	     i++) {
++	    sprintf(value, "%s 0x%02X", value, tlv->value[i]);
++	}
++	break;
++    case TLV_CODE_CRC_32:
++	sprintf(value, "0x%02X%02X%02X%02X",
++		tlv->value[0], tlv->value[1], tlv->value[2],
++		tlv->value[3]);
++	break;
++    default:
++	value[0] = 0;
++	for (i = 0; (i < (TLV_DECODE_VALUE_MAX_LEN/5)) && (i < tlv->length);
++	     i++) {
++	    sprintf(value, "%s 0x%02X", value, tlv->value[i]);
++	}
++	break;
++    }
++
++}
++
++/*
++ *  decode_tlv
++ *
++ *  Print a string representing the contents of the TLV field. The format of
++ *  the string is:
++ *      1. The name of the field left justified in 20 characters
++ *      2. The type code in hex right justified in 5 characters
++ *      3. The length in decimal right justified in 4 characters
++ *      4. The value, left justified in however many characters it takes
++ *  The validity of EEPROM contents and the TLV field have been verified
++ *  prior to calling this function.
++ */
++#define DECODE_NAME_MAX     20
++
++static void decode_tlv(tlvinfo_tlv_t * tlv)
++{
++    char name[DECODE_NAME_MAX];
++    char value[TLV_DECODE_VALUE_MAX_LEN];
++    int i;
++
++    decode_tlv_value(tlv, value);
++
++    strncpy(name, tlv_type2name(tlv->type), DECODE_NAME_MAX);
++    name[DECODE_NAME_MAX-1] = 0;
++
++    printf("%-20s 0x%02X %3d %s\n", name, tlv->type, tlv->length, value);
++}
++
++/*
++ *  is_checksum_valid
++ *
++ *  Validate the checksum in the provided TlvInfo EEPROM data. First,
++ *  verify that the TlvInfo header is valid, then make sure the last
++ *  TLV is a CRC-32 TLV. Then calculate the CRC over the EEPROM data
++ *  and compare it to the value stored in the EEPROM CRC-32 TLV.
++ */
++static bool is_checksum_valid(u_int8_t *eeprom)
++{
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    tlvinfo_tlv_t    * eeprom_crc;
++    unsigned int       calc_crc;
++    unsigned int       stored_crc;
++
++    // Is the eeprom header valid?
++    if (!is_valid_tlvinfo_header(eeprom_hdr)) {
++	return(FALSE);
++    }
++
++    // Is the last TLV a CRC?
++    eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
++					   be16_to_cpu(eeprom_hdr->totallen) -
++					   (sizeof(tlvinfo_tlv_t) + 4)];
++    if ((eeprom_crc->type != TLV_CODE_CRC_32) || (eeprom_crc->length != 4)) {
++	return(FALSE);
++    }
++
++    // Calculate the checksum
++    calc_crc = crc32(0, (void *)eeprom, sizeof(tlvinfo_header_t) +
++		     be16_to_cpu(eeprom_hdr->totallen) - 4);
++    stored_crc = ((eeprom_crc->value[0] << 24) | (eeprom_crc->value[1] << 16) |
++		  (eeprom_crc->value[2] <<  8) | eeprom_crc->value[3]);
++    return(calc_crc == stored_crc);
++}
++
++/*
++ *  update_crc
++ *
++ *  This function updates the CRC-32 TLV. If there is no CRC-32 TLV, then
++ *  one is added. This function should be called after each update to the
++ *  EEPROM structure, to make sure the CRC is always correct.
++ */
++static void update_crc(u_int8_t *eeprom)
++{
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    tlvinfo_tlv_t    * eeprom_crc;
++    unsigned int       calc_crc;
++
++    // Is the eeprom header valid?
++    if (!is_valid_tlvinfo_header(eeprom_hdr)) {
++	return;
++    }
++    // Is the last TLV a CRC?
++    eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
++					   be16_to_cpu(eeprom_hdr->totallen) -
++					   (sizeof(tlvinfo_tlv_t) + 4)];
++    if (eeprom_crc->type != TLV_CODE_CRC_32) {
++	if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) + 4) >
++	    TLV_TOTAL_LEN_MAX) {
++	    return;
++	}
++	eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
++					       be16_to_cpu(
++						   eeprom_hdr->totallen)];
++	eeprom_hdr->totallen = cpu_to_be16(be16_to_cpu(eeprom_hdr->totallen) +
++					   sizeof(tlvinfo_tlv_t) + 4);
++	eeprom_crc->type = TLV_CODE_CRC_32;
++    }
++    eeprom_crc->length = 4;
++
++    // Calculate the checksum
++    calc_crc = crc32(0, (void *)eeprom,
++		     sizeof(tlvinfo_header_t) +
++		     be16_to_cpu(eeprom_hdr->totallen) - 4);
++    eeprom_crc->value[0] = (calc_crc >> 24) & 0xFF;
++    eeprom_crc->value[1] = (calc_crc >> 16) & 0xFF;
++    eeprom_crc->value[2] = (calc_crc >>  8) & 0xFF;
++    eeprom_crc->value[3] = (calc_crc >>  0) & 0xFF;
++    return;
++}
++
++/*
++ *  show_eeprom
++ *
++ *  Display the contents of the EEPROM
++ */
++void show_eeprom(u_int8_t *eeprom)
++{
++    int tlv_end;
++    int curr_tlv;
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    tlvinfo_tlv_t    * eeprom_tlv;
++
++    if ( !is_valid_tlvinfo_header(eeprom_hdr) ) {
++	printf("EEPROM does not contain data in a valid TlvInfo format.\n");
++	return;
++    }
++
++    printf("TlvInfo Header:\n");
++    printf("   Id String:    %s\n", eeprom_hdr->signature);
++    printf("   Version:      %d\n", eeprom_hdr->version);
++    printf("   Total Length: %d\n", be16_to_cpu(eeprom_hdr->totallen));
++    printf("TLV Name             Code Len Value\n");
++    printf("-------------------- ---- --- -----\n");
++    curr_tlv = sizeof(tlvinfo_header_t);
++    tlv_end  = sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen);
++    while (curr_tlv < tlv_end) {
++	eeprom_tlv = (tlvinfo_tlv_t *) &eeprom[curr_tlv];
++	if (!is_valid_tlv(eeprom_tlv)) {
++	    printf("Invalid TLV field starting at EEPROM offset %d\n",
++		   curr_tlv);
++	    return;
++	}
++	decode_tlv(eeprom_tlv);
++	curr_tlv += sizeof(tlvinfo_tlv_t) + eeprom_tlv->length;
++    }
++    printf("Checksum is %s.\n", is_checksum_valid(eeprom) ? "valid" :
++	   "invalid");
++
++#ifdef DEBUG
++    printf("EEPROM dump: (0x%x bytes)", SYS_EEPROM_SIZE);
++    for (i = 0; i < SYS_EEPROM_SIZE; i++) {
++	if ((i % 16) == 0)
++	    printf("\n%02X: ", i);
++	printf("%02X ", eeprom[i]);
++    }
++    printf("\n");
++#endif
++    return;
++}
++
++/*
++ *  read_eeprom
++ *
++ *  Read the EEPROM into memory, if it hasn't already been read.
++ */
++int read_eeprom(u_int8_t *eeprom)
++{
++    int ret;
++    tlvinfo_header_t *eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    tlvinfo_tlv_t *eeprom_tlv = (tlvinfo_tlv_t *)&eeprom[
++	sizeof(tlvinfo_header_t)];
++
++    if (has_been_read)
++	return 0;
++
++    /* Read the header */
++    ret = read_sys_eeprom((void *)eeprom_hdr, 0, sizeof(tlvinfo_header_t));
++    /* If the header was successfully read, read the TLVs */
++    if ((ret == 0) && is_valid_tlvinfo_header(eeprom_hdr)) {
++	ret = read_sys_eeprom((void *)eeprom_tlv, sizeof(tlvinfo_header_t),
++			      be16_to_cpu(eeprom_hdr->totallen));
++    }
++    // If the contents are invalid, start over with default contents
++    if (!is_valid_tlvinfo_header(eeprom_hdr))
++	fprintf(stderr,
++                "Notice:  Invalid TLV header found.  Using default contents.\n");
++    if (!is_checksum_valid(eeprom))
++	fprintf(stderr,
++                "Notice:  Invalid TLV checksum found.  Using default contents.\n");
++    if ( !is_valid_tlvinfo_header(eeprom_hdr) || !is_checksum_valid(eeprom) ){
++	strcpy(eeprom_hdr->signature, TLV_INFO_ID_STRING);
++	eeprom_hdr->version = TLV_INFO_VERSION;
++	eeprom_hdr->totallen = cpu_to_be16(0);
++	update_crc(eeprom);
++	/* Note that the contents of the hardware is not valid */
++	hw_eeprom_valid = 0;
++    }
++    has_been_read = 1;
++
++#ifdef DEBUG
++    show_eeprom(eeprom);
++#endif
++    return ret;
++}
++
++/*
++ *  prog_eeprom
++ *  Write the EEPROM data from CPU memory to the hardware.
++ */
++int prog_eeprom(u_int8_t * eeprom)
++{
++    int ret = 0;
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    int eeprom_len;
++
++    eeprom_len = sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen);
++    ret = write_sys_eeprom(eeprom, eeprom_len);
++    if (ret) {
++	printf("Programming failed.\n");
++	return -1;
++    }
++
++    /* After writing the HW contents are valid */
++    hw_eeprom_valid = 1;
++
++    printf("Programming passed.\n");
++    return 0;
++}
++
++/*
++ * is_sys_eeprom_valid - Is the EEPROM binary data in hardware valid
++ */
++static int is_sys_eeprom_valid()
++{
++    return hw_eeprom_valid;
++}
++
++/*
++ *  tlvinfo_find_tlv
++ *
++ *  This function finds the TLV with the supplied code in the EERPOM.
++ *  An offset from the beginning of the EEPROM is returned in the
++ *  eeprom_index parameter if the TLV is found.
++ */
++bool tlvinfo_find_tlv(u_int8_t *eeprom, u_int8_t tcode,
++			     int *eeprom_index)
++{
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    tlvinfo_tlv_t    * eeprom_tlv;
++    int eeprom_end;
++
++    // Make sure the EEPROM contents are valid
++    if (!is_valid_tlvinfo_header(eeprom_hdr) || !is_checksum_valid(eeprom)) {
++	return(FALSE);
++    }
++    // Search through the TLVs, looking for the first one which matches the
++    // supplied type code.
++    *eeprom_index = sizeof(tlvinfo_header_t);
++    eeprom_end = sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen);
++    while (*eeprom_index < eeprom_end) {
++	eeprom_tlv = (tlvinfo_tlv_t *) &eeprom[*eeprom_index];
++	if (!is_valid_tlv(eeprom_tlv)) {
++	    return(FALSE);
++	}
++	if (eeprom_tlv->type == tcode) {
++	    return(TRUE);
++	}
++	*eeprom_index += sizeof(tlvinfo_tlv_t) + eeprom_tlv->length;
++    }
++    return(FALSE);
++}
++
++/*
++ *  tlvinfo_decode_tlv
++ *
++ *  This function finds the TLV with the supplied code in the EERPOM
++ *  and decodes the value into the buffer provided.
++ */
++bool tlvinfo_decode_tlv(u_int8_t *eeprom, u_int8_t tcode, char* value)
++{
++    int eeprom_index;
++    tlvinfo_tlv_t * eeprom_tlv;
++
++    // Find the TLV and then decode it
++    if (tlvinfo_find_tlv(eeprom, tcode, &eeprom_index)) {
++        eeprom_tlv = (tlvinfo_tlv_t *) &eeprom[eeprom_index];
++        decode_tlv_value(eeprom_tlv, value);
++        return TRUE;
++    }
++
++    return FALSE;
++}
++
++/*
++ *  tlvinfo_delete_tlv
++ *
++ *  This function deletes the TLV with the specified type code from the
++ *  EEPROM.
++ */
++bool tlvinfo_delete_tlv(u_int8_t * eeprom, u_int8_t code)
++{
++    int eeprom_index;
++    int tlength;
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    tlvinfo_tlv_t * eeprom_tlv;
++
++    // Find the TLV and then move all following TLVs "forward"
++    if (tlvinfo_find_tlv(eeprom, code, &eeprom_index)) {
++	eeprom_tlv = (tlvinfo_tlv_t *) &eeprom[eeprom_index];
++	tlength = sizeof(tlvinfo_tlv_t) + eeprom_tlv->length;
++	memcpy(&eeprom[eeprom_index], &eeprom[eeprom_index+tlength],
++	       sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen) -
++	       eeprom_index - tlength);
++	eeprom_hdr->totallen = cpu_to_be16(be16_to_cpu(eeprom_hdr->totallen) -
++					   tlength);
++	update_crc(eeprom);
++	return(TRUE);
++    }
++    return(FALSE);
++}
++
++/*
++ *  tlvinfo_add_tlv
++ *
++ *  This function adds a TLV to the EEPROM, converting the value (a string) to
++ *  the format in which it will be stored in the EEPROM.
++ */
++#define MAX_TLV_VALUE_LEN   256
++bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval)
++{
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    tlvinfo_tlv_t * eeprom_tlv;
++    int new_tlv_len = 0;
++    u_int32_t value;
++    char data[MAX_TLV_VALUE_LEN];
++    int eeprom_index;
++    int max_size = TLV_TOTAL_LEN_MAX;
++
++    // Encode each TLV type into the format to be stored in the EERPOM
++    switch (tcode) {
++    case TLV_CODE_PRODUCT_NAME:
++    case TLV_CODE_PART_NUMBER:
++    case TLV_CODE_SERIAL_NUMBER:
++    case TLV_CODE_LABEL_REVISION:
++    case TLV_CODE_PLATFORM_NAME:
++    case TLV_CODE_ONIE_VERSION:
++    case TLV_CODE_MANUF_NAME:
++    case TLV_CODE_MANUF_COUNTRY:
++    case TLV_CODE_VENDOR_NAME:
++    case TLV_CODE_DIAG_VERSION:
++    case TLV_CODE_SERVICE_TAG:
++	strncpy(data, strval, MAX_TLV_VALUE_LEN);
++	new_tlv_len = min(MAX_TLV_VALUE_LEN, strlen(strval));
++	break;
++    case TLV_CODE_DEVICE_VERSION:
++	value = strtoul(strval, NULL, 0);
++	if (value >= 256) {
++	    printf("ERROR: Device version must be 255 or less. Value " \
++		   "supplied: %u\n", value);
++	    return(FALSE);
++	}
++	data[0] = value & 0xFF;
++	new_tlv_len = 1;
++	break;
++    case TLV_CODE_MAC_SIZE:
++	value = strtoul(strval, NULL, 0);
++	if (value >= 65536) {
++	    printf("ERROR: MAC Size must be 65535 or less. Value " \
++		   "supplied: %u\n", value);
++	    return(FALSE);
++	}
++	data[0] = (value >> 8) & 0xFF;
++	data[1] = value & 0xFF;
++	new_tlv_len = 2;
++	break;
++    case TLV_CODE_MANUF_DATE:
++	if (set_date(data, strval) != 0) {
++	    return(FALSE);
++	}
++	new_tlv_len = 19;
++	break;
++    case TLV_CODE_MAC_BASE:
++	if (set_mac(data, strval) != 0) {
++	    return(FALSE);
++	}
++	new_tlv_len = 6;
++	break;
++    case TLV_CODE_CRC_32:
++	printf("WARNING: The CRC TLV is set automatically and cannot be set " \
++	       "manually.\n");
++	return(FALSE);
++    case TLV_CODE_VENDOR_EXT:
++    default:
++	if (set_bytes(data, strval, &new_tlv_len) != 0 ) {
++	    return(FALSE);
++	}
++	break;
++    }
++
++    // Is there room for this TLV?
++    if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) +
++	 new_tlv_len) > max_size) {
++	printf("ERROR: There is not enough room in the EERPOM to save data.\n");
++	return(FALSE);
++    }
++
++    // Add TLV at the end, overwriting CRC TLV if it exists
++    if (tlvinfo_find_tlv(eeprom, TLV_CODE_CRC_32, &eeprom_index)) {
++	eeprom_hdr->totallen = cpu_to_be16(be16_to_cpu(eeprom_hdr->totallen)
++					   - sizeof(tlvinfo_tlv_t) - 4);
++    } else {
++	eeprom_index = sizeof(tlvinfo_header_t) +
++	    be16_to_cpu(eeprom_hdr->totallen);
++    }
++    eeprom_tlv = (tlvinfo_tlv_t *) &eeprom[eeprom_index];
++    eeprom_tlv->type = tcode;
++    eeprom_tlv->length = new_tlv_len;
++    memcpy(eeprom_tlv->value, data, new_tlv_len);
++
++    // Update the total length and calculate (add) a new CRC-32 TLV
++    eeprom_hdr->totallen = cpu_to_be16(be16_to_cpu(eeprom_hdr->totallen) +
++				       sizeof(tlvinfo_tlv_t) + new_tlv_len);
++    update_crc(eeprom);
++
++    return(TRUE);
++}
++
++void update_eeprom_header(u_int8_t *eeprom)
++{
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++
++    strcpy(eeprom_hdr->signature, TLV_INFO_ID_STRING);
++    eeprom_hdr->version = TLV_INFO_VERSION;
++    eeprom_hdr->totallen = cpu_to_be16(0);
++    update_crc(eeprom);
++}
++
++/*
++ *  show_tlv_code_list - Display the list of TLV codes and names
++ */
++void show_tlv_code_list(void)
++{
++    int i;
++
++    printf("TLV Code    TLV Name\n");
++    printf("========    =================\n");
++    for (i = 0; i < sizeof(tlv_code_list)/sizeof(tlv_code_list[0]); i++) {
++	printf("0x%02x        %s\n",
++	       tlv_code_list[i].m_code,
++	       tlv_code_list[i].m_name);
++    }
++}
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+new file mode 100644
+index 0000000..3003bd6
+--- /dev/null
++++ b/miscutils/sys_eeprom.c
+@@ -0,0 +1,181 @@
++#include "libbb.h"
++#include "onie_tlvinfo.h"
++#include <getopt.h>
++
++static u_int8_t eeprom[SYS_EEPROM_SIZE];
++/*
++ *  This macro defines the onie-syseeprom command line command.
++ */
++//usage:#define onie_syseeprom_trivial_usage
++//usage:       "[[-le] | [-g <code>] | [-s <code>=<value>,...]]"
++//usage:#define onie_syseeprom_full_usage "\n\n"
++//usage:       "Display and program the system EEPROM data block.\n"
++//usage:       "   With no arguments display the EEPROM contents.\n"
++//usage:     "\n	-l	List the understood TLV codes and names."
++//usage:     "\n	-e	Reset the EEPROM data."
++//usage:     "\n	-g	Look up a TLV by code and write the value to stdout."
++//usage:     "\n	-s	Set a TLV code to a value."
++//usage:     "\n		If no value, TLV is deleted."
++//usage:       "\n"
++
++cmd_usage()
++{
++    static const char *usage =
++	"Display and program the system EEPROM data block.\n"
++	"Usage: onie-syseeprom [-h][-l] [-e] [-s <code>=<value>,...]\n"
++	"   With no arguments display the EEPROM contents.\n"
++	"   -h --help\n"
++	"      Display usage\n"
++	"   -l --list\n"
++	"      List the understood TLV codes and names.\n"
++	"   -e --erase\n"
++	"      Reset the EEPROM data.\n"
++	"   -g --get <code>\n"
++	"      Look up a TLV by code and write the value to stdout.\n"
++	"   -s --set <code>=<value>,<code>=<value>...\n"
++	"      Set a TLV code to a value.\n"
++	"      If no value, TLV is deleted.\n";
++
++    fprintf(stderr, "%s", usage);
++    exit(1);
++}
++
++/*
++ *  do_onie_syseeprom
++ *  This function implements the onie_syseeprom command.
++ */
++int onie_syseeprom_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
++int onie_syseeprom_main(int argc, char **argv)
++{
++    int count = 0;
++    int err = 0;
++    int update = 0;
++    char *value, *subopts, *tname;
++    int index, c, i, option_index, tcode;
++    char tlv_value[TLV_DECODE_VALUE_MAX_LEN];
++
++    const size_t tlv_code_count = sizeof(tlv_code_list) /
++	sizeof(tlv_code_list[0]);
++
++    char *tokens[tlv_code_count + 1];
++    const char *short_options = "hels:g:";
++    const struct option long_options[] = {
++	{"help",    no_argument,          0,    'h'},
++	{"list",    no_argument,          0,    'l'},
++	{"erase",   no_argument,          0,    'e'},
++	{"set",     required_argument,    0,    's'},
++	{"get",     required_argument,    0,    'g'},
++	{0,         0,                    0,      0},
++    };
++
++    for (i = 0; i < tlv_code_count; i++) {
++	    tokens[i] = (char *) malloc(6);
++	    sprintf(tokens[i], "0x%x", tlv_code_list[i].m_code);
++    }
++    tokens[tlv_code_count] = NULL;
++
++    while (TRUE) {
++	c = getopt_long(argc, argv, short_options,
++			long_options, &option_index);
++	if (c == EOF)
++	    break;
++
++	count++;
++	switch (c) {
++	case 'h':
++	    cmd_usage();
++	    break;
++
++	case 'l':
++	    show_tlv_code_list();
++	    break;
++
++	case 'e':
++	    if (read_eeprom(eeprom)) {
++                err = 1;
++		goto syseeprom_err;
++	    }
++	    update_eeprom_header(eeprom);
++	    update = 1;
++	    break;
++
++	case 's':
++	    subopts = optarg;
++	    while (*subopts != '\0' && !err) {
++		if ((index = getsubopt(&subopts, tokens, &value)) != -1) {
++		    if (read_eeprom(eeprom)) {
++                        err = 1;
++			goto syseeprom_err;
++		    }
++		    tcode = strtoul(tokens[index], NULL, 0);
++		    for (i = 0; i < tlv_code_count; i++) {
++			if (tlv_code_list[i].m_code == tcode) {
++			    tname = tlv_code_list[i].m_name;
++			}
++		    }
++		    if (tlvinfo_delete_tlv(eeprom, tcode) == TRUE) {
++			    printf("Deleting TLV 0x%x: %s\n", tcode, tname);
++		    }
++		    if (value) {
++			if (!tlvinfo_add_tlv(eeprom, tcode, value)) {
++                            err = 1;
++			    goto syseeprom_err;
++			} else {
++			    printf("Adding   TLV 0x%x: %s\n", tcode, tname);
++			}
++		    }
++		    update = 1;
++		} else {
++		    err = 1;
++		    printf("ERROR: Invalid option: %s\n", value);
++		    goto syseeprom_err;
++		}
++	    }
++	break;
++
++	case 'g':
++            if (read_eeprom(eeprom)) {
++                err = 1;
++                goto syseeprom_err;
++            }
++            tcode = strtoul(optarg, NULL, 0);
++            if (tlvinfo_decode_tlv(eeprom, tcode, tlv_value)) {
++                printf("%s\n", tlv_value);
++            } else {
++                err = 1;
++                printf("ERROR: TLV code not present in EEPROM: 0x%02x\n", tcode);
++            }
++            goto syseeprom_err;
++	break;
++
++	default:
++	    cmd_usage();
++            err = 1;
++	    break;
++	}
++    }
++    if (!count) {
++	if (argc > 1) {
++	    cmd_usage();
++            err = 1;
++	} else {
++	    if (read_eeprom(eeprom)) {
++                err = 1;
++                goto syseeprom_err;
++            }
++	    show_eeprom(eeprom);
++	}
++    }
++    if (update) {
++	if (prog_eeprom(eeprom)) {
++            err = 1;
++            goto syseeprom_err;
++        }
++	show_eeprom(eeprom);
++    }
++syseeprom_err:
++    for (i = 0; i < tlv_code_count; i++) {
++	free(tokens[i]);
++    }
++    return  (err == 0) ? 0 : 1;
++}
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+new file mode 100644
+index 0000000..0927abc
+--- /dev/null
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -0,0 +1,55 @@
++#include "libbb.h"
++#include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
++#include "24cXX.h"
++
++/*
++ * read_sys_eeprom - read the hwinfo from i2c EEPROM
++ */
++int read_sys_eeprom(void *eeprom_data, int offset, int len)
++{
++    int ret = 0;
++    struct eeprom e;
++    int i = 0;
++    u_int8_t *c;
++    int addr = SYS_EEPROM_OFFSET + offset;
++
++    c = eeprom_data;
++    if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++		    EEPROM_TYPE_8BIT_ADDR, &e)) {
++	printf("ERROR: Cannot open I2C device\n");
++	return -1;
++    }
++    for (i = 0; i < len; i++) {
++	*c = eeprom_read_byte(&e, addr);
++	c++; addr++;
++    }
++    eeprom_close(&e);
++    return ret;
++}
++
++/*
++ * write_sys_eeprom - write the hwinfo to i2c EEPROM
++ */
++int write_sys_eeprom(void *eeprom_data, int len)
++{
++    int ret = 0;
++    struct eeprom e;
++    int i = 0;
++    u_int8_t *c;
++    u_int16_t  addr = SYS_EEPROM_OFFSET;
++
++    c = eeprom_data;
++    for (i = 0; i < len; i++) {
++	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++			EEPROM_TYPE_8BIT_ADDR, &e)) {
++	    printf("ERROR: Cannot open I2C device\n");
++	    return -1;
++	}
++	eeprom_write_byte(&e, addr, *c);
++	eeprom_close(&e);
++	c++; addr++;
++    }
++
++    return ret;
++}
+diff --git a/miscutils/sys_eeprom_mtd.c b/miscutils/sys_eeprom_mtd.c
+new file mode 100644
+index 0000000..a33b1b0
+--- /dev/null
++++ b/miscutils/sys_eeprom_mtd.c
+@@ -0,0 +1,123 @@
++#include "libbb.h"
++#include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
++#include <mtd/mtd-user.h>
++
++/*
++ * read_sys_eeprom - read the hwinfo from MTD EEPROM
++ */
++int read_sys_eeprom(void *eeprom_data, int offset, int len)
++{
++    struct mtd_info_user mtdinfo;
++    int rc;
++    int ret = 0;
++    int fd;
++    u_int8_t *c;
++
++    c = eeprom_data;
++
++    fd = open(SYS_EEPROM_MTD_DEVICE, O_RDONLY);
++    if (fd < 0) {
++	fprintf (stderr, "Can't open %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++	return -1;
++    }
++
++    rc = ioctl(fd, MEMGETINFO, &mtdinfo);
++
++    if (rc < 0) {
++        perror ("Cannot get MTD information");
++        return -1;
++    }
++
++    if (mtdinfo.type != MTD_NORFLASH) {
++        fprintf (stderr, "Unsupported flash type %u\n", mtdinfo.type);
++        return -1;
++    }
++
++    if (lseek (fd, offset + SYS_EEPROM_OFFSET, SEEK_SET) == -1) {
++	fprintf (stderr, "Seek error on %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++	return -1;
++    }
++
++    rc = read (fd, c, len);
++    if (rc != len) {
++        fprintf (stderr, "Read error on %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++        return -1;
++    }
++
++    if (close (fd)) {
++	fprintf (stderr, "I/O error on %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++	return -1;
++    }
++
++    return ret;
++}
++
++/*
++ * write_sys_eeprom - write the hwinfo to MTD EEPROM
++ */
++int write_sys_eeprom(void *eeprom_data, int len)
++{
++    struct mtd_info_user mtdinfo;
++    struct erase_info_user erase;
++    int rc;
++    int ret = 0;
++    int fd;
++    u_int8_t *c;
++
++    c = eeprom_data;
++
++    fd = open(SYS_EEPROM_MTD_DEVICE, O_RDWR);
++    if (fd < 0) {
++	fprintf (stderr, "Can't open %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++	return -1;
++    }
++
++    rc = ioctl(fd, MEMGETINFO, &mtdinfo);
++
++    if (rc < 0) {
++        perror ("Cannot get MTD information");
++        return -1;
++    }
++
++    if (mtdinfo.type != MTD_NORFLASH) {
++        fprintf (stderr, "Unsupported flash type %u\n", mtdinfo.type);
++        return -1;
++    }
++
++    erase.length = SYS_EEPROM_ERASE_SIZE;
++    erase.start = 0;
++    ioctl (fd, MEMUNLOCK, &erase);
++
++    if (ioctl (fd, MEMERASE, &erase) != 0) {
++	fprintf (stderr, "MTD erase error on %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++	return -1;
++    }
++
++    if (lseek (fd, SYS_EEPROM_OFFSET, SEEK_SET) == -1) {
++	fprintf (stderr, "Seek error on %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++	return -1;
++    }
++
++    rc = write (fd, c, len);
++    if (rc != len) {
++        fprintf (stderr, "Write error on %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++        return -1;
++    }
++
++    if (close (fd)) {
++	fprintf (stderr, "I/O error on %s: %s\n",
++		SYS_EEPROM_MTD_DEVICE, strerror (errno));
++	return -1;
++    }
++
++    return ret;
++}
