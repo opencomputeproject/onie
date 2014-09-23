@@ -104,7 +104,7 @@ check_link_up()
 
     _log_info_msg "Info: ${intf}:  Checking link... "
     local i=0
-    [ -r $operstate ] && while [ $i -lt 50 ] ; do
+    [ -r $operstate ] && while [ $i -lt 100 ] ; do
         if [ "$(cat $operstate)" = "up" ] ; then
             _log_info_msg "up.\n"
             return 0
