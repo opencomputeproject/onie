@@ -166,7 +166,7 @@ install-cross-deps: install-native-deps
 	# These packages are currently incompatible between Debian/Emdebian wheezy:
 	sudo dpkg -i tools/bin/amd64/binutils-powerpc-linux-gnu_2.22-7.1_amd64.deb
 	sudo dpkg -i tools/bin/amd64/libgomp1-powerpc-cross_4.7.2-4_all.deb
-	sudo apt-get install gcc-4.7-powerpc-linux-gnu libc6-dev-powerpc-cross
+	sudo apt-get install gcc-4.7-powerpc-linux-gnu libc6-dev-powerpc-cross dpkg-sig
 	f=$$(mktemp); wget -O $$f "https://launchpad.net/ubuntu/+source/qemu/1.4.0+dfsg-1expubuntu3/+build/4336762/+files/qemu-user-static_1.4.0%2Bdfsg-1expubuntu3_amd64.deb" && sudo dpkg -i $$f
 	sudo update-alternatives --install /usr/bin/powerpc-linux-gnu-gcc powerpc-linux-gnu-gcc /usr/bin/powerpc-linux-gnu-gcc-4.7 10
 	sudo xapt -a powerpc libedit-dev ncurses-dev libsensors4-dev libwrap0-dev libssl-dev libsnmp-dev

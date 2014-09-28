@@ -54,9 +54,18 @@ ifndef DEBUILD_DIR
 DEBUILD_DIR := debuild
 endif
 
+# For .deb signing
+ifndef ONL_GNUPGHOME
+ONL_GNUPGHOME := $(ONL)/make/default_sign/gnupg
+endif
+ifndef DPKG_SIG
+DPKG_SIG := dpkg-sig
+endif
+
 deb:
 	$(ONL_V_at)$(MAKE) -C ../ $(ONL_MAKEFLAGS)
 	cd $(DEBUILD_DIR); $(DEBUILD)
+	GNUPGHOME=$(ONL_GNUPGHOME) $(DPKG_SIG) --sign builder *$(ARCH)*.deb  # sign packages
 	$(ONL_PKG_INSTALL) --add-pkg *$(ARCH)*.deb
 	rm *$(ARCH)*.deb
 	rm -rf $(DEBUILD_DIR)/debian/tmp $(foreach p,$(PACKAGE_NAMES),$(DEBUILD_DIR)/debian/$(p)/ $(DEBUILD_DIR)/debian/$(p)-dbg)
