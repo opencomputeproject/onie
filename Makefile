@@ -26,10 +26,18 @@
 all:
 	@echo "targets:"
 	@echo ""
+	@echo "Step #1: (outside workspace)"
 	@echo "    install-host-deps        Install build dependencies into your host build machine."
 	@echo ""
+	@echo "Step #2: (inside workspace)"
 	@echo "    install-ws-deps          Install build dependencies into your workspace after creating it."
 	@echo ""
+	@echo "Step #3: (inside workspace)"
+	@echo "    onl-powerpc              Build all components, swi, loader, and installer in workspace."
+	@echo "                               Run inside a workspace after \`make install-ws-deps\`"
+	@echo "                               Equivalent to \`make all-components swi installer\`"
+	@echo ""
+	@echo "Optional Steps"
 	@echo "    all-components           Build all components in workspace before building actual images."
 	@echo ""
 	@echo "    deb-clean                Clean all debian log files in the components subtree."
@@ -56,6 +64,13 @@ install-host-deps:
 install-ws-deps: __install-ws-deps
 
 
+onl-powerpc: all-components swi-powerpc installer-powerpc
+	@echo "##############################################"
+	@echo "################     DONE     ################"
+	@echo "##############################################"
+	@ls -l $$ONL/builds/installer/powerpc/all/*.installer \
+	    $$ONL/builds/swi/powerpc/all/*.swi
+
 ############################################################
 #
 # Build each of the underlying components
@@ -63,6 +78,12 @@ install-ws-deps: __install-ws-deps
 ############################################################
 all-components:
 	export ONL=`pwd` && make -C $$ONL/builds/components
+
+installer-powerpc:
+	export ONL=`pwd` && make -C $$ONL/builds/installer/powerpc/all
+
+swi-powerpc:
+	export ONL=`pwd` && make -C $$ONL/builds/swi/powerpc/all
 
 ############################################################
 #
