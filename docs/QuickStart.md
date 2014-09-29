@@ -84,9 +84,17 @@ Go back into the ONL tree and install the required build dependencies into your 
 
 
 You are now ready to build ONL.
-You will need to set $ONL to the root of the tree:
-------------------------------------------------------------
-    #> export ONL=`pwd`
+    # To build the powerpc images, run:
+    #> make onl-powerpc
+
+    # To build the kvm images, run:
+    #> make onl-kvm
+
+Additional Details
+----------------------------------------------------------
+
+The rest of this guide talks about how to build specific 
+sub-components of the ONL ecosystem.
 
 Build all component packages for powerpc, i386, and amd64.
 

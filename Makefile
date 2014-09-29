@@ -33,7 +33,8 @@ all:
 	@echo "    install-ws-deps          Install build dependencies into your workspace after creating it."
 	@echo ""
 	@echo "Step #3: (inside workspace)"
-	@echo "    onl-powerpc              Build all components, swi, loader, and installer in workspace."
+	@echo "    onl-{powerpc,kvm}       Build all ONL for either powerpc or kvm, including "
+	@echo "                               components, swi, loader, and installer in workspace."
 	@echo "                               Run inside a workspace after \`make install-ws-deps\`"
 	@echo "                               Equivalent to \`make all-components swi installer\`"
 	@echo ""
@@ -64,12 +65,21 @@ install-host-deps:
 install-ws-deps: __install-ws-deps
 
 
-onl-powerpc: all-components swi-powerpc installer-powerpc
+onl-powerpc: ARCH=powerpc
+onl-powerpc: all-components swi installer
 	@echo "##############################################"
 	@echo "################     DONE     ################"
 	@echo "##############################################"
 	@ls -l $$ONL/builds/installer/powerpc/all/*.installer \
 	    $$ONL/builds/swi/powerpc/all/*.swi
+
+onl-kvm: ARCH=i386
+onl-kvm: all-components swi kvm-loader kvm-iso
+	@echo "##############################################"
+	@echo "################     DONE     ################"
+	@echo "##############################################"
+	@ls -l $$ONL/builds/kvm/i386/onl/*.iso \
+	    $$ONL/builds/swi/i386/all/*.swi
 
 ############################################################
 #
@@ -79,11 +89,16 @@ onl-powerpc: all-components swi-powerpc installer-powerpc
 all-components:
 	export ONL=`pwd` && make -C $$ONL/builds/components
 
-installer-powerpc:
-	export ONL=`pwd` && make -C $$ONL/builds/installer/powerpc/all
+installer:
+	export ONL=`pwd` && make -C $$ONL/builds/installer/$(ARCH)/all
+swi:
+	export ONL=`pwd` && make -C $$ONL/builds/swi/$(ARCH)/all
 
-swi-powerpc:
-	export ONL=`pwd` && make -C $$ONL/builds/swi/powerpc/all
+kvm-loader:
+	export ONL=`pwd` && make -C $$ONL/builds/kvm/i386/loader
+kvm-iso:
+	export ONL=`pwd` && make -C $$ONL/builds/kvm/i386/onl
+
 
 ############################################################
 #
