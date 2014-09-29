@@ -28,7 +28,6 @@ INSTALLER_PLATFORMS :=  powerpc-as4600-54t \
 			powerpc-as5710-54x-r0a \
 			powerpc-as5710-54x-r0b \
 			powerpc-as6700-32x-r0 \
-			powerpc-as6700-32x-r0b \
 			powerpc-quanta-lb9a-r0 \
 			powerpc-quanta-lb9-r0 \
 			powerpc-quanta-ly2-r0 \
