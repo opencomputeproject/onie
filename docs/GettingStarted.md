@@ -19,7 +19,7 @@ ONL Manual Install
         booting into ONIE
 3) Download the ONL installer from http://opennetlinux.org and run it by hand
 
-Expected Serial Console Output:
+Expected Serial Console Output (from an QuantaMesh LB9, other switches ouput will vary):
 
         U-Boot 2010.12 (Oct 08 2013 - 17:11:37)
 
