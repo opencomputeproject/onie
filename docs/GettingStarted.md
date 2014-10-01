@@ -96,7 +96,7 @@ Expected Serial Console Output (from an QuantaMesh LB9, other switches ouput wil
         To check the install status inspect /var/log/onie.log.
         Try this:  tail -f /var/log/onie.log
 
-Now press <RETURN> here to jump into ONIE''s manual installer mode.  You should see:
+Now press RETURN here to jump into ONIE''s manual installer mode.  You should see:
 
         ** Installer Mode Enabled **
 
