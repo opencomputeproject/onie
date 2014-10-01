@@ -20,6 +20,7 @@ ONL Manual Install
 3) Download the ONL installer from http://opennetlinux.org and run it by hand
 
 Expected Serial Console Output:
+
         U-Boot 2010.12 (Oct 08 2013 - 17:11:37)
 
         CPU:   8541, Version: 1.1, (0x80720011)
@@ -106,5 +107,13 @@ Then simply download the latest ONL installer from the website and run it.
         ONIE:/ # wget http://opennetlinux.org/binaries/latest.installer
         Connecting to opennetlinux.org (107.170.237.53:80)
         latest.installer     100% |*******************************|   164M  0:00:00 ETA
-        ONIE:/ # sh -x latest.installer 
+        ONIE:/ # sh latest.installer 
+        Open Network Installer running under ONIE.
+        Installer Version: Open Network Linux e148b7a (powerpc.all,2014.05.21.18.57,e148b7a90131c07eb8d49f74316baf8f2aae92c6)
+        Detected platform: powerpc-quanta-lb9-r0
+        Installing in standalone mode.
+        Unpacking Open Network Linux installer files...
+        onl.powerpc-as4600-54t.loader
+        onl.powerpc-as5600-52x.loader
+        ...
 
