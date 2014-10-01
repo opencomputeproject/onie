@@ -5,7 +5,7 @@ http://opennetlinux.org/hcl) and the ONL installer binary.  Every
 ONL compatible switch ships with the ONIE installer environment installed
 which gives you a multitude of ways of getting ONL installed on your switch.
 
-We document the easiest way here (manual install) but the onie.org website
+We document the easiest way here (manual install) but the http://onie.org website
 contains a variety of installation methods including via USB, over the network,
 and even over NFS.
 
