@@ -89,6 +89,11 @@ GRUB_ENABLE = yes
 # override this.
 I2CTOOLS_ENABLE ?= yes
 
+# The onie-syseeprom in i2ctools is deprecated from now on.
+# It is recommended to migrate the support from i2ctools to busybox.
+# To compatible with current design, the feature is still enabled by default.
+I2CTOOLS_SYSEEPROM ?= yes
+
 # Include dmidecode tools
 DMIDECODE_ENABLE = yes
 

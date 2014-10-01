@@ -78,7 +78,7 @@ $(I2CTOOLS_BUILD_STAMP): $(I2CTOOLS_NEW_FILES) $(I2CTOOLS_PATCH_STAMP) \
 	$(Q) echo "====  Building i2ctools-$(I2CTOOLS_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(I2CTOOLS_DIR) \
 		CROSS_COMPILE=$(CROSSPREFIX) CFLAGS="$(ONIE_CFLAGS)" \
-		LDFLAGS="$(ONIE_LDFLAGS)"
+		LDFLAGS="$(ONIE_LDFLAGS)" SYSEEPROM_ENABLE=$(I2CTOOLS_SYSEEPROM)
 	$(Q) touch $@
 
 i2ctools-install: $(I2CTOOLS_INSTALL_STAMP)
@@ -87,11 +87,13 @@ $(I2CTOOLS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(I2CTOOLS_BUILD_STAMP)
 	$(Q) echo "==== Installing i2ctools in $(DEV_SYSROOT) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(I2CTOOLS_DIR) \
 		CROSS_COMPILE=$(CROSSPREFIX) CFLAGS="$(ONIE_CFLAGS)" \
-		LDFLAGS="$(ONIE_LDFLAGS)"
+		LDFLAGS="$(ONIE_LDFLAGS)" SYSEEPROM_ENABLE=$(I2CTOOLS_SYSEEPROM)
 	$(Q) for file in $(I2CTOOLS_PROGRAMS); do \
 		cp -av $(I2CTOOLS_DIR)/tools/$$file $(SYSROOTDIR)/usr/bin ; \
 	     done
+ifeq ($(I2CTOOLS_SYSEEPROM),yes)
 	$(Q) cp -av $(I2CTOOLS_DIR)/sys_eeprom/onie-syseeprom $(SYSROOTDIR)/usr/bin/onie-syseeprom
+endif
 	$(Q) touch $@
 
 USERSPACE_CLEAN += i2ctools-clean
