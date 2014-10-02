@@ -86,6 +86,9 @@ if [ "$arch" = "x86_64" ] ; then
         -e "s/%%CONSOLE_FLAG%%/$CONSOLE_FLAG/" \
         -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
 	-i $tmp_installdir/install-arch
+elif [ "$arch" = "powerpc-softfloat" ] ; then
+    sed -e "s/%%UPDATER_UBOOT_NAME%%/$UPDATER_UBOOT_NAME/" \
+	-i $tmp_installdir/install-arch
 fi
 echo -n "."
 
