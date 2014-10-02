@@ -162,9 +162,9 @@ installer_partition_format() {
 
 installer_umount_blockdev() { 
     local blockdev=$1
-    grep $1 /proc/mounts
+    grep $blockdev /proc/mounts
     if [ 0 = $? ]; then
-        umount `cat /proc/mounts | grep ${blockdev} | awk '{print $2}'` || true
+        umount `awk "/${blockdev}/ "'{print $2}' /proc/mounts` || true
     else
         echo $1 not mounted, skiping umount
         exit 1
