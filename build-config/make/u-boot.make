@@ -33,8 +33,11 @@ UBOOT_PBL		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.pbl
 UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE_PREFIX).u-boot
 UPDATER_UBOOT		= $(MBUILDDIR)/u-boot.bin
 ifeq ($(UBOOT_PBL_ENABLE),yes)
+  UPDATER_UBOOT		+= $(MBUILDDIR)/u-boot.pbl
+  UPDATER_UBOOT_NAME	= u-boot.pbl
   UBOOT_IMAGE		= $(UBOOT_PBL)
 else
+  UPDATER_UBOOT_NAME	= u-boot.bin
   UBOOT_IMAGE		= $(UBOOT_BIN)
 endif
 
@@ -131,7 +134,10 @@ $(UBOOT_INSTALL_STAMP): $(UBOOT_BUILD_STAMP)
 	$(Q) echo "==== Installing u-boot ($(MACHINE_PREFIX)) ===="
 	$(Q) cp -v $(UBOOT_IMAGE) $(UBOOT_INSTALL_IMAGE)
 	$(Q) chmod a-x $(UBOOT_INSTALL_IMAGE)
-	$(Q) ln -sf $(UBOOT_INSTALL_IMAGE) $(UPDATER_UBOOT)
+	$(Q) ln -sf $(UBOOT_BIN) $(MBUILDDIR)/u-boot.bin
+ifeq ($(UBOOT_PBL_ENABLE),yes)
+	$(Q) ln -sf $(UBOOT_PBL) $(MBUILDDIR)/u-boot.pbl
+endif
 	$(Q) touch $@
 
 CLEAN += u-boot-clean
