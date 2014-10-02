@@ -29,8 +29,14 @@ UBOOT			= $(UBOOT_INSTALL_STAMP)
 UBOOT_NAME		= $(shell echo $(MACHINE_PREFIX) | tr [:lower:] [:upper:])
 UBOOT_MACHINE		?= $(UBOOT_NAME)
 UBOOT_BIN		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.bin
+UBOOT_PBL		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.pbl
 UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE_PREFIX).u-boot
 UPDATER_UBOOT		= $(MBUILDDIR)/u-boot.bin
+ifeq ($(UBOOT_PBL_ENABLE),yes)
+  UBOOT_IMAGE		= $(UBOOT_PBL)
+else
+  UBOOT_IMAGE		= $(UBOOT_BIN)
+endif
 
 UBOOT_IDENT_STRING	?= ONIE $(LSB_RELEASE_TAG)
 
@@ -106,15 +112,24 @@ $(UBOOT_BUILD_DIR)/%/u-boot.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BU
 		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
 		all
 
+$(UBOOT_BUILD_DIR)/%/u-boot.pbl: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
+	$(Q) echo "==== Building u-boot PBL image ($*) ===="
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
+		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
+		$*_config
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
+		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
+		$(UBOOT_PBL)
+
 u-boot-build: $(UBOOT_BUILD_STAMP)
-$(UBOOT_BUILD_STAMP): $(UBOOT_BIN)
+$(UBOOT_BUILD_STAMP): $(UBOOT_IMAGE)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) touch $@
 
 u-boot-install: $(UBOOT_INSTALL_STAMP)
 $(UBOOT_INSTALL_STAMP): $(UBOOT_BUILD_STAMP)
 	$(Q) echo "==== Installing u-boot ($(MACHINE_PREFIX)) ===="
-	$(Q) cp -v $(UBOOT_BIN) $(UBOOT_INSTALL_IMAGE)
+	$(Q) cp -v $(UBOOT_IMAGE) $(UBOOT_INSTALL_IMAGE)
 	$(Q) chmod a-x $(UBOOT_INSTALL_IMAGE)
 	$(Q) ln -sf $(UBOOT_INSTALL_IMAGE) $(UPDATER_UBOOT)
 	$(Q) touch $@
