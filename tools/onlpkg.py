@@ -65,7 +65,8 @@ def find_component_dir(basedir, package_name):
             if file_ == "Makefile" or file_ == "makefile":
                 with open("%s/%s" % (root,file_), "r") as f:
                     data = f.read()
-                    if "Package:%s" % package_name in data:
+                    packages = re.findall("Package:(.*)", data)
+                    if package_name in packages:
                         # By convention - this is the component directory.
                         return os.path.abspath(root)
             if file_ == "control":
