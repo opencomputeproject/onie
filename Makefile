@@ -70,7 +70,7 @@ onl-powerpc: all-components swi installer
 	@echo "##############################################"
 	@echo "################     DONE     ################"
 	@echo "##############################################"
-	@ls -l $$ONL/builds/installer/powerpc/all/*.installer \
+	@export ONL=`pwd` && ls -l $$ONL/builds/installer/powerpc/all/*.installer \
 	    $$ONL/builds/swi/powerpc/all/*.swi
 
 onl-kvm: ARCH=i386
@@ -78,7 +78,7 @@ onl-kvm: all-components swi kvm-loader kvm-iso
 	@echo "##############################################"
 	@echo "################     DONE     ################"
 	@echo "##############################################"
-	@ls -l $$ONL/builds/kvm/i386/onl/*.iso \
+	@export ONL=`pwd` && ls -l $$ONL/builds/kvm/i386/onl/*.iso \
 	    $$ONL/builds/swi/i386/all/*.swi
 
 ############################################################
@@ -160,7 +160,7 @@ deb-clean:
 # Install Emdebian keyring and repositories
 #
 emdebian-update:
-	sudo apt-get install -y emdebian-archive-keyring
+	sudo apt-get install -y --force-yes emdebian-archive-keyring
 	echo 'APT::Get::AllowUnauthenticated "true";\nAPT::Get::Assume-Yes "true";' | sudo tee /etc/apt/apt.conf.d/99opennetworklinux
 	sudo dpkg --add-architecture powerpc
 	echo "deb http://emdebian.org/debian/ wheezy main" | sudo tee /etc/apt/sources.list.d/emdebian.list
