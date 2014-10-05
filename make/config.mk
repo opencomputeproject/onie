@@ -36,6 +36,27 @@ ONL_RELEASE_BANNER := $(space)$(ONL_RELEASE_VERSION)$(space)
 #
 ONL_LOCAL_SUBMODULES := none
 
+
+ifndef ONL_SUBMODULE_ONLP
+ONL_SUBMODULE_ONLP      := $(ONL)/submodules/onlp
+ONL_LOCAL_SUBMODULES += onlp
+endif
+
+ifndef ONL_SUBMODULE_ONLP_ACCTON
+ONL_SUBMODULE_ONLP_ACCTON      := $(ONL)/submodules/onlp-accton
+ONL_LOCAL_SUBMODULES += onlp-accton
+endif
+
+ifndef ONL_SUBMODULE_ONLP_DNI
+ONL_SUBMODULE_ONLP_DNI      := $(ONL)/submodules/onlp-dni
+ONL_LOCAL_SUBMODULES += onlp-dni
+endif
+
+ifndef ONL_SUBMODULE_ONLP_QUANTA
+ONL_SUBMODULE_ONLP_QUANTA      := $(ONL)/submodules/onlp-quanta
+ONL_LOCAL_SUBMODULES += onlp-quanta
+endif
+
 ifndef ONL_SUBMODULE_LINUX_3_9_6
 ONL_SUBMODULE_LINUX_3_9_6      := $(ONL)/submodules/linux-3.9.6
 ONL_LOCAL_SUBMODULES += linux-3.9.6
@@ -137,7 +158,7 @@ endif
 # This turns out to  be terribly hacky wrt the component makefiles.
 # This should be a temporary solution.
 #
-ALL_SUBMODULES = INFRA COMMON BIGCODE
+ALL_SUBMODULES = INFRA COMMON BIGCODE ONLP ONLP_ACCTON ONLP_DNI ONLP_QUANTA
 MODULE_DIRS := $(foreach submodule,$(ALL_SUBMODULES),$(ONL_SUBMODULE_$(submodule))/modules)
 MODULE_DIRS_TOUCH := $(foreach sd,$(MODULE_DIRS),$(shell mkdir -p $(sd) && touch $(sd)/Manifest.mk))
 

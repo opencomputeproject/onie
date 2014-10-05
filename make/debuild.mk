@@ -65,10 +65,11 @@ endif
 deb:
 	$(ONL_V_at)$(MAKE) -C ../ $(ONL_MAKEFLAGS)
 	cd $(DEBUILD_DIR); $(DEBUILD)
-	GNUPGHOME=$(ONL_GNUPGHOME) $(DPKG_SIG) --sign builder *$(ARCH)*.deb  # sign packages
+	GNUPGHOME=$(ONL_GNUPGHOME) $(DPKG_SIG) --sign builder *$(ARCH)*.deb  \
+	&& echo Packages Signed # sign packages
 	$(ONL_PKG_INSTALL) --add-pkg *$(ARCH)*.deb
 	rm *$(ARCH)*.deb
-	rm -rf $(DEBUILD_DIR)/debian/tmp $(foreach p,$(PACKAGE_NAMES),$(DEBUILD_DIR)/debian/$(p)/ $(DEBUILD_DIR)/debian/$(p)-dbg)
+	rm -rf $(DEBUILD_DIR)/debian/tmp $(foreach p,$(PACKAGE_NAMES),$(DEBUILD_DIR)/debian/$(p)/ $(DEBUILD_DIR)/debian/$(p)-dbg) || echo rm failed
 
 clean:
 	cd $(DEBUILD_DIR); $(DEBUILD) -Tclean
