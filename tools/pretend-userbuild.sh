@@ -40,7 +40,7 @@ function die {
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
     echo "" >&2
-    echo "" >&2
+    echo "Error on `date`" >&2
     exit 2
 }
 
@@ -48,11 +48,9 @@ set -x
 
 ARCHS=amd64
 TARGETS="powerpc kvm"
-ONL_ROOT=`realpath $(dirname $(readlink -f $0))/../`
+OUTDIR=build-`date | sed -e 's/[^a-zA-Z0-9]/_/g'`
+ONL_ROOT=`pwd`/$OUTDIR/ONL
 BUILD_SCRIPT=pretend-userbuild.sh
-
-
-cd $ONL_ROOT
 
 case $1 in 
     powerpc)
@@ -74,6 +72,23 @@ case $1 in
 esac
 echo Running $0 in Mode=$mode
 
+echo Starting: `date`
+mkdir $OUTDIR
+cd $OUTDIR
+
+
+# Fugly hack to give us a complete log of the process,
+# Including the parts before the process started
+BUILDLOG=build.out
+if [ -f ../$BUILDLOG ] ; then
+	echo Moving $BUILDLOG into the build directory
+	ln ../$BUILDLOG
+	rm $BUILDLOG	# will keep going even if file isn't there
+fi
+
+git clone git://github.com/opennetworklinux/ONL || die "git problem"
+
+cd ONL
 
 if [ $mode = all ] ; then
     # Step #1 install local host build dependencies
@@ -88,7 +103,7 @@ if [ $mode = all ] ; then
     done
 else # mode != all, running inside a workspace
     make install-ws-deps || die "make install-ws-deps failed for arch=$mode : \$?=$?"
-    make onl-$mode       || due "make onl-$mode failed: \$?=$?"
+    make onl-$mode       || die "make onl-$mode failed: \$?=$?"
 fi
 
 
