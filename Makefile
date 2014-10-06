@@ -160,7 +160,7 @@ deb-clean:
 # Install Emdebian keyring and repositories
 #
 emdebian-update:
-	sudo apt-get install -y emdebian-archive-keyring
+	sudo apt-get install -y --force-yes emdebian-archive-keyring
 	echo 'APT::Get::AllowUnauthenticated "true";\nAPT::Get::Assume-Yes "true";' | sudo tee /etc/apt/apt.conf.d/99opennetworklinux
 	sudo dpkg --add-architecture powerpc
 	echo "deb http://emdebian.org/debian/ wheezy main" | sudo tee /etc/apt/sources.list.d/emdebian.list
