@@ -14,6 +14,7 @@ BUSYBOX_DIR		= $(BUSYBOX_BUILD_DIR)/busybox-$(BUSYBOX_VERSION)
 BUSYBOX_CONFIG		= conf/busybox.config
 
 BUSYBOX_SRCPATCHDIR	= $(PATCHDIR)/busybox
+BUSYBOX_PATCHDIR	= $(BUSYBOX_BUILD_DIR)/patch
 MACHINE_BUSYBOX_PATCHDIR ?= $(MACHINEDIR)/busybox
 BUSYBOX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/busybox-download
 BUSYBOX_SOURCE_STAMP	= $(STAMPDIR)/busybox-source
@@ -27,6 +28,14 @@ BUSYBOX_STAMP		= $(BUSYBOX_SOURCE_STAMP) \
 
 PHONY += busybox busybox-download busybox-source busybox-config busybox-patch \
 	busybox-build busybox-install busybox-clean busybox-download-clean
+
+BUSYBOX_MACHINEPATCHDIR = $(shell \
+			   test -d $(MACHINEDIR)/busybox && \
+			   echo "$(MACHINEDIR)/busybox")
+
+ifneq ($(BUSYBOX_MACHINEPATCHDIR),)
+  BUSYBOX_MACHINEPATCHDIR_FILES = $(BUSYBOX_MACHINEPATCHDIR)/*
+endif
 
 busybox: $(BUSYBOX_STAMP)
 
@@ -48,10 +57,21 @@ $(BUSYBOX_SOURCE_STAMP): $(TREE_STAMP) | $(BUSYBOX_DOWNLOAD_STAMP)
 	$(Q) touch $@
 
 busybox-patch: $(BUSYBOX_PATCH_STAMP)
-$(BUSYBOX_PATCH_STAMP): $(BUSYBOX_SRCPATCHDIR)/* $(BUSYBOX_SOURCE_STAMP)
+$(BUSYBOX_PATCH_STAMP): $(BUSYBOX_SRCPATCHDIR)/* $(BUSYBOX_MACHINEPATCHDIR_FILES) $(BUSYBOX_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Patching Busybox ===="
-	$(Q) $(SCRIPTDIR)/apply-patch-series $(BUSYBOX_SRCPATCHDIR)/series $(BUSYBOX_DIR)
+	$(Q) mkdir -p $(BUSYBOX_PATCHDIR)
+	$(Q) cp $(BUSYBOX_SRCPATCHDIR)/* $(BUSYBOX_PATCHDIR)
+ifneq ($(BUSYBOX_MACHINEPATCHDIR),)
+	$(Q) if [ -r $(BUSYBOX_MACHINEPATCHDIR)/series ] ; then \
+		cat $(BUSYBOX_MACHINEPATCHDIR)/series >> $(BUSYBOX_PATCHDIR)/series ; \
+		cp $(BUSYBOX_MACHINEPATCHDIR)/*.patch $(BUSYBOX_PATCHDIR) ; \
+		else \
+		echo "Unable to find machine dependent busybox patch series: $(BUSYBOX_MACHINEPATCHDIR)/series" ; \
+		exit 1 ; \
+		fi
+endif
+	$(Q) $(SCRIPTDIR)/apply-patch-series $(BUSYBOX_PATCHDIR)/series $(BUSYBOX_DIR)
 	$(Q) touch $@
 
 $(BUSYBOX_DIR)/.config: $(BUSYBOX_CONFIG) $(BUSYBOX_PATCH_STAMP)
