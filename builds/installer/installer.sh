@@ -423,7 +423,7 @@ if [ "${onie_platform}" ]; then
         echo "$@" > /dev/console
     }
     # Installation failure message. 
-    trap 'installer_say "Install failed.; cat /var/log/onie.log > /dev/console; installer_say "Install failed. See log messages above for details"; sleep 3; reboot' EXIT
+    trap 'installer_say "Install failed."; cat /var/log/onie.log > /dev/console; installer_say "Install failed. See log messages above for details"; sleep 3; reboot' EXIT
 
     if [ -z "${installer_platform}" ]; then 
         # Our platform identifiers are equal to the ONIE platform identifiers without underscores:
