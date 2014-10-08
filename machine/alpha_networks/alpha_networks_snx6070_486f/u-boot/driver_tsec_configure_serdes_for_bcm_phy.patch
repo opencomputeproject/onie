@@ -1,0 +1,20 @@
+Patch for the TSEC settings to use along with the BCM54616S
+
+diff --git a/drivers/net/tsec.c b/drivers/net/tsec.c
+index f5e314b..bf6ea31 100644
+--- a/drivers/net/tsec.c
++++ b/drivers/net/tsec.c
+@@ -93,8 +93,13 @@ static void tsec_configure_serdes(struct tsec_private *priv)
+ {
+ 	/* Access TBI PHY registers at given TSEC register offset as opposed
+ 	 * to the register offset used for external PHY accesses */
++#ifndef CONFIG_SCX6001 /* Alphanetworks, PHY54616S requires the special modification */
+ 	tsec_local_mdio_write(priv->phyregs_sgmii, in_be32(&priv->regs->tbipa),
+ 			0, TBI_ANA, TBIANA_SETTINGS);
++#else
++	tsec_local_mdio_write(priv->phyregs_sgmii, in_be32(&priv->regs->tbipa),
++			0, TBI_ANA, 0x4001);
++#endif
+ 	tsec_local_mdio_write(priv->phyregs_sgmii, in_be32(&priv->regs->tbipa),
+ 			0, TBI_TBICON, TBICON_CLK_SELECT);
+ 	tsec_local_mdio_write(priv->phyregs_sgmii, in_be32(&priv->regs->tbipa),
