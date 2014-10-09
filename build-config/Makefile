@@ -261,7 +261,7 @@ endif
 #
 
 # Default mirror for packages needed by ONIE
-ONIE_MIRROR	?= http://dev.cumulusnetworks.com/~curt/mirror/onie
+ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 
 include make/crosstool-ng.make
 include make/kernel-download.make

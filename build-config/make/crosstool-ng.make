@@ -46,7 +46,7 @@ CT_NG_COMPONENTS		=	\
 	strace-4.6.tar.xz
 
 # Setup a mirror to use for packages needed by crosstool-NG
-CROSSTOOL_ONIE_MIRROR  ?= https://dev.cumulusnetworks.com/~curt/mirror/onie/crosstool-NG
+CROSSTOOL_ONIE_MIRROR  ?= $(ONIE_MIRROR)/crosstool-NG
 export CROSSTOOL_ONIE_MIRROR
 
 PHONY += crosstool-ng crosstool-ng-download crosstool-ng-source crosstool-ng-patch \
