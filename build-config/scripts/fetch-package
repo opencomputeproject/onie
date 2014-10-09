@@ -48,29 +48,26 @@ shift 3
     exit 1
 }
 
-# File already downloaded
-[ -r "${OUTDIR}/${FILE}" ] && {
+if [ -r "${OUTDIR}/${FILE}" ] ; then
     echo "Using cached ${OUTDIR}/${FILE}"
-    exit 0
-}
-
-download=no
-while [ $# -ge 1 ] ; do
-    URL="$1/$FILE"
-    wget --no-verbose -O "${OUTDIR}/${FILE}" $URL
-    if [ $? -eq 0 ] ; then
-        # stop
-        download=yes
-        break
-    else
-        rm -f "${OUTDIR}/${FILE}"
+else
+    download=no
+    while [ $# -ge 1 ] ; do
+        URL="$1/$FILE"
+        wget --no-verbose -O "${OUTDIR}/${FILE}" $URL
+        if [ $? -eq 0 ] ; then
+            # stop
+            download=yes
+            break
+        else
+            rm -f "${OUTDIR}/${FILE}"
+        fi
+        shift
+    done
+    if [ "$download" != "yes" ] ; then
+        echo "ERROR:  Unable to download $FILE"
+        exit 1
     fi
-    shift
-done
-
-if [ "$download" != "yes" ] ; then
-    echo "ERROR:  Unable to download $FILE"
-    exit 1
 fi
 
 # Verify SHA1
