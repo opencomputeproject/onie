@@ -6,7 +6,7 @@
 # This is a makefile fragment that defines the build of busybox
 #
 
-BUSYBOX_VERSION		= 1.20.0
+BUSYBOX_VERSION		= 1.20.2
 BUSYBOX_TARBALL		= busybox-$(BUSYBOX_VERSION).tar.bz2
 BUSYBOX_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.busybox.net/downloads
 BUSYBOX_BUILD_DIR	= $(MBUILDDIR)/busybox
