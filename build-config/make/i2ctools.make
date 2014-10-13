@@ -30,12 +30,12 @@ PHONY += i2ctools i2ctools-download i2ctools-source i2ctools-patch \
 	 i2ctools-build i2ctools-install i2ctools-clean \
 	 i2ctools-download-clean
 
-I2CTOOLS_MACHINEPATCHDIR = $(shell \
+MACHINE_I2CTOOLS_PATCHDIR = $(shell \
 			   test -d $(MACHINEDIR)/i2ctools && \
 			   echo "$(MACHINEDIR)/i2ctools")
 
-ifneq ($(I2CTOOLS_MACHINEPATCHDIR),)
-  I2CTOOLS_MACHINEPATCHDIR_FILES = $(I2CTOOLS_MACHINEPATCHDIR)/*
+ifneq ($(MACHINE_I2CTOOLS_PATCHDIR),)
+  MACHINE_I2CTOOLS_PATCHDIR_FILES = $(MACHINE_I2CTOOLS_PATCHDIR)/*
 endif
 
 i2ctools: $(I2CTOOLS_STAMP)
@@ -58,7 +58,7 @@ $(I2CTOOLS_SOURCE_STAMP): $(TREE_STAMP) | $(I2CTOOLS_DOWNLOAD_STAMP)
 	$(Q) touch $@
 
 i2ctools-patch: $(I2CTOOLS_PATCH_STAMP)
-$(I2CTOOLS_PATCH_STAMP): $(I2CTOOLS_SRCPATCHDIR)/* $(I2CTOOLS_MACHINEPATCHDIR_FILES) $(I2CTOOLS_SOURCE_STAMP)
+$(I2CTOOLS_PATCH_STAMP): $(I2CTOOLS_SRCPATCHDIR)/* $(MACHINE_I2CTOOLS_PATCHDIR_FILES) $(I2CTOOLS_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Patching i2ctools ===="
 	$(Q) mkdir -p $(I2CTOOLS_DIR)/sys_eeprom
@@ -66,14 +66,13 @@ $(I2CTOOLS_PATCH_STAMP): $(I2CTOOLS_SRCPATCHDIR)/* $(I2CTOOLS_MACHINEPATCHDIR_FI
 	$(Q) cp $(I2CTOOLS_DIR)/eepromer/24cXX.h $(I2CTOOLS_DIR)/sys_eeprom/24cXX.h
 	$(Q) mkdir -p $(I2CTOOLS_PATCHDIR)
 	$(Q) cp $(I2CTOOLS_SRCPATCHDIR)/* $(I2CTOOLS_PATCHDIR)
-ifneq ($(I2CTOOLS_MACHINEPATCHDIR),)
-	$(Q) if [ -r $(I2CTOOLS_MACHINEPATCHDIR)/series ] ; then \
-		cat $(I2CTOOLS_MACHINEPATCHDIR)/series >> $(I2CTOOLS_PATCHDIR)/series ; \
-		cp $(I2CTOOLS_MACHINEPATCHDIR)/*.patch $(I2CTOOLS_PATCHDIR) ; \
-		else \
-		echo "Unable to find machine dependent i2ctools patch series: $(I2CTOOLS_MACHINEPATCHDIR)/series" ; \
-		exit 1 ; \
-		fi
+ifneq ($(MACHINE_I2CTOOLS_PATCHDIR),)
+	$(Q) [ -r $(MACHINE_I2CTOOLS_PATCHDIR)/series ] || \
+		(echo "Unable to find machine dependent i2ctools patch series: $(MACHINE_I2CTOOLS_PATCHDIR)/series" && \
+		exit 1)
+	$(Q) cat $(MACHINE_I2CTOOLS_PATCHDIR)/series >> $(I2CTOOLS_PATCHDIR)/series
+	$(Q) $(SCRIPTDIR)/cp-machine-patches $(I2CTOOLS_PATCHDIR) $(MACHINE_I2CTOOLS_PATCHDIR)/series	\
+		$(MACHINE_I2CTOOLS_PATCHDIR) $(MACHINEROOT)/i2ctools
 endif
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(I2CTOOLS_PATCHDIR)/series $(I2CTOOLS_DIR)
 	$(Q) touch $@
