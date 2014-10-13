@@ -129,7 +129,7 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 		chmod +w $(SYSROOTDIR)/usr/bin/$$(basename $$file) ; \
 	done
 	$(Q) find $(SYSROOTDIR) -path */lib/grub/* -prune -o \( -type f -print0 \) | xargs -0 file | \
-		grep ELF | awk -F':' '{ print $$1 }' | xargs $(CROSSBIN)/$(CROSSPREFIX)strip
+		grep ELF | awk -F':' '{ print $$1 }' | grep -v "/lib/modules/" | xargs $(CROSSBIN)/$(CROSSPREFIX)strip
 	$(Q) rm -rf $(CHECKROOT)
 	$(Q) mkdir -p $(CHECKROOT) && \
 	     $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
