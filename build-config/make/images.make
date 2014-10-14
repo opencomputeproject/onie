@@ -255,7 +255,7 @@ RECOVERY_ISO_IMAGE	= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).iso
 RECOVERY_CONF_DIR	= $(PROJECTDIR)/build-config/recovery
 RECOVERY_SYSROOT	= $(MBUILDDIR)/recovery-sysroot
 RECOVERY_CPIO		= $(MBUILDDIR)/recovery.cpio
-RECOVERY_INITRD		= $(MBUILDDIR)/recovery.initrd
+RECOVERY_INITRD		= $(IMAGEDIR)/recovery-$(ARCH)-$(MACHINE_PREFIX).initrd
 RECOVERY_ISO_SYSROOT	= $(MBUILDDIR)/recovery-sysroot-iso
 PXE_EFI64_GRUB_MODS	= $(MBUILDDIR)/pxe-efi64-grub-modlist
 
