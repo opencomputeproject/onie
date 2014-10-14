@@ -1,0 +1,168 @@
+#!/bin/bash
+
+# Copyright (C) 2014 Mellanox Technologies, Ltd. All rights reserved.
+
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+
+# Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+# Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+# This script is used to add label for network boot.
+# This label will be used in manufacturing MLNX-OS on x86 systems.
+# The script should be run from directory that contains release files: vmlinuz and rootfs.
+# This directory should be in TFTP server path.
+# Network boot (PXE) label must be provided.
+# The script is used during a system production phase.
+#
+
+set -x
+
+DFLT_PXE_FILE=/tftpboot/pxelinux.cfg/default
+DFLT_TFTP_PATH=/tftpboot
+PXE_FILE=
+TFTP_PATH=
+PXE_LABEL=
+FILE_PATH=
+INITRD=@VERSION@.initrd
+VMLINUZ=@VERSION@.vmlinuz
+
+usage()
+{
+	echo "Usage: `basename $0` -l | --label <Label name> [-c | --config <pxe config file>] [-t | --tftp <tftp base dir>] [-h | --help]"
+	echo -e "\t-l or --label <Label name> that will be added to pxe config file"
+	echo -e "\t-c or --config is optional, pxe default file is /tftpboot/pxelinux.cfg/default"
+	echo -e "\t-t or --tftp is optional, tftp server default base dir is /tftpboot"
+	echo -e "\t-h or --help - this output"
+}
+
+# Find path and verify that vmlinuz and rootfs exist
+find_files()
+{
+	FILE_PATH=$( cd "$(dirname "$0")" ; pwd -P )
+	echo "FILE_PATH = $FILE_PATH"
+	if [ ! -e "${FILE_PATH}/${INITRD}" ]; then
+		echo "$FILE_PATH/${INITRD} wasn't found"
+		return 1
+	fi
+	if [ ! -e "${FILE_PATH}/${VMLINUZ}" ]; then
+		echo "$FILE_PATH/${VMLINUZ} wasn't found"
+		return 2
+	fi
+	return 0
+}
+
+# Check that script running directory is in TFTP server path
+check_path()
+{
+	if echo "$FILE_PATH" | grep -q "$TFTP_PATH"; then
+		TFTP_PATH=$TFTP_PATH"/"
+		FILE_PATH=${FILE_PATH#$TFTP_PATH}
+	else
+		echo "$FILE_PATH is not in tftp path $TFTP_PATH"
+		return 1
+	fi
+}
+
+# Check if label already exist. If yes, remove it
+check_label_exist()
+{
+	LINE_NUM=$(cat $PXE_FILE | grep -n $PXE_LABEL | cut -d \: -f 1)
+	if [ -n "${LINE_NUM}" ]; then
+		echo "Label $PXE_LABEL is already exist and will be replaced by new one"
+		LAST_LINE_NUM=$(( ${LINE_NUM} + 3 ))
+		sudo sh -c "sed -i '"${LINE_NUM}","${LAST_LINE_NUM}"d' $PXE_FILE"
+	fi
+}
+
+update_pxe_label()
+{
+	sudo sh -c "echo \"
+LABEL ${PXE_LABEL}_rescue
+        kernel ${FILE_PATH}/${VMLINUZ}
+        append initrd=${FILE_PATH}/${INITRD} panic=10 noexec=off console=ttyS0,115200n8 ramdisk_size=1048576 root=/dev/ram boot_reason=rescue boot_env=recovery acpi_enforce_resources=no nmi_watchdog=0
+
+LABEL ${PXE_LABEL}
+        kernel ${FILE_PATH}/${VMLINUZ}
+        append initrd=${FILE_PATH}/recovery-x86_64-${INITRD} panic=10 noexec=off console=ttyS0,115200n8 ramdisk_size=1048576 root=/dev/ram boot_reason=embed install_url=file:///lib/onie/onie-updater boot_env=recovery acpi_enforce_resources=no nmi_watchdog=0
+\" >> $PXE_FILE"
+}
+
+
+OPTIONS=`getopt -o hl:c:t: -l help,label:,config:,tftp: -- "$@"`
+
+eval set -- "$OPTIONS"
+
+while true; do
+	case "$1" in
+	-h|--help) usage; exit 0;;
+	-l|--label) PXE_LABEL=$2; shift 2;;
+	-c|--config)
+		case "$2" in
+			"") PXE_FILE=$DFLT_PXE_FILE; shift 2;;
+			*) PXE_FILE=$2 ; shift 2;;
+		esac ;;
+	-t|--tftp)
+		case "$2" in
+			"") TFTP_PATH=$DFLT_TFTP_PATH; shift 2;;
+			*) TFTP_PATH=$2 ; shift 2;;
+		esac ;;
+	--) shift; break;;
+	*) usage; exit 1;;
+	esac
+done
+
+if [ -z "${PXE_LABEL}" ]; then
+	echo -e "Label name must be provided"
+	usage
+	exit 2
+fi
+
+if [ -z "${PXE_FILE}" ]; then
+	PXE_FILE=$DFLT_PXE_FILE
+fi
+
+if [ -z "${TFTP_PATH}" ]; then
+	TFTP_PATH=$DFLT_TFTP_PATH
+fi
+
+echo "PXE_FILE = $PXE_FILE"
+echo "PXE_LABEL = $PXE_LABEL"
+
+find_files
+rc=$?
+if [ $rc -ne 0 ]; then
+	echo "$0 failed"
+	exit 3
+fi
+
+check_path
+rc=$?
+if [ $rc -ne 0 ]; then
+	echo "$0 failed"
+	exit 3
+fi
+
+check_label_exist
+
+update_pxe_label
+
+echo "Network boot label $PXE_LABEL has been added to $PXE_FILE"
+
+exit 0
+
