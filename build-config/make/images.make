@@ -34,7 +34,7 @@ MACHINE_CONF	 = $(MBUILDDIR)/machine.conf
 INSTALLER_DIR	= $(abspath ../installer)
 
 # List the packages to install
-PACKAGES_INSTALL_STAMPS = \
+PACKAGES_INSTALL_STAMPS += \
 	$(ZLIB_INSTALL_STAMP) \
 	$(BUSYBOX_INSTALL_STAMP) \
 	$(MTDUTILS_INSTALL_STAMP) \
