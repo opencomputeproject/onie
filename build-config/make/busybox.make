@@ -1,5 +1,12 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
+#  Copyright (C) 2014 Nikolay Shopik <shopik@inblock.ru>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+#
 #
 #-------------------------------------------------------------------------------
 #

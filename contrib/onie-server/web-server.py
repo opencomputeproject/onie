@@ -1,3 +1,8 @@
+
+#  Copyright (C) 2013 Daniel Walton <dwalton76@gmail.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 import SimpleHTTPServer
 import SocketServer
 import sys

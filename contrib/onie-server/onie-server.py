@@ -1,4 +1,9 @@
 
+#  Copyright (C) 2013 Daniel Walton <dwalton76@gmail.com>
+#  Copyright (C) 2014 Jonathan Toppins <jtoppins@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 # This program is a DHCP server, web server and HTTP proxy all rolled into one.
 # The goal of this program is help boot the OS on a switch that uses ONIE to
 # install its operating system.  Once the user has installed python on their

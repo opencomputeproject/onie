@@ -1,5 +1,9 @@
 #!/bin/sh
 
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 ##
 ## ONIE Update Installer
 ## DO NOT remove the following line:

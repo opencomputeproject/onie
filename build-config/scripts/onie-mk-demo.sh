@@ -1,5 +1,9 @@
 #!/bin/sh
 
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 arch=$1
 machine=$2
 platform=$3

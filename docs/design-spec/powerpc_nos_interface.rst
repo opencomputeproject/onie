@@ -1,3 +1,7 @@
+.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+   Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
+   SPDX-License-Identifier:     GPL-2.0
+
 *************************
 PowerPC Interface Details
 *************************

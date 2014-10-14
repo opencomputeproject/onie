@@ -1,4 +1,8 @@
 
+#  Copyright (C) 2013 Daniel Walton <dwalton76@gmail.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 # This is a modified version of the following DHCP server
 # https://github.com/psychomario/PyPXE
 

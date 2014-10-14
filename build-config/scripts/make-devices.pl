@@ -1,6 +1,9 @@
 #!/usr/bin/perl
 ################################################################################
 #
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
 #
 # This script builds a linux root file system.  It is a component of the build-out
 # system that also builds a cross-compilation tool chain and linux kernel.

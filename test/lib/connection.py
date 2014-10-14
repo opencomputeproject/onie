@@ -2,6 +2,10 @@
 # DUT Connection classes
 #
 
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 '''
 Defines a Connection object that the test fixture uses to communicate
 with a DUT.

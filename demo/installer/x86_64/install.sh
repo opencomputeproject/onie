@@ -1,5 +1,10 @@
 #!/bin/sh
 
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 set -e
 
 cd $(dirname $0)

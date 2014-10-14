@@ -1,5 +1,9 @@
 #!/bin/sh
 
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 MEM=1024
 DISK="$HOME/kvm/onie-x86-demo.img"
 
