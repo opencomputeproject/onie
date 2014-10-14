@@ -1,5 +1,9 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
 #
 #-------------------------------------------------------------------------------
 #

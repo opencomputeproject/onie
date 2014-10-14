@@ -1,5 +1,9 @@
 #!/bin/sh
 
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 #
 # Create a U-Boot FIT image (itb)
 #

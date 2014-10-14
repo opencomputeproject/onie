@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 #
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+#
 # This file is execfile()d with the current directory set to its containing dir.
 #
 # Note that not all possible configuration values are present in this

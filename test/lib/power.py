@@ -2,6 +2,10 @@
 # DUT Power Control classes
 #
 
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 '''
 Defines a 'PowerControl' object that a the test fixture uses to power cycle
 the DUT.

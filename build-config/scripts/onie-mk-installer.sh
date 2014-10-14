@@ -1,5 +1,11 @@
 #!/bin/sh
 
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 #
 # Script to create an ONIE binary installer, suitable for downloading
 # to a running ONIE system during "update" mode.

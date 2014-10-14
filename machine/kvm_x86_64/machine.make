@@ -1,5 +1,11 @@
 # KVM x86_64 Virtual Machin
 
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
+
 ONIE_ARCH ?= x86_64
 
 VENDOR_REV ?= 0

@@ -1,5 +1,9 @@
 #!/bin/sh
 
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 cmd="$1"
 
 PATH=/usr/bin:/usr/sbin:/bin:/sbin

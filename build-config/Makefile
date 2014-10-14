@@ -1,6 +1,14 @@
 #-------------------------------------------------------------------------------
-#
 #>
+#
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 Carlos Cardenas <cardenas12@gmail.com>
+#  Copyright (C) 2014 Carlos Cardenas <cardenas12@gmail.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+#
 # Builds the Open Network Install Environment install images
 #
 # The image contains:

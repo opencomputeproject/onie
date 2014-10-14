@@ -2,6 +2,10 @@
 # Base Test case class
 #
 
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 import unittest
 import logging
 from dut import *
