@@ -15,7 +15,7 @@ BUSYBOX_CONFIG		= conf/busybox.config
 
 BUSYBOX_SRCPATCHDIR	= $(PATCHDIR)/busybox
 BUSYBOX_PATCHDIR	= $(BUSYBOX_BUILD_DIR)/patch
-MACHINE_BUSYBOX_PATCHDIR ?= $(MACHINEDIR)/busybox
+MACHINE_BUSYBOX_CONFDIR ?= $(MACHINEDIR)/busybox/conf
 BUSYBOX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/busybox-download
 BUSYBOX_SOURCE_STAMP	= $(STAMPDIR)/busybox-source
 BUSYBOX_PATCH_STAMP	= $(STAMPDIR)/busybox-patch
@@ -77,7 +77,7 @@ endif
 $(BUSYBOX_DIR)/.config: $(BUSYBOX_CONFIG) $(BUSYBOX_PATCH_STAMP)
 	$(Q) echo "==== Copying $(BUSYBOX_CONFIG) to $(BUSYBOX_DIR)/.config ===="
 	$(Q) cp -v $< $@
-	$(Q) $(SCRIPTDIR)/apply-config-patch $@ $(MACHINE_BUSYBOX_PATCHDIR)/config
+	$(Q) $(SCRIPTDIR)/apply-config-patch $@ $(MACHINE_BUSYBOX_CONFDIR)/config
 
 busybox-config: $(BUSYBOX_DIR)/.config
 	PATH='$(CROSSBIN):$(PATH)' \
