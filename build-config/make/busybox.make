@@ -37,6 +37,10 @@ ifneq ($(MACHINE_BUSYBOX_PATCHDIR),)
   MACHINE_BUSYBOX_PATCHDIR_FILES = $(MACHINE_BUSYBOX_PATCHDIR)/*
 endif
 
+MACHINE_BUSYBOX_CONFIG_FILE = $(shell \
+               test -f $(MACHINE_BUSYBOX_CONFDIR)/config && \
+               echo "$(MACHINE_BUSYBOX_CONFDIR)/config")
+
 busybox: $(BUSYBOX_STAMP)
 
 DOWNLOAD += $(BUSYBOX_DOWNLOAD_STAMP)
@@ -73,10 +77,10 @@ endif
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(BUSYBOX_PATCHDIR)/series $(BUSYBOX_DIR)
 	$(Q) touch $@
 
-$(BUSYBOX_DIR)/.config: $(BUSYBOX_CONFIG) $(BUSYBOX_PATCH_STAMP)
+$(BUSYBOX_DIR)/.config: $(BUSYBOX_CONFIG) $(MACHINE_BUSYBOX_CONFIG_FILE) $(BUSYBOX_PATCH_STAMP)
 	$(Q) echo "==== Copying $(BUSYBOX_CONFIG) to $(BUSYBOX_DIR)/.config ===="
 	$(Q) cp -v $< $@
-	$(Q) $(SCRIPTDIR)/apply-config-patch $@ $(MACHINE_BUSYBOX_CONFDIR)/config
+	$(Q) $(SCRIPTDIR)/apply-config-patch $@ $(MACHINE_BUSYBOX_CONFIG_FILE)
 
 busybox-config: $(BUSYBOX_DIR)/.config
 	PATH='$(CROSSBIN):$(PATH)' \
