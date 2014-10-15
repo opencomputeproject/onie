@@ -29,12 +29,12 @@ BUSYBOX_STAMP		= $(BUSYBOX_SOURCE_STAMP) \
 PHONY += busybox busybox-download busybox-source busybox-config busybox-patch \
 	busybox-build busybox-install busybox-clean busybox-download-clean
 
-BUSYBOX_MACHINEPATCHDIR = $(shell \
-			   test -d $(MACHINEDIR)/busybox && \
-			   echo "$(MACHINEDIR)/busybox")
+MACHINE_BUSYBOX_PATCHDIR = $(shell \
+			   test -d $(MACHINEDIR)/busybox/patches && \
+			   echo "$(MACHINEDIR)/busybox/patches")
 
-ifneq ($(BUSYBOX_MACHINEPATCHDIR),)
-  BUSYBOX_MACHINEPATCHDIR_FILES = $(BUSYBOX_MACHINEPATCHDIR)/*
+ifneq ($(MACHINE_BUSYBOX_PATCHDIR),)
+  MACHINE_BUSYBOX_PATCHDIR_FILES = $(MACHINE_BUSYBOX_PATCHDIR)/*
 endif
 
 busybox: $(BUSYBOX_STAMP)
@@ -57,19 +57,18 @@ $(BUSYBOX_SOURCE_STAMP): $(TREE_STAMP) | $(BUSYBOX_DOWNLOAD_STAMP)
 	$(Q) touch $@
 
 busybox-patch: $(BUSYBOX_PATCH_STAMP)
-$(BUSYBOX_PATCH_STAMP): $(BUSYBOX_SRCPATCHDIR)/* $(BUSYBOX_MACHINEPATCHDIR_FILES) $(BUSYBOX_SOURCE_STAMP)
+$(BUSYBOX_PATCH_STAMP): $(BUSYBOX_SRCPATCHDIR)/* $(MACHINE_BUSYBOX_PATCHDIR_FILES) $(BUSYBOX_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Patching Busybox ===="
 	$(Q) mkdir -p $(BUSYBOX_PATCHDIR)
 	$(Q) cp $(BUSYBOX_SRCPATCHDIR)/* $(BUSYBOX_PATCHDIR)
-ifneq ($(BUSYBOX_MACHINEPATCHDIR),)
-	$(Q) if [ -r $(BUSYBOX_MACHINEPATCHDIR)/series ] ; then \
-		cat $(BUSYBOX_MACHINEPATCHDIR)/series >> $(BUSYBOX_PATCHDIR)/series ; \
-		cp $(BUSYBOX_MACHINEPATCHDIR)/*.patch $(BUSYBOX_PATCHDIR) ; \
-		else \
-		echo "Unable to find machine dependent busybox patch series: $(BUSYBOX_MACHINEPATCHDIR)/series" ; \
-		exit 1 ; \
-		fi
+ifneq ($(MACHINE_BUSYBOX_PATCHDIR),)
+	$(Q) [ -r $(MACHINE_BUSYBOX_PATCHDIR)/series ] || \
+		(echo "Unable to find machine dependent busybox patch series: $(MACHINE_BUSYBOX_PATCHDIR)/series" && \
+		exit 1)
+	$(Q) cat $(MACHINE_BUSYBOX_PATCHDIR)/series >> $(BUSYBOX_PATCHDIR)/series
+	$(Q) $(SCRIPTDIR)/cp-machine-patches $(BUSYBOX_PATCHDIR) $(MACHINE_BUSYBOX_PATCHDIR)/series	\
+		$(MACHINE_BUSYBOX_PATCHDIR) $(MACHINEROOT)/busybox
 endif
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(BUSYBOX_PATCHDIR)/series $(BUSYBOX_DIR)
 	$(Q) touch $@
