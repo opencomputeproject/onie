@@ -1,5 +1,11 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+#
 #  x86 Architecture and Toolchain Setup
 #
 

@@ -2,6 +2,10 @@
 # DUT Base class
 #
 
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 '''
 Defines a base "Device Under Test" object
 '''

@@ -2,6 +2,10 @@
 # Common U-Boot Tests
 #
 
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 try:
     import sys
     import os

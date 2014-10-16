@@ -1,5 +1,9 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+#
 #-------------------------------------------------------------------------------
 #
 # makefile fragment that defines the build of the onie cross-compiled linux kernel

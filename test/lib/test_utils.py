@@ -2,6 +2,10 @@
 # Collection of useful test utility methods
 #
 
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 #-------------------------------------------------------------------------------
 #
 # Imports

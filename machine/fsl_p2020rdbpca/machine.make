@@ -1,5 +1,9 @@
 # Makefile fragment for FSL P2020RDB
 
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 ONIE_ARCH ?= powerpc-softfloat
 
 VENDOR_REV ?= ONIE

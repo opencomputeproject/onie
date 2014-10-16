@@ -1,3 +1,8 @@
+.. Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+   Copyright (C) 2013-2014 Pete Bratach <pete@cumulusnetworks.com>
+   Copyright (C) 2013 Scott Emery <scotte@cumulusnetworks.com>
+   SPDX-License-Identifier:     GPL-2.0
+
 ***
 FAQ
 ***

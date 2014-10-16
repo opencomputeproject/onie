@@ -4,6 +4,10 @@
 # Defines a DUT object for the FSL P2020_RDB-PCA Board
 #
 
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
 '''
 FSL P2020_RDB-PCA DUT Class
 '''
