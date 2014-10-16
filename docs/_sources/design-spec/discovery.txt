@@ -1,3 +1,7 @@
+.. Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+   Copyright (C) 2013-2014 Pete Bratach <pete@cumulusnetworks.com>
+   SPDX-License-Identifier:     GPL-2.0
+
 *****************************
 Image Discovery and Execution
 *****************************
@@ -28,6 +32,9 @@ At runtime, ONIE provides the ``onie-sysinfo`` command, which can be
 used to dump this information and more.  See the
 :ref:`cmd_onie_sysinfo` section for more about the ``onie-sysinfo``
 command.
+
+The platform name must remain consistent across all ONIE modes as
+described in :ref:`nos_interface`.
 
 .. _installer_discovery:
 

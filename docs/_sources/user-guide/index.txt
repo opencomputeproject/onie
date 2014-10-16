@@ -1,3 +1,7 @@
+.. Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+   Copyright (C) 2013 Pete Bratach <pete@cumulusnetworks.com>
+   SPDX-License-Identifier:     GPL-2.0
+
 .. _quick_start_guide:
 
 ************************************
@@ -22,11 +26,35 @@ and configure these options.
   hypothetical PowerPC-based switch, called **MACHINE**, manufactured by a
   hypothetical hardware manufacturer, called **VENDOR**.
 
-Serving the NOS Installer Image
-===============================
+Installing using a USB thumb drive
+==================================
 
-For all installation scenarios, ONIE expects the NOS installer image to
-be available on the network via HTTP.  This guide assumes the
+To install via USB simply copy the installer image to the *root*
+directory of the USB thumb drive, using the file name
+``onie-installer``.
+
+For the purposes of this guide, assume the the NOS installer image is
+named ``ACME_XYZ1234_PowerPC_Installer.bin``.  Let's assume the USB
+drive shows up at /dev/sdd1 under Linux (it might be different on your
+system and OS).
+
+Copy the installer file to the root of the USB thumb drive like this::
+
+  linux:~$ sudo mkdir /mnt/usb
+  linux:~$ sudo mount /dev/sdd1 /mnt/usb
+  linux:~$ sudo cp ACME_XYZ1234_PowerPC_Installer.bin /mnt/usb
+  linux:~$ sudo umount /mnt/usb
+
+Now remove the USB drive from your computer and insert it into the USB
+port on the front (or rear) panel of your ONIE enabled device.  Power
+on the device and ONIE will discover the ``onie-installer`` file on
+the root of the USB drive and execute it.
+
+Installing over the Network
+===========================
+
+For all network installation scenarios, ONIE expects the NOS installer
+image to be available on the network via HTTP.  This guide assumes the
 following hostname and IPv4 address of the Web server::
 
   hostname:  image-server
