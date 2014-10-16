@@ -10,6 +10,7 @@ Open Network Install Environment Documentation
    faq/index
    overview/index
    user-guide/index
+   cli/index
    design-spec/index
    developers/index
    demo_os/demo_os
