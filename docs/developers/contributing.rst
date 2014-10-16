@@ -59,13 +59,18 @@ some general comments regarding patch submission:
 1. Each patch should only contain *one* logical change.  A patch
    should not contain multiple, unrelated changes.
 
-2. Each patch commit message must have the following:
+2. Each patch must have the following:
 
-  - a short one line summary
+  - The author must be a real person with a valid email address.  No
+    anonymous github user IDs.
 
-  - what problem the patch solves (why do we need the patch)
+  - A short one line summary.  When the patch is for a specific
+    machine include the machine name or company as a prefix to the
+    summary, e.g.  "machine_xyz_123: updated installer config".
 
-  - how you tested the patch
+  - What problem the patch solves (why do we need the patch).
+
+  - How you tested the patch.
 
 3. For sending patches to the mailing list please send the output of
    `git format-patch
@@ -75,9 +80,10 @@ some general comments regarding patch submission:
 4. Alternatively you can use GitHub `git pull requests
    <https://help.github.com/articles/using-pull-requests>`_ for
    upstreaming your patches.  The ONIE project is following the *fork
-   and pull* model.
+   and pull* model.  Note: The author must be a real person with a
+   valid email address.  No anonymous github user IDs.
 
-Pull request can be easier to use then sending patches via email, as
+Pull requests can be easier to use then sending patches via email, as
 some email client mangle patch attachments.
 
 .. _creating_stg_patches:
