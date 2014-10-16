@@ -29,6 +29,9 @@ used to dump this information and more.  See the
 :ref:`cmd_onie_sysinfo` section for more about the ``onie-sysinfo``
 command.
 
+The platform name must remain consistent across all ONIE modes as
+described in :ref:`nos_interface`.
+
 .. _installer_discovery:
 
 Installer Discovery Methods
