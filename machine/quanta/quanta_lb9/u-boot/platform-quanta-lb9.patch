@@ -1424,18 +1424,33 @@ index e4b0d44..27ada52 100644
  MPC8544DS                    powerpc     mpc85xx     mpc8544ds           freescale
  MPC8548CDS                   powerpc     mpc85xx     mpc8548cds          freescale      -           MPC8548CDS
 diff --git a/common/cmd_ide.c b/common/cmd_ide.c
-index 0105bdb..21b9697 100644
+index 0105bdb..ed240c7 100644
 --- a/common/cmd_ide.c
 +++ b/common/cmd_ide.c
-@@ -496,7 +496,7 @@ void ide_output_data(int dev, const ulong *sect_buf, int words)
- 	__attribute__ ((weak, alias("__ide_output_data")));
+@@ -679,7 +679,11 @@ static void ide_ident(block_dev_desc_t *dev_desc)
+ 		return;
+ #endif
  
- /* We only need to swap data if we are running on a big endian cpu. */
--#if defined(__LITTLE_ENDIAN)
-+#if defined(__LITTLE_ENDIAN) || defined(CONFIG_IDE_SWAP_IO)
- void __ide_input_swap_data(int dev, ulong *sect_buf, int words)
- {
- 	ide_input_data(dev, sect_buf, words);
++#if defined(CONFIG_QUANTA_LB9)
++	ide_input_data(device, (ulong *)&iop, ATA_SECTORWORDS);
++#else
+ 	ide_input_swap_data(device, (ulong *)&iop, ATA_SECTORWORDS);
++#endif
+ 
+ 	ident_cpy((unsigned char *) dev_desc->revision, iop.fw_rev,
+ 		  sizeof(dev_desc->revision));
+@@ -936,7 +940,11 @@ ulong ide_read(int device, ulong blknr, lbaint_t blkcnt, void *buffer)
+ 			break;
+ 		}
+ 
++#if defined(CONFIG_QUANTA_LB9)
++		ide_input_swap_data(device, buffer, ATA_SECTORWORDS);
++#else
+ 		ide_input_data(device, buffer, ATA_SECTORWORDS);
++#endif
+ 		(void) ide_inb(device, ATA_STATUS);	/* clear IRQ */
+ 
+ 		++n;
 diff --git a/config.mk b/config.mk
 index b7cd481..12c3afd 100644
 --- a/config.mk
@@ -1451,10 +1466,10 @@ index b7cd481..12c3afd 100644
  OBJCFLAGS += --gap-fill=0xff
 diff --git a/include/configs/QUANTA_LB9.h b/include/configs/QUANTA_LB9.h
 new file mode 100644
-index 0000000..25cae8e
+index 0000000..5a57323
 --- /dev/null
 +++ b/include/configs/QUANTA_LB9.h
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,433 @@
 +/*
 + * Copyright 2004, 2011 Freescale Semiconductor.
 + *
@@ -1844,7 +1859,6 @@ index 0000000..25cae8e
 +#define CONFIG_SYS_ATA_REG_OFFSET       3 /* Offset for normal register accesses  */
 +#define CONFIG_SYS_ATA_ALT_OFFSET       0x10000 /* Offset for alternate registers       */
 +#define CONFIG_SYS_ATA_STRIDE           4
-+#define CONFIG_IDE_SWAP_IO
 +#endif
 +
 +/*
