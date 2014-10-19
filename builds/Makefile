@@ -146,6 +146,7 @@ PARALLEL_3 := $(shell $(ONLPKG) --list platform-powerpc) loader-i386:i386
 $(foreach c,$(PARALLEL_3),$(eval $(call cbuild,$(c),$(PARALLEL_2))))
 
 
+serial0: $(subst :,.,$(SERIAL_0))
 parallel0: $(subst :,.,$(PARALLEL_0))
 parallel1: $(subst :,.,$(PARALLEL_1))
 parallel2: $(subst :,.,$(PARALLEL_2))
