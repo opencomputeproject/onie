@@ -91,6 +91,7 @@ rm -rf $ONL_ROOT/builds/BUILDS
 #
 # Optimized parallel build setups
 #
+(onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache serial0 ) 
 (onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel0 -j $JOBS) || true
 (onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel1 -j $JOBS) || true
 (onl-chws make -C /build/onl/builds CCACHE_DIR=/mnt/cache/ccache parallel2 -j $JOBS) || true

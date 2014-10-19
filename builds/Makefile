@@ -124,6 +124,11 @@ $(subst :,.,$(1)): $(subst :,.,$(2))
 	$(ONL)/tools/onlpkg.py $(1) --build
 endef
 
+
+# Hack to ensure this is build first; build SERIAL_$i before PARALLE_$i
+SERIAL_0 := vendor-config-onl:all
+$(foreach c,$(SERIAL_0),$(eval $(call cbuild,$(c),submodules_init)))
+
 # All Platform Config Packages
 PARALLEL_0 := $(shell $(ONLPKG) --list platform-config-)
 $(foreach c,$(PARALLEL_0),$(eval $(call cbuild,$(c),submodules_init)))
