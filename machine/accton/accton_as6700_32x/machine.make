@@ -8,11 +8,13 @@
 
 ONIE_ARCH ?= powerpc-softfloat
 
-VENDOR_REV ?= 0
+VENDOR_REV ?= r01c
 
 # Translate hardware revision to ONIE hardware revision
-ifeq ($(VENDOR_REV),0)
+ifeq ($(VENDOR_REV),r01b)
   MACHINE_REV = 0
+else ifeq ($(VENDOR_REV),r01c)
+  MACHINE_REV = 1
 else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
@@ -21,8 +23,7 @@ endif
 EXT3_4_ENABLE = yes
 UBOOT_PBL_ENABLE = yes
 
-UBOOT_MACHINE = AS6700_32X
-KERNEL_DTB = as6700_32x.dtb
+KERNEL_DTB = $(MACHINE_PREFIX).dtb
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
