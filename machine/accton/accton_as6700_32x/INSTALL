@@ -2,22 +2,41 @@
 Installing ONIE on Accton AS6700_32X
 ====================================
 
+Accton AS6700_32X has several revisions such as ``r01b`` and ``r01c``.  The
+``r0`` ONIE images are suitable for the machines till ``r01b`` revision.  And
+the ``r1`` ONIE images are suitable for the ``r01c`` machine.
+
 Cross-Compiling ONIE
 ====================
+
+Compiling the r0 ONIE
+---------------------
 
 Change directories to ``build-config`` to compile ONIE.
 
 To compile ONIE first change directories to ``build-config`` and then
-type ``"make MACHINEROOT=../machine/accton MACHINE=accton_as6700_32x all"``.
+type ``"make MACHINEROOT=../machine/accton MACHINE=accton_as6700_32x VENDOR_REV=r01b all"``.
 For example::
 
   $ cd build-config
-  $ make -j4 MACHINEROOT=../machine/accton MACHINE=accton_as6700_32x all
+  $ make -j4 MACHINEROOT=../machine/accton MACHINE=accton_as6700_32x VENDOR_REV=r01b all
 
 When complete, the ONIE binaries are located in
 ``build/images``::
 
   -rw-r--r-- 3604480 May  7 11:38 onie-accton_as6700_32x-r0.bin
+
+Compiling the r1 ONIE
+---------------------
+
+To compile the ``r1`` ONIE type
+``"make MACHINEROOT=../machine/accton MACHINE=accton_as6700_32x VENDOR_REV=r01c all"``.
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r-- 3604480 May  7 11:38 onie-accton_as6700_32x-r1.bin
+
 
 Installing the ONIE binaries
 ============================
@@ -28,14 +47,25 @@ Step 1 -- Put the ONIE files on a TFTP server
 The following directions assume the files are on the root of the TFTP
 server.
 
-Step 2 -- Install ONIE kernel (onie-accton_as6700_32x-r0.bin)
------------------------------------------------
+Step 2 -- Install ONIE kernel
+-----------------------------
 
-Copying the image down using TFTP and flash to the NOR flash::
+Copying the image (onie-accton_as6700_32x-r0.bin) down using TFTP and flash to
+the NOR flash on the machines till ``r01b`` revision::
+
+  => setenv q1start 0x00130000
+  => setenv q1sz.b 0x800000
+  => tftp onie-accton_as6700_32x-r0.bin
+  => sf probe
+  => sf erase $q1start ${q1sz.b}
+  => sf write $fileaddr $q1start ${q1sz.b}
+
+For the ``r01c`` machine, it has to assign another address to ``q1start`` to
+flash the image (onie-accton_as6700_32x-r1.bin) to the NOR flash::
 
   => setenv q1start 0x001c0000
   => setenv q1sz.b 0x800000
-  => tftp onie-accton_as6700_32x-r0.bin
+  => tftp onie-accton_as6700_32x-r1.bin
   => sf probe
   => sf erase $q1start ${q1sz.b}
   => sf write $fileaddr $q1start ${q1sz.b}
