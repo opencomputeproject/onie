@@ -126,7 +126,7 @@ endef
 
 
 # Hack to ensure this is build first; build SERIAL_$i before PARALLE_$i
-SERIAL_0 := vendor-config-onl:all
+SERIAL_0 := vendor-config-onl:all vendor-config-accton:all vendor-config-quanta:all
 $(foreach c,$(SERIAL_0),$(eval $(call cbuild,$(c),submodules_init)))
 
 # All Platform Config Packages
