@@ -135,8 +135,9 @@ config_ethmgmt_fallback()
 
 }
 
-# Check if the specified interface is operationally "up".  Try for 5
-# seconds and then give up.
+# Check the operational state of the specified interface before trying
+# DHCP.  From linux/Documentation/networking/operstates.txt, the
+# appropriate states are "up" and "unknown" for DHCP.
 check_link_up()
 {
     local intf=$1
@@ -145,7 +146,8 @@ check_link_up()
     _log_info_msg "Info: ${intf}:  Checking link... "
     local i=0
     [ -r $operstate ] && while [ $i -lt 100 ] ; do
-        if [ "$(cat $operstate)" = "up" ] ; then
+        intf_operstate="$(cat $operstate)"
+        if [ "$intf_operstate" = "up" -o "$intf_operstate" = "unknown" ] ; then
             _log_info_msg "up.\n"
             return 0
         fi
