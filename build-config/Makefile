@@ -133,6 +133,12 @@ MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
 MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
+# Do not pass the MACHINE variable to sub-makes or to the environment.
+# Various sub-projects also define and use a variable called MACHINE
+# for a completely different purpose.
+unexport MACHINE
+MAKEOVERRIDES := $(filter-out MACHINE=%,$(MAKEOVERRIDES))
+
 #-------------------------------------------------------------------------------
 #
 #  machine build tree
