@@ -413,10 +413,10 @@ index 0000000..23f7c2c
 +#endif /* _LINUX_I2C_DEV_H */
 diff --git a/include/onie_tlvinfo.h b/include/onie_tlvinfo.h
 new file mode 100644
-index 0000000..958c8ea
+index 0000000..52e7cb9
 --- /dev/null
 +++ b/include/onie_tlvinfo.h
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,170 @@
 +/*
 + *  The Definition of the TlvInfo EEPROM format can be found at onie.org or
 + *  github.com/onie
@@ -553,7 +553,6 @@ index 0000000..958c8ea
 + * SYS_EEPROM_I2C_DEVICE: i2c-bus
 + * SYS_EEPROM_I2C_ADDR: address on the bus
 + * SYS_EEPROM_MTD_DEVICE: MTD device name of the eeprom
-+ * SYS_EEPROM_ERASE_SIZE: erase size of the eeprom
 + * SYS_EEPROM_MAX_SIZE: Total size of the eeprom
 + * SYS_EEPROM_OFFSET: offset from where the ONIE header starts
 + */
@@ -561,7 +560,6 @@ index 0000000..958c8ea
 +#define SYS_EEPROM_I2C_DEVICE CONFIG_SYS_EEPROM_I2C_DEVICE
 +#define SYS_EEPROM_I2C_ADDR   CONFIG_SYS_EEPROM_I2C_ADDR
 +#define SYS_EEPROM_MTD_DEVICE CONFIG_SYS_EEPROM_MTD_DEVICE
-+#define SYS_EEPROM_ERASE_SIZE CONFIG_SYS_EEPROM_ERASE_SIZE
 +#define SYS_EEPROM_MAX_SIZE   CONFIG_SYS_EEPROM_MAX_SIZE
 +#define SYS_EEPROM_OFFSET     CONFIG_SYS_EEPROM_OFFSET
 +
@@ -572,12 +570,6 @@ index 0000000..958c8ea
 +#ifdef CONFIG_SYS_EEPROM_DEVICE_I2C
 +  #if CONFIG_SYS_EEPROM_I2C_ADDR == 0
 +    #error CONFIG_SYS_EEPROM_I2C_ADDR not specified!
-+  #endif
-+#endif
-+
-+#ifdef CONFIG_SYS_EEPROM_DEVICE_MTD
-+  #if CONFIG_SYS_EEPROM_ERASE_SIZE == 0
-+    #error CONFIG_SYS_EEPROM_ERASE_SIZE not specified!
 +  #endif
 +#endif
 +
@@ -792,10 +784,10 @@ index 0000000..b448761
 +	}
 +}
 diff --git a/miscutils/Config.src b/miscutils/Config.src
-index 4a1928d..cf048af 100644
+index 4a1928d..90d0d97 100644
 --- a/miscutils/Config.src
 +++ b/miscutils/Config.src
-@@ -625,4 +625,82 @@ config WATCHDOG
+@@ -625,4 +625,75 @@ config WATCHDOG
  	  certain amount of time, the watchdog device assumes the system has
  	  hung, and will cause the hardware to reboot.
  
@@ -843,13 +835,6 @@ index 4a1928d..cf048af 100644
 +	depends on SYS_EEPROM_DEVICE_MTD
 +	help
 +	  MTD device name of the eeprom. e.g., /dev/mtd-hw-info.
-+
-+config SYS_EEPROM_ERASE_SIZE
-+	hex "erase size in hexadecimal"
-+	default 0
-+	depends on SYS_EEPROM_DEVICE_MTD
-+	help
-+	  Erase size of the eeprom. e.g., 0x20000.
 +
 +config SYS_EEPROM_OFFSET
 +	int "offset"
@@ -1898,10 +1883,10 @@ index 0000000..0927abc
 +}
 diff --git a/miscutils/sys_eeprom_mtd.c b/miscutils/sys_eeprom_mtd.c
 new file mode 100644
-index 0000000..a33b1b0
+index 0000000..119d77c
 --- /dev/null
 +++ b/miscutils/sys_eeprom_mtd.c
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,126 @@
 +#include "libbb.h"
 +#include "onie_tlvinfo.h"
 +#include "sys_eeprom.h"
@@ -1994,7 +1979,10 @@ index 0000000..a33b1b0
 +        return -1;
 +    }
 +
-+    erase.length = SYS_EEPROM_ERASE_SIZE;
++    /*
++     * erase entire sys_eeprom
++     */
++    erase.length = mtdinfo.size;
 +    erase.start = 0;
 +    ioctl (fd, MEMUNLOCK, &erase);
 +
