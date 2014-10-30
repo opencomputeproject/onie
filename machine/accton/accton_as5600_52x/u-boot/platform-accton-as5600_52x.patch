@@ -36,16 +36,10 @@ index c3ef199..456039a 100644
  
  void get_sys_info (sys_info_t * sysInfo)
 diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
-index 5595329..6a7bf4b 100644
+index 5595329..384a0ef 100644
 --- a/arch/powerpc/lib/board.c
 +++ b/arch/powerpc/lib/board.c
-@@ -851,15 +851,10 @@ void board_init_r(gd_t *id, ulong dest_addr)
- 	sc3_read_eeprom();
- #endif
- 
--#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET) || \
--    defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
-+#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET)
+@@ -856,10 +856,6 @@ void board_init_r(gd_t *id, ulong dest_addr)
  	mac_read_from_eeprom();
  #endif
  
@@ -56,7 +50,7 @@ index 5595329..6a7bf4b 100644
  #ifdef	CONFIG_HERMES
  	if ((gd->board_type >> 16) == 2)
  		bd->bi_ethspeed = gd->board_type & 0xFFFF;
-@@ -1008,11 +1003,6 @@ void board_init_r(gd_t *id, ulong dest_addr)
+@@ -1008,11 +1004,6 @@ void board_init_r(gd_t *id, ulong dest_addr)
  	last_stage_init();
  #endif
  
@@ -2365,38 +2359,9 @@ index e4b0d44..09fbf0b 100644
  sbc8548_PCI_33               powerpc     mpc85xx     sbc8548             -              -           sbc8548:PCI,33
  sbc8548_PCI_33_PCIE          powerpc     mpc85xx     sbc8548             -              -           sbc8548:PCI,33,PCIE
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
-index a1824f4..a16d2f1 100644
+index a1824f4..6c45442 100644
 --- a/common/cmd_sys_eeprom.c
 +++ b/common/cmd_sys_eeprom.c
-@@ -10,6 +10,8 @@
- #include <i2c.h>
- #include <linux/ctype.h>
- 
-+DECLARE_GLOBAL_DATA_PTR;
-+
- #include "sys_eeprom.h"
- 
- /* File scope function prototypes */
-@@ -207,8 +209,8 @@ static struct tlv_code_desc tlv_code_list[] = {
- 	{ TLV_CODE_DEVICE_VERSION, "Device Version"},
- 	{ TLV_CODE_LABEL_REVISION, "Label Revision"},
- 	{ TLV_CODE_PLATFORM_NAME , "Platform Name"},
--	{ TLV_CODE_ONIE_VERSION	 , "Loader Version"},
--	{ TLV_CODE_MAC_SIZE	 , "MAC Addresses"},
-+	{ TLV_CODE_ONIE_VERSION	 , "ONIE Version"},
-+	{ TLV_CODE_MAC_SIZE	 , "MAC Address Size"},
- 	{ TLV_CODE_MANUF_NAME	 , "Manufacturer"},
- 	{ TLV_CODE_MANUF_COUNTRY , "Country Code"},
- 	{ TLV_CODE_VENDOR_NAME	 , "Vendor Name"},
-@@ -1038,8 +1040,6 @@ int mac_read_from_eeprom(void)
- 	u8 macbase[6];
- 	tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
- 
--	puts("EEPROM: ");
--
- 	if (read_eeprom(eeprom)) {
- 		printf("Read failed.\n");
- 		return -1;
 @@ -1059,18 +1059,35 @@ int mac_read_from_eeprom(void)
  
  	for (i = 0; i < min(maccount, CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS); i++) {
@@ -2434,55 +2399,10 @@ index a1824f4..a16d2f1 100644
  
  			macbase[5]++;
  			if (macbase[5] == 0) {
-@@ -1087,7 +1104,7 @@ int mac_read_from_eeprom(void)
- 		}
- 	}
- 
--	printf("%s v%u len=%u\n", eeprom_hdr->signature, eeprom_hdr->version,
-+	debug("%s v%u len=%u\n", eeprom_hdr->signature, eeprom_hdr->version,
- 	       be16_to_cpu(eeprom_hdr->totallen));
- 
- 	return 0;
-@@ -1095,6 +1112,7 @@ int mac_read_from_eeprom(void)
- 
- #endif /* CONFIG_SYS_EEPROM_LOAD_ENV_MAC */
- 
-+#if 0
- #ifdef CONFIG_POPULATE_SERIAL_NUMBER
- 
- /**
-@@ -1134,3 +1152,65 @@ int populate_serial_number(void)
+@@ -1134,3 +1151,36 @@ int populate_serial_number(void)
  }
  
  #endif /* CONFIG_POPULATE_SERIAL_NUMBER */
-+#else
-+/* ------------------------------------------------------------------------
-+ * FUNCTION NAME: populate_mac_address
-+ * PURPOSE:	Read the MAC addresses from non-volatile device and
-+ *          set the appropriate environment variables for each one read.
-+ * INPUT:   None
-+ * OUTPUT:	None
-+ * RETURN:
-+ *          0   = Success
-+ *          -1  = Fail
-+ * NOTES:
-+ *  The environment variables are only set if they haven't been set already or
-+ *  if the current value is different from non-volatile board information.
-+ */
-+int populate_mac_address(void)
-+{
-+    char * env;
-+    int ret = -1;
-+
-+    if(mac_read_from_eeprom())
-+        return -1;
-+
-+    env = getenv("ethaddr");
-+    if (!env)
-+        ret = eth_getenv_enetaddr("ethaddr", gd->bd->bi_enetaddr);
-+
-+    return ret;
-+}
 +
 +/* ------------------------------------------------------------------------
 + * FUNCTION NAME: populate_env
@@ -2516,7 +2436,6 @@ index a1824f4..a16d2f1 100644
 +
 +    return 0;
 +}
-+#endif
 diff --git a/common/image.c b/common/image.c
 index 95498e6..2edd747 100644
 --- a/common/image.c
