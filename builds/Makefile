@@ -124,6 +124,11 @@ $(subst :,.,$(1)): $(subst :,.,$(2))
 	$(ONL)/tools/onlpkg.py $(1) --build
 endef
 
+
+# Hack to ensure this is build first; build SERIAL_$i before PARALLE_$i
+SERIAL_0 := vendor-config-onl:all vendor-config-accton:all vendor-config-quanta:all
+$(foreach c,$(SERIAL_0),$(eval $(call cbuild,$(c),submodules_init)))
+
 # All Platform Config Packages
 PARALLEL_0 := $(shell $(ONLPKG) --list platform-config-)
 $(foreach c,$(PARALLEL_0),$(eval $(call cbuild,$(c),submodules_init)))
@@ -141,6 +146,7 @@ PARALLEL_3 := $(shell $(ONLPKG) --list platform-powerpc) loader-i386:i386
 $(foreach c,$(PARALLEL_3),$(eval $(call cbuild,$(c),$(PARALLEL_2))))
 
 
+serial0: $(subst :,.,$(SERIAL_0))
 parallel0: $(subst :,.,$(PARALLEL_0))
 parallel1: $(subst :,.,$(PARALLEL_1))
 parallel2: $(subst :,.,$(PARALLEL_2))

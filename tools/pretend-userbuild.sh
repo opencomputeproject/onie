@@ -27,8 +27,10 @@
 # just like a user following the instructions would.  This is 
 # a slightly different task than the autobuild which takes a
 # a bunch of work saving short cuts.
+#
+# call with `curl https://raw.githubusercontent.com/opennetworklinux/ONL/master/tools/pretend-userbuild.sh | bash | tee build.out`
+# for no fuss, high trust building
 # 
-# This script actually revokes itself from inside a workspace
 ############################################################
 
 function die {
@@ -40,7 +42,7 @@ function die {
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
     echo "" >&2
-    echo "" >&2
+    echo "Error on `date`" >&2
     exit 2
 }
 
@@ -48,47 +50,39 @@ set -x
 
 ARCHS=amd64
 TARGETS="powerpc kvm"
-ONL_ROOT=`realpath $(dirname $(readlink -f $0))/../`
+OUTDIR=build-`date | sed -e 's/[^a-zA-Z0-9]/_/g'`
+ONL_ROOT=`pwd`/$OUTDIR/ONL
 BUILD_SCRIPT=pretend-userbuild.sh
 
 
-cd $ONL_ROOT
 
-case $1 in 
-    powerpc)
-        mode=powerpc
-        ;;
-#    amd64)
-#        mode=amd64
-#        ;;
-    kvm)
-        mode=kvm
-        ;;
-    all)
-        mode=all
-        ;;
-    -h|--help|*)
-        echo "Usage $0 [TARGET=all|powerpc|kvm]" >&2
-        echo "      See script for more details" >&2
-        exit 1
-esac
-echo Running $0 in Mode=$mode
+    echo Starting: `date`
+    mkdir $OUTDIR
+    cd $OUTDIR
 
 
-if [ $mode = all ] ; then
+    # Fugly hack to give us a complete log of the process,
+    # Including the parts before the process started
+    BUILDLOG=build.out
+    if [ -f ../$BUILDLOG ] ; then
+        echo Moving $BUILDLOG into the build directory
+        ln ../$BUILDLOG
+        rm ../$BUILDLOG	# will keep going even if file isn't there
+    fi
+
+    git clone git://github.com/opennetworklinux/ONL || die "git problem"
+
+    cd ONL
     # Step #1 install local host build dependencies
     make install-host-deps || die "Installing host dependencies: \$?=$?"
 
     for arch in $ARCHS ; do 
         onl-mkws -a $arch ws.$arch || die "Make workspace for $arch failed: \$?=$?"
         cd ws.$arch
+        onl-chws make -C $ONL_ROOT install-ws-deps die "make install-ws-deps failed for arch=$arch : \$?=$?"
         for target in $TARGETS ; do
-            onl-chws $ONL_ROOT/tools/$BUILD_SCRIPT $target || die "Parent build: making target=$target arch=$arch: \$?=$?"
+            onl-chws make -C $ONL_ROOT onl-$target       || die "make onl-$target failed: \$?=$?"
         done
     done
-else # mode != all, running inside a workspace
-    make install-ws-deps || die "make install-ws-deps failed for arch=$mode : \$?=$?"
-    make onl-$mode       || due "make onl-$mode failed: \$?=$?"
-fi
 
 
