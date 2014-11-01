@@ -36,10 +36,28 @@ import fcntl
 
 #
 # Hack
+# These are the closed source packages that can't be built 
+# without magic priveledges
+
+closed_source = [
+"onlp-powerpc-accton-as5610-52x-r0:powerpc",
+"onlp-powerpc-accton-as6700-32x-r0:powerpc",
+"onlp-powerpc-accton-as5710-54x-r0:powerpc",
+"onlp-powerpc-accton-as4600-54t-r0:powerpc",
+"onlp-powerpc-dni-7448-r0:powerpc",
+];
+
+#
+# Hack
 # Disabled and/or deprecated packages
 #
 disabled_packages = [
 ];
+
+# add the closed_source packages to the disabled
+# list unless the magic env is set
+if not "ONL_CLOSED_SOURCE" in os.environ:
+    disabled_packages += closed_source
 
 def package_enabled(p):
     for dp in disabled_packages:
