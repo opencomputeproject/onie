@@ -1,43 +1,43 @@
 #!/bin/sh
 ############################################################
 # <bsn.cl fy=2013 v=onl>
-# 
-#        Copyright 2013, 2014 Big Switch Networks, Inc.       
-# 
+#
+#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
 # with the License. You may obtain a copy of the License at
-# 
+#
 #        http://www.eclipse.org/legal/epl-v10.html
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
 # either express or implied. See the License for the specific
 # language governing permissions and limitations under the
 # License.
-# 
+#
 # </bsn.cl>
 ############################################################
 #
-# Open Network Linux Installation Script. 
+# Open Network Linux Installation Script.
 #
 # The purpose of this script is to automatically install ONL
-# on the target system. 
+# on the target system.
 #
-# This script is ONIE-compatible. 
+# This script is ONIE-compatible.
 #
-# This script is can be run under a manual boot of the 
-# Open Network Loader as the execution environment for 
-# platforms that do not support ONIE. 
-# 
+# This script is can be run under a manual boot of the
+# Open Network Loader as the execution environment for
+# platforms that do not support ONIE.
+#
 ############################################################
 
 
 ############################################################
 #
 # Installation Utility Functions
-# 
+#
 ############################################################
 
 
@@ -45,13 +45,13 @@
 #
 # installer_create_device_file <blockdev> <partno>
 #     <blockdev> The block device name
-#     <partno>   The partition number. 
-# 
-#    Set the global variable 'installer_df' with the name of 
-#    the created device file. 
+#     <partno>   The partition number.
+#
+#    Set the global variable 'installer_df' with the name of
+#    the created device file.
 #
 # We can't always rely on the existance of a partition's
-# device file after the device has been formatted. 
+# device file after the device has been formatted.
 #
 # This function creates the appropriate device file
 # for a given block partition to avoid this problem.
@@ -61,11 +61,11 @@
 installer_create_device_file() {
     local blockdev=$1
     local partno=$2
-    
+
     # Determine the device major number for the given block device:
     local major=`ls -l /dev/${blockdev} | tr "," " " | awk '{print $5}'`
 
-    # Create a new device file matching the given partition 
+    # Create a new device file matching the given partition
     installer_df=$(mktemp)
     rm ${installer_df}
     mknod "${installer_df}" b "${major}" "${partno}"
@@ -80,12 +80,12 @@ installer_create_device_file() {
 #    <src>      The local source filename
 #    <dst>      The destination filename
 #
-# Copy the source file to the given partition. 
-# The partition must be formatted/mountable. 
+# Copy the source file to the given partition.
+# The partition must be formatted/mountable.
 #
 ############################################################
 
-installer_partition_cp() { 
+installer_partition_cp() {
     local blockdev=$1
     local partno=$2
     local src=$3
@@ -107,7 +107,7 @@ installer_partition_cp() {
 #
 #    <blockdev> The block device name
 #    <partno>   The partition number.
-#    <src>      The source file. 
+#    <src>      The source file.
 #
 # 'dd' the contents of the src file directly to the given partition.
 #
@@ -131,7 +131,7 @@ installer_partition_dd() {
 #    <blockdev> The block device name.
 #    <partno>   The partition number.
 #    <mkfs>     The formatting tool.
-# 
+#
 ############################################################
 
 installer_partition_format() {
@@ -153,21 +153,19 @@ installer_partition_format() {
 #
 #    <blockdev> The block device name.
 #
-# Unmount all partitions of the given blockdevice. 
+# Unmount all partitions of the given blockdevice.
 #
 # Required to avoid errors when repartitioning block
-# devices that are currently mounted. 
+# devices that are currently mounted.
 #
 ############################################################
 
-installer_umount_blockdev() { 
+installer_umount_blockdev() {
     local blockdev=$1
-    grep $blockdev /proc/mounts
-    if [ 0 = $? ]; then
+    if [ grep $blockdev /proc/mounts ]; then
         umount `awk "/${blockdev}/ "'{print $2}' /proc/mounts` || true
     else
-        echo $1 not mounted, skiping umount
-        exit 1
+        echo $1 not mounted, skipping umount
     fi
 }
 
@@ -175,11 +173,11 @@ installer_umount_blockdev() {
 ############################################################
 #
 # installer_blockdev_format <blockdev> <p1size> <p2size> <p3size>
-# 
+#
 #    <blockdev> The block device name.
 #    <p1size>   The size of the first partition.
 #    <p2size>   The size of the second partition.
-#    <p3size>   [Optional] The size of the third partition. 
+#    <p3size>   [Optional] The size of the third partition.
 #               If p3size is unset, the remainder of the device will be used
 #               for the third partition.
 #
@@ -210,7 +208,7 @@ installer_blockdev_format() {
 #
 #  The default is to copy the loader to the partition's filesystem.
 #  If 'platform_loader_raw' is specified by the platform, the
-#  loader will be written directly to the partition instead. 
+#  loader will be written directly to the partition instead.
 #
 ############################################################
 installer_platform_loader() {
@@ -224,18 +222,18 @@ installer_platform_loader() {
         # Default platform loader
         local loader="${installer_dir}/onl.${installer_platform}.loader"
     fi
-    
+
     if [ "${platform_loader_dst_name}" ]; then
         local loaderdst="${platform_loader_dst_name}"
     else
         local loaderdst="onl-loader"
     fi
-        
+
 
     if [ -f "${loader}" ]; then
         installer_say "Installing the Open Network Loader..."
-        
-        if [ "${platform_loader_raw}" ]; then 
+
+        if [ "${platform_loader_raw}" ]; then
             installer_partition_dd ${blockdev} ${partno} ${loader}
         else
             installer_partition_cp ${blockdev} ${partno} ${loader} ${loaderdst}
@@ -254,7 +252,7 @@ installer_platform_loader() {
 #    <partno>   The partition number.
 #
 # Generate and write the platform boot-config file
-# into the given partition. 
+# into the given partition.
 #
 ############################################################
 
@@ -268,7 +266,7 @@ installer_platform_bootconfig() {
     # Is there a platform bootconfig string?
     elif [ "${platform_bootconfig}" ]; then
         bootconfig="${platform_bootconfig}"
-    # Use the default. 
+    # Use the default.
     else
         if [ "${installer_mode_standalone}" ]; then
             bootconfig="SWI=flash2:onl-${installer_arch}.swi\nNETDEV=ma1\n"
@@ -276,7 +274,7 @@ installer_platform_bootconfig() {
             bootconfig='SWI=flash2:.ztn-onl.swi\nNETDEV=ma1\nNETAUTO=dhcp\n'
         fi
     fi
-    # Write the boot-config file to the given partition. 
+    # Write the boot-config file to the given partition.
     installer_say "Writing boot-config."
     echo -e "${bootconfig}" > /tmp/boot-config
     installer_partition_cp ${blockdev} ${partno} /tmp/boot-config boot-config
@@ -294,7 +292,7 @@ installer_platform_bootconfig() {
 #
 ############################################################
 
-installer_platform_swi() { 
+installer_platform_swi() {
     local blockdev=$1
     local partno=$2
 
@@ -305,10 +303,10 @@ installer_platform_swi() {
     elif [ -f "${installer_dir}/onl-${installer_arch}.swi" ]; then
         local swi="${installer_dir}/onl-${installer_arch}.swi"
     fi
-    
-    if [ -f "${swi}" ]; then 
+
+    if [ -f "${swi}" ]; then
         installer_say "Installing Open Network Software Image..."
-        if [ "${platform_swi_install_name}" ]; then 
+        if [ "${platform_swi_install_name}" ]; then
             local swidst="${platform_swi_install_name}"
         else
             if [ "${installer_mode_standalone}" ]; then
@@ -330,9 +328,9 @@ installer_platform_swi() {
 #    <blockdev> The block device name.
 #    <p1size>   The size of the loader partition.
 #    <p2size>   The size of the /mnt/flash partition.
-#    <p3size>   The size of the /mnt/flash2 partition. 
+#    <p3size>   The size of the /mnt/flash2 partition.
 #
-# Performs a standard installation for the platform. 
+# Performs a standard installation for the platform.
 # Most platform installers will just call this function with the appropriate arguments.
 #
 ############################################################
@@ -344,16 +342,16 @@ installer_standard_blockdev_install () {
 
     # Standard 3-partition format for loader, /mnt/flash, and /mnt/flash2
     installer_blockdev_format "${blockdev}" "${p1size}" "${p2size}" "${p3size}"
-  
-    # Copy the platform loader to the first partition. 
-    installer_platform_loader "${blockdev}" 1 
-    
+
+    # Copy the platform loader to the first partition.
+    installer_platform_loader "${blockdev}" 1
+
     # Set the boot-config file
     installer_platform_bootconfig "${blockdev}" 2
-    
+
     # Copy the packaged SWI to the third partition.
     installer_platform_swi "${blockdev}" 3
-    
+
     sync
     installer_umount_blockdev "${blockdev}"
 }
@@ -365,19 +363,19 @@ installer_standard_blockdev_install () {
 #
 # Installation is performed as follows:
 #
-# 1. Detect whether we are running under ONIE or the 
-#    Open Network Loader and perform the appropriate setup. 
-# 
-# 2. Unpack the installer files. 
+# 1. Detect whether we are running under ONIE or the
+#    Open Network Loader and perform the appropriate setup.
 #
-# 3. Source the installer scriptlet for the current platform. 
-# 4. Run the installer function from the platform scriptlet. 
+# 2. Unpack the installer files.
+#
+# 3. Source the installer scriptlet for the current platform.
+# 4. Run the installer function from the platform scriptlet.
 #
 # The platform scriptlet determines the entire installation
-# sequence. 
-# 
+# sequence.
+#
 # Most platforms will just call the installation
-# utilities in this script with the approprate platform settings. 
+# utilities in this script with the approprate platform settings.
 #
 ############################################################
 set -e
@@ -394,8 +392,8 @@ fi
 # if you comment this line out:
 installer_mode_standalone=1
 #
-# the default automatic installer can install Open Network Linux in ZTN mode. 
-# If you want to install in standalone mode from the console when ZTN is the default, 
+# the default automatic installer can install Open Network Linux in ZTN mode.
+# If you want to install in standalone mode from the console when ZTN is the default,
 # do the following at the uboot prompt before installing:
 # -> setenv onl_installer_standalone 1
 # -> saveenv
@@ -407,25 +405,25 @@ installer_mode_standalone=1
 fw_printenv onl_installer_standalone &> /dev/null && installer_mode_standalone=1
 
 #
-# Remount tmpfs larger if possible. 
+# Remount tmpfs larger if possible.
 # We will be doing all of our work out of /tmp
 #
-mount -o remount,size=512M /tmp || true
+mount -o remount,size=1024M /tmp || true
 
-# Pickup ONIE defines for this machine. 
+# Pickup ONIE defines for this machine.
 [ -r /etc/machine.conf ] && . /etc/machine.conf
 
 
 if [ "${onie_platform}" ]; then
-    # Running under ONIE, most likely in the background in installer mode. 
-    # Our messages have to be sent to the console directly, not to stdout. 
-    installer_say() { 
+    # Running under ONIE, most likely in the background in installer mode.
+    # Our messages have to be sent to the console directly, not to stdout.
+    installer_say() {
         echo "$@" > /dev/console
     }
-    # Installation failure message. 
+    # Installation failure message.
     trap 'installer_say "Install failed."; cat /var/log/onie.log > /dev/console; installer_say "Install failed. See log messages above for details"; sleep 3; reboot' EXIT
 
-    if [ -z "${installer_platform}" ]; then 
+    if [ -z "${installer_platform}" ]; then
         # Our platform identifiers are equal to the ONIE platform identifiers without underscores:
         installer_platform=`echo ${onie_platform} | tr "_" "-"`
         installer_arch=${onie_arch}
@@ -435,8 +433,8 @@ else
     #
     # Assume we are running in an interactive environment
     #
-    installer_say() { 
-        echo 
+    installer_say() {
+        echo
         echo "* $@"
         echo
     }
@@ -453,7 +451,7 @@ else
     installer_arch=powerpc
 fi
 
-# Replaced during build packaging with the current version. 
+# Replaced during build packaging with the current version.
 onl_version="@ONLVERSION@"
 
 installer_say "Installer Version: ${onl_version}"
@@ -475,14 +473,15 @@ sed -e '1,/^PAYLOAD_FOLLOWS$/d' "$0" | gzip -dc | ( cd "${installer_dir}" && cpi
 # Developer debugging
 if [ "${installer_unpack_only}" ]; then
     installer_say "Unpack only requested."
-    exit 1
+    trap - EXIT
+    exit 0
 fi
 
 
 
-# Look for the platform installer directory. 
+# Look for the platform installer directory.
 installer_platform_dir="${installer_dir}/lib/platform-config/${installer_platform}"
-if [ -d "${installer_platform_dir}" ]; then 
+if [ -d "${installer_platform_dir}" ]; then
     # Source the installer scriptlet
     . "${installer_platform_dir}/install/${installer_platform}.sh"
 else
@@ -494,7 +493,7 @@ else
     exit 1
 fi
 
-# Generate the MD5 signature for ourselves for future reference. 
+# Generate the MD5 signature for ourselves for future reference.
 installer_md5=$(md5sum "$0" | awk '{print $1}')
 # Cache our install URL if available
 if [ -f "$0.url" ]; then
@@ -504,10 +503,10 @@ fi
 # These variables are exported by the platform scriptlet
 installer_say "Platform installer version: ${platform_installer_version:-unknown}"
 
-# The platform script must provide this function. This performs the actual install for the platform. 
+# The platform script must provide this function. This performs the actual install for the platform.
 platform_installer
 
-# The platform script must provide the platform_bootcmd after completing the install. 
+# The platform script must provide the platform_bootcmd after completing the install.
 if [ "${onie_platform}" ]; then
     installer_say "Setting ONIE nos_bootcmd to boot Open Network Linux"
     envf=/tmp/.env
