@@ -8364,7 +8364,7 @@ index b27a6b7..ec9a4c3 100644
  #ifdef CONFIG_PHYS_64BIT
  typedef unsigned long long phys_addr_t;
 diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
-index 5595329..907cd2d 100644
+index 5595329..779f5a4 100644
 --- a/arch/powerpc/lib/board.c
 +++ b/arch/powerpc/lib/board.c
 @@ -130,6 +130,11 @@ ulong monitor_flash_len;
@@ -8387,21 +8387,9 @@ index 5595329..907cd2d 100644
  /*
   * This is the next part if the initialization sequence: we are now
   * running from RAM and have a "normal" C environment, i. e. global
-@@ -851,13 +857,25 @@ void board_init_r(gd_t *id, ulong dest_addr)
- 	sc3_read_eeprom();
+@@ -857,7 +863,15 @@ void board_init_r(gd_t *id, ulong dest_addr)
  #endif
  
--#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET) || \
--    defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
-+#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET)
- 	mac_read_from_eeprom();
- #endif
- 
-+/*ONIE*/
-+#if defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
-+	onie_mac_read_from_eeprom();
-+#endif
-+
  #ifdef CONFIG_POPULATE_SERIAL_NUMBER
 -	populate_serial_number();
 +    /* serial# */
@@ -15280,6 +15268,26 @@ index b98b180..2cf8738 100644
 +#endif
  
  #endif
+diff --git a/board/freescale/common/sys_eeprom.c b/board/freescale/common/sys_eeprom.c
+index d2ed036..e64503b 100644
+--- a/board/freescale/common/sys_eeprom.c
++++ b/board/freescale/common/sys_eeprom.c
+@@ -412,6 +412,7 @@ int do_mac(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+ 	return 0;
+ }
+ 
++#if 0 /* ONIE has its own function */
+ /**
+  * mac_read_from_eeprom - read the MAC addresses from EEPROM
+  *
+@@ -514,6 +515,7 @@ int mac_read_from_eeprom(void)
+ 
+ 	return 0;
+ }
++#endif
+ 
+ #ifdef CONFIG_SYS_I2C_EEPROM_CCID
+ 
 diff --git a/board/freescale/common/vsc3316_3308.c b/board/freescale/common/vsc3316_3308.c
 index 7868565..b87b65c 100644
 --- a/board/freescale/common/vsc3316_3308.c
@@ -21061,10 +21069,10 @@ index b175358..099a3cb 100644
  
  #ifdef CONFIG_CMD_SF_TEST
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
-index a1824f4..433cf29 100644
+index 99f0db0..29c087f 100644
 --- a/common/cmd_sys_eeprom.c
 +++ b/common/cmd_sys_eeprom.c
-@@ -8,10 +8,14 @@
+@@ -8,6 +8,8 @@
  #include <common.h>
  #include <command.h>
  #include <i2c.h>
@@ -21073,179 +21081,18 @@ index a1824f4..433cf29 100644
  #include <linux/ctype.h>
  
  #include "sys_eeprom.h"
+@@ -933,6 +935,84 @@ int write_sys_eeprom(void *eeprom, int len)
  
-+DECLARE_GLOBAL_DATA_PTR;
-+
- /* File scope function prototypes */
- static bool is_checksum_valid(u8 *eeprom);
- static int read_eeprom(u8 *eeprom);
-@@ -34,6 +38,24 @@ static int hw_eeprom_valid = 1;
- static u8 eeprom[TLV_INFO_MAX_LEN];
+ #endif /* CONFIG_SYS_FLASH_HWINFO_ADDR && CONFIG_SYS_FLASH_HWINFO_SECT_SIZE */
  
- /**
-+ *  is_valid_tlvinfo_header
-+ *
-+ *  Perform sanity checks on the first 11 bytes of the TlvInfo EEPROM
-+ *  data pointed to by the parameter:
-+ *      1. First 8 bytes contain null-terminated ASCII string "TlvInfo"
-+ *      2. Version byte is 1
-+ *      3. Total length bytes contain value which is less than or equal
-+ *         to the allowed maximum (2048-11)
-+ *
-+ */
-+static inline bool is_valid_tlvinfo_header(tlvinfo_header_t *hdr)
-+{
-+	return( (strcmp(hdr->signature, TLV_INFO_ID_STRING) == 0) &&
-+		(hdr->version == TLV_INFO_VERSION) &&
-+		(be16_to_cpu(hdr->totallen) <= TLV_TOTAL_LEN_MAX) );
-+}
-+
-+/**
-  *  is_valid_tlv
-  *
-  *  Perform basic sanity checks on a TLV field. The TLV is pointed to
-@@ -207,13 +229,12 @@ static struct tlv_code_desc tlv_code_list[] = {
- 	{ TLV_CODE_DEVICE_VERSION, "Device Version"},
- 	{ TLV_CODE_LABEL_REVISION, "Label Revision"},
- 	{ TLV_CODE_PLATFORM_NAME , "Platform Name"},
--	{ TLV_CODE_ONIE_VERSION	 , "Loader Version"},
--	{ TLV_CODE_MAC_SIZE	 , "MAC Addresses"},
-+	{ TLV_CODE_ONIE_VERSION	 , "ONIE Version"},
-+	{ TLV_CODE_MAC_SIZE	 , "MAC Address Size"},
- 	{ TLV_CODE_MANUF_NAME	 , "Manufacturer"},
- 	{ TLV_CODE_MANUF_COUNTRY , "Country Code"},
- 	{ TLV_CODE_VENDOR_NAME	 , "Vendor Name"},
- 	{ TLV_CODE_DIAG_VERSION	 , "Diag Version"},
--	{ TLV_CODE_SERVICE_TAG   , "Service Tag"},
- 	{ TLV_CODE_VENDOR_EXT	 , "Vendor Extension"},
- 	{ TLV_CODE_CRC_32	 , "CRC-32"},
- };
-@@ -249,17 +270,7 @@ static inline const char* tlv_type2name(u8 type)
-  *  prior to calling this function.
-  */
- #define DECODE_NAME_MAX     20
--
--/*
-- * The max decode value is currently for the 'raw' type or the 'vendor
-- * extension' type, both of which have the same decode format.  The
-- * max decode string size is computed as follows:
-- *
-- *   strlen(" 0xFF") * TLV_VALUE_MAX_LEN + 1
-- *
-- */
--#define DECODE_VALUE_MAX    ((5 * TLV_VALUE_MAX_LEN) + 1)
--
-+#define DECODE_VALUE_MAX    256
- static void decode_tlv(tlvinfo_tlv_t * tlv)
- {
- 	char name[DECODE_NAME_MAX];
-@@ -280,7 +291,6 @@ static void decode_tlv(tlvinfo_tlv_t * tlv)
- 	case TLV_CODE_MANUF_COUNTRY:
- 	case TLV_CODE_VENDOR_NAME:
- 	case TLV_CODE_DIAG_VERSION:
--	case TLV_CODE_SERVICE_TAG:
- 		memcpy(value, tlv->value, tlv->length);
- 		value[tlv->length] = 0;
- 		break;
-@@ -297,7 +307,7 @@ static void decode_tlv(tlvinfo_tlv_t * tlv)
- 		break;
- 	case TLV_CODE_VENDOR_EXT:
- 		value[0] = 0;
--		for (i = 0; (i < (DECODE_VALUE_MAX/5)) && (i < tlv->length); i++) {
-+		for (i = 0; i < (DECODE_VALUE_MAX/5); i++) {
- 			sprintf(value, "%s 0x%02X", value, tlv->value[i]);
- 		}
- 		break;
-@@ -590,8 +600,6 @@ static bool tlvinfo_add_tlv(u8 * eeprom, int tcode, char * strval)
- 	u32 value;
- 	char data[MAX_TLV_VALUE_LEN];
- 	int eeprom_index;
--	int max_size = min(TLV_TOTAL_LEN_MAX,
--			   CONFIG_SYS_EEPROM_MAX_SIZE - sizeof(tlvinfo_header_t));
- 
- 	// Encode each TLV type into the format to be stored in the EERPOM
- 	switch (tcode) {
-@@ -605,7 +613,6 @@ static bool tlvinfo_add_tlv(u8 * eeprom, int tcode, char * strval)
- 	case TLV_CODE_MANUF_COUNTRY:
- 	case TLV_CODE_VENDOR_NAME:
- 	case TLV_CODE_DIAG_VERSION:
--	case TLV_CODE_SERVICE_TAG:
- 		strncpy(data, strval, MAX_TLV_VALUE_LEN);
- 		new_tlv_len = min(MAX_TLV_VALUE_LEN, strlen(strval));
- 		break;
-@@ -652,7 +659,7 @@ static bool tlvinfo_add_tlv(u8 * eeprom, int tcode, char * strval)
- 	}
- 
- 	// Is there room for this TLV?
--	if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) + new_tlv_len) > max_size) {
-+	if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) + new_tlv_len) > TLV_TOTAL_LEN_MAX) {
- 		printf("ERROR: There is not enough room in the EERPOM to save data.\n");
- 		return(FALSE);
- 	}
-@@ -825,7 +832,7 @@ static int set_bytes(char *buf, const char *string, int * converted_accum)
- 	}
- 
- 	/* Convert string to bytes */
--	for (i = 0, p = (char *)string; (i < TLV_VALUE_MAX_LEN) && (*p != 0); i++) {
-+	for (i = 0, p = (char *)string; (i < 256) && (*p != 0); i++) {
- 		while ((*p == ' ') || (*p == '\t') || (*p == ',') || (*p == ';')) {
- 			p++;
- 		}
-@@ -836,7 +843,7 @@ static int set_bytes(char *buf, const char *string, int * converted_accum)
- 			}
- 			byte = simple_strtoul(p, &p, 0);
- 			if (byte >= 256) {
--				printf("ERROR: The value specified is greater than 255: (%u) in string: %s\n",
-+				printf("ERROR: The value specified is greater than 255: (%u) in string: %s",
- 				       byte, string);
- 				return -1;
- 			}
-@@ -844,23 +851,19 @@ static int set_bytes(char *buf, const char *string, int * converted_accum)
- 		}
- 	}
- 
--	if ((i == TLV_VALUE_MAX_LEN) && (*p != 0)) {
--		printf("ERROR: Trying to assign too many bytes "
--		       "(max: %d) in string: %s\n", TLV_VALUE_MAX_LEN, string);
--		return -1;
--	}
--
- 	*converted_accum = i;
- 	return 0;
- }
- 
--#ifdef CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO
- 
-+
-+
-+
-+#ifdef CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO
- /**
-  * Provide sys_eeprom read/write functions for platforms that store
-  * the information in a flash sector.
-  */
--
- #ifndef CONFIG_SYS_FLASH_HWINFO_ADDR
- # error CONFIG_SYS_FLASH_HWINFO_ADDR must be defined when using common flash i/o.
- #endif
-@@ -930,16 +933,94 @@ int write_sys_eeprom(void *eeprom, int len)
- 
- 	return 0;
- }
-+#endif /* CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO */
- 
--#endif /* CONFIG_SYS_FLASH_HWINFO_ADDR && CONFIG_SYS_FLASH_HWINFO_SECT_SIZE */
- 
--#ifdef CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO
- 
-+
 +
 +#ifdef CONFIG_SYS_EEPROM_USE_COMMON_SPI_IO
- /**
-- *  Use common i2c read/write functions
-+ *  Use common spi read/write functions
-  *
-  */
++
++ /**
++  *  Use common spi read/write functions
++  *
++  */
++
 +#ifndef CONFIG_SYS_SPI_FLASH_HWINFO_ADDR
 +# error CONFIG_SYS_SPI_FLASH_HWINFO_ADDR must be defined when using common spi i/o.
 +#endif
@@ -21273,7 +21120,7 @@ index a1824f4..433cf29 100644
 +        printf("SPI Read Fail!\n");
 +        return -1;
 +    }
- 
++
 +	return 0;
 +}
 +
@@ -21312,99 +21159,14 @@ index a1824f4..433cf29 100644
 +
 +	return 0;
 +}
++
 +#endif /* CONFIG_SYS_EEPROM_USE_COMMON_SPI_IO */
 +
 +
-+
-+
-+
-+#ifdef CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO
-+/**
-+ *  Use common i2c read/write functions
-+ *
-+ */
- #ifndef CONFIG_SYS_I2C_EEPROM_ADDR
- # error CONFIG_SYS_I2C_EEPROM_ADDR must be defined when using common i2c i/o.
- #endif
-@@ -949,15 +1030,6 @@ int write_sys_eeprom(void *eeprom, int len)
- #ifndef CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS
- # error CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS must be defined when using common i2c i/o.
- #endif
--#ifndef CONFIG_SYS_EEPROM_PAGE_WRITE_BITS
--# error CONFIG_SYS_EEPROM_PAGE_WRITE_BITS must be defined when using common i2c i/o.
--#endif
--
--#ifdef CONFIG_SYS_EEPROM_OFFSET
--#  define EEPROM_OFFSET CONFIG_SYS_EEPROM_OFFSET
--#else
--#  define EEPROM_OFFSET 0x0
--#endif
+ #ifdef CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO
  
  /**
-  * read_sys_eeprom - read the hwinfo from i2c EEPROM
-@@ -973,9 +1045,9 @@ int read_sys_eeprom(void *eeprom, int offset, int len)
- 	bus = i2c_get_bus_num();
- 	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
- #endif
--	ret = eeprom_read(CONFIG_SYS_I2C_EEPROM_ADDR,
--			  EEPROM_OFFSET + offset,
--			  eeprom, len);
-+	ret = i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, offset,
-+		       CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
-+		       eeprom, len);
- 
- #ifdef CONFIG_SYS_EEPROM_BUS_NUM
- 	i2c_set_bus_num(bus);
-@@ -1001,9 +1073,14 @@ int write_sys_eeprom(void *eeprom, int len)
- 	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
- #endif
- 
--	ret = eeprom_write(CONFIG_SYS_I2C_EEPROM_ADDR,
--			   EEPROM_OFFSET,
--			   eeprom, len);
-+	for (i = 0, p = eeprom; i < len; i += 8, p += 8) {
-+		ret = i2c_write(CONFIG_SYS_I2C_EEPROM_ADDR, i,
-+				CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
-+				p, min(len - i, 8));
-+		if (ret)
-+			break;
-+		udelay(CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS * 1000);
-+	}
- 
- #ifdef CONFIG_SYS_EEPROM_BUS_NUM
- 	i2c_set_bus_num(bus);
-@@ -1011,13 +1088,19 @@ int write_sys_eeprom(void *eeprom, int len)
- 
- 	return ret;
- }
-+#endif /* CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO */
-+
-+
-+
-+
-+
-+
- 
--#endif /* CONFIG_SYS_EEPROM_USE_COMMON_IO */
- 
- #ifdef CONFIG_SYS_EEPROM_LOAD_ENV_MAC
- 
- /**
-- *  mac_read_from_eeprom
-+ *  onie_mac_read_from_eeprom
-  *
-  *  Read the MAC addresses from EEPROM
-  *
-@@ -1029,7 +1112,7 @@ int write_sys_eeprom(void *eeprom, int len)
-  *
-  *  This function must be called after relocation.
-  */
--int mac_read_from_eeprom(void)
-+int onie_mac_read_from_eeprom(void)
- {
- 	unsigned int i;
- 	int eeprom_index;
-@@ -1059,18 +1142,35 @@ int mac_read_from_eeprom(void)
+@@ -1059,18 +1139,35 @@ int mac_read_from_eeprom(void)
  
  	for (i = 0; i < min(maccount, CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS); i++) {
  		if (is_valid_ether_addr(macbase)) {
@@ -21441,46 +21203,10 @@ index a1824f4..433cf29 100644
  
  			macbase[5]++;
  			if (macbase[5] == 0) {
-@@ -1095,6 +1195,7 @@ int mac_read_from_eeprom(void)
- 
- #endif /* CONFIG_SYS_EEPROM_LOAD_ENV_MAC */
- 
-+#if 0
- #ifdef CONFIG_POPULATE_SERIAL_NUMBER
- 
- /**
-@@ -1134,3 +1235,65 @@ int populate_serial_number(void)
+@@ -1134,3 +1231,36 @@ int populate_serial_number(void)
  }
  
  #endif /* CONFIG_POPULATE_SERIAL_NUMBER */
-+#else
-+/* ------------------------------------------------------------------------
-+ * FUNCTION NAME: populate_mac_address
-+ * PURPOSE:	Read the MAC addresses from non-volatile device and
-+ *          set the appropriate environment variables for each one read.
-+ * INPUT:   None
-+ * OUTPUT:	None
-+ * RETURN:
-+ *          0   = Success
-+ *          -1  = Fail
-+ * NOTES:
-+ *  The environment variables are only set if they haven't been set already or
-+ *  if the current value is different from non-volatile board information.
-+ */
-+int populate_mac_address(void)
-+{
-+    char * env;
-+    int ret = -1;
-+
-+    if(onie_mac_read_from_eeprom())
-+        return -1;
-+
-+    env = getenv("ethaddr");
-+    if (!env)
-+        ret = eth_getenv_enetaddr("ethaddr", gd->bd->bi_enetaddr);
-+
-+    return ret;
-+}
 +
 +/* ------------------------------------------------------------------------
 + * FUNCTION NAME: populate_env
@@ -21514,7 +21240,6 @@ index a1824f4..433cf29 100644
 +
 +    return 0;
 +}
-+#endif
 diff --git a/common/env_common.c b/common/env_common.c
 index df0f1ba..8a696ff 100644
 --- a/common/env_common.c
@@ -37726,10 +37451,10 @@ index a29f6a6..f26a80d 100644
  int set_cpu_clk_info(void);
 diff --git a/include/configs/ACCTON_AS6700_32X-R0.h b/include/configs/ACCTON_AS6700_32X-R0.h
 new file mode 100644
-index 0000000..c104e77
+index 0000000..036e213
 --- /dev/null
 +++ b/include/configs/ACCTON_AS6700_32X-R0.h
-@@ -0,0 +1,878 @@
+@@ -0,0 +1,877 @@
 +/*
 + * Copyright 2011-2012 Freescale Semiconductor, Inc.
 + *
@@ -38469,7 +38194,7 @@ index 0000000..c104e77
 +#define CONFIG_CMDLINE_EDITING			/* Command-line editing */
 +#define CONFIG_AUTO_COMPLETE			/* add autocompletion support */
 +#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address */
-+#define CONFIG_SYS_PROMPT	"=> "		/* Monitor Command Prompt */
++#define CONFIG_SYS_PROMPT	"LOADER=> "	/* Monitor Command Prompt */
 +#ifdef CONFIG_CMD_KGDB
 +#define CONFIG_SYS_CBSIZE	1024		/* Console I/O Buffer Size */
 +#else
@@ -38505,11 +38230,9 @@ index 0000000..c104e77
 +
 +/* default location for tftp and bootm */
 +#define CONFIG_LOADADDR     2000000
-+
-+/* -1 disables auto-boot */
-+#define CONFIG_BOOTDELAY 3
-+
-+#define CONFIG_BAUDRATE	115200
++#define CONFIG_AUTOBOOT_KEYED 1
++#define CONFIG_AUTOBOOT_STOP_STR "123\r"
++#define CONFIG_AUTOBOOT_PROMPT "Type 123<ENTER> to STOP autoboot\n"
 +
 +#define __USB_PHY_TYPE	utmi
 +
@@ -38584,6 +38307,7 @@ index 0000000..c104e77
 +#define CONFIG_SYS_EEPROM_USE_COMMON_SPI_IO
 +#define CONFIG_SYS_SPI_FLASH_HWINFO_ADDR        0x00120000
 +#define CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE   0x00010000
++#define CONFIG_SYS_EEPROM_MAX_SIZE		CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE
 +#define CONFIG_PLATFORM_ENV     \
 +    "hwconfig=fsl_ddr:ctlr_intlv=cacheline," \
 +    "bank_intlv=cs0_cs1\0"      \
@@ -38610,10 +38334,10 @@ index 0000000..c104e77
 +#endif	/* __CONFIG_H */
 diff --git a/include/configs/ACCTON_AS6700_32X-R1.h b/include/configs/ACCTON_AS6700_32X-R1.h
 new file mode 100644
-index 0000000..9e9c024
+index 0000000..7f1711c
 --- /dev/null
 +++ b/include/configs/ACCTON_AS6700_32X-R1.h
-@@ -0,0 +1,879 @@
+@@ -0,0 +1,878 @@
 +/*
 + * Copyright 2011-2012 Freescale Semiconductor, Inc.
 + *
@@ -39354,7 +39078,7 @@ index 0000000..9e9c024
 +#define CONFIG_CMDLINE_EDITING			/* Command-line editing */
 +#define CONFIG_AUTO_COMPLETE			/* add autocompletion support */
 +#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address */
-+#define CONFIG_SYS_PROMPT	"=> "		/* Monitor Command Prompt */
++#define CONFIG_SYS_PROMPT	"LOADER=> "	/* Monitor Command Prompt */
 +#ifdef CONFIG_CMD_KGDB
 +#define CONFIG_SYS_CBSIZE	1024		/* Console I/O Buffer Size */
 +#else
@@ -39390,11 +39114,9 @@ index 0000000..9e9c024
 +
 +/* default location for tftp and bootm */
 +#define CONFIG_LOADADDR     2000000
-+
-+/* -1 disables auto-boot */
-+#define CONFIG_BOOTDELAY 3
-+
-+#define CONFIG_BAUDRATE	115200
++#define CONFIG_AUTOBOOT_KEYED 1
++#define CONFIG_AUTOBOOT_STOP_STR "123\r"
++#define CONFIG_AUTOBOOT_PROMPT "Type 123<ENTER> to STOP autoboot\n"
 +
 +#define __USB_PHY_TYPE	utmi
 +
@@ -39469,6 +39191,7 @@ index 0000000..9e9c024
 +#define CONFIG_SYS_EEPROM_USE_COMMON_SPI_IO
 +#define CONFIG_SYS_SPI_FLASH_HWINFO_ADDR        0x00180000
 +#define CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE   0x00040000
++#define CONFIG_SYS_EEPROM_MAX_SIZE		CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE
 +#define CONFIG_PLATFORM_ENV     \
 +    "hwconfig=fsl_ddr:ctlr_intlv=cacheline," \
 +    "bank_intlv=cs0_cs1\0"      \
@@ -44627,7 +44350,7 @@ index 76b3ca6..3a166d9 100644
 +
 +#endif	/* __CONFIG_H */
 diff --git a/include/configs/common_config.h b/include/configs/common_config.h
-index e9e2135..b8bf4b0 100644
+index e9e2135..211d542 100644
 --- a/include/configs/common_config.h
 +++ b/include/configs/common_config.h
 @@ -26,7 +26,7 @@
@@ -44718,7 +44441,7 @@ index e9e2135..b8bf4b0 100644
   */
  
 -#define CONFIG_BOOTDELAY 10	/* -1 disables auto-boot */
-+#define CONFIG_BOOTDELAY 3	/* -1 disables auto-boot */
++#define CONFIG_BOOTDELAY 5	/* -1 disables auto-boot */
  #undef	CONFIG_BOOTARGS		/* the boot command will set bootargs*/
  
  #define CONFIG_BAUDRATE	115200
@@ -49347,55 +49070,6 @@ index b02f36f..fe257be 100644
  
  struct spl_image_info {
  	const char *name;
-diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
-index f99f409..524f14c 100644
---- a/include/sys_eeprom.h
-+++ b/include/sys_eeprom.h
-@@ -61,9 +61,6 @@ struct __attribute__ ((__packed__)) tlvinfo_tlv_s {
- };
- typedef struct tlvinfo_tlv_s tlvinfo_tlv_t;
- 
--/* Maximum length of a TLV value in bytes */
--#define TLV_VALUE_MAX_LEN        255
--
- /**
-  *  The TLV Types.
-  *
-@@ -83,7 +80,6 @@ typedef struct tlvinfo_tlv_s tlvinfo_tlv_t;
- #define TLV_CODE_MANUF_COUNTRY  0x2C
- #define TLV_CODE_VENDOR_NAME    0x2D
- #define TLV_CODE_DIAG_VERSION   0x2E
--#define TLV_CODE_SERVICE_TAG    0x2F
- #define TLV_CODE_VENDOR_EXT     0xFD
- #define TLV_CODE_CRC_32         0xFE
- 
-@@ -121,26 +117,4 @@ extern int write_sys_eeprom(void *eeprom, int len);
-  */
- extern int is_sys_eeprom_valid(void);
- 
--/**
-- *  is_valid_tlvinfo_header
-- *
-- *  Perform sanity checks on the first 11 bytes of the TlvInfo EEPROM
-- *  data pointed to by the parameter:
-- *      1. First 8 bytes contain null-terminated ASCII string "TlvInfo"
-- *      2. Version byte is 1
-- *      3. Total length bytes contain value which is less than or equal
-- *         to the allowed maximum (2048-11)
-- *
-- */
--static inline bool is_valid_tlvinfo_header(tlvinfo_header_t *hdr)
--{
--
--	int max_size = min(TLV_TOTAL_LEN_MAX,
--			   CONFIG_SYS_EEPROM_MAX_SIZE - sizeof(tlvinfo_header_t));
--
--	return( (strcmp(hdr->signature, TLV_INFO_ID_STRING) == 0) &&
--		(hdr->version == TLV_INFO_VERSION) &&
--		(be16_to_cpu(hdr->totallen) <= max_size) );
--}
--
- #endif /* __SYS_EEPROM_H_ */
 diff --git a/lib/fdtdec.c b/lib/fdtdec.c
 index 16921e1..d38a762 100644
 --- a/lib/fdtdec.c
