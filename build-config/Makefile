@@ -275,6 +275,9 @@ include make/kernel-download.make
 include make/uclibc-download.make
 include make/xtools.make
 include make/sysroot.make
+ifeq ($(SYSLINUX_ENABLE),yes)
+include make/syslinux.make
+endif
 include make/kernel.make
 ifeq ($(UBOOT_ENABLE),yes)
   include make/u-boot.make
@@ -371,7 +374,7 @@ machine-prefix:
 # Install required build packages for a x86_64 debian based build host
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf \
 				  gperf device-tree-compiler python-all-dev genisoimage \
-				  syslinux-common autoconf automake bison flex texinfo libtool \
+				  autoconf automake bison flex texinfo libtool \
 				  realpath gawk libncurses5 libncurses5-dev bc
 
 PHONY += debian-prepare-build-host
