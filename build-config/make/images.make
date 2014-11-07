@@ -62,6 +62,10 @@ ifeq ($(GRUB_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(GRUB_INSTALL_STAMP)
 endif
 
+ifeq ($(SYSLINUX_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(SYSLINUX_SOURCE_STAMP)
+endif
+
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
 			test -d $(ROOTCONFDIR)/default && \
@@ -270,6 +274,9 @@ RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
 RECOVERY_ISO_STAMP	= $(STAMPDIR)/recovery-iso
 PXE_EFI64_STAMP		= $(STAMPDIR)/pxe-efi64
 
+RECOVERY_ISO_SYSLINUX_FILES = $(SYSLINUX_DIR)/core/isolinux.bin \
+                              $(SYSLINUX_DIR)/com32/menu/menu.c32
+
 PHONY += pxe-efi64 recovery-initrd recovery-iso
 
 # Make an initrd based on the ONIE sysroot that also includes the ONIE
@@ -292,12 +299,7 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)
 	$(Q) cp $(UPDATER_VMLINUZ) $(RECOVERY_ISO_SYSROOT)/vmlinuz
 	$(Q) cp $(RECOVERY_INITRD) $(RECOVERY_ISO_SYSROOT)/initrd.xz
-	$(Q) [ -r /usr/lib/syslinux/isolinux.bin ] || {						\
-		echo "ERROR:  /usr/lib/syslinux/isolinux.bin is not present";			\
-		echo "ERROR:  Is the syslinux-common package installed on your build host??" ;	\
-		exit 1; }
-	$(Q) cp /usr/lib/syslinux/isolinux.bin $(RECOVERY_ISO_SYSROOT)
-	$(Q) cp /usr/lib/syslinux/menu.c32 $(RECOVERY_ISO_SYSROOT)
+	$(Q) cp $(RECOVERY_ISO_SYSLINUX_FILES) $(RECOVERY_ISO_SYSROOT)
 	$(Q) sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
 		 -e 's/<CONSOLE_DEV>/$(CONSOLE_DEV)/g' \
 		 -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' \
