@@ -162,8 +162,12 @@ installer_partition_format() {
 
 installer_umount_blockdev() {
     local blockdev=$1
-    grep $1 /proc/mounts
-    if [ 0 = $? ]; then
+
+    if [ X$blockdev = X ] ; then
+        blockdev=NONEXISTANT
+    fi
+
+    if [ grep $blockdev /proc/mounts ]; then
         umount `cat /proc/mounts | grep ${blockdev} | awk '{print $2}'` || true
     else
         echo $1 not mounted, skipping umount
