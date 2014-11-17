@@ -37,6 +37,22 @@ get_serial_num()
     fi
 }
 
+get_part_num()
+{
+    if [ -z "$part_num" ] ; then
+        if type get_part_num_platform | grep -q 'shell function' > /dev/null 2>&1 ; then
+            part_num=$(get_part_num_platform)
+        elif type get_part_num_arch | grep -q 'shell function' > /dev/null 2>&1 ; then
+                part_num=$(get_part_num_arch)
+        fi
+    fi
+
+    if [ -n "$part_num" ] ; then
+        echo $part_num
+    else
+        echo "Unknown"
+    fi
+}
 
 # Determine the first MAC address, typically used for eth0.  Check a
 # number of methods in order:
@@ -75,7 +91,7 @@ get_ethaddr()
 [ -r $lib_dir/sysinfo-arch ]     && . $lib_dir/sysinfo-arch
 [ -r $lib_dir/sysinfo-platform ] && . $lib_dir/sysinfo-platform
 
-args="hsevimrpcfdat"
+args="hsevimrpcfdatP"
 
 usage()
 {
@@ -92,6 +108,9 @@ COMMAND LINE OPTIONS
 
 	-s
 		Serial Number
+
+	-P
+		Part Number
 
 	-e
 		Management Ethernet MAC address
@@ -135,6 +154,7 @@ vendor_id=no
 machine=no
 machine_rev=no
 platform=no
+pn=no
 arch=no
 config_version=no
 build_date=no
@@ -169,6 +189,9 @@ while getopts "$args" a ; do
             ;;
         p)
             platform=yes
+            ;;
+        P)
+            pn=yes
             ;;
         c)
             arch=yes
@@ -208,6 +231,11 @@ print_val()
 
 if [ "$sn" = "yes" ] || [ "$all" = "yes" ] ; then
     val=$(get_serial_num)
+    print_val $val
+fi
+
+if [ "$pn" = "yes" ] || [ "$all" = "yes" ] ; then
+    val=$(get_part_num)
     print_val $val
 fi
 
