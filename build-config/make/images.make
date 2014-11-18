@@ -276,6 +276,8 @@ PXE_EFI64_STAMP		= $(STAMPDIR)/pxe-efi64
 
 RECOVERY_ISO_SYSLINUX_FILES = $(SYSLINUX_DIR)/core/isolinux.bin \
                               $(SYSLINUX_DIR)/com32/menu/menu.c32
+# Default to rescue mode for Syslinux menu, if none specified in machine.make
+SYSLINUX_DEFAULT_MODE ?=rescue
 
 PHONY += pxe-efi64 recovery-initrd recovery-iso
 
@@ -304,6 +306,7 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 		 -e 's/<CONSOLE_DEV>/$(CONSOLE_DEV)/g' \
 		 -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' \
 		 -e 's/<CONSOLE_PORT>/$(CONSOLE_PORT)/g' \
+		 -e 's/<SYSLINUX_DEFAULT_MODE>/$(SYSLINUX_DEFAULT_MODE)/g' \
 	         $(RECOVERY_CONF_DIR)/syslinux.cfg \
 		 > $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
 	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)/boot/grub
