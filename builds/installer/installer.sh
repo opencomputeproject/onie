@@ -383,6 +383,8 @@ cd $(dirname $0)
 
 # Check installer debug option from the uboot environment
 fw_printenv onl_installer_debug &> /dev/null && installer_debug=1
+# Check installer verbose option from the environment set by ONIE
+[ $onie_verbose = 'y' ] && installer_debug=1
 
 if [ "$installer_debug" ]; then
     echo "Debug mode"
