@@ -36,10 +36,28 @@ import fcntl
 
 #
 # Hack
+# These are the closed source packages that can't be built 
+# without magic priveledges
+
+closed_source = [
+"onlp-powerpc-accton-as5610-52x-r0:powerpc",
+"onlp-powerpc-accton-as6700-32x-r0:powerpc",
+"onlp-powerpc-accton-as5710-54x-r0:powerpc",
+"onlp-powerpc-accton-as4600-54t-r0:powerpc",
+"onlp-powerpc-dni-7448-r0:powerpc",
+];
+
+#
+# Hack
 # Disabled and/or deprecated packages
 #
 disabled_packages = [
 ];
+
+# add the closed_source packages to the disabled
+# list unless the magic env is set
+if not "ONL_CLOSED_SOURCE" in os.environ:
+    disabled_packages += closed_source
 
 def package_enabled(p):
     for dp in disabled_packages:
@@ -65,7 +83,8 @@ def find_component_dir(basedir, package_name):
             if file_ == "Makefile" or file_ == "makefile":
                 with open("%s/%s" % (root,file_), "r") as f:
                     data = f.read()
-                    if "Package:%s" % package_name in data:
+                    packages = re.findall("Package:(.*)", data)
+                    if package_name in packages:
                         # By convention - this is the component directory.
                         return os.path.abspath(root)
             if file_ == "control":
