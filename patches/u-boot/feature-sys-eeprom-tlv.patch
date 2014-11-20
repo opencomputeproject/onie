@@ -34,10 +34,10 @@ index 54fcc81..98a08e5 100644
  COBJS-$(CONFIG_CMD_INI) += cmd_ini.o
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..99f0db0
+index 0000000..3d5dace
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,1136 @@
+@@ -0,0 +1,1140 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -476,7 +476,9 @@ index 0000000..99f0db0
 +
 +	// Read the EEPROM contents
 +	if (cmd == 'r') {
-+		read_eeprom(eeprom);
++		has_been_read = 0;
++		if (!read_eeprom(eeprom))
++			printf("EEPROM data loaded from device to memory.\n");
 +		return 0;
 +	}
 +
@@ -497,6 +499,7 @@ index 0000000..99f0db0
 +			eeprom_hdr->version = TLV_INFO_VERSION;
 +			eeprom_hdr->totallen = cpu_to_be16(0);
 +			update_crc(eeprom);
++			printf("EEPROM data in memory reset.\n");
 +			break;
 +		case 'l':   /* list */
 +			show_tlv_code_list();
@@ -536,11 +539,11 @@ index 0000000..99f0db0
 +U_BOOT_CMD(
 +	sys_eeprom, 4, 1,  do_sys_eeprom,
 +	"Display and program the system EEPROM data block.",
-+	"[read|write|set|erase|list] [<type_code> <string_value>]\n"
++	"[read|write|set <type_code> <string_value>|erase|list]\n"
 +	"sys_eeprom\n"
 +	"    - With no arguments display the current contents.\n"
 +	"sys_eeprom read\n"
-+	"    - Read EEPROM data from device and show content.\n"
++	"    - Load EEPROM data from device to memory.\n"
 +	"sys_eeprom write\n"
 +	"    - Write the EEPROM data to persistent storage.\n"
 +	"sys_eeprom set <type_code> <string_value>\n"
@@ -549,6 +552,7 @@ index 0000000..99f0db0
 +	"    - Use 'sys_eeprom write' to make changes permanent.\n"
 +	"sys_eeprom erase\n"
 +	"    - Reset the in memory EEPROM data.\n"
++	"    - Use 'sys_eeprom read' to refresh the in memory EEPROM data.\n"
 +	"    - Use 'sys_eeprom write' to make changes permanent.\n"
 +	"sys_eeprom list\n"
 +	"    - List the understood TLV codes and names.\n"
