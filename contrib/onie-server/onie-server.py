@@ -91,10 +91,10 @@ if sys.platform.startswith('win32'):
             if (result):
                 ipaddrs.append(result.group(1))
         return ipaddrs
-elif sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
+elif sys.platform.startswith('linux') or sys.platform.startswith('darwin') or sys.platform.startswith('freebsd')
     def platform_get_ipaddrs():
         '''
-        Mac OSX output:
+        Mac OSX / FreeBSD output:
         en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
             ether 78:31:c1:b9:c0:64
             inet6 fe80::7a31:c1ff:feb9:c064%en0 prefixlen 64 scopeid 0x4
