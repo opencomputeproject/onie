@@ -91,7 +91,7 @@ if sys.platform.startswith('win32'):
             if (result):
                 ipaddrs.append(result.group(1))
         return ipaddrs
-elif sys.platform.startswith('linux') or sys.platform.startswith('darwin') or sys.platform.startswith('freebsd')
+elif sys.platform.startswith('linux') or sys.platform.startswith('darwin') or sys.platform.startswith('freebsd'):
     def platform_get_ipaddrs():
         '''
         Mac OSX / FreeBSD output:
