@@ -21,5 +21,9 @@ Documentation
 * [docs/SupportedHardware.md](docs/SupportedHardware.md)
     A list of hardware that ONL supports (in various forms)
 
+* [docs/Agents.md](docs/Agents.md)
+    A list of forwarding agents that ONL supports
+
+
 Please see the docs directory for additional information. 
 
