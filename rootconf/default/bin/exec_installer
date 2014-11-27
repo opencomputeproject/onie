@@ -9,23 +9,46 @@
 . /lib/onie/functions
 syslog_tag=onie-exec
 
-run_installer()
+check_installer()
 {
     [ -r $onie_installer ] || {
         log_failure_msg "Unable to find installer: $onie_installer"
         return 1
     }
 
+    # Check whether image passed by 'install_url', 'update_url', or 'discover'
+    # whose format matches to boot reason or not.
+    is_updater=$(if grep -q ONIE-UPDATER-COOKIE $onie_installer ; then \
+        echo "yes" ; else echo "no" ; fi)
+
+    case $onie_boot_reason in
+        update | embed)
+            [ "$is_updater" = "yes" ] && return 0
+            log_failure_msg "ONIE Updater: Invalid ONIE update image format."
+            ;;
+        rescue)
+            # Allow to run either NOS installer or ONIE updater at the situation
+            return 0
+            ;;
+        install)
+            [ "$is_updater" = "no" ] && return 0
+            log_failure_msg "NOS Installer: Expecting install image, but found ONIE updater image format."
+            ;;
+        *)
+            log_failure_msg "Unknown boot reason: ${onie_boot_reason}"
+            ;;
+    esac
+
+    return 1
+}
+
+run_installer()
+{
     export onie_exec_url="$1"
     # escape any % characters for printing with printf
     print_exec_url=$(echo -n $onie_exec_url | sed -e 's/%/%%/g')
     log_console_msg "Executing installer: $print_exec_url"
-    if [ "$onie_boot_reason" = "update" -o "$onie_boot_reason" = "embed" ] ; then
-        grep -q ONIE-UPDATER-COOKIE $onie_installer || {
-            log_failure_msg "ONIE Updater:  Invalid ONIE update image format."
-            return 1
-        }
-    fi
+    check_installer || return 1
 
     chmod +x $onie_installer
     # Send installer execution output to stdout or /dev/console
