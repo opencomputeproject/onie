@@ -139,15 +139,11 @@ deb-clean:
 # The following rules are a bit of hackery at the moment.
 #
 # We use the cross compiling and cross-package tools
-# provided by the Emdebian repositories.
-#
-# Normally, we would just add the Emdebian sources and
-# start installing everything, but some of the current
-# package dependencies listed in Emdebian Wheezy appear
-# to be broken -- the cross compiler tools provided by
-# Emdebian have been recently updated with dependencies
-# on libc6 and gcc-4.8 that cannot be satisfied by the
-# versions provided by Debian Wheezy.
+# provided by the Emdebian repositories.  But Emdebian 
+# has gone away and Debian is becoming the official source.
+# But we need to do the work to move to the new tools, so 
+# we've just temporarily cached the cross-packages on the 
+# ONL apt repo.
 #
 # This needs to get resolved, but as a stop-gap the
 # previous versions of the offending packages (which
@@ -157,19 +153,19 @@ deb-clean:
 ############################################################
 
 #
-# Install Emdebian keyring and repositories
+# Install ONL keyring and repositories
 #
-emdebian-update:
-	sudo apt-get install -y --force-yes emdebian-archive-keyring
+onl-update:
+	#sudo apt-get install -y --force-yes emdebian-archive-keyring
 	echo 'APT::Get::AllowUnauthenticated "true";\nAPT::Get::Assume-Yes "true";' | sudo tee /etc/apt/apt.conf.d/99opennetworklinux
 	sudo dpkg --add-architecture powerpc
-	echo "deb http://emdebian.org/debian/ wheezy main" | sudo tee /etc/apt/sources.list.d/emdebian.list
+	echo "deb http://apt.opennetlinux.org/debian/ unstable main" | sudo tee /etc/apt/sources.list.d/opennetlinux.list
 	sudo apt-get update
 
 #
 # Install required native packages
 #
-install-native-deps: emdebian-update
+install-native-deps: onl-update
 	sudo apt-get install -y libedit-dev ncurses-dev gcc make xapt cdbs debhelper pkg-config devscripts bison flex texinfo wget cpio multistrap squashfs-tools zip binfmt-support autoconf automake1.9 autotools-dev libtool apt-file file genisoimage syslinux dosfstools mtools bc python-yaml mtd-utils gcc-4.7-multilib uboot-mkimage kmod
 
 #
@@ -178,7 +174,7 @@ install-native-deps: emdebian-update
 #
 install-cross-deps: install-native-deps
 	sudo apt-get install -y libc6-dev-powerpc-cross
-	# These packages are currently incompatible between Debian/Emdebian wheezy:
+	# These packages are currently incompatible between Debian/Emdebian wheezy: TODO remove
 	sudo dpkg -i tools/bin/amd64/binutils-powerpc-linux-gnu_2.22-7.1_amd64.deb
 	sudo dpkg -i tools/bin/amd64/libgomp1-powerpc-cross_4.7.2-4_all.deb
 	sudo apt-get install -y gcc-4.7-powerpc-linux-gnu libc6-dev-powerpc-cross dpkg-sig
