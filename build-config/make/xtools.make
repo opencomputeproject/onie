@@ -58,7 +58,8 @@ xtools-build: $(XTOOLS_BUILD_STAMP)
 $(XTOOLS_BUILD_STAMP): $(XTOOLS_BUILD_DIR)/.config $(CROSSTOOL_NG_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building xtools for $(XTOOLS_VERSION) ===="
-	$(Q) cd $(XTOOLS_BUILD_DIR) && $(CROSSTOOL_NG_DIR)/ct-ng build
+	$(Q) cd $(XTOOLS_BUILD_DIR) && \
+		$(CROSSTOOL_NG_DIR)/ct-ng build || (rm $(XTOOLS_BUILD_DIR)/.config.2 && false)
 	$(Q) touch $@
 
 xtools-clean:
