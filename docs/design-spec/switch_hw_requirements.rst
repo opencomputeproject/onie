@@ -213,6 +213,8 @@ To encode that in the EEPROM, set TLV code 0x2A (Num MACs) to 73.
 Maintenance of this EEPROM format specification and allocation of the TLV type
 codes is handled by the `ONIE Project <http://www.onie.org/>`_.
 
+.. _fru_labeling:
+
 Hardware Face Plate and FRU Numbering
 =====================================
 
