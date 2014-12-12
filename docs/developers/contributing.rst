@@ -76,16 +76,27 @@ some general comments regarding patch submission:
 
   - How you tested the patch.
 
-3. For sending patches to the mailing list please send the output of
-   `git format-patch
+3. To upstream patches, send patches to the mailing list using the
+   output of `git format-patch
    <https://www.kernel.org/pub/software/scm/git/docs/git-format-patch.html>`_.
    This ensures the patch is appropriately attributed to you.
 
 4. Alternatively you can use GitHub `git pull requests
    <https://help.github.com/articles/using-pull-requests>`_ for
    upstreaming your patches.  The ONIE project is following the *fork
-   and pull* model.  Note: The author must be a real person with a
-   valid email address.  No anonymous github user IDs.
+   and pull* model.
+
+   Note: The author must be a real person with a valid email address.
+   No anonymous github user IDs.
+
+   Please do not create pull requests using your master branch. You
+   should create a topic branch and make a pull request from that branch.
+
+   This is described here: `Creating a Pull Request
+   <https://help.github.com/articles/creating-a-pull-request/>`_.
+
+   As it says in the article "These changes are proposed in a branch,
+   which ensures that the master branch is kept clean and tidy."
 
 Pull requests can be easier to use then sending patches via email, as
 some email client mangle patch attachments.
