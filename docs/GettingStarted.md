@@ -9,6 +9,10 @@ We document the easiest ways here (manual install via console and NFS)
 but the http://onie.org website contains a variety of installation
 methods including via USB, over the network, and even via ssh.
 
+The resulting installation has a default account ("root") with a default
+password ("onl").  The network interface is disabled by default so that
+you can change the root password before the system comes up.
+
 
 ONL Manual Install
 ------------------------------------------------
