@@ -40,6 +40,12 @@ import fcntl
 # without magic priveledges
 
 closed_source = [
+"onlp-powerpc-as5610-52x:powerpc",
+"onlp-powerpc-as4600-54t:powerpc",
+"onlp-powerpc-as6700-32x-r0:powerpc",
+"onlp-powerpc-as5710-54x-r0b:powerpc",
+"onlp-powerpc-as5710-54x-r0a:powerpc",
+"onlp-powerpc-accton-as5700-96x-r0:powerpc",
 "onlp-powerpc-accton-as5610-52x-r0:powerpc",
 "onlp-powerpc-accton-as6700-32x-r0:powerpc",
 "onlp-powerpc-accton-as5710-54x-r0:powerpc",
