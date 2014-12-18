@@ -58,6 +58,21 @@ The following methods are tried in this order:
 #. IPv6 neighbors
 #. TFTP waterfall
 
+.. note:: The discovery methods are tried repeatedly, forever, until a
+          successful image install occurs.
+
+The general image discovery procedure is illustrated by this
+pseudo-code::
+
+  while (true) {
+    Configure Ethernet management console
+    Attempt discovery method 1
+    Attempt discovery method 2
+    ...
+    Attempt discovery method N
+    Sleep for 20 seconds
+  }
+
 The subsequent sections describe these methods in detail.
 
 .. _default_file_name:
@@ -130,6 +145,28 @@ proceeds as follows::
   foreach $partition in found_list {
     Run installer from $partition
   }
+
+.. _onie_eth_mgmt_config:
+
+Ethernet Management Console Port Configuration
+----------------------------------------------
+
+In order to perform network based image discovery the Ethernet
+management console must first be configured.  The following
+configuration methods are tried in order:
+
+#. Static configuration -- Set via the ``ip`` kernel command line argument
+#. DHCPv6 -- Planned, but not yet implemented
+#. DHCPv4
+#. Fall back IPv4 address
+
+The static configuration uses the ``ip`` `Linux kernel command line
+argument
+<https://www.kernel.org/doc/Documentation/filesystems/nfs/nfsroot.txt>`_.
+
+The fall back IPv4 address is ``192.168.3.10`` for the first
+management port, with ``.11``, ``.12``, etc. used for additional
+management ports if necessary.
 
 .. _onie_dhcp_requests:
 

@@ -71,6 +71,27 @@ FRU labeling differences.  See the ONIE labeling requirements
 :ref:`fru_labeling` section, which may differ from a vendor's non-ONIE
 SKU.
 
+Why is the default console baud rate 115200?
+=============================================
+
+It is the 21st century -- time to use a reasonably fast baud rate.
+
+Why is the Ethernet management port IPv4 address set to 192.168.3.10?
+=====================================================================
+
+``192.168.3.10`` is the default fall back IPv4 address, which is used
+when no other address configuration mechanism works.  This is usually
+*not* what you want and typically indicates your DHCP configuration is
+not quite right.
+
+See :ref:`onie_eth_mgmt_config` for details.
+
+
+Is there a virtual machine implementation?
+==========================================
+
+Yes.  See the :ref:`x86_virtual_machine` section for details.
+
 Is there an ONIE state transition diagram?
 ==========================================
 
@@ -78,16 +99,6 @@ The ONIE states and transitions can be a little confusing.  For a high
 level overview of the states and transitions, read the :ref:`onie_fsm` section.
 
 For more details, read the :ref:`full_design_spec` chapter.
-
-Why is the default console baud rate 115200?
-=============================================
-
-It is the 21st century -- time to use a reasonably fast baud rate.
-
-Is there a virtual machine implementation?
-==========================================
-
-Yes.  See the :ref:`x86_virtual_machine` section for details.
 
 .. _cache_packages:
 
