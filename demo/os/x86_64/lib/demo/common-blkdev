@@ -1,0 +1,33 @@
+# -*- shell-script -*-
+
+#  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Common block device definitions for the DEMO OS
+
+demo_mnt="/demo"
+
+# Configure UEFI / Boot Loader to load ONIE GRUB at the next boot.
+# This is a one-shot event, reverting to the regular boot after one
+# iteration.
+set_onie_next_boot()
+{
+    if [ -d "/sys/firmware/efi/efivars" ] ; then
+        # For the UEFI case we set the UEFI variable "BootNext" to
+        # select ONIE as the next OS to boot.  The "BootNext" variable
+        # is only used once by the firmware, after which the permanent
+        # "BootOrder" variable is used.
+        local boot_num=$(efibootmgr | grep "ONIE:" | awk '{ print $1 }')
+        boot_num=${boot_num#Boot}
+        # Remove trailing '*'
+        boot_num=${boot_num%\*}
+        if [ -n "$boot_num" ] ; then
+            efibootmgr --quiet --bootnext $boot_num && return
+            echo "ERROR: Problems setting UEFI BootNext variable"
+        fi
+    fi
+
+    # Fall back to using GRUB chainload method
+    grub-reboot --boot-directory="$demo_mnt" ONIE
+}

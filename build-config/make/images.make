@@ -215,6 +215,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_build_date=\"$$(date -Imin)\"" >> $(MACHINE_CONF)
 	$(Q) echo "onie_partition_type=$(PARTITION_TYPE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_kernel_version=$(LINUX_RELEASE)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_firmware=$(FIRMWARE_TYPE)" >> $(MACHINE_CONF)
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
@@ -280,11 +281,18 @@ PXE_EFI64_IMAGE		= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).efi64.pxe
 RECOVERY_ISO_IMAGE	= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).iso
 
 RECOVERY_CONF_DIR	= $(PROJECTDIR)/build-config/recovery
-RECOVERY_SYSROOT	= $(MBUILDDIR)/recovery-sysroot
-RECOVERY_CPIO		= $(MBUILDDIR)/recovery.cpio
-RECOVERY_INITRD		= $(IMAGEDIR)/recovery-$(ARCH)-$(MACHINE_PREFIX).initrd
-RECOVERY_ISO_SYSROOT	= $(MBUILDDIR)/recovery-sysroot-iso
-PXE_EFI64_GRUB_MODS	= $(MBUILDDIR)/pxe-efi64-grub-modlist
+RECOVERY_DIR		= $(MBUILDDIR)/recovery
+RECOVERY_SYSROOT	= $(RECOVERY_DIR)/sysroot
+RECOVERY_CPIO		= $(RECOVERY_DIR)/initrd.cpio
+RECOVERY_INITRD		= $(RECOVERY_DIR)/$(ARCH)-$(MACHINE_PREFIX).initrd
+RECOVERY_ISO_SYSROOT	= $(RECOVERY_DIR)/iso-sysroot
+RECOVERY_CORE_IMG	= $(RECOVERY_DIR)/core.img
+RECOVERY_EMBEDDED_IMG	= $(RECOVERY_DIR)/embedded.img
+RECOVERY_EFI_DIR	= $(RECOVERY_DIR)/efi
+RECOVERY_EFI_BOOTX86_IMG= $(RECOVERY_EFI_DIR)/boot/bootx64.efi
+RECOVERY_ELTORITO_IMG	= $(RECOVERY_ISO_SYSROOT)/boot/eltorito.img
+RECOVERY_UEFI_IMG	= $(RECOVERY_ISO_SYSROOT)/boot/efi.img
+PXE_EFI64_GRUB_MODS     = $(RECOVERY_DIR)/pxe-efi64-grub-modlist
 
 RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
 RECOVERY_ISO_STAMP	= $(STAMPDIR)/recovery-iso

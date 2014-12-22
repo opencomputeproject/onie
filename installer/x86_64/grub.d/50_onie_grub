@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -20,7 +20,26 @@
 # partition.
 
 # Step 1
-cat <<EOF
+# Depends on UEFI GRUB or Legacy BIOS GRUB
+uefi_root=/boot/efi
+onie_uefi_grub=EFI/onie/grubx64.efi
+if [ -d "/sys/firmware/efi/efivars" ] && [ -r "${uefi_root}/$onie_uefi_grub" ] ; then
+    uefi_uuid=$(grub-probe --target=fs_uuid "${uefi_root}/$onie_uefi_grub") || {
+        echo "ERROR: grub-probe failed" > /dev/stderr
+        echo "ERROR: failing cmd: grub-probe --target=fs_uuid ${uefi_root}/$onie_uefi_grub" > /dev/stderr
+        exit 1
+    }
+    cat <<EOF
+# Menu entry to chainload ONIE UEFI
+menuentry ONIE {
+	set root='(hd0,gpt1)'
+	search --no-floppy --fs-uuid --set=root $uefi_uuid
+	echo	'Loading ONIE ...'
+	chainloader /$onie_uefi_grub
+}
+EOF
+else
+    cat <<EOF
 # Menu entry to chainload ONIE
 menuentry ONIE {
 	search --no-floppy --label --set=root ONIE-BOOT
@@ -28,6 +47,7 @@ menuentry ONIE {
 	chainloader +1
 }
 EOF
+fi
 
 # Step 2 -- Update ONIE's GRUB configuration in the ONIE-BOOT
 # partition.
@@ -126,11 +146,27 @@ done
 # Look for an ONIE compatible DIAG image and add a boot entry for it.
 diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
 if [ -n "$diag_label" ]  ; then
-    cat <<EOF >> $grub_cfg
+    if [ -d "/sys/firmware/efi/efivars" ] && [ -r "${uefi_root}/$onie_uefi_grub" ] ; then
+        # UEFI firmware
+        diag_uefi_grub=$(efibootmgr -v | grep $diag_label | sed -e 's/.*)File(//' -e 's/)//' -e 's/\\/\//g')
+        if [ -r "$uefi_root/$diag_uefi_grub" ] ; then
+            cat <<EOF >> $grub_cfg
+menuentry '$diag_label' {
+	set root='(hd0,gpt1)'
+	search --no-floppy --fs-uuid --set=root $uefi_uuid
+        echo    'Loading $diag_label $onie_platform ...'
+	chainloader /$diag_uefi_grub
+}
+EOF
+        fi
+    else
+        # legacy BIOS firmware
+        cat <<EOF >> $grub_cfg
 menuentry '$diag_label' {
         search --no-floppy --label --set=root $diag_label
         echo    'Loading $diag_label $onie_platform ...'
         chainloader +1
 }
 EOF
+    fi
 fi

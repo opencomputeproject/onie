@@ -1,14 +1,12 @@
 #!/bin/sh
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014-15 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
 . /lib/onie/functions
 . /lib/demo/functions
-
-# Mount demo filesystem
-demo_mnt="/boot"
+. /lib/demo/common-blkdev
 
 mkdir -p $demo_mnt || {
     echo "Error: Unable to create demo file system mount point: $demo_mnt"
@@ -16,12 +14,12 @@ mkdir -p $demo_mnt || {
 }
 
 demo_type=$(demo_type_get)
-label="ONIE-DEMO-${demo_type}"
-
-[ -n "$label" ] || {
+[ -n "$demo_type" ] || {
     echo "Error: Unable to find DEMO_TYPE on kernel command line"
     exit 1
 }
+
+label="ONIE-DEMO-${demo_type}"
 
 mount -t ext4 -o defaults LABEL=$label $demo_mnt || {
     echo "Error: Unable to mount LABEL=$label on $demo_mnt"

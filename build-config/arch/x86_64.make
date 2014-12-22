@@ -57,6 +57,31 @@ CLIB64 = 64
 
 PLATFORM_IMAGE_COMPLETE = $(IMAGE_UPDATER_STAMP) $(RECOVERY_ISO_STAMP)
 
+# Include UEFI support
+UEFI_ENABLE ?= yes
+ifeq ($(UEFI_ENABLE),yes)
+  # Set the target firmware type.  Possible values are "auto", "uefi"
+  # and "bios":
+  #  - auto -- auto-detect the firmware type at runtime, either 'uefi' or 'bios'
+  #  - uefi -- UEFI firmware mode
+  #  - bios -- legacy BIOS mode
+  #
+  # If firmware type is set to "bios" on a UEFI system, the ONIE
+  # installer uses the legacy GRUB MBR method.  The system will *not*
+  # have a ESP and UEFI will need to use CSM.
+  # 
+  # Explicitly setting "bios" is intended for older ONIE systems that
+  # were UEFI capable, but since ONIE did not support UEFI at the time
+  # were treated as legacy BIOS.  This option allows those systems to
+  # continue to use the legacy BIOS method.
+  #
+  # If firmware type is set to "uefi" on a BIOS system, the ONIE
+  # installer will fail at runtime.
+  FIRMWARE_TYPE ?= auto
+endif
+
+PXE_EFI64_ENABLE ?= no
+
 ifeq ($(PXE_EFI64_ENABLE),yes)
   PLATFORM_IMAGE_COMPLETE += $(PXE_EFI64_STAMP)
 endif
@@ -73,7 +98,8 @@ DEMO_ARCH_BINS = $(DEMO_OS_BIN) $(DEMO_DIAG_BIN)
 # Include MTD utilities
 MTDUTILS_ENABLE ?= yes
 
-# Default to GPT on x86.  A particular machine.make can override this.
+# Default to GPT on x86.  A particular machine.make can override this,
+# though it is required for UEFI.
 PARTITION_TYPE ?= gpt
 
 # Include the GPT partitioning tools
