@@ -1,6 +1,6 @@
 # x86_64 specific uninstall routine
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -47,18 +47,18 @@ delete_msdos_partition()
 # Step 2 -- Remove the partition from the partition table
 erase_part()
 {
-    blk_dev="$1"
-    part="$2"
+    local blk_dev="$1"
+    local part="$2"
 
-    device="${blk_dev}$part"
-    dev_sz=$(blockdev --getsize64 /dev/$device)
-    cur_sz=0
-    count=0
-    n_mb=8
-    step=$(( $n_mb * 1024 * 1024 ))
-    total=$(( $dev_sz + $step - 1 ))
-    total=$(( $total / $step ))
-    mb_sz=$(( $dev_sz / ( 1024 * 1024 ) ))
+    local device="${blk_dev}$part"
+    local dev_sz=$(blockdev --getsize64 /dev/$device)
+    local cur_sz=0
+    local count=0
+    local n_mb=8
+    local step=$(( $n_mb * 1024 * 1024 ))
+    local total=$(( $dev_sz + $step - 1 ))
+    local total=$(( $total / $step ))
+    local mb_sz=$(( $dev_sz / ( 1024 * 1024 ) ))
     printf "${log_pre}Erasing internal mass storage device: /dev/$device (${mb_sz}MB)\n"
     if [ "$onie_testing" != "y" ] ; then
         dd if=/dev/urandom of=/tmp/junk.bin bs=1M count=$n_mb > /dev/null 2>&1
@@ -90,17 +90,27 @@ erase_part()
 # Returns 0 to delete the partition.
 should_delete_gpt_partition()
 {
-    name="$(sgdisk -i $2 /dev/$1 | grep 'Partition name:')"
-    name=${name#*"'"}
-    name=${name%"'"*}
-    case "$name" in
-        GRUB-BOOT|ONIE-BOOT)
+    # Check for precious GPT Partition GUIDs
+    local part_guid="$(sgdisk -i $2 /dev/$1 | grep 'Partition GUID code:')"
+    local part_guid=${part_guid##Partition GUID code: }
+    local part_guid=${part_guid%% *}
+    case "$part_guid" in
+        $uefi_esp_gpt_uuid|$grub_boot_gpt_uuid|$onie_boot_gpt_uuid)
             # echo "skipping ONIE part"
             return 1
             ;;
+        *)
+            ;;
+    esac
+
+    # Check for precious GPT Partition names
+    local part_name="$(sgdisk -i $2 /dev/$1 | grep 'Partition name:')"
+    local part_name=${part_name#*"'"}
+    local part_name=${part_name%"'"*}
+    case "$part_name" in
         *-DIAG)
             # check system attributes
-            attr=$(sgdisk -i $2 /dev/$1 | grep 'Attribute flags')
+            local attr=$(sgdisk -i $2 /dev/$1 | grep 'Attribute flags')
             attr=${attr##*: }
             if [ "$attr" = "0000000000000001" ] ; then
                 # system attribute is set, skip this part
@@ -109,9 +119,9 @@ should_delete_gpt_partition()
             fi
             ;;
         *)
-            return 0
             ;;
     esac
+
     return 0
 }
 
@@ -129,12 +139,30 @@ should_delete_msdos_partition()
     return 0
 }
 
+# After uninstall, clean up files and directories in the ESP.  Also
+# clean up any unused EFI boot numbers.
+uefi_clean_up()
+{
+    # Remove unused files from /boot/efi
+    ls -d $uefi_esp_mnt/EFI/* | while read dir ; do
+        case "$dir" in
+            */onie|*-DIAG|*/BOOT)
+                # preserve these
+                continue
+                ;;
+            *)
+                # remove the rest
+                rm -rf $dir
+        esac
+    done
+
+    uefi_rm_stale_bootnum
+}
+
 uninstall_system()
 {
-
     # Clean up block device that contains ONIE
-    onie_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' | sed -e 's/:.*$//')
-    blk_dev=$(echo $onie_dev | sed -e 's/[0-9]$//' | sed -e 's/\([0-9]\)\(p\)/\1/' | sed -e 's#/dev/##')
+    local blk_dev="$(onie_get_boot_disk | sed -e 's#/dev/##')"
 
     [ -b "/dev/$blk_dev" ] || {
         echo "Error: Unable to determine block device of ONIE install"
@@ -149,30 +177,14 @@ uninstall_system()
         fi
     done
 
-    # Re-install ONIE GRUB in the MBR as the NOS we just removed
-    # probably installed there.
-
-    boot_dev="/dev/$blk_dev"
-
-    # Install ONIE GRUB in MBR and ONIE partition
-    core_img="$onie_boot_mnt/grub/i386-pc/core.img"
-    [ -f "$core_img" ] && chattr -i $core_img
-    grub-install --boot-directory="$onie_boot_mnt" --recheck "$boot_dev" || {
-        echo "ERROR: grub-install failed on: $boot_dev"
-        exit 1
-    }
-    grub_install_log=$(mktemp)
-    grub-install --force --boot-directory="$onie_boot_mnt" \
-        --recheck "$onie_dev" > /$grub_install_log 2>&1 || {
-        echo "ERROR: grub-install failed on: $onie_dev"
-        cat $grub_install_log && rm -f $grub_install_log
-        exit 1
-    }
-    rm -f $grub_install_log
-    [ -f "$core_img" ] && chattr +i $core_img
-
-    # Return to install mode on the next boot
-    onie-boot-mode -q -o install
+    if [ "$(onie_get_running_firmware)" = "uefi" ] ; then
+        uefi_clean_up
+        uefi_boot_onie_install
+    else
+        # Re-install ONIE GRUB in the MBR as the NOS we just removed
+        # probably installed there.
+        bios_boot_onie_install
+    fi
 
     return 0
 }

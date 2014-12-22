@@ -1,6 +1,6 @@
 # x86_64 specific ONIE installer functions
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
@@ -23,15 +23,6 @@
 # get running machine from conf file
 [ -r /etc/machine.conf ] && . /etc/machine.conf
 
-onie_dev="$(install_device_platform)"
-[ $? -eq 0 ] || {
-    echo "WARNING: Unable to find ONIE install block device."
-}
-
-# check if we have an mmcblk device
-blk_suffix=
-echo $onie_dev | grep -q mmcblk && blk_suffix="p"
-
 args_arch="d:"
 
 usage_arch=$(cat <<EOF
@@ -43,8 +34,8 @@ EOF
 # Parse architecture specific installer args
 parse_arg_arch()
 {
-    a="$1"
-    optarg="$2"
+    local a="$1"
+    local optarg="$2"
 
     case $a in
         d)
@@ -58,50 +49,144 @@ parse_arg_arch()
     return 0
 }
 
-# ONIE Partition parameters.  'start' and 'size' are in units of 512
-# byte sectors.
+# Perform various initializations and sanity checks prior to
+# installing ONIE.
+init_onie_install()
+{
 
-# sectors_per_mb = (1024 * 1024) / 512 = 2048
-sectors_per_mb=2048
+    # Find target install block device.
+    # - Default value from burned in install.conf
+    # - Overridden with -d CLI arg
+    onie_dev="$(install_device_platform)"
+    [ $? -eq 0 ] || {
+        echo "WARNING: Unable to find ONIE install block device."
+    }
 
-# Note: Checking the "image_partition_type" here as we need to know
-# the partition type this image is expecting.  In the case of upgrade
-# the running partition type could be different from the installer's
-# image type.
-#
-# Also Note: On platforms that use the "disk" eeprom type,
-# onie-syseeprom content is stored in the area just before
-# the first partition (2048 below).  See sys_eeprom_disk.c
-# in the busybox source.
-if [ "$image_partition_type" = "gpt" ] ; then
-    # GRUB Boot Partition
-    grub_boot_part=1
-    grub_boot_start=2048
-    # 2MB
-    grub_boot_size=$(( 2 * $sectors_per_mb ))
+    [ -b "$onie_dev" ] || {
+        echo "ERROR: Invalid ONIE install device: $onie_dev"
+        exit 1
+    }
 
-    # ONIE-BOOT Paritition 
-    onie_boot_part=$(( $grub_boot_part + 1 ))
-    onie_boot_start=$(( $grub_boot_start + $grub_boot_size ))
-    # 128MB
-    onie_boot_size=$(( 128 * $sectors_per_mb ))
+    # check if we have an mmcblk device
+    blk_suffix=
+    echo $onie_dev | grep -q mmcblk && blk_suffix="p"
 
-    # Helper functions
-    init_disk="init_gpt_disk"
-    verify_partitions="verify_gpt_partitions"
-elif [ "$image_partition_type" = "msdos" ] ; then
-    # ONIE-BOOT Paritition 
-    onie_boot_part=1
-    onie_boot_start=2048
-    # 128MB
-    onie_boot_size=$(( 128 * $sectors_per_mb ))
-    # Helper functions
-    init_disk="init_msdos_disk"
-    verify_partitions="verify_msdos_partitions"
-else
-    echo "ERROR: Unsupported partition type: $image_partition_type"
-    exit 1
-fi
+    [ -r ./onie-blkdev-common ] || {
+        echo "ERROR: Unable to find onie-blkdev-common"
+        exit 1
+    }
+    . ./onie-blkdev-common
+
+    running_firmware="$(onie_get_running_firmware)"
+
+    # Determine the desired firmware to install based on the
+    # installer.
+    case "$image_firmware" in
+        auto)
+            # auto-detect whether BIOS or UEFI
+            if [ -d "/sys/firmware/efi/efivars" ] ; then
+                install_firmware="uefi"
+            else
+                install_firmware="bios"
+            fi
+            ;;
+
+        uefi)
+            [ -d "/sys/firmware/efi/efivars" ] || {
+                echo "ERROR: UEFI firmware install requested, but running system does not support UEFI"
+                exit 1
+            }
+            install_firmware="uefi"
+            ;;
+
+        bios)
+            install_firmware="bios"
+            ;;
+
+        *)
+            echo "WARNING: Unknown firmware requested: $onie_firmware"
+            echo "WARNING: Defaulting to 'bios'."
+            install_firmware="bios"
+
+    esac
+
+    # Peform a few sanity checks prior to starting the embed/upgrade
+    # operation.
+
+    # Check the requested firmware type is compatible with the running
+    # system for upgrades.  When embedding it is OK to change firmware
+    # types, as the entire system is being reprovisioned.
+    if [ "$onie_boot_reason" != "embed" ] ; then
+        # For upgrades the pre/post firmware must be equal.
+        if [ "$running_firmware" != "$install_firmware" ] ; then
+            echo "ERROR: Upgrade firmware mismatch detected."
+            echo "ERROR: Upgrading from firmware '$running_firmware' to '$install_firmware' is not supported."
+            exit 1
+        fi
+    fi
+
+    # ONIE Partition parameters.  'start' and 'size' are in units of 512
+    # byte sectors.
+
+    # sectors_per_mb = (1024 * 1024) / 512 = 2048
+    sectors_per_mb=2048
+
+    # Note: Determine the disk partitioning layout.  In the case of
+    # upgrade the running partition type could be different from the
+    # installer's image type.
+    #
+    # Also Note: On platforms that use the "disk" eeprom type,
+    # onie-syseeprom content is stored in the area just before
+    # the first partition (2048 below).  See sys_eeprom_disk.c
+    # in the busybox source.
+    if [ "$install_firmware" = "uefi" ] ; then
+
+        # UEFI EFI System Partition
+        uefi_esp_part=1
+        uefi_esp_start=2048
+        # 256MB
+        uefi_esp_size=$(( 256 * $sectors_per_mb ))
+
+        # ONIE-BOOT Paritition
+        onie_boot_part=$(( $uefi_esp_part + 1 ))
+        onie_boot_start=$(( $uefi_esp_start + $uefi_esp_size ))
+        # 128MB
+        onie_boot_size=$(( 128 * $sectors_per_mb ))
+
+        # Helper functions
+        init_disk="init_uefi_disk"
+        verify_partitions="verify_uefi_partitions"
+    elif [ "$image_partition_type" = "gpt" ] ; then
+        # GRUB Boot Partition
+        grub_boot_part=1
+        grub_boot_start=2048
+        # 2MB
+        grub_boot_size=$(( 2 * $sectors_per_mb ))
+
+        # ONIE-BOOT Paritition
+        onie_boot_part=$(( $grub_boot_part + 1 ))
+        onie_boot_start=$(( $grub_boot_start + $grub_boot_size ))
+        # 128MB
+        onie_boot_size=$(( 128 * $sectors_per_mb ))
+
+        # Helper functions
+        init_disk="init_gpt_disk"
+        verify_partitions="verify_gpt_partitions"
+    elif [ "$image_partition_type" = "msdos" ] ; then
+        # ONIE-BOOT Paritition
+        onie_boot_part=1
+        onie_boot_start=2048
+        # 128MB
+        onie_boot_size=$(( 128 * $sectors_per_mb ))
+        # Helper functions
+        init_disk="init_msdos_disk"
+        verify_partitions="verify_msdos_partitions"
+    else
+        echo "ERROR: Unsupported partition type: $image_partition_type"
+        exit 1
+    fi
+
+}
 
 # Creates a msdos partition
 create_msdos_partition()
@@ -113,7 +198,7 @@ create_msdos_partition()
 
     [ "$verbose" = "yes" ] && echo "Creating msdos partition $label on: ${onie_dev}$part"
 
-    boot_flags=
+    local boot_flags=
     if [ "$p" = "onie_boot" ] ; then
         boot_flags="set $part boot on"
     fi
@@ -138,7 +223,6 @@ init_msdos_disk()
         echo "ERROR: Problems creating msdos disk label on: $onie_dev"
         exit 1
     }
-    rm -f $sgdisk_log
 
     for p in onie_boot ; do
         create_msdos_partition $p
@@ -165,7 +249,7 @@ verify_msdos_partitions()
         }
 
         # Check starting sector
-        part_start=$(echo -n $info | awk -F: '{print $2}')
+        local part_start=$(echo -n $info | awk -F: '{print $2}')
         # Remove trailing 's'
         part_start=${part_start%s}
         [ $part_start -eq $start ] || {
@@ -174,7 +258,7 @@ verify_msdos_partitions()
         }
 
         # Check partition size
-        part_size=$(echo -n $info | awk -F: '{print $4}')
+        local part_size=$(echo -n $info | awk -F: '{print $4}')
         # Remove trailing 's'
         part_size=${part_size%s}
         [ $part_size -eq $size ] || {
@@ -189,7 +273,7 @@ verify_msdos_partitions()
 # Creates a GPT partition
 create_gpt_partition()
 {
-    p=$1
+    local p=$1
     for v in part label start size gpt_uuid ; do
         eval $v='$'${p}_$v
     done
@@ -206,12 +290,16 @@ create_gpt_partition()
             # attributes.
             attr_bitmask="0x1000000000000001"
             ;;
+        uefi_esp)
+            # Set system partition (bit 0) attribute.
+            attr_bitmask="0x1"
+            ;;
         *)
         echo "ERROR: unknown ONIE partition name: $p"
         exit 1
     esac
 
-    sgdisk_log=$(mktemp)
+    local sgdisk_log=$(mktemp)
     sgdisk --new=$part:$start:+$size \
         --typecode=$part:$gpt_uuid \
         --attributes=$part:=:$attr_bitmask \
@@ -230,7 +318,7 @@ init_gpt_disk()
 {
     # Create GPT disk label
     [ "$verbose" = "yes" ] && echo "Creating GPT disk label on: $onie_dev"
-    sgdisk_log=$(mktemp)
+    local sgdisk_log=$(mktemp)
     sgdisk --clear --mbrtogpt "$onie_dev" > $sgdisk_log 2>&1 || {
         echo "ERROR: Problems creating GPT disk label on: $onie_dev"
         cat $sgdisk_log && rm -f $sgdisk_log
@@ -264,14 +352,14 @@ verify_gpt_partitions()
         }
 
         # Check starting sector
-        part_start=$(sgdisk -i $part $onie_dev | grep 'First sector:' | awk '{ print $3 }')
+        local part_start=$(sgdisk -i $part $onie_dev | grep 'First sector:' | awk '{ print $3 }')
         [ $part_start -eq $start ] || {
             echo "$label: Start sector mismatch.  Found $part_start, expected $start"
             return 1
         }
 
         # Check partition size
-        part_size=$(sgdisk -i $part $onie_dev | grep 'Partition size:' | awk '{ print $3 }')
+        local part_size=$(sgdisk -i $part $onie_dev | grep 'Partition size:' | awk '{ print $3 }')
         [ $part_size -eq $size ] || {
             echo "$label: Partition size mismatch.  Found $part_size, expected $size"
             return 1
@@ -281,17 +369,121 @@ verify_gpt_partitions()
     return 0
 }
 
+# Initializes the disk for UEFI usage.
+# - Creates the GPT disk label on the device, wiping out all partitions
+# - Creates the needed GPT partitions
+init_uefi_disk()
+{
+    # Create GPT disk label
+    [ "$verbose" = "yes" ] && echo "Initializing UEFI disk partitions on: $onie_dev"
+    local sgdisk_log=$(mktemp)
+    sgdisk --clear --mbrtogpt "$onie_dev" > $sgdisk_log 2>&1 || {
+        echo "ERROR: Problems creating GPT disk label on: $onie_dev"
+        cat $sgdisk_log && rm -f $sgdisk_log
+        exit 1
+    }
+    rm -f $sgdisk_log
+
+    for p in uefi_esp onie_boot ; do
+        create_gpt_partition $p
+    done
+
+    # Create file system on UEFI ESP partition
+    local uefi_esp_dev="${onie_dev}$uefi_esp_part"
+    [ "$verbose" = "yes" ] && echo "Creating $uefi_esp_fs_type file system on: $uefi_esp_dev"
+    mkfs.$uefi_esp_fs_type -n "$uefi_esp_label" $uefi_esp_dev > /dev/null 2>&1 || {
+        echo "Error: Unable to create $uefi_esp_fs_type file system on: $uefi_esp_dev"
+        exit 1
+    }
+
+    mkdir -p $uefi_esp_mnt || {
+        echo "Error: Unable to create UEFI ESP mount point: $uefi_esp_mnt"
+        exit 1
+    }
+    mount -o defaults,rw -t $uefi_esp_fs_type $uefi_esp_dev $uefi_esp_mnt || {
+        echo "Error: Unable to mount $uefi_esp_label ($uefi_esp_dev) on ${uefi_esp_mnt}"
+        exit 1
+    }
+
+    # erase any stale EFI BootOrder variables from NVRAM.
+    uefi_rm_stale_bootnum
+
+}
+
+# Verify the format of the ONIE UEFI partitions
+#   For each ONIE partition (EFI System, ONIE-BOOT) verify:
+#     1. expected partition number
+#     2. expected partition GUID
+#     3. expected starting sector address
+#     4. expected partition size
+
+verify_uefi_partitions()
+{
+    for p in uefi_esp onie_boot ; do
+        for v in part label start size gpt_uuid ; do
+            eval $v='$'${p}_$v
+        done
+
+        # Check UUID
+        sgdisk -i $part $onie_dev | grep -q $gpt_uuid || {
+            echo "$label: Unable to find GUID $gpt_uuid on $onie_dev"
+            return 1
+        }
+
+        # Check starting sector
+        local part_start=$(sgdisk -i $part $onie_dev | grep 'First sector:' | awk '{ print $3 }')
+        [ $part_start -eq $start ] || {
+            echo "$label: Start sector mismatch.  Found $part_start, expected $start"
+            return 1
+        }
+
+        # Check partition size
+        local part_size=$(sgdisk -i $part $onie_dev | grep 'Partition size:' | awk '{ print $3 }')
+        [ $part_size -eq $size ] || {
+            echo "$label: Partition size mismatch.  Found $part_size, expected $size"
+            return 1
+        }
+    done
+
+    return 0
+}
+
+# Install GRUB initial grub.cfg file.
+#
+# Set a few GRUB_xxx environment variables that will be picked up and
+# used by the 50_onie_grub script.  This is similiar to what an OS
+# would specify in /etc/default/grub.
+install_grub_config()
+{
+    local boot_dir="$1"
+
+    # Copy grub configuration fragments into onie directory
+    /bin/cp -a grub grub.d $boot_dir/onie || {
+        echo "ERROR: copying grub files to destatition: $boot_dir/onie"
+        exit 1
+    }
+
+    DEFAULT_GRUB_SERIAL_COMMAND="serial --port=%%CONSOLE_PORT%% --speed=%%CONSOLE_SPEED%% --word=8 --parity=no --stop=1"
+    DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8 %%EXTRA_CMDLINE_LINUX%%"
+    GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
+    GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
+    export GRUB_SERIAL_COMMAND
+    export GRUB_CMDLINE_LINUX
+
+    $boot_dir/onie/grub.d/50_onie_grub >> $grub_root_dir/grub.cfg
+}
+
+# Legacy BIOS GRUB install function.
 # Installs GRUB in the specified location.
 #
 # arg $1 -- location, a string.  Either "mbr" or "part".
 # arg $2 -- install device
 # arg $3 -- install directory
-
 install_grub()
 {
-    location="$1"
-    boot_dev="$2"
-    boot_dir="$3"
+    local location="$1"
+    local boot_dev="$2"
+    local boot_dir="$3"
 
     [ "$verbose" = "yes" ] && echo "Installing GRUB in device: $boot_dev, boot-directory: $boot_dir"
 
@@ -318,8 +510,13 @@ install_grub()
     fi
 
     grub_install_log=$(mktemp)
-    grub-install --force --boot-directory="$boot_dir" \
-        --recheck "$boot_dev" > /$grub_install_log 2>&1 || {
+    grub-install \
+        --target=i386-pc \
+        --directory=/usr/lib/grub/i386-pc \
+        --force \
+        --boot-directory="$boot_dir" \
+        --recheck \
+        "$boot_dev" > /$grub_install_log 2>&1 || {
         echo "ERROR: grub-install failed on: $boot_dev"
         cat $grub_install_log && rm -f $grub_install_log
         exit 1
@@ -332,48 +529,62 @@ install_grub()
         [ -f "$core_img" ] && chattr +i $core_img
     fi
 
-    # Copy grub configuration fragments into onie directory
-    /bin/cp -a grub grub.d $boot_dir/onie || {
-        echo "ERROR: copying grub files to destatition: $boot_dir/onie"
-        exit 1
-    }
-
-    # Create initial grub.cfg file.
-
-    # Set a few GRUB_xxx environment variables that will be picked up and
-    # used by the 50_onie_grub script.  This is similiar to what an OS
-    # would specify in /etc/default/grub.
-    #
-    # GRUB_SERIAL_COMMAND
-    # GRUB_CMDLINE_LINUX
-    
-    DEFAULT_GRUB_SERIAL_COMMAND="serial --port=%%CONSOLE_PORT%% --speed=%%CONSOLE_SPEED%% --word=8 --parity=no --stop=1"
-    DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8 %%EXTRA_CMDLINE_LINUX%%"
-    GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
-    GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
-    export GRUB_SERIAL_COMMAND
-    export GRUB_CMDLINE_LINUX
-
-    $boot_dir/onie/grub.d/50_onie_grub >> $grub_root_dir/grub.cfg
+    install_grub_config $boot_dir
 
 }
 
+# UEFI BIOS GRUB install function.
+# Installs GRUB in the specified location.
+#
+# arg $1 -- EFI root directory
+# arg $2 -- install device
+# arg $3 -- GRUB boot directory
+
+install_uefi_grub()
+{
+    local uefi_dir="$1"
+    local boot_dev="$2"
+    local boot_dir="$3"
+
+    [ "$verbose" = "yes" ] && echo "Installing UEFI GRUB in device: $uefi_dir, boot-directory: $boot_dir"
+
+    grub_install_log=$(mktemp)
+    grub-install \
+        --target=x86_64-efi \
+        --no-nvram \
+        --bootloader-id=onie \
+        --efi-directory="$uefi_dir" \
+        --boot-directory="$boot_dir" \
+        --recheck \
+        "$boot_dev" > /$grub_install_log 2>&1 || {
+        echo "ERROR: grub-install failed on: $boot_dev"
+        cat $grub_install_log && rm -f $grub_install_log
+        exit 1
+    }
+    rm -f $grub_install_log
+
+    if [ "$onie_boot_reason" = "embed" ] ; then
+        # Configure EFI NVRAM Boot variables.  --create also sets the
+        # new boot number as active.
+        efibootmgr --quiet --create \
+            --label "ONIE: Open Network Install Environment" \
+            --disk $boot_dev --part $uefi_esp_part \
+            --loader /EFI/onie/grubx64.efi || {
+            echo "ERROR: efibootmgr failed to create new boot variable on: $boot_dev"
+            exit 1
+        }
+    fi
+    
+    install_grub_config $boot_dir
+
+}
+
+# This function is run by install.sh *after* the onie-update.tar file
+# is extracted.
 install_onie()
 {
 
-    [ -r ./onie-blkdev-common ] || {
-        echo "ERROR: Unable to find onie-blkdev-common"
-        exit 1
-    }
-    . ./onie-blkdev-common
-
-    # Find install device.
-    # - Default value from burned in install.conf
-    # - Overridden with -d CLI arg
-    [ -b "$onie_dev" ] || {
-        echo "ERROR: Invalid ONIE install device: $onie_dev"
-        exit 1
-    }
+    init_onie_install
 
     echo "Installing ONIE on: $onie_dev"
     
@@ -445,21 +656,28 @@ install_onie()
         exit 1
     }
 
-    if [ "$onie_boot_reason" = "embed" ] ; then
-        # When embedding ONIE install ONIE's grub into the MBR block
-        # device, e.g. /dev/sda.
-        install_grub mbr $onie_dev $onie_boot_mnt || {
-            echo "Error: Problems installing GRUB on device: $onie_dev, $onie_boot_mnt"
+    if [ "$install_firmware" = "uefi" ] ; then
+        install_uefi_grub $uefi_esp_mnt $onie_dev $onie_boot_mnt || {
+            echo "Error: Problems installing UEFI GRUB on device: $uefi_esp_mnt, $onie_dev, $onie_boot_mnt"
+            exit 1
+        }
+    else
+        if [ "$onie_boot_reason" = "embed" ] ; then
+            # When embedding ONIE install ONIE's grub into the MBR block
+            # device, e.g. /dev/sda.
+            install_grub mbr $onie_dev $onie_boot_mnt || {
+                echo "Error: Problems installing GRUB on device: $onie_dev, $onie_boot_mnt"
+                exit 1
+            }
+        fi
+
+        # Also install GRUB on the ONIE partition block device,
+        # e.g. /dev/sda1.
+        install_grub part $onie_boot_dev $onie_boot_mnt || {
+            echo "Error: Problems installing GRUB on device: ${onie_boot_dev}, $onie_boot_mnt"
             exit 1
         }
     fi
-
-    # Also install GRUB on the ONIE partition block device,
-    # e.g. /dev/sda1.
-    install_grub part $onie_boot_dev $onie_boot_mnt || {
-        echo "Error: Problems installing GRUB on device: ${onie_boot_dev}, $onie_boot_mnt"
-        exit 1
-    }
 
     # Restore the previous grubenv file
     if [ "$preserve_grubenv" = "yes" ] ; then

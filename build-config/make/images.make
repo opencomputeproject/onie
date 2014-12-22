@@ -228,6 +228,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_build_date=\"$$(date -Imin)\"" >> $(MACHINE_CONF)
 	$(Q) echo "onie_partition_type=$(PARTITION_TYPE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_kernel_version=$(LINUX_RELEASE)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_firmware=$(FIRMWARE_TYPE)" >> $(MACHINE_CONF)
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
@@ -303,6 +304,7 @@ RECOVERY_EFI_DIR	= $(RECOVERY_DIR)/efi
 RECOVERY_EFI_BOOTX86_IMG= $(RECOVERY_EFI_DIR)/boot/bootx64.efi
 RECOVERY_ELTORITO_IMG	= $(RECOVERY_ISO_SYSROOT)/boot/eltorito.img
 RECOVERY_UEFI_IMG	= $(RECOVERY_ISO_SYSROOT)/boot/efi.img
+PXE_EFI64_GRUB_MODS     = $(RECOVERY_DIR)/pxe-efi64-grub-modlist
 
 RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
 RECOVERY_ISO_STAMP	= $(STAMPDIR)/recovery-iso

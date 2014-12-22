@@ -31,6 +31,7 @@ EFIVAR_PROGRAMS		= efivar
 PHONY += efivar efivar-download efivar-source efivar-patch \
 	efivar-build efivar-install efivar-clean efivar-download-clean
 
+EFIVAR_BINS = efivar
 EFIVAR_LIBS = libefivar.so.0 libefivar.so
 
 efivar: $(EFIVAR_STAMP)
@@ -77,6 +78,9 @@ $(EFIVAR_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(EFIVAR_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing efivar in $(DEV_SYSROOT) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) CROSS_COMPILE=$(CROSSPREFIX) DESTDIR=$(DEV_SYSROOT) install
+	$(Q) for file in $(EFIVAR_BINS); do \
+		cp -av $(DEV_SYSROOT)/usr/bin/$$file $(SYSROOTDIR)/usr/bin/ ; \
+	     done
 	$(Q) for file in $(EFIVAR_LIBS); do \
 		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
 	     done
