@@ -1,0 +1,88 @@
+====================================
+Installing ONIE on Accton AS5700_96X
+====================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/accton MACHINE=accton_as5700_96x all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/accton MACHINE=accton_as5700_96x all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r-- 3604480 May  7 11:38 onie-accton_as5700_96x-r0.bin
+  -rw-r--r--  524288 May  7 11:38 onie-accton_as5700_96x-r0.bin.uboot
+
+Installing the ONIE binaries
+============================
+
+For the Accton AS5700_96X two binary images need to be installed on the
+NOR flash.  Two images are required as a board info block resides in the
+NOR flash between U-Boot and the U-Boot environment variables::
+
+  Image 1 -- ONIE kernel and empty U-Boot envariables
+    name:  onie-accton_as5700_96x-r0.bin
+
+  Image 2 -- U-Boot binary
+    name:  onie-accton_as5700_96x-r0.bin.uboot
+
+Step 1 -- Put the ONIE files on a TFTP server
+---------------------------------------------
+
+The following directions assume the files are on the root of the TFTP
+server.
+
+Step 2 -- Install image1 (onie-accton_as5700_96x-r0.bin)
+--------------------------------------------------------
+
+Copying the image down using TFTP and flash to the NOR flash::
+
+  => setenv q1start 0xe8040000
+  => setenv q1sz.b 0xd00000
+  => tftp onie-accton_as5700_96x-r0.bin
+  => protect off $q1start +${q1sz.b} && erase $q1start +${q1sz.b}
+  => cp.b $fileaddr $q1start ${q1sz.b} && protect on $q1start +${q1sz.b}
+
+Step 3 -- Install image2 (onie-accton_as5700_96x-r0.bin.uboot)
+--------------------------------------------------------------
+
+Copying the image down using TFTP and flash to the NOR flash::
+
+  => setenv q2start 0xeff80000
+  => setenv q2sz.b 0x00080000
+  => tftp onie-accton_as5700_96x-r0.bin.uboot
+  => protect off $q2start +${q2sz.b} && erase $q2start +${q2sz.b}
+  => cp.b $fileaddr $q2start ${q2sz.b} && protect on $q2start +${q2sz.b}
+
+Step 4 -- Configure Serial Console
+----------------------------------
+
+ONIE defaults the serial console baud rate to 115200.  You may need to
+adjust your terminal settings.
+
+Step 5 -- Restart The System
+----------------------------
+
+You can interrupt the boot process by pressing any key during the
+count down::
+
+  => reset
+
+Step 6 -- Optional
+------------------
+
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this::
+
+  => setenv reboot_cmd rescue
+  => boot
