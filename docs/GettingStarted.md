@@ -5,9 +5,9 @@ http://opennetlinux.org/hcl) and the ONL installer binary.  Every
 ONL compatible switch ships with the ONIE installer environment installed
 which gives you a multitude of ways of getting ONL installed on your switch.
 
-We document the easiest way here (manual install) but the http://onie.org website
-contains a variety of installation methods including via USB, over the network,
-and even over NFS.
+We document the easiest ways here (manual install via console and NFS)
+but the http://onie.org website contains a variety of installation
+methods including via USB, over the network, and even via ssh.
 
 
 ONL Manual Install
@@ -116,4 +116,46 @@ Then simply download the latest ONL installer from the website and run it.
         onl.powerpc-as4600-54t.loader
         onl.powerpc-as5600-52x.loader
         ...
+
+
+
+
+ONL NFS Root Directory
+------------------------------------------------
+
+Given that the default installation of ONL does not persist files across
+reboots (this is intentional -- flash disks should not be written to
+as often as spinning disks), it is sometimes useful to have a normally
+writable, larger disk available for the switch.  Enter the NFS root
+directory which enables a switch to boot ONL from a remote NFS partition.
+While it is possible to simply fetch the SWI file from an NFS server
+(keeping the same non-persisted behavior), the much more useful feature
+is to have the root file system NFS hosted.
+
+To enable NFS mounted root partition:
+1) Run the ONL installer normally (e.g., via the manual mode per above) so that the ONL
+    loader is installed.
+2) Edit /mnt/flash/boot-config and change the SWI variable to point to a URL of the form:
+    SWI=nfs://$ip[:port]/path/to/directory/     # trailing '/' is critical
+    NETAUTO=dhcp                                # optional, but likely what you want
+3) On server $ip, in /path/to/directory, unzip a target .SWI file, e.g.,
+    # wget http://opennetlinux.org/binaries/latest.swi
+    # unzip latest.swi
+4) unsquash the compressed root file system as directory 'rootfs-$arch':
+    # unsquashfs rootfs-powerpc.sqsh -d rootfs-$arc # e.g., $arch = 'powerpc'h
+
+Now reboot your switch and it should boot automatically into the NFS root file system.
+Note that the SWI structure is still maintained:
+    robs@sbs3:~/export/ly2-1$ ls -l
+    total 109048
+    -rw-r--r--  1 robs __USERS__   3382017 Nov  4 22:28 initrd-powerpc
+    -rwxr-xr-x  1 robs __USERS__   6942960 Nov  4 22:28 kernel-85xx*
+    -rw-r--r--  1 robs __USERS__ 101322752 Nov  4 22:28 rootfs-powerpc.sqsh
+    drwxrwxr-x 22 robs __USERS__      4096 Jan  2 18:21 rootfs-powerpc/
+    -rw-r--r--  1 robs __USERS__       100 Nov  4 22:29 version
+That is:
+    * 'kernel-85xx' is the kernel image
+    * 'initrd-powerpc' is the initial RAM disk image
+    * 'rootfs-powerpc' is the base of the root filesystem
+    * 'version' is a string that identifies this SWI
 
