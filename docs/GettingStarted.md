@@ -151,7 +151,7 @@ To enable NFS mounted root partition:
 
 4) unsquash the compressed root file system as directory 'rootfs-$arch':
 
-     # unsquashfs rootfs-powerpc.sqsh -d rootfs-$arch # e.g., $arch = 'powerpc'h
+     # unsquashfs -d rootfs-$arch rootfs-$arch.sqsh  # e.g., $arch = 'powerpc'h
 
 Now reboot your switch and it should boot automatically into the NFS root file system.
 Note that the SWI structure is still maintained:
