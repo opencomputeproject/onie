@@ -136,23 +136,23 @@ To enable NFS mounted root partition:
 1) Run the ONL installer normally (e.g., via the manual mode per above) so that the ONL
     loader is installed.
 2) Edit /mnt/flash/boot-config and change the SWI variable to point to a URL of the form:
-    SWI=nfs://$ip[:port]/path/to/directory/     # trailing '/' is critical
-    NETAUTO=dhcp                                # optional, but likely what you want
+     SWI=nfs://$ip[:port]/path/to/directory/     # trailing '/' is critical
+     NETAUTO=dhcp                                # optional, but likely what you want
 3) On server $ip, in /path/to/directory, unzip a target .SWI file, e.g.,
-    # wget http://opennetlinux.org/binaries/latest.swi
-    # unzip latest.swi
+     # wget http://opennetlinux.org/binaries/latest.swi
+     # unzip latest.swi
 4) unsquash the compressed root file system as directory 'rootfs-$arch':
-    # unsquashfs rootfs-powerpc.sqsh -d rootfs-$arc # e.g., $arch = 'powerpc'h
+     # unsquashfs rootfs-powerpc.sqsh -d rootfs-$arc # e.g., $arch = 'powerpc'h
 
 Now reboot your switch and it should boot automatically into the NFS root file system.
 Note that the SWI structure is still maintained:
-    robs@sbs3:~/export/ly2-1$ ls -l
-    total 109048
-    -rw-r--r--  1 robs __USERS__   3382017 Nov  4 22:28 initrd-powerpc
-    -rwxr-xr-x  1 robs __USERS__   6942960 Nov  4 22:28 kernel-85xx*
-    -rw-r--r--  1 robs __USERS__ 101322752 Nov  4 22:28 rootfs-powerpc.sqsh
-    drwxrwxr-x 22 robs __USERS__      4096 Jan  2 18:21 rootfs-powerpc/
-    -rw-r--r--  1 robs __USERS__       100 Nov  4 22:29 version
+     robs@sbs3:~/export/ly2-1$ ls -l
+     total 109048
+     -rw-r--r--  1 robs __USERS__   3382017 Nov  4 22:28 initrd-powerpc
+     -rwxr-xr-x  1 robs __USERS__   6942960 Nov  4 22:28 kernel-85xx*
+     -rw-r--r--  1 robs __USERS__ 101322752 Nov  4 22:28 rootfs-powerpc.sqsh
+     drwxrwxr-x 22 robs __USERS__      4096 Jan  2 18:21 rootfs-powerpc/
+     -rw-r--r--  1 robs __USERS__       100 Nov  4 22:29 version
 That is:
     * 'kernel-85xx' is the kernel image
     * 'initrd-powerpc' is the initial RAM disk image
