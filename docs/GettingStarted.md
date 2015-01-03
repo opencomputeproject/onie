@@ -137,7 +137,7 @@ To enable NFS mounted root partition:
 1) Run the ONL installer normally (e.g., via the manual mode per above) so that the ONL
     loader is installed.
 
-2) Edit /mnt/flash/boot-config and change the SWI variable to point to a URL of the form:
+2) Edit /mnt/flash/boot-config, enable DHCP, and change the SWI variable to point to a URL of the form:
 
      # cat /mnt/flash/boot-config
      SWI=nfs://$ip[:port]/path/to/directory/     # trailing '/' is critical
