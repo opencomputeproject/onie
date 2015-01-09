@@ -1,0 +1,26 @@
+From 7522c9625f00e4635a851cc724ddef3c5f0097e0 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 04/12] Make the optional_data_len size signed.
+
+Steve McIntyre's testing on i386 with efivars using the legacy path
+(i.e. not efivarfs) also found a bug here - we're checking
+optional_data_len for negative error values, but it's unsigned.  We're
+not going to have 4GB of optional loader data, so just make it signed.
+
+This should fix Issue #21 .
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/efibootmgr/efibootmgr.c b/src/efibootmgr/efibootmgr.c
+index f9d915b..8460ee1 100644
+--- a/src/efibootmgr/efibootmgr.c
++++ b/src/efibootmgr/efibootmgr.c
+@@ -778,7 +778,7 @@ show_boot_vars()
+ 	char description[80];
+ 	EFI_LOAD_OPTION *load_option;
+ 	EFI_DEVICE_PATH *path;
+-	unsigned long optional_data_len=0;
++	long optional_data_len=0;
+ 
+ 	list_for_each(pos, &boot_entry_list) {
+ 		boot = list_entry(pos, var_entry_t, list);

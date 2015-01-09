@@ -1,0 +1,278 @@
+From 019916ee540541d9deaa9f1ae2bd307ec4e7de52 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 01/12] Don't name something efi_variable_t; that namespace is
+ used by efivar.
+
+Newer efivar has efi_variable_t as a type for its import/export api
+(which efibootmgr can use at some point), so don't make a type with that
+name internally here.
+
+This fixes github issue #20
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/efibootmgr/efibootmgr.c b/src/efibootmgr/efibootmgr.c
+index 85dc73e..3c2be5b 100644
+--- a/src/efibootmgr/efibootmgr.c
++++ b/src/efibootmgr/efibootmgr.c
+@@ -68,7 +68,7 @@ typedef struct _var_entry {
+ 	uint32_t	attributes;
+ 	uint16_t	num;
+ 	list_t		list;
+-} efi_variable_t;
++} var_entry_t;
+ 
+ /* global variables */
+ static	LIST_HEAD(boot_entry_list);
+@@ -79,10 +79,10 @@ static void
+ free_vars(list_t *head)
+ {
+ 	list_t *pos, *n;
+-	efi_variable_t *boot;
++	var_entry_t *boot;
+ 
+ 	list_for_each_safe(pos, n, head) {
+-		boot = list_entry(pos, efi_variable_t, list);
++		boot = list_entry(pos, var_entry_t, list);
+ 		if (boot->data)
+ 			free(boot->data);
+ 		list_del(&(boot->list));
+@@ -94,7 +94,7 @@ static void
+ read_vars(char **namelist,
+ 	  list_t *head)
+ {
+-	efi_variable_t *entry;
++	var_entry_t *entry;
+ 	int i, rc;
+ 
+ 	if (!namelist)
+@@ -102,10 +102,10 @@ read_vars(char **namelist,
+ 
+ 	for (i=0; namelist[i] != NULL; i++) {
+ 		if (namelist[i]) {
+-			entry = malloc(sizeof(efi_variable_t));
++			entry = malloc(sizeof(var_entry_t));
+ 			if (!entry)
+ 				goto err;
+-			memset(entry, 0, sizeof(efi_variable_t));
++			memset(entry, 0, sizeof(var_entry_t));
+ 
+ 			rc = efi_get_variable(EFI_GLOBAL_GUID, namelist[i],
+ 					       &entry->data, &entry->data_size,
+@@ -167,7 +167,7 @@ find_free_boot_var(list_t *boot_list)
+ 	int num_vars=0, i=0, found;
+ 	uint16_t *vars, free_number;
+ 	list_t *pos;
+-	efi_variable_t *boot;
++	var_entry_t *boot;
+ 	list_for_each(pos, boot_list) {
+ 		num_vars++;
+ 	}
+@@ -176,7 +176,7 @@ find_free_boot_var(list_t *boot_list)
+ 		return -1;
+ 
+ 	list_for_each(pos, boot_list) {
+-		boot = list_entry(pos, efi_variable_t, list);
++		boot = list_entry(pos, var_entry_t, list);
+ 		vars[i] = boot->num;
+ 		i++;
+ 	}
+@@ -187,7 +187,7 @@ find_free_boot_var(list_t *boot_list)
+ 	for (free_number = 0; free_number < num_vars && found; free_number++) {
+ 		found = 0;
+ 		list_for_each(pos, boot_list) {
+-			boot = list_entry(pos, efi_variable_t, list);
++			boot = list_entry(pos, var_entry_t, list);
+ 			if (boot->num == free_number) {
+ 				found = 1;
+ 				break;
+@@ -206,11 +206,11 @@ static void
+ warn_duplicate_name(list_t *boot_list)
+ {
+ 	list_t *pos;
+-	efi_variable_t *boot;
++	var_entry_t *boot;
+ 	EFI_LOAD_OPTION *load_option;
+ 
+ 	list_for_each(pos, boot_list) {
+-		boot = list_entry(pos, efi_variable_t, list);
++		boot = list_entry(pos, var_entry_t, list);
+ 		load_option = (EFI_LOAD_OPTION *)
+ 			boot->data;
+ 		if (!efichar_char_strcmp(opts.label,
+@@ -222,10 +222,10 @@ warn_duplicate_name(list_t *boot_list)
+ 	}
+ }
+ 
+-static efi_variable_t *
++static var_entry_t *
+ make_boot_var(list_t *boot_list)
+ {
+-	efi_variable_t *boot = NULL;
++	var_entry_t *boot = NULL;
+ 	int free_number;
+ 	list_t *pos;
+ 	int rc;
+@@ -234,7 +234,7 @@ make_boot_var(list_t *boot_list)
+ 		free_number = find_free_boot_var(boot_list);
+ 	else {
+ 		list_for_each(pos, boot_list) {
+-			boot = list_entry(pos, efi_variable_t, list);
++			boot = list_entry(pos, var_entry_t, list);
+ 			if (boot->num == opts.bootnum) {
+ 				fprintf(stderr, "** Warning ** : bootnum %04X "
+ 				        "already exists\n", opts.bootnum);
+@@ -249,7 +249,7 @@ make_boot_var(list_t *boot_list)
+ 		return NULL;
+ 	}
+ 
+-	/* Create a new efi_variable_t object
++	/* Create a new var_entry_t object
+ 	   and populate it.
+ 	*/
+ 
+@@ -293,10 +293,10 @@ err_boot_entry:
+ }
+ 
+ static int
+-read_boot_order(efi_variable_t **boot_order)
++read_boot_order(var_entry_t **boot_order)
+ {
+ 	int rc;
+-	efi_variable_t *new = NULL, *bo = NULL;
++	var_entry_t *new = NULL, *bo = NULL;
+ 
+ 	if (*boot_order == NULL) {
+ 		new = calloc(1, sizeof (**boot_order));
+@@ -336,7 +336,7 @@ set_boot_u16(const char *name, uint16_t num)
+ static int
+ add_to_boot_order(uint16_t num)
+ {
+-	efi_variable_t *boot_order = NULL;
++	var_entry_t *boot_order = NULL;
+ 	uint64_t new_data_size;
+ 	uint16_t *new_data, *old_data;
+ 	int rc;
+@@ -375,7 +375,7 @@ add_to_boot_order(uint16_t num)
+ static int
+ remove_dupes_from_boot_order(void)
+ {
+-	efi_variable_t *boot_order = NULL;
++	var_entry_t *boot_order = NULL;
+ 	uint64_t new_data_size;
+ 	uint16_t *new_data, *old_data;
+ 	unsigned int old_i,new_i;
+@@ -429,7 +429,7 @@ remove_dupes_from_boot_order(void)
+ static int
+ remove_from_boot_order(uint16_t num)
+ {
+-	efi_variable_t *boot_order = NULL;
++	var_entry_t *boot_order = NULL;
+ 	uint64_t new_data_size;
+ 	uint16_t *new_data, *old_data;
+ 	unsigned int old_i,new_i;
+@@ -505,7 +505,7 @@ delete_boot_var(uint16_t num)
+ 	int rc;
+ 	char name[16];
+ 	list_t *pos, *n;
+-	efi_variable_t *boot;
++	var_entry_t *boot;
+ 
+ 	snprintf(name, sizeof(name), "Boot%04X", num);
+ 	rc = efi_del_variable(EFI_GLOBAL_GUID, name);
+@@ -526,7 +526,7 @@ delete_boot_var(uint16_t num)
+ 		return rc;
+ 	}
+ 	list_for_each_safe(pos, n, &boot_entry_list) {
+-		boot = list_entry(pos, efi_variable_t, list);
++		boot = list_entry(pos, var_entry_t, list);
+ 		if (boot->num == num) {
+ 			rc = remove_from_boot_order(num);
+ 			if (rc < 0)
+@@ -542,13 +542,13 @@ static void
+ set_var_nums(list_t *list)
+ {
+ 	list_t *pos;
+-	efi_variable_t *var;
++	var_entry_t *var;
+ 	int num=0, rc;
+ 	char *name;
+ 	int warn=0;
+ 
+ 	list_for_each(pos, list) {
+-		var = list_entry(pos, efi_variable_t, list);
++		var = list_entry(pos, var_entry_t, list);
+ 		rc = sscanf(var->name, "Boot%04X-%*s", &num);
+ 		if (rc == 1) {
+ 			var->num = num;
+@@ -585,10 +585,10 @@ static int
+ is_current_boot_entry(int b)
+ {
+ 	list_t *pos;
+-	efi_variable_t *boot;
++	var_entry_t *boot;
+ 
+ 	list_for_each(pos, &boot_entry_list) {
+-		boot = list_entry(pos, efi_variable_t, list);
++		boot = list_entry(pos, var_entry_t, list);
+ 		if (boot->num == b)
+ 			return 1;
+ 	}
+@@ -684,7 +684,7 @@ static int
+ construct_boot_order(char *bootorder, int keep,
+ 			uint16_t **ret_data, size_t *ret_data_size)
+ {
+-	efi_variable_t bo;
++	var_entry_t bo;
+ 	int rc;
+ 	uint16_t *data = NULL;
+ 	size_t data_size = 0;
+@@ -774,14 +774,14 @@ static void
+ show_boot_vars()
+ {
+ 	list_t *pos;
+-	efi_variable_t *boot;
++	var_entry_t *boot;
+ 	char description[80];
+ 	EFI_LOAD_OPTION *load_option;
+ 	EFI_DEVICE_PATH *path;
+ 	unsigned long optional_data_len=0;
+ 
+ 	list_for_each(pos, &boot_entry_list) {
+-		boot = list_entry(pos, efi_variable_t, list);
++		boot = list_entry(pos, var_entry_t, list);
+ 		load_option = (EFI_LOAD_OPTION *)boot->data;
+ 		efichar_to_char(description,
+ 				load_option->description, sizeof(description));
+@@ -869,7 +869,7 @@ static void
+ show_boot_order()
+ {
+ 	int rc;
+-	efi_variable_t *boot_order = NULL;
++	var_entry_t *boot_order = NULL;
+ 	uint16_t *data;
+ 
+ 	rc = read_boot_order(&boot_order);
+@@ -902,11 +902,11 @@ static int
+ set_active_state()
+ {
+ 	list_t *pos;
+-	efi_variable_t *boot;
++	var_entry_t *boot;
+ 	EFI_LOAD_OPTION *load_option;
+ 
+ 	list_for_each(pos, &boot_entry_list) {
+-		boot = list_entry(pos, efi_variable_t, list);
++		boot = list_entry(pos, var_entry_t, list);
+ 		load_option = (EFI_LOAD_OPTION *)boot->data;
+ 		if (boot->num == opts.bootnum) {
+ 			if (opts.active == 1) {
+@@ -1271,7 +1271,7 @@ int
+ main(int argc, char **argv)
+ {
+ 	char **boot_names = NULL;
+-	efi_variable_t *new_boot = NULL;
++	var_entry_t *new_boot = NULL;
+ 	int num;
+ 	int ret = 0;
+ 

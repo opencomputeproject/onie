@@ -1,0 +1,29 @@
+From ea640b305066f22db08423e95a42f59b01aa5303 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 12/12] Don't depend on vendor-defined calloc(n, 0) behavior.
+
+If we don't have any boot variables, we know that 0 is free, so just
+return that.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/efibootmgr/efibootmgr.c b/src/efibootmgr/efibootmgr.c
+index 319e732..9f1636a 100644
+--- a/src/efibootmgr/efibootmgr.c
++++ b/src/efibootmgr/efibootmgr.c
+@@ -172,9 +172,13 @@ find_free_boot_var(list_t *boot_list)
+ 	uint16_t *vars, free_number;
+ 	list_t *pos;
+ 	var_entry_t *boot;
+-	list_for_each(pos, boot_list) {
++
++	list_for_each(pos, boot_list)
+ 		num_vars++;
+-	}
++
++	if (num_vars == 0)
++		return 0;
++
+ 	vars = calloc(1, sizeof(uint16_t) * num_vars);
+ 	if (!vars)
+ 		return -1;

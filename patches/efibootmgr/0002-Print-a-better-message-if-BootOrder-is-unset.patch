@@ -1,0 +1,33 @@
+From 7fa64d195321b2fbc782321959620b75c153bda9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 02/12] Print a better message if BootOrder is unset.
+
+This resolves issue #7 .
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/efibootmgr/efibootmgr.c b/src/efibootmgr/efibootmgr.c
+index 3c2be5b..f9d915b 100644
+--- a/src/efibootmgr/efibootmgr.c
++++ b/src/efibootmgr/efibootmgr.c
+@@ -875,16 +875,11 @@ show_boot_order()
+ 	rc = read_boot_order(&boot_order);
+ 
+ 	if (rc < 0) {
+-		if (errno == ENOENT) {
+-			boot_order = calloc(1, sizeof (*boot_order));
+-			if (!boot_order) {
+-				perror("show_boot_order()");
+-				return;
+-			}
+-		} else {
++		if (errno == ENOENT)
++			printf("No BootOrder is set; firmware will attempt recovery\n");
++		else
+ 			perror("show_boot_order()");
+-			return;
+-		}
++		return;
+ 	}
+ 
+ 	/* We've now got an array (in boot_order->data) of the

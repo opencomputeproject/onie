@@ -1,0 +1,161 @@
+From 9877b4fe7e22853bffcef61eeb3d07cdafef0cac Mon Sep 17 00:00:00 2001
+Subject: [PATCH 04/16] Add some validity checkers for dp and loadopt.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/include/efivar/efiboot-loadopt.h b/src/include/efivar/efiboot-loadopt.h
+index 1872af6..1a67773 100644
+--- a/src/include/efivar/efiboot-loadopt.h
++++ b/src/include/efivar/efiboot-loadopt.h
+@@ -64,4 +64,11 @@ efi_load_option_args_as_ucs2(uint16_t *buf, ssize_t size, char *utf8)
+ 	__attribute__((__nonnull__ (3)))
+ 	__attribute__((__visibility__ ("default")));
+ 
++extern ssize_t efi_loadopt_optional_data_size(efi_load_option *opt, size_t size)
++	__attribute__((__nonnull__ (1)))
++	__attribute__((__visibility__ ("default")));
++extern int efi_loadopt_is_valid(efi_load_option *opt, size_t size)
++	__attribute__((__nonnull__ (1)))
++	__attribute__((__visibility__ ("default")));
++
+ #endif /* _EFIBOOT_LOADOPT_H */
+diff --git a/src/include/efivar/efivar-dp.h b/src/include/efivar/efivar-dp.h
+index ad326e9..9fccdb2 100644
+--- a/src/include/efivar/efivar-dp.h
++++ b/src/include/efivar/efivar-dp.h
+@@ -18,6 +18,8 @@
+ #ifndef _EFIVAR_DP_H
+ #define _EFIVAR_DP_H 1
+ 
++#include <limits.h>
++
+ /* Generic device path header */
+ typedef struct {
+ 	uint8_t type;
+@@ -854,6 +856,64 @@ efidp_instance_size(const_efidp dpi)
+ 	return ret;
+ }
+ 
++static inline int
++__attribute__((__unused__))
++__attribute__((__nonnull__ (1)))
++efidp_is_valid(const_efidp dp, ssize_t limit)
++{
++	efidp_header *hdr = (efidp_header *)dp;
++	/* just to make it so I'm not checking for negatives everywhere,
++	 * limit this at a truly absurdly large size. */
++	if (limit < 0)
++		limit = INT_MAX;
++
++	while (limit > 0 && hdr) {
++		if (limit < (int64_t)(sizeof (efidp_header)))
++			return 0;
++
++		switch (hdr->type) {
++		case EFIDP_HARDWARE_TYPE:
++			if (hdr->subtype != EFIDP_HW_VENDOR &&
++			    hdr->length > 1024)
++				return 0;
++			break;
++		case EFIDP_ACPI_TYPE:
++			if (hdr->length > 1024)
++				return 0;
++			break;
++		case EFIDP_MESSAGE_TYPE:
++			if (hdr->subtype != EFIDP_MSG_VENDOR &&
++			    hdr->length > 1024)
++				return 0;
++			break;
++		case EFIDP_MEDIA_TYPE:
++			if (hdr->subtype != EFIDP_MEDIA_VENDOR &&
++			    hdr->length > 1024)
++				return 0;
++			break;
++		case EFIDP_BIOS_BOOT_TYPE:
++			break;
++		case EFIDP_END_TYPE:
++			if (hdr->length > 4)
++				return 0;
++			break;
++		default:
++			return 0;
++		}
++
++		if (limit < hdr->length)
++			return 0;
++		limit -= hdr->length;
++
++		if (hdr->type != EFIDP_END_TYPE &&
++		    hdr->type != EFIDP_END_ENTIRE)
++			break;
++
++		hdr = (efidp_header *)((uint8_t *)hdr + hdr->length);
++	}
++	return (limit >= 0);
++}
++
+ /* and now, printing and parsing */
+ extern ssize_t efidp_parse_device_node(char *path, efidp out, size_t size);
+ extern ssize_t efidp_parse_device_path(char *path, efidp out, size_t size);
+diff --git a/src/loadopt.c b/src/loadopt.c
+index e383b96..97355f0 100644
+--- a/src/loadopt.c
++++ b/src/loadopt.c
+@@ -38,6 +38,7 @@ efi_make_load_option(uint8_t *buf, ssize_t size, uint32_t attributes,
+ 		errno = EINVAL;
+ 		return -1;
+ 	}
++
+ 	if (!dp && dp_size == 0) {
+ 		errno = EINVAL;
+ 		return -1;
+@@ -74,6 +75,48 @@ efi_make_load_option(uint8_t *buf, ssize_t size, uint32_t attributes,
+ 	return sz;
+ }
+ 
++ssize_t
++__attribute__((__nonnull__ (1)))
++__attribute__((__visibility__ ("default")))
++efi_loadopt_optional_data_size(efi_load_option *opt, size_t size)
++{
++	size_t sz;
++	uint8_t *p;
++
++	if (!opt)
++		return -1;
++
++	if (size < sizeof(*opt))
++		return -1;
++	size -= sizeof(*opt);
++	if (size < opt->file_path_list_length)
++		return -1;
++	sz = ucs2size(opt->description, size);
++	if (sz == size) // since there's no room for a file path...
++		return -1;
++	p = (uint8_t *)(opt->description) + sz;
++	size -= sz;
++
++	if (!efidp_is_valid((const_efidp)p, size))
++		return -1;
++	sz = efidp_size((const_efidp)p);
++	p += sz;
++	size -= sz;
++
++	return size;
++}
++
++int
++__attribute__((__nonnull__ (1)))
++__attribute__((__visibility__ ("default")))
++efi_loadopt_is_valid(efi_load_option *opt, size_t size)
++{
++	ssize_t rc;
++
++	rc = efi_loadopt_optional_data_size(opt, size);
++	return (rc >= 0);
++}
++
+ uint32_t
+ __attribute__((__nonnull__ (1)))
+ __attribute__((__visibility__ ("default")))

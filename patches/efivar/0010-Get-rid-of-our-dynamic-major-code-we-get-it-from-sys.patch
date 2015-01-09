@@ -1,0 +1,200 @@
+From 8fb5a4bcc4b32e3c3413b264331b92bab54574a0 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 10/16] Get rid of our dynamic major code; we get it from
+ sysfs.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/linux.c b/src/linux.c
+index fa19300..17d1f03 100644
+--- a/src/linux.c
++++ b/src/linux.c
+@@ -85,55 +85,6 @@ eb_scsi_idlun(int fd, uint8_t *host, uint8_t *channel, uint8_t *id,
+ 	return 0;
+ }
+ 
+-/*
+- * Look up dynamic major device node numbers.
+- */
+-static int
+-get_dynamic_major(char *name, int block)
+-{
+-	static int cached;
+-	static char cached_name[1024] = "";
+-	static int cached_block;
+-
+-	FILE *f;
+-	char line[256];
+-	int seen_block = 0;
+-	char namenl[strlen(name)+2];
+-
+-	if (cached != 0 && block==cached_block &&
+-	    !strncmp(cached_name, name, 1023)) {
+-		return cached;
+-	}
+-	strcpy(namenl, name);
+-	strcat(namenl, "\n");
+-
+-	cached = -1;
+-	f = fopen("/proc/devices", "r");
+-	if (f == NULL)
+-		return cached;
+-
+-	while (fgets(line, sizeof line, f) != NULL) {
+-		size_t len = strlen(line);
+-		int major, scanned = 0;
+-
+-		if (!strcmp(line, "Block devices:\n"))
+-			seen_block = 1;
+-		if (len == 0 || line[len - 1] != '\n') {
+-			break;
+-		}
+-		if (seen_block == block &&
+-		    sscanf(line, "%d %n", &major, &scanned) == 1 &&
+-		    strcmp(line + scanned, namenl) == 0) {
+-			cached = major;
+-			strncpy(cached_name, name, 1023);
+-			cached_block = block;
+-			break;
+-		}
+-	}
+-	fclose(f);
+-	return cached;
+-}
+-
+ int
+ __attribute__((__visibility__ ("hidden")))
+ eb_ide_pci(int fd, const struct disk_info *info, uint8_t *bus, uint8_t *device,
+@@ -710,62 +661,72 @@ make_blockdev_path(uint8_t *buf, ssize_t size, int fd, struct disk_info *info)
+ 	    info->interface_type == fibre ||
+ 	    info->interface_type == i2o ||
+ 	    info->interface_type == md) {
+-		errno = ENOSYS;
+-		return -1;
+-	}
+-
+-	if (info->interface_type == virtblk) {
+-		found = 1;
+-	}
++		uint32_t tosser;
++		int tmpoff;
+ 
+-	if (info->interface_type == nvme) {
+-		uint32_t ns_id=0;
+-		int rc = eb_nvme_ns_id(fd, &ns_id);
+-		if (rc < 0)
++		rc = sscanf(linkbuf+loff, "virtio%x/%n", &tosser, &tmpoff);
++		if (rc < 0) {
+ 			return -1;
++		} else if (rc == 1) {
++			info->interface_type = virtblk;
++			loff += tmpoff;
++			found = 1;
++		}
+ 
+-		sz = efidp_make_nvme(buf+off, size?size-off:0,
+-				     ns_id, NULL);
+-		if (sz < 0)
+-			return -1;
+-		off += sz;
+-		found = 1;
++		if (!found) {
++			uint32_t ns_id=0;
++			int rc = eb_nvme_ns_id(fd, &ns_id);
++			if (rc >= 0) {
++				sz = efidp_make_nvme(buf+off, size?size-off:0,
++						     ns_id, NULL);
++				if (sz < 0)
++					return -1;
++
++				info->interface_type = nvme;
++				off += sz;
++				found = 1;
++			}
++		}
+ 	}
+ 
+ 	/* /dev/sda as SATA looks like:
+ 	 * /sys/dev/block/8:0 -> ../../devices/pci0000:00/0000:00:1f.2/ata1/host0/target0:0:0/0:0:0:0/block/sda
+ 	 */
+-	rc = sysfs_test_sata(linkbuf+loff, PATH_MAX-off);
+-	if (rc < 0)
+-		return -1;
+-	if (!found && rc > 0) {
+-		ssize_t linksz=0;
+-		rc = sysfs_parse_sata(buf+off, size?size-off:0, &sz,
+-				       linkbuf+loff, PATH_MAX-off, &linksz,
+-				       info);
++	if (!found) {
++		rc = sysfs_test_sata(linkbuf+loff, PATH_MAX-off);
+ 		if (rc < 0)
+ 			return -1;
+-		loff += linksz;
+-		off += sz;
+-		found = 1;
++		if (!found && rc > 0) {
++			ssize_t linksz=0;
++			rc = sysfs_parse_sata(buf+off, size?size-off:0, &sz,
++					      linkbuf+loff, PATH_MAX-off,
++					      &linksz, info);
++			if (rc < 0)
++				return -1;
++			loff += linksz;
++			off += sz;
++			found = 1;
++		}
+ 	}
+ 
+ 	/* /dev/sdc as SAS looks like:
+ 	 * /sys/dev/block/8:32 -> ../../devices/pci0000:00/0000:00:01.0/0000:01:00.0/host4/port-4:0/end_device-4:0/target4:0:0/4:0:0:0/block/sdc
+ 	 */
+-	rc = sysfs_test_sas(linkbuf+loff, PATH_MAX-off, info);
+-	if (rc < 0)
+-		return -1;
+-	if (!found && rc > 0) {
+-		ssize_t linksz=0;
+-		rc = sysfs_parse_sas(buf+off, size?size-off:0, &sz,
+-				      linkbuf+loff, PATH_MAX-off, &linksz,
+-				      info);
++	if (!found) {
++		rc = sysfs_test_sas(linkbuf+loff, PATH_MAX-off, info);
+ 		if (rc < 0)
+ 			return -1;
+-		loff += linksz;
+-		off += sz;
+-		found = 1;
++		else if (rc > 0) {
++			ssize_t linksz=0;
++			rc = sysfs_parse_sas(buf+off, size?size-off:0, &sz,
++					     linkbuf+loff, PATH_MAX-off,
++					     &linksz, info);
++			if (rc < 0)
++				return -1;
++			loff += linksz;
++			off += sz;
++			found = 1;
++		}
+ 	}
+ 
+ 	if (!found && info->interface_type == scsi) {
+@@ -894,20 +855,6 @@ eb_disk_info_from_fd(int fd, struct disk_info *info)
+ 		return 0;
+ 	}
+ 
+-	int64_t major = get_dynamic_major("nvme", 1);
+-	if (major >= 0 && (uint64_t)major == info->major) {
+-		info->interface_type = nvme;
+-		return 0;
+-	}
+-
+-	major = get_dynamic_major("virtblk", 1);
+-	if (major >= 0 && (uint64_t)major == info->major) {
+-		info->interface_type = virtblk;
+-		info->disknum = info->minor >> 4;
+-		info->part = info->minor & 0xF;
+-		return 0;
+-	}
+-
+ 	errno = ENOSYS;
+ 	return -1;
+ }

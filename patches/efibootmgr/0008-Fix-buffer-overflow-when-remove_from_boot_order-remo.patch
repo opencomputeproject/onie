@@ -1,0 +1,93 @@
+From f575bf87fe70b4274d1e381c633b2003e523b5b4 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 08/12] Fix buffer overflow when remove_from_boot_order
+ removes nothing
+
+Deleting a boot entry via "-b xxxx -B" also attempts to remove
+that entry from boot order via a call to remove_from_boot_order.
+Although unusual, it's possible that the entry being deleted is
+not in boot order. Correct the handling of this case in
+remove_from_boot_order, which malloc's space for the new boot
+order list wrongly assuming that at least one entry will be
+removed. However, if no entry is removed, then 2 bytes are
+overwritten beyond the malloc'ed space. This can result in heap
+corruption and possible termination via a SIGABRT if the
+corruption is detected by the heap allocation routines.
+
+While there, simplify the routine to do the removal of boot
+entries in place in the original data buffer, skip the
+unnecessary BootOrder variable update if nothing got removed,
+and free the malloc'ed boot_order struct on the way out.
+
+Resolves: RH BZ 1168019
+
+Signed-off-by: Lenny Szubowicz <lszubowi@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/efibootmgr/efibootmgr.c b/src/efibootmgr/efibootmgr.c
+index 5014ff6..cda7cd6 100644
+--- a/src/efibootmgr/efibootmgr.c
++++ b/src/efibootmgr/efibootmgr.c
+@@ -434,8 +434,7 @@ static int
+ remove_from_boot_order(uint16_t num)
+ {
+ 	var_entry_t *boot_order = NULL;
+-	uint64_t new_data_size;
+-	uint16_t *new_data, *old_data;
++	uint16_t *data;
+ 	unsigned int old_i,new_i;
+ 	int rc;
+ 
+@@ -447,34 +446,37 @@ remove_from_boot_order(uint16_t num)
+ 	}
+ 
+ 	/* We've now got an array (in boot_order->data) of the
+-	   boot order.  Simply copy the array, skipping the
+-	   entry we're deleting.
++	   boot order. Squeeze out any instance of the entry we're
++	   deleting by shifting the remainder down.
+ 	*/
+-	old_data = (uint16_t *)(boot_order->data);
+-	/* Start with the same size */
+-	new_data_size = boot_order->data_size - sizeof (*new_data);
+-	new_data = malloc(new_data_size);
+-	if (!new_data)
+-		return -1;
++	data = (uint16_t *)(boot_order->data);
+ 
+ 	for (old_i=0,new_i=0;
+-	     old_i < boot_order->data_size / sizeof(*new_data);
++	     old_i < boot_order->data_size / sizeof(data[0]);
+ 	     old_i++) {
+-		if (old_data[old_i] != num) {
+-				/* Copy this value */
+-			new_data[new_i] = old_data[old_i];
++		if (data[old_i] != num) {
++			if (new_i != old_i)
++				data[new_i] = data[old_i];
+ 			new_i++;
+ 		}
+ 	}
+ 
+-	/* Now new_data has what we need */
+-	free(boot_order->data);
+-	boot_order->data = (uint8_t *)new_data;
+-	boot_order->data_size = new_data_size;
++	/* If nothing removed, no need to update the BootOrder variable */
++	if (new_i == old_i)
++		goto all_done;
++
++	/* BootOrder variable needs to be updated */
+ 	efi_del_variable(EFI_GLOBAL_GUID, "BootOrder");
++
++	if (new_i == 0)
++		goto all_done;
++
++	boot_order->data_size = sizeof(data[0]) * new_i;
+ 	rc = efi_set_variable(EFI_GLOBAL_GUID, "BootOrder", boot_order->data,
+ 				boot_order->data_size, boot_order->attributes);
++all_done:
+ 	free(boot_order->data);
++	free(boot_order);
+ 	return rc;
+ }
+ 

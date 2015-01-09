@@ -1,0 +1,32 @@
+From 50830994ee8aa260ad91252352321bdb76640b30 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 11/12] Test a couple of pointers for NULL-ness.
+
+In both of these cases buf is NULL if and only if the size is also 0,
+and thus we'll fail the test anyway, but coverify isn't noticing that.
+And I'm tired of talking to a piece of software about its deficiencies.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/lib/efi.c b/src/lib/efi.c
+index d8dc101..6350c6f 100644
+--- a/src/lib/efi.c
++++ b/src/lib/efi.c
+@@ -189,7 +189,7 @@ make_edd10_device_path(uint32_t hardware_device, uint8_t *buf, size_t size)
+ 	hw->length = EDD10_HARDWARE_VENDOR_PATH_LENGTH;
+ 	memcpy(&(hw->vendor_guid), &guid, sizeof(guid));
+ 	*data = hardware_device;
+-	if (size >= hw->length)
++	if (size >= hw->length && buf != NULL)
+ 		memcpy(buf, buffer, hw->length);
+ 	return hw->length;
+ }
+@@ -399,7 +399,7 @@ make_harddrive_device_path(uint32_t num, uint64_t part_start,
+ 	if (signature) memcpy(p.signature, signature, 16);
+ 	p.mbr_type = mbr_type;
+ 	p.signature_type = signature_type;
+-	if (size >= p.length)
++	if (size >= p.length && buf != NULL)
+ 		memcpy(buf, &p, p.length);
+ 	return p.length;
+ }

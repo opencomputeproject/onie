@@ -1,0 +1,112 @@
+From 2c1b81547e3e263f26ad3a3edf6086d013bdb8e1 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 08/16] Do a better job of figuring out partition numbers.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/creator.c b/src/creator.c
+index 2aea5be..c409d84 100644
+--- a/src/creator.c
++++ b/src/creator.c
+@@ -302,12 +302,19 @@ efi_generate_file_device_path(uint8_t *buf, ssize_t size,
+ 	if (rc < 0)
+ 		return -1;
+ 
++	rc = get_partition_number(devpath);
++	if (rc < 0)
++		goto err;
++
+ 	va_start(ap, options);
+ 
+ 	ret = efi_va_generate_file_device_path_from_esp(buf, size, devpath,
+ 						       0, relpath, options, ap);
+ 	saved_errno = errno;
+ 	va_end(ap);
++	errno = saved_errno;
++err:
++	saved_errno = errno;
+ 	if (devpath)
+ 		free(devpath);
+ 	if (relpath)
+diff --git a/src/disk.c b/src/disk.c
+index d4f17b9..1aeac81 100644
+--- a/src/disk.c
++++ b/src/disk.c
+@@ -230,12 +230,12 @@ _make_hd_dn(uint8_t *buf, ssize_t size, int fd, uint32_t partition,
+ 	errno = 0;
+ 
+ 	rc = get_partition_info(fd, options,
+-				partition, &part_start,
++				partition>0?partition:1, &part_start,
+ 				&part_size, signature, &format,
+ 				&signature_type);
+ 	if (rc < 0)
+ 		return rc;
+ 
+-	return efidp_make_hd(buf, size, partition, part_start, part_size,
+-			     signature, format, signature_type);
++	return efidp_make_hd(buf, size, partition>0?partition:1, part_start,
++			     part_size, signature, format, signature_type);
+ }
+diff --git a/src/linux.c b/src/linux.c
+index 6d84dba..fa19300 100644
+--- a/src/linux.c
++++ b/src/linux.c
+@@ -236,6 +236,43 @@ set_disk_and_part_name(struct disk_info *info)
+ 	return 0;
+ }
+ 
++int
++__attribute__((__visibility__ ("hidden")))
++get_partition_number(const char *devpath)
++{
++	struct stat statbuf = { 0, };
++	int rc;
++	unsigned int maj, min;
++	char *linkbuf;
++	char *partbuf;
++	int ret = -1;
++
++	rc = stat(devpath, &statbuf);
++	if (rc < 0)
++		return -1;
++
++	if (!S_ISBLK(statbuf.st_mode)) {
++		errno = EINVAL;
++		return -1;
++	}
++
++	maj = gnu_dev_major(statbuf.st_rdev);
++	min = gnu_dev_minor(statbuf.st_rdev);
++
++	rc = sysfs_readlink(&linkbuf, "/sys/dev/block/%u:%u", maj, min);
++	if (rc < 0)
++		return -1;
++
++	rc = read_sysfs_file(&partbuf, "/sys/dev/block/%s/partition", linkbuf);
++	if (rc < 0)
++		return -1;
++
++	rc = sscanf(partbuf, "%d\n", &ret);
++	if (rc != 1)
++		return -1;
++	return ret;
++}
++
+ static int
+ sysfs_test_sata(const char *buf, ssize_t size)
+ {
+diff --git a/src/linux.h b/src/linux.h
+index 36e2e07..d752c72 100644
+--- a/src/linux.h
++++ b/src/linux.h
+@@ -102,6 +102,9 @@ extern int eb_nvme_ns_id(int fd, uint32_t *ns_id);
+ extern int eb_scsi_idlun(int fd, uint8_t *host, uint8_t *channel,
+ 			      uint8_t *id, uint8_t *lun);
+ 
++extern int get_partition_number(const char *devpath)
++	__attribute__((__visibility__ ("hidden")));
++
+ extern ssize_t make_mac_path(uint8_t *buf, ssize_t size,
+ 			     const char const *ifname)
+ 	__attribute__((__visibility__ ("hidden")));

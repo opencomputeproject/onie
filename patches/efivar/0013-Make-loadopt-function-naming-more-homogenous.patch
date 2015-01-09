@@ -1,0 +1,185 @@
+From ca5de0c42f8f42d9cfc10f966c9f0bcb6cf379ab Mon Sep 17 00:00:00 2001
+Subject: [PATCH 13/16] Make loadopt function naming more homogenous.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/include/efivar/efiboot-loadopt.h b/src/include/efivar/efiboot-loadopt.h
+index 93d9fe6..e5fae65 100644
+--- a/src/include/efivar/efiboot-loadopt.h
++++ b/src/include/efivar/efiboot-loadopt.h
+@@ -21,46 +21,45 @@
+ 
+ typedef struct efi_load_option_s efi_load_option;
+ 
+-extern ssize_t efi_make_load_option(uint8_t *buf, ssize_t size,
+-				    uint32_t attributes,
+-				    efidp dp, ssize_t dp_size,
+-				    unsigned char *description,
+-				    uint8_t *optional_data,
+-				    size_t optional_data_size)
++extern ssize_t efi_loadopt_create(uint8_t *buf, ssize_t size,
++				  uint32_t attributes, efidp dp,
++				  ssize_t dp_size, unsigned char *description,
++				  uint8_t *optional_data,
++				  size_t optional_data_size)
+ 	__attribute__((__nonnull__ (6)));
+ 
+-extern efidp efi_load_option_path(efi_load_option *opt)
++extern efidp efi_loadopt_path(efi_load_option *opt)
+ 	__attribute__((__nonnull__ (1)));
+-extern const unsigned char const *efi_load_option_desc(efi_load_option *opt)
++extern const unsigned char const *efi_loadopt_desc(efi_load_option *opt)
+ 	__attribute__((__visibility__ ("default")))
+ 	__attribute__((__nonnull__ (1)));
+-extern uint32_t efi_load_option_attrs(efi_load_option *opt)
++extern uint32_t efi_loadopt_attrs(efi_load_option *opt)
+ 	__attribute__((__nonnull__ (1)))
+ 	__attribute__((__visibility__ ("default")));
+-extern void efi_load_option_attr_set(efi_load_option *opt, uint16_t attr)
++extern void efi_loadopt_attr_set(efi_load_option *opt, uint16_t attr)
+ 	__attribute__((__nonnull__ (1)))
+ 	__attribute__((__visibility__ ("default")));
+-extern void efi_load_option_attr_clear(efi_load_option *opt, uint16_t attr)
++extern void efi_loadopt_attr_clear(efi_load_option *opt, uint16_t attr)
+ 	__attribute__((__nonnull__ (1)))
+ 	__attribute__((__visibility__ ("default")));
+-extern uint16_t efi_load_option_pathlen(efi_load_option *opt)
++extern uint16_t efi_loadopt_pathlen(efi_load_option *opt)
+ 	__attribute__((__nonnull__ (1)))
+ 	__attribute__((__visibility__ ("default")));
+-extern int efi_load_option_optional_data(efi_load_option *opt, size_t opt_size,
+-					 unsigned char **datap, size_t *len)
++extern int efi_loadopt_optional_data(efi_load_option *opt, size_t opt_size,
++				     unsigned char **datap, size_t *len)
+ 	__attribute__((__nonnull__ (1,3)))
+ 	__attribute__((__visibility__ ("default")));
+ 
+-extern ssize_t efi_load_option_args_from_file(uint8_t *buf, ssize_t size,
+-					      char *filename)
++extern ssize_t efi_loadopt_args_from_file(uint8_t *buf, ssize_t size,
++					  char *filename)
+ 	__attribute__((__nonnull__ (3)))
+ 	__attribute__((__visibility__ ("default")));
+-extern ssize_t efi_load_option_args_as_utf8(uint8_t *buf, ssize_t size,
+-					    char *utf8)
++extern ssize_t efi_loadopt_args_as_utf8(uint8_t *buf, ssize_t size,
++					char *utf8)
+ 	__attribute__((__nonnull__ (3)))
+ 	__attribute__((__visibility__ ("default")));
+-extern ssize_t efi_load_option_args_as_ucs2(uint16_t *buf, ssize_t size,
+-					    char *utf8)
++extern ssize_t efi_loadopt_args_as_ucs2(uint16_t *buf, ssize_t size,
++					char *utf8)
+ 	__attribute__((__nonnull__ (3)))
+ 	__attribute__((__visibility__ ("default")));
+ 
+diff --git a/src/loadopt.c b/src/loadopt.c
+index 912a42d..a41f181 100644
+--- a/src/loadopt.c
++++ b/src/loadopt.c
+@@ -32,9 +32,9 @@ efi_load_option;
+ ssize_t
+ __attribute__((__nonnull__ (6)))
+ __attribute__((__visibility__ ("default")))
+-efi_make_load_option(uint8_t *buf, ssize_t size, uint32_t attributes,
+-		     efidp dp, ssize_t dp_size, unsigned char *description,
+-		     uint8_t *optional_data, size_t optional_data_size)
++efi_loadopt_create(uint8_t *buf, ssize_t size, uint32_t attributes,
++		   efidp dp, ssize_t dp_size, unsigned char *description,
++		   uint8_t *optional_data, size_t optional_data_size)
+ {
+ 	if (!description || (!optional_data && optional_data_size != 0)) {
+ 		errno = EINVAL;
+@@ -122,7 +122,7 @@ efi_loadopt_is_valid(efi_load_option *opt, size_t size)
+ uint32_t
+ __attribute__((__nonnull__ (1)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_attrs(efi_load_option *opt)
++efi_loadopt_attrs(efi_load_option *opt)
+ {
+ 	return opt->attributes;
+ }
+@@ -130,7 +130,7 @@ efi_load_option_attrs(efi_load_option *opt)
+ void
+ __attribute__((__nonnull__ (1)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_attr_set(efi_load_option *opt, uint16_t attr)
++efi_loadopt_attr_set(efi_load_option *opt, uint16_t attr)
+ {
+ 	opt->attributes |= attr;
+ }
+@@ -138,7 +138,7 @@ efi_load_option_attr_set(efi_load_option *opt, uint16_t attr)
+ void
+ __attribute__((__nonnull__ (1)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_attr_clear(efi_load_option *opt, uint16_t attr)
++efi_loadopt_attr_clear(efi_load_option *opt, uint16_t attr)
+ {
+ 	opt->attributes &= ~attr;
+ }
+@@ -146,7 +146,7 @@ efi_load_option_attr_clear(efi_load_option *opt, uint16_t attr)
+ uint16_t
+ __attribute__((__nonnull__ (1)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_pathlen(efi_load_option *opt)
++efi_loadopt_pathlen(efi_load_option *opt)
+ {
+ 	return opt->file_path_list_length;
+ }
+@@ -154,7 +154,7 @@ efi_load_option_pathlen(efi_load_option *opt)
+ efidp
+ __attribute__((__nonnull__ (1)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_path(efi_load_option *opt)
++efi_loadopt_path(efi_load_option *opt)
+ {
+ 	char *p = (char *)opt;
+ 	if (!opt) {
+@@ -170,8 +170,8 @@ efi_load_option_path(efi_load_option *opt)
+ int
+ __attribute__((__nonnull__ (1,3)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_optional_data(efi_load_option *opt, size_t opt_size,
+-			      unsigned char **datap, size_t *len)
++efi_loadopt_optional_data(efi_load_option *opt, size_t opt_size,
++			  unsigned char **datap, size_t *len)
+ {
+ 	unsigned char *p = (unsigned char *)opt;
+ 	if (!opt || !datap) {
+@@ -190,7 +190,7 @@ efi_load_option_optional_data(efi_load_option *opt, size_t opt_size,
+ ssize_t
+ __attribute__((__nonnull__ (3)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_args_from_file(uint8_t *buf, ssize_t size, char *filename)
++efi_loadopt_args_from_file(uint8_t *buf, ssize_t size, char *filename)
+ {
+ 	int rc;
+ 	ssize_t ret = -1;
+@@ -233,7 +233,7 @@ err:
+ ssize_t
+ __attribute__((__nonnull__ (3)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_args_as_utf8(uint8_t *buf, ssize_t size, char *utf8)
++efi_loadopt_args_as_utf8(uint8_t *buf, ssize_t size, char *utf8)
+ {
+ 	ssize_t req;
+ 	if (!utf8 || (!buf && size > 0)) {
+@@ -260,7 +260,7 @@ efi_load_option_args_as_utf8(uint8_t *buf, ssize_t size, char *utf8)
+ ssize_t
+ __attribute__((__nonnull__ (3)))
+ __attribute__((__visibility__ ("default")))
+-efi_load_option_args_as_ucs2(uint16_t *buf, ssize_t size, uint8_t *utf8)
++efi_loadopt_args_as_ucs2(uint16_t *buf, ssize_t size, uint8_t *utf8)
+ {
+ 	ssize_t req;
+ 	if (!utf8 || (!buf && size > 0)) {
+@@ -294,7 +294,7 @@ teardown(void)
+ __attribute__((__nonnull__ (1)))
+ __attribute__((__visibility__ ("default")))
+ const unsigned char const *
+-efi_load_option_desc(efi_load_option *opt)
++efi_loadopt_desc(efi_load_option *opt)
+ {
+ 	if (last_desc) {
+ 		free(last_desc);

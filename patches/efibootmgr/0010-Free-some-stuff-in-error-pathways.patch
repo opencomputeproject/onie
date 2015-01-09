@@ -1,0 +1,70 @@
+From 8ac7182b562e1e1d682a2b26e02552523912d431 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 10/12] Free some stuff in error pathways.
+
+This is just to make covscan gripe less.  These variables are legitimate
+leaks, though the program is just going to exit afterward anyway.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/efibootmgr/efibootmgr.c b/src/efibootmgr/efibootmgr.c
+index cda7cd6..319e732 100644
+--- a/src/efibootmgr/efibootmgr.c
++++ b/src/efibootmgr/efibootmgr.c
+@@ -770,10 +770,12 @@ set_boot_order(int keep_old_entries)
+ 	if (rc < 0 || data_size == 0)
+ 		return rc;
+ 
+-	return efi_set_variable(EFI_GLOBAL_GUID, "BootOrder", data, data_size,
+-				EFI_VARIABLE_NON_VOLATILE |
+-				EFI_VARIABLE_BOOTSERVICE_ACCESS |
+-				EFI_VARIABLE_RUNTIME_ACCESS);
++	rc = efi_set_variable(EFI_GLOBAL_GUID, "BootOrder", data, data_size,
++			      EFI_VARIABLE_NON_VOLATILE |
++			      EFI_VARIABLE_BOOTSERVICE_ACCESS |
++			      EFI_VARIABLE_RUNTIME_ACCESS);
++	free(data);
++	return rc;
+ }
+ 
+ static void
+diff --git a/src/lib/efi.c b/src/lib/efi.c
+index 1b590ab..d8dc101 100644
+--- a/src/lib/efi.c
++++ b/src/lib/efi.c
+@@ -104,6 +104,7 @@ read_var_names(filter_t filter, char ***namelist)
+ 
+ 		char **tmp = realloc(newlist, (++nentries + 1) * sizeof (*newlist));
+ 		if (!tmp) {
++			free(aname);
+ 			rc = -1;
+ 			break;
+ 		}
+@@ -811,8 +812,11 @@ append_extra_args_ascii(uint8_t **data, size_t *data_size)
+ 		int l = strlen(opts.argv[i]);
+ 		int space = (i < opts.argc - 1) ? 1: 0;
+ 		uint8_t *tmp = realloc(new_data, (usedchars + l + space + 1));
+-		if (tmp == NULL)
++		if (tmp == NULL) {
++			if (new_data)
++				free(new_data);
+ 			return -1;
++		}
+ 		new_data = tmp;
+ 		p = (char *)new_data + usedchars;
+ 		strcpy(p, opts.argv[i]);
+@@ -904,10 +908,12 @@ append_extra_args_file(uint8_t **data, size_t *data_size)
+ 			buffer = tmp;
+ 		}
+ 		num_read = read(fd, buffer + appended, maxchars - appended);
+-		if (num_read < 0)
++		if (num_read < 0) {
++			free(buffer);
+ 			return -1;
+-		else if (num_read > 0)
++		} else if (num_read > 0) {
+ 			appended += num_read;
++		}
+ 	} while (num_read > 0);
+ 
+ 	if (fd != STDIN_FILENO)

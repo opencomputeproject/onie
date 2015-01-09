@@ -1,0 +1,71 @@
+Makefile changes for ONIE patch
+
+Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+Minor Makefile tweaks to work with the ONIE build system.
+
+diff --git a/.gitignore b/.gitignore
+index e83dc35..0796a59 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -6,3 +6,4 @@
+ efibootmgr-*.tar.*
+ core.*
+ efibootmgr*.zip
++filelist-rpm
+diff --git a/Makefile b/Makefile
+index dc11f31..d2a21ab 100644
+--- a/Makefile
++++ b/Makefile
+@@ -3,7 +3,7 @@
+   SIGNING_KEY := pjones
+   RELEASE_MAJOR := 0
+   RELEASE_MINOR := 11
+-  RELEASE_SUBLEVEL := 0
++  RELEASE_SUBLEVEL := 0-onie
+   RELEASE_NAME := efibootmgr
+   RELEASE_STRING := $(RELEASE_NAME)-$(RELEASE_MAJOR).$(RELEASE_MINOR).$(RELEASE_SUBLEVEL)
+ 
+@@ -12,7 +12,10 @@
+ 
+   MODULES := src
+ 
+-  BINDIR := /usr/sbin
++  # ONIE build environment changes
++  CC = $(CROSS_COMPILE)gcc
++  CFLAGS  += $(ONIE_CFLAGS)
++  LDFLAGS += $(ONIE_LDFLAGS)
+ 
+ #--------------------------------------------
+ # Generic Makefile stuff is below. You
+diff --git a/src/efibootmgr/module.mk b/src/efibootmgr/module.mk
+index ba7a709..56db004 100644
+--- a/src/efibootmgr/module.mk
++++ b/src/efibootmgr/module.mk
+@@ -11,7 +11,7 @@ efibootmgr_LIBS    := crc32.o disk.o efi.o efichar.o gpt.o scsi_ioctls.o \
+ efibootmgr_LIBDIR  := src/lib
+ efibootmgr_FULLLIB := \
+ 	$(patsubst %,$(efibootmgr_LIBDIR)/%,$(efibootmgr_LIBS))
+-LIBS = -lpci -lz -lefivar
++LIBS = -lpci -lz -ldl -lefivar
+ 
+ ALLDEPS += $(efibootmgr_FULLTARGET)
+ CLEANLIST += $(efibootmgr_FULLTARGET)
+diff --git a/src/include/efi.h b/src/include/efi.h
+index ec25be9..a9e84b0 100644
+--- a/src/include/efi.h
++++ b/src/include/efi.h
+@@ -43,8 +43,10 @@
+ EFI_GUID( 0x09576e91, 0x6d3f, 0x11d2, 0x8e39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b)
+ #define EFI_GLOBAL_VARIABLE \
+ EFI_GUID( 0x8BE4DF61, 0x93CA, 0x11d2, 0xAA0D, 0x00, 0xE0, 0x98, 0x03, 0x2B, 0x8C)
+-#define EDD10_HARDWARE_VENDOR_PATH_GUID \
++/*
++#define EDD10_HARDWARE_VENDOR_PATH_GUID                               \
+ EFI_GUID( 0xCF31FAC5, 0xC24E, 0x11d2, 0x85F3, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B)
++*/
+ #define BLKX_UNKNOWN_GUID \
+ EFI_GUID( 0x47c7b225, 0xc42a, 0x11d2, 0x8e57, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b)
+ #define DIR_UNKNOWN_GUID \

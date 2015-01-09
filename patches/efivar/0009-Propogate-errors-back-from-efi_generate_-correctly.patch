@@ -1,0 +1,36 @@
+From a78142034acb2a5ed21237fd2cc4dc7c481a2334 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 09/16] Propogate errors back from efi_generate_*() correctly.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/creator.c b/src/creator.c
+index c409d84..3e158a1 100644
+--- a/src/creator.c
++++ b/src/creator.c
+@@ -175,7 +175,7 @@ efi_va_generate_file_device_path_from_esp(uint8_t *buf, ssize_t size,
+ 		goto err;
+ 
+ 	rc = eb_disk_info_from_fd(fd, &info);
+-	if (rc < 0)
++	if (rc < 0 && errno != ENOSYS)
+ 		goto err;
+ 
+ 	if (partition > 0)
+@@ -244,6 +244,7 @@ efi_va_generate_file_device_path_from_esp(uint8_t *buf, ssize_t size,
+ 	if (sz < 0)
+ 		goto err;
+ 	off += sz;
++	ret = off;
+ err:
+ 	saved_errno = errno;
+ 	if (info.disk_name) {
+@@ -292,7 +293,7 @@ efi_generate_file_device_path(uint8_t *buf, ssize_t size,
+ 			      uint32_t options, ...)
+ {
+ 	int rc;
+-	ssize_t ret;
++	ssize_t ret = -1;
+ 	char *devpath = NULL;
+ 	char *relpath = NULL;
+ 	va_list ap;

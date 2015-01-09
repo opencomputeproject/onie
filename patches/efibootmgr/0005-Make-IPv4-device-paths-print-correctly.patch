@@ -1,0 +1,23 @@
+From 4bcc49d850c23c34268e88375d8f49eaec6cee1b Mon Sep 17 00:00:00 2001
+Subject: [PATCH 05/12] Make IPv4() device paths print correctly.
+
+We need to give the size to snprintf, not the offset.  The offset is
+zero, so it'll only ever tell us the buffer size we need, even if we
+have a reasonable buffer.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/lib/unparse_path.c b/src/lib/unparse_path.c
+index d76191d..4af4d3d 100644
+--- a/src/lib/unparse_path.c
++++ b/src/lib/unparse_path.c
+@@ -249,7 +249,7 @@ unparse_messaging_path(char *buffer, size_t buffer_size, EFI_DEVICE_PATH *path)
+ 
+ 		return buf_offset;
+ 	case 12:
+-		needed = snprintf(buffer, buf_offset, "IPv4(");
++		needed = snprintf(buffer, buffer_size, "IPv4(");
+ 		if (needed < 0)
+ 			return -1;
+ 		buf_offset += needed;

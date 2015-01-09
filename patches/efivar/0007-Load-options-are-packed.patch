@@ -1,0 +1,30 @@
+From ac76b5616fd77c4cc66708de3a48035c4a2a8778 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 07/16] Load options are packed...
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/loadopt.c b/src/loadopt.c
+index 97355f0..912a42d 100644
+--- a/src/loadopt.c
++++ b/src/loadopt.c
+@@ -25,7 +25,9 @@ typedef struct efi_load_option_s {
+ 	uint16_t description[];
+ 	// uint8_t file_path_list[];
+ 	// uint8_t optional_data[];
+-} efi_load_option;
++}
++__attribute__((packed))
++efi_load_option;
+ 
+ ssize_t
+ __attribute__((__nonnull__ (6)))
+@@ -92,7 +94,7 @@ efi_loadopt_optional_data_size(efi_load_option *opt, size_t size)
+ 	if (size < opt->file_path_list_length)
+ 		return -1;
+ 	sz = ucs2size(opt->description, size);
+-	if (sz == size) // since there's no room for a file path...
++	if (sz >= size) // since there's no room for a file path...
+ 		return -1;
+ 	p = (uint8_t *)(opt->description) + sz;
+ 	size -= sz;

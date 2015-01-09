@@ -1,0 +1,115 @@
+From 627b8f398506ec1fd8bdfbc886da0ab038db145c Mon Sep 17 00:00:00 2001
+Subject: [PATCH 15/16] Make ATA/ATAPI devices work most of the time
+ hopefully.
+
+Qemu and friends use these sometimes, but there's no good way to tell
+them apart from SATA.  We're guessing based on driver name: pata_* or
+ata_piix -> ata.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/dp-message.c b/src/dp-message.c
+index c4b50b5..42dfa59 100644
+--- a/src/dp-message.c
++++ b/src/dp-message.c
+@@ -647,6 +647,26 @@ efidp_make_sata(uint8_t *buf, ssize_t size, uint16_t hba_port,
+ 
+ ssize_t
+ __attribute__((__visibility__ ("default")))
++efidp_make_atapi(uint8_t *buf, ssize_t size, uint16_t primary,
++		uint16_t slave, uint16_t lun)
++{
++	efidp_atapi *atapi = (efidp_atapi *)buf;
++	ssize_t req = sizeof (*atapi);
++	ssize_t sz;
++
++	sz = efidp_make_generic(buf, size, EFIDP_MESSAGE_TYPE,
++					EFIDP_MSG_ATAPI, sizeof (*atapi));
++	if (size && sz == req) {
++		atapi->primary = primary;
++		atapi->slave = slave;
++		atapi->lun = lun;
++	}
++	return sz;
++}
++
++
++ssize_t
++__attribute__((__visibility__ ("default")))
+ efidp_make_sas(uint8_t *buf, ssize_t size, uint64_t sas_address)
+ {
+ 	efidp_sas *sas = (efidp_sas *)buf;
+diff --git a/src/include/efivar/efivar-dp.h b/src/include/efivar/efivar-dp.h
+index 312d404..9c921f9 100644
+--- a/src/include/efivar/efivar-dp.h
++++ b/src/include/efivar/efivar-dp.h
+@@ -175,6 +175,8 @@ typedef struct {
+ 	uint8_t		slave;
+ 	uint16_t	lun;
+ } efidp_atapi;
++extern ssize_t efidp_make_atapi(uint8_t *buf, ssize_t size, uint16_t primary,
++		uint16_t slave, uint16_t lun);
+ 
+ #define EFIDP_MSG_SCSI		0x02
+ typedef struct {
+diff --git a/src/linux.c b/src/linux.c
+index 17d1f03..42b9bf3 100644
+--- a/src/linux.c
++++ b/src/linux.c
+@@ -396,11 +396,18 @@ sysfs_parse_sata(uint8_t *buf, ssize_t size, ssize_t *off,
+ 
+ 	info->disk_name = disk_name;
+ 	info->part_name = part_name;
+-	info->interface_type = sata;
++	if (info->interface_type == interface_type_unknown)
++		info->interface_type = sata;
+ 
+-	*off = efidp_make_sata(buf, size, info->sata_info.ata_port,
+-			       info->sata_info.ata_pmp,
+-			       info->sata_info.ata_devno);
++	if (info->interface_type == ata) {
++		*off = efidp_make_atapi(buf, size, info->sata_info.ata_port,
++					info->sata_info.ata_pmp,
++					info->sata_info.ata_devno);
++	} else {
++		*off = efidp_make_sata(buf, size, info->sata_info.ata_port,
++				       info->sata_info.ata_pmp,
++				       info->sata_info.ata_devno);
++	}
+ 	return *off;
+ }
+ 
+@@ -627,6 +634,7 @@ __attribute__((__visibility__ ("hidden")))
+ make_blockdev_path(uint8_t *buf, ssize_t size, int fd, struct disk_info *info)
+ {
+ 	char *linkbuf = NULL;
++	char *driverbuf = NULL;
+ 	ssize_t off=0, sz=0, loff=0;
+ 	int lsz = 0;
+ 	int rc;
+@@ -653,8 +661,23 @@ make_blockdev_path(uint8_t *buf, ssize_t size, int fd, struct disk_info *info)
+ 	loff += tmplsz;
+ 	off += sz;
+ 
++	char *tmppath = strdupa(linkbuf);
++	if (!tmppath)
++		return -1;
++	tmppath[loff] = '\0';
++	rc = sysfs_readlink(&driverbuf, "/sys/dev/block/%s/driver", tmppath);
++	if (rc < 0)
++		return -1;
++
++	char *driver = strrchr(driverbuf, '/');
++	if (!driver || !*driver)
++		return -1;
++	driver+=1;
++
++	if (!strncmp(driver, "pata_", 5) || !(strcmp(driver, "ata_piix")))
++		info->interface_type = ata;
++
+ 	if (info->interface_type == interface_type_unknown ||
+-	    info->interface_type == ata ||
+ 	    info->interface_type == atapi ||
+ 	    info->interface_type == usb ||
+ 	    info->interface_type == i1394 ||

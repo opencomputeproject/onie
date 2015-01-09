@@ -1,0 +1,34 @@
+From bd7a93d241d0acf9900bdd4ebf2aa75c9ae69c47 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 02/16] -ldl is not a dep.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/Makefile b/src/Makefile
+index 149bf9a..6161399 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -57,7 +57,8 @@ fakeguid.o : guid.c
+ makeguids.o : makeguids.c
+ 	$(CC) $(cflags) -DEFIVAR_BUILD_ENVIRONMENT -c -o $@ $^
+ 
+-makeguids : makeguids.o fakeguid.o -ldl
++makeguids : makeguids.o fakeguid.o
++	$(CC) $(cflags) -o $@ $^ -ldl
+ 
+ include/efivar/efivar-guids.h : makeguids guids.txt
+ 	./makeguids guids.txt guids.bin names.bin guid-symbols.S $@
+diff --git a/src/test/Makefile b/src/test/Makefile
+index 4913fe9..9b90d45 100644
+--- a/src/test/Makefile
++++ b/src/test/Makefile
+@@ -16,7 +16,8 @@ clean :
+ test : tester
+ 	./tester
+ 
+-tester :: tester.o -ldl
++tester :: tester.o
++	$(CC) $(cflags) $(LDFLAGS) -Wl,-rpath,$(TOPDIR)/src -L$(TOPDIR)/src -o $@ $^ -ldl -lefivar
+ 
+ .PHONY: all clean install test
+ 

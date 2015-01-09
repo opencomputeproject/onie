@@ -1,0 +1,35 @@
+Provide char16_t and char32_t definitions for ONIE
+
+Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+Since uClibc does not provide <uchar.h> provide explicit typedefs for
+char16_t and char32_t using the compiler's internal definitions.
+Summary:Summary:
+
+diff --git a/src/export.c b/src/export.c
+index 2fa40d6..f3f6047 100644
+--- a/src/export.c
++++ b/src/export.c
+@@ -19,7 +19,20 @@
+ #include <inttypes.h>
+ #include <stdint.h>
+ #include <stdlib.h>
++
++#ifdef __UCLIBC__
++/*
++ * Define the 16-bit and 32-bit character types as <uchar.h> is
++ * missing from uClibc.	 Use the information provided by the compiler
++ */
++#if !defined __CHAR16_TYPE__ || !defined __CHAR32_TYPE__
++#  error "definitions of __CHAR16_TYPE__ and/or __CHAR32_TYPE__ missing"
++#endif
++typedef __CHAR16_TYPE__ char16_t;
++typedef __CHAR32_TYPE__ char32_t;
++#else
+ #include <uchar.h>
++#endif
+ 
+ #include <efivar.h>
+ #include "lib.h"

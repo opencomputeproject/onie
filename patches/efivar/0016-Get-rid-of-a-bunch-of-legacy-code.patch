@@ -1,0 +1,126 @@
+From b9da9a1abc53c01ba742f2b6be3d0bfdf4f3fb3e Mon Sep 17 00:00:00 2001
+Subject: [PATCH 16/16] Get rid of a bunch of legacy code.
+
+We don't need SCSI ioctls and such any more, since we're parsing it all
+from sysfs.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/linux.c b/src/linux.c
+index 42b9bf3..a812b0c 100644
+--- a/src/linux.c
++++ b/src/linux.c
+@@ -41,10 +41,6 @@
+ #include "linux.h"
+ #include "util.h"
+ 
+-#ifndef SCSI_IOCTL_GET_IDLUN
+-#define SCSI_IOCTL_GET_IDLUN 0x5382
+-#endif
+-
+ int
+ __attribute__((__visibility__ ("hidden")))
+ eb_nvme_ns_id(int fd, uint32_t *ns_id)
+@@ -56,80 +52,6 @@ eb_nvme_ns_id(int fd, uint32_t *ns_id)
+ 	return 0;
+ }
+ 
+-typedef struct scsi_idlun_s {
+-	uint32_t dev_id;
+-	uint32_t host_unique_id;
+-} scsi_idlun;
+-
+-int
+-__attribute__((__visibility__ ("hidden")))
+-eb_scsi_idlun(int fd, uint8_t *host, uint8_t *channel, uint8_t *id,
+-		   uint8_t *lun)
+-{
+-	int rc;
+-	scsi_idlun idlun = {0, 0};
+-
+-	if (fd < 0 || !host || !channel || !id || !lun) {
+-		errno = EINVAL;
+-		return -1;
+-	}
+-
+-	rc = ioctl(fd, SCSI_IOCTL_GET_IDLUN, &idlun);
+-	if (rc < 0)
+-		return rc;
+-
+-	*host =	(idlun.dev_id >> 24) & 0xff;
+-	*channel = (idlun.dev_id >> 16) & 0xff;
+-	*lun = (idlun.dev_id >> 8) & 0xff;
+-	*id = idlun.dev_id & 0xff;
+-	return 0;
+-}
+-
+-int
+-__attribute__((__visibility__ ("hidden")))
+-eb_ide_pci(int fd, const struct disk_info *info, uint8_t *bus, uint8_t *device,
+-	   uint8_t *function)
+-{
+-	return -1;
+-}
+-
+-#ifndef SCSI_IOCTL_GET_PCI
+-#define SCSI_IOCTL_GET_PCI 0x5387
+-#endif
+-
+-/* see scsi_ioctl_get_pci() in linux/drivers/scsi/scsi_ioctl.c */
+-#define SLOT_NAME_SIZE ((size_t)21)
+-
+-/* TODO: move this to get it from sysfs? */
+-int
+-__attribute__((__visibility__ ("hidden")))
+-eb_scsi_pci(int fd, const struct disk_info *info, uint8_t *bus,
+-	    uint8_t *device, uint8_t *function)
+-{
+-	char buf[SLOT_NAME_SIZE] = "";
+-	int rc;
+-	unsigned int b=0,d=0,f=0;
+-
+-	/*
+-	 * Maybe if we're on an old enough kernel,
+-	 * SCSI_IOCTL_GET_PCI gives b:d.f ...
+-	 */
+-	rc = ioctl(fd, SCSI_IOCTL_GET_PCI, buf);
+-	if (rc < 0)
+-		return rc;
+-
+-	rc = sscanf(buf, "%x:%x:%x", &b, &d, &f);
+-	if (rc != 3) {
+-		errno = EINVAL;
+-		return -1;
+-	}
+-
+-	*bus = b & 0xff;
+-	*device = d & 0xff;
+-	*function = f & 0xff;
+-	return 0;
+-}
+-
+ int
+ __attribute__((__visibility__ ("hidden")))
+ set_disk_and_part_name(struct disk_info *info)
+diff --git a/src/linux.h b/src/linux.h
+index d752c72..db79f65 100644
+--- a/src/linux.h
++++ b/src/linux.h
+@@ -92,16 +92,9 @@ extern int eb_disk_info_from_fd(int fd, struct disk_info *info);
+ extern int set_disk_and_part_name(struct disk_info *info);
+ extern int make_blockdev_path(uint8_t *buf, ssize_t size, int fd,
+ 				struct disk_info *info);
+-extern int eb_scsi_pci(int fd, const struct disk_info *info, uint8_t *bus,
+-		       uint8_t *device, uint8_t *function);
+-extern int eb_ide_pci(int fd, const struct disk_info *info, uint8_t *bus,
+-		      uint8_t *device, uint8_t *function);
+ 
+ extern int eb_nvme_ns_id(int fd, uint32_t *ns_id);
+ 
+-extern int eb_scsi_idlun(int fd, uint8_t *host, uint8_t *channel,
+-			      uint8_t *id, uint8_t *lun);
+-
+ extern int get_partition_number(const char *devpath)
+ 	__attribute__((__visibility__ ("hidden")));
+ 

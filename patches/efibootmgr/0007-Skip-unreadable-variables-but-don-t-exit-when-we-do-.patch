@@ -1,0 +1,39 @@
+From 5ed580e3f9d6eb8b39cf40e2c3462cdb57ff333a Mon Sep 17 00:00:00 2001
+Subject: [PATCH 07/12] Skip unreadable variables, but don't exit when we do
+ so.
+
+Old versions of efibootmgr and libefivar0 allowed the installation of
+necessary EFI boot entries on the affected systems. It seems that an old
+libefivar0 did not report read errors.
+
+Then libefivar0 started to crash on unreadable variables (see Debian bug
+764386). Since that bug has been fixed, efibootmgr doesn't crash
+anymore, but the read errors are reported and efibootmgr always fails
+with an input/output error.
+
+Resolves: debian bug 768880
+
+Signed-off-by: Jan Echternach <jan@goneko.de>
+Signed-off-by: Daniel Jared Dominguez <Jared_Dominguez@Dell.com>
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/efibootmgr/efibootmgr.c b/src/efibootmgr/efibootmgr.c
+index 8460ee1..5014ff6 100644
+--- a/src/efibootmgr/efibootmgr.c
++++ b/src/efibootmgr/efibootmgr.c
+@@ -110,8 +110,12 @@ read_vars(char **namelist,
+ 			rc = efi_get_variable(EFI_GLOBAL_GUID, namelist[i],
+ 					       &entry->data, &entry->data_size,
+ 					       &entry->attributes);
+-			if (rc < 0)
+-				goto err;
++			if (rc < 0) {
++				warn("Skipping unreadable variable \"%s\"",
++					namelist[i]);
++				free(entry);
++				continue;
++			}
+ 
+ 			/* latest apple firmware sets high bit which appears
+ 			 * invalid to the linux kernel if we write it back so

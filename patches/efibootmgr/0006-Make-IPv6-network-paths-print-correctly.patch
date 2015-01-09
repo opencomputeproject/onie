@@ -1,0 +1,171 @@
+From 7fd5eb20623de65c999a29b67bca617d83777c7a Mon Sep 17 00:00:00 2001
+Subject: [PATCH 06/12] Make IPv6 network paths print correctly.
+
+This should fix issue #13 .
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/lib/unparse_path.c b/src/lib/unparse_path.c
+index 4af4d3d..da28f72 100644
+--- a/src/lib/unparse_path.c
++++ b/src/lib/unparse_path.c
+@@ -91,6 +91,98 @@ unparse_ipv4_port(char *buffer, size_t buffer_size, uint32_t ipaddr,
+ 		       port);
+ }
+ 
++static ssize_t
++unparse_ipv6_port(char *buffer, size_t buffer_size, uint8_t *ipaddr,
++		uint16_t port)
++{
++	uint16_t *ip = (uint16_t *)ipaddr;
++	off_t offset = 0;
++	ssize_t needed;
++
++	needed = snprintf(buffer, buffer_size, "[");
++	if (needed < 0)
++		return -1;
++	offset += needed;
++
++	// deciding how to print an ipv6 ip requires 2 passes, because
++	// RFC5952 says we have to use :: a) only once and b) to maximum effect.
++	int largest_zero_block_size = 0;
++	int largest_zero_block_offset = -1;
++
++	int this_zero_block_size = 0;
++	int this_zero_block_offset = -1;
++
++	int in_zero_block = 0;
++
++	int i;
++	for (i = 0; i < 8; i++) {
++		if (ip[i] != 0 && in_zero_block) {
++			if (this_zero_block_size > largest_zero_block_size) {
++				largest_zero_block_size = this_zero_block_size;
++				largest_zero_block_offset =
++							this_zero_block_offset;
++				this_zero_block_size = 0;
++				this_zero_block_offset = -1;
++				in_zero_block = 0;
++			}
++		}
++		if (ip[i] == 0) {
++			if (in_zero_block == 0) {
++				in_zero_block = 1;
++				this_zero_block_offset = i;
++			}
++			this_zero_block_size++;
++		}
++	}
++	if (this_zero_block_size > largest_zero_block_size) {
++		largest_zero_block_size = this_zero_block_size;
++		largest_zero_block_offset = this_zero_block_offset;
++		this_zero_block_size = 0;
++		this_zero_block_offset = -1;
++		in_zero_block = 0;
++	}
++	if (largest_zero_block_size == 1)
++		largest_zero_block_offset = -1;
++
++	for (i = 0; i < 8; i++) {
++		if (largest_zero_block_offset == i) {
++			needed = snprintf(buffer + offset,
++					  buffer_size == 0 ? 0
++						: buffer_size - offset,
++					  "::");
++			if (needed < 0)
++				return -1;
++			offset += needed;
++			i += largest_zero_block_size -1;
++			continue;
++		} else if (i > 0) {
++			needed = snprintf(buffer + offset,
++					  buffer_size == 0 ? 0
++						: buffer_size - offset,
++					  ":");
++			if (needed < 0)
++				return -1;
++			offset += needed;
++		}
++
++		needed = snprintf(buffer + offset,
++				  buffer_size == 0 ? 0 : buffer_size - offset,
++				  "%x", ip[i]);
++		if (needed < 0)
++			return -1;
++		offset += needed;
++	}
++
++	needed = snprintf(buffer + offset,
++			  buffer_size == 0 ? 0 : buffer_size - offset,
++			  "]:%d", port);
++	if (needed < 0)
++		return -1;
++	offset += needed;
++
++	return offset;
++}
++
+ static int
+ unparse_acpi_path(char *buffer, size_t buffer_size, EFI_DEVICE_PATH *path)
+ {
+@@ -195,7 +287,7 @@ unparse_messaging_path(char *buffer, size_t buffer_size, EFI_DEVICE_PATH *path)
+ 	USB_CLASS_DEVICE_PATH *usbclass = (USB_CLASS_DEVICE_PATH *)path;
+ 	I2O_DEVICE_PATH *i2o = (I2O_DEVICE_PATH *)path;
+ 	IPv4_DEVICE_PATH *ipv4 = (IPv4_DEVICE_PATH *)path;
+-/* 	IPv6_DEVICE_PATH *ipv6 = (IPv6_DEVICE_PATH *)path; */
++	IPv6_DEVICE_PATH *ipv6 = (IPv6_DEVICE_PATH *)path;
+ 	NVME_DEVICE_PATH *nvme = (NVME_DEVICE_PATH *)path;
+ 	char a[16], b[16], c[16], d[16], e[16];
+ 
+@@ -277,13 +369,49 @@ unparse_messaging_path(char *buffer, size_t buffer_size, EFI_DEVICE_PATH *path)
+ 
+ 		needed = snprintf(buffer + buf_offset,
+ 			buffer_size == 0 ? 0 : buffer_size - buf_offset,
+-			",%hx, %hhx", get(a, ipv4->protocol),
++			",%hx,%hhx)", get(a, ipv4->protocol),
+ 			get(b, ipv4->static_addr));
+ 		if (needed < 0)
+ 			return -1;
+ 		buf_offset += needed;
+ 
+ 		return buf_offset;
++	case 13:
++		needed = snprintf(buffer, buffer_size, "IPv6(");
++		if (needed < 0)
++			return -1;
++		buf_offset += needed;
++
++		needed = unparse_ipv6_port(buffer + buf_offset,
++			buffer_size == 0 ? 0 : buffer_size - buf_offset,
++			ipv6->local_ip, ipv6->local_port);
++		if (needed < 0)
++			return -1;
++		buf_offset += needed;
++
++		needed = snprintf(buffer + buf_offset,
++			buffer_size == 0 ? 0 : buffer_size - buf_offset,
++			"<->");
++		if (needed < 0)
++			return -1;
++		buf_offset += needed;
++
++		needed = unparse_ipv6_port(buffer + buf_offset,
++			buffer_size == 0 ? 0 : buffer_size - buf_offset,
++			ipv6->remote_ip, ipv6->remote_port);
++		if (needed < 0)
++			return -1;
++		buf_offset += needed;
++
++		needed = snprintf(buffer + buf_offset,
++			buffer_size == 0 ? 0 : buffer_size - buf_offset,
++			",%hx,%hhx)", get(a, ipv6->protocol),
++			get(b, ipv6->static_addr));
++		if (needed < 0)
++			return -1;
++		buf_offset += needed;
++
++		return buf_offset;
+ 	case 15:
+ 		return snprintf(buffer, buffer_size,
+ 				"USBClass(%hx,%hx,%hhx,%hhx,%hhx)",
