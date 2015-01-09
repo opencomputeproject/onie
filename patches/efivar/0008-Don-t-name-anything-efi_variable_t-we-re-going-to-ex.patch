@@ -1,0 +1,71 @@
+From 55837047290031fb3c66bfba0438b874f5cbf3b9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 08/13] Don't name anything efi_variable_t; we're going to
+ export that elsewhere.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/efivarfs.c b/src/efivarfs.c
+index c456401..e85599f 100644
+--- a/src/efivarfs.c
++++ b/src/efivarfs.c
+@@ -39,11 +39,6 @@
+ #  define EFIVARFS_MAGIC 0xde5e81e4
+ #endif
+ 
+-typedef struct efi_variable_t {
+-	uint32_t	Attributes;
+-	uint8_t		Data[];
+-} __attribute__((packed)) efi_variable_t;
+-
+ static int
+ efivarfs_probe(void)
+ {
+diff --git a/src/vars.c b/src/vars.c
+index ff00860..97487f0 100644
+--- a/src/vars.c
++++ b/src/vars.c
+@@ -31,14 +31,14 @@
+ 
+ #define VARS_PATH "/sys/firmware/efi/vars/"
+ 
+-typedef struct efi_variable_t {
++typedef struct efi_kernel_variable_t {
+ 	uint16_t	VariableName[1024/sizeof(uint16_t)];
+ 	efi_guid_t	VendorGuid;
+ 	uint64_t	DataSize;
+ 	uint8_t		Data[1024];
+ 	efi_status_t	Status;
+ 	uint32_t	Attributes;
+-} __attribute__((packed)) efi_variable_t;
++} __attribute__((packed)) efi_kernel_variable_t;
+ 
+ static int
+ get_size_from_file(const char *filename, size_t *retsize)
+@@ -160,7 +160,7 @@ vars_get_variable(efi_guid_t guid, const char *name, uint8_t **data,
+ 	if (rc < 0)
+ 		goto err;
+ 
+-	efi_variable_t *var = (void *)buf;
++	efi_kernel_variable_t *var = (void *)buf;
+ 
+ 	*data = malloc(var->DataSize);
+ 	if (!*data)
+@@ -207,7 +207,7 @@ vars_del_variable(efi_guid_t guid, const char *name)
+ 		goto err;
+ 
+ 	rc = read_file(fd, &buf, &buf_size);
+-	if (rc < 0 || buf_size != sizeof(efi_variable_t))
++	if (rc < 0 || buf_size != sizeof(efi_kernel_variable_t))
+ 		goto err;
+ 
+ 	close(fd);
+@@ -327,7 +327,7 @@ vars_set_variable(efi_guid_t guid, const char *name, uint8_t *data,
+ 			goto err;
+ 	}
+ 
+-	efi_variable_t var = {
++	efi_kernel_variable_t var = {
+ 		.VendorGuid = guid,
+ 		.DataSize = data_size,
+ 		.Status = 0,

@@ -1,0 +1,80 @@
+Makefile changes for ONIE
+
+Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+Minor Makefile changes for ONIE build environment.
+
+diff --git a/Make.defaults b/Make.defaults
+index a6f2ea0..bdef36b 100644
+--- a/Make.defaults
++++ b/Make.defaults
+@@ -6,6 +6,8 @@ bindir	?= /usr/bin/
+ PCDIR	?= $(libdir)/pkgconfig/
+ CC	:= $(if $(filter default,$(origin CC)),gcc,$(CC))
+ CCLD	:= $(if $(filter undefined,$(origin CCLD)),$(CC),$(CCLD))
++HOST_CC	:= gcc
++HOST_CCLD	:= $(HOST_CC)
+ CFLAGS	?= -O0 -g
+ 
+ ARCH = $(shell uname -m)
+@@ -16,11 +18,19 @@ cflags	:= $(CFLAGS) \
+ 	-D_GNU_SOURCE -I${TOPDIR}/src/ \
+ 	$(if $(filter $(CC),clang),$(clang_cflags),) \
+ 	$(if $(filter $(CC),gcc),$(gcc_cflags),)
++host_cflags	:= $(HOST_CFLAGS) \
++	-Wall -Wsign-compare -std=gnu11 -fshort-wchar -fPIC \
++	-D_GNU_SOURCE -I${TOPDIR}/src/ \
++	$(if $(filter $(HOST_CC),clang),$(clang_cflags),) \
++	$(if $(filter $(HOST_CC),gcc),$(gcc_cflags),)
+ clang_ccldflags =
+ gcc_ccldflags = -fno-merge-constants
+ ccldflags := $(cflags) $(CCLDFLAGS) $(LDFLAGS) \
+ 	$(if $(filter $(CCLD),clang),$(clang_ccldflags),) \
+ 	$(if $(filter $(CCLD),gcc),$(gcc_ccldflags),)
++host_ccldflags := $(host_cflags) $(HOST_CCLDFLAGS) $(HOST_LDFLAGS) \
++	$(if $(filter $(HOST_CCLD),clang),$(clang_ccldflags),) \
++	$(if $(filter $(HOST_CCLD),gcc),$(gcc_ccldflags),)
+ LIBFLAGS += -shared
+ 
+ SONAME_VERSION := 0
+diff --git a/Makefile b/Makefile
+index 047203f..10db27f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,7 +1,12 @@
+ TOPDIR = $(shell echo $$PWD)
+ 
+-SUBDIRS := src docs
+-VERSION := 0.15
++# ONIE build environment changes
++export CC = $(CROSS_COMPILE)gcc
++export LDFLAGS += $(ONIE_LDFLAGS)
++export CFLAGS  += $(ONIE_CFLAGS)
++
++SUBDIRS := src
++VERSION := 0.15-onie
+ 
+ all : $(SUBDIRS)
+ 
+diff --git a/src/Makefile b/src/Makefile
+index d5bd885..c94b247 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -32,12 +32,13 @@ efivar.pc : efivar.pc.in
+ efivar.h : efivar-guids.h
+ 
+ fakeguid.o : guid.c
+-	$(CC) $(cflags) -DEFIVAR_BUILD_ENVIRONMENT -c -o $@ $^
++	$(HOST_CC) $(host_cflags) -DEFIVAR_BUILD_ENVIRONMENT -c -o $@ $^
+ 
+ makeguids.o : makeguids.c
+-	$(CC) $(cflags) -DEFIVAR_BUILD_ENVIRONMENT -c -o $@ $^
++	$(HOST_CC) $(host_cflags) -DEFIVAR_BUILD_ENVIRONMENT -c -o $@ $^
+ 
+ makeguids : makeguids.o fakeguid.o
++	$(HOST_CCLD) $(host_ccldflags) -o $@ $^ $(foreach lib,$(LIBS),-l$(lib))
+ 
+ efivar-guids.h : makeguids guids.txt
+ 	./makeguids guids.txt guids.bin names.bin guid-symbols.S efivar-guids.h

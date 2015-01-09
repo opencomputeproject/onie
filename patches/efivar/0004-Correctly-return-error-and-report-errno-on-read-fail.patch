@@ -1,0 +1,40 @@
+From 1235441af59c89c9989de236d2d816d1555d08b1 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 04/13] Correctly return error and report errno on read
+ failures.
+
+Based on the bug and patch reported in this thread:
+https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=764386
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/util.h b/src/util.h
+index 94708e1..fdeb649 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -45,10 +45,12 @@ read_file(int fd, uint8_t **buf, size_t *bufsize)
+ 		if (s < 0 && errno == EAGAIN) {
+ 			continue;
+ 		} else if (s < 0) {
++			int saved_errno = errno;
+ 			free(*buf);
+ 			*buf = NULL;
+ 			*bufsize = 0;
+-			break;
++			errno = saved_errno;
++			return -1;
+ 		}
+ 		filesize += s;
+ 		/* only exit for empty reads */
+@@ -57,9 +59,11 @@ read_file(int fd, uint8_t **buf, size_t *bufsize)
+ 		} else if (s == 4096) {
+ 			newbuf = realloc(*buf, size + 4096);
+ 			if (newbuf == NULL) {
++				int saved_errno = errno;
+ 				free(*buf);
+ 				*buf = NULL;
+ 				*bufsize = 0;
++				errno = saved_errno;
+ 				return -1;
+ 			}
+ 			*buf = newbuf;

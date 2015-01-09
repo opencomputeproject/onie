@@ -71,6 +71,10 @@ ifeq ($(MTREE_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(MTREE_INSTALL_STAMP)
 endif
 
+ifeq ($(UEFI_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(EFIBOOTMGR_INSTALL_STAMP)
+endif
+
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
 			test -d $(ROOTCONFDIR)/default && \

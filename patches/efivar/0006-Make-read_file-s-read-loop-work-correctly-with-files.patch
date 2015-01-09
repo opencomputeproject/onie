@@ -1,0 +1,59 @@
+From 5e16e9813f332825dfbc1cc4684db7dff6fc112f Mon Sep 17 00:00:00 2001
+Subject: [PATCH 06/13] Make read_file's read loop work correctly with files >
+ 8k.
+
+Since we're not only concerned with boot variables, we need a real
+read+alloc loop that continues to work, not that works once.
+
+Based on the bug and patch reported in this thread:
+https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=764386
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/util.h b/src/util.h
+index a12cdd7..1cd59d2 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -41,7 +41,10 @@ read_file(int fd, uint8_t **buf, size_t *bufsize)
+ 
+ 	do {
+ 		p = *buf + filesize;
+-		s = read(fd, p, 4096 - s);
++		/* size - filesize shouldn't exceed SSIZE_MAX because we're
++		 * only allocating 4096 bytes at a time and we're checking that
++		 * before doing so. */
++		s = read(fd, p, size - filesize);
+ 		if (s < 0 && errno == EAGAIN) {
+ 			continue;
+ 		} else if (s < 0) {
+@@ -54,9 +57,9 @@ read_file(int fd, uint8_t **buf, size_t *bufsize)
+ 		}
+ 		filesize += s;
+ 		/* only exit for empty reads */
+-		if (s == 0) {
++		if (s == 0)
+ 			break;
+-		} else if (s == 4096) {
++		if (filesize >= size) {
+ 			/* See if we're going to overrun and return an error
+ 			 * instead. */
+ 			if (size > (size_t)-1 - 4096) {
+@@ -77,10 +80,7 @@ read_file(int fd, uint8_t **buf, size_t *bufsize)
+ 			}
+ 			*buf = newbuf;
+ 			memset(*buf + size, '\0', 4096);
+-			size += s;
+-			s = 0;
+-		} else {
+-			size += s;
++			size += 4096;
+ 		}
+ 	} while (1);
+ 
+@@ -88,5 +88,4 @@ read_file(int fd, uint8_t **buf, size_t *bufsize)
+ 	return 0;
+ }
+ 
+-
+ #endif /* EFIVAR_UTIL_H */

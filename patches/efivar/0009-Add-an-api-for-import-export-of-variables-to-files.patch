@@ -1,0 +1,680 @@
+From 0746faddbf79848921395196238101602f4ca4b0 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 09/13] Add an api for import/export of variables to files.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/docs/Makefile b/docs/Makefile
+index c025384..314b92e 100644
+--- a/docs/Makefile
++++ b/docs/Makefile
+@@ -17,7 +17,21 @@ MAN3TARGETS = efi_append_variable.3 \
+ 	     efi_set_variable.3 \
+ 	     efi_str_to_guid.3 \
+ 	     efi_symbol_to_guid.3 \
+-	     efi_variables_supported.3
++	     efi_variables_supported.3 \
++	     efi_variable_t.3 \
++	     efi_variable_import.3 \
++	     efi_variable_export.3 \
++	     efi_variable_alloc.3 \
++	     efi_variable_free.3 \
++	     efi_variable_set_name.3 \
++	     efi_variable_get_name.3 \
++	     efi_variable_set_guid.3 \
++	     efi_variable_get_guid.3 \
++	     efi_variable_set_data.3 \
++	     efi_variable_get_data.3 \
++	     efi_variable_get_attributes.3 \
++	     efi_variable_set_attributes.3 \
++	     efi_variable_realize.3
+ 
+ all :
+ 
+diff --git a/docs/efi_variable_alloc.3 b/docs/efi_variable_alloc.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_alloc.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_export.3 b/docs/efi_variable_export.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_export.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_free.3 b/docs/efi_variable_free.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_free.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_get_attributes.3 b/docs/efi_variable_get_attributes.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_get_attributes.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_get_data.3 b/docs/efi_variable_get_data.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_get_data.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_get_guid.3 b/docs/efi_variable_get_guid.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_get_guid.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_get_name.3 b/docs/efi_variable_get_name.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_get_name.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_import.3 b/docs/efi_variable_import.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_import.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_realize.3 b/docs/efi_variable_realize.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_realize.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_set_attributes.3 b/docs/efi_variable_set_attributes.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_set_attributes.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_set_data.3 b/docs/efi_variable_set_data.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_set_data.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_set_guid.3 b/docs/efi_variable_set_guid.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_set_guid.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_set_name.3 b/docs/efi_variable_set_name.3
+new file mode 100644
+index 0000000..6824627
+--- /dev/null
++++ b/docs/efi_variable_set_name.3
+@@ -0,0 +1 @@
++.so man3/efi_variable_t.3
+diff --git a/docs/efi_variable_t.3 b/docs/efi_variable_t.3
+new file mode 100644
+index 0000000..6bb2b33
+--- /dev/null
++++ b/docs/efi_variable_t.3
+@@ -0,0 +1,82 @@
++.TH EFI_VARIABLE_T 3 "Thu Aug 20 2012"
++.SH NAME
++efi_variable_t,
++efi_variable_import, efi_variable_export, efi_variable_alloc,
++efi_variable_free, efi_variable_set_name, efi_variable_get_name,
++efi_variable_set_guid, efi_variable_get_guid,
++efi_variable_set_data, efi_variable_get_data,
++efi_variable_set_attributes, efi_variable_get_attributes,
++efi_variable_realize \- 
++utility functions to import and export UEFI variables to files.
++.SH SYNOPSIS
++.nf
++.B #include <efivar.h>
++.sp
++\fItypedef struct efi_variable \fR\fBefi_variable_t\fR\fI;\fR
++
++\fIssize_t \fR\fBefi_variable_import\fR(\fIuint8_t *\fR\fBdata\fR, \fIsize_t\fR \fBsize\fR, \fIefi_variable_t **\fR\fBvar\fR);
++\fIssize_t \fR\fBefi_variable_export\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIuint8_t **\fR\fBdata\fR, \fIsize_t *\fR\fBsize\fR);
++
++\fIefi_variable_t *\fR\fBefi_variable_alloc\fR(\fIvoid\fR);
++\fIvoid \fR\fBefi_variable_free\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIint \fR\fBfree_data\fR);
++
++\fIint \fR\fBefi_variable_set_name\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIchar *\fR\fBname\fR);
++\fIchar *\fR\fBefi_variable_get_name\fR(\fIefi_variable_t *\fR\fBvar\fR);
++
++\fIint \fR\fBefi_variable_set_guid\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIefi_guid_t *\fR\fBguid\fR);
++\fIint \fR\fBefi_variable_get_guid\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIefi_guid_t **\fR\fBguid\fR);
++
++\fIint \fR\fBefi_variable_set_data\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIuint8_t *\fR\fBdata\fR, \fIsize_t \fR\fBsize\fR);
++\fIint \fR\fBefi_variable_get_data\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIuint8_t **\fR\fBdata\fR, \fIsize_t *\fR\fBsize\fR);
++
++\fI#define\fR \fBEFI_VARIABLE_NON_VOLATILE\fR \fI0x0000000000000001\fR
++\fI#define\fR \fBEFI_VARIABLE_BOOTSERVICE_ACCESS\fR \fI0x0000000000000002\fR
++\fI#define\fR \fBEFI_VARIABLE_RUNTIME_ACCESS\fR \fI0x0000000000000004\fR
++\fI#define\fR \fBEFI_VARIABLE_HARDWARE_ERROR_RECORD\fR \fI0x0000000000000008\fR
++\fI#define\fR \fBEFI_VARIABLE_AUTHENTICATED_WRITE_ACCESS\fR \fI0x0000000000000010\fR
++\fI#define\fR \fBEFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS\fR \fI0x0000000000000020\fR
++\fI#define\fR \fBEFI_VARIABLE_APPEND_WRITE\fR \fI0x0000000000000040\fR
++\fI#define\fR \fBEFI_VARIABLE_HAS_AUTH_HEADER\fR \fI0x0000000100000000\fR
++\fI#define\fR \fBEFI_VARIABLE_HAS_SIGNATURE\fR \fI0x0000000200000000\fR
++
++\fIint \fR\fBefi_variable_set_attributes\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIuint64_t \fR\fBattrs\fR);
++\fIint \fR\fBefi_variable_get_attributes\fR(\fIefi_variable_t *\fR\fBvar\fR, \fIuint64_t *\fR\fBattrs\fR);
++
++\fIint \fR\fBefi_variable_realize\fR(\fIefi_variable_t *\fR\fBvar\fR);
++.fi
++.SH DESCRIPTION
++\fBefi_variable_t\fR is an opaque data type used to store in-memory for use with this API.
++.PP
++\fBefi_variable_import\fR() is used to import raw data read from a file.  This function returns the amount of data consumed with this variable, and may be used successively, using its return code as an offset, to parse a list of variables.  Note that the internal guid, name, and data values are allocated separately, and must be freed either individually or using the \fBfree_data\fR parameter of \fBefi_variable_free\fR().  \fB_get\fR() accessors for those values return data suitable for freeing individually, except in such cases where a \fB_set\fR() accessor has been passed an object already unsuitable for that.
++.PP
++\fBefi_variable_export\fR() is used to marshall \fBefi_variable_t\fR objects into linear data which can be written to a file.  If \fBdata\fR or \fBsize\fR parameters are not provided, this function will return how much storage a caller must allocate.  Otherwise, \fBefi_variable_export\fR() will use the storage referred to as its buffer; if \fBsize\fR is smaller than the amount of needed storage , the buffer will not be modified, and the difference between the needed space and \fBsize\fR will be returned.
++.PP
++\fBefi_variable_alloc\fR() is used to allocate an unpopulated \fBefi_variable_t\fR object suitable to be used throughout this API.
++\fBefi_variable_free\fR() is used to free an \fBefi_variable_t\fR object, and if \fBfree_data\fR is nonzero, to free its constituent data.
++.PP
++Each pair of \fB_set\fR() and \fB_get\fR() accessors have essentially the same semantics.  Neither operation performs any memory management, including freeing of previously set values or values set by \fBefi_variable_import\fR(), and so in some cases it may be necessary to use a \fB_get\fR() accessor to retrieve an object to be freed.  In cases where no value has been set, \fB_get\fR() accessors will set \fBerrno\fR to \fBENOENT\fR and return a negative value or NULL.
++.PP
++\fBefi_variable_set_name\fR() and \fBefi_variable_get_name\fR() are used to set and retrieve the name of the variable referred to by the \fBefi_variable_t\fR object.
++.PP
++\fBefi_variable_set_guid\fR() and \fBefi_variable_get_guid\fR() are used to set and retrieve the Vendor GUID value of the variable referred to by the \fBefi_variable_t\fR object.
++.PP
++\fBefi_variable_set_data\fR() and \fBefi_variable_get_data\fR() are used to set and retrieve an \fBefi_variable_t\fR object's variable data.
++.PP
++\fBefi_variable_set_attributes\fR() and \fBefi_variable_get_attributes\fR are used to set and retrieve an \fBefi_variable_t\fR object's attributes.  All bits except \fBEFI_VARIABLE_HAS_AUTH_HEADER\fR and \fBEFI_VARIABLE_HAS_SIGNATURE\fR are defined in the UEFI specification and should be used accordingly.  \fBEFI_VARIABLE_HAS_AUTH_HEADER\fR should be used by applications to track whether the variable data contents include an authentication header.  \fBEFI_VARIABLE_HAS_SIGNATURE\fR should be used by applications to track if the variable's data contents include a signature, and should not be set unless \fBEFI_VARIABLE_HAS_AUTH_HEADER\fR is also set.  These attributes are used to track if an exported variable is in a state of partial construction, for example if an authenticated variable has been created but is intended to be signed at a later date.
++.PP
++\fBefi_variable_realize\fR() is a convenience function to set or append a UEFI variable on the running system from an \fBefi_variable_t\fR object.  its return codes are the same as \fBefi_append_variable\fR(3) if EFI_VARIABLE_APPEND_WRITE is set, and \fBefi_set_variable\fR() if that bit is not set.  Additionally, in the case that any of the authentication bits are set, \fBefi_variable_realize\fR() will return error and set \fBerrno\fR to \fBEPERM\fR unless both \fBEFI_VARIABLE_HAS_AUTH_HEADER\fR and \fBEFI_VARIABLE_HAS_SIGNATURE\fR attribute bits are been set.
++.PP
++.SH "RETURN VALUE"
++\fBefi_variable_import\fR() returns 0 on success, and -1 on failure.  In cases where it cannot parse the data, \fBerrno\fR will be set to \fBEINVAL\fR.  In cases where memory has been exhausted, \fBerrno\fR will be set to \fBENOMEM\fR.
++.PP
++\fBefi_variable_import\fR() returns the size of the buffer data on success, or a negative value in the case of an error.  If \fBdata\fR or \fBsize\fR parameters are not provided, this function will return how much storage is a caller must allocate.  Otherwise, this function will use the storage provided in \fBdata\fR; if \fBsize\fR is less than the needed space, the buffer will not be modified, and the return value will be the difficiency in size.
++.PP
++\fBefi_variable_alloc\fR() returns a newly allocated \fBefi_variable_t\fR object, but does not peform any allocation for that object's \fBname\fR, \fBguid\fR, or \fBdata\fR.  In the case that memory is exhausted, \fBNULL\fR will be returned, and \fBerrno\fR will be set to \fBENOMEM\fR.
++.PP
++\fBefi_variable_get_name\fR() returns a pointer the NUL-terminated string containing the \fBefi_variable_t\fR object's name information.  
++.PP
++\fBefi_variable_set_name\fR(), \fBefi_variable_set_guid\fR(), \fBefi_variable_get_guid\fR(), \fBefi_variable_set_data\fR(), \fBefi_variable_get_data\fR(), \fBefi_variable_set_attributes\fR(), \fBefi_variable_get_attributes\fR(), and \fBefi_variable_realize\fR() return 0 on success and -1 on error.
++.SH AUTHORS
++.nf
++Peter Jones <pjones@redhat.com>
++.fi
+diff --git a/src/Makefile b/src/Makefile
+index d5bd885..4d497ad 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -12,9 +12,9 @@ INCTARGETS = efivar.h efivar-guids.h
+ all : $(LIBTARGETS) $(PCTARGETS) $(BINTARGETS) $(INCTARGETS)
+ 	@$(MAKE) -C test TOPDIR=$(TOPDIR) SRCDIR=$(SRCDIR)/test $@
+ 
+-OBJECTS = lib.o vars.o efivarfs.o guid.o guidlist.o guid-symbols.o
++OBJECTS = lib.o vars.o efivarfs.o guid.o guidlist.o guid-symbols.o export.o
+ DEPS = .lib.c.P .efivar.c.P .efivar.h.P .vars.c.P .lib.h.P \
+-	.generics.h.P .guid.h.P .guid.c.P
++	.generics.h.P .guid.h.P .guid.c.P .export.c.P efivarfs.c.P
+ LIBS = dl
+ 
+ libefivar.a :: $(OBJECTS)
+diff --git a/src/efivar.h b/src/efivar.h
+index 5ef8740..19311ee 100644
+--- a/src/efivar.h
++++ b/src/efivar.h
+@@ -52,6 +52,9 @@ typedef struct {
+ #define EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS 0x0000000000000020
+ #define EFI_VARIABLE_APPEND_WRITE	0x0000000000000040
+ 
++#define EFI_VARIABLE_HAS_AUTH_HEADER	0x0000000100000000
++#define EFI_VARIABLE_HAS_SIGNATURE	0x0000000200000000
++
+ extern int efi_variables_supported(void);
+ extern int efi_get_variable_size(efi_guid_t guid, const char *name,
+ 				 size_t *size)
+@@ -142,4 +145,43 @@ __attribute__ ((unused))
+ __attribute__ ((__nonnull__ (1)))
+ __attribute__ ((weak, alias ("efi_guid_is_zero")));
+ 
++
++/* import / export functions */
++typedef struct efi_variable efi_variable_t;
++
++extern ssize_t efi_variable_import(uint8_t *data, size_t size,
++				efi_variable_t **var)
++			__attribute__((__nonnull__ (1, 3)));
++extern ssize_t efi_variable_export(efi_variable_t *var, uint8_t *data,
++				size_t size)
++			__attribute__((__nonnull__ (1)));
++
++extern efi_variable_t *efi_variable_alloc(void);
++extern void efi_variable_free(efi_variable_t *var, int free_data);
++
++extern int efi_variable_set_name(efi_variable_t *var, char *name)
++			__attribute__((__nonnull__ (1, 2)));
++extern char *efi_variable_get_name(efi_variable_t *var)
++			__attribute__((__nonnull__ (1)));
++
++extern int efi_variable_set_guid(efi_variable_t *var, efi_guid_t *guid)
++			__attribute__((__nonnull__ (1, 2)));
++extern int efi_variable_get_guid(efi_variable_t *var, efi_guid_t **guid)
++			__attribute__((__nonnull__ (1, 2)));
++
++extern int efi_variable_set_data(efi_variable_t *var, uint8_t *data,
++				size_t size)
++			__attribute__((__nonnull__ (1, 2)));
++extern ssize_t efi_variable_get_data(efi_variable_t *var, uint8_t **data,
++				size_t *size)
++			__attribute__((__nonnull__ (1, 2, 3)));
++
++extern int efi_variable_set_attributes(efi_variable_t *var, uint64_t attrs)
++			__attribute__((__nonnull__ (1)));
++extern int efi_variable_get_attributes(efi_variable_t *var, uint64_t *attrs)
++			__attribute__((__nonnull__ (1, 2)));
++
++extern int efi_variable_realize(efi_variable_t *var)
++			__attribute__((__nonnull__ (1)));
++
+ #endif /* EFIVAR_H */
+diff --git a/src/export.c b/src/export.c
+new file mode 100644
+index 0000000..14536df
+--- /dev/null
++++ b/src/export.c
+@@ -0,0 +1,388 @@
++/*
++ * libefivar - library for the manipulation of EFI variables
++ * Copyright 2012-2013 Red Hat, Inc.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License.
++ * 
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ * 
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this library.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <inttypes.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <uchar.h>
++
++#include "efivar.h"
++#include "lib.h"
++
++#define EFIVAR_MAGIC 0xf3df1597
++
++#define ATTRS_UNSET 0xa5a5a5a5a5a5a5a5
++#define ATTRS_MASK 0xffffffff
++
++struct efi_variable {
++	uint64_t attrs;
++	efi_guid_t *guid;
++	char *name;
++	uint8_t *data;
++	size_t data_size;
++};
++
++/* The exported structure is:
++ * struct {
++ *	uint32_t magic;
++ *	uint32_t version;
++ *	uint64_t attr;
++ *	efi_guid_t guid;
++ *	uint32_t name_len;
++ *	uint32_t data_len;
++ *	char16_t name[];
++ *	uint8_t data[];
++ *	uint32_t magic;
++ * }
++ */
++
++ssize_t
++__attribute__((__nonnull__ (1, 3)))
++efi_variable_import(uint8_t *data, size_t size, efi_variable_t **var_out)
++{
++	efi_variable_t var;
++	size_t min = sizeof (uint32_t) * 2	/* magic */
++		   + sizeof (uint32_t)		/* version */
++		   + sizeof (uint64_t)		/* attr */
++		   + sizeof (efi_guid_t)	/* guid */
++		   + sizeof (uint32_t) * 2	/* name_len and data_len */
++		   + sizeof (char16_t)	/* two bytes of name */
++		   + 1;				/* one byte of data */
++	errno = EINVAL;
++	if (size <= min)
++		return -1;
++
++	if (!var_out)
++		return -1;
++
++	uint8_t *ptr = data;
++	uint32_t magic = EFIVAR_MAGIC;
++	if (memcmp(data, &magic, sizeof (uint32_t)) ||
++			memcmp(data + size - sizeof (uint32_t), &magic,
++				sizeof (uint32_t)))
++		return -1;
++	size -= sizeof (uint32_t);
++	ptr += sizeof (uint32_t);
++
++	if (*(uint32_t *)ptr == 1) {
++		ptr += sizeof (uint32_t);
++		var.attrs = *(uint64_t *)ptr;
++		ptr += sizeof (uint32_t);
++
++		var.guid = malloc(sizeof (efi_guid_t));
++		if (!var.guid)
++			return -1;
++		*var.guid = *(efi_guid_t *)ptr;
++		ptr += sizeof (efi_guid_t);
++
++		uint32_t name_len = *(uint32_t *)ptr;
++		ptr += sizeof (uint32_t);
++		uint32_t data_len = *(uint32_t *)ptr;
++		ptr += sizeof (uint32_t);
++
++		if (name_len < 1 ||
++				name_len != ((data + size) - ptr - data_len))
++			return -1;
++		if (data_len < 1 ||
++				data_len != ((data + size) - ptr - name_len))
++			return -1;
++
++		var.name = calloc(1, name_len + 1);
++		if (!var.name) {
++			int saved_errno = errno;
++			free(var.guid);
++			errno = saved_errno;
++			return -1;
++		}
++
++		char16_t *wname = (char16_t *)ptr;
++		for (uint32_t i = 0; i < name_len; i++)
++			var.name[i] = wname[i] & 0xff;
++		ptr += name_len * 2;
++
++		var.data = malloc(data_len);
++		if (!var.data) {
++			int saved_errno = errno;
++			free(var.guid);
++			free(var.name);
++			errno = saved_errno;
++			return -1;
++		}
++		memcpy(var.data, ptr, data_len);
++
++		if (!*var_out) {
++			*var_out =malloc(sizeof (var));
++			if (!*var_out) {
++				int saved_errno = errno;
++				free(var.guid);
++				free(var.name);
++				free(var.data);
++				errno = saved_errno;
++				return -1;
++			}
++		}
++		memcpy(*var_out, &var, sizeof (var));
++	} else {
++		return -1;
++	}
++	return size;
++}
++
++ssize_t
++__attribute__((__nonnull__ (1)))
++efi_variable_export(efi_variable_t *var, uint8_t *data, size_t size)
++{
++	if (!var) {
++		errno = EINVAL;
++		return -1;
++	}
++	size_t name_len = strlen(var->name);
++
++	size_t needed = sizeof (uint32_t)		/* magic */
++		      + sizeof (uint32_t)		/* version */
++		      + sizeof (uint64_t)		/* attr */
++		      + sizeof (efi_guid_t)		/* guid */
++		      + sizeof (uint32_t)		/* name_len */
++		      + sizeof (uint32_t)		/* data_len */
++		      + sizeof (char16_t) * name_len	/* name */
++		      + var->data_size			/* data */
++		      + sizeof (uint32_t);		/* magic again */
++
++	if (!data || size == 0) {
++		return needed;
++	} else if (size < needed) {
++		return needed - size;
++	}
++
++	uint8_t *ptr = data;
++
++	*(uint32_t *)ptr = EFIVAR_MAGIC;
++	ptr += sizeof (uint32_t);
++
++	*(uint32_t *)ptr = 1;
++	ptr += sizeof (uint32_t);
++
++	*(uint64_t *)ptr = var->attrs;
++	ptr += sizeof (uint64_t);
++
++	memcpy(ptr, var->guid, sizeof (efi_guid_t));
++	ptr += sizeof (efi_guid_t);
++
++	*(uint32_t *)ptr = (uint32_t)(sizeof (char16_t) * name_len);
++	ptr += sizeof (uint32_t);
++
++	*(uint32_t *)ptr = var->data_size;
++	ptr += sizeof (uint32_t);
++
++	for (uint32_t i = 0; i < name_len; i++) {
++		*(char16_t *)ptr = var->name[i];
++		ptr += sizeof (char16_t);
++	}
++
++	memcpy(ptr, var->data, var->data_size);
++	ptr += var->data_size;
++
++	*(uint32_t *)ptr = EFIVAR_MAGIC;
++
++	return needed;
++}
++
++efi_variable_t *
++efi_variable_alloc(void)
++{
++	efi_variable_t *var = calloc(1, sizeof (efi_variable_t));
++	if (!var)
++		return NULL;
++
++	var->attrs = ATTRS_UNSET;
++	return var;
++}
++
++void
++efi_variable_free(efi_variable_t *var, int free_data)
++{
++	if (!var)
++		return;
++
++	if (free_data) {
++		if (var->guid)
++			free(var->guid);
++
++		if (var->name)
++			free(var->name);
++
++		if (var->data && var->data_size)
++			free(var->data);
++	}
++
++	memset(var, '\0', sizeof (*var));
++	free(var);
++}
++
++int
++__attribute__((__nonnull__ (1, 2)))
++efi_variable_set_name(efi_variable_t *var, char *name)
++{
++	if (!var || !name) {
++		errno = EINVAL;
++		return -1;
++	}
++
++	var->name = name;
++	return 0;
++}
++
++char *
++__attribute__((__nonnull__ (1)))
++efi_variable_get_name(efi_variable_t *var)
++{
++	if (!var) {
++		errno = EINVAL;
++		return NULL;
++	}
++
++	if (!var->name) {
++		errno = ENOENT;
++	} else {
++		errno = 0;
++	}
++	return var->name;
++}
++
++int
++__attribute__((__nonnull__ (1, 2)))
++efi_variable_set_guid(efi_variable_t *var, efi_guid_t *guid)
++{
++	if (!var || !guid) {
++		errno = EINVAL;
++		return -1;
++	}
++
++	var->guid = guid;
++	return 0;
++}
++
++int
++__attribute__((__nonnull__ (1, 2)))
++efi_variable_get_guid(efi_variable_t *var, efi_guid_t **guid)
++{
++	if (!var || !guid) {
++		errno = EINVAL;
++		return -1;
++	}
++
++	if (!var->guid) {
++		errno = ENOENT;
++		return -1;
++	}
++
++	*guid = var->guid;
++	return 0;
++}
++
++int
++__attribute__((__nonnull__ (1, 2)))
++efi_variable_set_data(efi_variable_t *var, uint8_t *data, size_t size)
++{
++	if (!var || !data || !size) {
++		errno = EINVAL;
++		return -1;
++	}
++
++	var->data = data;
++	var->data_size = size;
++	return 0;
++}
++
++ssize_t
++__attribute__((__nonnull__ (1, 2, 3)))
++efi_variable_get_data(efi_variable_t *var, uint8_t **data, size_t *size)
++{
++	if (!var || !data || !size) {
++		errno = EINVAL;
++		return -1;
++	}
++
++	if (var->data || !var->data_size) {
++		errno = ENOENT;
++		return -1;
++	}
++
++	*data = var->data;
++	*size = var->data_size;
++	return 0;
++}
++
++int
++__attribute__((__nonnull__ (1)))
++efi_variable_set_attributes(efi_variable_t *var, uint64_t attrs)
++{
++	if (!var) {
++		errno = -EINVAL;
++		return -1;
++	}
++
++	var->attrs = attrs;
++	return 0;
++}
++
++int
++__attribute__((__nonnull__ (1, 2)))
++efi_variable_get_attributes(efi_variable_t *var, uint64_t *attrs)
++{
++	if (!var || !attrs) {
++		errno = -EINVAL;
++		return -1;
++	}
++
++	if (var->attrs == ATTRS_UNSET) {
++		errno = ENOENT;
++		return -1;
++	}
++
++	*attrs = var->attrs;
++	return 0;
++}
++
++int
++__attribute__((__nonnull__ (1)))
++efi_variable_realize(efi_variable_t *var)
++{
++	if (!var) {
++		errno = -EINVAL;
++		return -1;
++	}
++
++	if (!var->name || !var->data || !var->data_size ||
++			var->attrs == ATTRS_UNSET) {
++		errno = -EINVAL;
++		return -1;
++	}
++	if (var->attrs & EFI_VARIABLE_HAS_AUTH_HEADER &&
++			!(var->attrs & EFI_VARIABLE_HAS_SIGNATURE)) {
++		errno = -EPERM;
++		return -1;
++	}
++	uint32_t attrs = var->attrs & ATTRS_MASK;
++	if (attrs & EFI_VARIABLE_APPEND_WRITE) {
++		return efi_append_variable(*var->guid, var->name,
++					var->data, var->data_size, attrs);
++	}
++	return efi_set_variable(*var->guid, var->name, var->data,
++				var->data_size, attrs);
++}

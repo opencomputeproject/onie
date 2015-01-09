@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #>
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014-2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
@@ -302,6 +302,11 @@ ifeq ($(PARTED_ENABLE),yes)
 endif
 ifeq ($(GRUB_ENABLE),yes)
   include make/grub.make
+endif
+ifeq ($(UEFI_ENABLE),yes)
+  include make/pciutils.make
+  include make/efivar.make
+  include make/efibootmgr.make
 endif
 ifeq ($(I2CTOOLS_ENABLE),yes)
   include make/i2ctools.make
