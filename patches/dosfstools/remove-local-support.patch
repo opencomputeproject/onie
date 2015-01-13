@@ -1,0 +1,37 @@
+Remove local support patch
+
+uClibc in the ONIE environment does not do locales well, so removing
+local support from dosfstools.
+
+This patch makes the locale init and locale translation no-ops.
+
+diff --git a/Makefile b/Makefile
+index 81256ef..711b170 100644
+--- a/Makefile
++++ b/Makefile
+@@ -40,9 +40,9 @@ all: build
+ 
+ build: fatlabel fsck.fat mkfs.fat
+ 
+-fatlabel: boot.o check.o common.o fat.o file.o io.o lfn.o charconv.o fatlabel.o
++fatlabel: boot.o check.o common.o fat.o file.o io.o lfn.o fatlabel.o
+ 
+-fsck.fat: boot.o check.o common.o fat.o file.o io.o lfn.o charconv.o fsck.fat.o
++fsck.fat: boot.o check.o common.o fat.o file.o io.o lfn.o fsck.fat.o
+ 
+ mkfs.fat: mkfs.fat.o
+ 
+diff --git a/src/charconv.h b/src/charconv.h
+index 3ac3e56..a33b803 100644
+--- a/src/charconv.h
++++ b/src/charconv.h
+@@ -3,7 +3,7 @@
+ 
+ #define DEFAULT_DOS_CODEPAGE 437
+ 
+-int set_dos_codepage(int codepage);
+-int dos_char_to_printable(char **p, unsigned char c);
++static inline int set_dos_codepage(int codepage) { return 0; }
++static inline int dos_char_to_printable(char **p, unsigned char c) { return 0; }
+ 
+ #endif

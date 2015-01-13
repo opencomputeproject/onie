@@ -320,6 +320,9 @@ endif
 ifeq ($(MTREE_ENABLE),yes)
   include make/mtree.make
 endif
+ifeq ($(DOSFSTOOLS_ENABLE),yes)
+  include make/dosfstools.make
+endif
 include make/images.make
 include make/demo.make
 
