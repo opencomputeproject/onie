@@ -323,6 +323,9 @@ endif
 ifeq ($(ACPI_ENABLE),yes)
   include make/acpica-tools.make
 endif
+ifeq ($(DOSFSTOOLS_ENABLE),yes)
+  include make/dosfstools.make
+endif
 include make/images.make
 include make/demo.make
 

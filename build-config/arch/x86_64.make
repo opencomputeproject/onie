@@ -118,6 +118,9 @@ ETHTOOL_ENABLE ?= yes
 # Enable Syslinux as the bootloader for this platform
 SYSLINUX_ENABLE = yes
 
+# Include dosfstools
+DOSFSTOOLS_ENABLE = yes
+
 # Update this if the GRUB configuration mechanism changes from one
 # release to the next.
 ONIE_CONFIG_VERSION = 1
