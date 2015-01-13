@@ -84,6 +84,7 @@ Go back into the ONL tree and install the required build dependencies into your 
 
 
 You are now ready to build ONL.
+
     # To build the powerpc images, run:
     #> make onl-powerpc
 
