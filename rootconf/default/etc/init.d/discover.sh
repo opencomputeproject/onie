@@ -84,6 +84,29 @@ do_start() {
 }
 
 do_stop() {
+    # parse boot_reason
+    case "$onie_boot_reason" in
+        rescue)
+            echo "$daemon: Rescue mode detected. No $daemon stopped." > /dev/console
+            exit 0
+            ;;
+        uninstall)
+            echo "$daemon: Uninstall mode detected. No $daemon stopped." > /dev/console
+            exit 0
+            ;;
+        update|embed)
+            # pass through to discover stop
+            echo "$daemon: ONIE $onie_boot_reason mode detected." > /dev/console
+            ;;
+        install)
+            # pass through to discover stop
+            echo "$daemon: installer mode detected." > /dev/console
+            ;;
+        *)
+            # pass through to discover stop
+            log_failure_msg "$daemon: Unknown reboot command [stop]: $onie_boot_reason"
+    esac
+
     log_begin_msg "Stopping: $daemon"
     start-stop-daemon -q -K -s TERM -p /var/run/${daemon}.pid
     killall -q $onie_installer exec_installer wget tftp 
