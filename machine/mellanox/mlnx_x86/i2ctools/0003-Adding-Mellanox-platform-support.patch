@@ -7,10 +7,10 @@ Subject: [PATCH 3/3] Adding Mellanox platform support:
 
 Signed-off-by: Doron Tsur <doront@mellanox.com>
 ---
- sys_eeprom/24cXX.c               | 59 +++++++++++++++++++++++++++++++++++++---
- sys_eeprom/onie_tlvinfo.c        |  6 ++--
- sys_eeprom/sys_eeprom_platform.h |  6 ++++
- 3 files changed, 65 insertions(+), 6 deletions(-)
+ sys_eeprom/24cXX.c               | 47 ++++++++++++++++++++++++++++++++++++----
+ sys_eeprom/onie_tlvinfo.c        |  6 +++--
+ sys_eeprom/sys_eeprom_platform.h |  6 +++++
+ 3 files changed, 53 insertions(+), 6 deletions(-)
 
 diff --git a/sys_eeprom/24cXX.c b/sys_eeprom/24cXX.c
 index ed9fbcc..d1e9322 100644
@@ -24,25 +24,17 @@ index ed9fbcc..d1e9322 100644
  
  static int i2c_write_1b(struct eeprom *e, __u8 buf)
  {
-@@ -74,7 +75,16 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+@@ -74,7 +75,8 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
  	unsigned long funcs;
  	e->fd = e->addr = 0;
  	e->dev = 0;
 -	
 +	unsigned char data;
 +
-+	// Start Mellanox open pre-run step 1
-+	r = system("modprobe lpci2c");
-+	if (r != 0) {
-+		fprintf(stderr, "eeprom_open on Mellanox platform: lpci2c module load failed with error %d\n", r);
-+		return r;
-+	}
-+	// End Mellanox open pre-run : step 1
-+
  	fd = open(dev_fqn, O_RDWR);
  	if(fd <= 0)
  		return -1;
-@@ -92,22 +102,63 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+@@ -92,18 +94,55 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
  	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_WORD_DATA );
  	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_WORD_DATA );
  
@@ -101,14 +93,6 @@ index ed9fbcc..d1e9322 100644
  	close(e->fd);
  	e->fd = -1;
  	e->dev = 0;
- 	e->type = EEPROM_TYPE_UNKNOWN;
-+	r = system("rmmod lpci2c");
-+	if (r != 0) {
-+		fprintf(stderr, "eeprom_close on Mellanox platform: lpci2c module unload failed with error %d\n", r);
-+	}
- 	return 0;
- }
- 
 diff --git a/sys_eeprom/onie_tlvinfo.c b/sys_eeprom/onie_tlvinfo.c
 index ea5b30b..939cf65 100644
 --- a/sys_eeprom/onie_tlvinfo.c

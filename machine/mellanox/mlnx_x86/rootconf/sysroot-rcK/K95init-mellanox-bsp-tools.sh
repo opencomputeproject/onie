@@ -1,0 +1,1 @@
+../init.d/init-mellanox-bsp-tools.sh
