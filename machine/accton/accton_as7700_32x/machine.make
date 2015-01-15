@@ -22,7 +22,7 @@ EXT3_4_ENABLE = yes
 
 # Set the desired kernel version.
 LINUX_TARBALL_URLS	= http://git.freescale.com/git/cgit.cgi/ppc/sdk/linux.git/snapshot
-LINUX_RELEASE		= fsl-sdk-v1.5
+LINUX_RELEASE		= fsl-sdk-v1.7
 LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
 
 UBOOT_MACHINE = AS7700_32X
