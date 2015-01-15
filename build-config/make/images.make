@@ -179,6 +179,16 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-bin ] ; then \
 		cp $(MACHINEDIR)/rootconf/sysroot-bin/* $(SYSROOTDIR)/bin ; \
 	     fi
+	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-init ] ; then \
+		cp $(MACHINEDIR)/rootconf/sysroot-init/* $(SYSROOTDIR)/etc/init.d ; \
+	     fi
+	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-rcS ] ; then \
+		cp -a $(MACHINEDIR)/rootconf/sysroot-rcS/* $(SYSROOTDIR)/etc/rcS.d ; \
+	     fi
+	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-rcK ] ; then \
+		cp -a $(MACHINEDIR)/rootconf/sysroot-rcK/* $(SYSROOTDIR)/etc/rc0.d ; \
+		cp -a $(MACHINEDIR)/rootconf/sysroot-rcK/* $(SYSROOTDIR)/etc/rc6.d ; \
+	     fi
 	$(Q) cd $(SYSROOTDIR) && ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_ID=onie" >> $(LSB_RELEASE_FILE)
