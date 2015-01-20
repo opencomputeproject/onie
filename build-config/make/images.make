@@ -329,7 +329,7 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 	$(Q) genisoimage -r -V "ONIE-RECOVERY" -cache-inodes -J -l -b isolinux.bin	\
 		-c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table		\
 		-o $(RECOVERY_ISO_IMAGE) $(RECOVERY_ISO_SYSROOT)
-	$(Q) isohybrid.pl $(RECOVERY_ISO_IMAGE)
+	$(Q) $(SYSLINUX_DIR)/utils/isohybrid.pl $(RECOVERY_ISO_IMAGE)
 	$(Q) touch $@
 
 # Convert the .iso to a PXE-EFI64 bootable image using GRUB
