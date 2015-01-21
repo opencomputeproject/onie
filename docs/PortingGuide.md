@@ -61,6 +61,7 @@ where $platform corresponds to the ONIE platform identifier string.  This string
 to identify which set of drivers to load (ONL supports many systems) at boot time and is 
 critical that it matches the ONIE identifier exactly.  The rest of the directory structure
 for the installer driver is as follows:
+
     ./$platform/
     ./$platform/Makefile                    # copy from existing driver
     ./$platform/Makefile.comp               # copy from existing driver
@@ -114,18 +115,19 @@ along with the example platform driver code seems to be the best
 bet here -- FIXME!
 
 For example, looking at the driver
-$ONL/components/all/platform-config/powerpc-as5710-54x-r0b/src/install/powerpc-as5710-54x-r0b.sh
+`$ONL/components/all/platform-config/powerpc-as5710-54x-r0b/src/install/powerpc-as5710-54x-r0b.sh`
 the driver first sets "platform_loader_raw=1" which tells the
 installer that the boot partition has no file format (as opposed
 to ext2fs or fat - it is type 'raw').  Then it has the platform_bootcmd as:
 
-   platform_bootcmd='usb start; usbboot 0x10000000 0:1; setenv bootargs console=$consoledev,$baudrate onl_platform=powerpc-as5710-54x-r0b; bootm 0x10000000'
+`platform_bootcmd='usb start; usbboot 0x10000000 0:1; setenv bootargs console=$consoledev,$baudrate onl_platform=powerpc-as5710-54x-r0b; bootm 0x10000000'`
  
-    Which is a string of uboot commands, that:
-    1) usb start -- initialize the usb subsystems
-    2) Using the usb boot loader, load the contents of device 0, partition 1 (0:1) into memory range 0x10000000 
-    3) Pass a number of env variables to the kernel at boot via $bootargs
-    4) Actually just jump to memory 0x10000000 and start running (bootm 0x100000000)
+Which is a string of uboot commands, that:
+
+1. usb start -- initialize the usb subsystems
+2. Using the usb boot loader, load the contents of device 0, partition 1 (0:1) into memory range 0x10000000 
+3. Pass a number of env variables to the kernel at boot via $bootargs
+4. Actually just jump to memory 0x10000000 and start running (bootm 0x100000000)
 
 The sequence of exact boot commands will vary with version of uboot
 (or other boot loader), available storage, and other device specific
@@ -175,7 +177,7 @@ ONLP Application APIs
 If you want to create an application in ONL that builds on top of the
 platform, the "application to platform" APIs are found in:
 
-  $ONL/submodules/onlp/modules/onlp/module/inc/onlp
+    $ONL/submodules/onlp/modules/onlp/module/inc/onlp
 
 This section will have to become better documented, but look at the example
 code in the `onlpdump` driver for how to call the ONLP APIs as an application.
@@ -203,7 +205,7 @@ ONLPI Driver APIs
 If you want to create a driver so that your new hardware can work with
 ONL, the "platform to hardware" APIs are found in:
 
-  $ONL/submodules/onlp/modules/onlp/module/inc/onlp/platformi
+    $ONL/submodules/onlp/modules/onlp/module/inc/onlp/platformi
 
 This section will have to become better documented,
 but look at the example driver 'onlpie' implementation at
