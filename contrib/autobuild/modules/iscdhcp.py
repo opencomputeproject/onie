@@ -37,9 +37,9 @@ option op125 code 125 = encapsulate vivso;
 #
 log-facility local7;
 # Logging constructs to assist with debugging
-log(error, concat("vendor-class: ", 
+log(error, concat("vendor-class: ",
     substring(option vendor-class-identifier, 0, 11)));
-log(error, concat("platform    : ", 
+log(error, concat("platform    : ",
     substring(option vendor-class-identifier, 12, 999)));
 
 option domain-name "{{ dhcp_domain_name }}";
@@ -102,8 +102,8 @@ DEFAULT_CMD_TEMPLATE = \
 '''
 touch {{ log_file }}
 touch {{ lease_file }}
-chown {{ user }}.{{ group }} {{ log_file }}
-chown {{ user }}.{{ group }} {{ lease_file }}
+sudo chown {{ user }}:{{ group }} {{ log_file }}
+sudo chown {{ user }}:{{ group }} {{ lease_file }}
 sudo {{ binary }} {{ options }}
 '''
 

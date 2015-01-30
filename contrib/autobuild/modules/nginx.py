@@ -4,7 +4,7 @@ DEFAULT_CONF_FILENAME = 'nginx.conf'
 DEFAULT_CONF_TEMPLATE = \
 '''
 user {{ user }} {{ group }};
-
+daemon off;
 worker_processes 4;
 
 events {
@@ -18,8 +18,14 @@ http {
     keepalive_timeout 65;
     types_hash_max_size 2048;
 
+    log_format onie '$http_ONIE_SERIAL_NUMBER $http_ONIE_ETH_ADDR'
+                    '$http_ONIE_VENDOR_ID'
+                    '$http_ONIE_MACHINE $http_ONIE_MACHINE_REV'
+                    '$http_ONIE_ARCH'
+                    '$http_ONIE_OPERATION';
+
     default_type application/octet-stream;
-    access_log {{ access_log }};
+    access_log {{ access_log }} onie;
     error_log {{ error_log }};
 
     gzip on;
@@ -46,8 +52,8 @@ DEFAULT_CMD_TEMPLATE = \
 '''
 touch {{ access_log }}
 touch {{ error_log }}
-chown {{ user }}.{{ group }} {{ access_log }}
-chown {{ user }}.{{ group }} {{ error_log }}
+sudo chown {{ user }}:{{ group }} {{ access_log }}
+sudo chown {{ user }}:{{ group }} {{ error_log }}
 sudo {{ binary }} {{ options }}
 '''
 
@@ -76,6 +82,7 @@ def build_config(output, test_args):
 
     template = Template(DEFAULT_CONF_TEMPLATE)
     output.write(template.render(values))
+
 
 def build_cmd(output, test_args):
     import os.path
