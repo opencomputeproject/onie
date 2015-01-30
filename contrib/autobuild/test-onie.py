@@ -293,7 +293,7 @@ def validate_network_info(test_args):
 
     # Get first INET address
     inet = net_addrs[netifaces.AF_INET][0]
-    ipv4_network = ipaddr.IPv4Network('{0}[addr]/{0}[netmask]'.format(inet))
+    ipv4_network = ipaddr.IPv4Network('{0[addr]}/{0[netmask]}'.format(inet))
     dut_address = ipaddr.IPv4Address(test_args['ip_address'])
     dut_cidr = ipaddr.IPv4Network(test_args['ip_cidr'])
 
@@ -307,7 +307,7 @@ def validate_network_info(test_args):
         sys.exit(-3)
     # Check dut_cidr
     temp_cidr = ipaddr.IPv4Network('{0}/{1}'.format(
-                                   dut_address.ip, dut_cidr.prefixlen))
+                                   dut_address, dut_cidr.prefixlen))
     if ipv4_network.Contains(temp_cidr) is False:
         logger.critical('Interface {0} cannot support DUT cidr {1}'.
                         format(test_args['interface'], test_args['ip_cidr']))
@@ -361,7 +361,7 @@ def prepare_test_case(test_args):
 
     # handle tftp_filename
     if test_num in tftp_filename_cases:
-        test_args['tftp_filename'] = base_filename;
+        test_args['tftp_filename'] = base_filename
 
     # handle tftp_server_ip
     if test_num in tftp_server_ip_cases:
@@ -394,6 +394,7 @@ def prepare_test_case(test_args):
 
 def configure_test(args):
     import shutil
+    import stat
     import ipaddr
     test = TEST_DEFINE['tests'][str(args.test)]
     out = 'Configuring for Test {0} - {1[name]}'.format(args.test, test)
@@ -438,6 +439,8 @@ def configure_test(args):
     # i.e. dnsmasq.  This elimates running module confg in a particular order
     test_args['www_root'] = os.path.join(test_dir, 'www-root')
     test_args['tftp_root'] = os.path.join(test_dir, 'tftp-root')
+    # dict of scripts by service
+    test_args['scripts'] = {}
 
     # update options, CLI args take precendence
     if 'options' in DUT_CONFIG:
@@ -530,6 +533,12 @@ def configure_test(args):
                 script_file = open(script_filename, 'w')
                 mod.build_cmd(script_file, test_args)
                 script_file.close()
+                stat_res = os.stat(script_filename)
+                os.chmod(script_filename, stat_res.st_mode | stat.S_IXGRP |
+                         stat.S_IXOTH | stat.S_IXUSR)
+                test_args['scripts'][rqd_mod] = script_filename
+
+    return test_args
 
 
 def main():
@@ -641,10 +650,35 @@ def main():
         logger.critical('Invalid CIDR for DUT')
         sys.exit(-1)
 
-    configure_test(args)
+    test_args = configure_test(args)
 
     if args.dump is False:
-        logger.warning('OCE is not able to execute at this time')
+        import psutil
+        ordered_services = ['tftp', 'http', 'dhcp']
+        running_procs = {}
+        scripts = test_args['scripts']
+        for svc in ordered_services:
+            if svc in scripts:
+                logger.info('Starting {0}'.format(svc))
+                logger.debug(scripts[svc])
+                proc = psutil.Popen(['bash', scripts[svc]])
+                running_procs[svc] = proc
+        # wait on user input
+        try:
+            raw_input('\n\nPress enter to stop all services\n\n')
+        except:
+            pass
+
+        for svc, proc in running_procs.iteritems():
+            logger.info('Sending SIGTERM to {0}'.format(svc))
+            child_procs = proc.children(recursive=True)
+            for p in child_procs:
+                psutil.Popen('sudo kill -9 {0}'.format(p.pid), shell=True)
+            proc.terminate()
+
+        for svc, proc in running_procs.iteritems():
+            logger.info('Waiting for {0} to cleanup'.format(svc))
+            proc.wait()
 
 
 if __name__ == "__main__":

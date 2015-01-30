@@ -58,7 +58,7 @@ DEFAULT_CMD_GROUP = 'nogroup'
 DEFAULT_CMD_TEMPLATE = \
 '''
 touch {{ log_file }}
-chown {{ user }}.{{ group }} {{ log_file }}
+sudo chown {{ user }}:{{ group }} {{ log_file }}
 sudo {{ binary }} {{ options }}
 '''
 

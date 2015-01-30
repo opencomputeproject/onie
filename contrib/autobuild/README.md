@@ -72,6 +72,12 @@ However, it is possible to change out the back end services by either modifying
 the test definition file (default: config/onie-tests.json) or creating a new
 one.
 
+Before we get started, if you system is running ```apparmor```, you must stop it and unload all the profiles.  Typically, this involves:
+```
+# sudo service apparmor stop
+# sudo service apparmor teardown
+```
+
 To use ```test-onie.py```, you need to have all of the python modules, defined
 in ```requirements.txt``` installed.
 
