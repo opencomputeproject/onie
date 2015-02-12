@@ -45,7 +45,7 @@ Get the sources
 
 Install required build dependencies on your host machine.
 ------------------------------------------------------------
-    #> cd onl
+    #> cd ONL
     #> make install-host-deps
 
 Create an ONL Workspace
@@ -65,21 +65,22 @@ The `onl-mkws` tool creates a build workspace.
 The `onl-chws` tool enters a build workspace.
 
 Create a build workspace and name it `ws.amd64`.
-Do this in your work directory, not the ONL tree:
 ------------------------------------------------------------
+Do this in your work directory, not the ONL tree:
+
     #> cd ..        # should be in ~/work or equivalent
     #> onl-mkws -a amd64 ws.amd64
 
 Change to the ONL workspace you just created.
 ------------------------------------------------------------
-    #> cd ws.amd
+    #> cd ws.amd64
     #> onl-chws         # enter workspace
 
 You are now in a chrooted, network-isolated workspace.
 
 Go back into the ONL tree and install the required build dependencies into your workspace
 ------------------------------------------------------------
-    #> cd ../onl                # now in the workspace
+    #> cd ../ONL                # now in the workspace
     #> make install-ws-deps
 
 
