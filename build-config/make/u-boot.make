@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -10,13 +10,13 @@
 # makefile fragment that defines the build of the onie cross-compiled U-Boot
 #
 
-UBOOT_VERSION		= 2013.01.01
+UBOOT_VERSION		?= 2013.01.01
 UBOOT_TARBALL		= u-boot-$(UBOOT_VERSION).tar.bz2
 UBOOT_TARBALL_URLS	+= $(ONIE_MIRROR) ftp://ftp.denx.de/pub/u-boot
 UBOOT_BUILD_DIR		= $(MBUILDDIR)/u-boot
 UBOOT_DIR		= $(UBOOT_BUILD_DIR)/u-boot-$(UBOOT_VERSION)
 
-UBOOT_SRCPATCHDIR	= $(PATCHDIR)/u-boot
+UBOOT_SRCPATCHDIR	= $(PATCHDIR)/u-boot/$(UBOOT_VERSION)
 UBOOT_PATCHDIR		= $(UBOOT_BUILD_DIR)/patch
 UBOOT_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/u-boot-download
 UBOOT_SOURCE_STAMP	= $(STAMPDIR)/u-boot-source
