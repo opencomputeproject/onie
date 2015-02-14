@@ -250,21 +250,26 @@ http_download()
 
 tftp_download()
 {
-    # Try BOOTP next-server and bootfile
-    if [ -n "$onie_disco_siaddr" ] && [ -n "$onie_disco_bootfile" ] ; then
-        url_run "tftp://$onie_disco_siaddr/$onie_disco_bootfile" && return 0
-    fi
+    # Busybox sets "boot_file" for the BOOTP boot file and sets
+    # "bootfile" (no underscore) for DHCP option 67.
 
-    # Try DHCP TFTP server name (opt 66) and bootfile (opt 67)
-    # Requires DNS
-    if [ -n "$onie_disco_tftp" ] && [ -n "$onie_disco_bootfile" ] ; then
-        url_run "tftp://$onie_disco_tftp/$onie_disco_bootfile" && return 0
-    fi
+    for f in $onie_disco_bootfile $onie_disco_boot_file ; do
+        # Try BOOTP next-server and bootfile
+        if [ -n "$onie_disco_siaddr" ] && [ -n "$f" ] ; then
+            url_run "tftp://$onie_disco_siaddr/$f" && return 0
+        fi
 
-    # Try DHCP TFTP server IP address (opt 150) and bootfile (opt 67)
-    if [ -n "$onie_disco_tftpsiaddr" ] && [ -n "$onie_disco_bootfile" ] ; then
-        url_run "tftp://$onie_disco_tftpsiaddr/$onie_disco_bootfile" && return 0
-    fi
+        # Try DHCP TFTP server name (opt 66) and bootfile
+        # Requires DNS
+        if [ -n "$onie_disco_tftp" ] && [ -n "$f" ] ; then
+            url_run "tftp://$onie_disco_tftp/$f" && return 0
+        fi
+
+        # Try DHCP TFTP server IP address (opt 150) and bootfile
+        if [ -n "$onie_disco_tftpsiaddr" ] && [ -n "$f" ] ; then
+            url_run "tftp://$onie_disco_tftpsiaddr/$f" && return 0
+        fi
+    done
 
     return 1
 }
