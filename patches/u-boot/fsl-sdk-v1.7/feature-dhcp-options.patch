@@ -1,0 +1,130 @@
+Patch to support DHCP options
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+diff --git a/README b/README
+index 194bdf0..5e6a314 100644
+--- a/README
++++ b/README
+@@ -2056,6 +2056,7 @@ CBFS (Coreboot Filesystem) support
+ 		CONFIG_BOOTP_NTPSERVER
+ 		CONFIG_BOOTP_TIMEOFFSET
+ 		CONFIG_BOOTP_VENDOREX
++		CONFIG_BOOTP_OPTIONS
+ 		CONFIG_BOOTP_MAY_FAIL
+ 
+ 		CONFIG_BOOTP_SERVERIP - TFTP server will be the serverip
+@@ -2083,6 +2084,12 @@ CBFS (Coreboot Filesystem) support
+ 		of the "hostname" environment variable is passed as
+ 		option 12 to the DHCP server.
+ 
++		CONFIG_BOOTP_OPTIONS - The environment is checked for the
++		supported DHCPv4 client options (prefixed with dhcp_), any
++		found are sent during a "DHCP Discover" and "DHCP Request".
++		The DHCP server can use this information to conditionally
++		tailor it's response.
++
+ 		CONFIG_BOOTP_DHCP_REQUEST_DELAY
+ 
+ 		A 32bit value in microseconds for a delay between
+diff --git a/net/bootp.c b/net/bootp.c
+index 189a003..38e2aa4 100644
+--- a/net/bootp.c
++++ b/net/bootp.c
+@@ -47,6 +47,15 @@ static IPaddr_t NetDHCPServerIP;
+ static void DhcpHandler(uchar *pkt, unsigned dest, IPaddr_t sip, unsigned src,
+ 			unsigned len);
+ 
++#define put_vci(e, str)						\
++	do {							\
++		size_t vci_strlen = strlen(str);		\
++		*e++ = 60;	/* Vendor Class Identifier */	\
++		*e++ = vci_strlen;				\
++		memcpy(e, str, vci_strlen);			\
++		e += vci_strlen;				\
++	} while (0)
++
+ /* For Debug */
+ #if 0
+ static char *dhcpmsg2str(int type)
+@@ -63,6 +72,51 @@ static char *dhcpmsg2str(int type)
+ 	}
+ }
+ #endif
++
++#if defined(CONFIG_BOOTP_OPTIONS) /* check environment for dhcp client options */
++
++/*
++ *     The vendor-specifiable options should not be changeable
++ *     unless CONFIG_ENV_OVERWRITE has been defined, however
++ *     user-specifiable options should be changeable regardless
++ */
++u8 *dhcp_options_prep(u8 **ep)
++{
++	u8 *e = *ep;
++	char *ptr;
++
++	debug("DHCP Client options start\n");
++
++	/* vendor-specifiable identification string */
++	if ((ptr = getenv("dhcp_vendor-class-identifier"))) {
++		debug("dhcp_vendor-class-identifier=%s\n",ptr);
++		put_vci(e, ptr);
++	}
++
++	/* user-specifiable identification string */
++	if ((ptr = getenv("dhcp_dhcp-client-identifier"))) {
++		debug("dhcp_dhcp-client-identifier=%s\n",ptr);
++		*e++ = 61;
++		*e++ = strlen(ptr);
++		while (*ptr)
++			*e++ = *ptr++;
++	}
++
++	/* user-specifiable identification string */
++	if ((ptr = getenv("dhcp_user-class"))) {
++		debug("dhcp_user-class=%s\n",ptr);
++		*e++ = 77;
++		*e++ = strlen(ptr);
++		while (*ptr)
++			*e++ = *ptr++;
++	}
++
++	debug("DHCP Client options end\n");
++	*ep = e;
++	return e;
++}
++
++#endif /* CONFIG_BOOTP_OPTIONS */
+ #endif
+ 
+ static int BootpCheckPkt(uchar *pkt, unsigned dest, unsigned src, unsigned len)
+@@ -341,15 +395,6 @@ BootpTimeout(void)
+ 	}
+ }
+ 
+-#define put_vci(e, str)						\
+-	do {							\
+-		size_t vci_strlen = strlen(str);		\
+-		*e++ = 60;	/* Vendor Class Identifier */	\
+-		*e++ = vci_strlen;				\
+-		memcpy(e, str, vci_strlen);			\
+-		e += vci_strlen;				\
+-	} while (0)
+-
+ /*
+  *	Initialize BOOTP extension fields in the request.
+  */
+@@ -451,6 +496,10 @@ static int DhcpExtended(u8 *e, int message_type, IPaddr_t ServerID,
+ 	put_vci(e, CONFIG_BOOTP_VCI_STRING);
+ #endif
+ 
++#if defined(CONFIG_BOOTP_OPTIONS)
++	dhcp_options_prep (&e);
++#endif
++
+ #if defined(CONFIG_BOOTP_VENDOREX)
+ 	x = dhcp_vendorex_prep(e);
+ 	if (x)

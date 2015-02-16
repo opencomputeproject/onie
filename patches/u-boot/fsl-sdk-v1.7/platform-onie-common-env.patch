@@ -1,0 +1,116 @@
+Common u-boot configuration variables for qnq installation platforms.
+
+Summary:
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+diff --git a/include/configs/onie_common_config.h b/include/configs/onie_common_config.h
+new file mode 100644
+index 0000000..c941e2a
+--- /dev/null
++++ b/include/configs/onie_common_config.h
+@@ -0,0 +1,103 @@
++/*
++ * Author: Curt Brune <curt@cumulusnetworks.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
++ */
++
++/*
++ * U-boot configuration parameters common to ONIE platforms.
++ */
++
++#ifndef ONIE_COMMON_CONFIG_H__
++#define ONIE_COMMON_CONFIG_H__
++
++#include "configs/onie_version.h"
++
++/* Write out a good default env if the env in flash is corrupt */
++#define CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++
++/* Set the 'serial#' environment variable at boot time. */
++#define CONFIG_POPULATE_SERIAL_NUMBER
++
++/* Store the size of the U-Boot environment in the device tree */
++#define CONFIG_FDT_ENV_SIZE
++
++/*
++ * onie_bootcmd load command, kicked off by CONFIG_BOOTCOMMAND.
++ *
++ * oniestart -- platform specific address of onie image in NOR flash
++ * oniesz.b  -- size in bytes of the platform specific onie image in NOR flash
++ */
++#define CONFIG_ONIE_BOOT_CMD \
++	"nos_bootcmd=echo\0"						\
++	"onie_bootcmd=echo Loading Open Network Install Environment ...; " \
++	  "echo Platform: $onie_platform ; "				\
++	  "echo Version : $onie_version ; "				\
++	  "cp.b $onie_start $loadaddr ${onie_sz.b} && "			\
++	  "run onie_args && bootm ${loadaddr}\0"
++
++/*
++ * Default onie boot args.
++ *
++ * onie_initargs     -- Basic args needed by all platforms.
++ * onie_platformargs -- Additional platform specific args needed by onie.
++ *                      Can be overriden.
++ */
++#define CONFIG_ONIE_BOOT_ARGS \
++	"onie_initargs=setenv bootargs quiet console=$consoledev,$baudrate\0" \
++	"onie_platformargs=setenv bootargs $bootargs serial_num=${serial#} " \
++	"eth_addr=$ethaddr " \
++	"$onie_bootargs $onie_debugargs \0" \
++	"onie_args=run onie_initargs onie_platformargs\0"
++
++/*
++ * Check for one time boot commands
++ *
++ * onie will clear this variable during boot.
++ *
++ */
++#define CONFIG_ONIE_CHECK_BOOT_CMD \
++	"check_boot_reason=if test -n $onie_boot_reason; then "  \
++	  "setenv onie_bootargs boot_reason=$onie_boot_reason; " \
++	  "run onie_bootcmd; " \
++	"fi;\0"
++
++/*
++ * Add U-Boot scripts for ONIE commands
++ *
++ * onie_rescue    -- boot ONIE in rescue mode
++ * onie_update    -- boot ONIE in update mode
++ * onie_uninstall -- boot ONIE in uninstall mode
++ *
++ */
++#define CONFIG_ONIE_CMDS \
++	"onie_rescue=setenv onie_boot_reason rescue && boot\0" \
++	"onie_update=setenv onie_boot_reason update && boot\0" \
++	"onie_uninstall=setenv onie_boot_reason uninstall && boot\0"
++
++#define CONFIG_BOOTCOMMAND	"run check_boot_reason; run nos_bootcmd; run onie_bootcmd"
++
++/*
++ * Common environemnt variables.
++ */
++#define CONFIG_ONIE_COMMON_UBOOT_ENV			\
++	"autoload=no\0"					\
++	"stdin=serial\0stdout=serial\0stderr=serial\0"	\
++	ONIE_VERSION					\
++	CONFIG_ONIE_CMDS				\
++	CONFIG_ONIE_BOOT_ARGS CONFIG_ONIE_BOOT_CMD	\
++	CONFIG_ONIE_CHECK_BOOT_CMD
++
++#endif /* ONIE_COMMON_CONFIG_H__ */

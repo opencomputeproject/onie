@@ -1,0 +1,258 @@
+New broadcom drivers support
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2014 Scott Emery <scotte@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+diff --git a/drivers/net/phy/broadcom.c b/drivers/net/phy/broadcom.c
+index 4512763..d6fd83b 100644
+--- a/drivers/net/phy/broadcom.c
++++ b/drivers/net/phy/broadcom.c
+@@ -9,26 +9,7 @@
+ #include <config.h>
+ #include <common.h>
+ #include <phy.h>
+-
+-/* Broadcom BCM54xx -- taken from linux sungem_phy */
+-#define MIIM_BCM54xx_AUXCNTL			0x18
+-#define MIIM_BCM54xx_AUXCNTL_ENCODE(val) (((val & 0x7) << 12)|(val & 0x7))
+-#define MIIM_BCM54xx_AUXSTATUS			0x19
+-#define MIIM_BCM54xx_AUXSTATUS_LINKMODE_MASK	0x0700
+-#define MIIM_BCM54xx_AUXSTATUS_LINKMODE_SHIFT	8
+-
+-#define MIIM_BCM54XX_SHD			0x1c
+-#define MIIM_BCM54XX_SHD_WRITE			0x8000
+-#define MIIM_BCM54XX_SHD_VAL(x)			((x & 0x1f) << 10)
+-#define MIIM_BCM54XX_SHD_DATA(x)		((x & 0x3ff) << 0)
+-#define MIIM_BCM54XX_SHD_WR_ENCODE(val, data)	\
+-	(MIIM_BCM54XX_SHD_WRITE | MIIM_BCM54XX_SHD_VAL(val) | \
+-	 MIIM_BCM54XX_SHD_DATA(data))
+-
+-#define MIIM_BCM54XX_EXP_DATA		0x15	/* Expansion register data */
+-#define MIIM_BCM54XX_EXP_SEL		0x17	/* Expansion register select */
+-#define MIIM_BCM54XX_EXP_SEL_SSD	0x0e00	/* Secondary SerDes select */
+-#define MIIM_BCM54XX_EXP_SEL_ER		0x0f00	/* Expansion register select */
++#include <broadcom_phy.h>
+ 
+ /* Broadcom BCM5461S */
+ static int bcm5461_config(struct phy_device *phydev)
+@@ -91,6 +72,121 @@ static int bcm54xx_startup(struct phy_device *phydev)
+ 	return 0;
+ }
+ 
++/* Broadcom BCM54616S */
++/*
++ * "Ethernet@Wirespeed" needs to be enabled to achieve link in certain
++ * circumstances.  eg a gigabit TSEC connected to a gigabit switch with
++ * a 4-wire ethernet cable.  Both ends advertise gigabit, but can't
++ * link.  "Ethernet@Wirespeed" reduces advertised speed until link
++ * can be achieved.
++ */
++static u32 bcm54616_read_wirespeed(struct phy_device *phydev, u32 reg)
++{
++	return (phy_read(phydev, MDIO_DEVAD_NONE, reg) & 0x8FFF) | 0x8010;
++}
++
++static int bcm54616_config(struct phy_device *phydev)
++{
++	unsigned int reg;
++
++	/* reset the PHY */
++	reg = phy_read(phydev, MDIO_DEVAD_NONE, MII_BMCR);
++	reg |= BMCR_RESET;
++	phy_write(phydev, MDIO_DEVAD_NONE, MII_BMCR, reg);
++
++	/* Setup read from auxilary control shadow register 7 */
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54xx_AUXCNTL,
++			MIIM_BCM54xx_AUXCNTL_ENCODE(7));
++	/* Read Misc Control register and or in Ethernet@Wirespeed */
++	reg = bcm54616_read_wirespeed(phydev, MIIM_BCM54xx_AUXCNTL);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54xx_AUXCNTL, reg);
++
++	/* Enable copper/fiber auto-detect */
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD,
++			MIIM_BCM54XX_SHD_WR_ENCODE(0x1e, 0x027));
++
++	genphy_config_aneg(phydev);
++
++	return 0;
++}
++
++/*
++ * Find out if PHY is in copper or serdes mode by looking at Shadow Reg
++ * 0x1F - "Mode Control Register"
++ */
++static int bcm54616_is_serdes(struct phy_device *phydev)
++{
++	u16 val;
++
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD,
++			MIIM_BCM54XX_SHD_VAL(0x1F));
++	val = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD);
++	return (val & 0x0001);
++}
++
++/*
++ * Determine SerDes link speed and duplex from Expansion reg 0x42 "Operating
++ * Mode Status Register"
++ */
++static u32 bcm54616_parse_serdes_sr(struct phy_device *phydev)
++{
++	u16 val;
++	int i = 0;
++
++	/* Wait 1s for link - Clause 37 autonegotiation happens very fast */
++	while (1) {
++		phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD,
++			MIIM_BCM54XX_SHD_VAL(0x15));
++		val = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD);
++
++		if (val & 0x0200)
++			break;
++
++		if (i++ > 1000) {
++			phydev->link = 0;
++			return 1;
++		}
++
++		udelay(1000);	/* 1 ms */
++	}
++
++	phydev->link = 1;
++	switch ((val >> 6) & 0x3) {
++	case (0x00):
++		phydev->speed = 10;
++		break;
++	case (0x01):
++		phydev->speed = 100;
++		break;
++	case (0x02):
++		phydev->speed = 1000;
++		break;
++	}
++
++	phydev->duplex = (val & 0x0100) == 0x0100;
++
++	return 0;
++}
++
++/*
++ * Figure out if BCM54616 is in serdes or copper mode and determine link
++ * configuration accordingly
++ */
++static int bcm54616_startup(struct phy_device *phydev)
++{
++	if (bcm54616_is_serdes(phydev)) {
++		bcm54616_parse_serdes_sr(phydev);
++		phydev->port = PORT_FIBRE;
++	} else {
++		/* Wait for auto-negotiation to complete or fail */
++		genphy_update_link(phydev);
++		/* Parse BCM54xx copper aux status register */
++		bcm54xx_parse_status(phydev);
++	}
++
++	return 0;
++}
++
+ /* Broadcom BCM5482S */
+ /*
+  * "Ethernet@Wirespeed" needs to be enabled to achieve link in certain
+@@ -264,11 +360,44 @@ static struct phy_driver BCM5482S_driver = {
+ 	.shutdown = &genphy_shutdown,
+ };
+ 
++static struct phy_driver BCM54610_A3_driver = {
++	.name = "Broadcom BCM54610_A3",
++	.uid = 0x0143bd63,
++	.mask = 0xfffff0,
++	.features = PHY_GBIT_FEATURES,
++	.config = &bcm5461_config,
++	.startup = &bcm54xx_startup,
++	.shutdown = &genphy_shutdown,
++};
++
++static struct phy_driver BCM5481_A2_driver = {
++	.name = "Broadcom BCM5481_A2",
++	.uid = 0x0143bca2,
++	.mask = 0xfffff0,
++	.features = PHY_GBIT_FEATURES,
++	.config = &bcm5461_config,
++	.startup = &bcm54xx_startup,
++	.shutdown = &genphy_shutdown,
++};
++
++static struct phy_driver BCM54616S_driver = {
++	.name = "Broadcom BCM54616S",
++	.uid = 0x03625D10,
++	.mask = 0xfffffff0,
++	.features = PHY_GBIT_FEATURES,
++	.config = &bcm54616_config,
++	.startup = &bcm54616_startup,
++	.shutdown = &genphy_shutdown,
++};
++
+ int phy_broadcom_init(void)
+ {
+ 	phy_register(&BCM5482S_driver);
+ 	phy_register(&BCM5464S_driver);
+ 	phy_register(&BCM5461S_driver);
++	phy_register(&BCM54610_A3_driver);
++	phy_register(&BCM5481_A2_driver);
++	phy_register(&BCM54616S_driver);
+ 
+ 	return 0;
+ }
+diff --git a/include/broadcom_phy.h b/include/broadcom_phy.h
+new file mode 100644
+index 0000000..2607c5c
+--- /dev/null
++++ b/include/broadcom_phy.h
+@@ -0,0 +1,46 @@
++/*
++ * Broadcom PHY drivers
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ *
++ * Copyright 2010-2011 Freescale Semiconductor, Inc.
++ * author Andy Fleming
++ *
++ */
++#ifndef BROADCOM_PHY_H__
++#define BROADCOM_PHY_H__
++
++/* Broadcom BCM54xx -- taken from linux sungem_phy */
++#define MIIM_BCM54xx_AUXCNTL            0x18
++#define MIIM_BCM54xx_AUXCNTL_ENCODE(val) (((val & 0x7) << 12)|(val & 0x7))
++#define MIIM_BCM54xx_AUXSTATUS          0x19
++#define MIIM_BCM54xx_AUXSTATUS_LINKMODE_MASK    0x0700
++#define MIIM_BCM54xx_AUXSTATUS_LINKMODE_SHIFT   8
++
++#define MIIM_BCM54XX_SHD            0x1c
++#define MIIM_BCM54XX_SHD_WRITE          0x8000
++#define MIIM_BCM54XX_SHD_VAL(x)         ((x & 0x1f) << 10)
++#define MIIM_BCM54XX_SHD_DATA(x)        ((x & 0x3ff) << 0)
++#define MIIM_BCM54XX_SHD_WR_ENCODE(val, data)   \
++    (MIIM_BCM54XX_SHD_WRITE | MIIM_BCM54XX_SHD_VAL(val) | \
++     MIIM_BCM54XX_SHD_DATA(data))
++
++#define MIIM_BCM54XX_EXP_DATA       0x15    /* Expansion register data */
++#define MIIM_BCM54XX_EXP_SEL        0x17    /* Expansion register select */
++#define MIIM_BCM54XX_EXP_SEL_SSD    0x0e00  /* Secondary SerDes select */
++#define MIIM_BCM54XX_EXP_SEL_ER     0x0f00  /* Expansion register select */
++
++#endif	/* BROADCOM_PHY_H__ */
