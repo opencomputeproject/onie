@@ -89,7 +89,7 @@ host {{ host.hostname }}
     option tftp-server-name "{{ tftp_server_name }}";
     {% endif %}
     {%- if www_server_ip %}
-    option www-server "{{ www_server_ip }}";
+    option www-server {{ www_server_ip }};
     {% endif %}
 }
 
