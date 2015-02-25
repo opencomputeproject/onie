@@ -9,7 +9,7 @@ import sys
 OPTIONS = {'onie_installer': str,
            'onie_updater': str,
            'onie_arch': str,
-           'onie_vendor': int,
+           'onie_vendor': str,
            'onie_machine': str,
            'onie_machine_rev': str,
            'http_binary': str,
@@ -374,7 +374,7 @@ def prepare_test_case(test_args):
     if test_num in tftp_server_name_cases:
         hostname = 'TFTP_SERVER_NAME'
         if 'host_local_name' in test_args:
-            hostname = test_args['local_name']
+            hostname = test_args['host_local_name']
         test_args['tftp_server_name'] = hostname
 
     # handle www_server_ip
