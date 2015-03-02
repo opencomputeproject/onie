@@ -86,16 +86,21 @@ while getopts "$args" a ; do
     esac
 done
 
+check_machine_image()
+{
+    if [ "$onie_machine" != "$image_machine" ] ; then
+        fail=yes
+    fi
+    if [ "$onie_machine_rev" != "$image_machine_rev" ] ; then
+        fail=yes
+    fi
+    if [ "$onie_arch" != "$image_arch" ] ; then
+        fail=yes
+    fi
+}
+
 fail=
-if [ "$onie_machine" != "$image_machine" ] ; then
-    fail=yes
-fi
-if [ "$onie_machine_rev" != "$image_machine_rev" ] ; then
-    fail=yes
-fi
-if [ "$onie_arch" != "$image_arch" ] ; then
-    fail=yes
-fi
+check_machine_image
 
 if [ "$fail" = "yes" ] && [ "$force" = "no" ] ; then
     echo "ERROR: Machine mismatch"
