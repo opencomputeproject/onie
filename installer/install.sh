@@ -99,6 +99,8 @@ check_machine_image()
     fi
 }
 
+[ -r ./install-platform ] && . ./install-platform
+
 fail=
 check_machine_image
 

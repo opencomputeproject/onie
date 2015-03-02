@@ -86,6 +86,10 @@ cp $installer_dir/install.sh $tmp_installdir || exit 1
 echo -n "."
 cp -r $installer_dir/$arch/* $tmp_installdir
 
+[ -r $machine_dir/installer/install-platform ] && {
+    cp $machine_dir/installer/install-platform $tmp_installdir
+}
+
 # Escape special chars in the user provide kernel cmdline string for use in
 # sed. Special chars are: \ / &
 EXTRA_CMDLINE_LINUX=`echo $EXTRA_CMDLINE_LINUX | sed -e 's/[\/&]/\\\&/g'`
