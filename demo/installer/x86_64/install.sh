@@ -13,7 +13,7 @@ cd $(dirname $0)
 echo "Demo Installer: platform: $platform"
 
 # Install demo on same block device as ONIE
-blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' | sed -e 's/[0-9]://' | head -n 1)
+blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' |  sed -e 's/[0-9]:$//' | sed -e 's/\([0-9]\)\(p\)/\1/' | head -n 1)
 
 [ -b "$blk_dev" ] || {
     echo "Error: Unable to determine block device of ONIE install"
@@ -126,7 +126,11 @@ create_demo_msdos_partition()
 }
 
 eval $create_demo_partition $blk_dev
-demo_dev="${blk_dev}$demo_part"
+if [[${onie_dev} == sd*]]; then
+    demo_dev="${blk_dev}$demo_part"
+else
+    demo_dev="${blk_dev}p$demo_part"
+fi
 partprobe
 
 # Create filesystem on demo partition with a label
