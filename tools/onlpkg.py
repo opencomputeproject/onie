@@ -58,6 +58,8 @@ closed_source = [
 # Disabled and/or deprecated packages
 #
 disabled_packages = [
+"onlp-powerpc-accton-as5700-96x-r0",
+"platform-config-powerpc-accton-as5700-96x-r0" # disabled until this platform is ready
 ];
 
 # add the closed_source packages to the disabled

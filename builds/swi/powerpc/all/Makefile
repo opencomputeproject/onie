@@ -27,6 +27,7 @@ endif
 # for this SWI configuration.
 #
 ONL_REQUIRED_PACKAGES := kernel-85xx:powerpc \
+             kernel-e500mc:powerpc \
 			 initrd-powerpc:powerpc
 
 include $(ONL)/make/component.mk
