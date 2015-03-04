@@ -126,11 +126,7 @@ create_demo_msdos_partition()
 }
 
 eval $create_demo_partition $blk_dev
-if [[${onie_dev} == sd*]]; then
-    demo_dev="${blk_dev}$demo_part"
-else
-    demo_dev="${blk_dev}p$demo_part"
-fi
+demo_dev=$(echo $onie_dev | sed -e 's/\(mmcblk[0-9]\)/\1p/')$demo_part
 partprobe
 
 # Create filesystem on demo partition with a label
