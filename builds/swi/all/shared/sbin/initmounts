@@ -1,38 +1,275 @@
 #!/bin/sh
 ############################################################
-# <bsn.cl fy=2013 v=onl>
-# 
-#        Copyright 2013, 2014 Big Switch Networks, Inc.       
-# 
-# Licensed under the Eclipse Public License, Version 1.0 (the
-# "License"); you may not use this file except in compliance
-# with the License. You may obtain a copy of the License at
-# 
-#        http://www.eclipse.org/legal/epl-v10.html
-# 
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-# either express or implied. See the License for the specific
-# language governing permissions and limitations under the
-# License.
-# 
+# <bsn.cl fy=2013 v=none>
+#
+#        Copyright 2013, 2014 BigSwitch Networks, Inc.
+#
+#
+#
 # </bsn.cl>
 ############################################################
 #
 # initmounts
 #
+# Mount all mount points listed in /etc/onl_mounts
+#
+# Each line in /etc/onl_mounts is in the following syntax:
+#
+# /dev/sda sda mount-point
+# - wait for /dev/sda to appear,
+#   then mount /dev/sda as /mnt/mount-point
+#
+# /dev/sda * mount-point
+# - wait for block device /dev/sda to appear,
+#   then mount /dev/sda as /mnt/mount-point
+#   (infer /dev/sda from the left-hand path specification)
+#
+# block/sda sda mount-point
+# block/sda * mount-point
+# SYSDEV=block/sda sda mount-point
+# SYSDEV=block/sda * mount-point
+# - wait for /sys/block/sda to appear,
+#   then mount /mnt/sda as /mnt/mnt-point
+#
+# LABEL=MYDEV * mount-point
+# LABEL="MYDEV" * mount-point
+# - wait for a partition with the given label to appear
+#   (via polling 'blkid')
+#   then mount as /mnt/mnt-point
+#
+# UUID=some-uuid * mount-point
+# UUID="some-uuid" * mount-point
+# - wait for a partition with the given UUID to appear
+#   (via polling 'blkid')
+#   then mount as /mnt/mnt-point
+#
+# - multiple lines mapping to the same mount point can
+#   be listed in /etc/onl_mounts, the first one that
+#   is valid wins
+#
+# - initmounts exits with code zero (success)
+#   if each mount point is mounted once
+#
+# - initmounts exits with non-zero (failure)
+#   if un-mounted mount points are still remaining after 10s
+#
 ############################################################
-set -e
 exec 9<$0
 flock -x 9
 
-if [ -f /etc/onl_mounts ]; then
-    while read sysdev devpart mount; do
-        waitforsysdev $sysdev
-	mkdir -p /mnt/$mount
-        mount -o noatime /dev/$devpart /mnt/$mount 2>/dev/null
-    done</etc/onl_mounts
+CR="
+"
+PATH=$PATH:/sbin:/usr/sbin
+
+recover="fsck"
+
+try_mount_block()
+{
+  local dev devpart mount
+  dev=$1; shift
+  devpart=$1; shift
+  mount=$1; shift
+
+  if test -b "$dev"; then
+
+    if test "$devpart" = "*"; then
+      devpart=`echo "$dev" | sed -e 's/^.*[/]//' `
+    fi
+
+    test -d /mnt/$mount || mkdir -p /mnt/$mount
+    if test "$recover" = "fsck"; then
+      if dosfsck -a /dev/$devpart; then
+        :
+      else
+        dosfsck -n /dev/$devpart || return
+      fi
+    else
+      dosfsck -n /dev/$devpart || return
+    fi
+    mount -o noatime /dev/$devpart /mnt/$mount || return
+    echo "mounted /dev/$devpart --> /mnt/$mount"
+
+  fi
+}
+
+try_mount_sysdev()
+{
+  local syspath devpart mount
+  syspath=$1; shift
+  devpart=$1; shift
+  mount=$1; shift
+
+  if test -e /sys/$syspath; then
+
+    if test "$devpart" = "*"; then
+      devpart=`echo "$syspath" | sed -e 's/^.*[/]//' `
+    fi
+
+    test -d /mnt/$mount || mkdir -p /mnt/$mount
+    if test "$recover" = "fsck"; then
+      if dosfsck -a /dev/$devpart; then
+        :
+      else
+        dosfsck -n /dev/$devpart || return
+      fi
+    else
+      dosfsck -n /dev/$devpart || return
+    fi
+    mount -o noatime /dev/$devpart /mnt/$mount || return
+    echo "mounted /dev/$devpart --> /mnt/$mount"
+
+  fi
+}
+
+try_mount_label()
+{
+  local label devpart mount
+  label=$1; shift
+  devpart=$1; shift
+  mount=$1; shift
+
+  local ifs dummy line dev
+  ifs=$IFS; IFS=$CR
+  for line in `blkid`; do
+    IFS=$ifs
+    case " $line " in
+      *" LABEL=${label} "*)
+        dev=`echo "$line" | sed -e 's/:.*//'`
+        break
+        ;;
+      *" LABEL=\"${label}\" "*)
+        dev=`echo "$line" | sed -e 's/:.*//'`
+        break
+        ;;
+    esac
+  done
+  IFS=$ifs
+
+  if test "$dev"; then
+    try_mount_block "$dev" "$devpart" "$mount"
+  fi
+}
+
+try_mount_uuid()
+{
+  local uuid devpart mount
+  uuid=$1; shift
+  devpart=$1; shift
+  mount=$1; shift
+
+  local ifs dummy line dev
+  ifs=$IFS; IFS=$CR
+  for line in `blkid`; do
+    IFS=$ifs
+    case " $line " in
+      *" UUID=${uuid} "*)
+        dev=`echo "$line" | sed -e 's/:.*//'`
+        break
+        ;;
+      *" UUID=\"${label}\" "*)
+        dev=`echo "$uuid" | sed -e 's/:.*//'`
+        break
+        ;;
+    esac
+  done
+  IFS=$ifs
+
+  if test "$dev"; then
+    try_mount_block "$dev" "$devpart" "$mount"
+  fi
+}
+
+try_mount()
+{
+  local devspec devpart mount
+  devspec=$1; shift
+  devpart=$1; shift
+  mount=$1; shift
+
+  if grep " /mnt/$mount " /proc/mounts 1>/dev/null; then
+    return
+  fi
+
+  local sysdev label uuid
+
+  case "$devspec" in
+    /dev/*)
+      try_mount_block "$devspec" "$devpart" "$mount"
+      ;;
+    block/*)
+      try_mount_sysdev "$devspec" "$devpart" "$mount"
+      ;;
+    SYSDEV=\"*\")
+      sysdev=`echo "$devspec" | sed -e 's/SYSDEV=\"\(.*\)\"/\1/'`
+      try_mount_sysdev "$sysdev" "$devpart" "$mount"
+      ;;
+    SYSDEV=*)
+      sysdev=`echo "$devspec" | sed -e 's/SYSDEV=\(.*\)/\1/'`
+      try_mount_sysdev "$sysdev" "$devpart" "$mount"
+      ;;
+    LABEL=\"*\")
+      label=`echo "$devspec" | sed -e 's/LABEL=\"\(.*\)\"/\1/'`
+      try_mount_label "$label" "$devpart" "$mount"
+      ;;
+    LABEL=*)
+      label=`echo "$devspec" | sed -e 's/LABEL=\(.*\)/\1/'`
+      try_mount_label "$label" "$devpart" "$mount"
+      ;;
+    UUID=\"*\")
+      uuid=`echo "$devspec" | sed -e 's/UUID=\"\(.*\)\"/\1/'`
+      try_mount_uuid "$uuid" "$devpart" "$mount"
+      ;;
+    UUID=*)
+      uuid=`echo "$devspec" | sed -e 's/UUID=\(.*\)/\1/'`
+      try_mount_uuid "$uuid" "$devpart" "$mount"
+      ;;
+    *)
+      echo "*** invalid block specifier: $devspec" 1>&2
+      ;;
+  esac
+}
+
+visit_onl_mounts()
+{
+  local fn rest
+  fn=$1; shift
+  rest="$@"
+
+  local ifs dummy line remain
+  remain=0
+  ifs=$IFS; IFS=$CR
+  for line in $(cat /etc/onl_mounts); do
+    IFS=$ifs
+
+    set -f
+    set dummy $line; shift
+    devspec=$1; shift
+    devpart=$1; shift
+    mount=$1; shift
+
+    grep " /mnt/$mount " /proc/mounts 1>/dev/null && continue
+    remain=1
+    eval $fn "$devspec" "$devpart" "$mount" $rest
+
+    set +f
+  done
+  IFS=$ifs
+
+  return $remain
+}
+
+if test -f /etc/onl_mounts; then
+  timeout=10
+  while test $timeout -gt 0; do
+    if visit_onl_mounts try_mount; then
+      echo "Found all mounts."
+      exit 0
+    fi
+    sleep 1
+    timeout=$(( $timeout - 1 ))
+  done
+  if test "$timeout" -eq 0; then
+    echo "Timed out waiting for block devices"
+    exit 1
+  fi
 fi
-
-
