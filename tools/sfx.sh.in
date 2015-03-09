@@ -1,0 +1,262 @@
+#!/bin/sh
+
+set -e
+
+CMD=${0##*/}
+
+UNZIP=/usr/bin/unzip
+
+UNZIPOPTS=
+UNZIPARGS=
+UNZIPDIR=
+UNZIPQ="-q"
+UNZIPV=
+
+UNZIPLOOP=
+
+mode=install
+
+SHAR=$0
+
+shardir=`dirname $SHAR`
+shardir=`cd $shardir && pwd`
+SHARABS="$shardir"/${SHAR##*/}
+
+SFX_BYTES=0 ## fill in the size (padded) of this SFX header ##################
+SFX_BLOCKSIZE=1 ## use a larger block size, 'dd bs=1' is sometimes slow ######
+SFX_CHECKSUM= ## compute checksum over this SFX and the payload ##############
+SFX_INSTALL=install ## internal script in the payload to run #################
+SFX_PAD= ## pad file (this payload) to skip during unpack ####################
+SFX_LAZY=  ## set to '1' to defer extraction to SFX_INSTALL ##################
+SFX_UNZIP=1  ## set to '' if this unzip cannot parse SFX headers #############
+SFX_LOOP=1   ## set to '' if this unzip cannot read from a loopback/block ####
+SFX_PIPE=1   ## set to '' if this unzip cannot read from a pipe ##############
+
+if test "$SFX_PAD"; then
+  UNZIPARGS=$UNZIPARGS${UNZIPARGS:+" "}"-x $SFX_PAD"
+fi
+
+while test $# -gt 0; do
+  case "$1" in
+    -x)
+      # N.B. that busybox unzip has trouble with multiple files
+      mode=unzip
+      shift
+      UNZIPARGS=$UNZIPARGS${UNZIPARGS:+" "}"$1"
+      shift
+      UNZIPARGS=$UNZIPARGS${UNZIPARGS:+" "}"$1"
+      continue
+      ;;
+    -d)
+      shift
+      UNZIPDIR=$1
+      shift
+      continue
+      ;;
+    -v)
+      UNZIPQ=
+      UNZIPV="$1"
+      shift
+      ;;
+    -q)
+      UNZIPQ="$1"
+      UNZIPV=
+      shift
+      ;;
+    -*)
+      mode=unzip
+      UNZIPOPTS=$UNZIPOPTS${UNZIPOPTS:+" "}"$1"
+      shift
+      ;;
+    *)
+      mode=unzip
+      UNZIPARGS=$UNZIPARGS${UNZIPARGS:+" "}"$1"
+      shift
+      continue
+      ;;
+  esac
+done
+
+if test "$SFX_BLOCKSIZE" -gt 1; then
+  SFX_BLOCKS=$(($SFX_BYTES / $SFX_BLOCKSIZE))
+  SFX_TRAILER=$(($SFX_BYTES % $SFX_BLOCKSIZE))
+  if test $SFX_TRAILER -ne 0; then
+    echo "$CMD: *** SFX is not block-aligned" 1>&2
+    exit 1
+  fi
+else
+  echo "$CMD: *** SFX is blocked, dd may be slow" 1>&2
+fi
+
+workdir=`mktemp -t -d sfx-XXXXXX` || exit 1
+do_cleanup()
+{
+  if test -b "$UNZIPLOOP"; then
+    losetup -d "$UNZIPLOOP" || :
+  fi
+  cd /
+  /bin/rm -fr $workdir 2>/dev/null
+}
+trap "do_cleanup" 0 1
+
+_t()
+{
+  local c z
+  c="$1"; shift
+  z="$1"; shift
+  $c | $UNZIP $UNZIPQ $UNZIPV -l "$z" 1>/dev/null 2>&1
+  return $?
+}
+
+# be wary of busybox unzip
+# http://lists.busybox.net/pipermail/busybox/2010-August/073131.html
+case "$SFX_PAD:$SFX_UNZIP:$SFX_LOOP:$SFX_PIPE" in
+  :1:*:*)
+    echo "$CMD: testing for SFX support"
+    if ! _t ":" "$SHARABS"; then
+      echo "$CMD: *** SFX failed" 1>&2
+      SFX_UNZIP=
+    fi
+  ;;
+esac
+
+case "$SFX_PAD:$SFX_UNZIP:$SFX_LOOP:$SFX_PIPE" in
+  ::1:*)
+    echo "$CMD: testing for loopback support"
+    UNZIPLOOP=`losetup -f`
+    losetup -r -o $SFX_BYTES "$UNZIPLOOP" "$SHARABS"
+    if ! _t ":" "$UNZIPLOOP"; then
+      echo "$CMD: *** loopback failed" 1>&2
+      SFX_LOOP=
+    fi
+  ;;
+esac
+
+case "$SFX_PAD:$SFX_UNZIP:$SFX_LOOP:$SFX_PIPE" in
+  :::1)
+    echo "$CMD: testing for pipe support"
+    if ! _t "dd if=$SHARABS bs=$SFX_BLOCKSIZE skip=$SFX_BLOCKS" "-"; then
+      echo "$CMD: *** pipe failed" 1>&2
+      SFX_PIPE=
+    fi
+  ;;
+esac
+
+if test "$SFX_PAD"; then
+  echo "$CMD: copying file and resetting pad"
+  cp "$SHARABS" $workdir/onie-installer.zip
+  dd if="$SHARABS" of=$workdir/onie-installer.zip bs=512 skip=$(($SFX_BLOCKS-1)) count=1 conv=notrunc
+  _CAT=":"
+  _ZIP="$workdir/onie-installer.zip"
+elif test "$SFX_UNZIP"; then
+  echo "$CMD: processing SFX with unzip"
+  _CAT=":"
+  _ZIP="$SHARABS"
+elif test "$SFX_LOOP"; then
+  echo "$CMD: processing SFX with losetup"
+  _CAT=":"
+  _ZIP="$UNZIPLOOP"
+elif test "$SFX_PIPE"; then
+  echo "$CMD: processing SFX with dd"
+  _CAT="dd if=$SHARABS bs=$SFX_BLOCKSIZE skip=$SFX_BLOCKS"
+  _ZIP="-"
+else
+  echo "$CMD: *** copying file to find zip offset"
+  dd if=$SHARABS of=$workdir/onie-installer.zip bs=$SFX_BLOCKSIZE skip=$SFX_BLOCKS
+  _CAT=":"
+  _ZIP="$workdir/onie-installer.zip"
+fi
+
+if test "$mode" = "unzip"; then
+  echo "$CMD: processing with zip"
+  $_CAT | $UNZIP $UNZIPQ $UNZIPV $UNZIPOPTS "$_ZIP" $UNZIPARGS
+  exit $?
+fi
+
+if test "$mode" != "install"; then
+  echo "$CMD: *** invalid mode: $mode" 1>&2
+  exit 1
+fi
+
+if test "$UNZIPDIR"; then
+  :
+else
+  UNZIPDIR=$workdir
+fi
+
+banner=`unzip 2>&1` || :
+case "$banner" in
+  *"-t"*)
+    echo "$CMD: testing shar"
+    $_CAT | $UNZIP $UNZIPQ $UNZIPV $UNZIPOPTS -t "$_ZIP" $UNZIPARGS
+    sts=$?
+    test $sts -eq 0 || exit $sts
+  ;;
+esac
+
+echo "$CMD: computing checksum"
+{
+  dd if="$SHARABS" bs=$SFX_BLOCKSIZE count=$SFX_BLOCKS 2>/dev/null | sed -e "/^SFX_CHECKSUM=/d";
+  dd if="$SHARABS" bs=$SFX_BLOCKSIZE skip=$SFX_BLOCKS 2>/dev/null
+} | md5sum > "$UNZIPDIR/ck"
+
+set dummy `cat "$UNZIPDIR/ck"`
+newck=$2
+
+rm -f "$UNZIPDIR/ck"
+
+if test "$SFX_CHECKSUM" = "$newck"; then
+  echo "$CMD: checksum is OK"
+else
+  echo "$CMD: *** checksum mismatch" 1>&2
+  exit 1
+fi
+
+shardir=`dirname $0`
+shardir=`cd $shardir && pwd`
+
+echo "$CMD: extracting shar into $UNZIPDIR"
+cd $UNZIPDIR
+
+if test "$SFX_LAZY"; then
+  $_CAT | $UNZIP $UNZIPQ $UNZIPOPTS "$_ZIP" "$SFX_INSTALL"
+else
+  $_CAT | $UNZIP $UNZIPQ $UNZIPOPTS "$_ZIP" $UNZIPARGS
+fi
+
+if test -f "$SFX_INSTALL"; then
+  echo "$CMD: invoking installer $SFX_INSTALL"
+
+  tmp_install=`mktemp $UNZIPDIR/install-XXXXXX`
+  mv "$SFX_INSTALL" $tmp_install
+  chmod +x "$tmp_install"
+
+  export SFX_BLOCKSIZE SFX_BLOCKS SFX_PAD SFX_UNZIP SFX_LOOP SFX_PIPE SFX_LAZY
+
+  case "$-" in
+    *x*)
+      dashx="-x"
+    ;;
+  esac
+
+  if test -e "$_ZIP"; then
+    eval "$tmp_install" $dashx "$_ZIP"
+  else
+    eval "$tmp_install" $dashx "$SHARABS"
+  fi
+
+  exit $?
+else
+  echo "$CMD: *** missing installer: $SFX_INSTALL" 1>&2
+  exit 1
+fi
+
+##############################
+#
+# END OF SHAR HEADER
+#
+# BINARY ZIP DATA FOLLOWS
+#
+# DO NOT EDIT!
+#
+##############################

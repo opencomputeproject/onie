@@ -1,22 +1,22 @@
 # -*- Makefile -*-
 ############################################################
 # <bsn.cl fy=2013 v=onl>
-# 
-#        Copyright 2013, 2014 Big Switch Networks, Inc.       
-# 
+#
+#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
 # with the License. You may obtain a copy of the License at
-# 
+#
 #        http://www.eclipse.org/legal/epl-v10.html
-# 
+#
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
 # either express or implied. See the License for the specific
 # language governing permissions and limitations under the
 # License.
-# 
+#
 # </bsn.cl>
 ############################################################
 #
@@ -47,6 +47,11 @@ ONL_SUBMODULE_ONLP_ACCTON      := $(ONL)/submodules/onlp-accton
 ONL_LOCAL_SUBMODULES += onlp-accton
 endif
 
+ifndef ONL_SUBMODULE_ONLP_DELL
+ONL_SUBMODULE_ONLP_DELL      := $(ONL)/submodules/onlp-dell
+ONL_LOCAL_SUBMODULES += onlp-dell
+endif
+
 ifndef ONL_SUBMODULE_ONLP_DNI
 ONL_SUBMODULE_ONLP_DNI      := $(ONL)/submodules/onlp-dni
 ONL_LOCAL_SUBMODULES += onlp-dni
@@ -65,6 +70,11 @@ endif
 ifndef ONL_SUBMODULE_LINUX_3_8_13
 ONL_SUBMODULE_LINUX_3_8_13      := $(ONL)/submodules/linux-3.8.13
 ONL_LOCAL_SUBMODULES += linux-3.8.13
+endif
+
+ifndef ONL_SUBMODULE_LINUX
+ONL_SUBMODULE_LINUX := $(ONL)/submodules/linux
+ONL_LOCAL_SUBMODULES += linux
 endif
 
 ifndef ONL_SUBMODULE_INFRA
@@ -158,7 +168,7 @@ endif
 # This turns out to  be terribly hacky wrt the component makefiles.
 # This should be a temporary solution.
 #
-ALL_SUBMODULES = INFRA COMMON BIGCODE ONLP ONLP_ACCTON ONLP_DNI ONLP_QUANTA
+ALL_SUBMODULES = INFRA COMMON BIGCODE ONLP ONLP_ACCTON ONLP_DNI ONLP_QUANTA ONLP_DELL
 MODULE_DIRS := $(foreach submodule,$(ALL_SUBMODULES),$(ONL_SUBMODULE_$(submodule))/modules)
 MODULE_DIRS_TOUCH := $(foreach sd,$(MODULE_DIRS),$(shell mkdir -p $(sd) && touch $(sd)/Manifest.mk))
 

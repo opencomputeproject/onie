@@ -71,7 +71,7 @@ rootfs.all: $(ROOTFS_DIR).sqsh $(ROOTFS_DIR).cpio
 export ONL
 
 ifndef APT_CACHE
-APT_CACHE := 10.198.0.0:3142/
+APT_CACHE := $(shell $(ONL)/tools/apt-cache.sh)
 endif
 
 ifndef NO_PACKAGE_DEPENDENCY
