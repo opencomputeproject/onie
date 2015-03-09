@@ -1,0 +1,52 @@
+From c2cbc2ba4699f1b529e16a98ddfa89d98ee89bc4 Mon Sep 17 00:00:00 2001
+From: Luffy <luffy.cheng@quantatw.com>
+Date: Mon, 9 Mar 2015 14:14:14 +0800
+Subject: [PATCH 1/1] Fixup MPC8541 SS_EN and CLK_ADJ
+
+---
+ arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c |    4 ++++
+ board/quanta/quanta_lb9/ddr.c            |   11 ++++++++---
+ 2 files changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c b/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
+index 6265e52..2c71089 100644
+--- a/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
++++ b/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
+@@ -1215,7 +1215,11 @@ static void set_ddr_sdram_clk_cntl(fsl_ddr_cfg_regs_t *ddr,
+ 	unsigned int clk_adjust;	/* Clock adjust */
+ 
+ 	clk_adjust = popts->clk_adjust;
++#if defined(CONFIG_MPC8541) || defined(CONFIG_MPC8555)
++	ddr->ddr_sdram_clk_cntl = (0x80000000 | ((clk_adjust & 0x7) << 24));
++#else
+ 	ddr->ddr_sdram_clk_cntl = (clk_adjust & 0xF) << 23;
++#endif
+ 	debug("FSLDDR: clk_cntl = 0x%08x\n", ddr->ddr_sdram_clk_cntl);
+ }
+ 
+diff --git a/board/quanta/quanta_lb9/ddr.c b/board/quanta/quanta_lb9/ddr.c
+index 78d73b0..885be6e 100644
+--- a/board/quanta/quanta_lb9/ddr.c
++++ b/board/quanta/quanta_lb9/ddr.c
+@@ -23,10 +23,15 @@ void fsl_ddr_board_options(memctl_options_t *popts,
+ 	 *	- ???
+ 	 *
+ 	 * This needs to be determined on a board-by-board basis.
+-	 *	0110	3/4 cycle late
+-	 *	0111	7/8 cycle late
++	 *
++	 *  MPC8541 / MPC8555 specific
++	 *	000		 no cycle late
++	 *	001		1/4 cycle late
++	 *	010		1/2 cycle late
++	 *	011		3/4 cycle late
++	 *	100		  1 cycle late
+ 	 */
+-	popts->clk_adjust = 6;
++	popts->clk_adjust = 3;
+ 
+ 	/*
+ 	 * Factors to consider for CPO:
+-- 
+1.7.3.4
+
