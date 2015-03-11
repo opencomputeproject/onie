@@ -27,8 +27,12 @@
 ############################################################
 include $(ONL)/make/config.mk
 
+ifndef MAX_PARALLEL_MAKES
+MAX_PARALLEL_MAKES=8
+endif
+
 ifndef NOT_PARALLEL
-ONL_MAKE_PARALLEL := -j
+ONL_MAKE_PARALLEL := -j $(MAX_PARALLEL_MAKES)
 endif
 
 component: component-deps
