@@ -174,3 +174,4 @@ That is:
 * 'rootfs-powerpc' is the base of the root filesystem
 * 'version' is a string that identifies this SWI
 
+Note: If NFS root squash is set on the server, you might get a permission error while booting. To fix this, you can set 'no_disable_squash' in /etc/exports. However, be aware of the security implications as root on a client machine will now have the same access privilege on the files as root on the NFS server.
