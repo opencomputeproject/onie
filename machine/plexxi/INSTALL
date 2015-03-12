@@ -1,0 +1,110 @@
+=============================================
+Installing ONIE on Plexxi x86_64 Virtual Machine
+=============================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINE=plexxi all"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINE=plexxi all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-r--r-- 1 3963992 Jan 30 16:38 plexxi-r0.initrd
+-rw-r--r-- 1 3091328 Jan 30 10:58 plexxi-r0.vmlinuz
+-rw-r--r-- 1 7067253 Jan 30 16:38 onie-updater-x86_64-plexxi-r0
+
+plexxi-r0.vmlinuz -- This is the ONIE kernel image
+
+plexxi-r0.initrd  -- This is the ONIE initramfs (filesystem)
+
+onie-updater-x86_64-plexxi-r0 -- This is the ONIE self-update
+image.  This image is a self-extracting archive used for installing
+ONIE.
+
+
+Installing the ONIE binaries into the Virtual Machine
+=====================================================
+
+This example assumes you have configured a DHCP server and a HTTP
+server.  The DHCP server is nice to have, but not required.  The HTTP
+server is required.
+
+First copy the above build products to the root of your web server.
+Here we assume the root of the web server is /var/www::
+
+  $ cp plexxi-r0.vmlinuz plexxi-r0.initrd onie-updater-x86_64-plexxi-r0 /var/www
+
+Next copy the provided ipxe installer script to the same directory::
+
+  $ cp install.ipxe /var/www
+
+.. note:: You will need to edit install.ipxe and change the
+          onie-updater URL for your environment.  In the setting of
+          the ``onie_url`` variable replace the string "<image-base>" with
+          the IP address of your webserver.
+
+When running under QEMU the virtual machine initially boots into
+SeaBIOS, which has ipxe installed.  See http://www.ipxe.org/ for
+complete details about ipxe.
+
+1.  Before starting the virtual machine, connect to the console of the
+    machine using virt-manager's VNC connection.
+
+2.  Once installed, ONIE is configured to use the serial console of
+    the VM.  It is nice to connect to that now, before installing
+    ONIE, so you can see the difference between "before ONIE install"
+    and "after ONIE install".  You can use the "virsh console" command
+    to connect to the console::
+
+      $ virsh console onie-x86-test
+
+3.  Start the virtual machine using 'virsh start <machine-name>'
+
+4.  On the console you wil see the SeaBIOS splash screen, followed by
+    the ipxe splash screen.  Type <ctrl>-B now.
+
+5.  That should drop you to iPXE prompt
+
+6.  Configure the network interface.  This example assumes you have a
+    DHCP server configured.  If not, use the ipxe ``config`` command
+    to set up the network parameters.  At the ipxe prompt type::
+
+    iPXE> dhcp
+
+7.  Download and run the install.ipxe script.  The URL of the
+    install.ipxe depends on your environment.  Use the IP address of
+    your HTTP server::
+
+    iPXE> chain http://<web-server-IP-address>/install.ipxe
+
+The install.ipxe should now download and commence running.  The ipxe
+script will do the following:
+
+1.  Download plexxi-r0.vmlinuz
+
+2.  Download plexxi-r0.initrd
+
+3.  Boot into ONIE using the "ONIE update" mode, passing the URL of
+    the ONIE self-update image in the ``install_url`` kernel command
+    line arguemt.
+
+Once ONIE has booted it will:
+
+1.  Detect that it is running in "ONIE update" mode
+
+2.  Find the ``install_url`` command line argument
+
+3.  Proceed to perform the update using the
+    onie-updater-x86_64-plexxi-r0 image.  This update procedure
+    will install ONIE on the virtual hard drive.
+
+Once the ONIE update is complete the machine reboots.  This time you
+will see the GRUB menu and the machine will boot of the hard drive.
+The default GRUB entry boots the machine into "ONIE install" mode.

@@ -1,0 +1,53 @@
+# This gets sourced by rootconf/default/etc/init.d/networking.sh
+
+get_serial_num()
+{
+    if [ -x /usr/bin/onie-syseeprom ] ; then
+        echo $(onie-syseeprom -g 0x23)
+    fi
+}
+
+get_ethaddr()
+{
+    if [ -x /usr/bin/onie-syseeprom ] ; then
+        mac=$(onie-syseeprom -g 0x24)
+        if [ -n "$mac" ] ; then
+            mac=$(mac_add $mac 127)
+            if [ -n "$mac" ] ; then
+                echo $mac
+            fi
+        fi
+    fi
+}
+
+net_intf()
+{
+    if [ -x /usr/bin/onie-syseeprom ] ; then
+        boardtype=$(onie-syseeprom -g 0x28)
+        if [ -n "$boardtype" ] ; then
+            if [ $boardtype = "SM2" ] || [ $boardtype = "SM3" ]; then
+                echo "eth2"
+            else
+                echo "eth0"
+            fi
+        fi
+    fi
+}
+
+check_link_status_platform()
+{
+    check_link_up $intf || {
+        log_console_msg "${intf}: link down.  waiting for link"
+        eval "result_${intf}=1"
+    }
+    let countdown=30
+    while [ $((result_${intf})) -eq 1 ] && [ $((countdown)) -gt 0 ]; do
+        check_link_up $intf
+        if [ $? -eq 1 ]; then
+            let countdown=countdown-1
+            sleep 1
+        else
+            eval "result_${intf}=0"
+        fi
+    done
+}

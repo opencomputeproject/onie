@@ -1,0 +1,100 @@
+# plexxi specific uninstall routine
+
+[ -r "$lib_dir/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. $lib_dir/onie-blkdev-common
+
+# Erase a block device partition
+# Step 1 -- Overwrite the partition with random data
+# Step 2 -- Remove the partition from the partition table
+erase_part()
+{
+    blk_dev="$1"
+    part="$2"
+
+    if [ "$onie_testing" != "y" ] ; then
+        printf "${log_pre}Deleting partition $part from /dev/$blk_dev\n"
+        eval $delete_partition $blk_dev $part || {
+            printf "${log_pre}Unable to remove partition $part on /dev/$blk_dev\n"
+            return 1
+        }
+    fi
+}
+
+list_contains()
+{
+    for f in $1; do
+        if [ "$f" = "$2" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Clean up any non-onie pieces from boot partition.
+boot_part_clean()
+{
+    # Move original grub.cfg back into place
+    if [ -f ${grub_root_dir}/grub.cfg.onie ]; then
+        mv ${grub_root_dir}/grub.cfg.onie ${grub_root_dir}/grub.cfg
+    fi
+
+    # Delete anything not on the whitelists
+    TOP_WHITELIST="grub lost+found onie"
+    for file in `ls $onie_boot_mnt`; do
+        list_contains "$TOP_WHITELIST" $file || rm -rf ${onie_boot_mnt}/$file
+    done
+
+    GRUB_WHITELIST="fonts grub.cfg grubenv i386-pc locale"
+    for file in `ls $grub_root_dir`; do
+        list_contains "$GRUB_WHITELIST" $file || rm -rf ${grub_root_dir}/$file
+    done
+}
+
+uninstall_system()
+{
+
+    # Clean up block device that contains ONIE
+    blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' | sed -e 's/[0-9]://' | head -n 1 | sed -e 's#/dev/##')
+
+    [ -b "/dev/$blk_dev" ] || {
+        echo "Error: Unable to determine block device of ONIE install"
+        exit 1
+    }
+
+    # Wipe out and delete all partitions, except for the ONIE and GRUB
+    # partitions.
+    ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev//" | while read part ; do
+        if eval $should_delete_partition $blk_dev $part ; then
+            erase_part $blk_dev $part
+        fi
+    done
+
+    # Clean out any Plexxi cruft from ONIE-BOOT
+    boot_part_clean
+
+    # Re-install ONIE GRUB in the MBR as the NOS we just removed
+    # probably installed there.
+
+    boot_dev="/dev/$blk_dev"
+    core_img="$onie_boot_mnt/grub/i386-pc/core.img"
+    [ -f "$core_img" ] && chattr -i $core_img
+    grub-install --boot-directory="$onie_boot_mnt" --recheck "$boot_dev" || {
+        echo "ERROR: grub-install failed on: $boot_dev"
+        exit 1
+    }
+
+    grub-editenv $grub_env_file create
+
+    # Return to install mode on the next boot
+    onie-boot-mode -q -o install
+
+    return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

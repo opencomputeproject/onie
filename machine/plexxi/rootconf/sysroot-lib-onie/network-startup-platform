@@ -1,0 +1,55 @@
+#!/bin/sh
+# Plexxi specific startup routine for static network configuration dictated by
+# a file of this format:
+#  -----------------------------------
+#  |IP=172.17.203.4
+#  |GATEWAY=172.17.214.1
+#  |NETMASK=255.255.0.0
+#  |HOSTNAME=pas141
+#  |DOMAIN=plexxi.com
+#  |NAMESERVERS=10.10.10.204,172.19.2.10
+#  -----------------------------------
+#
+# This gets sourced by rootconf/default/etc/init.d/networking.sh
+
+NETCFG=/mnt/onie-boot/plexxi-network.cfg
+RESOLV=/etc/resolv.conf
+PATH=/usr/bin:/usr/sbin:/bin:/sbin
+
+[ -r $NETCFG ] || (echo "No network configuration found."; exit 0)
+
+. $NETCFG
+
+# Look at board type to determine which eth device to use.
+DEVICE=eth0
+BOARD_TYPE=$(onie-syseeprom -g 0x28)
+if [ $BOARD_TYPE = "SM2" ] || [ $BOARD_TYPE = "SM3" ]; then
+    DEVICE=eth2
+fi
+
+# Set IP, netmask and device UP
+if [ ! -z $IP ] && [ ! -z $NETMASK ]; then
+    ifconfig $DEVICE $IP netmask $NETMASK up
+fi
+
+# Set route to default gateway
+if [ ! -z $GATEWAY ]; then
+    route add default gw $GATEWAY
+fi
+
+# Set hostname
+if [ ! -z $HOSTNAME ]; then
+    hostname $HOSTNAME
+fi
+
+# Set domain and nameserver(s)
+if [ ! -z $DOMAIN ]; then
+    echo "domain $DOMAIN" >> $RESOLV
+fi
+
+if [ ! -z $NAMESERVERS ]; then
+    for ns in $(echo $NAMESERVERS | sed -e 's/,/ /g'); do
+        echo "nameserver $ns" >> $RESOLV
+    done
+fi
+

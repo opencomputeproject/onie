@@ -84,8 +84,13 @@ elif [ "$image_partition_type" = "msdos" ] ; then
     # ONIE-BOOT Paritition 
     onie_boot_part=1
     onie_boot_start=2048
-    # 128MB
-    onie_boot_size=$(( 128 * $sectors_per_mb ))
+    type onie_boot_size_platform > /dev/null && {
+        onie_boot_size=$(onie_boot_size_platform)
+    } || {
+        # 128MB
+        onie_boot_size=$(( 128 * $sectors_per_mb ))
+    }
+
     # Helper functions
     init_disk="init_msdos_disk"
     verify_partitions="verify_msdos_partitions"
@@ -357,6 +362,12 @@ install_onie()
         exit 1
     }
     . ./onie-blkdev-common
+    [ -r ./onie-blkdev-platform ] && {
+        . ./onie-blkdev-platform
+        type onie_boot_fs_type_platform > /dev/null && {
+            onie_boot_fs_type=$(onie_boot_fs_type_platform)
+        }
+    }
 
     # Find install device.
     # - Default value from burned in install.conf
@@ -383,25 +394,34 @@ install_onie()
         # Initialize block device
         eval $init_disk
     else
-        # umount ONIE-BOOT if mounted
-        umount $(onie_get_boot_dev) > /dev/null 2>&1
-        eval $verify_partitions || {
-            echo "ERROR: Partitions on target device do not look right: $onie_dev"
-            echo "ERROR: Recommend re-embedding ONIE instead of updating."
-            exit 1
+        type umount_and_verify_platform > /dev/null && {
+            umount_and_verify_platform
+        } || {
+            # umount ONIE-BOOT if mounted
+            umount $(onie_get_boot_dev) > /dev/null 2>&1
+            eval $verify_partitions || {
+                echo "ERROR: Partitions on target device do not look right: $onie_dev"
+                echo "ERROR: Recommend re-embedding ONIE instead of updating."
+                exit 1
+            }
         }
     fi
 
     mkdir -p $onie_boot_mnt
 
     # Preserve the grubenv file if it exists
-    if mount -o defaults,rw -t $onie_boot_fs_type $onie_boot_dev $onie_boot_mnt > /dev/null 2>&1 ; then
-        if [ -r $grub_env_file ] ; then
-            preserve_grubenv=yes
-            cp $grub_env_file /tmp/grubenv
+    preserve_grubenv=
+    type preserve_grub_env_platform > /dev/null && {
+        preserve_grub_env_platform
+    } || {
+        if mount -o defaults,rw -t $onie_boot_fs_type $onie_boot_dev $onie_boot_mnt > /dev/null 2>&1 ; then
+            if [ -r $grub_env_file ] ; then
+                preserve_grubenv=yes
+                cp $grub_env_file /tmp/grubenv
+            fi
+            umount $onie_boot_mnt > /dev/null 2>&1
         fi
-        umount $onie_boot_mnt > /dev/null 2>&1
-    fi
+    }
 
     # Create file system on ONIE-BOOT partition
     onie_boot_dev="${onie_dev}$onie_boot_part"
@@ -453,7 +473,11 @@ install_onie()
 
     # Restore the previous grubenv file
     if [ "$preserve_grubenv" = "yes" ] ; then
-        cp /tmp/grubenv $grub_env_file
+        type restore_grub_env_platform > /dev/null && {
+            restore_grub_env_platform
+        } || {
+            cp /tmp/grubenv $grub_env_file
+        }
     fi
 
     # Return to default boot mode on the next boot.  Use this

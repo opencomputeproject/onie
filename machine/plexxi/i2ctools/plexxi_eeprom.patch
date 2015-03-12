@@ -1,0 +1,431 @@
+
+
+diff --git a/include/linux/i2c-dev.h b/include/linux/i2c-dev.h
+index 23f7c2c..4e8d2f5 100644
+--- a/include/linux/i2c-dev.h
++++ b/include/linux/i2c-dev.h
+@@ -26,7 +26,7 @@
+ #include <linux/types.h>
+ #include <sys/ioctl.h>
+ #include <stddef.h>
+-
++#include <stdio.h>
+ 
+ /* -- i2c.h -- */
+ 
+@@ -157,7 +157,7 @@ static inline __s32 i2c_smbus_access(int file, char read_write, __u8 command,
+                                      int size, union i2c_smbus_data *data)
+ {
+ 	struct i2c_smbus_ioctl_data args;
+-
++        
+ 	args.read_write = read_write;
+ 	args.command = command;
+ 	args.size = size;
+diff --git a/sys_eeprom/24cXX.c b/sys_eeprom/24cXX.c
+index be194ad..829ead4 100644
+--- a/sys_eeprom/24cXX.c
++++ b/sys_eeprom/24cXX.c
+@@ -141,28 +141,23 @@ int eeprom_24c32_read_byte(struct eeprom* e, __u16 mem_addr)
+ 
+ int eeprom_read_current_byte(struct eeprom* e)
+ {
+-	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
+ 	return i2c_smbus_read_byte(e->fd);
+ }
+ 
+ int eeprom_read_byte(struct eeprom* e, __u16 mem_addr)
+ {
+ 	int r;
+-	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
+ 	if(e->type == EEPROM_TYPE_8BIT_ADDR)
+ 	{
+ 		__u8 buf =  mem_addr & 0x0ff;
+-		r = i2c_write_1b(e, buf);
++                r = i2c_smbus_read_byte_data(e->fd, buf);
+ 	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
+ 		__u8 buf[2] = { (mem_addr >> 8) & 0x0ff, mem_addr & 0x0ff };
+-		r = i2c_write_2b(e, buf);
++                r = i2c_smbus_read_word_data(e->fd, buf);
+ 	} else {
+ 		fprintf(stderr, "ERR: unknown eeprom type\n");
+ 		return -1;
+ 	}
+-	if (r < 0)
+-		return r;
+-	r = i2c_smbus_read_byte(e->fd);
+ 	return r;
+ }
+ 
+diff --git a/sys_eeprom/Module.mk b/sys_eeprom/Module.mk
+index 5b59b5a..a6a35d6 100644
+--- a/sys_eeprom/Module.mk
++++ b/sys_eeprom/Module.mk
+@@ -5,7 +5,8 @@ SYS_EEPROM_FLAGS :=  -O2 -Iinclude -lz
+ SYS_EEPROM_TARGETS:= onie-syseeprom
+ 
+ $(SYS_EEPROM_DIR)/onie-syseeprom: $(SYS_EEPROM_DIR)/sys_eeprom.o \
+-	$(SYS_EEPROM_DIR)/onie_tlvinfo.o $(SYS_EEPROM_DIR)/24cXX.o
++	$(SYS_EEPROM_DIR)/onie_tlvinfo.o $(SYS_EEPROM_DIR)/24cXX.o \
++	$(SYS_EEPROM_DIR)/plexxi_eeprom.o
+ 	$(CC) $(CFLAGS) $(SYS_EEPROM_FLAGS) $(LDFLAGS) -o $@ $^
+ 
+ $(SYS_EEPROM_DIR)/sys_eeprom.o: $(SYS_EEPROM_DIR)/sys_eeprom.c \
+@@ -18,6 +19,10 @@ $(SYS_EEPROM_DIR)/onie_tlvinfo.o: $(SYS_EEPROM_DIR)/onie_tlvinfo.c \
+ 	$(SYS_EEPROM_DIR)/24cXX.h $(SYS_EEPROM_DIR)/sys_eeprom_platform.h
+ 	$(CC) $(CFLAGS) $(LD_FLAGS) $(SYS_EEPROM_FLAGS) -c $< -o $@
+ 
++$(SYS_EEPROM_DIR)/plexxi_eeprom.o: $(SYS_EEPROM_DIR)/plexxi_eeprom.c \
++	$(SYS_EEPROM_DIR)/plexxi_eeprom.h $(SYS_EEPROM_DIR)/sys_eeprom_platform.h
++	$(CC) $(CFLAGS) $(LD_FLAGS) $(SYS_EEPROM_FLAGS) -c $< -o $@
++
+ $(SYS_EEPROM_DIR)/24cXX.o: $(SYS_EEPROM_DIR)/24cXX.c \
+ 	$(INCLUDE_DIR)/linux/i2c-dev.h $(SYS_EEPROM_DIR)/24cXX.h
+ 	$(CC) $(CFLAGS) $(SYS_EEPROM_FLAGS) -c $< -o $@
+diff --git a/sys_eeprom/onie_tlvinfo.c b/sys_eeprom/onie_tlvinfo.c
+index cf88f70..fc29bca 100644
+--- a/sys_eeprom/onie_tlvinfo.c
++++ b/sys_eeprom/onie_tlvinfo.c
+@@ -221,7 +221,7 @@ static int set_mac(char *buf, const char *string)
+  *         to the allowed maximum (2048-11)
+  *
+  */
+-static inline bool is_valid_tlvinfo_header(tlvinfo_header_t *hdr)
++bool is_valid_tlvinfo_header(tlvinfo_header_t *hdr)
+ {
+     int max_size = TLV_TOTAL_LEN_MAX;
+     return((strcmp(hdr->signature, TLV_INFO_ID_STRING) == 0) &&
+diff --git a/sys_eeprom/onie_tlvinfo.h b/sys_eeprom/onie_tlvinfo.h
+index 5714f37..ca3eb1b 100644
+--- a/sys_eeprom/onie_tlvinfo.h
++++ b/sys_eeprom/onie_tlvinfo.h
+@@ -169,4 +169,5 @@ bool tlvinfo_find_tlv(u_int8_t *eeprom, u_int8_t tcode, int *eeprom_index);
+ bool tlvinfo_delete_tlv(u_int8_t * eeprom, u_int8_t code);
+ bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval);
+ bool tlvinfo_decode_tlv(u_int8_t *eeprom, u_int8_t tcode, char* value);
++bool is_valid_tlvinfo_header(tlvinfo_header_t *hdr);
+ void show_tlv_code_list(void);
+diff --git a/sys_eeprom/plexxi_eeprom.c b/sys_eeprom/plexxi_eeprom.c
+new file mode 100644
+index 0000000..b1e2e9b
+--- /dev/null
++++ b/sys_eeprom/plexxi_eeprom.c
+@@ -0,0 +1,157 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include "24cXX.h"
++#include "onie_tlvinfo.h"
++#include "plexxi_eeprom.h"
++
++typedef struct {
++    u_int8_t  mimVersion;            // not used
++    u_int8_t  boardType;             // TLV_CODE_PLATFORM_NAME
++    char      boardRev[6];           // TLV_CODE_DEVICE_VERSION
++    char      serialNumber[32];      // TLV_CODE_SERIAL_NUMBER
++    char      buildDate[16];         // TLV_CODE_MANUF_DATE
++    u_int16_t manufacturer;          // TLV_CODE_MANUF_NAME
++    u_int8_t  MacBase[6];            // TLV_CODE_MAC_BASE
++    u_int16_t MacCount;              // TLV_CODE_MAC_SIZE
++    u_int32_t systemConfig;          // not used
++    u_int32_t systemConfig2;         // not used
++    char      chassisSN[32];         // TLV_CODE_SERVICE_TAG
++    char      partNumber[18];        // TLV_CODE_PART_NUMBER
++    char      assemblyRev[3];        // TLV_CODE_LABEL_REVISION
++    char      systemProductCode[16]; // TLV_CODE_PRODUCT_NAME
++} __attribute__((__packed__)) EEPROM_Format;
++
++typedef struct
++{
++    char* type;
++    int   size;
++} typeStrType;
++
++static typeStrType boardTypeStr[] =
++{
++    {"DEV", 3},
++    {"SM",  2},
++    {"XM",  2},
++    {"OM",  2},
++    {"SM2", 3},
++    {"CM2", 3},
++    {"BM2", 3},
++    {"SM3", 3},
++    {"SM4", 3},
++    {"XM4", 3},
++    {"CM4", 3},
++    {"FM",  2},
++};
++
++/* Set to 1 if we've read EEPROM into memory */
++static int has_been_read = 0;
++/* Set to 1 if the EEPROM contents were valid when read from hardware */
++static int hw_eeprom_valid = 1;
++
++int plexxi_decode_tlv(u_int8_t* buf, u_int8_t tcode, char* value)
++{
++    EEPROM_Format* eeprom = (EEPROM_Format*)buf;
++    int i;
++
++    switch (tcode) {
++    case TLV_CODE_PRODUCT_NAME:
++        strncpy(value, eeprom->systemProductCode, 16);
++        value[15] = 0;
++        break;
++    case TLV_CODE_PART_NUMBER:
++        strncpy(value, eeprom->partNumber, 18);
++        value[17] = 0;
++        break;
++    case TLV_CODE_SERIAL_NUMBER:
++        strncpy(value, eeprom->serialNumber, 32);
++        value[31] = 0;
++        break;
++    case TLV_CODE_MANUF_DATE:
++        strncpy(value, eeprom->buildDate, 16);
++        value[15] = 0;
++        break;
++    case TLV_CODE_LABEL_REVISION:
++        strncpy(value, eeprom->assemblyRev, 3);
++        value[2] = 0;
++        break;
++    case TLV_CODE_PLATFORM_NAME:
++        strncpy(value, boardTypeStr[eeprom->boardType].type, boardTypeStr[eeprom->boardType].size);
++        value[boardTypeStr[eeprom->boardType].size] = 0;
++        break;
++    case TLV_CODE_MANUF_NAME:
++        sprintf(value, "%d", eeprom->manufacturer);
++        break;
++    case TLV_CODE_SERVICE_TAG:
++        strncpy(value, eeprom->chassisSN, 32);
++        value[31] = 0;
++	break;
++    case TLV_CODE_MAC_BASE:
++	sprintf(value, "%02X:%02X:%02X:%02X:%02X:%02X",
++                eeprom->MacBase[0], eeprom->MacBase[1], eeprom->MacBase[2],
++                eeprom->MacBase[3], eeprom->MacBase[4], eeprom->MacBase[5]);
++	break;
++    case TLV_CODE_DEVICE_VERSION:
++        strncpy(value, eeprom->boardRev, 6);
++        value[5] = 0;
++	break;
++    case TLV_CODE_MAC_SIZE:
++	sprintf(value, "%d", eeprom->MacCount);
++	break;
++    default:
++	value[0] = 0;
++        return 0;
++    }
++    return 1;
++}
++
++/*
++ *  read_eeprom
++ *
++ *  Read the EEPROM into memory, if it hasn't already been read.
++ */
++int plexxi_read_eeprom(u_int8_t *eeprom)
++{
++    int ret;
++    tlvinfo_header_t* eeprom_hdr = (tlvinfo_header_t*) eeprom;
++
++    if (has_been_read)
++	return 0;
++
++    /* Read the header */
++    ret = read_sys_eeprom((void *)eeprom_hdr, 0, 256);
++    /* If the header was successfully read, read the TLVs */
++    if ((ret == 0) && is_valid_tlvinfo_header(eeprom_hdr))
++    {
++        return 1;
++    }
++    has_been_read = 1;
++    return 0;
++}
++
++static int is_sys_eeprom_valid()
++{
++    return hw_eeprom_valid;
++}
++
++void plexxi_show_eeprom(u_int8_t* eeprom)
++{
++    EEPROM_Format* data = (EEPROM_Format*)eeprom;
++    printf ("Plexxi formatted EEPROM:\n");
++    printf ("            MIM Version: %d\n", data->mimVersion);
++    printf ("             Board type: %s\n", boardTypeStr[data->boardType].type);
++    printf ("               Revision: %s\n", data->boardRev);
++    printf ("          Serial Number: %s\n", data->serialNumber);
++    printf ("           Manufacturer: %d\n", data->manufacturer);
++    printf ("     Manufacturing Date: %s\n", data->buildDate);
++    printf ("       Base MAC Address: %02X:%02X:%02X:%02X:%02X:%02X\n",
++            data->MacBase[0], data->MacBase[1], data->MacBase[2],
++            data->MacBase[3],data->MacBase[4], data->MacBase[5]);
++    printf ("Number of MAC Addresses: %d\n", data->MacCount);
++    printf ("   System Configuration: %08X\n", data->systemConfig);
++    printf ("  System Configuration2: %08X\n", data->systemConfig2);
++    printf ("  Chassis Serial Number: %s\n", data->chassisSN);
++    printf ("            Part Number: %s\n", data->partNumber);
++    printf ("        Rework Revision: %s\n", data->assemblyRev);
++    printf ("    System Product Code: %s\n", data->systemProductCode);
++}
+diff --git a/sys_eeprom/plexxi_eeprom.h b/sys_eeprom/plexxi_eeprom.h
+new file mode 100644
+index 0000000..0c8c839
+--- /dev/null
++++ b/sys_eeprom/plexxi_eeprom.h
+@@ -0,0 +1,3 @@
++int plexxi_decode_tlv(u_int8_t* buf, u_int8_t tcode, char* value);
++int plexxi_read_eeprom(u_int8_t *eeprom);
++void plexxi_show_eeprom(u_int8_t* eeprom);
+diff --git a/sys_eeprom/sys_eeprom.c b/sys_eeprom/sys_eeprom.c
+index a77837f..fbc3e09 100644
+--- a/sys_eeprom/sys_eeprom.c
++++ b/sys_eeprom/sys_eeprom.c
+@@ -3,6 +3,7 @@
+ #include <string.h>
+ #include <getopt.h>
+ #include "onie_tlvinfo.h"
++#include "plexxi_eeprom.h"
+ 
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+ /*
+@@ -91,28 +92,35 @@ int main(int argc, char * const argv[])
+ 	    subopts = optarg;
+ 	    while (*subopts != '\0' && !err) {
+ 		if ((index = getsubopt(&subopts, tokens, &value)) != -1) {
+-		    if (read_eeprom(eeprom)) {
+-                        err = 1;
+-			goto syseeprom_err;
+-		    }
+-		    tcode = strtoul(tokens[index], NULL, 0);
+-		    for (i = 0; i < tlv_code_count; i++) {
+-			if (tlv_code_list[i].m_code == tcode) {
+-			    tname = tlv_code_list[i].m_name;
+-			}
+-		    }
+-		    if (tlvinfo_delete_tlv(eeprom, tcode) == TRUE) {
+-			    printf("Deleting TLV 0x%x: %s\n", tcode, tname);
+-		    }
+-		    if (value) {
+-			if (!tlvinfo_add_tlv(eeprom, tcode, value)) {
++                    if (plexxi_read_eeprom(eeprom) == 0)
++                    {
++                        printf("EEPROM Setting not supported on this system\n");
++                    }
++                    else
++                    {
++                        if (read_eeprom(eeprom)) {
+                             err = 1;
+-			    goto syseeprom_err;
+-			} else {
+-			    printf("Adding   TLV 0x%x: %s\n", tcode, tname);
+-			}
+-		    }
+-		    update = 1;
++                            goto syseeprom_err;
++                        }
++                        tcode = strtoul(tokens[index], NULL, 0);
++                        for (i = 0; i < tlv_code_count; i++) {
++                            if (tlv_code_list[i].m_code == tcode) {
++                                tname = tlv_code_list[i].m_name;
++                            }
++                        }
++                        if (tlvinfo_delete_tlv(eeprom, tcode) == TRUE) {
++			    printf("Deleting TLV 0x%x: %s\n", tcode, tname);
++                        }
++                        if (value) {
++                            if (!tlvinfo_add_tlv(eeprom, tcode, value)) {
++                                err = 1;
++                                goto syseeprom_err;
++                            } else {
++                                printf("Adding   TLV 0x%x: %s\n", tcode, tname);
++                            }
++                        }
++                        update = 1;
++                    }
+ 		} else {
+ 		    err = 1;
+ 		    printf("ERROR: Invalid option: %s\n", value);
+@@ -122,18 +130,33 @@ int main(int argc, char * const argv[])
+ 	break;
+ 
+ 	case 'g':
+-            if (read_eeprom(eeprom)) {
+-                err = 1;
++            // check header
++            if (plexxi_read_eeprom(eeprom) == 0)
++            {
++                tcode = strtoul(optarg, NULL, 0);
++                if (plexxi_decode_tlv(eeprom, tcode, tlv_value)) {
++                    printf("%s\n", tlv_value);
++                } else {
++                    err = 1;
++                    printf("ERROR: TLV code not present in EEPROM: 0x%02x\n", tcode);
++                }
+                 goto syseeprom_err;
+             }
+-            tcode = strtoul(optarg, NULL, 0);
+-            if (tlvinfo_decode_tlv(eeprom, tcode, tlv_value)) {
+-                printf("%s\n", tlv_value);
+-            } else {
+-                err = 1;
+-                printf("ERROR: TLV code not present in EEPROM: 0x%02x\n", tcode);
++            else
++            {
++                if (read_eeprom(eeprom)) {
++                    err = 1;
++                    goto syseeprom_err;
++                }
++                tcode = strtoul(optarg, NULL, 0);
++                if (tlvinfo_decode_tlv(eeprom, tcode, tlv_value)) {
++                    printf("%s\n", tlv_value);
++                } else {
++                    err = 1;
++                    printf("ERROR: TLV code not present in EEPROM: 0x%02x\n", tcode);
++                }
++                goto syseeprom_err;
+             }
+-            goto syseeprom_err;
+ 	break;
+ 
+ 	default:
+@@ -147,11 +170,19 @@ int main(int argc, char * const argv[])
+ 	    cmd_usage();
+             err = 1;
+ 	} else {
+-	    if (read_eeprom(eeprom)) {
+-                err = 1;
+-                goto syseeprom_err;
++            if (plexxi_read_eeprom(eeprom) == 0)
++            {
++
++                plexxi_show_eeprom(eeprom);
++            }
++            else
++            {
++                if (read_eeprom(eeprom)) {
++                    err = 1;
++                    goto syseeprom_err;
++                }
++                show_eeprom(eeprom);
+             }
+-	    show_eeprom(eeprom);
+ 	}
+     }
+     if (update) {
+diff --git a/sys_eeprom/sys_eeprom_platform.h b/sys_eeprom/sys_eeprom_platform.h
+index 529f774..02b45cd 100644
+--- a/sys_eeprom/sys_eeprom_platform.h
++++ b/sys_eeprom/sys_eeprom_platform.h
+@@ -1,4 +1,11 @@
+ #ifndef __SYS_EEPROM_PLATFORM_H_
+ #define __SYS_EEPROM_PLATFORM_H_
+ 
++#define SYS_EEPROM_MAX_SIZE     256
++#define SYS_EEPROM_OFFSET         0
++#define SYS_EEPROM_SIZE         256
++#define SYS_EEPROM_I2C_DEVICE  "/dev/i2c-0"
++#define SYS_EEPROM_I2C_ADDR    0x54
++
++
+ #endif /* __SYS_EEPROM_PLATFORM_H_ */

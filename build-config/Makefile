@@ -374,13 +374,26 @@ machine-prefix:
 # Install required build packages for a x86_64 debian based build host
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf \
 				  gperf device-tree-compiler python-all-dev genisoimage \
-				  autoconf automake bison flex texinfo libtool \
+				  syslinux-common autoconf automake bison flex texinfo libtool \
 				  realpath gawk libncurses5 libncurses5-dev bc
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update
 	$(Q) sudo apt-get install $(DEBIAN_BUILD_HOST_PACKAGES)
+
+#Install required build packages for a redhat based build host
+REDHAT_BUILD_HOST_PACKAGES	= gperf stgit texinfo glibc-static \
+				  expat-devel python-devel fakeroot syslinux syslinux-devel \
+				  syslinux-extlinux syslinux-perl
+# 'realpath' is retrieved from a different repo than the others
+PHONY += redhat-prepare-build-host
+redhat-prepare-build-host:
+	$(Q) sudo yum -q --enablerepo=rpmforge-extras --version || (wget http://pkgs.repoforge.org/rpmforge-release/rpmforge-release-0.5.3-1.el6.rf.x86_64.rpm; sudo rpm -Uvh rpmforge-release-0.5.3-1.el6.rf.x86_64.rpm)
+	$(Q) sudo yum -q --enablerepo=epel --version || (wget http://dl.fedoraproject.org/pub/epel/6/i386/epel-release-6-8.noarch.rpm; sudo rpm -Uvh epel-release-6-8.noarch.rpm)
+	$(Q) sudo yum install $(REDHAT_BUILD_HOST_PACKAGES)
+	$(Q) sudo yum --enablerepo=rpmforge-extras install realpath
+	$(Q) ACVER=`autoconf --version | head -n 1 | cut -d' ' -f 4`; if [ "$$ACVER" != "2.69" ]; then wget http://ftp.gnu.org/gnu/autoconf/autoconf-latest.tar.gz; tar zxvf autoconf-latest.tar.gz; cd autoconf-2.69 && ./configure && make && sudo make install; fi
 
 PHONY += test-onie
 SITE_CONFIG ?= $(TESTDIR)/site.conf

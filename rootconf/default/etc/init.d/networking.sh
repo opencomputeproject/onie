@@ -9,6 +9,7 @@
 PATH=/usr/bin:/usr/sbin:/bin:/sbin
 
 . /lib/onie/functions
+[ -f /lib/onie/sysinfo-platform ] && . /lib/onie/sysinfo-platform
 
 import_cmdline
 
@@ -22,6 +23,9 @@ config_ethmgmt_static()
         # ip= was set on the kernel command line and configured by the
         # kernel already.  Do no more.
         log_console_msg "${intf}: Using static IP config: ip=$onie_ip"
+        if [ -f /lib/onie/network-startup-platform ]; then
+            . /lib/onie/network-startup-platform
+        fi
         return 0
     fi
 
@@ -141,10 +145,14 @@ config_ethmgmt()
         cmd_run ifconfig $intf up
         params="$intf $*"
         eval "result_${intf}=0"
-        check_link_up $intf || {
-            log_console_msg "${intf}: link down.  Skipping configuration."
-            eval "result_${intf}=1"
-            continue
+        type check_link_status_platform > /dev/null && {
+            check_link_status_platform
+        } || {
+            check_link_up $intf || {
+                log_console_msg "${intf}: link down.  Skipping configuration."
+                eval "result_${intf}=1"
+                continue
+            }
         }
         config_ethmgmt_static    $params || \
             config_ethmgmt_dhcp6 $params || \

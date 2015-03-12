@@ -1,0 +1,32 @@
+# dropbear config for x86_64 platforms - customized for Plexxi
+
+[ -r "/lib/onie/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. /lib/onie/onie-blkdev-common
+
+# If there are user keys to use, Plexxi Linux places them in /boot.
+PX_RSA_KEY=${onie_boot_mnt}/ssh_host_rsa_key
+PX_DSA_KEY=${onie_boot_mnt}/ssh_host_dsa_key
+
+# Convert to dropbear style, else generate new ones.
+get_keys_arch() {
+
+    if [ -r $PX_RSA_KEY ]; then
+        dropbearconvert openssh dropbear $PX_RSA_KEY $RSA_KEY > /dev/null 2>&1
+    else
+        dropbearkey -t rsa -s 1024 -f $RSA_KEY > /dev/null 2>&1
+    fi
+
+    if [ -r $PX_DSA_KEY ]; then
+        dropbearconvert openssh dropbear $PX_DSA_KEY $DSS_KEY > /dev/null 2>&1
+    else
+        dropbearkey -t dss -s 1024 -f $DSS_KEY > /dev/null 2>&1
+    fi
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
