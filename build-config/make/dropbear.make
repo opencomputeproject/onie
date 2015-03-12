@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 Nikolay Shopik <shopik@inblock.ru>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -9,7 +10,7 @@
 # This is a makefile fragment that defines the build of dropbear
 #
 
-DROPBEAR_VERSION		= 2013.58
+DROPBEAR_VERSION		= 2015.67
 DROPBEAR_TARBALL		= dropbear-$(DROPBEAR_VERSION).tar.bz2
 DROPBEAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://matt.ucc.asn.au/dropbear/releases
 DROPBEAR_BUILD_DIR		= $(MBUILDDIR)/dropbear
