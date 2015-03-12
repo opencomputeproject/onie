@@ -378,7 +378,12 @@ install_onie()
     if [ "$onie_boot_reason" = "embed" ] ; then
         # umount any partitions that might be mounted on this disk
         for p in $(seq 8) ; do
+        if [${onie_dev} = mmcblk*]; then
+            umount ${onie_dev}p$p > /dev/null 2>&1
+        else
             umount ${onie_dev}$p > /dev/null 2>&1
+        fi
+
         done
         # Initialize block device
         eval $init_disk
@@ -404,7 +409,13 @@ install_onie()
     fi
 
     # Create file system on ONIE-BOOT partition
-    onie_boot_dev="${onie_dev}$onie_boot_part"
+    # Determine if we have sd or mmcblk device
+    if [${onie_dev} = mmcblk*]; then
+        onie_boot_dev="$onie_devp$onie_boot_part"
+    else
+        onie_boot_dev="$onie_dev$onie_boot_part"
+    fi
+
     [ "$verbose" = "yes" ] && echo "Creating $onie_boot_fs_type file system on: $onie_boot_dev"
     mkfs.$onie_boot_fs_type -q -L $onie_boot_label $onie_boot_dev || {
         echo "Error: Unable to create $onie_boot_fs_type file system on: $onie_boot_dev"
