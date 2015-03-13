@@ -1,0 +1,50 @@
+diff --git a/sys_eeprom/24cXX.c b/sys_eeprom/24cXX.c
+index 269fbda..6031aee 100644
+--- a/sys_eeprom/24cXX.c
++++ b/sys_eeprom/24cXX.c
+@@ -74,6 +74,7 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ 	unsigned long funcs;
+ 	e->fd = e->addr = 0;
+ 	e->dev = 0;
++	unsigned char data;
+ 	
+ 	fd = open(dev_fqn, O_RDWR);
+ 	if(fd <= 0)
+@@ -92,6 +93,18 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_WORD_DATA );
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_WORD_DATA );
+ 
++	e->fd = fd;
++	e->dev = dev_fqn;
++	e->type = type;
++	e->addr = 0x70;
++
++	// set I2C MUX channel
++	if( ( r = ioctl(fd, I2C_SLAVE, e->addr)) < 0)
++		return r;
++	data = 0x2;
++	if( ( r = i2c_write_1b(e, data)) < 0)
++		return r;
++
+ 	// set working device
+ 	if( ( r = ioctl(fd, I2C_SLAVE, addr)) < 0)
+ 		return r;
+@@ -104,6 +117,18 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ 
+ int eeprom_close(struct eeprom *e)
+ {
++	int r;
++	unsigned char data;
++
++	e->addr = 0x70;
++	// set I2C MUX to default channel
++	if( ( r = ioctl(e->fd, I2C_SLAVE, e->addr)) < 0) {
++		fprintf(stderr, "eeprom_close on Alpha platform: set MUX to default channel failed with error %d\n", r);
++	} else {
++		data = 0x0;
++		i2c_write_1b(e, data);
++	}
++
+ 	close(e->fd);
+ 	e->fd = -1;
+ 	e->dev = 0;
