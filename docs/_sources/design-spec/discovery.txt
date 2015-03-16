@@ -28,6 +28,17 @@ For identifying the running platform. ONIE uses the following definitions:
 
 - platform -- A string of the form ``<ARCH>-<MACHINE>-<MACHINE-REVISION>``
 
+.. note:: The above definitions place some restrictions on the valid
+          characters allowed for the <ARCH>, <VENDOR> and <MODEL>
+          strings.
+
+The allowable characters in the above strings are:
+
+#. VENDOR - cannot contain ``_`` (underscore) or ``-`` (hyphen) characters
+#. MODEL  - cannot contain ``-`` (hyphen) character.  ``_``
+   (underscore) is OK
+#. ARCH   - cannot contain ``_`` (underscore) or ``-`` (hyphen) characters
+
 At runtime, ONIE provides the ``onie-sysinfo`` command, which can be
 used to dump this information and more.  See the
 :ref:`cmd_onie_sysinfo` section for more about the ``onie-sysinfo``
