@@ -1,0 +1,66 @@
+#!/usr/bin/python
+
+### BEGIN INIT INFO
+# Provides:        platform-baseconf
+# Required-Start:  initdev
+# Required-Stop:
+# Default-Start:   S
+# Default-Stop:
+# Short-Description: Set up platform
+### END INIT INFO
+
+import sys
+import os
+from onl.platform.base import *
+from onl.platform.current import OpenNetworkPlatform
+import shutil
+import json
+import subprocess
+
+platform=OpenNetworkPlatform()
+
+sys.stderr.write("Setting up base platform configuration for %s...\n" %
+                 platform.platform())
+sys.stderr.flush()
+
+DEB_GNU_HOST_TYPE = None
+HOST_TYPES = [ 'powerpc-linux-gnu',
+               'i486-linux-gnu', 'i386-linux-gnu',
+               'x86_64-linux-gnu' ]
+
+for ht in HOST_TYPES:
+    if os.path.exists('/lib/%s' % ht):
+        DEB_GNU_HOST_TYPE=ht
+        break
+
+if DEB_GNU_HOST_TYPE is None:
+    sys.stderr.write("Could not determine the current host type.\n")
+    sys.exit(1)
+
+DEFAULT_ONLP_LIB = "/lib/%s/libonlp-platform.so.1" % DEB_GNU_HOST_TYPE
+PLATFORM_ONLP_LIB = "%s/lib/libonlp-%s.so" % (platform.platform_basedir(), platform.platform())
+
+if os.path.exists(PLATFORM_ONLP_LIB):
+    if os.path.exists(DEFAULT_ONLP_LIB):
+        os.unlink(DEFAULT_ONLP_LIB)
+    os.symlink(PLATFORM_ONLP_LIB, DEFAULT_ONLP_LIB)
+
+ONLPDUMP = "%s/bin/onlpdump" % (platform.platform_basedir())
+
+PLATFORM_CURRENT = "/lib/platform-config/current"
+if os.path.exists(PLATFORM_CURRENT):
+    os.unlink(PLATFORM_CURRENT)
+os.symlink(platform.platform_basedir(), PLATFORM_CURRENT)
+
+if os.path.exists(ONLPDUMP):
+    os.system("%s -i > %s/oids" % (ONLPDUMP,PLATFORM_CURRENT))
+    os.system("%s -o -j > %s/onie-info.json" % (ONLPDUMP, PLATFORM_CURRENT))
+    os.system("%s -x -j > %s/plat-info.json" % (ONLPDUMP, PLATFORM_CURRENT))
+
+if not platform.baseconfig():
+    sys.stderr.write("*** platform class baseconfig failed.\n")
+    sys.stderr.flush()
+
+sys.stderr.write("Setting up base platform configuration for %s: done\n" %
+                 platform.platform())
+

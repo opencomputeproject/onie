@@ -39,7 +39,7 @@ sys.path.append("%s/python" % platform_basedir)
 from onlpc import OpenNetworkPlatformImplementation
 
 # Make it available to the importer as OpenNetworkPlatform
-OpenNetwokPlatform=OpenNetworkPlatformImplementation
+OpenNetworkPlatform=OpenNetworkPlatformImplementation
 
 if __name__ == "__main__":
     print OpenNetworkPlatform()
