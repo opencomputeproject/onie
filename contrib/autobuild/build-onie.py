@@ -1,12 +1,18 @@
 #!/usr/bin/env python
 
+# -----------------------------------------------------------------------------
+# Copyright (C) 2014-2015 Carlos Cardenas <carlos@cumulusnetworks.com>
+#
+# SPDX-License-Identifier:     GPL-2.0
+#
+# -----------------------------------------------------------------------------
+
 import os
 import os.path
 import sys
 
 BUILD_CONFIG_PATH = None
 MACHINE_ROOT_PATH = None
-QEMU_TARGETS = []
 VENDOR_MACHINES = {}
 
 
@@ -129,7 +135,7 @@ def list_all():
         print '\n'
 
 
-def build(machine_or_vendor, dry_run=True, args=''):
+def build(machine_or_vendor, dry_run=True, args='', targets=None):
     import subprocess
     global MACHINE_ROOT_PATH
     global VENDOR_MACHINES
@@ -139,18 +145,22 @@ def build(machine_or_vendor, dry_run=True, args=''):
         print 'Building everything for vendor: {0}'.format(machine_or_vendor)
         machines = VENDOR_MACHINES[machine_or_vendor]
         for machine in machines:
-            build(machine, dry_run, args)
+            build(machine, dry_run, args, targets)
 
     elif is_machine(machine_or_vendor):
         vendor = get_vendor(machine_or_vendor)
         print 'Building {0} / {1}'.format(vendor, machine_or_vendor)
         machine_root = os.path.join(MACHINE_ROOT_PATH, vendor)
+        add_targets = ''
+        if targets is not None and len(targets) > 0:
+            add_targets = ' '.join(targets)
+
         if vendor != 'UNKNOWN':
-            cmd = 'make {0} MACHINEROOT={1} MACHINE={2} all'.\
-                  format(args, machine_root, machine_or_vendor)
+            cmd = 'make {0} MACHINEROOT={1} MACHINE={2} all {3}'.\
+                  format(args, machine_root, machine_or_vendor, add_targets)
         else:
-            cmd = 'make {0} MACHINE={1} all'.\
-                  format(args, machine_or_vendor)
+            cmd = 'make {0} MACHINE={1} all {3}'.\
+                  format(args, machine_or_vendor, add_targets)
         print cmd
         if not dry_run:
             subprocess.call(cmd, shell=True)
@@ -166,13 +176,15 @@ def main():
     parser = argparse.ArgumentParser(description="Build ONIE")
     parser.add_argument('-l', '--list', action='store_true', default=False,
                         help='list all vendors and machines')
-    parser.add_argument('-b', '--build', action='append', metavar='TARGET',
+    parser.add_argument('-b', '--build', action='append', metavar='PLATFORM',
                         help='Vendor or Machine to compile')
     parser.add_argument('-n', '--dry-run', action='store_true', default=False,
                         help='perform a dry run, do not execute')
     parser.add_argument('-m', '--make-args', action='store', metavar='ARGS',
                         default='',
                         help='additional args to be passed to make')
+    parser.add_argument('-t', '--target', action='append', metavar='MAKE',
+                        help='make target to use (in addition to "all")')
 
     args = parser.parse_args()
     if args.list is None and args.build is None:
@@ -191,10 +203,10 @@ def main():
         os.chdir(BUILD_CONFIG_PATH)
         if 'all' in args.build:
             for vendor in VENDOR_MACHINES.keys():
-                build(vendor, args.dry_run, args.make_args)
+                build(vendor, args.dry_run, args.make_args, args.target)
         else:
             for b in args.build:
-                build(b, args.dry_run, args.make_args)
+                build(b, args.dry_run, args.make_args, args.target)
     else:
         sys.stderr.write('No action performed\n')
         parser.print_help()
