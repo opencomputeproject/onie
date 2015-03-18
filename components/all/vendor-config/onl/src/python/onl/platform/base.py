@@ -98,7 +98,7 @@ class OpenNetworkPlatformBase(object):
         return "/lib/platform-config/%s" % self.platform()
 
     def baseconfig(self):
-        True
+        return True
 
     def manufacturer(self):
         raise Exception("Manufacturer is not set.")
