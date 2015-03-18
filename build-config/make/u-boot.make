@@ -17,6 +17,7 @@ UBOOT_BUILD_DIR		= $(MBUILDDIR)/u-boot
 UBOOT_DIR		= $(UBOOT_BUILD_DIR)/u-boot-$(UBOOT_VERSION)
 
 UBOOT_SRCPATCHDIR	= $(PATCHDIR)/u-boot/$(UBOOT_VERSION)
+UBOOT_CMNPATCHDIR	= $(PATCHDIR)/u-boot/common
 UBOOT_PATCHDIR		= $(UBOOT_BUILD_DIR)/patch
 UBOOT_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/u-boot-download
 UBOOT_SOURCE_STAMP	= $(STAMPDIR)/u-boot-source
@@ -77,14 +78,16 @@ $(UBOOT_SOURCE_STAMP): $(TREE_STAMP) | $(UBOOT_DOWNLOAD_STAMP)
 # top.
 #
 u-boot-patch: $(UBOOT_PATCH_STAMP)
-$(UBOOT_PATCH_STAMP): $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOURCE_STAMP)
+$(UBOOT_PATCH_STAMP): $(UBOOT_CMNPATCHDIR)/* $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Patching u-boot ===="
 	$(Q) [ -r $(MACHINEDIR)/u-boot/series ] || \
 		(echo "Unable to find machine dependent u-boot patch series: $(MACHINEDIR)/u-boot/series" && \
 		exit 1)
 	$(Q) mkdir -p $(UBOOT_PATCHDIR)
-	$(Q) cp $(UBOOT_SRCPATCHDIR)/* $(UBOOT_PATCHDIR)
+	$(Q) cp $(UBOOT_SRCPATCHDIR)/series $(UBOOT_PATCHDIR)
+	$(Q) $(SCRIPTDIR)/cp-machine-patches $(UBOOT_PATCHDIR) $(UBOOT_SRCPATCHDIR)/series	\
+		$(UBOOT_SRCPATCHDIR) $(UBOOT_CMNPATCHDIR)
 	$(Q) cat $(MACHINEDIR)/u-boot/series >> $(UBOOT_PATCHDIR)/series
 	$(Q) $(SCRIPTDIR)/cp-machine-patches $(UBOOT_PATCHDIR) $(MACHINEDIR)/u-boot/series	\
 		$(MACHINEDIR)/u-boot $(MACHINEROOT)/u-boot
