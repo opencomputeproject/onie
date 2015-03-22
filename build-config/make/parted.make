@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -58,7 +59,7 @@ $(PARTED_CONFIGURE_STAMP): $(PARTED_SOURCE_STAMP) $(E2FSPROGS_INSTALL_STAMP) $(L
 	$(Q) echo "====  Configure parted-$(PARTED_VERSION) ===="
 	$(Q) cd $(PARTED_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(PARTED_DIR)/configure				\
-		--prefix=/usr					\
+		--prefix=$(DEV_SYSROOT)/usr			\
 		--host=$(TARGET)				\
 		--enable-device-mapper				\
 		--disable-mtrace				\
