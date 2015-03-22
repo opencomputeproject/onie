@@ -159,7 +159,7 @@ def build(machine_or_vendor, dry_run=True, args='', targets=None):
             cmd = 'make {0} MACHINEROOT={1} MACHINE={2} all {3}'.\
                   format(args, machine_root, machine_or_vendor, add_targets)
         else:
-            cmd = 'make {0} MACHINE={1} all {3}'.\
+            cmd = 'make {0} MACHINE={1} all {2}'.\
                   format(args, machine_or_vendor, add_targets)
         print cmd
         if not dry_run:
