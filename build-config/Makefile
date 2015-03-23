@@ -2,7 +2,7 @@
 #>
 #
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 Carlos Cardenas <cardenas12@gmail.com>
+#  Copyright (C) 2014-2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #
@@ -312,6 +312,9 @@ ifeq ($(DMIDECODE_ENABLE),yes)
 endif
 ifeq ($(ETHTOOL_ENABLE),yes)
   include make/ethtool.make
+endif
+ifeq ($(MTREE_ENABLE),yes)
+  include make/mtree.make
 endif
 include make/images.make
 include make/demo.make
