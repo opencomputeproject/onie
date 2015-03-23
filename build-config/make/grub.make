@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -69,7 +70,7 @@ $(GRUB_CONFIGURE_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_INSTALL_STAMP) | $(DEV_SYSRO
 	$(Q) cd $(GRUB_DIR) && ./autogen.sh
 	$(Q) cd $(GRUB_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(GRUB_DIR)/configure				\
-		--prefix=/usr					\
+		--prefix=$(DEV_SYSROOT)/usr			\
 		--host=$(TARGET)				\
 		--enable-device-mapper				\
 		--disable-nls					\
