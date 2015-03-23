@@ -33,7 +33,7 @@ all:
 	@echo "    install-ws-deps          Install build dependencies into your workspace after creating it."
 	@echo ""
 	@echo "Step #3: (inside workspace)"
-	@echo "    onl-{powerpc,kvm}       Build all ONL for either powerpc or kvm, including "
+	@echo "    onl-{powerpc,x86, kvm}     Build all ONL for either powerpc or kvm, including "
 	@echo "                               components, swi, loader, and installer in workspace."
 	@echo "                               Run inside a workspace after \`make install-ws-deps\`"
 	@echo "                               Equivalent to \`make all-components swi installer\`"
@@ -72,6 +72,14 @@ onl-powerpc: all-components swi installer
 	@echo "##############################################"
 	@export ONL=`pwd` && ls -l $$ONL/builds/installer/powerpc/all/*.installer \
 	    $$ONL/builds/swi/powerpc/all/*.swi
+
+onl-x86: ARCH=amd64
+onl-x86: all-components swi installer
+	@echo "##############################################"
+	@echo "################     DONE     ################"
+	@echo "##############################################"
+	@export ONL=`pwd` && ls -l $$ONL/builds/installer/amd64/all/*.installer \
+	    $$ONL/builds/swi/amd64/all/*.swi
 
 onl-kvm: ARCH=i386
 onl-kvm: all-components swi kvm-loader kvm-iso
