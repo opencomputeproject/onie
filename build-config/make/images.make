@@ -4,6 +4,7 @@
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
+#  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -64,6 +65,10 @@ endif
 
 ifeq ($(SYSLINUX_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(SYSLINUX_SOURCE_STAMP)
+endif
+
+ifeq ($(MTREE_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(MTREE_INSTALL_STAMP)
 endif
 
 ifndef MAKE_CLEAN
