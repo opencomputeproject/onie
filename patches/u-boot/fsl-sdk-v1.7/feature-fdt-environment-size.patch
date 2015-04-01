@@ -1,0 +1,56 @@
+feature fdt environment size patch
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2015 david_yang <david_yang@accton.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+When fixing up the device tree before booting store CONFIG_ENV_SIZE in
+the device tree.
+
+First find the FDT node with a property called "label" whose value is
+"uboot-env".
+
+If the node is found then set the "env_size" property to
+CONFIG_ENV_SIZE.
+
+diff --git a/README b/README
+index 5b37a20..7a7a48d 100644
+--- a/README
++++ b/README
+@@ -682,6 +682,19 @@ The following options need to be configured:
+ 		crash. This is needed for buggy hardware (uc101) where
+ 		no pull down resistor is connected to the signal IDE5V_DD7.
+ 
++		CONFIG_FDT_ENV_SIZE
++
++		When fixing up the device tree before booting store
++		the value of the CONFIG_ENV_SIZE macro in the device
++		tree.  This allows the OS to know how the environment
++		area is defined.
++
++		The method first finds the FDT node with a property
++		called "label" whose value is "uboot-env".
++
++		If the node is found then set the "env_size" property to
++		CONFIG_ENV_SIZE.
++
+ 		CONFIG_MACH_TYPE	[relevant for ARM only][mandatory]
+ 
+ 		This setting is mandatory for all boards that have only one
+diff --git a/common/image-fdt.c b/common/image-fdt.c
+index 9fc7481..290add8 100644
+--- a/common/image-fdt.c
++++ b/common/image-fdt.c
+@@ -472,6 +472,11 @@ int image_setup_libfdt(bootm_headers_t *images, void *blob,
+ 		ft_board_setup(blob, gd->bd);
+ 	fdt_fixup_ethernet(blob);
+ 
++#if defined(CONFIG_FDT_ENV_SIZE) && defined(CONFIG_ENV_SIZE)
++		do_fixup_by_prop_u32(blob, "label", "uboot-env", 10,
++				     "env_size", CONFIG_ENV_SIZE, 1);
++#endif
++
+ 	/* Delete the old LMB reservation */
+ 	lmb_free(lmb, (phys_addr_t)(u32)(uintptr_t)blob,
+ 		 (phys_size_t)fdt_totalsize(blob));
