@@ -73,7 +73,6 @@ EXTRA_CMDLINE_LINUX=`echo $EXTRA_CMDLINE_LINUX | sed -e 's/[\/&]/\\\&/g'`
 sed -i -e "s/%%DEMO_TYPE%%/$demo_type/g" \
        -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/g" \
        -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/g" \
-       -e "s/%%CONSOLE_FLAG%%/$CONSOLE_FLAG/g" \
        -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/g" \
        -e "s/%%EXTRA_CMDLINE_LINUX%%/$EXTRA_CMDLINE_LINUX/" \
     $tmp_installdir/install.sh || clean_up 1

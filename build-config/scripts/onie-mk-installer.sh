@@ -98,7 +98,6 @@ EXTRA_CMDLINE_LINUX=`echo $EXTRA_CMDLINE_LINUX | sed -e 's/[\/&]/\\\&/g'`
 if [ "$arch" = "x86_64" ] ; then
     sed -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/" \
         -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/" \
-        -e "s/%%CONSOLE_FLAG%%/$CONSOLE_FLAG/" \
         -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
         -e "s/%%EXTRA_CMDLINE_LINUX%%/$EXTRA_CMDLINE_LINUX/" \
 	-i $tmp_installdir/install-arch

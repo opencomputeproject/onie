@@ -63,10 +63,6 @@ ifeq ($(GRUB_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(GRUB_INSTALL_STAMP)
 endif
 
-ifeq ($(SYSLINUX_ENABLE),yes)
-  PACKAGES_INSTALL_STAMPS += $(SYSLINUX_SOURCE_STAMP)
-endif
-
 ifeq ($(MTREE_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(MTREE_INSTALL_STAMP)
 endif
@@ -284,7 +280,6 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(SCRIPTDIR)/onie-mk-ins
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE updater ===="
 	$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
 	     CONSOLE_DEV=$(CONSOLE_DEV) \
-	     CONSOLE_FLAG=$(CONSOLE_FLAG) \
 	     CONSOLE_PORT=$(CONSOLE_PORT) \
 	     UPDATER_UBOOT_NAME=$(UPDATER_UBOOT_NAME) \
 	     EXTRA_CMDLINE_LINUX=$(EXTRA_CMDLINE_LINUX) \
@@ -313,8 +308,6 @@ RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
 RECOVERY_ISO_STAMP	= $(STAMPDIR)/recovery-iso
 PXE_EFI64_STAMP		= $(STAMPDIR)/pxe-efi64
 
-RECOVERY_ISO_SYSLINUX_FILES = $(SYSLINUX_DIR)/core/isolinux.bin \
-                              $(SYSLINUX_DIR)/com32/menu/menu.c32
 # Default to rescue mode for Syslinux menu, if none specified in machine.make
 RECOVERY_DEFAULT_ENTRY ?= rescue
 

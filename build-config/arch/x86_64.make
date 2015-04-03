@@ -17,18 +17,14 @@ CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
 #
 # Console parameters
 #
-# These are passed to grub, syslinux (for the recovery images),
-# the ONIE Linux kernel, and the demo OS grub and kernel
-# (in other words, everything that uses the console).
-# The default values are defined here.  They can be overridden
-# by the platform's machine.make.
+# These are passed to grub, the ONIE Linux kernel, and the demo OS
+# grub and kernel (in other words, everything that uses the console).
+# The default values are defined here.  They can be overridden by the
+# platform's machine.make.
 #
 # CONSOLE_DEV is 0 or 1, corresponding to Linux /dev/ttyS[01].
 # They always map to serial devices at 0x3f8 and 0x2f8, respectively,
 # without any BIOS shenanigans.
-#
-# CONSOLE_FLAG tells syslinux whether to also use the VGA console
-# (the "console" command in syslinux.cfg).
 #
 # CONSOLE_PORT is the serial device IO port address.  It is derived
 # from CONSOLE_DEV.  So there's no need to define it unless
@@ -39,7 +35,6 @@ CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
 #
 CONSOLE_SPEED ?= 115200
 CONSOLE_DEV ?= 0
-CONSOLE_FLAG ?= 0
 ifndef CONSOLE_PORT
   ifeq ($(CONSOLE_DEV), 0)
     CONSOLE_PORT = 0x3f8
@@ -114,9 +109,6 @@ LVM2_ENABLE = yes
 
 # Include ethtool by default
 ETHTOOL_ENABLE ?= yes
-
-# Enable Syslinux as the bootloader for this platform
-SYSLINUX_ENABLE = yes
 
 # Include dosfstools
 DOSFSTOOLS_ENABLE = yes
