@@ -65,14 +65,14 @@ It takes a list of arguments:
 And ```test-onie.py``` takes care of the rest.  By default, ```test-onie.py```
 uses the following:
 * DHCP using isc-dhcp-server
-* TFTP using atftpd
+* TFTP using tftpd-hpa
 * HTTP using nginx
 
 However, it is possible to change out the back end services by either modifying
 the test definition file (default: config/onie-tests.json) or creating a new
 one.
 
-Before we get started, if you system is running ```apparmor```, you must stop it and unload all the profiles.  Typically, this involves:
+Before we get started, if your system is running ```apparmor```, you must stop it and unload all the profiles.  Typically, this involves:
 ```
 # sudo service apparmor stop
 # sudo service apparmor teardown
@@ -262,3 +262,119 @@ A NOS *should* obey the ONIE contract which includes:
 * The ability for a user to uninstall a NOS and install another NOS
 * The ability for a user to update ONIE after a NOS is installed
 * The ability for a user to enter ONIE's rescue mode after a NOS is installed
+
+### test-nos.sh
+
+```test-nos.sh``` allows a user to determine if key files have been modified
+to ONIE, along with partition layouts, and file system attributes.
+
+It takes the following mandatory argument (COMMAND: ```init``` or ```check```)
+along with some optional parameters.
+
+Before we get started, ```test-nos.sh``` requires the following:
+* ONIE release 2015.05
+* mtree(1)
+
+Starting with ONIE release 2015.05, uclibc is being built with the FTS subsystem
+which allows for traversing file hierarchies efficiently. This is a requirement
+for mtree(1) to work.  Also with this release, mtree is an optional utility
+that can be enabled in ONIE during build time by including ```MTREE_ENABLE=yes```.
+
+If mtree(1) is not present on a 2015.05 or later release, you can compile it.
+
+```
+# ./build-onie.py -b kvm_x86_64 -m 'MTREE_ENABLE=yes' -t demo
+```
+
+The above example compiles the KVM x86_64 ONIE VM with mtree(1) as part of the
+image using the ```all``` and ```demo``` make targets.  If you are just wanting
+the mtree(1) binary, look at build/kvm_x86_64/sysroot/usr/bin/mtree.
+
+Now that you have the mtree(1) binary (and possibly in ONIE itself), we can
+start using ```test-nos.sh```.
+
+```
+ONIE:~ # ./test-nos.sh -h
+usage: test-nos.sh [-c COMMAND] [OPTIONS]
+Test to see if ONIE has been altered by a NOS function (install, uninstall).
+The default COMMAND is to perform 'check'.
+
+COMMAND LINE OPTIONS
+
+        -c
+                Perform the following command.  Available commands are:
+
+                check  -- Perform Check (default)
+                init   -- Perform Initialization
+
+        -d
+                Use the following directory as the location to store the
+                mtree index files. (default: /mnt/onie-boot/onie/config/etc/mtree)
+
+        -h
+                Help.  Print this message.
+
+        -m
+                Use the following mtree binary.
+                (default: /usr/bin/mtree)
+
+        -q
+                Quiet.  No printing, except for errors.
+
+        -v
+                Be verbose.  Print what is happening.
+ONIE:~ #
+```
+
+The first time we use ```test-nos.sh```, we must generate the mtree(1) index
+files.  This is done by:
+
+```
+# ./test-nos.sh -c init
+```
+
+Once we have the index files, we can perform a NOS operation (install or uninstall)
+and run ```test-nos.sh``` again to see if any files were modified.
+
+```
+# ./test-nos.sh -c check
+```
+or
+
+```
+# ./test-nos.sh
+```
+
+### Platform differences for NOS validation
+
+On x86_64 platforms, onie is mounted read-write under ```/mnt/onie-boot```.
+On other platforms, this mount doesn't exist.  By default, ```test-nos.sh```
+creates the directory ```/mnt/onie-boot/onie/config/etc/mtree``` to store
+the index files.  These files are only preserved on x86_64 which means they
+can survive a boot/reboot of the device.  In order to make copying of these
+index files easier on other platforms, you can use the ```-d DIR``` option
+for ```test-nos.sh``` to use another directory.  This directory can then be
+copied over to a file server for safe keeping and re-copied for verification.
+
+On x86_64 platforms, the mass storage device is either gpt or msdos formatted
+and as such we are able to check partition tables and file system attributes
+to ensure compliance with NOS and Diag images.  On other platforms, this is not
+possible as all NOR storage is defined in the DTS files and seen in ```/dev```
+as ```mtd-*``` files.
+
+Here's an example:
+
+```
+ONIE:/dev # ls -l mtd-*
+lrwxrwxrwx    1 root     0                9 Apr  4 03:33 mtd-NOR -> /dev/mtd0
+lrwxrwxrwx    1 root     0                9 Apr  4 03:33 mtd-board_eeprom -> /dev/mtd1
+lrwxrwxrwx    1 root     0                9 Apr  4 03:33 mtd-onie -> /dev/mtd3
+lrwxrwxrwx    1 root     0                9 Apr  4 03:33 mtd-open -> /dev/mtd2
+lrwxrwxrwx    1 root     0                9 Apr  4 03:33 mtd-open2 -> /dev/mtd6
+lrwxrwxrwx    1 root     0                9 Apr  4 03:33 mtd-uboot -> /dev/mtd5
+lrwxrwxrwx    1 root     0                9 Apr  4 03:33 mtd-uboot-env -> /dev/mtd4
+ONIE:/dev #
+```
+
+We can determine the block partition sizes.  We can also determine if a NOS and/or
+DIAG image has been installed by using ```onie-env-get```.
