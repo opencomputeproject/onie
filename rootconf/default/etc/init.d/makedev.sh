@@ -96,14 +96,19 @@ vdevs=$(ls -d /sys/block/vd[a-z] 2&> /dev/null) && {
     for d in $vdevs ; do
         dev=$(basename $d)
         major=$(sed -e 's/:.*$//' $d/dev)
+        minor=$(sed -e 's/^.*://' $d/dev)
         rm -f /dev/$dev
-        mknod /dev/$dev b $major 0 || {
+        mknod /dev/$dev b $major $minor || {
             log_failure_msg "Problems creating /dev/$dev block device."
             continue
         }
-        for minor in $(seq 8) ; do
-            rm -f /dev/${dev}$minor
-            mknod /dev/${dev}$minor b $major $minor || {
+        minor_start=$(( $minor + 1 ))
+        minor_end=$(( $minor + 15 ))
+        dev_idx=0
+        for minor_idx in $(seq $minor_start 1 $minor_end) ; do
+            dev_idx=$(( $dev_idx + 1 ))
+            rm -f /dev/${dev}$dev_idx
+            mknod /dev/${dev}$dev_idx b $major $minor_idx || {
                 log_failure_msg "Problems creating /dev/$dev block device."
                 continue
             }
