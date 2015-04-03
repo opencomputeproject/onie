@@ -274,9 +274,6 @@ include make/kernel-download.make
 include make/uclibc-download.make
 include make/xtools.make
 include make/sysroot.make
-ifeq ($(SYSLINUX_ENABLE),yes)
-include make/syslinux.make
-endif
 include make/kernel.make
 ifeq ($(UBOOT_ENABLE),yes)
   include make/u-boot.make
