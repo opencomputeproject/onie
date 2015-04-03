@@ -359,11 +359,11 @@ $(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cf
 pxe-efi64: $(PXE_EFI64_STAMP)
 $(PXE_EFI64_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE PXE EFI64 Recovery Image ===="
-	$(Q) cd $(GRUB_HOST_INSTALL_DIR)/usr/lib/grub/x86_64-efi && \
+	$(Q) cd $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/lib/grub/x86_64-efi && \
 		ls *.mod|sed -e 's/\.mod//g'|egrep -v '(ehci|at_keyboard)' > $(PXE_EFI64_GRUB_MODS)
-	$(Q) $(GRUB_HOST_INSTALL_DIR)/usr/bin/grub-mkimage --format=x86_64-efi	\
+	$(Q) $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/bin/grub-mkimage --format=x86_64-efi	\
 	    --config=$(RECOVERY_CONF_DIR)/grub-embed.cfg			\
-	    --directory=$(GRUB_HOST_INSTALL_DIR)/usr/lib/grub/x86_64-efi	\
+	    --directory=$(GRUB_HOST_INSTALL_UEFI_DIR)/usr/lib/grub/x86_64-efi	\
 	    --output=$(PXE_EFI64_IMAGE) --memdisk=$(RECOVERY_ISO_IMAGE)		\
 	    $$(cat $(PXE_EFI64_GRUB_MODS))
 	$(Q) touch $@
