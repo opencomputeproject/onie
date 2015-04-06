@@ -1,0 +1,34 @@
+#!/bin/sh
+
+##
+## 
+## Script to launch platform specific diag.
+## 
+##
+
+
+this_script=$(basename $(realpath $0))
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+
+. $lib_dir/onie-blkdev-common
+
+echo "mount point is $onie_boot_mnt"
+diag_file="$onie_boot_mnt/diag.sh"
+echo " file path is $diag_file "
+
+#to recover diag.sh / avoid loosing it after onie-update 
+diag_mount=$(blkid | grep -- '-DIAG"' | awk '{print $1}' | sed -e 's/:.*$//')
+if [[ ! -z "$diag_mount" ]]; then
+mount $diag_mount /tmp
+cp /tmp/diag/diag.sh $onie_boot_mnt
+umount /tmp 
+fi
+
+
+if [ -x $diag_file ] ; then
+echo "Platform specific diag found launching....."
+. $diag_file
+else
+echo "Platform specific diag not found..."
+fi
+exit 0
