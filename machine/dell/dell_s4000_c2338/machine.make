@@ -18,6 +18,9 @@ endif
 # DELL IANA number
 VENDOR_ID = 674
 
+I2CTOOLS_ENABLE = yes
+I2CTOOLS_SYSEEPROM = no
+
 # This platform requires the PXE_EFI64 installer
 PXE_EFI64_ENABLE = yes
 
