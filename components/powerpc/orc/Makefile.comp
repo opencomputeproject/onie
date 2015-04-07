@@ -33,7 +33,13 @@ $(LIBRARY)_SUBDIR := $(dir $(lastword $(MAKEFILE_LIST)))
 include $(BUILDER)/lib.mk
 
 
-DEPENDMODULES := orc AIM
+# Note: module system doesn't resolve transitive dependencies
+# ELS needs OS
+# uCli needs BigList and IOF
+DEPENDMODULES := orc AIM ELS OS uCli BigList IOF
+
+LIBONLP := $(shell $(ONL_PKG_INSTALL) onlp:powerpc --find-file libonlp.so)
+
 
 include $(BUILDER)/dependmodules.mk
 
@@ -55,11 +61,24 @@ GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_MODULES_INIT=1
 GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_MAIN=1
 GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_PVS_SYSLOG=1
 GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_DAEMONIZE=1
-GLOBAL_CFLAGS += -DORC_CONFIG_INCLUDE_AIM_MAIN=1
 GLOBAL_CFLAGS += -DAIM_CONFIG_AIM_MAIN_FUNCTION="orc_main"
+
+GLOBAL_CFLAGS += -DORC_CONFIG_INCLUDE_AIM_MAIN=1
+GLOBAL_CFLAGS += -DORC_CONFIG_INCLUDE_UCLI=1
+GLOBAL_CFLAGS += -DORC_CONFIG_INCLUDE_CONSOLE_CLI=1
+GLOBAL_CFLAGS += -DORC_CONFIG_CONSOLE_PROMPT_DEFAULT=\"orc\"
+
+# uncomment for static linking/debugging
+GLOBAL_CFLAGS += -DORC_STATIC_DRIVER=1
+GLOBAL_LINK_LIBS += $$SWITCHLIGHT/components/powerpc/broadcom/orc/orc-brcm-6.3.3-release/build/powerpc-linux-gnu/bin/orc_brcm.so
+
+
+
 GLOBAL_CFLAGS += -g
 
-GLOBAL_LINK_LIBS += -g -ldl -rdynamic -lpthread   # pthreads is needed to unbork gdb
+GLOBAL_LINK_LIBS += -Wl,--unresolved-symbols=ignore-all # HACK; need to ignore shared for ONLP and object for veth.so
+GLOBAL_LINK_LIBS += $(LIBONLP)
+GLOBAL_LINK_LIBS += -g -ledit -ldl -rdynamic -lpthread   # pthreads is needed to unbork gdb
 
 
 include $(ONL)/make/deb-subdir.mk
