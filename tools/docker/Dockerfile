@@ -103,10 +103,11 @@ RUN echo 'APT::Get::AllowUnauthenticated "true";\nAPT::Get::Assume-Yes "true";' 
     dpkg --add-architecture powerpc && \
     apt-get update && \
     apt-get install -y  \
-        libc6-dev-powerpc-cross \
         binutils-powerpc-linux-gnu=2.22-7.1 \
+        gcc-4.7-powerpc-linux-gnu \ 
+        libc6-dev-powerpc-cross \
         libgomp1-powerpc-cross=4.7.2-4  && \
     xapt -a powerpc libedit-dev ncurses-dev libsensors4-dev libwrap0-dev libssl-dev libsnmp-dev && \
+    update-alternatives --install /usr/bin/powerpc-linux-gnu-gcc powerpc-linux-gnu-gcc /usr/bin/powerpc-linux-gnu-gcc-4.7 10 && \
     cp  /usr/include/linux/i2c-dev.h /usr/powerpc-linux-gnu/include/linux/i2c-dev.h
 
-    # update-alternatives --install /usr/bin/powerpc-linux-gnu-gcc powerpc-linux-gnu-gcc /usr/bin/powerpc-linux-gnu-gcc-4.7 10 && \
