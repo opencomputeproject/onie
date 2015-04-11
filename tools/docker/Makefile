@@ -8,6 +8,7 @@ endif
 
 IMAGE=1.4
 
+
 # needed to get SSH agent credential forwarding
 ifdef SSH_AUTH_SOCK
 ssh_dir = $(shell dirname $$SSH_AUTH_SOCK)
@@ -23,6 +24,7 @@ docker_build:
 	docker build -t bigswitch/onl-build:$(IMAGE) .
 
 docker_run:
+	# UNCOMMENT ME FOR PRODUCTION docker pull bigswitch/onl-build:$(IMAGE) .
 	docker run -t -i -v $(ONL):$(ONL) -w $(ONL) $(SSH_AGENT) bigswitch/onl-build:$(IMAGE)
 
 # DANGER - destructively kills all containers and images - DO NOT USE
