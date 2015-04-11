@@ -46,6 +46,7 @@ RUN echo 'deb http://http.debian.net/debian unstable main' >> /etc/apt/sources.l
         autoconf \
         automake1.9 \
         autotools-dev \
+        libi2c-dev \
         libtool \
         apt-file \
         file \
@@ -60,7 +61,9 @@ RUN echo 'deb http://http.debian.net/debian unstable main' >> /etc/apt/sources.l
         uboot-mkimage \
         kmod \
         qemu && \
-    xapt -a powerpc libedit-dev ncurses-dev libsensors4-dev libwrap0-dev libssl-dev libsnmp-dev
+    xapt -a powerpc libedit-dev ncurses-dev libsensors4-dev libwrap0-dev libssl-dev libsnmp-dev && \
+    cp  /usr/include/linux/i2c-dev.h /usr/powerpc-linux-gnu/include/linux/i2c-dev.h
+# this last cp is needed to fix an i2c compile problem
 
 
 # Now the ONL deps
