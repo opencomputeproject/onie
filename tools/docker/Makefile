@@ -6,7 +6,7 @@ ifndef ONL
 $(error Need to define $$ONL variable to use this Makefile)
 endif
 
-IMAGE=1.3
+IMAGE=1.4
 
 # needed to get SSH agent credential forwarding
 ifdef SSH_AUTH_SOCK
@@ -17,9 +17,9 @@ SSH_AGENT=
 endif
 
 
-all: build
+all: docker_run
 
-build:
+docker_build:
 	docker build -t bigswitch/onl-build:$(IMAGE) .
 
 docker_run:

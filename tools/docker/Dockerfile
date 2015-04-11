@@ -3,71 +3,94 @@ MAINTAINER Rob Sherwood <rob.sherwood@bigswitch.com>
 
 # First round of dependences
 RUN apt-get update && apt-get install -y \
-	build-essential \
-	pkg-config \
-	python \
-	debhelper \
-	ccache \
-	binfmt-support \
-	qemu-user-static \
-	multistrap \
-	apt-cacher-ng \
-	devscripts \
-	debhelper \
-	dpkg-sig \
-	realpath
-#RUN apt-get insstall binutils-powerpc-linux-gnu libgomp1-powerpc-cross
-
-# Now the unstable deps and cross compilers
-RUN echo 'deb http://http.debian.net/debian unstable main' >> /etc/apt/sources.list && \
-    dpkg --add-architecture powerpc && \
-    apt-get update && \
-    apt-get install -y  binutils-powerpc-linux-gnu \ 
-        gcc-powerpc-linux-gnu \
-        cpp-powerpc-linux-gnu \
-        libedit-dev \
-        ncurses-dev \
-        gcc \
-        make \
-        xapt \
-        cdbs \
-        debhelper \
-        pkg-config \
-        devscripts \
-        bison \
-        flex \
-        texinfo \
-        wget \
-        cpio \
-        multistrap \
-        squashfs-tools \
-        zip \
-        binfmt-support \
+        apt \
+        apt-cacher-ng \
+        apt-file \
+        apt-utils \
         autoconf \
         automake1.9 \
         autotools-dev \
+        bc \
+        binfmt-support \
+        binfmt-support \
+        bison \
+        bsdmainutils \
+        build-essential \
+        ccache \
+        cdbs \
+        cpio \
+        debhelper \
+        debhelper \
+        debhelper \
+        devscripts \
+        devscripts \
+        dosfstools \
+        dpkg-sig \
+        file \
+        flex \
+        gcc \
+        genisoimage \
+        ifupdown \
+        iproute \
+        iputils-ping \
+        kmod \
+        less \
+        libedit-dev \
         libi2c-dev \
         libtool \
-        apt-file \
-        file \
-        genisoimage \
-        syslinux \
-        dosfstools \
-        mtools \
-        bc \
-        python-yaml \
+        locales \
+        lsof \
+        make \
+        mingetty \
         mtd-utils \
-        gcc-4.7-multilib \
+        mtools \
+        multistrap \
+        nano \
+        ncurses-dev \
+        netbase \
+        net-tools \
+        nfs-common \
+        openssh-server \
+        pkg-config \
+        pkg-config \
+        procps \
+        psmisc \
+        python \
+        python \
+        python-yaml \
+        qemu \
+        qemu-user-static \
+        realpath \
+        realpath \
+        rsyslog \
+        squashfs-tools \
+        sudo \
+        syslinux \
+        texinfo=4.13a.dfsg.1-10 \
+        traceroute \
         uboot-mkimage \
-        kmod \
-        qemu && \
+        vim-tiny \
+        wget \
+        xapt \
+        zile \
+        zip 
+#RUN apt-get insstall binutils-powerpc-linux-gnu libgomp1-powerpc-cross
+
+# Now the unstable deps and cross compilers
+# NOTE: texinfo 5.x and above breaks the buildroot build, thus the specific 4.x version
+# NOTES: this cp is needed to fix an i2c compile problem
+RUN echo 'deb http://http.debian.net/debian unstable main' >> /etc/apt/sources.list && \
+    dpkg --add-architecture powerpc && \
+    apt-get update && \
+    apt-get install -y  \
+        binutils-powerpc-linux-gnu \ 
+        cpp-powerpc-linux-gnu \
+        gcc-4.7-multilib \
+        gcc-powerpc-linux-gnu \
+        multistrap && \
     xapt -a powerpc libedit-dev ncurses-dev libsensors4-dev libwrap0-dev libssl-dev libsnmp-dev && \
-    cp  /usr/include/linux/i2c-dev.h /usr/powerpc-linux-gnu/include/linux/i2c-dev.h
-# this last cp is needed to fix an i2c compile problem
-
-
-# Now the ONL deps
-RUN echo 'APT::Get::AllowUnauthenticated "true";\nAPT::Get::Assume-Yes "true";' | tee /etc/apt/apt.conf.d/99opennetworklinux && \
+    cp  /usr/include/linux/i2c-dev.h /usr/powerpc-linux-gnu/include/linux/i2c-dev.h && \
+    echo 'APT::Get::AllowUnauthenticated "true";\nAPT::Get::Assume-Yes "true";' | tee /etc/apt/apt.conf.d/99opennetworklinux && \
     echo "deb http://apt.opennetlinux.org/debian/ unstable main" | tee /etc/apt/sources.list.d/opennetlinux.list
 
 
