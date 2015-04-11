@@ -27,15 +27,11 @@ all:
 	@echo "targets:"
 	@echo ""
 	@echo "Step #1: (outside workspace)"
-	@echo "    install-host-deps        Install build dependencies into your host build machine."
+	@echo "    docker                   Enter the pre-built docker workspace with all dev tools"
 	@echo ""
 	@echo "Step #2: (inside workspace)"
-	@echo "    install-ws-deps          Install build dependencies into your workspace after creating it."
-	@echo ""
-	@echo "Step #3: (inside workspace)"
-	@echo "    onl-{powerpc,x86, kvm}     Build all ONL for either powerpc or kvm, including "
+	@echo "    onl-{powerpc,x86, kvm}     Build all ONL for either x86, powerpc or kvm, including "
 	@echo "                               components, swi, loader, and installer in workspace."
-	@echo "                               Run inside a workspace after \`make install-ws-deps\`"
 	@echo "                               Equivalent to \`make all-components swi installer\`"
 	@echo ""
 	@echo "Optional Steps"
@@ -43,27 +39,13 @@ all:
 	@echo ""
 	@echo "    deb-clean                Clean all debian log files in the components subtree."
 	@echo ""
+	@echo "    swi                      Build the SWitch Image; requires $$ARCH set"
+	@echo ""
+	@echo "    installer                Build the ONL ONIE installer; requires $$ARCH set"
+	@echo ""
 
-############################################################
-#
-# These need to be initialized on the build host machine
-#
-############################################################
-install-host-deps:
-	sudo apt-get install -y binfmt-support qemu-user-static multistrap apt-cacher-ng devscripts debhelper realpath
-	$(MAKE) -C tools
-	sudo dpkg -i tools/*.deb
-	@echo \`make install-host-deps\` SUCCESS
-
-
-############################################################
-#
-# These need to be installed once in the build workspace
-# after you create it.
-#
-############################################################
-install-ws-deps: __install-ws-deps
-
+docker:
+	export ONL=`pwd` && $(MAKE) -C tools/docker
 
 onl-powerpc: ARCH=powerpc
 onl-powerpc: all-components swi installer
@@ -121,74 +103,4 @@ deb-clean:
 	find components -name "*.changes" -delete
 	find components -name files -delete
 	find components -name "*~" -delete
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-############################################################
-#
-# No need to read further unless you run into issues
-# installing the above targets.
-#
-# The following rules are a bit of hackery at the moment.
-#
-# We use the cross compiling and cross-package tools
-# provided by the Emdebian repositories.  But Emdebian 
-# has gone away and Debian is becoming the official source.
-# But we need to do the work to move to the new tools, so 
-# we've just temporarily cached the cross-packages on the 
-# ONL apt repo.
-#
-# This needs to get resolved, but as a stop-gap the
-# previous versions of the offending packages (which
-# are compatible with Debian Wheezy) are included and
-# installed locally.
-#
-############################################################
-
-#
-# Install ONL keyring and repositories
-#
-onl-update:
-	#sudo apt-get install -y --force-yes emdebian-archive-keyring
-	echo 'APT::Get::AllowUnauthenticated "true";\nAPT::Get::Assume-Yes "true";' | sudo tee /etc/apt/apt.conf.d/99opennetworklinux
-	sudo dpkg --add-architecture powerpc
-	echo "deb http://apt.opennetlinux.org/debian/ unstable main" | sudo tee /etc/apt/sources.list.d/opennetlinux.list
-	sudo apt-get update
-
-#
-# Install required native packages
-#
-install-native-deps: onl-update
-	sudo apt-get install -y libedit-dev ncurses-dev gcc make xapt cdbs debhelper pkg-config devscripts bison flex texinfo wget cpio multistrap squashfs-tools zip binfmt-support autoconf automake1.9 autotools-dev libtool apt-file file genisoimage syslinux dosfstools mtools bc python-yaml mtd-utils gcc-4.7-multilib uboot-mkimage kmod
-
-#
-# Install required cross compiler packages.
-# This is where it gets a little pear-shaped.
-#
-install-cross-deps: install-native-deps
-	sudo apt-get install -y libc6-dev-powerpc-cross
-	# These packages are currently incompatible between Debian/Emdebian wheezy: TODO remove
-	sudo dpkg -i tools/bin/amd64/binutils-powerpc-linux-gnu_2.22-7.1_amd64.deb
-	sudo dpkg -i tools/bin/amd64/libgomp1-powerpc-cross_4.7.2-4_all.deb
-	sudo apt-get install -y gcc-4.7-powerpc-linux-gnu libc6-dev-powerpc-cross dpkg-sig
-	f=$$(mktemp); wget -O $$f "https://launchpad.net/ubuntu/+source/qemu/1.4.0+dfsg-1expubuntu3/+build/4336762/+files/qemu-user-static_1.4.0%2Bdfsg-1expubuntu3_amd64.deb" && sudo dpkg -i $$f
-	sudo update-alternatives --install /usr/bin/powerpc-linux-gnu-gcc powerpc-linux-gnu-gcc /usr/bin/powerpc-linux-gnu-gcc-4.7 10
-	sudo xapt -a powerpc libedit-dev ncurses-dev libsensors4-dev libwrap0-dev libssl-dev libsnmp-dev
-
-__install-ws-deps: install-cross-deps
 
