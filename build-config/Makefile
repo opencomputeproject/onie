@@ -371,8 +371,8 @@ machine-prefix:
 	$(Q) echo $(MACHINE_PREFIX)
 
 # Install required build packages for a x86_64 debian based build host
-DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools \
-				  gperf device-tree-compiler python-all-dev genisoimage \
+DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
+				  gperf device-tree-compiler python-all-dev xorriso \
 				  autoconf automake bison flex texinfo libtool \
 				  realpath gawk libncurses5 libncurses5-dev bc
 
