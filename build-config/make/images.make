@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
@@ -297,11 +297,17 @@ PXE_EFI64_IMAGE		= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).efi64.pxe
 RECOVERY_ISO_IMAGE	= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).iso
 
 RECOVERY_CONF_DIR	= $(PROJECTDIR)/build-config/recovery
-RECOVERY_SYSROOT	= $(MBUILDDIR)/recovery-sysroot
-RECOVERY_CPIO		= $(MBUILDDIR)/recovery.cpio
-RECOVERY_INITRD		= $(IMAGEDIR)/recovery-$(ARCH)-$(MACHINE_PREFIX).initrd
-RECOVERY_ISO_SYSROOT	= $(MBUILDDIR)/recovery-sysroot-iso
-PXE_EFI64_GRUB_MODS	= $(MBUILDDIR)/pxe-efi64-grub-modlist
+RECOVERY_DIR		= $(MBUILDDIR)/recovery
+RECOVERY_SYSROOT	= $(RECOVERY_DIR)/sysroot
+RECOVERY_CPIO		= $(RECOVERY_DIR)/initrd.cpio
+RECOVERY_INITRD		= $(RECOVERY_DIR)/$(ARCH)-$(MACHINE_PREFIX).initrd
+RECOVERY_ISO_SYSROOT	= $(RECOVERY_DIR)/iso-sysroot
+RECOVERY_CORE_IMG	= $(RECOVERY_DIR)/core.img
+RECOVERY_EMBEDDED_IMG	= $(RECOVERY_DIR)/embedded.img
+RECOVERY_EFI_DIR	= $(RECOVERY_DIR)/efi
+RECOVERY_EFI_BOOTX86_IMG= $(RECOVERY_EFI_DIR)/boot/bootx64.efi
+RECOVERY_ELTORITO_IMG	= $(RECOVERY_ISO_SYSROOT)/boot/eltorito.img
+RECOVERY_UEFI_IMG	= $(RECOVERY_ISO_SYSROOT)/boot/efi.img
 
 RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
 RECOVERY_ISO_STAMP	= $(STAMPDIR)/recovery-iso
@@ -310,7 +316,18 @@ PXE_EFI64_STAMP		= $(STAMPDIR)/pxe-efi64
 RECOVERY_ISO_SYSLINUX_FILES = $(SYSLINUX_DIR)/core/isolinux.bin \
                               $(SYSLINUX_DIR)/com32/menu/menu.c32
 # Default to rescue mode for Syslinux menu, if none specified in machine.make
-SYSLINUX_DEFAULT_MODE ?=rescue
+RECOVERY_DEFAULT_ENTRY ?= rescue
+
+# Map RECOVERY_DEFAULT_ENTRY to GRUB entry number
+ifeq ($(RECOVERY_DEFAULT_ENTRY),rescue)
+  GRUB_DEFAULT_ENTRY = 0
+else
+  ifeq ($(RECOVERY_DEFAULT_ENTRY),embed)
+    GRUB_DEFAULT_ENTRY = 1
+  else
+    $(error Unknown RECOVERY_DEFAULT_ENTRY requested: $(RECOVERY_DEFAULT_ENTRY))
+  endif
+endif
 
 PHONY += pxe-efi64 recovery-initrd recovery-iso
 
@@ -319,7 +336,8 @@ PHONY += pxe-efi64 recovery-initrd recovery-iso
 recovery-initrd: $(RECOVERY_INITRD_STAMP)
 $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery initrd ===="
-	$(Q) rm -rf $(RECOVERY_SYSROOT)
+	$(Q) rm -rf $(RECOVERY_DIR)
+	$(Q) mkdir -p $(RECOVERY_DIR)
 	$(Q) cp -a $(SYSROOTDIR) $(RECOVERY_SYSROOT)
 	$(Q) cp $(UPDATER_IMAGE) $(RECOVERY_SYSROOT)/lib/onie/onie-updater
 	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
@@ -327,32 +345,22 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) touch $@
 
 # Make hybrid .iso image containing the ONIE kernel and recovery intrd
+XORRISO = /usr/bin/xorriso
 recovery-iso: $(RECOVERY_ISO_STAMP)
-$(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cfg $(RECOVERY_CONF_DIR)/syslinux.cfg
+$(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
+			$(RECOVERY_CONF_DIR)/grub-iso.cfg $(RECOVERY_CONF_DIR)/xorriso-options.cfg
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery Hybrid iso ===="
-	$(Q) rm -rf $(RECOVERY_ISO_SYSROOT)
-	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)
-	$(Q) cp $(UPDATER_VMLINUZ) $(RECOVERY_ISO_SYSROOT)/vmlinuz
-	$(Q) cp $(RECOVERY_INITRD) $(RECOVERY_ISO_SYSROOT)/initrd.xz
-	$(Q) cp $(RECOVERY_ISO_SYSLINUX_FILES) $(RECOVERY_ISO_SYSROOT)
-	$(Q) sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
-		 -e 's/<CONSOLE_DEV>/$(CONSOLE_DEV)/g' \
-		 -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' \
-		 -e 's/<CONSOLE_PORT>/$(CONSOLE_PORT)/g' \
-		 -e 's/<SYSLINUX_DEFAULT_MODE>/$(SYSLINUX_DEFAULT_MODE)/g' \
-	         $(RECOVERY_CONF_DIR)/syslinux.cfg \
-		 > $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
-	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)/boot/grub
-	$(Q) sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
-		 -e 's/<CONSOLE_DEV>/$(CONSOLE_DEV)/g' \
-		 -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' \
-		 -e 's/<CONSOLE_PORT>/$(CONSOLE_PORT)/g' \
-	         $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg \
-		 > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
-	$(Q) genisoimage -r -V "ONIE-RECOVERY" -cache-inodes -J -l -b isolinux.bin	\
-		-c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table		\
-		-o $(RECOVERY_ISO_IMAGE) $(RECOVERY_ISO_SYSROOT)
-	$(Q) $(SYSLINUX_DIR)/utils/isohybrid.pl $(RECOVERY_ISO_IMAGE)
+	$(Q) Q=$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
+	     CONSOLE_DEV=$(CONSOLE_DEV) \
+	     CONSOLE_PORT=$(CONSOLE_PORT) \
+	     GRUB_DEFAULT_ENTRY=$(GRUB_DEFAULT_ENTRY) \
+	     $(SCRIPTDIR)/onie-mk-iso.sh $(UPDATER_VMLINUZ) $(RECOVERY_INITRD) \
+		$(RECOVERY_DIR) \
+		$(MACHINE_CONF) $(RECOVERY_CONF_DIR) \
+		$(GRUB_HOST_LIB_I386_DIR) $(GRUB_HOST_BIN_I386_DIR) \
+		$(GRUB_HOST_LIB_UEFI_DIR) $(GRUB_HOST_BIN_UEFI_DIR) \
+		$(XORRISO) \
+		$(RECOVERY_ISO_IMAGE)
 	$(Q) touch $@
 
 # Convert the .iso to a PXE-EFI64 bootable image using GRUB
@@ -376,6 +384,7 @@ $(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE)
 USERSPACE_CLEAN += image-clean
 image-clean:
 	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
+	$(Q) rm -rf $(RECOVERY_DIR)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
 #

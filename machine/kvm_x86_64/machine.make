@@ -64,10 +64,10 @@ UCLIBC_VERSION = 0.9.33.2
 #
 # NOTE: You can give multiple space separated parameters
 
-# Specify the default menu option for syslinux when booting a recovery image
-# Valid values are "rescue" or "embed" (without double-quotes). This parameter
-# defaults to "rescue" mode if not specified here.
-#SYSLINUX_DEFAULT_MODE=embed
+# Specify the default menu option when booting a recovery image.  Valid
+# values are "rescue" or "embed" (without double-quotes). This
+# parameter defaults to "rescue" mode if not specified here.
+# RECOVERY_DEFAULT_ENTRY = embed
 
 #-------------------------------------------------------------------------------
 #
