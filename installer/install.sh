@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -128,6 +129,4 @@ xz -d -c onie-update.tar.xz | tar -xf -
 # arch specific ONIE install method
 install_onie "$@"
 
-echo "Rebooting..."
 cd /
-reboot

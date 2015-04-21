@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -36,5 +37,4 @@ EOF
 
 fw_setenv -f -s /tmp/env.txt
 
-echo "Rebooting..."
-reboot
+cd /
