@@ -21,10 +21,10 @@ endif
 all: docker_run
 
 docker_build:
-	docker build -t bigswitch/onl-build:$(IMAGE) .
+	docker build -t opennetworklinux/onl-build:$(IMAGE) .
 
 docker_run:
-	# UNCOMMENT ME FOR PRODUCTION docker pull bigswitch/onl-build:$(IMAGE) .
+	docker pull opennetworklinux/onl-build:$(IMAGE)
 	docker run --privileged -t -i \
         -e USER=root \
         -e ONL=$(ONL) \
@@ -32,7 +32,7 @@ docker_run:
         -w $(ONL) \
         -h "onl-builder" \
         $(SSH_AGENT) \
-        bigswitch/onl-build:$(IMAGE) \
+        opennetworklinux/onl-build:$(IMAGE) \
         bash -c '/etc/init.d/apt-cacher-ng start && bash'
 
 # DANGER - destructively kills all containers and images - DO NOT USE
@@ -47,4 +47,4 @@ docker_nuke_all:
 	docker info
 
 docker_push:
-	docker push bigswitch/onl-build 
+	docker push opennetworklinux/onl-build 
