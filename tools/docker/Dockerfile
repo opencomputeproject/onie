@@ -80,8 +80,8 @@ RUN apt-get update && apt-get install -y \
 # Now the unstable deps and cross compilers
 # NOTE 1: texinfo 5.x and above breaks the buildroot build, thus the specific 4.x version
 # NOTE 2: this cp is needed to fix an i2c compile problem
-# NOTE 3: the docker-gzip-indexes options break multistrap so that it can't find
-#       Essential packages
+# NOTE 3: the /etc/apt/apt.conf.d/docker-* options break multistrap so that it can't find
+#       Essential packages or resolve apt.opennetlinux.org
 
 
 
@@ -97,7 +97,7 @@ RUN echo 'APT::Get::AllowUnauthenticated "true";\nAPT::Get::Assume-Yes "true";' 
     xapt -a powerpc libedit-dev ncurses-dev libsensors4-dev libwrap0-dev libssl-dev libsnmp-dev && \
     update-alternatives --install /usr/bin/powerpc-linux-gnu-gcc powerpc-linux-gnu-gcc /usr/bin/powerpc-linux-gnu-gcc-4.7 10 && \
     cp  /usr/include/linux/i2c-dev.h /usr/powerpc-linux-gnu/include/linux/i2c-dev.h && \
-    rm /etc/apt/apt.conf.d/docker-gzip-indexes
+    rm /etc/apt/apt.conf.d/docker-*
 
 #RUN echo 'deb http://http.debian.net/debian unstable main' >> /etc/apt/sources.list && \
 #    dpkg --add-architecture powerpc && \

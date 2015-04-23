@@ -25,7 +25,15 @@ docker_build:
 
 docker_run:
 	# UNCOMMENT ME FOR PRODUCTION docker pull bigswitch/onl-build:$(IMAGE) .
-	docker run -t -i -v $(ONL):$(ONL) -w $(ONL) $(SSH_AGENT) bigswitch/onl-build:$(IMAGE)
+	docker run --privileged -t -i \
+        -e USER=root \
+        -e ONL=$(ONL) \
+        -v $(ONL):$(ONL) \
+        -w $(ONL) \
+        -h "onl-builder" \
+        $(SSH_AGENT) \
+        bigswitch/onl-build:$(IMAGE) \
+        bash -c '/etc/init.d/apt-cacher-ng start && bash'
 
 # DANGER - destructively kills all containers and images - DO NOT USE
 docker_nuke_all:
