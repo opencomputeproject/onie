@@ -17,15 +17,17 @@ else
 SSH_AGENT=
 endif
 
+DOCKER=docker.io
+
 
 all: docker_run
 
-docker_build:
-	docker build -t opennetworklinux/onl-build:$(IMAGE) .
+docker_build: docker_check
+	$(DOCKER) build -t opennetworklinux/onl-build:$(IMAGE) .
 
-docker_run:
-	docker pull opennetworklinux/onl-build:$(IMAGE)
-	docker run --privileged -t -i \
+docker_run: docker_check
+	$(DOCKER) pull opennetworklinux/onl-build:$(IMAGE)
+	$(DOCKER) run --privileged -t -i \
         -e USER=root \
         -e ONL=$(ONL) \
         -v $(ONL):$(ONL) \
@@ -36,15 +38,18 @@ docker_run:
         bash -c '/etc/init.d/apt-cacher-ng start && bash'
 
 # DANGER - destructively kills all containers and images - DO NOT USE
-docker_nuke_all:
+docker_nuke_all: docker_check
 	@echo Before
 	@echo ------------------------
-	docker info
-	docker rm `docker ps -aq` || true
-	docker rmi `docker images -aq` || true
+	$(DOCKER) info
+	$(DOCKER) rm `docker ps -aq` || true
+	$(DOCKER) rmi `docker images -aq` || true
 	@echo After
 	@echo ------------------------
-	docker info
+	$(DOCKER) info
 
-docker_push:
-	docker push opennetworklinux/onl-build 
+docker_push: docker_check
+	$(DOCKER) push opennetworklinux/onl-build 
+
+docker_check: 
+	@which $(DOCKER) || echo STOP : you need to install docker.io first
