@@ -3,10 +3,15 @@
 
 Build Hosts and Environments
 ------------------------------------------------------------
-ONL now builds with Docker (yay!) so the only requirement on the
+ONL now builds with Docker (yay!) so the only requirements on the
 build system is that you have a modern version of docker installed.
-We currently test with "Docker version 1.5.0, build a8a31ef", but
-presumably others will work as well.
+
+- docker
+- binfmt-support
+
+On a modern Ubuntu system, you can get these with:
+
+    # apt-get install docker.io binfmt-support
 
 Historical Note: the previous workspace workflow (with `onl-mkws` and
 `onl-chws`) was actually a home grown Docker-like Linux container based
@@ -35,8 +40,10 @@ all of the various elements of the build.
 Installing Docker Gotchas
 ----------------------------------------------------------
 Docker installer oneliner (for reference: see docker.com for details)
+
     # apt-get install -y docker.io
 or
+
     # wget -qO- https://get.docker.com/ | sh
 
 
