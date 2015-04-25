@@ -147,7 +147,7 @@ def find_all_packages(basedir):
                         all_.append("%s:%s" % (d['Package'],arch))
                     d = deb822.Deb822(f)
 
-    return all_
+    return sorted(all_)
 
 def check_call(cmd, *args, **kwargs):
     if type(cmd) == str:
