@@ -4,10 +4,10 @@
 Build Hosts and Environments
 ------------------------------------------------------------
 ONL now builds with Docker (yay!) so the only requirements on the
-build system is that you have a modern version of docker installed.
+build system is:
 
-- docker
-- binfmt-support
+- docker			# to grab the build workspace
+- binfmt-support		# kernel support for ppc builds
 
 On a modern Ubuntu system, you can get these with:
 
