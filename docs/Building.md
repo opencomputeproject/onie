@@ -35,21 +35,24 @@ all of the various elements of the build.
 Installing Docker Gotchas
 ----------------------------------------------------------
 Docker installer oneliner (for reference: see docker.com for details)
+
     # apt-get install -y docker.io
 or
+
     # wget -qO- https://get.docker.com/ | sh
 
 
 If you are installing on Ubuntu 14.04 or earlier:
-    * You may have to update your kernel to 3.10+
-    * Beware that `apt-get install docker` installs a dock application not docker :-)
-	* You want the docker.io package instead
-    * Check out http://docs.docker.com/installation/ubuntulinux/ for details
+
+- You may have to update your kernel to 3.10+
+- Beware that `apt-get install docker` installs a dock application not docker :-)  You want the docker.io package instead.
+- Check out http://docs.docker.com/installation/ubuntulinux/ for details
 
 Consider enabling builds for non-priviledged users with:
-    * sudo usermod -aG docker
-    * if you get errors like "..: dial unix /var/run/docker.sock: permission denied"	
-    * Building is root is fine as well (it immediately jumps into a root build shell)
+
+- sudo usermod -aG docker
+- if you get errors like "..: dial unix /var/run/docker.sock: permission denied"	
+- Building is root is fine as well (it immediately jumps into a root build shell)
     
 
 Build all .deb packages for powerpc, i386, and amd64.
