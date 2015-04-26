@@ -1,4 +1,4 @@
-FROM debian
+FROM debian:7.8
 MAINTAINER Rob Sherwood <rob.sherwood@bigswitch.com>
 
 # First round of dependences
