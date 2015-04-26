@@ -31,6 +31,7 @@ docker_run: docker_check
         -e USER=root \
         -e ONL=$(ONL) \
         -v $(ONL):$(ONL) \
+	--dns=8.8.8.8 \
         -w $(ONL) \
         -h "onl-builder" \
         $(SSH_AGENT) \
