@@ -6,7 +6,7 @@ ifndef ONL
 $(error Need to define $$ONL variable to use this Makefile)
 endif
 
-IMAGE=1.4
+IMAGE=1.5
 
 
 # needed to get SSH agent credential forwarding
@@ -31,8 +31,7 @@ docker_run: docker_check
         -e USER=root \
         -e ONL=$(ONL) \
         -v $(ONL):$(ONL) \
-	--dns=8.8.8.8 \
-        -w $(ONL) \
+        -w $(ONL) $(DNS) \
         -h "onl-builder" \
         $(SSH_AGENT) \
         opennetworklinux/onl-build:$(IMAGE) \
