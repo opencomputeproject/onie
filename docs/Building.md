@@ -8,6 +8,7 @@ build system is:
 
 - docker			# to grab the build workspace
 - binfmt-support		# kernel support for ppc builds
+- About 20G of disk free space 	# to build all images
 
 On a modern Ubuntu system, you can get these with:
 
@@ -25,14 +26,16 @@ Build ONL Summary
     #> make docker                                              # enter the docker workspace
     root@8onl-builder:/path/to/ONL# make onl-x86 onl-powerpc    # build both x86 and PPC images
 
-The resulting ONIE installers are in $ONL/builds/installer/$ARCH/all/onl-$VERSION-all.installer,
-and the SWI files (if you want them) are in $ONL/builds/swi/$ARCH/all/onl-$VERSION-all.swi.
+The resulting ONIE installers are in
+$ONL/builds/installer/$ARCH/all/onl-$VERSION-all.installer,
+and the SWI files (if you want them) are in
+$ONL/builds/swi/$ARCH/all/onl-$VERSION-all.swi.
 
 
 
 
-Installing Docker Gotchas
-----------------------------------------------------------
+#Installing Docker Gotchas
+
 Docker installer oneliner (for reference: see docker.com for details)
 
     # apt-get install -y docker.io
@@ -41,11 +44,15 @@ or
     # wget -qO- https://get.docker.com/ | sh
 
 
-If you are installing on Ubuntu 14.04 or earlier:
+Common docker related issues:
 
+- Check out http://docs.docker.com/installation/ubuntulinux/ for detailed instructions
 - You may have to update your kernel to 3.10+
 - Beware that `apt-get install docker` installs a dock application not docker :-)  You want the docker.io package instead.
-- Check out http://docs.docker.com/installation/ubuntulinux/ for details
+- Some versions of docker are unhappy if you use a local DNS caching resolver:
+	- e.g., you have 127.0.0.1 in your /etc/resolv.conf
+        - if you have this, specify DNS="--dns 8.8.8.8" when you enter the docker environment
+ 	- e.g., `make DNS="--dns 8.8.8.8" docker`
 
 Consider enabling builds for non-privileged users with:
 
@@ -53,7 +60,7 @@ Consider enabling builds for non-privileged users with:
 - If you run as non-root without this, you will get errors like "..: dial unix /var/run/docker.sock: permission denied"	
 - Building as root is fine as well (it immediately jumps into a root build shell), so this optional
     
-Additional Details
+#Additional Build Details
 ----------------------------------------------------------
 
 The rest of this guide talks about how to build specific 
