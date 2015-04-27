@@ -90,6 +90,7 @@ Adding/Removing packages from a SWI:
 ------------------------------------------------------------
 
 The list of packages for a given SWI are in
+
     $ONL/builds/swi/$ARCH/all/rootfs/rootfs.$ARCH	# for $ARCH specific packages
     $ONL/builds/swi/$ARCH/all/rootfs/rootfs		# for $ARCH-independent packages
 
