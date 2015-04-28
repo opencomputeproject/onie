@@ -11,12 +11,13 @@ switches.
 Documentation
 -------------
 
-* [docs/QuickStart.md](docs/QuickStart.md)
+* [docs/GettingStarted.md](docs/GettingStarted.md)
     Simplified instructions for building and installing the ONL images.
+    Pre-compiled ONL images are available from http://opennetlinux.org/binaries
 
-* [docs/BuildTroubleshooting.md](docs/BuildTroubleshooting.md)
-    Troubleshooting tips for when you run into problems with the
-    QUICKSTART guide.
+
+* [docs/Building.md](docs/Building.md)
+    Instructions for building ONL from scratch.
 
 * [docs/SupportedHardware.md](docs/SupportedHardware.md)
     A list of hardware that ONL supports (in various forms)
