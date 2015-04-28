@@ -1,6 +1,7 @@
 # x86_64 specific uninstall routine
 
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -174,13 +175,7 @@ uninstall_system()
     diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
     if [ -n "$diag_label" ] &&
        [ -z "$(grep $diag_label $grub_root_dir/grub.cfg)" ] ; then
-        cat <<EOF >> $grub_root_dir/grub.cfg
-menuentry '$diag_label $onie_platform' {
-        search --no-floppy --label --set=root $diag_label
-        echo    'Loading $diag_label $onie_platform ...'
-        chainloader +1
-}
-EOF
+        $onie_boot_mnt/onie/grub.d/60_diag_chainload >> $grub_root_dir/grub.cfg
     fi
 
     # Return to install mode on the next boot
