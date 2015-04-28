@@ -1,0 +1,287 @@
+diff --git a/sys_eeprom/onie_tlvinfo.c b/sys_eeprom/onie_tlvinfo.c
+index cf88f70..9cd325e 100644
+--- a/sys_eeprom/onie_tlvinfo.c
++++ b/sys_eeprom/onie_tlvinfo.c
+@@ -3,7 +3,7 @@
+ #include <string.h>
+ #include "24cXX.h"
+ #include "onie_tlvinfo.h"
+-
++#include <fcntl.h>
+ /* Set to 1 if we've read EEPROM into memory */
+ static int has_been_read = 0;
+ /* Set to 1 if the EEPROM contents were valid when read from hardware */
+@@ -410,6 +410,7 @@ static void update_crc(u_int8_t *eeprom)
+  */
+ void show_eeprom(u_int8_t *eeprom)
+ {
++    int i;
+     int tlv_end;
+     int curr_tlv;
+     tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
+@@ -441,7 +442,7 @@ void show_eeprom(u_int8_t *eeprom)
+     printf("Checksum is %s.\n", is_checksum_valid(eeprom) ? "valid" :
+ 	   "invalid");
+ 
+-#ifdef DEBUG
++#if 0 //def DEBUG
+     printf("EEPROM dump: (0x%x bytes)", SYS_EEPROM_SIZE);
+     for (i = 0; i < SYS_EEPROM_SIZE; i++) {
+ 	if ((i % 16) == 0)
+@@ -464,10 +465,13 @@ int read_eeprom(u_int8_t *eeprom)
+     tlvinfo_header_t *eeprom_hdr = (tlvinfo_header_t *) eeprom;
+     tlvinfo_tlv_t *eeprom_tlv = (tlvinfo_tlv_t *)&eeprom[
+ 	sizeof(tlvinfo_header_t)];
+-
++#if 0
+     if (has_been_read)
++    {
++	printf("read_eeprom has_been_read\n");
+ 	return 0;
+-
++    }
++#endif
+     /* Read the header */
+     ret = read_sys_eeprom((void *)eeprom_hdr, 0, sizeof(tlvinfo_header_t));
+     /* If the header was successfully read, read the TLVs */
+@@ -492,7 +496,7 @@ int read_eeprom(u_int8_t *eeprom)
+     }
+     has_been_read = 1;
+ 
+-#ifdef DEBUG
++#if 0 //def DEBUG
+     show_eeprom(eeprom);
+ #endif
+     return ret;
+@@ -726,23 +730,32 @@ bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval)
+ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ {
+     int ret = 0;
+-    struct eeprom e;
+     int i = 0;
+     u_int8_t *c;
+     int addr = SYS_EEPROM_OFFSET + offset;
+ 
+     c = eeprom_data;
+-    if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-		    EEPROM_TYPE_8BIT_ADDR, &e)) {
+-	printf("ERROR: Cannot open I2C device\n");
+-	return -1;
+-    }
++    int fd;
++    fd = open("/dev/sda3", O_RDWR);
++    if(!fd)
++    {
++        printf("read_sys_eeprom():fd open error!!\n\n");
++        return -1;
++    }
++        
++    lseek(fd, offset, SEEK_SET);
+     for (i = 0; i < len; i++) {
+-	*c = eeprom_read_byte(&e, addr);
+-	c++; addr++;
+-    }
+-    eeprom_close(&e);
+-    return ret;
++		unsigned char buf;
++		ret = read(fd, &buf, 1);
++		*c = buf;
++		c++;
++		addr++;
++    }
++    close(fd);
++    if(ret)
++        return 0;
++    else
++        return -1;
+ }
+ 
+ /*
+@@ -751,24 +764,33 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ int write_sys_eeprom(void *eeprom_data, int len)
+ {
+     int ret = 0;
+-    struct eeprom e;
+     int i = 0;
+     u_int8_t *c;
+     u_int16_t  addr = SYS_EEPROM_OFFSET;
+ 
++    int fd;
++    fd = open("/dev/sda3", O_RDWR);
++    if(!fd)
++    {
++        printf("write_sys_eeprom():fd open error!!\n\n");
++        return -1;
++    }
++
+     c = eeprom_data;
+     for (i = 0; i < len; i++) {
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-			EEPROM_TYPE_8BIT_ADDR, &e)) {
+-	    printf("ERROR: Cannot open I2C device\n");
+-	    return -1;
+-	}
+-	eeprom_write_byte(&e, addr, *c);
+-	eeprom_close(&e);
+-	c++; addr++;
++
++		//DEBUG_PRINT("reg=0x%x val=0x%x\n",SYS_EEPROM_OFFSET+i,*c);
++        ret = write(fd, c, 1);
++		c++; addr++;
++		//sleep(1);
++		usleep(50000);//1000000 no NAK
+     }
++    close(fd);
++    if(ret)
++        return 0;
++    else
++        return -1;
+ 
+-    return ret;
+ }
+ 
+ void update_eeprom_header(u_int8_t *eeprom)
+diff --git a/sys_eeprom/onie_tlvinfo.h b/sys_eeprom/onie_tlvinfo.h
+index 5714f37..8c37b38 100644
+--- a/sys_eeprom/onie_tlvinfo.h
++++ b/sys_eeprom/onie_tlvinfo.h
+@@ -87,7 +87,7 @@ static const struct tlv_code_desc tlv_code_list[] = {
+     { TLV_CODE_DEVICE_VERSION    , "Device Version"},
+     { TLV_CODE_LABEL_REVISION    , "Label Revision"},
+     { TLV_CODE_PLATFORM_NAME     , "Platform Name"},
+-    { TLV_CODE_ONIE_VERSION	 , "Loader Version"},
++    { TLV_CODE_ONIE_VERSION	 , "ONIE Version"},
+     { TLV_CODE_MAC_SIZE	         , "MAC Addresses"},
+     { TLV_CODE_MANUF_NAME	 , "Manufacturer"},
+     { TLV_CODE_MANUF_COUNTRY     , "Country Code"},
+diff --git a/sys_eeprom/sys_eeprom.c b/sys_eeprom/sys_eeprom.c
+index a77837f..eec083a 100644
+--- a/sys_eeprom/sys_eeprom.c
++++ b/sys_eeprom/sys_eeprom.c
+@@ -4,6 +4,25 @@
+ #include <getopt.h>
+ #include "onie_tlvinfo.h"
+ 
++static const struct tlv_code_desc tlv_code_default[] = {
++    { TLV_CODE_PRODUCT_NAME	 , "WNC-X86-ONIE"},
++    { TLV_CODE_PART_NUMBER	 , "xxxxx-yyyyy-zz"},
++    { TLV_CODE_SERIAL_NUMBER , "WNC0000000001"},
++    { TLV_CODE_MAC_BASE	     , "00:00:00:00:00:01"},
++    { TLV_CODE_MANUF_DATE	 , "04/15/2015 14:30:00"},//MM/DD/YYYY hh:mm:ss
++    { TLV_CODE_DEVICE_VERSION, "0"},
++    { TLV_CODE_LABEL_REVISION, "WNC-X86-ONIE-REV_0"},
++    { TLV_CODE_PLATFORM_NAME , "WNC-X86-ONIE"},
++    { TLV_CODE_ONIE_VERSION	 , "2014.04"},
++    { TLV_CODE_MAC_SIZE	     , "73"},
++    { TLV_CODE_MANUF_NAME	 , "WNC"},
++    { TLV_CODE_MANUF_COUNTRY , "TW"},
++    { TLV_CODE_VENDOR_NAME	 , "XXX"},
++    { TLV_CODE_DIAG_VERSION	 , "1.0.0"},
++    { TLV_CODE_SERVICE_TAG   , "LB"},
++    { TLV_CODE_VENDOR_EXT	 , "66"},
++};
++
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+ /*
+  *  This macro defines the sys_eeprom command line command.
+@@ -20,11 +39,15 @@ cmd_usage()
+ 	"      List the understood TLV codes and names.\n"
+ 	"   -e --erase\n"
+ 	"      Reset the EEPROM data.\n"
++	"   -r --restore\n"
++	"      Restore the EEPROM data to default.\n"
+ 	"   -g --get <code>\n"
+ 	"      Look up a TLV by code and write the value to stdout.\n"
+ 	"   -s --set <code>=<value>,<code>=<value>...\n"
+ 	"      Set a TLV code to a value.\n"
+-	"      If no value, TLV is deleted.\n";
++	"      If no value, TLV is deleted.\n"
++	"   -d --dump\n"
++	"      Dump the EEPROM TLV data.\n";
+ 
+     fprintf(stderr, "%s", usage);
+     exit(1);
+@@ -46,13 +69,15 @@ int main(int argc, char * const argv[])
+ 	sizeof(tlv_code_list[0]);
+ 
+     char *tokens[tlv_code_count + 1];
+-    const char *short_options = "hels:g:";
++    const char *short_options = "helrs:g:d";
+     const struct option long_options[] = {
+ 	{"help",    no_argument,          0,    'h'},
+ 	{"list",    no_argument,          0,    'l'},
+ 	{"erase",   no_argument,          0,    'e'},
++	{"restore",	no_argument,		  0,	'r'},
+ 	{"set",     required_argument,    0,    's'},
+ 	{"get",     required_argument,    0,    'g'},
++	{"dump",    no_argument,          0,    'd'},
+ 	{0,         0,                    0,      0},
+     };
+ 
+@@ -87,6 +112,31 @@ int main(int argc, char * const argv[])
+ 	    update = 1;
+ 	    break;
+ 
++	case 'r':
++	    if (read_eeprom(eeprom)) {
++                err = 1;
++			printf("goto syseeprom_err\n");
++			//goto syseeprom_err;
++	    }
++		//printf("update_eeprom_header\n");
++	    update_eeprom_header(eeprom);
++		for (i = 0; i < sizeof(tlv_code_default)/sizeof(struct tlv_code_desc); i++) {
++		//printf("Enter process i=%d\n",i);
++		    if (tlvinfo_delete_tlv(eeprom, tlv_code_default[i].m_code) == TRUE) {
++			    printf("Deleting TLV 0x%x: %s\n", tlv_code_default[i].m_code, tlv_code_list[i].m_name);
++		    }
++			if (!tlvinfo_add_tlv(eeprom, tlv_code_default[i].m_code, tlv_code_default[i].m_name)) {
++                            err = 1;
++				    goto syseeprom_err;
++			} else {
++			    printf("Adding   TLV 0x%x: %s\n", tlv_code_default[i].m_code, tlv_code_default[i].m_name);
++			}
++			//printf("i=%d\n",i);
++		}		
++		printf("update eeprom\n");
++	    update = 1;
++	    break;
++
+ 	case 's':
+ 	    subopts = optarg;
+ 	    while (*subopts != '\0' && !err) {
+@@ -136,6 +186,14 @@ int main(int argc, char * const argv[])
+             goto syseeprom_err;
+ 	break;
+ 
++	case 'd':
++        if (read_eeprom(eeprom)) {
++            err = 1;
++            goto syseeprom_err;
++        }
++        show_eeprom(eeprom);
++	break;
++
+ 	default:
+ 	    cmd_usage();
+             err = 1;
+diff --git a/sys_eeprom/sys_eeprom_platform.h b/sys_eeprom/sys_eeprom_platform.h
+index 529f774..d80b673 100644
+--- a/sys_eeprom/sys_eeprom_platform.h
++++ b/sys_eeprom/sys_eeprom_platform.h
+@@ -1,4 +1,15 @@
+ #ifndef __SYS_EEPROM_PLATFORM_H_
+ #define __SYS_EEPROM_PLATFORM_H_
+ 
++#ifndef SYS_EEPROM_SIZE
++#define SYS_EEPROM_SIZE       2048
++#endif
++
++#ifndef SYS_EEPROM_I2C_DEVICE
++#define SYS_EEPROM_I2C_DEVICE       1
++#endif
++
++#ifndef SYS_EEPROM_I2C_ADDR
++#define SYS_EEPROM_I2C_ADDR       0x50
++#endif
+ #endif /* __SYS_EEPROM_PLATFORM_H_ */
