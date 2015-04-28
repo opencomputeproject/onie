@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -47,10 +48,13 @@ endif
 
 # List of files to remove from base ONIE image for the demo.
 DEMO_TRIM = \
+   etc/rc0.d/K25discover.sh	\
    etc/rc3.d/S50discover.sh	\
+   etc/rc6.d/K25discover.sh	\
    etc/init.d/discover.sh	\
    bin/discover			\
    bin/uninstaller		\
+   bin/onie-uninstaller		\
    lib/onie/udhcp4_sd		
 
 PHONY += demo-sysroot-complete
