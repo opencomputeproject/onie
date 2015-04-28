@@ -166,11 +166,23 @@ config_ethmgmt()
 # When starting the network at boot time configure the MAC addresses
 # for all the Ethernet management interfaces.
 if [ "$1" = "start" ] ; then
-    # Configure Ethernet management MAC addresses
     intf_list=$(net_intf)
     intf_counter=0
 
-    # Set MAC addr for all interfaces, but leave the interfaces down.
+    # Detect for any i2c interface first, check it;s ready, delay at most 3 seconds.
+    var=1
+    for var in 1 2 3
+	do
+		i2c_result=`i2cdetect -l`
+		if [ "$i2c_result" != "" ]; then
+			break
+		fi
+		sleep 1
+        let vat=var+1
+	done
+    #
+
+    # Configure Ethernet management MAC addresses
     base_mac=$(onie-sysinfo -e)
     for intf in $intf_list ; do
         new_mac="$(mac_add $base_mac $intf_counter)"
