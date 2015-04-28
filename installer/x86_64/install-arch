@@ -81,6 +81,14 @@ if [ "$image_partition_type" = "gpt" ] ; then
     # 128MB
     onie_boot_size=$(( 128 * $sectors_per_mb ))
 
+# WNC0_Vic, 2015/03/26, add eeprom partition
+    # ONIE-EEPROM Paritition 
+    onie_eeprom_part=$(( $grub_boot_part + 2 ))
+    onie_eeprom_start=$(( $onie_boot_start + $onie_boot_size ))
+    # 2KB
+    onie_eeprom_size=$(( 4 ))
+# WNC0
+
     # Helper functions
     init_disk="init_gpt_disk"
     verify_partitions="verify_gpt_partitions"
@@ -196,7 +204,7 @@ create_gpt_partition()
     # particular partition.
 
     case "$p" in
-        grub_boot | onie_boot)
+        grub_boot | onie_boot | onie_eeprom) # WNC0_Vic, 2015/03/26, add onie_eeprom
             # Set system partition (bit 0) and read-only (bit 60)
             # attributes.
             attr_bitmask="0x1000000000000001"
@@ -233,7 +241,8 @@ init_gpt_disk()
     }
     rm -f $sgdisk_log
 
-    for p in grub_boot onie_boot ; do
+    # WNC0_Vic, 2015/03/26, add onie_eeprom
+    for p in grub_boot onie_boot onie_eeprom ; do
         create_gpt_partition $p
     done
 }
@@ -247,7 +256,8 @@ init_gpt_disk()
 
 verify_gpt_partitions()
 {
-    for p in grub_boot onie_boot ; do
+    # WNC0_Vic, 2015/03/26, add onie_eeprom
+    for p in grub_boot onie_boot onie_eeprom ; do
         for v in part label start size gpt_uuid ; do
             eval $v='$'${p}_$v
         done
