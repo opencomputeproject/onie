@@ -1,0 +1,26 @@
+#!/bin/sh
+
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# This file provides a GRUB menu entry for diag.
+#
+# Place this file in /etc/grub.d and grub-mkconfig will use this file
+# when generating a grub configuration file.
+
+# If there is a diag partition add a chainload entry to the host OS GRUB
+# configuration.  Everything sent to stdout will end up in the host OS
+# GRUB configuration.
+diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
+[ -z "$diag_label" ] && exit 0
+
+onie_platform="$(onie-sysinfo -p)"
+
+cat <<EOF
+menuentry '$diag_label $onie_platform' {
+        search --no-floppy --label --set=root $diag_label
+        echo    'Loading $diag_label $onie_platform ...'
+        chainloader +1
+}
+EOF
