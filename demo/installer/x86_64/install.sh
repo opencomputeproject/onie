@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -269,21 +269,6 @@ menuentry '$demo_grub_entry' {
 }
 EOF
 ) >> $grub_cfg
-
-if [ "$demo_type" = "OS" ] ; then
-    # If there is a diag image add a chainload entry for it.
-    diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
-    if [ -n "$diag_label" ] ; then
-        onie_platform="$(onie-sysinfo -p)"
-        cat <<EOF >> $grub_cfg
-menuentry '$diag_label $onie_platform' {
-        search --no-floppy --label --set=root $diag_label
-        echo    'Loading $diag_label $onie_platform ...'
-        chainloader +1
-}
-EOF
-    fi
-fi
 
 # Add menu entries for ONIE -- use the grub fragment provided by the
 # ONIE distribution.
