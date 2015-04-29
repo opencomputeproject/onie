@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -121,3 +122,15 @@ menuentry "\$onie_menu_$mode" {
 EOF
     ) >> $grub_cfg
 done
+
+# Look for an ONIE compatible DIAG image and add a boot entry for it.
+diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
+if [ -n "$diag_label" ]  ; then
+    cat <<EOF >> $grub_cfg
+menuentry '$diag_label' {
+        search --no-floppy --label --set=root $diag_label
+        echo    'Loading $diag_label $onie_platform ...'
+        chainloader +1
+}
+EOF
+fi
