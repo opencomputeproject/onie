@@ -22,7 +22,7 @@
 # These are the platforms to include in this installer build.
 #
 ############################################################
-INSTALLER_PLATFORMS :=  x86-64-accton-as5712-54x-r0
+INSTALLER_PLATFORMS :=  x86-64-accton-as5712-54x-r0 x86-64-accton-as6712-32x-r0
 
 
 
