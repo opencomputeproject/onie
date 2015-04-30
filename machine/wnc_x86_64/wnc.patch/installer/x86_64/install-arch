@@ -1,0 +1,499 @@
+# x86_64 specific ONIE installer functions
+
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
+#  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+[ -r ./installer.conf ]  || {
+    echo "ERROR: ONIE machine installer.conf file is missing."
+    exit 1
+}
+. ./installer.conf
+
+# Load machine info from image to be installed.
+[ -r ./machine.conf ] || {
+    echo "ERROR: ONIE update image machine.conf file is missing."
+    exit 1
+}
+. ./machine.conf
+
+# get running machine from conf file
+[ -r /etc/machine.conf ] && . /etc/machine.conf
+
+onie_dev="$(install_device_platform)"
+[ $? -eq 0 ] || {
+    echo "WARNING: Unable to find ONIE install block device."
+}
+
+# check if we have an mmcblk device
+blk_suffix=
+echo $onie_dev | grep -q mmcblk && blk_suffix="p"
+
+args_arch="d:"
+
+usage_arch=$(cat <<EOF
+	-d
+		Target ONIE install device.  Must be a valid block device.
+EOF
+)
+
+# Parse architecture specific installer args
+parse_arg_arch()
+{
+    a="$1"
+    optarg="$2"
+
+    case $a in
+        d)
+            onie_dev="$optarg"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+# ONIE Partition parameters.  'start' and 'size' are in units of 512
+# byte sectors.
+
+# sectors_per_mb = (1024 * 1024) / 512 = 2048
+sectors_per_mb=2048
+
+# Note: Checking the "image_partition_type" here as we need to know
+# the partition type this image is expecting.  In the case of upgrade
+# the running partition type could be different from the installer's
+# image type.
+if [ "$image_partition_type" = "gpt" ] ; then
+    # GRUB Boot Partition
+    grub_boot_part=1
+    grub_boot_start=2048
+    # 2MB
+    grub_boot_size=$(( 2 * $sectors_per_mb ))
+
+    # ONIE-BOOT Paritition 
+    onie_boot_part=$(( $grub_boot_part + 1 ))
+    onie_boot_start=$(( $grub_boot_start + $grub_boot_size ))
+    # 128MB
+    onie_boot_size=$(( 128 * $sectors_per_mb ))
+
+# WNC0_Vic, 2015/03/26, add eeprom partition
+    # ONIE-BOOT Paritition 
+    onie_eeprom_part=$(( $grub_boot_part + 2 ))
+    onie_eeprom_start=$(( $onie_boot_start + $onie_boot_size ))
+    # 2KB
+    onie_eeprom_size=$(( 4 ))
+# WNC0
+
+    # Helper functions
+    init_disk="init_gpt_disk"
+    verify_partitions="verify_gpt_partitions"
+elif [ "$image_partition_type" = "msdos" ] ; then
+    # ONIE-BOOT Paritition 
+    onie_boot_part=1
+    onie_boot_start=2048
+    # 128MB
+    onie_boot_size=$(( 128 * $sectors_per_mb ))
+    # Helper functions
+    init_disk="init_msdos_disk"
+    verify_partitions="verify_msdos_partitions"
+else
+    echo "ERROR: Unsupported partition type: $image_partition_type"
+    exit 1
+fi
+
+# Creates a msdos partition
+create_msdos_partition()
+{
+    p=$1
+    for v in part label start size ; do
+        eval $v='$'${p}_$v
+    done
+
+    [ "$verbose" = "yes" ] && echo "Creating msdos partition $label on: ${onie_dev}$part"
+
+    boot_flags=
+    if [ "$p" = "onie_boot" ] ; then
+        boot_flags="set $part boot on"
+    fi
+
+    # Create a new partition with the given start and size in units of
+    # sectors.
+    parted -s --align optimal "$onie_dev" unit s \
+      mkpart primary $start $(( $start + $size - 1 )) $boot_flags || {
+        echo "ERROR: Problems creating msdos $label partition $part on: $onie_dev"
+        exit 1
+    }
+}
+
+# Initializes the disk for msdos usage.
+# - Creates the msdos disk label on the device, wiping out all partitions
+# - Creates the needed msdos partitions
+init_msdos_disk()
+{
+    # Create GPT disk label
+    [ "$verbose" = "yes" ] && echo "Creating msdos disk label on: $onie_dev"
+    parted -s "$onie_dev" mklabel msdos || {
+        echo "ERROR: Problems creating msdos disk label on: $onie_dev"
+        exit 1
+    }
+    rm -f $sgdisk_log
+
+    for p in onie_boot ; do
+        create_msdos_partition $p
+    done
+}
+
+# Verify the format of the msdos ONIE partitions
+#   For each ONIE partition (ONIE-BOOT) verify:
+#     1. expected partition number
+#     2. expected starting sector address
+#     3. expected partition size
+
+verify_msdos_partitions()
+{
+    for p in onie_boot ; do
+        for v in part label start size ; do
+            eval $v='$'${p}_$v
+        done
+
+        info="$(parted -s -m $onie_dev unit s print | grep ^${part}:)"
+        [ -n "$info" ] || {
+            echo "$label: Unable to find partition information on $onie_dev"
+            return 1
+        }
+
+        # Check starting sector
+        part_start=$(echo -n $info | awk -F: '{print $2}')
+        # Remove trailing 's'
+        part_start=${part_start%s}
+        [ $part_start -eq $start ] || {
+            echo "$label: Start sector mismatch.  Found $part_start, expected $start"
+            return 1
+        }
+
+        # Check partition size
+        part_size=$(echo -n $info | awk -F: '{print $4}')
+        # Remove trailing 's'
+        part_size=${part_size%s}
+        [ $part_size -eq $size ] || {
+            echo "$label: Partition size mismatch.  Found $part_size, expected $size"
+            return 1
+        }
+    done
+
+    return 0
+}
+
+# Creates a GPT partition
+create_gpt_partition()
+{
+    p=$1
+    for v in part label start size gpt_uuid ; do
+        eval $v='$'${p}_$v
+    done
+
+    [ "$verbose" = "yes" ] && echo "Creating $label on: ${onie_dev}$part"
+
+    # Create a new partition with the given start, size, gpt_uuid and
+    # name.  Additionally set partition attributes based on the
+    # particular partition.
+
+    case "$p" in
+        grub_boot | onie_boot | onie_eeprom) # WNC0_Vic, 2015/03/26, add onie_eeprom
+            # Set system partition (bit 0) and read-only (bit 60)
+            # attributes.
+            attr_bitmask="0x1000000000000001"
+            ;;
+        *)
+        echo "ERROR: unknown ONIE partition name: $p"
+        exit 1
+    esac
+
+    sgdisk_log=$(mktemp)
+    sgdisk --new=$part:$start:+$size \
+        --typecode=$part:$gpt_uuid \
+        --attributes=$part:=:$attr_bitmask \
+        --change-name=$part:"$label" "$onie_dev" > $sgdisk_log 2>&1 || {
+        echo "ERROR: Problems creating $label partition $part on: $onie_dev"
+        cat $sgdisk_log && rm -f $sgdisk_log
+        exit 1
+    }
+    rm -f $sgdisk_log
+}
+
+# Initializes the disk for GPT usage.
+# - Creates the GPT disk label on the device, wiping out all partitions
+# - Creates the needed GPT partitions
+init_gpt_disk()
+{
+    # Create GPT disk label
+    [ "$verbose" = "yes" ] && echo "Creating GPT disk label on: $onie_dev"
+    sgdisk_log=$(mktemp)
+    sgdisk --clear --mbrtogpt "$onie_dev" > $sgdisk_log 2>&1 || {
+        echo "ERROR: Problems creating GPT disk label on: $onie_dev"
+        cat $sgdisk_log && rm -f $sgdisk_log
+        exit 1
+    }
+    rm -f $sgdisk_log
+
+    # WNC0_Vic, 2015/03/26, add onie_eeprom
+    for p in grub_boot onie_boot onie_eeprom ; do
+        create_gpt_partition $p
+    done
+}
+
+# Verify the format of the ONIE partitions
+#   For each ONIE partition (GRUB-BOOT, ONIE-BOOT) verify:
+#     1. expected partition number
+#     2. expected partition GUID
+#     3. expected starting sector address
+#     4. expected partition size
+
+verify_gpt_partitions()
+{
+    # WNC0_Vic, 2015/03/26, add onie_eeprom
+    for p in grub_boot onie_boot onie_eeprom ; do
+        for v in part label start size gpt_uuid ; do
+            eval $v='$'${p}_$v
+        done
+
+        # Check UUID
+        sgdisk -i $part $onie_dev | grep -q $gpt_uuid || {
+            echo "$label: Unable to find GUID $gpt_uuid on $onie_dev"
+            return 1
+        }
+
+        # Check starting sector
+        part_start=$(sgdisk -i $part $onie_dev | grep 'First sector:' | awk '{ print $3 }')
+        [ $part_start -eq $start ] || {
+            echo "$label: Start sector mismatch.  Found $part_start, expected $start"
+            return 1
+        }
+
+        # Check partition size
+        part_size=$(sgdisk -i $part $onie_dev | grep 'Partition size:' | awk '{ print $3 }')
+        [ $part_size -eq $size ] || {
+            echo "$label: Partition size mismatch.  Found $part_size, expected $size"
+            return 1
+        }
+    done
+
+    return 0
+}
+
+# Installs GRUB in the specified location.
+#
+# arg $1 -- location, a string.  Either "mbr" or "part".
+# arg $2 -- install device
+# arg $3 -- install directory
+
+install_grub()
+{
+    location="$1"
+    boot_dev="$2"
+    boot_dir="$3"
+
+    [ "$verbose" = "yes" ] && echo "Installing GRUB in device: $boot_dev, boot-directory: $boot_dir"
+
+    if [ "$location" = "part" ] ; then
+        # We are installing GRUB in a partition, as opposed to the
+        # MBR.  With this method block lists are used to refer to the
+        # the core.img file.  The sector locations of core.img may
+        # change whenever the file system in the partition is being
+        # altered (files copied, deleted etc.). For more info, see
+        # https://bugzilla.redhat.com/show_bug.cgi?id=728742 and
+        # https://bugzilla.redhat.com/show_bug.cgi?id=730915.
+        #
+        # The workaround for this is to set the immutable flag on
+        # /boot/grub/i386-pc/core.img using the chattr command so that
+        # the sector locations of the core.img file in the disk is not
+        # altered. The immutable flag on /boot/grub/i386-pc/core.img
+        # needs to be set only if GRUB is installed to a partition
+        # boot sector or a partitionless disk, not in case of
+        # installation to MBR.
+
+        core_img="$boot_dir/grub/i386-pc/core.img"
+        # remove immutable flag if file exists during an update.
+        [ -f "$core_img" ] && chattr -i $core_img
+    fi
+
+    grub_install_log=$(mktemp)
+    grub-install --force --boot-directory="$boot_dir" \
+        --recheck "$boot_dev" > /$grub_install_log 2>&1 || {
+        echo "ERROR: grub-install failed on: $boot_dev"
+        cat $grub_install_log && rm -f $grub_install_log
+        exit 1
+    }
+    rm -f $grub_install_log
+
+    if [ "$location" = "part" ] ; then
+        # restore immutable flag on the core.img file as discussed
+        # above.
+        [ -f "$core_img" ] && chattr +i $core_img
+    fi
+
+    # Copy grub configuration fragments into onie directory
+    /bin/cp -a grub grub.d $boot_dir/onie || {
+        echo "ERROR: copying grub files to destatition: $boot_dir/onie"
+        exit 1
+    }
+
+    # Create initial grub.cfg file.
+
+    # Set a few GRUB_xxx environment variables that will be picked up and
+    # used by the 50_onie_grub script.  This is similiar to what an OS
+    # would specify in /etc/default/grub.
+    #
+    # GRUB_SERIAL_COMMAND
+    # GRUB_CMDLINE_LINUX
+    
+    DEFAULT_GRUB_SERIAL_COMMAND="serial --port=%%CONSOLE_PORT%% --speed=%%CONSOLE_SPEED%% --word=8 --parity=no --stop=1"
+    DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8 %%EXTRA_CMDLINE_LINUX%%"
+    GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
+    GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
+    export GRUB_SERIAL_COMMAND
+    export GRUB_CMDLINE_LINUX
+
+    $boot_dir/onie/grub.d/50_onie_grub >> $grub_root_dir/grub.cfg
+
+}
+
+install_onie()
+{
+
+    [ -r ./onie-blkdev-common ] || {
+        echo "ERROR: Unable to find onie-blkdev-common"
+        exit 1
+    }
+    . ./onie-blkdev-common
+
+    # Find install device.
+    # - Default value from burned in install.conf
+    # - Overridden with -d CLI arg
+    [ -b "$onie_dev" ] || {
+        echo "ERROR: Invalid ONIE install device: $onie_dev"
+        exit 1
+    }
+
+    echo "Installing ONIE on: $onie_dev"
+    
+    if [ -n "$pre_install_hook" ]; then
+        eval $pre_install_hook || {
+            echo "Error: pre-install failed"
+            exit 1
+        }
+    fi
+ 
+    if [ "$onie_boot_reason" = "embed" ] ; then
+        # umount any partitions that might be mounted on this disk
+        for p in $(seq 8) ; do
+            umount ${onie_dev}$blk_suffix$p > /dev/null 2>&1
+        done
+        # Initialize block device
+        eval $init_disk
+    else
+        # umount ONIE-BOOT if mounted
+        umount $(onie_get_boot_dev) > /dev/null 2>&1
+        eval $verify_partitions || {
+            echo "ERROR: Partitions on target device do not look right: $onie_dev"
+            echo "ERROR: Recommend re-embedding ONIE instead of updating."
+            exit 1
+        }
+    fi
+
+    mkdir -p $onie_boot_mnt
+
+    # Preserve the grubenv file if it exists
+    if mount -o defaults,rw -t $onie_boot_fs_type $onie_boot_dev $onie_boot_mnt > /dev/null 2>&1 ; then
+        if [ -r $grub_env_file ] ; then
+            preserve_grubenv=yes
+            cp $grub_env_file /tmp/grubenv
+        fi
+        umount $onie_boot_mnt > /dev/null 2>&1
+    fi
+
+    # Create file system on ONIE-BOOT partition
+    onie_boot_dev="${onie_dev}$blk_suffix$onie_boot_part"
+    [ "$verbose" = "yes" ] && echo "Creating $onie_boot_fs_type file system on: $onie_boot_dev"
+    mkfs.$onie_boot_fs_type -q -L $onie_boot_label $onie_boot_dev || {
+        echo "Error: Unable to create $onie_boot_fs_type file system on: $onie_boot_dev"
+        exit 1
+    }
+
+    mount -o defaults,rw -t $onie_boot_fs_type $onie_boot_dev $onie_boot_mnt || {
+        echo "Error: Unable to mount $onie_boot_label ($onie_boot_dev) on ${onie_boot_mnt}"
+        exit 1
+    }
+
+    # Put the ONIE kernel and initramfs into place.
+    mkdir -p $onie_root_dir
+    kernel_name="vmlinuz-${image_kernel_version}-onie"
+    initrd_name="initrd.img-${image_kernel_version}-onie"
+    cp onie.vmlinuz $onie_root_dir/$kernel_name || {
+        echo "Error: Unable to copy ONIE kernel to $onie_boot_mnt/$kernel_name"
+        exit 1
+    }
+    cp onie.initrd $onie_root_dir/$initrd_name || {
+        echo "Error: Unable to copy ONIE initrd to $onie_boot_mnt/$initrd_name"
+        exit 1
+    }
+    # install ONIE tools
+    rm -rf $onie_root_dir/tools && mkdir -p $onie_root_dir/tools
+    tar -C $onie_root_dir/tools -xf onie-tools.tar.xz || {
+        echo "Error: Unable to copy ONIE tools to $onie_root_dir/tools"
+        exit 1
+    }
+
+    if [ "$onie_boot_reason" = "embed" ] ; then
+        # When embedding ONIE install ONIE's grub into the MBR block
+        # device, e.g. /dev/sda.
+        install_grub mbr $onie_dev $onie_boot_mnt || {
+            echo "Error: Problems installing GRUB on device: $onie_dev, $onie_boot_mnt"
+            exit 1
+        }
+    fi
+
+    # Also install GRUB on the ONIE partition block device,
+    # e.g. /dev/sda1.
+    install_grub part $onie_boot_dev $onie_boot_mnt || {
+        echo "Error: Problems installing GRUB on device: ${onie_boot_dev}, $onie_boot_mnt"
+        exit 1
+    }
+
+    # Restore the previous grubenv file
+    if [ "$preserve_grubenv" = "yes" ] ; then
+        cp /tmp/grubenv $grub_env_file
+    fi
+
+    # Return to default boot mode on the next boot.  Use this
+    # installer's version of onie-boot-mode.
+    $onie_root_dir/tools/bin/onie-boot-mode -q -o none
+
+    umount $onie_boot_mnt || {
+        echo "Error: Unable to umount ${onie_boot_mnt}"
+        exit 1
+    }
+
+    if [ -n "$post_install_hook" ]; then
+        eval $post_install_hook || {
+            echo "Error: post-install failed"
+            exit 1
+        }
+    fi
+
+    # Set platform name and ONIE version to sys_eeprom.
+    if [ -x /usr/bin/onie-syseeprom ] ; then
+        onie-syseeprom -s 0x28="$image_platform",0x29="$image_version" > /dev/null
+    fi
+
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
