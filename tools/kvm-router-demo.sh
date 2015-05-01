@@ -18,16 +18,37 @@ BRCTL=brctl
 IP=ip
 KVM=kvm
 
-SCREEN=demo
+SCREEN=tutorial
 BRIDGES="br-h1-r1 br-r1-r2 br-r2-h2"
 INTERFACES="h1-eth1 h2-eth1 $BRIDGES"
-NAMESPACES="h1 h2 r1 r2"
+NAMESPACES="h1 h2"
 PREFIX="10.99"
+SWI=onl-i386-kvm.swi
 SRC_KVM_IMG=onl-i386.img
 #KVM_OPTS="-m 1024 -cdrom loader-i386.iso -boot d -nographic -hda onl-i386.img"
 KVM_OPTS="-m 1024 -cdrom loader-i386.iso -boot d -nographic -chardev pty,id=pty0 "
 
 do_setup() {
+
+   # shipping the .swi is much smaller than shipping the .img!
+   if [ ! -f $SRC_KVM_IMG ] ; then
+           echo Making $SRC_KVM_IMG from $SWI
+           mkdosfs -F 32 -C $SRC_KVM_IMG 1000000
+           mcopy -i $SRC_KVM_IMG $SWI ::onl-i386.swi
+           echo "SWI=flash:onl-i386.swi" > boot-config
+           echo "NETDEV=ma1" >> boot-config
+           echo "NETAUTO=dhcp" >> boot-config
+           mcopy -i $SRC_KVM_IMG boot-config ::boot-config
+           rm boot-config
+   fi
+
+   if [ ! -f onl-r1.img ] ; then
+        cp $SRC_KVM_IMG onl-r1.img
+   fi
+
+   if [ ! -f onl-r12img ] ; then
+        cp $SRC_KVM_IMG onl-r2.img
+   fi
 
    for bridge in $BRIDGES; do 
       echo Adding bridge $bridge
@@ -72,23 +93,30 @@ do_setup() {
    $IP addr change ${PREFIX}.3.1 broadcast ${PREFIX}.3.255 dev br-r1-r2
    $IP route add ${PREFIX}.3.0/24 dev br-r1-r2
 
-   echo Starting ONL image Router1
-   screen -S $SCREEN -d -m $KVM $KVM_OPTS \
-	-name router1 \
-	-vnc :0 \
-	-net nic -net user,net=${PREFIX}.14.0/24,hostname=router1 \
-	-net nic -net tap,ifname=r1-eth0,script=no,downscript=no \
-	-net nic -net tap,ifname=r1-eth1,script=no,downscript=no \
-	-hda onl-r1.img 
+    tmux new -s $SCREEN \; detach
+    echo Starting ONL image Router1
+    tmux new-window -n router1 "$KVM $KVM_OPTS \
+            -name router1 \
+            -vnc :0 \
+            -net nic -net user,net=${PREFIX}.14.0/24,hostname=router1 \
+            -net nic -net tap,ifname=r1-eth0,script=no,downscript=no \
+            -net nic -net tap,ifname=r1-eth1,script=no,downscript=no \
+            -hda onl-r1.img"
 
    echo Starting ONL image Router2
-   screen -S $SCREEN -X screen $KVM $KVM_OPTS \
-	-name router2 \
-	-vnc :1 \
-	-net nic -net user,net=${PREFIX}.24.0/24,hostname=router2 \
-	-net nic -net tap,ifname=r2-eth0,script=no,downscript=no \
-	-net nic -net tap,ifname=r2-eth1,script=no,downscript=no \
-	-hda onl-r2.img 
+   tmux new-window -n router2 "$KVM $KVM_OPTS \
+            -name router2 \
+            -vnc :1 \
+            -net nic -net user,net=${PREFIX}.24.0/24,hostname=router2 \
+            -net nic -net tap,ifname=r2-eth0,script=no,downscript=no \
+            -net nic -net tap,ifname=r2-eth1,script=no,downscript=no \
+            -hda onl-r2.img"
+
+   echo Starting Shell for H1
+   tmux new-window -n H1 "ip netns exec H1 bash"
+
+   echo Starting Shell for H2
+   tmux new-window -n H2 "ip netns exec H2 bash"
 
    echo Waiting a bit for KVM to start
    sleep 2
@@ -104,27 +132,29 @@ do_setup() {
 
 do_teardown() {
 
-   echo '*** ' Killing all KVM instances
-   killall qemu-system-x86_64
+    echo '*** ' Killing all KVM instances
+    killall qemu-system-x86_64
 
-   echo '*** ' Bringing down all interfaces
-   for intf in $INTERFACES ; do 
-      $IP link set dev $intf down
-   done
-   for bridge in $BRIDGES; do 
-      echo '*** ' Removing bridge $bridge
-      $BRCTL delbr $bridge 
-   done
+    echo '*** ' Bringing down all interfaces
+    for intf in $INTERFACES ; do 
+       $IP link set dev $intf down
+    done
+    for bridge in $BRIDGES; do 
+       echo '*** ' Removing bridge $bridge
+       $BRCTL delbr $bridge 
+    done
 
-   echo '*** ' Removing Namespaces
-   for ns in $NAMESPACES ; do 
-       echo '*** ' Removing namespace $ns
-       $IP netns delete $ns
-   done
+    echo '*** ' Removing Namespaces
+    for ns in $NAMESPACES ; do 
+        echo '*** ' Removing namespace $ns
+        $IP netns delete $ns
+    done
 
-   echo '*** ' Removing screen \'$SCREEN\'
-   screen -wipe $SCREEN
+    echo '*** ' Removing screen \'$SCREEN\'
+    screen -wipe $SCREEN
 	
+    echo '*** ' Removing Router KVM images
+    rm onl-r1.img onl-r2.img
 
    # Not needed anymore
    #echo Removing h1 interfaces
@@ -147,6 +177,7 @@ do_show () {
     pgrep qemu-system-x86_6
     echo '*** ' Screen instances
     screen -ls
+
 }
 
 die () {
