@@ -50,6 +50,13 @@ do_setup() {
         cp $SRC_KVM_IMG onl-r2.img
    fi
 
+    # Create KVM device 
+    if [ ! -e /dev/kvm ]; then
+        set +e
+        mknod /dev/kvm c 10 $(grep '\<kvm\>' /proc/misc | cut -f 1 -d' ')   
+        set -e
+    fi
+
    for bridge in $BRIDGES; do 
       echo Adding bridge $bridge
       $BRCTL addbr $bridge || die "$BRCTL addbr $bridge Failed"
@@ -99,8 +106,8 @@ do_setup() {
             -name router1 \
             -vnc :0 \
             -net nic -net user,net=${PREFIX}.14.0/24,hostname=router1 \
-            -net nic -net tap,ifname=r1-eth0,script=no,downscript=no \
             -net nic -net tap,ifname=r1-eth1,script=no,downscript=no \
+            -net nic -net tap,ifname=r1-eth2,script=no,downscript=no \
             -hda onl-r1.img"
 
    echo Starting ONL image Router2
@@ -108,26 +115,30 @@ do_setup() {
             -name router2 \
             -vnc :1 \
             -net nic -net user,net=${PREFIX}.24.0/24,hostname=router2 \
-            -net nic -net tap,ifname=r2-eth0,script=no,downscript=no \
             -net nic -net tap,ifname=r2-eth1,script=no,downscript=no \
+            -net nic -net tap,ifname=r2-eth2,script=no,downscript=no \
             -hda onl-r2.img"
 
    echo Starting Shell for H1
-   tmux new-window -n H1 "ip netns exec H1 bash"
+   tmux new-window -n H1 -t $SCREEN "ip netns exec h1 bash"
 
    echo Starting Shell for H2
-   tmux new-window -n H2 "ip netns exec H2 bash"
+   tmux new-window -n H2 -t $SCREEN "ip netns exec h2 bash"
 
    echo Waiting a bit for KVM to start
    sleep 2
 
-   for intf in r1-eth0 r1-eth1 r2-eth0 r2-eth1 ; do 
+   for intf in r1-eth1 r1-eth2 r2-eth1 r2-eth2 ; do 
 	$IP link set dev $intf up
    done
-   $BRCTL addif br-h1-r1 r1-eth0 || die "$BRCTL addif br-h1-r1 r1-eth0"
-   $BRCTL addif br-r2-h2 r2-eth0 || die "$BRCTL addif br-r2-h2 r2-eth0"
-   $BRCTL addif br-r1-r2 r1-eth1 || die "$BRCTL addif br-r1-r2 r1-eth1"
-   $BRCTL addif br-r1-r2 r2-eth1 || die "$BRCTL addif br-r1-r2 r2-eth1"
+
+    # attach R1:e1 to H1
+    $BRCTL addif br-h1-r1 r1-eth1 || die "$BRCTL addif br-h1-r1 r1-eth1"
+    # attach R2:e1 to H2
+    $BRCTL addif br-r2-h2 r2-eth1 || die "$BRCTL addif br-r2-h2 r2-eth1"
+    # attach R1:e2 to R2:e2
+    $BRCTL addif br-r1-r2 r1-eth2 || die "$BRCTL addif br-r1-r2 r1-eth2"
+    $BRCTL addif br-r1-r2 r2-eth2 || die "$BRCTL addif br-r1-r2 r2-eth2"
 }
 
 do_teardown() {
@@ -151,7 +162,7 @@ do_teardown() {
     done
 
     echo '*** ' Removing screen \'$SCREEN\'
-    screen -wipe $SCREEN
+    tmux kill-session -t $SCREEN
 	
     echo '*** ' Removing Router KVM images
     rm onl-r1.img onl-r2.img
@@ -176,7 +187,7 @@ do_show () {
     echo '*** ' KVM instances:
     pgrep qemu-system-x86_6
     echo '*** ' Screen instances
-    screen -ls
+    tmux  ls
 
 }
 
@@ -187,7 +198,7 @@ die () {
 }
 
 do_usage() {
-   echo "Usage: $0 <-setup|-teardown|-show|-shell h1 h2 r1 r2>" >&2
+   echo "Usage: $0 <-setup|-teardown|-show>" >&2
    exit 1
 }
 

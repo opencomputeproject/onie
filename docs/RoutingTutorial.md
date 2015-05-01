@@ -88,6 +88,7 @@ Now we configure our network to look like the reference topology:
 From tmux, hit ctl+b and then '1' to go to the first router, login as root
 (password 'onl'), and then cut and paste these commands:
 
+    dhclient ma1
     hostname router1
     exec bash
     ifconfig eth1 10.99.1.3 netmask 255.255.255.0
@@ -99,6 +100,7 @@ And then confirm that R1 can reach H1 with:
 
 Now use ctl+b and then '2' to switch to route2 and execute the equivalent commands:
 
+    dhclient ma1
     hostname router2
     exec bash
     ifconfig eth1 10.99.3.3 netmask 255.255.255.0
@@ -108,3 +110,9 @@ And then confirm that R2 can reach H2 and R1 with:
     
     ping 10.99.2.2       # can we reach H2?
     ping 10.99.3.2       # can we reach R1?
+
+Note that at this point, because there is no dynamic routing in place, H1 cannot ping H2:
+
+
+
+
