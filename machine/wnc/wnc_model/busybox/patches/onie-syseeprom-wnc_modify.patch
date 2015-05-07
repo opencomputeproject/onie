@@ -1,0 +1,174 @@
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index 3003bd6..baf5094 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -2,6 +2,26 @@
+ #include "onie_tlvinfo.h"
+ #include <getopt.h>
+ 
++/* refer with celestica i2c-tool patch.*/
++static const struct tlv_code_desc tlv_code_default[] = {
++    { TLV_CODE_PRODUCT_NAME	 , "WNC-X86-ONIE"},
++    { TLV_CODE_PART_NUMBER	 , "xxxxx-yyyyy-zz"},
++    { TLV_CODE_SERIAL_NUMBER , "WNC0000000001"},
++    { TLV_CODE_MAC_BASE	     , "00:00:00:00:00:01"},
++    { TLV_CODE_MANUF_DATE	 , "04/15/2015 14:30:00"},//MM/DD/YYYY hh:mm:ss
++    { TLV_CODE_DEVICE_VERSION, "0"},
++    { TLV_CODE_LABEL_REVISION, "WNC-X86-ONIE-REV_0"},
++    { TLV_CODE_PLATFORM_NAME , "WNC-X86-ONIE"},
++    { TLV_CODE_ONIE_VERSION	 , "2014.04"},
++    { TLV_CODE_MAC_SIZE	     , "73"},
++    { TLV_CODE_MANUF_NAME	 , "WNC"},
++    { TLV_CODE_MANUF_COUNTRY , "TW"},
++    { TLV_CODE_VENDOR_NAME	 , "XXX"},
++    { TLV_CODE_DIAG_VERSION	 , "1.0.0"},
++    { TLV_CODE_SERVICE_TAG   , "LB"},
++    { TLV_CODE_VENDOR_EXT	 , "66"},
++};
++
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+ /*
+  *  This macro defines the onie-syseeprom command line command.
+@@ -22,7 +42,7 @@ cmd_usage()
+ {
+     static const char *usage =
+ 	"Display and program the system EEPROM data block.\n"
+-	"Usage: onie-syseeprom [-h][-l] [-e] [-s <code>=<value>,...]\n"
++	"Usage: sys-eeprom [-h][-l] [-e] [-s <code>=<value>,...]\n"
+ 	"   With no arguments display the EEPROM contents.\n"
+ 	"   -h --help\n"
+ 	"      Display usage\n"
+@@ -30,11 +50,15 @@ cmd_usage()
+ 	"      List the understood TLV codes and names.\n"
+ 	"   -e --erase\n"
+ 	"      Reset the EEPROM data.\n"
++	"   -r --restore\n"
++	"      Restore the EEPROM data to default.\n"
+ 	"   -g --get <code>\n"
+ 	"      Look up a TLV by code and write the value to stdout.\n"
+ 	"   -s --set <code>=<value>,<code>=<value>...\n"
+ 	"      Set a TLV code to a value.\n"
+-	"      If no value, TLV is deleted.\n";
++	"      If no value, TLV is deleted.\n"
++	"   -d --dump\n"
++	"      Dump the EEPROM TLV data.\n";
+ 
+     fprintf(stderr, "%s", usage);
+     exit(1);
+@@ -58,13 +82,15 @@ int onie_syseeprom_main(int argc, char **argv)
+ 	sizeof(tlv_code_list[0]);
+ 
+     char *tokens[tlv_code_count + 1];
+-    const char *short_options = "hels:g:";
++    const char *short_options = "helrs:g:d";
+     const struct option long_options[] = {
+ 	{"help",    no_argument,          0,    'h'},
+ 	{"list",    no_argument,          0,    'l'},
+ 	{"erase",   no_argument,          0,    'e'},
++	{"restore",	no_argument,		  0,	'r'}, // refer with celestica i2c-tool patch
+ 	{"set",     required_argument,    0,    's'},
+ 	{"get",     required_argument,    0,    'g'},
++	{"dump",    no_argument,          0,    'd'},
+ 	{0,         0,                    0,      0},
+     };
+ 
+@@ -99,6 +125,31 @@ int onie_syseeprom_main(int argc, char **argv)
+ 	    update = 1;
+ 	    break;
+ 
++	case 'r':
++	    if (read_eeprom(eeprom)) {
++                err = 1;
++			printf("goto syseeprom_err\n");
++			//goto syseeprom_err;
++	    }
++		//printf("update_eeprom_header\n");
++	    update_eeprom_header(eeprom);
++		for (i = 0; i < sizeof(tlv_code_default)/sizeof(struct tlv_code_desc); i++) {
++		//printf("Enter process i=%d\n",i);
++		    if (tlvinfo_delete_tlv(eeprom, tlv_code_default[i].m_code) == TRUE) {
++			    printf("Deleting TLV 0x%X: %s\n", tlv_code_default[i].m_code, tlv_code_list[i].m_name);
++		    }
++			if (!tlvinfo_add_tlv(eeprom, tlv_code_default[i].m_code, tlv_code_default[i].m_name)) {
++                            err = 1;
++				    goto syseeprom_err;
++			} else {
++			    printf("Adding   TLV 0x%X: %s\n", tlv_code_default[i].m_code, tlv_code_default[i].m_name);
++			}
++			//printf("i=%d\n",i);
++		}		
++		printf("update eeprom\n");
++	    update = 1;
++	    break;
++
+ 	case 's':
+ 	    subopts = optarg;
+ 	    while (*subopts != '\0' && !err) {
+@@ -148,6 +199,14 @@ int onie_syseeprom_main(int argc, char **argv)
+             goto syseeprom_err;
+ 	break;
+ 
++	case 'd':
++        if (read_eeprom(eeprom)) {
++            err = 1;
++            goto syseeprom_err;
++        }
++        show_eeprom(eeprom);
++	break;
++
+ 	default:
+ 	    cmd_usage();
+             err = 1;
+diff --git a/miscutils/sys_eeprom_mtd.c b/miscutils/sys_eeprom_mtd.c
+index 119d77c..aac2e96 100644
+--- a/miscutils/sys_eeprom_mtd.c
++++ b/miscutils/sys_eeprom_mtd.c
+@@ -23,6 +23,7 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ 	return -1;
+     }
+ 
++    /*
+     rc = ioctl(fd, MEMGETINFO, &mtdinfo);
+ 
+     if (rc < 0) {
+@@ -34,6 +35,7 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+         fprintf (stderr, "Unsupported flash type %u\n", mtdinfo.type);
+         return -1;
+     }
++    */
+ 
+     if (lseek (fd, offset + SYS_EEPROM_OFFSET, SEEK_SET) == -1) {
+ 	fprintf (stderr, "Seek error on %s: %s\n",
+@@ -78,6 +80,7 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 	return -1;
+     }
+ 
++    /*
+     rc = ioctl(fd, MEMGETINFO, &mtdinfo);
+ 
+     if (rc < 0) {
+@@ -89,19 +92,24 @@ int write_sys_eeprom(void *eeprom_data, int len)
+         fprintf (stderr, "Unsupported flash type %u\n", mtdinfo.type);
+         return -1;
+     }
++    */
+ 
+     /*
+      * erase entire sys_eeprom
+      */
++
++    /*
+     erase.length = mtdinfo.size;
+     erase.start = 0;
+     ioctl (fd, MEMUNLOCK, &erase);
+ 
++
+     if (ioctl (fd, MEMERASE, &erase) != 0) {
+ 	fprintf (stderr, "MTD erase error on %s: %s\n",
+ 		SYS_EEPROM_MTD_DEVICE, strerror (errno));
+ 	return -1;
+     }
++    */
+ 
+     if (lseek (fd, SYS_EEPROM_OFFSET, SEEK_SET) == -1) {
+ 	fprintf (stderr, "Seek error on %s: %s\n",
