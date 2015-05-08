@@ -27,7 +27,7 @@ from onl.platform.base import OpenNetworkPlatformBase, sysinfo
 import struct
 import time
 
-class OpenNetworkPlatformDNI(OpenNetworkPlatformBase):
+class OpenNetworkPlatformDELL(OpenNetworkPlatformBase):
 
     def manufacturer(self):
         return "DELL"
