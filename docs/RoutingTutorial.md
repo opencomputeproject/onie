@@ -4,23 +4,23 @@
 The goal of the tutorial is to ping between virtual hosts connected via
 virtual routers.
 
-These instructions walk you through setting up a docker environment to
-run virtual ONL KVM instances and Quagga in a virtual network and 
+These instructions walk you through setting up a virtual environment to
+run nested virtual ONL KVM instances and Quagga on a virtual network and 
 configure BGP/OSPF etc. routes, peering, and other fun things.
 
 
 #Host Requirements
 -------------------------------------------------
 
-This tutorial assumes that you have access to a Linux host (physical
-server or VM) that is modern enough to run docker.  This typically means
-a kernel newer than 3.10.x.
+This tutorial assumes that you can create a virtual machine from the
+'onl-routing-tutorial.iso'.  The tutorial ISO is a self-contained live CD 
+of Open Network Linux (based on Debian Wheezy).  From the ISO, you will 
+have to create a virtual machine with the following requirements
 
 Requirements:
-- docker v1.0 or above 
-- About 3GB of free disk space
-- About 4GB of RAM
-
+- Single CPU is ok, but multiple is recommended.
+- 4GB of RAM
+- ~300 MB of free diskspace
 
 # Tutorial Overview
 -------------------------------------------------
@@ -31,32 +31,17 @@ physical hosts and physical routers (e.g., using `orc`), but virtually is
 easier to setup for self-guided tutorial.  In principle, many of these same
 steps will work with a physical setup.
 
-1. Download and install pre-built docker image 'opennetworklinux/routing-tutorial'
+1. Download the pre-built ISO 'onl-routing-tutorial.iso' and create a VM
 2. Run the kvm-router-demo.sh script to spawn the virtual topology
 3. Configure quagga on the corresponding routers so that they peer
 4. Verify that the virtual hosts can ping each other through the routers
 
 
-# Download Tutorial Image
+# Download Tutorial Image And Create VM
 -------------------------------------------------
 
-If your docker installation is working, this should be easy:
-
-    docker pull onl/routing-tutorial
-    docker run -i -t --privileged  \
-        -h "tutorial" \
-        opennetworklinux/routing-tutorial 
-
-If you do not have docker installed on your system, consider
-    sudo apt-get install lxc-docker
-
-or
-    wget -qO- https://get.docker.com/ | sh
-
-Also, your docker binary might be called 'docker' not 'docker.io'
-depending on your system. 
-
-
+Download the image from:
+    
 
 # Start Up Virtual Hosts and Routers
 -------------------------------------------------
@@ -116,3 +101,13 @@ Note that at this point, because there is no dynamic routing in place, H1 cannot
 
 
 
+
+
+
+#NOTES ON TUTORIAL DEVELOPMENT
+-----------------------------------
+
+* Tried to use docker instead of an ISO image
+    ** The nested KVMs would hang when I pinged from one to the other - no idea why
+    ** `screen` could never work - would just hang
+    ** Existing ONL build infrastructure was easy to adapt to my needs (thanks Jeff!)
