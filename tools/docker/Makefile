@@ -17,7 +17,7 @@ else
 SSH_AGENT=
 endif
 
-DOCKER=docker.io
+DOCKER=docker
 
 
 all: docker_run

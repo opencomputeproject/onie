@@ -16,7 +16,7 @@ build system is:
 
 On a modern Ubuntu system, you can get these with:
 
-    # apt-get install docker.io binfmt-support
+    # apt-get install lxc-docker binfmt-support
 
 Historical Note: the previous workspace workflow (with `onl-mkws` and
 `onl-chws`) was actually a home grown Docker-like Linux container based
@@ -42,7 +42,7 @@ $ONL/builds/swi/$ARCH/all/onl-$VERSION-all.swi.
 
 Docker installer oneliner (for reference: see docker.com for details)
 
-    # apt-get install -y docker.io
+    # apt-get install -y lxc-docker
 or
 
     # wget -qO- https://get.docker.com/ | sh
@@ -52,7 +52,7 @@ Common docker related issues:
 
 - Check out http://docs.docker.com/installation/ubuntulinux/ for detailed instructions
 - You may have to update your kernel to 3.10+
-- Beware that `apt-get install docker` installs a dock application not docker :-)  You want the docker.io package instead.
+- Beware that `apt-get install docker` installs a dock application not docker :-)  You want the lxc-docker package instead.
 - Some versions of docker are unhappy if you use a local DNS caching resolver:
 	- e.g., you have 127.0.0.1 in your /etc/resolv.conf
         - if you have this, specify DNS="--dns 8.8.8.8" when you enter the docker environment
