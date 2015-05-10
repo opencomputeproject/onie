@@ -1,4 +1,3 @@
-# -*- Makefile -*-
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 # 
@@ -20,40 +19,11 @@
 # </bsn.cl>
 ############################################################
 #
-#
+# Open Network Linux KVM Rootfs 
 #
 ############################################################
-ifndef ONL
-$(error $$ONL is not defined.)
-else
-include $(ONL)/make/config.mk
-endif
 
-ifndef IMG_SIZE
-IMG_SIZE=2097152
-endif
+ROOTFS_BUILD_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+ROOTFS_ARCH := i386
+include $(ONL)/make/rootfs.mk
 
-.DEFAULT_GOAL := all
-
-# Pull loader from the repo
-loader-i386.iso := $(shell $(ONL_PKG_INSTALL) loader-i386:i386 --find-file loader-i386.iso)
-
-SWI := $(ONL)/builds/swi/i386/kvm/onl-$(ONL_RELEASE_VERSION)-i386-kvm.swi
-
-# Rebuild i386.swi
-$(SWI):
-	$(MAKE) -C $(dir $(SWI))
-
-# Create hda image with integrated SWI
-onl-i386.img: $(SWI)
-	rm -f $@
-	mkdosfs -F 32 -C $@ $(IMG_SIZE)
-	mcopy -i $@ $(SWI) ::onl-i386.swi
-	echo "SWI=flash:onl-i386.swi" > boot-config
-	echo "NETDEV=ma1" >> boot-config
-	echo "NETAUTO=dhcp" >> boot-config
-	mcopy -i $@ boot-config ::boot-config
-	rm boot-config
-
-all: $(loader-i386.iso) onl-i386.img
-	cp $(loader-i386.iso) . 

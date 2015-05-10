@@ -42,13 +42,13 @@ steps will work with a physical setup.
 
 If your docker installation is working, this should be easy:
 
-    docker.io pull onl/routing-tutorial
-    docker.io run -i -t --privileged  \
+    docker pull onl/routing-tutorial
+    docker run -i -t --privileged  \
         -h "tutorial" \
         opennetworklinux/routing-tutorial 
 
 If you do not have docker installed on your system, consider
-    sudo apt-get install docker.io
+    sudo apt-get install lxc-docker
 
 or
     wget -qO- https://get.docker.com/ | sh
@@ -88,11 +88,11 @@ Now we configure our network to look like the reference topology:
 From tmux, hit ctl+b and then '1' to go to the first router, login as root
 (password 'onl'), and then cut and paste these commands:
 
-    dhclient ma1
     hostname router1
     exec bash
     ifconfig eth1 10.99.1.3 netmask 255.255.255.0
     ifconfig eth2 10.99.3.2 netmask 255.255.255.0
+    echo 1 > /proc/sys/net/ipv4/ip_forward
 
 And then confirm that R1 can reach H1 with:
     
@@ -100,11 +100,11 @@ And then confirm that R1 can reach H1 with:
 
 Now use ctl+b and then '2' to switch to route2 and execute the equivalent commands:
 
-    dhclient ma1
     hostname router2
     exec bash
-    ifconfig eth1 10.99.3.3 netmask 255.255.255.0
-    ifconfig eth2 10.99.2.3 netmask 255.255.255.0
+    ifconfig eth1 10.99.2.3 netmask 255.255.255.0
+    ifconfig eth2 10.99.3.3 netmask 255.255.255.0
+    echo 1 > /proc/sys/net/ipv4/ip_forward
 
 And then confirm that R2 can reach H2 and R1 with:
     
