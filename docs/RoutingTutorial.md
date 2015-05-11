@@ -18,12 +18,12 @@ translate with a physical setup.
 
 ## Tutorial Overview
 
-1. Verify your host statifies the tutorial requirements
+1. Verify your host satisfies the tutorial requirements
 2. Download the tutorial tarball and install in your environment
 3. Run the kvm-router-demo.sh script to spawn the virtual topology
 4. Configure quagga on the corresponding routers so that they peer
 5. Verify that the virtual hosts can ping each other through the routers
-6. Consider suggsted advanced steps in the same virtual environment
+6. Consider suggested advanced steps in the same virtual environment
 
 #Host Requirements
 -------------------------------------------------
@@ -36,9 +36,9 @@ Ubuntu 14.04 server installation so that is recommended.
 
 Host Requirements:
 
-- Single CPU is ok, but multiple is recommended.
+- Single CPU is OK, but multiple is recommended.
 - 4+GB of RAM
-- ~400 MB of free diskspace
+- ~400 MB of free disk space
 - Linux KVM
 - Linux bridge utilities
 - DOS FS tools and mtools package
@@ -195,7 +195,7 @@ Quagga has a standard, IOS-like looking shell called `vtysh`.
 Run `vtysh` and issue some of your favorite CLI commands:
     vtysh               
         show running-config
-        show bgp neighbot
+        show bgp neighbor
         show interface
 
 For the basic example, we are going to setup iBGP peering between
@@ -219,7 +219,7 @@ On router2, in the vtysh prompt:
 
 
 Now run `show bgp neighbors` to confirm we are correctly peered with an
-'Established' connection.  Note that 'Active' or 'Idle' indiciate a
+'Established' connection.  Note that 'Active' or 'Idle' indicate a
 problem with the setup.
 
 Now run `show ip route` to confirm we have learned the routes on both sides.  Your
@@ -258,7 +258,7 @@ to make some progress here.
   2. Spin up another KVM instance with three interfaces (cut and paste from script)
   3. Use the unused eth0 interfaces from 'r1' and 'r2' to add the the new bridges
   4. Once 'r3' is up, virtually bring down links with `ifconfig $bridge down` for each of the bridges
-2. Withdrawl the iBGP routes and repeat with:
+2. Withdrawal the iBGP routes and repeat with:
   1. OSPF
   2. ISIS
 3. Change the AS number of one of 'r1' or 'r2' to something new for an eBGP peering
