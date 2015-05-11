@@ -1,8 +1,9 @@
 #ONL Routing Tutorial
 -------------------------------------------------
 
-The goal of the tutorial is to ping between virtual hosts connected via
-virtual routers.
+The goal of the tutorial is to setup a virtual network of ONL KVM images
+running as virtual routers, setup Quagga, and ping between virtual hosts
+connected via virtual routers.
 
 These instructions walk you through setting up a virtual environment to
 run nested virtual ONL KVM instances and Quagga on a virtual network and 
@@ -47,7 +48,7 @@ Download the image from:
 -------------------------------------------------
 
     ./kvm-router-demo.sh -setup         # launch everything
-    tmux a 
+    tmux a                              # attach to the tmux instance
     
 If you take a look at the kvm-router-demo.sh script, it does lots
 of things:
@@ -67,7 +68,7 @@ of various tutorial elements.
 
 Now we configure our network to look like the reference topology:
 
-![Tutorial Topology](https://github.com/opennetworklinux/ONL/tools/docker.tutorial/topology.png "Tutorial Topology")
+![Tutorial Topology](https://raw.githubusercontent.com/opennetworklinux/ONL/master/tools/docker.tutorial/topology.png "Tutorial Topology")
 
 
 From tmux, hit ctl+b and then '1' to go to the first router, login as root
@@ -186,16 +187,3 @@ advanced steps you can take.
   2. ISIS
 3. Change the AS number of one of 'r1' or 'r2' to something new for an eBGP peering
 4. Repeat this tutorial with IPv6 addressing and routing
-
-#NOTES ON TUTORIAL DEVELOPMENT
------------------------------------
-
-* Touch up Talk
-* Print Labs user names
-* ONIE boot
-* Three routers
-
-* Tried to use docker instead of an ISO image
-  * The nested KVMs would hang when I pinged from one to the other - no idea why
-  * `screen` could never work - would just hang
-  * Existing ONL build infrastructure was easy to adapt to my needs (thanks Jeff!)
