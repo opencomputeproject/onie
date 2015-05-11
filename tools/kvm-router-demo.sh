@@ -37,7 +37,7 @@ do_setup() {
            mcopy -i $SRC_KVM_IMG $SWI ::onl-i386.swi
            echo "SWI=flash:onl-i386.swi" > boot-config
            echo "NETDEV=ma1" >> boot-config
-           echo "NETAUTO=dhcp" >> boot-config
+           #echo "NETAUTO=dhcp" >> boot-config
            mcopy -i $SRC_KVM_IMG boot-config ::boot-config
            rm boot-config
    fi
@@ -62,6 +62,10 @@ do_setup() {
       $BRCTL addbr $bridge || die "$BRCTL addbr $bridge Failed"
    done
 
+   $IP link set br-h1-r1 address 00:11:11:aa:aa:aa
+   $IP link set br-r1-r2 address 00:11:11:bb:bb:bb
+   $IP link set br-r2-h2 address 00:11:11:cc:cc:cc
+
    echo Adding Namespaces
    for ns in $NAMESPACES ; do 
        echo Creating namespace $ns
@@ -75,7 +79,7 @@ do_setup() {
    $IP netns exec h1 $IP addr change ${PREFIX}.1.2 broadcast ${PREFIX}.1.255 dev h1-eth0
    $IP netns exec h1 $IP link set dev lo up
    $IP netns exec h1 $IP route add ${PREFIX}.1.0/24 dev h1-eth0
-   $IP netns exec h1 $IP route add default via ${PREFIX}.1.1
+   $IP netns exec h1 $IP route add default via ${PREFIX}.1.3
 
     
    echo Adding h2 interfaces
@@ -85,7 +89,7 @@ do_setup() {
    $IP netns exec h2 $IP addr change ${PREFIX}.2.2 broadcast ${PREFIX}.2.255 dev h2-eth0
    $IP netns exec h2 $IP link set dev lo up
    $IP netns exec h2 $IP route add ${PREFIX}.2.0/24 dev h2-eth0
-   $IP netns exec h2 $IP route add default via ${PREFIX}.2.1
+   $IP netns exec h2 $IP route add default via ${PREFIX}.2.3
 
    echo Bringing up all interfaces
    for intf in $INTERFACES ; do 
@@ -97,27 +101,30 @@ do_setup() {
    $IP route add ${PREFIX}.1.0/24 dev br-h1-r1
    $IP addr change ${PREFIX}.2.1 broadcast ${PREFIX}.2.255 dev br-r2-h2
    $IP route add ${PREFIX}.2.0/24 dev br-r2-h2
-   $IP addr change ${PREFIX}.3.1 broadcast ${PREFIX}.3.255 dev br-r1-r2
-   $IP route add ${PREFIX}.3.0/24 dev br-r1-r2
+    # don't add an IP for the inter-router interface ; causes a loop(?)
+   #$IP addr change ${PREFIX}.3.1 broadcast ${PREFIX}.3.255 dev br-r1-r2
+   #$IP route add ${PREFIX}.3.0/24 dev br-r1-r2
 
     tmux new -s $SCREEN \; detach
     echo Starting ONL image Router1
     tmux new-window -n router1 "$KVM $KVM_OPTS \
             -name router1 \
             -vnc :0 \
-            -net nic -net user,net=${PREFIX}.14.0/24,hostname=router1 \
-            -net nic -net tap,ifname=r1-eth1,script=no,downscript=no \
-            -net nic -net tap,ifname=r1-eth2,script=no,downscript=no \
+            -net nic,macaddr=52:54:00:00:01:00 -net tap,ifname=r1-eth0,script=no,downscript=no \
+            -net nic,macaddr=52:54:00:00:01:01 -net tap,ifname=r1-eth1,script=no,downscript=no \
+            -net nic,macaddr=52:54:00:00:01:02 -net tap,ifname=r1-eth2,script=no,downscript=no \
             -hda onl-r1.img"
+            #-net nic -net user,net=${PREFIX}.14.0/24,hostname=router1 \
 
    echo Starting ONL image Router2
    tmux new-window -n router2 "$KVM $KVM_OPTS \
             -name router2 \
             -vnc :1 \
-            -net nic -net user,net=${PREFIX}.24.0/24,hostname=router2 \
-            -net nic -net tap,ifname=r2-eth1,script=no,downscript=no \
-            -net nic -net tap,ifname=r2-eth2,script=no,downscript=no \
+            -net nic,macaddr=52:54:00:00:02:00 -net tap,ifname=r2-eth0,script=no,downscript=no \
+            -net nic,macaddr=52:54:00:00:02:01 -net tap,ifname=r2-eth1,script=no,downscript=no \
+            -net nic,macaddr=52:54:00:00:02:02 -net tap,ifname=r2-eth2,script=no,downscript=no \
             -hda onl-r2.img"
+            #-net nic -net user,net=${PREFIX}.24.0/24,hostname=router2 \
 
    echo Starting Shell for H1
    tmux new-window -n H1 -t $SCREEN "ip netns exec h1 bash"
@@ -155,15 +162,15 @@ do_teardown() {
        $BRCTL delbr $bridge 
     done
 
+    echo '*** ' Removing screen \'$SCREEN\'
+    tmux kill-session -t $SCREEN
+	
     echo '*** ' Removing Namespaces
     for ns in $NAMESPACES ; do 
         echo '*** ' Removing namespace $ns
         $IP netns delete $ns
     done
 
-    echo '*** ' Removing screen \'$SCREEN\'
-    tmux kill-session -t $SCREEN
-	
     echo '*** ' Removing Router KVM images
     rm onl-r1.img onl-r2.img
 
@@ -209,6 +216,15 @@ fi
 
 if [ `id -u` != 0 ] ; then
    die "You need to run this as root"
+fi
+
+if `lsmod | grep openvswitch` ; then
+    echo '*********************************************'
+    echo '****     WARNING       **********************'
+    echo '*********************************************'
+    echo '**' OVS seems to be loaded and it conflicts with Linux Bridge
+    echo '**' Make sure that you have brcompat running or things will go bad
+    sleep 5
 fi
 
 case $1 in 
