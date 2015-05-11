@@ -5,22 +5,30 @@
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
-install_onie()
+# Default implementation for updating kernel
+install_onie_kernel()
 {
-
     echo "Updating ONIE kernel ..."
     flashcp -v onie.itb /dev/mtd-onie || {
         echo "ERROR: Updating ONIE kernel failed."
         exit 1
     }
+}
 
+# Default implementation for updating u-boot
+install_onie_uboot()
+{
     # install u-boot
     echo "Updating ONIE U-Boot ..."
     flashcp -v %%UPDATER_UBOOT_NAME%% /dev/mtd-uboot || {
         echo "ERROR: Updating ONIE U-Boot failed."
         exit 1
     }
+}
 
+# Default implementation for updating u-boot env
+update_uboot_env()
+{
     # Set/clear a few U-Boot environment variables.  Some of the values
     # come from the compiled-in default environment of the update image.
     #
@@ -50,6 +58,19 @@ ver $ver
 $bootvar $bootcmd
 EOF
     ) | fw_setenv -f -s -
+
+}
+
+install_onie()
+{
+    # install kernel
+    install_onie_kernel
+
+    # install u-boot
+    install_onie_uboot
+
+    # update u-boot env
+    update_uboot_env
 
     # Set platform name and ONIE version to sys_eeprom.
     if [ -x /usr/bin/onie-syseeprom ] ; then
