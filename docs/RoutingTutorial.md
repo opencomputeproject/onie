@@ -190,7 +190,12 @@ advanced steps you can take.
 #NOTES ON TUTORIAL DEVELOPMENT
 -----------------------------------
 
+* Touch up Talk
+* Print Labs user names
+* ONIE boot
+* Three routers
+
 * Tried to use docker instead of an ISO image
-    ** The nested KVMs would hang when I pinged from one to the other - no idea why
-    ** `screen` could never work - would just hang
-    ** Existing ONL build infrastructure was easy to adapt to my needs (thanks Jeff!)
+  * The nested KVMs would hang when I pinged from one to the other - no idea why
+  * `screen` could never work - would just hang
+  * Existing ONL build infrastructure was easy to adapt to my needs (thanks Jeff!)
