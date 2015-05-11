@@ -5,17 +5,18 @@ RUN apt-get update && apt-get install -y \
         bridge-utils \
         dosfstools \
         iproute \
-        iputils-ping \
         mtools \
         net-tools \
         qemu-kvm \
         sudo \
+        tcpdump \
         tmux \
         traceroute 
 
 # uncomment for debugging
 RUN apt-get install -y \
-    procps
+        procps \
+        rsyslog 
 
 # Assumes files have been copied into $ONL/tools/docker.tutorial by Makefile
 # Docker v1.0 (which is default with ubutu 14.04) has bugs and ignores WORKDIR

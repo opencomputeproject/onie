@@ -123,7 +123,7 @@ Note that at this point, because there is no dynamic routing in place, H1 cannot
 
 
 
-# Add Neighbor and Redistribute Routes
+# Add Neighbor and Redistribute Routes with iBGP
 --------------------------------------------
 
 Quagga has a standard, IOS-like looking shell called `vtysh`.
@@ -142,17 +142,47 @@ On router1, in the vtysh prompt:
     conf t
        router bgp 7675
          neighbor 10.99.3.3 remote-as  7675
+         network 10.99.1.0/24
          end
 
 On router2, in the vtysh prompt:
     conf t
        router bgp 7675
          neighbor 10.99.3.2 remote-as  7675
+         network 10.99.2.0/24
          end
 
 
 Now run `show bgp neighbors` to confirm we are correctly peered.
 
+Now run `show ip route` to confirm we have learned the routes on both sides.
+
+Now jump to H1 (ctl-b + '3') and run a traceroute from 10.99.1.2 to 10.99.2.2,
+and you should be able to see each hop like this:
+
+        root@h1:~# traceroute -n 10.99.2.2
+        traceroute to 10.99.2.2 (10.99.2.2), 30 hops max, 60 byte packets
+        1  10.99.1.3  3.283 ms  1.257 ms  1.501 ms
+        2  10.99.3.3  1563.713 ms  1565.277 ms  1565.396 ms
+        3  10.99.2.2  1565.538 ms  1565.690 ms  1566.343 ms
+
+Congrats on getting this far!  You have a working network!
+
+#Advanced Steps
+-------------------------------------------------
+
+Once you are done with the basic tutorial, there are a number of more 
+advanced steps you can take.
+
+1. Spin up a third router 'r3' and play with that:
+  1. Create two more bridges: br-r1-r3 and br-r2-r3
+  2. Spin up another KVM instance with three interfaces (cut and paste from script)
+  3. Use the unused eth0 interfaces from 'r1' and 'r2' to add the the new bridges
+2. Withdrawl the iBGP routes and repeat with:
+  1. OSPF
+  2. ISIS
+3. Change the AS number of one of 'r1' or 'r2' to something new for an eBGP peering
+4. Repeat this tutorial with IPv6 addressing and routing
 
 #NOTES ON TUTORIAL DEVELOPMENT
 -----------------------------------
