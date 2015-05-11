@@ -91,7 +91,7 @@ And then confirm that R1 can reach H1 with:
     
     ping 10.99.1.2
 
-Now use ctl+b and then '2' to switch to route2 and execute the equivalent commands:
+Now use ctl+b and then '2' to switch to router2 and execute the equivalent commands:
 
     hostname router2
     exec bash
@@ -146,6 +146,7 @@ On router1, in the vtysh prompt:
          end
 
 On router2, in the vtysh prompt:
+
     conf t
        router bgp 7675
          neighbor 10.99.3.2 remote-as  7675
@@ -153,7 +154,9 @@ On router2, in the vtysh prompt:
          end
 
 
-Now run `show bgp neighbors` to confirm we are correctly peered.
+Now run `show bgp neighbors` to confirm we are correctly peered with an
+'Established' connection.  Note that 'Active' or 'Idle' indiciate a
+problem with the setup.
 
 Now run `show ip route` to confirm we have learned the routes on both sides.
 
