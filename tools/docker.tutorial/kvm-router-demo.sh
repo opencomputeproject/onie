@@ -218,15 +218,6 @@ if [ `id -u` != 0 ] ; then
    die "You need to run this as root"
 fi
 
-if `lsmod | grep openvswitch` ; then
-    echo '*********************************************'
-    echo '****     WARNING       **********************'
-    echo '*********************************************'
-    echo '**' OVS seems to be loaded and it conflicts with Linux Bridge
-    echo '**' Make sure that you have brcompat running or things will go bad
-    sleep 5
-fi
-
 case $1 in 
    -setup)
 	do_setup ;;

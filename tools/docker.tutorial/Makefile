@@ -23,13 +23,7 @@ IMAGE=opennetworklinux/routing-tutorial
 
 all: docker_run
 
-# must update Dockerfile to match if this list changes
-FILES=  ../kvm-router-demo.sh \
-        ../../builds/kvm/i386/onl/loader-i386.iso  \
-        ../../builds/swi/i386/all/onl-i386.img 
-
 docker_build: docker_check
-	ln -f ../kvm-router-demo.sh .
 	ln -f ../../builds/kvm/i386/onl/loader-i386.iso .
 	sudo ln -f ../../builds/swi/i386/all/onl-*-i386-kvm-*.swi onl-i386-kvm.swi
 	$(DOCKER) build -t $(IMAGE):$(VERSION) .
