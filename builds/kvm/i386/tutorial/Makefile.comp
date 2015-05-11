@@ -1,0 +1,135 @@
+# -*- Makefile -*-
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+#
+# Build the Open Network Loader ISO. 
+#
+# This build target is designed for Loader development and testing. 
+# 
+# - The tutorial image is built from source directly (not the debian package). 
+# - The hda image is blank (no integrated SWI). 
+#
+# How to run:
+# > kvm -m 1024 -cdrom tutorial.iso -boot d -nographic -hda hda.img
+############################################################
+#
+# We inherit the Makefile.comp from the i386/loader build, but specify that
+# we should use a custom initrd build rather than the default, which is
+# to pull it from the repo. 
+#
+# The assumption is that you are building this target because you are 
+# doing generic loader development, and rebuilds from source are
+# what you want. 
+#
+initrd-i386 := initrd-i386
+
+ifndef ONL
+    $(error $$ONL is not defined.)
+else
+    include $(ONL)/make/config.mk
+endif
+
+ifndef kernel-x86_64
+kernel-x86_64  := $(shell $(ONL_PKG_INSTALL) kernel-x86-64:amd64 --find-file kernel-x86_64)
+endif
+
+ifndef kernel-initrd-i386
+kernel-initrd-i386    := $(shell $(ONL_PKG_INSTALL) initrd-i386:i386 --find-file initrd-i386)
+endif
+
+ifeq ($(kernel-x86_64),)
+$(error kernel-x86_64 undefined)
+endif
+
+ifeq ($(kernel-initrd-i386),)
+$(error kernel-initrd-i386 undefined)
+endif
+
+
+SWI := $(ONL)/builds/swi/i386/tutorial/onl-$(ONL_RELEASE_VERSION)-i386-kvm.swi
+
+
+all: tutorial.iso tutorial-hda.img $(SWI)
+
+# Rebuild i386.swi
+$(SWI):
+	$(MAKE) -C $(dir $(SWI))
+
+
+tutorial.iso: $(kernel-x86_64) $(initrd-i386)
+	mkdir $@.tmp
+	cp /usr/*/syslinux/isolinux.bin $@.tmp/isolinux.bin
+	cp $(kernel-x86_64) $@.tmp/kernel   
+	cp $(initrd-i386) $@.tmp/initrd
+	# this line is critically different from original: add SWI=file:/onl-i386.swi
+	# echo -e 'default Open Network Linux\nlabel Open Network Linux\nkernel kernel\nappend initrd=initrd debug SWI=file:/onl-i386.swi console=ttyS0' >$@.tmp/isolinux.cfg
+	echo -e 'default Open Network Linux\nlabel Open Network Linux\nkernel kernel\nappend initrd=initrd debug console=ttyS0' >$@.tmp/isolinux.cfg
+	genisoimage -o $@ -b isolinux.bin -c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table $@.tmp
+	isohybrid $@
+	rm -rf $@.tmp
+
+.PHONY: initrd-i386
+
+
+# buildroot-based initrd but with .SWI added
+# initrd-i386:
+# 	rm -rf $(ONL)/components/i386/initrd-i386/initrd-i386  $@.tmp
+# 	$(MAKE) -C $(ONL)/components/i386/initrd-i386
+# 	mkdir $@.tmp
+# 	gunzip < $(ONL)/components/i386/initrd-i386/initrd-i386 | ( cd $@.tmp && cpio -id )      # reextract for our needs
+# 	cp $(ONL)/builds/swi/i386/tutorial/onl-*-i386-kvm-*.swi  $@.tmp/onl-i386.swi             # add the SWI
+# 	cp boot $@.tmp/bin/boot                                                                  # update boot function with local
+# 	( cd $@.tmp  && find . | cpio --quiet -o -H newc ) | gzip -9 > initrd-i386               # recreate initrd
+# 	rm -rf $@.tmp
+
+# stock initrd-i386
+initrd-i386:
+	rm -rf $(ONL)/components/i386/initrd-i386/initrd-i386
+	$(MAKE) -C $(ONL)/components/i386/initrd-i386
+	cp $(ONL)/components/i386/initrd-i386/initrd-i386 .
+    
+
+# direct from swi/rootfs initrd
+#initrd-i386: $(ONL)/builds/swi/i386/tutorial/rootfs/rootfs-i386.cpio
+#	$(MAKE) -C $(ONL)/builds/swi/i386/tutorial
+#	( cd $(ONL)/builds/swi/i386/tutorial/rootfs/rootfs-i386 && find . | cpio --quiet -o -H newc ) | gzip -9 > initrd-i386
+#	# gzip -9 -n <  $(ONL)/builds/swi/i386/tutorial/rootfs/rootfs-i386.sqsh > initrd-i386   # works, but ReadOnly
+#	# gzip -9 -n <  $(ONL)/builds/swi/i386/tutorial/rootfs/rootfs-i386.sqsh > initrd-i386
+
+# Empty 8M flash filesystem
+# loader-i386-hda.img:
+# 	rm -rf $@.tmp
+# 	mkdosfs -F 32 -C $@ 17152
+
+# Big  200M flash filesystem for SWI
+IMG_SIZE=300000  # ~256MB ; just big enough for SWI
+tutorial-hda.img: $(SWI)
+	rm -f $@
+	mkdosfs -F 32 -C $@ $(IMG_SIZE)
+	mcopy -i $@ $(SWI) ::onl-i386.swi
+	echo "SWI=flash:onl-i386.swi" > boot-config
+	echo "NETDEV=ma1" >> boot-config
+	echo "NETAUTO=dhcp" >> boot-config
+	mcopy -i $@ boot-config ::boot-config
+	rm boot-config
+
+clean:
+	rm -f initrd-i386 tutorial.iso tutorial-hda.img

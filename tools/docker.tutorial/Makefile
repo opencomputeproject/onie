@@ -6,7 +6,7 @@ ifndef ONL
 $(error Need to define $$ONL variable to use this Makefile)
 endif
 
-IMAGE=1.5
+VERSION=latest
 
 
 # needed to get SSH agent credential forwarding
@@ -18,24 +18,28 @@ SSH_AGENT=
 endif
 
 DOCKER=docker
+IMAGE=opennetworklinux/routing-tutorial
 
 
 all: docker_run
 
+# must update Dockerfile to match if this list changes
+FILES=  ../kvm-router-demo.sh \
+        ../../builds/kvm/i386/onl/loader-i386.iso  \
+        ../../builds/swi/i386/all/onl-i386.img 
+
 docker_build: docker_check
-	$(DOCKER) build -t opennetworklinux/onl-build:$(IMAGE) .
+	ln -f ../kvm-router-demo.sh .
+	ln -f ../../builds/kvm/i386/onl/loader-i386.iso .
+	sudo ln -f ../../builds/swi/i386/all/onl-*-i386-kvm-*.swi onl-i386-kvm.swi
+	$(DOCKER) build -t $(IMAGE):$(VERSION) .
 
 docker_run: docker_check
-	$(DOCKER) pull opennetworklinux/onl-build:$(IMAGE)
+	#$(DOCKER) pull $(IMAGE):$(VERSION)
 	$(DOCKER) run --privileged -t -i \
-        -e USER=root \
-        -e ONL=$(ONL) \
-        -v $(ONL):$(ONL) \
-        -w $(ONL) $(DNS) \
-        -h "onl-builder" \
+        -h "tutorial" \
         $(SSH_AGENT) \
-        opennetworklinux/onl-build:$(IMAGE) \
-        bash -c '/etc/init.d/apt-cacher-ng start && bash'
+        $(IMAGE):$(VERSION) 
 
 # DANGER - destructively kills all containers and images - DO NOT USE
 docker_nuke_all: docker_check
@@ -49,7 +53,10 @@ docker_nuke_all: docker_check
 	$(DOCKER) info
 
 docker_push: docker_check
-	$(DOCKER) push opennetworklinux/onl-build 
+	$(DOCKER) push $(IMAGE)
 
 docker_check: 
 	@which $(DOCKER) || echo STOP : you need to install docker.io first
+
+clean:
+	rm -f kvm-router-demo.sh loader-i386.iso onl-i386-kvm.swi

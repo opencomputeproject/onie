@@ -1,0 +1,85 @@
+#!/bin/bash -ex
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+LOCALDIR=$(dirname "$0")
+SHARED_DIR=${LOCALDIR}/../../../all/shared
+WS_ROOT=$1
+
+HRFSTOOL="python ${ONL}/tools/py/rfstool.py"
+RFSTOOL="${HRFSTOOL} --chroot ${WS_ROOT}"
+
+${HRFSTOOL} -c overlay "${SHARED_DIR}" "${WS_ROOT}"
+
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d initdev defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d restorepersist defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d rc.boot defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d sensors-baseconf defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d platform-baseconf defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d snmpd-baseconf defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d loadstartupconfig defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d snmpd remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d ssh defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d openbsd-inetd remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d ntp remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d nfs-common remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d rpcbind remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d motd remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d kexec remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d kexec-load remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mountall-bootclean.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mountall.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d checkfs.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mtab.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d checkroot-bootclean.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d checkroot.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mountnfs-bootclean.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mountnfs.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d lm-sensors remove
+
+# Root is enabled with password 'onl'
+${RFSTOOL} -c user_password_set root onl
+# Standard admin and recovery accounts
+${RFSTOOL} -c user_recovery_add standard
+${RFSTOOL} -c user_admin_add
+
+echo "onl-kvm" > "${WS_ROOT}/etc/hostname"
+
+rm -f "${WS_ROOT}/etc/securetty" # allow root login via telnet
+sed -i "s/\(^[123456]:.*\)/#\1/" "${WS_ROOT}/etc/inittab"
+echo "T0:23:respawn:/sbin/pgetty ttyS0" >>"${WS_ROOT}/etc/inittab"
+: >"${WS_ROOT}/etc/motd"
+
+
+#####
+# Tutoria.iso doesn't run the loader, so do that first
+
+
+######
+# Copy tutorial files into place
+
+cp $ONL/docs/RoutingTutorial.md \
+    $ONL/tools/kvm-router-demo.sh \
+    $ONL/builds/kvm/i386/onl/loader-i386.iso \
+    "${WS_ROOT}/root"
+# assumes only one SWI has been built
+cp $ONL/builds/swi/i386/all/onl-*-i386-kvm-*.swi "${WS_ROOT}/root/onl-i386.swi"
+
+${RFSTOOL} -c fsclean
