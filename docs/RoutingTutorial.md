@@ -78,6 +78,14 @@ From tmux, hit ctl+b and then '1' to go to the first router, login as root
     ifconfig eth1 10.99.1.3 netmask 255.255.255.0
     ifconfig eth2 10.99.3.2 netmask 255.255.255.0
     echo 1 > /proc/sys/net/ipv4/ip_forward
+    cp /usr/share/doc/quagga/examples/zebra.conf.sample /etc/quagga/zebra.conf
+    cp /usr/share/doc/quagga/examples/bgpd.conf.sample /etc/quagga/bgpd.conf
+    sed -i.bak -e 's/hostname Router/hostname router1/' /etc/quagga/zebra.conf
+    sed -i.bak -e 's/zebra=no/zebra=yes/' -e 's/bgpd=no/bgpd=yes/' /etc/quagga/daemons
+    sed -i.bak -e 's/-A 127.0.0.1//' /etc/quagga/debian.conf
+    adduser --system quagga --group && addgroup quaggavty
+    chgrp quagga /var/run/quagga/ &&  chmod 775 /var/run/quagga/
+    /etc/init.d/quagga start
 
 And then confirm that R1 can reach H1 with:
     
@@ -90,6 +98,14 @@ Now use ctl+b and then '2' to switch to route2 and execute the equivalent comman
     ifconfig eth1 10.99.2.3 netmask 255.255.255.0
     ifconfig eth2 10.99.3.3 netmask 255.255.255.0
     echo 1 > /proc/sys/net/ipv4/ip_forward
+    cp /usr/share/doc/quagga/examples/zebra.conf.sample /etc/quagga/zebra.conf
+    cp /usr/share/doc/quagga/examples/bgpd.conf.sample /etc/quagga/bgpd.conf
+    sed -i.bak -e 's/hostname Router/hostname router2/' /etc/quagga/zebra.conf
+    sed -i.bak -e 's/zebra=no/zebra=yes/' -e 's/bgpd=no/bgpd=yes/' /etc/quagga/daemons
+    sed -i.bak -e 's/-A 127.0.0.1//' /etc/quagga/debian.conf
+    adduser --system quagga --group && addgroup quaggavty
+    chgrp -R quagga /etc/quagga /var/run/quagga/ &&  chmod -R 775 /var/run/quagga/ /etc/quagga
+    /etc/init.d/quagga start
 
 And then confirm that R2 can reach H2 and R1 with:
     
@@ -97,11 +113,45 @@ And then confirm that R2 can reach H2 and R1 with:
     ping 10.99.3.2       # can we reach R1?
 
 Note that at this point, because there is no dynamic routing in place, H1 cannot ping H2:
+    
+    Jump to the H1 window with ctr-b and then '3'
+    ping 10.99.2.2          # this will fail with network unreachable
+
+    Jump to the H2 window with ctr-b and then '4'
+    ping 10.99.1.2          # this will fail with network unreachable
 
 
 
 
+# Add Neighbor and Redistribute Routes
+--------------------------------------------
 
+Quagga has a standard, IOS-like looking shell called `vtysh`.
+
+Run `vtysh` and issue some of your favorite CLI commands:
+    vtysh               
+        show running-config
+        show bgp neighbot
+        show interface
+
+For the basic example, we are going to setup iBGP peering between
+router1 and router2 so that H1 and H2 can reach each other.
+
+On router1, in the vtysh prompt:
+
+    conf t
+       router bgp 7675
+         neighbor 10.99.3.3 remote-as  7675
+         end
+
+On router2, in the vtysh prompt:
+    conf t
+       router bgp 7675
+         neighbor 10.99.3.2 remote-as  7675
+         end
+
+
+Now run `show bgp neighbors` to confirm we are correctly peered.
 
 
 #NOTES ON TUTORIAL DEVELOPMENT
