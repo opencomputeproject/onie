@@ -36,6 +36,10 @@ ONL_RELEASE_BANNER := $(space)$(ONL_RELEASE_VERSION)$(space)
 #
 ONL_LOCAL_SUBMODULES := none
 
+ifndef ONL_SUBMODULE_INDIGO
+ONL_SUBMODULE_INDIGO      := $(ONL)/submodules/indigo
+ONL_LOCAL_SUBMODULES += indigo
+endif
 
 ifndef ONL_SUBMODULE_ONLP
 ONL_SUBMODULE_ONLP      := $(ONL)/submodules/onlp
@@ -95,6 +99,21 @@ endif
 ifndef ONL_SUBMODULE_BIGCODE
 ONL_SUBMODULE_BIGCODE 	 := $(ONL)/submodules/bigcode
 ONL_LOCAL_SUBMODULES += bigcode
+endif
+
+ifndef ONL_SUBMODULE_OFDPA_20
+ONL_SUBMODULE_OFDPA_20 := $(ONL)/submodules/ofdpa-2.0
+ONL_LOCAL_SUBMODULES += ofdpa-2.0
+endif
+
+ifndef ONL_SUBMODULE_OFDPA_20_CLOSED
+ONL_SUBMODULE_OFDPA_20_CLOSED := $(ONL)/submodules/ofdpa-2.0-closed
+ONL_LOCAL_SUBMODULES += ofdpa-2.0-closed
+endif
+
+ifndef ONL_SUBMODULE_LOXIGEN_ARTIFACTS
+ONL_SUBMODULE_LOXIGEN_ARTIFACTS := $(ONL)/submodules/loxigen-artifacts
+ONL_LOCAL_SUBMODULES += loxigen-artifacts
 endif
 
 #
@@ -168,7 +187,7 @@ endif
 # This turns out to  be terribly hacky wrt the component makefiles.
 # This should be a temporary solution.
 #
-ALL_SUBMODULES = INFRA COMMON BIGCODE ONLP ONLP_ACCTON ONLP_DNI ONLP_QUANTA ONLP_DELL
+ALL_SUBMODULES = INFRA COMMON BIGCODE ONLP ONLP_ACCTON ONLP_DNI ONLP_QUANTA ONLP_DELL INDIGO OFDPA_20 OFDPA_20_CLOSED LOXIGEN_ARTIFACTS
 MODULE_DIRS := $(foreach submodule,$(ALL_SUBMODULES),$(ONL_SUBMODULE_$(submodule))/modules)
 MODULE_DIRS_TOUCH := $(foreach sd,$(MODULE_DIRS),$(shell mkdir -p $(sd) && touch $(sd)/Manifest.mk))
 
