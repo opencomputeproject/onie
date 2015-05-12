@@ -1,0 +1,50 @@
+#!/usr/bin/make -f
+
+DEB_DH_INSTALL_SOURCEDIR = debian/tmp
+INSTALL_DIR = $(CURDIR)/$(DEB_DH_INSTALL_SOURCEDIR)
+PACKAGE_NAME = ofdpa-2.0-closed
+
+OFDPA=$(ONL)/submodules/ofdpa-2.0-closed/
+BUILD=$(OFDPA)/output/ONL/build
+
+DOCS=LEGAL_TERMS README README.md RELEASE_NOTES LICENSE_CDP_BIN README_CDP_SRC
+
+
+# this is a hack, but right now we only support the one kernel/platform
+# FIXME move to use $ONL/tools/kmodcopy.sh
+KERNDIR=3.9.6-OpenNetworkLinux-85xx/ofdpa
+
+
+%:
+	dh $@
+
+build-arch:
+	dh build-arch
+
+clean:
+	dh clean
+
+override_dh_shlibdeps:
+	@echo "Skipping dh_shlibdeps"
+
+override_dh_auto_install:
+	mkdir -p    $(INSTALL_DIR)/usr/bin \
+                $(INSTALL_DIR)/lib/modules/$(KERNDIR) \
+                $(INSTALL_DIR)/usr/sbin \
+                $(INSTALL_DIR)/lib/$(DEB_HOST_GNU_TYPE) \
+                $(INSTALL_DIR)/usr/include/ofdpa-2.0 \
+                $(INSTALL_DIR)/usr/share/doc/ofdpa-2.0-closed
+	cp $(BUILD)/linux-kernel-bde.ko \
+        $(BUILD)/linux-user-bde.ko \
+        $(INSTALL_DIR)/lib/modules/$(KERNDIR)
+	cp $(BUILD)/librpc_client.so* $(INSTALL_DIR)/lib/$(DEB_HOST_GNU_TYPE)
+	cp $(BUILD)/ofdpa $(INSTALL_DIR)/usr/sbin
+	cp $(OFDPA)application/api/include/*.h $(INSTALL_DIR)/usr/include/ofdpa-2.0
+	for doc in $(DOCS) ; do \
+        cp $(OFDPA)/$$doc $(INSTALL_DIR)/usr/share/doc/ofdpa-2.0-closed ; \
+        done
+  
+
+
+
+
