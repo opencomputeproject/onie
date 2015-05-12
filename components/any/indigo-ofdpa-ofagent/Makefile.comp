@@ -36,12 +36,18 @@ MODULE := indigo-ofdpa-ofagent
 include $(BUILDER)/standardinit.mk
 
 
-# indigo-ofdpa-ofagent \
-
 DEPENDMODULES := AIM \
     SocketManager OFConnectionManager OFStateManager \
-    loci indigo \
+    loci indigo debug_counter BigRing uCli  timer_wheel \
+    minimatch murmur IOF OS \
     Configuration BigList BigHash cjson indigo_ofdpa_driver
+
+OFDPA_HEADERS := $(dir $(shell $(ONL_PKG_INSTALL) ofdpa-2.0-closed:powerpc --find-file ofdpa_api.h))
+
+ifndef OFDPA_HEADERS
+$(error Need to download ofdpa-2.0-closed package and put it in $(ONL)/debian/repo/$(ARCH))
+endif
+
 
 include $(BUILDER)/dependmodules.mk
 
@@ -51,13 +57,28 @@ include $(BUILDER)/bin.mk
 
 include $(BUILDER)/targets.mk
 
+GLOBAL_CFLAGS += $(foreach mod,$(DEPENDMODULES_UPPER),-D$(mod)_CONFIG_INCLUDE_UCLI=1)
+
+GLOBAL_CFLAGS += -DINDIGO_LINUX_LOGGING
+GLOBAL_CFLAGS += -DINDIGO_LINUX_TIME
+GLOBAL_CFLAGS += -DINDIGO_FAULT_ON_ASSERT
+GLOBAL_CFLAGS += -DINDIGO_MEM_STDLIB
+
 GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_MODULES_INIT=1
 GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_MAIN=1
 GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_PVS_SYSLOG=1
 GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_DAEMONIZE=1
 GLOBAL_CFLAGS += -DFAULTD_CONFIG_INCLUDE_MAIN=1
 GLOBAL_CFLAGS += -DFAULTD_CONFIG_INCLUDE_AIM_MAIN=1
+
+GLOBAL_CFLAGS += -I$(OFDPA_HEADERS)
+
 GLOBAL_CFLAGS += -g
+
+GLOBAL_CFLAGS += -DINDIGO_OFDPA_DRIVER_CONFIG_INCLUDE_LOGGING=1
+#GLOBAL_CFLAGS += -DINDIGO_OFDPA_DRIVER_CONFIG_LOG_OPTIONS_DEFAULT=1
+
+GLOBAL_CFLAGS += -I$(loci_BASEDIR)/module/inc
 
 GLOBAL_LINK_LIBS += -lpthread
 
