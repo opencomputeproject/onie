@@ -149,30 +149,11 @@ uninstall_system()
         fi
     done
 
-    # Re-install ONIE GRUB in the MBR as the NOS we just removed
-    # probably installed there.
+    # Remove NOS GRUB script from grub.d
+    onie_grub_d_remove_nos
 
-    boot_dev="/dev/$blk_dev"
-
-    # Install ONIE GRUB in MBR and ONIE partition
-    core_img="$onie_boot_mnt/grub/i386-pc/core.img"
-    [ -f "$core_img" ] && chattr -i $core_img
-    grub-install --boot-directory="$onie_boot_mnt" --recheck "$boot_dev" || {
-        echo "ERROR: grub-install failed on: $boot_dev"
-        exit 1
-    }
-    grub_install_log=$(mktemp)
-    grub-install --force --boot-directory="$onie_boot_mnt" \
-        --recheck "$onie_dev" > /$grub_install_log 2>&1 || {
-        echo "ERROR: grub-install failed on: $onie_dev"
-        cat $grub_install_log && rm -f $grub_install_log
-        exit 1
-    }
-    rm -f $grub_install_log
-    [ -f "$core_img" ] && chattr +i $core_img
-
-    # Return to install mode on the next boot
-    onie-boot-mode -q -o install
+    # Update grub.cfg
+    onie_update_grub_cfg
 
     return 0
 }

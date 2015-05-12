@@ -9,86 +9,6 @@
 #
 # Place this file in /etc/grub.d and grub-mkconfig will use this file
 # when generating a grub configuration file.
-#
-# There are two parts to the operation.
-#
-# Step 1 -- Add a chainload menu entry to the host OS GRUB
-# configuration.  Everything sent to stdout will end up in the host OS
-# GRUB configuration.
-#
-# Step 2 -- Update ONIE's GRUB configuration in the ONIE-BOOT
-# partition.
-
-# Step 1
-cat <<EOF
-# Menu entry to chainload ONIE
-menuentry ONIE {
-	search --no-floppy --label --set=root ONIE-BOOT
-	echo	'Loading ONIE ...'
-	chainloader +1
-}
-EOF
-
-# Step 2 -- Update ONIE's GRUB configuration in the ONIE-BOOT
-# partition.
-
-tmp_mnt=
-onie_umount_partition()
-{
-    umount $tmp_mnt > /dev/null 2>&1
-    rmdir $tmp_mnt || {
-        echo "ERROR: Problems removing temp directory: $tmp_mnt"
-        exit 1
-    }
-}
-
-# Mount the ONIE partition
-tmp_mnt=$(mktemp -d)
-trap onie_umount_partition EXIT
-
-mount LABEL=ONIE-BOOT $tmp_mnt || {
-    echo "ERROR: Problems trying to mount ONIE-BOOT partition"
-    exit 1
-}
-
-grub_root_dir="${tmp_mnt}/grub"
-grub_cfg="${grub_root_dir}/grub.cfg"
-
-onie_root_dir="${tmp_mnt}/onie"
-[ -d "$onie_root_dir" ] || {
-    echo "ERROR: Unable to find ONIE root directory: $onie_root_dir"
-    exit 1
-}
-
-# Serial console configuration.  Presumably the host OS has already
-# setup the following GRUB configuration variables, as is standard
-# practice when configuring GRUB for a serial console:
-#
-#  GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"
-#  GRUB_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
-
-DEFAULT_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
-GRUB_ONIE_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_SERIAL_COMMAND"}
-
-(cat <<EOF
-# begin: serial console config
-
-$GRUB_ONIE_SERIAL_COMMAND
-terminal_input serial
-terminal_output serial
-
-# end: serial console config
-EOF
-) > $grub_cfg
-
-# add the ONIE machine configuration data
-cat $onie_root_dir/grub/grub-machine.cfg >> $grub_cfg
-
-# add ONIE configuration common to all ONIE boot modes
-cat $onie_root_dir/grub/grub-common.cfg >> $grub_cfg
-
-DEFAULT_CMDLINE="$GRUB_CMDLINE_LINUX $GRUB_CMDLINE_LINUX_DEFAULT $GRUB_ONIE_PLATFORM_ARGS $GRUB_ONIE_DEBUG_ARGS"
-GRUB_ONIE_CMDLINE_LINUX=${GRUB_ONIE_CMDLINE_LINUX:-"$DEFAULT_CMDLINE"}
 
 ONIE_CMDLINE="quiet $GRUB_ONIE_CMDLINE_LINUX"
 for mode in install rescue uninstall update embed ; do
@@ -120,17 +40,5 @@ menuentry "\$onie_menu_$mode" {
         onie_entry_end
 }
 EOF
-    ) >> $grub_cfg
+    )
 done
-
-# Look for an ONIE compatible DIAG image and add a boot entry for it.
-diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
-if [ -n "$diag_label" ]  ; then
-    cat <<EOF >> $grub_cfg
-menuentry '$diag_label' {
-        search --no-floppy --label --set=root $diag_label
-        echo    'Loading $diag_label $onie_platform ...'
-        chainloader +1
-}
-EOF
-fi

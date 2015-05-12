@@ -153,128 +153,40 @@ cp demo.vmlinuz demo.initrd $demo_mnt
 # store installation log in demo file system
 onie-support $demo_mnt
 
-# Pretend we are a major distro and install GRUB into the MBR of
-# $blk_dev.
-grub-install --boot-directory="$demo_mnt" --recheck "$blk_dev" || {
-    echo "ERROR: grub-install failed on: $blk_dev"
-    exit 1
-}
-
-if [ "$demo_type" = "DIAG" ] ; then
-    # Install GRUB in the partition also.  This allows for
-    # chainloading the DIAG image from another OS.
-    #
-    # We are installing GRUB in a partition, as opposed to the
-    # MBR.  With this method block lists are used to refer to the
-    # the core.img file.  The sector locations of core.img may
-    # change whenever the file system in the partition is being
-    # altered (files copied, deleted etc.). For more info, see
-    # https://bugzilla.redhat.com/show_bug.cgi?id=728742 and
-    # https://bugzilla.redhat.com/show_bug.cgi?id=730915.
-    #
-    # The workaround for this is to set the immutable flag on
-    # /boot/grub/i386-pc/core.img using the chattr command so that
-    # the sector locations of the core.img file in the disk is not
-    # altered. The immutable flag on /boot/grub/i386-pc/core.img
-    # needs to be set only if GRUB is installed to a partition
-    # boot sector or a partitionless disk, not in case of
-    # installation to MBR.
-
-    core_img="$demo_mnt/grub/i386-pc/core.img"
-    # remove immutable flag if file exists during the update.
-    [ -f "$core_img" ] && chattr -i $core_img
-
-    grub_install_log=$(mktemp)
-    grub-install --force --boot-directory="$demo_mnt" \
-        --recheck "$demo_dev" > /$grub_install_log 2>&1 || {
-        echo "ERROR: grub-install failed on: $demo_dev"
-        cat $grub_install_log && rm -f $grub_install_log
-        exit 1
-    }
-    rm -f $grub_install_log
-
-    # restore immutable flag on the core.img file as discussed
-    # above.
-    [ -f "$core_img" ] && chattr +i $core_img
-
-fi
-
-# Create a minimal grub.cfg that allows for:
-#   - configure the serial console
-#   - allows for grub-reboot to work
-#   - a menu entry for the DEMO OS
-#   - menu entries for ONIE
-
-grub_cfg=$(mktemp)
-
-# Set a few GRUB_xxx environment variables that will be picked up and
-# used by the 50_onie_grub script.  This is similiar to what an OS
-# would specify in /etc/default/grub.
-#
-# GRUB_SERIAL_COMMAND
-# GRUB_CMDLINE_LINUX
-
-[ -r ./platform.conf ] && . ./platform.conf
-
-DEFAULT_GRUB_SERIAL_COMMAND="serial --port=%%CONSOLE_PORT%% --speed=%%CONSOLE_SPEED%% --word=8 --parity=no --stop=1"
-DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8 %%EXTRA_CMDLINE_LINUX%%"
-GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
-GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
-export GRUB_SERIAL_COMMAND
-export GRUB_CMDLINE_LINUX
-
-# Add common configuration, like the timeout and serial console.
-(cat <<EOF
-$GRUB_SERIAL_COMMAND
-terminal_input serial
-terminal_output serial
-
-set timeout=5
-
-EOF
-) > $grub_cfg
-
-# Add the logic to support grub-reboot
-(cat <<EOF
-if [ -s \$prefix/grubenv ]; then
-  load_env
-fi
-if [ "\${next_entry}" ] ; then
-   set default="\${next_entry}"
-   set next_entry=
-   save_env next_entry
-fi
-
-EOF
-) >> $grub_cfg
-
-if [ "$demo_type" = "DIAG" ] ; then
-    # Make sure ONIE install mode is the default boot mode for the
-    # diag partition.
-    cat <<EOF >> $grub_cfg
-set default=ONIE
-EOF
-    /mnt/onie-boot/onie/tools/bin/onie-boot-mode -q -o install
-fi
+. /mnt/onie-boot/onie/tools/lib/onie/onie-blkdev-common
 
 # Add a menu entry for the DEMO OS
+demo_grub_script=$(mktemp)
+demo_root_dev="${grub_part_type}$demo_part"
 demo_grub_entry="Demo $demo_type"
 (cat <<EOF
+# $demo_grub_entry GRUB script used for generating menu entry
+(cat <<SCRIPT_END
+# begin: $demo_grub_entry
 menuentry '$demo_grub_entry' {
+        set root="(hd0,$demo_root_dev)"
         search --no-floppy --label --set=root $demo_volume_label
         echo    'Loading ONIE Demo $demo_type ...'
         linux   /demo.vmlinuz $GRUB_CMDLINE_LINUX DEMO_TYPE=$demo_type
         echo    'Loading ONIE initial ramdisk ...'
         initrd  /demo.initrd
 }
+# end: $demo_grub_entry
+SCRIPT_END
+)
 EOF
-) >> $grub_cfg
+) > $demo_grub_script
 
 # Add menu entries for ONIE -- use the grub fragment provided by the
 # ONIE distribution.
-/mnt/onie-boot/onie/grub.d/50_onie_grub >> $grub_cfg
 
-cp $grub_cfg $demo_mnt/grub/grub.cfg
+if [ "$demo_type" = "DIAG" ] ; then
+    onie_grub_d_add_diag $demo_grub_script
+else
+    onie_grub_d_add_nos $demo_grub_script
+fi
+
+onie_update_grub_cfg
 
 # clean up
 umount $demo_mnt || {
