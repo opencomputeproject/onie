@@ -17,6 +17,10 @@
 # ------------------------------
 #
 ############################################################
+
+ifndef ONL
+$(error Need to define $$ONL to be the top of the tree)
+endif
 ARCH := powerpc
 TOOLCHAIN := powerpc-linux-gnu
 ANYDIR := ofdpa-2.0-closed
