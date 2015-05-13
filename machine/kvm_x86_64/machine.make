@@ -55,7 +55,6 @@ UCLIBC_VERSION = 0.9.33.2
 # 
 # CONSOLE_SPEED = 9600
 # CONSOLE_DEV = 0
-# CONSOLE_FLAG = 0
 
 # Specify any extra parameters that you'd want to pass to the onie linux
 # kernel command line in EXTRA_CMDLINE_LINUX env variable. Eg:
@@ -64,10 +63,10 @@ UCLIBC_VERSION = 0.9.33.2
 #
 # NOTE: You can give multiple space separated parameters
 
-# Specify the default menu option for syslinux when booting a recovery image
-# Valid values are "rescue" or "embed" (without double-quotes). This parameter
-# defaults to "rescue" mode if not specified here.
-#SYSLINUX_DEFAULT_MODE=embed
+# Specify the default menu option when booting a recovery image.  Valid
+# values are "rescue" or "embed" (without double-quotes). This
+# parameter defaults to "rescue" mode if not specified here.
+# RECOVERY_DEFAULT_ENTRY = embed
 
 #-------------------------------------------------------------------------------
 #

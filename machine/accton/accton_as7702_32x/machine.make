@@ -26,7 +26,6 @@ I2CTOOLS_SYSEEPROM = no
 
 # Console parameters
 CONSOLE_DEV = 1
-CONSOLE_FLAG = 1
 
 #-------------------------------------------------------------------------------
 #

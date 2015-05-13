@@ -27,7 +27,6 @@ I2CTOOLS_ENABLE = yes
 
 # Console parameters
 CONSOLE_DEV = 1
-CONSOLE_FLAG = 1
 
 #-------------------------------------------------------------------------------
 #
