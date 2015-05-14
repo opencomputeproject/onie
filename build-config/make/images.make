@@ -71,6 +71,10 @@ ifeq ($(MTREE_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(MTREE_INSTALL_STAMP)
 endif
 
+ifeq ($(ACPI_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(ACPICA_TOOLS_INSTALL_STAMP)
+endif
+
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
 			test -d $(ROOTCONFDIR)/default && \
@@ -124,6 +128,11 @@ STRACE_ENABLE ?= yes
 
 ifeq ($(STRACE_ENABLE),yes)
 DEBUG_UTILS += $(XTOOLS_DEBUG_ROOT)/usr/bin/strace
+endif
+
+# Add librt if ACPI is enabled
+ifeq ($(ACPI_ENABLE),yes)
+  SYSROOT_LIBS += librt.so.0 librt-$(UCLIBC_VERSION).so
 endif
 
 # sysroot-check does the following:
