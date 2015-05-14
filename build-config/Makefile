@@ -315,6 +315,9 @@ endif
 ifeq ($(MTREE_ENABLE),yes)
   include make/mtree.make
 endif
+ifeq ($(ACPI_ENABLE),yes)
+  include make/acpica-tools.make
+endif
 include make/images.make
 include make/demo.make
 

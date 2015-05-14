@@ -71,6 +71,10 @@ ifeq ($(MTREE_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(MTREE_INSTALL_STAMP)
 endif
 
+ifeq ($(ACPI_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(ACPICA_TOOLS_INSTALL_STAMP)
+endif
+
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
 			test -d $(ROOTCONFDIR)/default && \
@@ -114,6 +118,11 @@ endif
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)
   SYSROOT_LIBS += libstdc++.so libstdc++.so.6 libstdc++.so.6.0.17
+endif
+
+# Add librt if ACPI is enabled
+ifeq ($(ACPI_ENABLE),yes)
+  SYSROOT_LIBS += librt.so.0 librt-$(UCLIBC_VERSION).so
 endif
 
 # Optionally add debug utilities
