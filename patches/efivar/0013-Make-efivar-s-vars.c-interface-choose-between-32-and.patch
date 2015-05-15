@@ -1,0 +1,203 @@
+From d774e3699db4d04c72cf92e53c8161e9ac7ce2e2 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 13/13] Make efivar's vars.c interface choose between 32 and
+ 64 bit at runtime.
+
+We don't actually know what size the /kernel/ interface will use until
+we're executed, because it's defined as "unsigned long", and we don't
+know if a 32-bit build will be run on a 32-bit or 64-bit kernel.  So in
+this case, we figure it out from uname.
+
+This makes the assumption that all the 64-bit arches we might care about
+(ia64, x86_64, and aarch64) have "64" in "uname -m" somewhere, and that
+none of the 32-bit architectures do.
+
+This should resolve the conflict between 487a9ea and a01d106, and
+resolve issue #12 .
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+
+diff --git a/src/vars.c b/src/vars.c
+index ad344a0..43939bc 100644
+--- a/src/vars.c
++++ b/src/vars.c
+@@ -15,15 +15,15 @@
+  * You should have received a copy of the GNU Lesser General Public License
+  * along with this library.  If not, see <http://www.gnu.org/licenses/>.
+  */
+-
+ #include <errno.h>
+ #include <fcntl.h>
+ #include <limits.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#include <sys/types.h>
+ #include <sys/stat.h>
++#include <sys/types.h>
++#include <sys/utsname.h>
+ 
+ #include "lib.h"
+ #include "generics.h"
+@@ -31,14 +31,49 @@
+ 
+ #define VARS_PATH "/sys/firmware/efi/vars/"
+ 
+-typedef struct efi_kernel_variable_t {
++typedef struct efi_kernel_variable_32_t {
++	uint16_t	VariableName[1024/sizeof(uint16_t)];
++	efi_guid_t	VendorGuid;
++	uint32_t	DataSize;
++	uint8_t		Data[1024];
++	efi_status_t	Status;
++	uint32_t	Attributes;
++} __attribute__((packed)) efi_kernel_variable_32_t;
++
++typedef struct efi_kernel_variable_64_t {
+ 	uint16_t	VariableName[1024/sizeof(uint16_t)];
+ 	efi_guid_t	VendorGuid;
+-	unsigned long	DataSize;
++	uint64_t	DataSize;
+ 	uint8_t		Data[1024];
+ 	efi_status_t	Status;
+ 	uint32_t	Attributes;
+-} __attribute__((packed)) efi_kernel_variable_t;
++} __attribute__((packed)) efi_kernel_variable_64_t;
++
++/*
++ * Is there a better way to know if you're on a 64-bit kernel than this?
++ * Submit your patch here today!
++ */
++static int
++is_64bit(void)
++{
++	struct utsname utsname;
++	char machine[sizeof(utsname.machine) + 1];
++	static int sixtyfour_bit = -1;
++
++	if (sixtyfour_bit != -1)
++		return sixtyfour_bit;
++
++	int rc = uname(&utsname);
++	if (rc < 0)
++		return rc;
++
++	strncpy(machine, utsname.machine, sizeof(utsname.machine));
++	machine[sizeof(utsname.machine)] = '\0';
++	sixtyfour_bit = 0;
++	if (strstr(machine, "64") != NULL)
++		sixtyfour_bit = 1;
++	return sixtyfour_bit;
++}
+ 
+ static int
+ get_size_from_file(const char *filename, size_t *retsize)
+@@ -81,6 +116,9 @@ err:
+ static int
+ vars_probe(void)
+ {
++	/* If we can't tell if it's 64bit or not, this interface is no good. */
++	if (is_64bit() < 0)
++		return 0;
+ 	if (!access(VARS_PATH "new_var", F_OK))
+ 		return 1;
+ 	return 0;
+@@ -160,14 +198,26 @@ vars_get_variable(efi_guid_t guid, const char *name, uint8_t **data,
+ 	if (rc < 0)
+ 		goto err;
+ 
+-	efi_kernel_variable_t *var = (void *)buf;
+ 
+-	*data = malloc(var->DataSize);
+-	if (!*data)
+-		goto err;
+-	memcpy(*data, var->Data, var->DataSize);
+-	*data_size = var->DataSize;
+-	*attributes = var->Attributes;
++	if (is_64bit()) {
++		efi_kernel_variable_64_t *var64 = (void *)buf;
++
++		*data = malloc(var64->DataSize);
++		if (!*data)
++			goto err;
++		memcpy(*data, var64->Data, var64->DataSize);
++		*data_size = var64->DataSize;
++		*attributes = var64->Attributes;
++	} else {
++		efi_kernel_variable_32_t *var32 = (void *)buf;
++
++		*data = malloc(var32->DataSize);
++		if (!*data)
++			goto err;
++		memcpy(*data, var32->Data, var32->DataSize);
++		*data_size = var32->DataSize;
++		*attributes = var32->Attributes;
++	}
+ 
+ 	ret = 0;
+ err:
+@@ -207,7 +257,8 @@ vars_del_variable(efi_guid_t guid, const char *name)
+ 		goto err;
+ 
+ 	rc = read_file(fd, &buf, &buf_size);
+-	if (rc < 0 || buf_size != sizeof(efi_kernel_variable_t))
++	if (rc < 0 || (buf_size != sizeof(efi_kernel_variable_64_t) &&
++		       buf_size != sizeof(efi_kernel_variable_32_t)))
+ 		goto err;
+ 
+ 	close(fd);
+@@ -327,20 +378,41 @@ vars_set_variable(efi_guid_t guid, const char *name, uint8_t *data,
+ 			goto err;
+ 	}
+ 
+-	efi_kernel_variable_t var = {
+-		.VendorGuid = guid,
+-		.DataSize = data_size,
+-		.Status = 0,
+-		.Attributes = attributes
+-		};
+-	for (int i = 0; name[i] != '\0'; i++)
+-		var.VariableName[i] = name[i];
+-	memcpy(var.Data, data, data_size);
++	if (is_64bit()) {
++		efi_kernel_variable_64_t var64 = {
++			.VendorGuid = guid,
++			.DataSize = data_size,
++			.Status = 0,
++			.Attributes = attributes
++			};
++
++		for (int i = 0; name[i] != '\0'; i++)
++			var64.VariableName[i] = name[i];
++		memcpy(var64.Data, data, data_size);
++
++		fd = open(VARS_PATH "new_var", O_WRONLY);
++		if (fd < 0)
++			goto err;
++
++		rc = write(fd, &var64, sizeof(var64));
++	} else {
++		efi_kernel_variable_32_t var32 = {
++			.VendorGuid = guid,
++			.DataSize = data_size,
++			.Status = 0,
++			.Attributes = attributes
++			};
++		for (int i = 0; name[i] != '\0'; i++)
++			var32.VariableName[i] = name[i];
++		memcpy(var32.Data, data, data_size);
++
++		fd = open(VARS_PATH "new_var", O_WRONLY);
++		if (fd < 0)
++			goto err;
++
++		rc = write(fd, &var32, sizeof(var32));
++	}
+ 
+-	fd = open(VARS_PATH "new_var", O_WRONLY);
+-	if (fd < 0)
+-		goto err;
+-	rc = write(fd, &var, sizeof(var));
+ 	if (rc >= 0)
+ 		ret = 0;
+ 

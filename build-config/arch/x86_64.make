@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #
@@ -57,6 +57,12 @@ CLIB64 = 64
 
 PLATFORM_IMAGE_COMPLETE = $(IMAGE_UPDATER_STAMP) $(RECOVERY_ISO_STAMP)
 
+# Include UEFI support.  Default to legacy mode.
+UEFI_ENABLE ?= no
+ifeq ($(UEFI_ENABLE),yes)
+  PXE_EFI64_ENABLE = yes
+endif
+
 ifeq ($(PXE_EFI64_ENABLE),yes)
   PLATFORM_IMAGE_COMPLETE += $(PXE_EFI64_STAMP)
 endif
@@ -111,6 +117,9 @@ ETHTOOL_ENABLE ?= yes
 
 # Enable Syslinux as the bootloader for this platform
 SYSLINUX_ENABLE = yes
+
+# Include dosfstools
+DOSFSTOOLS_ENABLE = yes
 
 # Update this if the GRUB configuration mechanism changes from one
 # release to the next.

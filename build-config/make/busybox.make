@@ -87,6 +87,18 @@ endif
 $(BUSYBOX_DIR)/.config: $(BUSYBOX_CONFIG) $(MACHINE_BUSYBOX_CONFIG_FILE) $(BUSYBOX_PATCH_STAMP)
 	$(Q) echo "==== Copying $(BUSYBOX_CONFIG) to $(BUSYBOX_DIR)/.config ===="
 	$(Q) cp -v $< $@
+ifeq ($(EXT3_4_ENABLE),yes)
+	$(Q) sed -i \
+		-e '/\bCONFIG_CHATTR\b/c\# CONFIG_CHATTR is not set' \
+		-e '/\bCONFIG_LSATTR\b/c\# CONFIG_LSATTR is not set' \
+		-e '/\bCONFIG_FSCK\b/c\# CONFIG_FSCK is not set' \
+		-e '/\bCONFIG_TUNE2FS\b/c\# CONFIG_TUNE2FS is not set' \
+		-e '/\bCONFIG_MKFS_EXT2\b/c\# CONFIG_MKFS_EXT2 is not set' $@
+endif
+ifeq ($(DOSFSTOOLS_ENABLE),yes)
+	$(Q) sed -i \
+		-e '/\bCONFIG_MKFS_VFAT\b/c\# CONFIG_MKFS_VFAT is not set' $@
+endif
 	$(Q) $(SCRIPTDIR)/apply-config-patch $@ $(MACHINE_BUSYBOX_CONFIG_FILE)
 
 busybox-config: $(BUSYBOX_DIR)/.config
