@@ -135,6 +135,11 @@ ifeq ($(STRACE_ENABLE),yes)
 DEBUG_UTILS += $(XTOOLS_DEBUG_ROOT)/usr/bin/strace
 endif
 
+# Add librt if ACPI is enabled
+ifeq ($(ACPI_ENABLE),yes)
+  SYSROOT_LIBS += librt.so.0 librt-$(UCLIBC_VERSION).so
+endif
+
 # sysroot-check does the following:
 #
 # - strip the ELF binaries (grub moduels and kernel)
