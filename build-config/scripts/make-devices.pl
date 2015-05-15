@@ -197,14 +197,22 @@ sub devices
     symlink "./rtc0", "${devdir}rtc";
     makedev("nvram", "c", 10, 144, ${root}, ${root}, 0660);
 
-    print "SCSI Devices: sda sdb\n";
+    print "SCSI Devices: sda sdb sdc sdd\n";
     makedev("sda", "b", 8, 0, ${root}, ${disk}, 0660);
     makedev("sdb", "b", 8, 16, ${root}, ${disk}, 0660);
+    makedev("sdc", "b", 8, 32, ${root}, ${disk}, 0660);
+    makedev("sdd", "b", 8, 48, ${root}, ${disk}, 0660);
     foreach my $i (1..15) {
 	makedev("sda${i}", "b", 8, ${i}, ${root}, ${disk}, 0660);
     }
     foreach my $i (1..15) {
 	makedev("sdb${i}", "b", 8, ${i} + 16, ${root}, ${disk}, 0660);
+    }
+    foreach my $i (1..15) {
+	makedev("sdc${i}", "b", 8, ${i} + 32, ${root}, ${disk}, 0660);
+    }
+    foreach my $i (1..15) {
+	makedev("sdd${i}", "b", 8, ${i} + 48, ${root}, ${disk}, 0660);
     }
 
 }
