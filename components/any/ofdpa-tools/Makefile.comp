@@ -45,21 +45,30 @@ ifndef OFDPA_HEADERS
 $(error Need to download ofdpa-2.0-closed package and put it in $(ONL)/debian/repo/$(ARCH))
 endif
 
-include $(BUILDER)/dependmodules.mk
+## include $(BUILDER)/dependmodules.mk
+## 
+## 
+## BINARY := client_mpls
+## $(BINARY)_LIBRARIES := client_mpls.o
+## include $(BUILDER)/bin.mk
+## 
+## 
 
 
-BINARY := client_mpls
-$(BINARY)_LIBRARIES := client_mpls.o
-include $(BUILDER)/bin.mk
+
+SRCDIR=$(ONL)/submodules/ofdpa-2.0/modules/ofdpa_tools/module/src/
+#$(info SRCDIR=$(SRCDIR))
+CLIENTS=$(notdir $(subst .c,,$(wildcard $(SRCDIR)/client*.c)))
+CLIENTS_BIN=$(foreach c,$(CLIENTS),$(BINARY_DIR)/$(c))
+#$(info ClientsBin=$(CLIENTS_BIN))
+
+vpath %.c $(SRCDIR)
+
+alltargets: $(CLIENTS_BIN)
 
 
 include $(BUILDER)/targets.mk
 
-## .PHONY: all builddir
-## 
-## vpath %.c $(SRCDIR)
-## 
-## all: $(CLIENTS)
 GLOBAL_CFLAGS += -I$(OFDPA_HEADERS)
 
 GLOBAL_CFLAGS += -g
@@ -70,5 +79,11 @@ GLOBAL_CFLAGS += -DBUILD_VERSION="\"Build Version $(BUILD_VERSION)\""
 
 GLOBAL_LINK_LIBS += -lpthread -lm
 GLOBAL_LINK_LIBS += $(OFDPA_CLIENT_LIB)
+#GLOBAL_LINK_LIBS += -lrpc_client
+
+include $(TOOLCHAIN_DIR)/obj.mk
+
+$(BINARY_DIR)/% : %.c
+	$(GCC) $(GLOBAL_CFLAGS) $(CLIENT_LDFLAGS)  $< -o $@  -L$(dir $(OFDPA_CLIENT_LIB)) $(GLOBAL_LINK_LIBS)
 
 include $(ONL)/make/deb-subdir.mk
