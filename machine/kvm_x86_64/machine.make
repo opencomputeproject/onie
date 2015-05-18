@@ -42,8 +42,8 @@ I2CTOOLS_ENABLE = no
 #I2CTOOLS_SYSEEPROM = no
 
 # Set the desired kernel version.
-LINUX_VERSION		= 3.14
-LINUX_MINOR_VERSION	= 27
+LINUX_VERSION		= 4.0
+LINUX_MINOR_VERSION	= 4
 
 # Set the desired uClibc version
 UCLIBC_VERSION = 0.9.33.2

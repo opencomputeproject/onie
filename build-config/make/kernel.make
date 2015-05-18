@@ -50,7 +50,7 @@ kernel: $(KERNEL_STAMP)
 
 SOURCE += $(KERNEL_PATCH_STAMP)
 kernel-source: $(KERNEL_SOURCE_STAMP)
-$(KERNEL_SOURCE_STAMP): $(TREE_STAMP) | $(KERNEL_DOWNLOAD_STAMP)
+$(KERNEL_SOURCE_STAMP): $(TREE_STAMP) $(KERNEL_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting Linux ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(KERNELDIR) $(DOWNLOADDIR)/$(LINUX_TARBALL)
