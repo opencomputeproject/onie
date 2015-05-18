@@ -333,34 +333,32 @@ install_grub()
         exit 1
     }
 
+    # Restore scripts to grub.d
+    if [ -r /tmp/30_nos_grub ] ; then
+        onie_grub_d_add_nos /tmp/30_nos_grub
+    fi
+    if [ -r /tmp/60_diag_grub ] ; then
+        onie_grub_d_add_diag /tmp/60_diag_grub
+    fi
+
     # Create initial grub.cfg file.
-
-    # Set a few GRUB_xxx environment variables that will be picked up and
-    # used by the 50_onie_grub script.  This is similiar to what an OS
-    # would specify in /etc/default/grub.
-    #
-    # GRUB_SERIAL_COMMAND
-    # GRUB_CMDLINE_LINUX
-    
-    DEFAULT_GRUB_SERIAL_COMMAND="serial --port=%%CONSOLE_PORT%% --speed=%%CONSOLE_SPEED%% --word=8 --parity=no --stop=1"
-    DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8 %%EXTRA_CMDLINE_LINUX%%"
-    GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
-    GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
-    export GRUB_SERIAL_COMMAND
-    export GRUB_CMDLINE_LINUX
-
-    $boot_dir/onie/grub.d/50_onie_grub >> $grub_root_dir/grub.cfg
+    onie_update_grub_cfg
 
 }
 
 install_onie()
 {
+    [ -r ./onie-tools.tar.xz ] || {
+        echo "ERROR: Unable to find onie-tools.tar.xz"
+        exit 1
+    }
+    xz -d -c onie-tools.tar.xz | tar -xf -
 
-    [ -r ./onie-blkdev-common ] || {
+    [ -r ./lib/onie/onie-blkdev-common ] || {
         echo "ERROR: Unable to find onie-blkdev-common"
         exit 1
     }
-    . ./onie-blkdev-common
+    . ./lib/onie/onie-blkdev-common
 
     # Find install device.
     # - Default value from burned in install.conf
@@ -400,11 +398,20 @@ install_onie()
 
     onie_boot_dev="${onie_dev}$blk_suffix$onie_boot_part"
 
-    # Preserve the grubenv file if it exists
     if mount -o defaults,rw -t $onie_boot_fs_type $onie_boot_dev $onie_boot_mnt > /dev/null 2>&1 ; then
+        # Preserve the grubenv file if it exists
         if [ -r $grub_env_file ] ; then
             preserve_grubenv=yes
             cp $grub_env_file /tmp/grubenv
+        fi
+        if [ "$onie_boot_reason" != "embed" ] ; then
+            # Preserve scripts in grub.d if they exist
+            if [ -r $nos_grub_script ] ; then
+                cp $nos_grub_script /tmp/30_nos_grub
+            fi
+            if [ -r $diag_grub_script ] ; then
+                cp $diag_grub_script /tmp/60_diag_grub
+            fi
         fi
         umount $onie_boot_mnt > /dev/null 2>&1
     fi

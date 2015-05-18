@@ -90,19 +90,7 @@ cp -r $installer_dir/$arch/* $tmp_installdir
     cp $machine_dir/installer/install-platform $tmp_installdir
 }
 
-# Escape special chars in the user provide kernel cmdline string for use in
-# sed. Special chars are: \ / &
-EXTRA_CMDLINE_LINUX=`echo $EXTRA_CMDLINE_LINUX | sed -e 's/[\/&]/\\\&/g'`
-
-# Massage install-arch
-if [ "$arch" = "x86_64" ] ; then
-    sed -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/" \
-        -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/" \
-        -e "s/%%CONSOLE_FLAG%%/$CONSOLE_FLAG/" \
-        -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
-        -e "s/%%EXTRA_CMDLINE_LINUX%%/$EXTRA_CMDLINE_LINUX/" \
-	-i $tmp_installdir/install-arch
-elif [ "$arch" = "powerpc-softfloat" ] ; then
+if [ "$arch" = "powerpc-softfloat" ] ; then
     sed -e "s/%%UPDATER_UBOOT_NAME%%/$UPDATER_UBOOT_NAME/" \
 	-i $tmp_installdir/install-arch
 fi

@@ -185,6 +185,15 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie ] ; then \
 		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
 	     fi
+ifeq ($(ONIE_ARCH),x86_64)
+	$(Q) ESCAPED_EXTRA_CMDLINE_LINUX=`echo $(EXTRA_CMDLINE_LINUX) | sed -e 's/[\/&]/\\\&/g'` && \
+	    sed -e "s/%%CONSOLE_SPEED%%/$(CONSOLE_SPEED)/" \
+		-e "s/%%CONSOLE_DEV%%/$(CONSOLE_DEV)/" \
+		-e "s/%%CONSOLE_FLAG%%/$(CONSOLE_FLAG)/" \
+		-e "s/%%CONSOLE_PORT%%/$(CONSOLE_PORT)/" \
+		-e "s/%%EXTRA_CMDLINE_LINUX%%/$(ESCAPED_EXTRA_CMDLINE_LINUX)/" \
+		-i $(SYSROOTDIR)/lib/onie/onie-blkdev-common
+endif
 	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin ] ; then	\
 		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin/* $(SYSROOTDIR)/bin ; \
 	     fi
