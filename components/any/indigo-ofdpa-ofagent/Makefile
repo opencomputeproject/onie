@@ -23,7 +23,7 @@ ifndef ONL
 $(error $$ONL is undefined.)
 endif
 
-ONL_REQUIRED_SUBMODULES := infra common ofdpa-2.0 ofdpa-2.0-closed indigo loxigen-artifacts bigcode
+ONL_REQUIRED_SUBMODULES := infra common ofdpa-2.0 indigo loxigen-artifacts bigcode
 include $(ONL)/make/component.mk
 
 
