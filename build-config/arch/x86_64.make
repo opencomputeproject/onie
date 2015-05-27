@@ -52,8 +52,8 @@ CLIB64 = 64
 
 PLATFORM_IMAGE_COMPLETE = $(IMAGE_UPDATER_STAMP) $(RECOVERY_ISO_STAMP)
 
-# Include UEFI support
-UEFI_ENABLE ?= yes
+# Disable UEFI support by default
+UEFI_ENABLE ?= no
 ifeq ($(UEFI_ENABLE),yes)
   # Set the target firmware type.  Possible values are "auto", "uefi"
   # and "bios":
@@ -73,6 +73,9 @@ ifeq ($(UEFI_ENABLE),yes)
   # If firmware type is set to "uefi" on a BIOS system, the ONIE
   # installer will fail at runtime.
   FIRMWARE_TYPE ?= auto
+else
+  # Without UEFI support force legacy BIOS firmware
+  FIRMWARE_TYPE = bios
 endif
 
 PXE_EFI64_ENABLE ?= no

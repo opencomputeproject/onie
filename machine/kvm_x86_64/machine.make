@@ -41,6 +41,9 @@ I2CTOOLS_ENABLE = no
 #
 #I2CTOOLS_SYSEEPROM = no
 
+# Enable UEFI support
+UEFI_ENABLE = yes
+
 # Set the desired kernel version.
 LINUX_VERSION		= 4.0
 LINUX_MINOR_VERSION	= 4
