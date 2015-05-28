@@ -323,6 +323,9 @@ endif
 ifeq ($(DOSFSTOOLS_ENABLE),yes)
   include make/dosfstools.make
 endif
+ifeq ($(KEXEC_ENABLE),yes)
+  include make/kexec-tools.make
+endif
 include make/images.make
 include make/demo.make
 
