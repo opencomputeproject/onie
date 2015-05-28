@@ -3,6 +3,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -37,8 +38,8 @@ GRUB_HOST_LIB_I386_DIR=$6
 GRUB_HOST_BIN_I386_DIR=$7
 GRUB_HOST_LIB_UEFI_DIR=$8
 GRUB_HOST_BIN_UEFI_DIR=$9
-XORRISO=$10
-RECOVERY_ISO_IMAGE=$11
+XORRISO=${10}
+RECOVERY_ISO_IMAGE=${11}
 
 # Sanity check the arguments
 [ -r "$RECOVERY_KERNEL" ] || {
