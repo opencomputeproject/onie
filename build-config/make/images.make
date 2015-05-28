@@ -340,7 +340,6 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) touch $@
 
 # Make hybrid .iso image containing the ONIE kernel and recovery intrd
-XORRISO = /usr/bin/xorriso
 recovery-iso: $(RECOVERY_ISO_STAMP)
 $(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
 			$(RECOVERY_CONF_DIR)/grub-iso.cfg $(RECOVERY_CONF_DIR)/xorriso-options.cfg
@@ -354,7 +353,6 @@ $(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
 		$(MACHINE_CONF) $(RECOVERY_CONF_DIR) \
 		$(GRUB_HOST_LIB_I386_DIR) $(GRUB_HOST_BIN_I386_DIR) \
 		$(GRUB_HOST_LIB_UEFI_DIR) $(GRUB_HOST_BIN_UEFI_DIR) \
-		$(XORRISO) \
 		$(RECOVERY_ISO_IMAGE)
 	$(Q) touch $@
 

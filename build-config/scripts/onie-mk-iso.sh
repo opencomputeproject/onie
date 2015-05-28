@@ -25,7 +25,7 @@ set -e
 [ "$Q" != "@" ] && set -x
 
 # Sanity check the number of arguments
-[ $# -eq 11 ] || {
+[ $# -eq 10 ] || {
     echo "ERROR: $0: Incorrect number of arguments"
     exit 1
 }
@@ -38,8 +38,7 @@ GRUB_HOST_LIB_I386_DIR=$6
 GRUB_HOST_BIN_I386_DIR=$7
 GRUB_HOST_LIB_UEFI_DIR=$8
 GRUB_HOST_BIN_UEFI_DIR=$9
-XORRISO=${10}
-RECOVERY_ISO_IMAGE=${11}
+RECOVERY_ISO_IMAGE=${10}
 
 # Sanity check the arguments
 [ -r "$RECOVERY_KERNEL" ] || {
@@ -78,8 +77,18 @@ RECOVERY_ISO_IMAGE=${11}
     echo "ERROR: Does not look like valid GRUB x86_64-efi bin directory: $GRUB_HOST_BIN_UEFI_DIR"
     exit 1
 }
-[ -x "$XORRISO" ] || {
-    echo "ERROR: Does not look like valid xorriso binary: $XORRISO"
+
+# Make sure a few tools are available
+XORRISO=$(which xorriso) || {
+    echo "ERROR: unable to find xorriso binary"
+    exit 1
+}
+MKDOSFS=$(which mkdosfs) || {
+    echo "ERROR: unable to find mkdosfs binary"
+    exit 1
+}
+MCOPY=$(which mcopy) || {
+    echo "ERROR: unable to find mcopy binary"
     exit 1
 }
 
@@ -150,8 +159,8 @@ BOOTX86_IMG_SECTORS=$(( ( ( $BOOTX86_IMG_SIZE_BYTES / 512 ) + 31 ) / 32 ))
 BOOTX86_IMG_SECTORS=$(( ( $BOOTX86_IMG_SECTORS + 2 ) * 32 ))
 
 dd if=/dev/zero of=$RECOVERY_UEFI_IMG bs=512 count=$BOOTX86_IMG_SECTORS
-mkdosfs $RECOVERY_UEFI_IMG
-mcopy -s -i $RECOVERY_UEFI_IMG $RECOVERY_EFI_DIR '::/'
+$MKDOSFS $RECOVERY_UEFI_IMG
+$MCOPY -s -i $RECOVERY_UEFI_IMG $RECOVERY_EFI_DIR '::/'
 
 # Combine the legacy BIOS and UEFI GRUB images images into an ISO.
 cd $RECOVERY_DIR && $XORRISO -outdev $RECOVERY_ISO_IMAGE \
