@@ -42,7 +42,7 @@ DNI/Agema
 <tr> <td> AG-7448CU               <td> 48x10G  + 4x40G  <td> FreeScale P2020       <td> Broadcom BCM56845 (Trident)     <td> Supported and Tested   </tr>
 </table>
 
-DNI/Dell
+Dell
 ---
 <table class="table table-striped table-hover">
 <thead>
