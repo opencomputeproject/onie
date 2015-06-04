@@ -1,4 +1,4 @@
-# Accton AS7702_32X
+# Accton AS7712_32X_1
 
 # Vendor's version number can be defined here.
 # Available variable is 'VENDOR_VERSION'.
