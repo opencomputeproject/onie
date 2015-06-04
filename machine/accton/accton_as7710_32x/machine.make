@@ -1,4 +1,4 @@
-# Makefile fragment for Accton AS7700_32X
+# Makefile fragment for Accton AS7710_32X
 
 # Vendor's version number can be defined here.
 # Available variables are 'VENDOR_VERSION' and 'UBOOT_IDENT_STRING'.
@@ -12,7 +12,7 @@ VENDOR_REV ?= 0
 
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),0)
-  MACHINE_REV = 1
+  MACHINE_REV = 0
 else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
@@ -29,8 +29,8 @@ LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
 UBOOT_TARBALL_URLS	= http://git.freescale.com/git/cgit.cgi/ppc/sdk/u-boot.git/snapshot
 UBOOT_VERSION		= fsl-sdk-v1.7
 
-UBOOT_MACHINE = AS7700_32X
-KERNEL_DTB = as7700_32x.dtb
+UBOOT_MACHINE = AS7710_32X
+KERNEL_DTB = as7710_32x.dtb
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
