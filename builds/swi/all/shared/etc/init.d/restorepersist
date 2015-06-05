@@ -14,9 +14,11 @@
 log_action_begin_msg "Restoring persistent files"
 
 rm -rf /persist
-mkdir -p /persist/sys /persist/node
-chmod 777 /persist/sys /persist/node
+mkdir -p /persist/sys /persist/node /persist/rootfs
+chmod 700 /persist/sys /persist/node /persist/rootfs    # root only can create persist files
 mkdir -p /mnt/flash/persist
+( cd /persist/rootfs; cpio -i --quiet </mnt/flash/persist/rootfs ) 2>/dev/null
+( cd /; cpio -i --quiet </mnt/flash/persist/rootfs ) 2>/dev/null    # yes, push these files over the rootfs as well
 ( cd /persist/sys; cpio -i --quiet </mnt/flash/persist/sys ) 2>/dev/null
 ( cd /persist/node; cpio -i --quiet </mnt/flash/persist/node ) 2>/dev/null
 
@@ -32,7 +34,22 @@ done
 sed -i "s%^HostKey /etc/ssh/%HostKey /persist/sys/%g" /etc/ssh/sshd_config
 sed -i "s%^driftfile /var/lib/ntp/%driftfile /persist/node/%g" /etc/ntp.conf
 
-watchdir --watchdir=/persist/sys --watchdir=/persist/node --period=1 --daemon --logfile=/var/log/watchdir /sbin/savepersist
+# now, for each file in /persist/rootfs/a/b/c , rm /presist/rootfs//a/b/c and hardlink it to
+#   /a/b/c
+# ASSUMES /persist and / are the same device!
+
+cd /persist/rootfs
+for f in `find . -type f` ; do
+    rm -f /persist/rootfs/$f        # remove the file first
+    ln -f /$f /persist/rootfs/$f     # then hard link the two files
+done
+
+watchdir \
+    --watchdir=/persist/sys \
+    --watchdir=/persist/node \
+    --watchdir=/persist/rootfs \
+    --period=1 --daemon --logfile=/var/log/watchdir /sbin/savepersist
 
 /sbin/savepersist /persist/sys
 /sbin/savepersist /persist/node
+/sbin/savepersist /persist/rootfs
