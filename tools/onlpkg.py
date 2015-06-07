@@ -40,6 +40,7 @@ import fcntl
 # without magic priveledges
 
 closed_source = [
+"ofdpa-2.0-closed:powerpc",
 "onlp-x86-64-dell-s4000-c2338-r0:amd64",
 "onlp-x86-64-dell-s6000-s1220-r0:amd64",
 "onlp-powerpc-as5610-52x:powerpc",
