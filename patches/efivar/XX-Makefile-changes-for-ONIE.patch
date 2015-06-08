@@ -1,10 +1,17 @@
-Makefile changes for ONIE
+Makefile changes for ONIE patch
+
+From: Curt Brune <curt@cumulusnetworks.com>
 
 Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
 
 SPDX-License-Identifier:     GPL-2.0
 
 Minor Makefile changes for ONIE build environment.
+---
+ Make.defaults |   11 +++++++++++
+ Makefile      |    7 ++++++-
+ src/Makefile  |    7 +++----
+ 3 files changed, 20 insertions(+), 5 deletions(-)
 
 diff --git a/Make.defaults b/Make.defaults
 index 6899773..661b36d 100644
@@ -41,26 +48,24 @@ index 6899773..661b36d 100644
  
  SONAME_VERSION := 0
 diff --git a/Makefile b/Makefile
-index 4b2beb8..1ba3776 100644
+index 5449912..e1d3d86 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -1,7 +1,12 @@
+@@ -1,6 +1,11 @@
  TOPDIR = $(shell echo $$PWD)
  
 -SUBDIRS := src docs
--VERSION := 0.18
 +# ONIE build environment changes
 +export CC = $(CROSS_COMPILE)gcc
 +export LDFLAGS += $(ONIE_LDFLAGS)
 +export CFLAGS  += $(ONIE_CFLAGS)
 +
 +SUBDIRS := src
-+VERSION := 0.18-onie
+ VERSION := 0.20
  
  all : $(SUBDIRS) efivar.spec
- 
 diff --git a/src/Makefile b/src/Makefile
-index 6161399..dbaad8f 100644
+index f8ac6bd..e76cd6d 100644
 --- a/src/Makefile
 +++ b/src/Makefile
 @@ -8,7 +8,6 @@ PCTARGETS = efivar.pc efiboot.pc
@@ -71,7 +76,7 @@ index 6161399..dbaad8f 100644
  
  EFIVAR_OBJECTS = dp.o dp-acpi.o dp-hw.o dp-media.o dp-message.o \
  	efivarfs.o export.o guid.o guidlist.o guid-symbols.o \
-@@ -52,13 +51,13 @@ efivar : efivar.o libefivar.so
+@@ -56,13 +55,13 @@ efivar-static : efivar.o libefivar.a
  include/efivar/efivar.h : include/efivar/efivar-guids.h
  
  fakeguid.o : guid.c
@@ -84,7 +89,7 @@ index 6161399..dbaad8f 100644
  
  makeguids : makeguids.o fakeguid.o
 -	$(CC) $(cflags) -o $@ $^ -ldl
-+	$(HOST_CCLD) $(host_ccldflags) -o $@ $^ -ldl
++	$(HOST_CC) $(host_cflags) -o $@ $^ -ldl
  
  include/efivar/efivar-guids.h : makeguids guids.txt
  	./makeguids guids.txt guids.bin names.bin guid-symbols.S $@
