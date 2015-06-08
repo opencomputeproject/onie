@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of efivar
 #
 
-EFIVAR_VERSION			= 0.18
+EFIVAR_VERSION			= 0.20
 EFIVAR_TARBALL			= efivar-$(EFIVAR_VERSION).tar.bz2
 EFIVAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/rhinstaller/efivar/releases/download/$(EFIVAR_VERSION)
 EFIVAR_BUILD_DIR		= $(MBUILDDIR)/efivar
@@ -32,7 +32,7 @@ PHONY += efivar efivar-download efivar-source efivar-patch \
 	efivar-build efivar-install efivar-clean efivar-download-clean
 
 EFIVAR_BINS = efivar
-EFIVAR_LIBS = libefivar.so.0 libefivar.so
+EFIVAR_LIBS = libefivar.so.0 libefivar.so libefiboot.so.0 libefiboot.so
 
 efivar: $(EFIVAR_STAMP)
 
@@ -47,7 +47,7 @@ $(EFIVAR_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(EFIVAR_SOURCE_STAMP)
 efivar-source: $(EFIVAR_SOURCE_STAMP)
-$(EFIVAR_SOURCE_STAMP): $(TREE_STAMP) | $(EFIVAR_DOWNLOAD_STAMP)
+$(EFIVAR_SOURCE_STAMP): $(TREE_STAMP) $(EFIVAR_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream efivar ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(EFIVAR_BUILD_DIR) $(DOWNLOADDIR)/$(EFIVAR_TARBALL)

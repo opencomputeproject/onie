@@ -9,9 +9,10 @@
 # This is a makefile fragment that defines the build of efibootmgr
 #
 
-EFIBOOTMGR_VERSION		= 0.11.0
+EFIBOOTMGR_VERSION		= 0.12
 EFIBOOTMGR_TARBALL		= efibootmgr-$(EFIBOOTMGR_VERSION).tar.bz2
-EFIBOOTMGR_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/rhinstaller/efibootmgr/releases/download/efibootmgr-0.11.0
+EFIBOOTMGR_TARBALL_URLS		+= $(ONIE_MIRROR) \
+				   https://github.com/rhinstaller/efibootmgr/releases/download/efibootmgr-$(EFIBOOTMGR_VERSION)
 EFIBOOTMGR_BUILD_DIR		= $(MBUILDDIR)/efibootmgr
 EFIBOOTMGR_DIR			= $(EFIBOOTMGR_BUILD_DIR)/efibootmgr-$(EFIBOOTMGR_VERSION)
 
@@ -44,7 +45,7 @@ $(EFIBOOTMGR_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(EFIBOOTMGR_SOURCE_STAMP)
 efibootmgr-source: $(EFIBOOTMGR_SOURCE_STAMP)
-$(EFIBOOTMGR_SOURCE_STAMP): $(TREE_STAMP) | $(EFIBOOTMGR_DOWNLOAD_STAMP)
+$(EFIBOOTMGR_SOURCE_STAMP): $(TREE_STAMP) $(EFIBOOTMGR_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream efibootmgr ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(EFIBOOTMGR_BUILD_DIR) $(DOWNLOADDIR)/$(EFIBOOTMGR_TARBALL)
