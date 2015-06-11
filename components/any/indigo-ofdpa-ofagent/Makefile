@@ -24,6 +24,7 @@ $(error $$ONL is undefined.)
 endif
 
 ONL_REQUIRED_SUBMODULES := infra common ofdpa-2.0 indigo loxigen-artifacts bigcode
+ONL_REQUIRED_PACKAGES := ofdpa-2.0-closed:$(ARCH)
 include $(ONL)/make/component.mk
 
 

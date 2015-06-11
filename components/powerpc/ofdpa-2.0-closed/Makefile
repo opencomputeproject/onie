@@ -12,7 +12,7 @@
 # Do not edit this header.
 # It is used by the SPKG script.
 # ------------------------------
-# Package:onlp
+# Package:ofdpa-2.0-closed
 # Architecture:powerpc
 # ------------------------------
 #
