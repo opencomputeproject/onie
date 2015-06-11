@@ -30,7 +30,9 @@ across a reboot.  This document shows how this works.
 
 Just run `/sbin/persist /path/to/file` to mark a file as 'persisted'.  This
 file will be saved to the /mnt/flash persistent storage device and automatically
-put back into place on reboot.
+put back into place on reboot.  Once a file has been persisted, it will always
+be persisted across reboots.  If you really want to unpersist a file, manually remove it from
+'/persist/rootfs/path/to/file'.
 
 # Under the covers
 
@@ -47,3 +49,7 @@ The `/etc/init.d/restorepersist` script runs on bootup and does a number of thin
 
 And so, any change to a persisted file is noticed by watchdir and saved
 to /mnt/flash in a cpio archive automatically using /sbin/savepersist.
+
+# Limitations
+
+You cannot persist any file that is read/used before `/etc/rcS.d/S03restorepersist` is run, including this script itself.  Also, it is NOT recommended for persisting logging files, e.g., /var/log/*.  While technically this will work, you will likely quickly exceed the write cycle limit of the underlying flash memory.  Better to use a syslog server.
