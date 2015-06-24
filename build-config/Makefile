@@ -301,7 +301,6 @@ ifeq ($(GRUB_ENABLE),yes)
   include make/grub.make
 endif
 ifeq ($(UEFI_ENABLE),yes)
-  include make/pciutils.make
   include make/efivar.make
   include make/efibootmgr.make
 endif
