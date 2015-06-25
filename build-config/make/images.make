@@ -83,6 +83,10 @@ ifeq ($(KEXEC_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(KEXEC_INSTALL_STAMP)
 endif
 
+ifeq ($(FLASHROM_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(FLASHROM_INSTALL_STAMP)
+endif
+
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
 			test -d $(ROOTCONFDIR)/default && \
@@ -145,7 +149,7 @@ endif
 
 # sysroot-check does the following:
 #
-# - strip the ELF binaries (grub moduels and kernel)
+# - strip the ELF binaries (grub modules and kernel)
 #
 # - verifies that we have all the shared libraries required by the
 #   executables in our final sysroot.

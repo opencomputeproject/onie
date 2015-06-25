@@ -139,6 +139,9 @@ DOSFSTOOLS_ENABLE = yes
 # Include kexec-tools
 KEXEC_ENABLE = yes
 
+# Include flashrom
+FLASHROM_ENABLE = yes
+
 # Update this if the GRUB configuration mechanism changes from one
 # release to the next.
 ONIE_CONFIG_VERSION = 1
