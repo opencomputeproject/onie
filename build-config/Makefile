@@ -325,6 +325,10 @@ endif
 ifeq ($(KEXEC_ENABLE),yes)
   include make/kexec-tools.make
 endif
+ifeq ($(FLASHROM_ENABLE),yes)
+  include make/pciutils.make
+  include make/flashrom.make
+endif
 include make/images.make
 include make/demo.make
 
