@@ -9,7 +9,7 @@
 ## This assumes the shell is ash/dash.
 ##
 
-. /etc/machine.conf
+[ -r /etc/machine.conf ] && . /etc/machine.conf
 
 export onie_installer="/var/tmp/installer"
 
@@ -433,6 +433,39 @@ mac_add()
     done
     echo $b | cut -b 1-17
     return 0
+}
+
+# Magic cookie required to be present in the header of all ONIE update
+# images.
+onie_updater_cookie="ONIE-UPDATER-COOKIE"
+
+# ONIE image types
+onie_image_type_update="update"
+onie_image_type_nos="nos"
+
+# Return the type of installer image, either a firmware update or NOS
+# installer.
+get_image_type()
+{
+    # ONIE updater images *must* contain the string
+    # "ONIE-UPDATER-COOKIE" within the first 100 lines of the image.
+    if head -n 100 $1 | grep -q "$onie_updater_cookie" ; then
+        echo -n $onie_image_type_update
+    else
+        echo -n $onie_image_type_nos
+    fi
+}
+
+# Prompt the user for a yes/no confirmation question
+prompt_yes_no()
+{
+    msg_str="$1"
+    echo -n "$msg_str (y/N)? "
+    read ans
+    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+	return 0
+    fi
+    return 1
 }
 
 # Local Variables:

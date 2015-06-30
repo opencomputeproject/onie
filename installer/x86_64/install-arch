@@ -616,11 +616,15 @@ install_onie()
 
     onie_boot_dev="${onie_dev}$blk_suffix$onie_boot_part"
 
-    # Preserve the grubenv file if it exists
+    # Preserve a few precious files if they exist
     if mount -o defaults,rw -t $onie_boot_fs_type $onie_boot_dev $onie_boot_mnt > /dev/null 2>&1 ; then
         if [ -r $grub_env_file ] ; then
             preserve_grubenv=yes
             cp $grub_env_file /tmp/grubenv
+        fi
+        if [ -d $onie_update_dir ] ; then
+            preserve_update_dir=yes
+            cp -a $onie_update_dir /tmp/preserve-update
         fi
         umount $onie_boot_mnt > /dev/null 2>&1
     fi
@@ -684,14 +688,14 @@ install_onie()
         cp /tmp/grubenv $grub_env_file
     fi
 
+    # Restore the previous update directory
+    if [ "$preserve_update_dir" = "yes" ] ; then
+        cp -a /tmp/preserve-update $onie_update_dir
+    fi
+
     # Return to default boot mode on the next boot.  Use this
     # installer's version of onie-boot-mode.
     $onie_root_dir/tools/bin/onie-boot-mode -q -o none
-
-    umount $onie_boot_mnt || {
-        echo "Error: Unable to umount ${onie_boot_mnt}"
-        exit 1
-    }
 
     if [ -n "$post_install_hook" ]; then
         eval $post_install_hook || {

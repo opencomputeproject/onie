@@ -36,7 +36,7 @@ true ${onie_machine_rev=0}
 # assume it is 0.
 true ${onie_config_version=0}
 
-args="hvfx${args_arch}"
+args="hivfqx${args_arch}"
 
 usage()
 {
@@ -51,8 +51,14 @@ COMMAND LINE OPTIONS
 	-v
 		Be verbose.  Print what is happening.
 
+	-q
+		Be quiet.  Do not print what is happening.
+
 	-x
 		Extract image to a temporary directory.
+
+	-i
+		Dump image information.
 
 	-f
 		Force ONIE update opteration, bypassing any safety
@@ -64,6 +70,7 @@ EOF
 
 verbose=no
 force=no
+quiet=no
 while getopts "$args" a ; do
     case $a in
         h)
@@ -73,9 +80,19 @@ while getopts "$args" a ; do
         v)
             verbose=yes
             cmd_verbose=-v
+            quiet=no
             ;;
         f)
             force=yes
+            ;;
+        q)
+            quiet=yes
+            verbose=no
+            ;;
+        i)
+            # Dump the image information
+            cat ./machine.conf
+            exit 0
             ;;
         *)
             parse_arg_arch "$a" "$OPTARG" || {
@@ -118,11 +135,11 @@ fi
     exit 1
 }
 
-echo "ONIE: Version       : $image_version"
-echo "ONIE: Architecture  : $image_arch"
-echo "ONIE: Machine       : $image_machine"
-echo "ONIE: Machine Rev   : $image_machine_rev"
-echo "ONIE: Config Version: $image_config_version"
+[ "$quiet" = "no" ] && echo "ONIE: Version       : $image_version"
+[ "$quiet" = "no" ] && echo "ONIE: Architecture  : $image_arch"
+[ "$quiet" = "no" ] && echo "ONIE: Machine       : $image_machine"
+[ "$quiet" = "no" ] && echo "ONIE: Machine Rev   : $image_machine_rev"
+[ "$quiet" = "no" ] && echo "ONIE: Config Version: $image_config_version"
 
 xz -d -c onie-update.tar.xz | tar -xf -
 
