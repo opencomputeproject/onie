@@ -39,8 +39,10 @@ import fcntl
 # These are the closed source packages that can't be built 
 # without magic priveledges
 
+# NOTE: "ofdpa-2.0-closed:powerpc" needs to be expoesd normally
+#   because it has a special build rule to download it
+
 closed_source = [
-"ofdpa-2.0-closed:powerpc",
 "onlp-x86-64-dell-s4000-c2338-r0:amd64",
 "onlp-x86-64-dell-s6000-s1220-r0:amd64",
 "onlp-powerpc-as5610-52x:powerpc",
