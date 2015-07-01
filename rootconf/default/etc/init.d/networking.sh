@@ -64,7 +64,7 @@ config_ethmgmt_dhcp4()
         local ipaddr=$(ifconfig $intf |grep 'inet '|sed -e 's/:/ /g'|awk '{ print $3 " / " $7 }')
         log_console_msg "Using DHCPv4 addr: ${intf}: $ipaddr"
     else
-        _log_err_msg "DHCPv4 on interface: $intf failed"
+        log_warning_msg "Unable to configure interface using DHCPv4: $intf"
         return 1
     fi
     return 0
@@ -76,24 +76,58 @@ config_ethmgmt_fallback()
 {
 
     local base_ip=10
-    local default_nm="255.255.255.0"
+    local prefix=24
     local default_hn="onie-host"
-    intf_counter=$1
+    local intf_counter=$1
     shift
-    intf=$1
+    local intf=$1
     shift
 
-    interface_base_ip=$(( $base_ip + $intf_counter ))
+    # Remove any previously configured IP address
+    ip addr flush $intf
+
     # Assign sequential static IP to each detected interface
+    local interface_base_ip=$(( $base_ip + $intf_counter ))
     local default_ip="192.168.3.$interface_base_ip"
-    log_console_msg "Using default IPv4 addr: ${intf}: ${default_ip}/${default_nm}"
-    ifconfig $intf $default_ip netmask $default_nm || {
-        _log_err_msg "Problems setting default IPv4 addr: ${intf}: ${default_ip}/${default_nm}"
+    log_console_msg "Using default IPv4 addr: ${intf}: ${default_ip}/${prefix}"
+
+    ip addr add ${default_ip}/$prefix dev $intf || {
+        log_failure_msg "Problems setting default IPv4 addr: ${intf}: ${default_ip}/${prefix}"
         return 1
     }
 
+    # In addition configure an IPv4 link-local address per RFC-3927.
+    prefix=16
+
+    # Maximum number of attempts to find an unused 169.254.x.y/16
+    # address.
+    local max_retry=20
+    local attempt=1
+    while [ $attempt -lt $max_retry ] ; do
+        local rnd1=$(( ( $RANDOM % 254 ) + 1 ))
+        local rnd2=$(( ( $RANDOM % 254 ) + 1 ))
+        local test_ip="169.254.${rnd1}.${rnd2}"
+
+        # use arping to check if IP is in use
+        arping -qD -c 5 $test_ip && {
+            # Claim this IP
+            ip addr add ${test_ip}/$prefix dev $intf || {
+                log_failure_msg "Problems setting default IPv4 addr: ${intf}: ${test_ip}/$prefix"
+                return 1
+            }
+            arping -c 3 -Uq -s $test_ip $test_ip
+            log_console_msg "Using link-local IPv4 addr: ${intf}: ${test_ip}/$prefix"
+            break
+        }
+        attempt=$(( $attempt + 1 ))
+    done
+
+    if [ $attempt -eq $max_retry ] ; then
+        log_warning_msg "Unable to configure link-local IPv4 address within $max_retry attempts"
+    fi
+
     hostname $default_hn || {
-        _log_err_msg "Problems setting default hostname: ${intf}: ${default_hn}"
+        log_failure_msg "Problems setting default hostname: ${intf}: ${default_hn}\n"
         return 1
     }
 
