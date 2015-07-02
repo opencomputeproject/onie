@@ -25,7 +25,8 @@ UPDATER_ONIE_TOOLS	= $(MBUILDDIR)/onie-tools.tar.xz
 
 UPDATER_IMAGE		= $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
 
-ONIE_TOOLS_LIST = \
+ONIE_TOOLS_DIR	= $(abspath ../tools)
+ONIE_SYSROOT_TOOLS_LIST = \
 	lib/onie \
 	bin/onie-boot-mode
 
@@ -251,9 +252,20 @@ $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 $(UPDATER_INITRD) : $(SYSROOT_CPIO_XZ)
 	ln -sf $< $@
 
-$(UPDATER_ONIE_TOOLS):  $(SYSROOT_COMPLETE_STAMP)
+ifndef MAKE_CLEAN
+ONIE_TOOLS_FILES = $(shell \
+		test -d $(ONIE_TOOLS_DIR) && test -r $(UPDATER_ONIE_TOOLS) && \
+		find -L $(ONIE_TOOLS_DIR) -mindepth 1 -cnewer $(UPDATER_ONIE_TOOLS) \
+		  -print -quit 2>/dev/null)
+  ifneq ($(strip $(ONIE_TOOLS_FILES)),)
+    $(shell rm -f $(UPDATER_ONIE_TOOLS))
+  endif
+endif
+
+$(UPDATER_ONIE_TOOLS): $(SYSROOT_COMPLETE_STAMP) $(SCRIPTDIR)/onie-mk-tools.sh
 	$(Q) echo "==== Create ONIE Tools tarball ===="
-	$(Q) tar -C $(SYSROOTDIR) -cJf $@ $(ONIE_TOOLS_LIST)
+	$(Q) $(SCRIPTDIR)/onie-mk-tools.sh $(ONIE_ARCH) $(ONIE_TOOLS_DIR) $@ \
+		$(SYSROOTDIR) $(ONIE_SYSROOT_TOOLS_LIST)
 
 .SECONDARY: $(ITB_IMAGE)
 
