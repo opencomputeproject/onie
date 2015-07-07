@@ -68,7 +68,7 @@ def determine_paths():
     machine_str = 'machine'
 
     current_path = os.path.abspath(os.path.curdir)
-    if os.path.basename(current_path) == 'autobuild':
+    if os.path.basename(current_path) == 'oce':
         # calling from within the dir, go two dirs up
         BUILD_CONFIG_PATH = os.path.join(current_path, '..', '..', build_str)
         BUILD_CONFIG_PATH = os.path.abspath(BUILD_CONFIG_PATH)
