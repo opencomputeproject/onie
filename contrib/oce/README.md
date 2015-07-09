@@ -65,6 +65,7 @@ It takes a list of arguments:
 And ```test-onie.py``` takes care of the rest.  By default, ```test-onie.py```
 uses the following:
 * DHCP using isc-dhcp-server
+* DNS using dnsmasq
 * TFTP using tftpd-hpa
 * HTTP using nginx
 
