@@ -54,6 +54,14 @@ def load_modules():
                 logger.critical('Unsupported backend for dhcp: {0}'.format(
                                 modules[m]))
                 sys.exit(-2)
+        elif m == 'dns':
+            if modules[m] in MODS.SUPPORTED_DNS:
+                LOADED_MODULES['dns'] = __import__(module_name,
+                                                   fromlist=[modules[m]])
+            else:
+                logger.critical('Unsupported backend for dns: {0}'.format(
+                                modules[m]))
+                sys.exit(-2)
         elif m == 'tftp':
             if modules[m] in MODS.SUPPORTED_TFTP:
                 LOADED_MODULES['tftp'] = __import__(module_name,
@@ -97,8 +105,8 @@ def fix_mac_address(mac_str):
         return mac_str
 
     if len(mac_str) == 12:
-        #all numbers, no ':' separators
-        #need to add ':' after every two chars
+        # all numbers, no ':' separators
+        # need to add ':' after every two chars
         mac = '{0}:{1}:{2}:{3}:{4}:{5}'.format(mac_str[0:2], mac_str[2:4],
                                                mac_str[4:6], mac_str[6:8],
                                                mac_str[8:10], mac_str[10:12])
@@ -318,6 +326,7 @@ def prepare_test_case(test_args):
     '''
     This function is highly coupled to the ONIE spec and test document
     DO NOT EDIT *_cases without referencing the spec.
+    This function ensures all dhcp and dns options are present
     '''
 
     vivso_cases = [8, 44]
@@ -328,6 +337,8 @@ def prepare_test_case(test_args):
     tftp_server_name_cases = [11, 47]
     www_server_cases = [13, 14, 15, 16, 17, 49, 50, 51, 52, 53]
     dhcp_server_cases = [23, 24, 25, 26, 27, 59, 60, 61, 62, 63]
+    dns_server_cases = [80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+                        95, 96, 97, 98, 99, 100, 101, 102, 103, 104]
 
     # handle onie_action
     action = test_args['test']['action']
@@ -373,9 +384,22 @@ def prepare_test_case(test_args):
     # handle tftp_server_name
     if test_num in tftp_server_name_cases:
         hostname = 'TFTP_SERVER_NAME'
+        dns_server_ip = 'DNS_SERVER_IP'
         if 'host_local_name' in test_args:
             hostname = test_args['host_local_name']
+        if 'host_ipv4_addr' in test_args:
+            dns_server_ip = test_args['host_ipv4_addr']
         test_args['tftp_server_name'] = hostname
+        test_args['dns_server_name'] = hostname
+        test_args['dns_server_ip'] = dns_server_ip
+
+    # handle dns_server_name
+    if test_num in dns_server_cases:
+        dns_server_ip = 'DNS_SERVER_IP'
+        if 'host_ipv4_addr' in test_args:
+            dns_server_ip = test_args['host_ipv4_addr']
+        test_args['dns_server_ip'] = dns_server_ip
+        test_args['dns_server_name'] = 'onie-server'
 
     # handle www_server_ip
     if test_num in www_server_cases:
@@ -481,6 +505,7 @@ def configure_test(args):
 
     os.makedirs(test_dir)
     for rqd_mod in test['required-services']:
+        logger.debug('Handling {0} module'.format(rqd_mod))
         if rqd_mod not in LOADED_MODULES:
             logger.critical('Service {0} is not loaded'.format(rqd_mod))
             sys.exit(-1)
@@ -491,6 +516,20 @@ def configure_test(args):
                 if not os.path.exists(dir_name) and \
                    not os.path.isdir(dir_name):
                     os.mkdir(dir_name)
+
+            # Determine if we are a dns module
+            # if so, set enable_dns
+            # Determine if dhcp server is not enabled or dnsmasq is not
+            # dhcp server, if so set only_dns
+            if rqd_mod == 'dns':
+                logger.debug('Enabling DNS flag')
+                test_args['enable_dns'] = True
+                dns_service = TEST_DEFINE['available-services']['dns']
+                dhcp_service = TEST_DEFINE['available-services']['dhcp']
+                if 'dhcp' not in test['required-services'] or \
+                   dns_service != dhcp_service:
+                    logger.debug('Enabling ONLY_DNS flag')
+                    test_args['only_dns'] = True
 
             # Determine if we are a tftp module
             # if so, check if we are dnsmasq
@@ -593,6 +632,7 @@ def main():
     logger.setLevel(logging.INFO)
 
     if args.verbose:
+        ch.setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
     load_tests(args.config)
     # Load the required modules for processing
@@ -620,12 +660,12 @@ def main():
     if args.dut_config is not None:
         load_dut_config(args.dut_config)
 
-    if args.mac_address is None and not 'mac_address' in DUT_CONFIG:
+    if args.mac_address is None and 'mac_address' not in DUT_CONFIG:
         logger.critical('No DUT MAC Address given')
         parser.print_help()
         sys.exit(-1)
 
-    if args.ip_cidr is None and not 'ip_cidr' in DUT_CONFIG:
+    if args.ip_cidr is None and 'ip_cidr' not in DUT_CONFIG:
         logger.critical('No DUT CIDR given')
         parser.print_help()
         sys.exit(-1)
@@ -654,7 +694,7 @@ def main():
 
     if args.dump is False:
         import psutil
-        ordered_services = ['tftp', 'http', 'dhcp']
+        ordered_services = ['tftp', 'http', 'dns', 'dhcp']
         running_procs = {}
         scripts = test_args['scripts']
         for svc in ordered_services:

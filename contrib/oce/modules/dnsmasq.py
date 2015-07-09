@@ -6,10 +6,33 @@ DEFAULT_MAX_LEASE_TIME = 7200
 DEFAULT_DOMAIN_NAME = 'cloud.local'
 DEFAULT_DNS_SERVER = '192.168.1.1'
 DEFAULT_DIRS = ['logs', 'tftp-root']
+DEFAULT_HOSTS_FILENAME = 'hosts'
+DEFAULT_HOSTS_TEMPLATE = \
+'''
+{{ ip }} {{ hostname }}
+'''
 DEFAULT_CONF_FILENAME = 'dnsmasq.conf'
-
 DEFAULT_CONF_TEMPLATE = \
 '''
+{%- if only_dns %}
+user={{ user }}
+group={{ group }}
+interface={{ interface }}
+no-dhcp-interface={{ interface }}
+no-resolv
+no-hosts
+addn-hosts={{ hosts_filename }}
+expand-hosts
+domain={{ dhcp_domain_name }}
+no-poll
+log-queries
+{%- else %}
+{%- if enable_dns %}
+addn-hosts={{ hosts_filename }}
+expand-hosts
+no-poll
+log-queries
+{% endif %}
 no-resolv
 no-hosts
 user={{ user }}
@@ -51,6 +74,7 @@ tftp-root={{ tftp_root }}
 dhcp-boot=pxelinux.0
 {% endif %}
 {% endif %}
+{% endif %}
 '''
 DEFAULT_CMD_BINARY = 'dnsmasq'
 DEFAULT_CMD_USER = 'nobody'
@@ -86,6 +110,7 @@ def add_host(hosts, host):
 
 
 def build_config(output, test_args):
+    import os.path
     from jinja2 import Template
     values = {}
 
@@ -105,6 +130,8 @@ def build_config(output, test_args):
     if 'tftp_root' in test_args:
         values['tftp_root'] = test_args['tftp_root']
 
+    hosts_filename = os.path.join(test_args['test_dir'],
+                                  DEFAULT_HOSTS_FILENAME)
     temp = ipaddr.IPv4Network(test_args['ip_cidr'])
     values['subnet_cidr'] = '{0}/{1}'.format(temp.network, temp.prefixlen)
     gateway_addr = None
@@ -115,7 +142,16 @@ def build_config(output, test_args):
         next_server = ipaddr.IPv4Address(test_args['dhcp_next_server'])
         values['dhcp_next_server'] = next_server
 
-    add_subnet(subnets, subnet_cidr, gateway_addr)
+    if 'enable_dns' in test_args:
+        values['enable_dns'] = test_args['enable_dns']
+    if 'only_dns' in test_args:
+        values['only_dns'] = test_args['only_dns']
+    if 'enable_tftp' in test_args:
+        values['enable_tftp'] = test_args['enable_tftp']
+
+    subnets = []
+    hosts = []
+    add_subnet(subnets, values['subnet_cidr'], gateway_addr)
     add_host(hosts, test_args)
 
     values['subnets'] = subnets
@@ -128,6 +164,15 @@ def build_config(output, test_args):
     values['group'] = DEFAULT_CMD_GROUP
     if 'dhcp_group' in test_args:
         values['group'] = test_args['dhcp_group']
+
+    if 'only_dns' in test_args or 'enable_dns' in test_args:
+        values['hosts_filename'] = hosts_filename
+        host_temp = Template(DEFAULT_HOSTS_TEMPLATE)
+        host_file = open(hosts_filename, 'w')
+        ip_addr = test_args['dns_server_ip']
+        hostname = test_args['dns_server_name']
+        host_file.write(host_temp.render(ip=ip_addr, hostname=hostname))
+        host_file.close()
 
     template = Template(DEFAULT_CONF_TEMPLATE)
     output.write(template.render(values))
