@@ -46,7 +46,7 @@ UEFI_ENABLE = yes
 
 # Set the desired kernel version.
 LINUX_VERSION		= 4.1
-LINUX_MINOR_VERSION	= 1
+LINUX_MINOR_VERSION	= 2
 
 # Set the desired uClibc version
 UCLIBC_VERSION = 0.9.33.2
