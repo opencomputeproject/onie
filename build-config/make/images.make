@@ -28,7 +28,8 @@ UPDATER_IMAGE		= $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
 ONIE_TOOLS_DIR	= $(abspath ../tools)
 ONIE_SYSROOT_TOOLS_LIST = \
 	lib/onie \
-	bin/onie-boot-mode
+	bin/onie-boot-mode \
+	bin/onie-fwpkg
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
 IMAGE_UPDATER_STAMP	= $(STAMPDIR)/image-updater
