@@ -163,7 +163,7 @@ def build(machine_or_vendor, dry_run=True, args='', targets=None):
                   format(args, machine_or_vendor, add_targets)
         print cmd
         if not dry_run:
-            subprocess.call(cmd, shell=True)
+            subprocess.check_call(cmd, shell=True)
 
     else:
         print 'Invalid Target: {0}'.format(machine_or_vendor)
