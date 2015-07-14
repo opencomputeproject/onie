@@ -37,6 +37,9 @@ LINUX_TARBALL = linux-3.10.0-54.0.1.el7.x86_64.tar.xz
 
 LINUX_CONFIG = conf/linux.x86_64.mellanox.config
 
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
+
 MELLANOX_PXE_UPDATER_STAMP   = $(STAMPDIR)/mellanox-pxe-updater-stamp
 MELLANOX_NETBOOT_PXE_UPDATER = $(IMAGEDIR)/mellanox_net_boot_label.sh
 
