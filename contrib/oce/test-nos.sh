@@ -9,6 +9,7 @@ if [ -f /lib/onie/onie-blkdev-common ]; then
     . /lib/onie/onie-blkdev-common
 fi
 
+efi_check_dir=/sys/firmware/efi/efivars
 mtree_bin=/usr/bin/mtree
 mtree_dir=/mnt/onie-boot/onie/config/etc/mtree
 this_script=$(basename $(realpath $0))
@@ -102,6 +103,13 @@ print_mass_storage()
         if [ "$onie_arch" = "x86_64" ]; then
             onie_dev=onie_get_boot_dev
             blk_dev=$(echo $onie_dev | sed -e 's/[0-9]$//' | sed -e 's/\([0-9]\)\(p\)/\1/')
+            if [ -d "$efi_check_dir" ]; then
+                [ "$verbose" = "yes" ] && echo 
+                [ "$verbose" = "yes" ] && echo "UEFI System Detected"
+                [ "$verbose" = "yes" ] && echo 
+                efibootmgr
+            fi
+
             [ "$verbose" = "yes" ] && echo 
             [ "$verbose" = "yes" ] && echo "Printing all block ids"
             [ "$verbose" = "yes" ] && echo 
@@ -181,8 +189,8 @@ check_for_nos()
     if [ -n "$onie_arch" ]; then
         if [ "$onie_arch" = "x86_64" ]; then
             [ "$verbose" = "yes" ] && echo 
-            # ignore *-DIAG, GRUB-BOOT, ONIE-BOOT
-            nos=$(blkid | egrep -ve '-DIAG|GRUB-BOOT|ONIE-BOOT')
+            # ignore *-DIAG, GRUB-BOOT, ONIE-BOOT, EFI System
+            nos=$(blkid | egrep -ve '-DIAG|GRUB-BOOT|ONIE-BOOT|EFI System')
 
             if [ -z "$nos" ]; then
                 echo "No NOS found"
@@ -246,7 +254,7 @@ done
 
 if [ ! -x "$mtree_bin" ] ; then
     echo "mtree is not found on this system"
-    #exit 1
+    exit 1
 fi
 
 if [ -n "$cmd" ] ; then
