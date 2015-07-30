@@ -25,7 +25,7 @@ set -e
 [ "$Q" != "@" ] && set -x
 
 # Sanity check the number of arguments
-[ $# -eq 10 ] || {
+[ $# -eq 11 ] || {
     echo "ERROR: $0: Incorrect number of arguments"
     exit 1
 }
@@ -38,7 +38,8 @@ GRUB_HOST_LIB_I386_DIR=$6
 GRUB_HOST_BIN_I386_DIR=$7
 GRUB_HOST_LIB_UEFI_DIR=$8
 GRUB_HOST_BIN_UEFI_DIR=$9
-RECOVERY_ISO_IMAGE=${10}
+RECOVERY_XORRISO_OPTIONS=${10}
+RECOVERY_ISO_IMAGE=${11}
 
 # Sanity check the arguments
 [ -r "$RECOVERY_KERNEL" ] || {
@@ -75,6 +76,10 @@ RECOVERY_ISO_IMAGE=${10}
 }
 [ -x "${GRUB_HOST_BIN_UEFI_DIR}/grub-mkimage" ] || {
     echo "ERROR: Does not look like valid GRUB x86_64-efi bin directory: $GRUB_HOST_BIN_UEFI_DIR"
+    exit 1
+}
+[ -r "$RECOVERY_XORRISO_OPTIONS" ] || {
+    echo "ERROR: Unable to read xorriso options file: $RECOVERY_XORRISO_OPTIONS"
     exit 1
 }
 
@@ -134,72 +139,76 @@ cat $GRUB_HOST_LIB_I386_DIR/cdboot.img $RECOVERY_CORE_IMG > $RECOVERY_ELTORITO_I
 # Generate legacy BIOS MBR format GRUB image
 cat $GRUB_HOST_LIB_I386_DIR/boot.img $RECOVERY_CORE_IMG > $RECOVERY_EMBEDDED_IMG
 
-# Populate .ISO sysroot with x86_64-efi GRUB modules
-mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/x86_64-efi
-(cd $GRUB_HOST_LIB_UEFI_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/x86_64-efi)
+if [ "$UEFI_ENABLE" = "yes" ] ; then
+    # Populate .ISO sysroot with x86_64-efi GRUB modules
+    mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/x86_64-efi
+    (cd $GRUB_HOST_LIB_UEFI_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/x86_64-efi)
 
-# Generate UEFI format GRUB image
-mkdir -p $RECOVERY_EFI_BOOT_DIR
-$GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \
-    --format=x86_64-efi \
-    --directory=$GRUB_HOST_LIB_UEFI_DIR \
-    --prefix=/boot/grub \
-    --config=$RECOVERY_CONF_DIR/grub-uefi.cfg \
-    --output=$RECOVERY_EFI_BOOTX86_IMG \
-    part_msdos part_gpt fat iso9660 search
+    # Generate UEFI format GRUB image
+    mkdir -p $RECOVERY_EFI_BOOT_DIR
+    $GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \
+        --format=x86_64-efi \
+        --directory=$GRUB_HOST_LIB_UEFI_DIR \
+        --prefix=/boot/grub \
+        --config=$RECOVERY_CONF_DIR/grub-uefi.cfg \
+        --output=$RECOVERY_EFI_BOOTX86_IMG \
+        part_msdos part_gpt fat iso9660 search
 
-# For UEFI the GRUB image is embedded inside a UEFI ESP (fat16) disk
-# partition image.  Create that here and copy GRUB UEFI image into it.
-# The size of the ESP needs to be large enough to hold the bootx64.efi
-# file, plus file system overhead.
-BOOTX86_IMG_SIZE_BYTES=$(stat -c '%s' $RECOVERY_EFI_BOOTX86_IMG)
-# mcopy wants disk to be an integer number of 32 sectors
-BOOTX86_IMG_SECTORS=$(( ( ( $BOOTX86_IMG_SIZE_BYTES / 512 ) + 31 ) / 32 ))
-# plus a couple of chunks for the file system overhead
-BOOTX86_IMG_SECTORS=$(( ( $BOOTX86_IMG_SECTORS + 2 ) * 32 ))
+    # For UEFI the GRUB image is embedded inside a UEFI ESP (fat16) disk
+    # partition image.  Create that here and copy GRUB UEFI image into it.
+    # The size of the ESP needs to be large enough to hold the bootx64.efi
+    # file, plus file system overhead.
+    BOOTX86_IMG_SIZE_BYTES=$(stat -c '%s' $RECOVERY_EFI_BOOTX86_IMG)
+    # mcopy wants disk to be an integer number of 32 sectors
+    BOOTX86_IMG_SECTORS=$(( ( ( $BOOTX86_IMG_SIZE_BYTES / 512 ) + 31 ) / 32 ))
+    # plus a couple of chunks for the file system overhead
+    BOOTX86_IMG_SECTORS=$(( ( $BOOTX86_IMG_SECTORS + 2 ) * 32 ))
 
-dd if=/dev/zero of=$RECOVERY_UEFI_IMG bs=512 count=$BOOTX86_IMG_SECTORS
-$MKDOSFS $RECOVERY_UEFI_IMG
-$MCOPY -s -i $RECOVERY_UEFI_IMG $RECOVERY_EFI_DIR '::/'
+    dd if=/dev/zero of=$RECOVERY_UEFI_IMG bs=512 count=$BOOTX86_IMG_SECTORS
+    $MKDOSFS $RECOVERY_UEFI_IMG
+    $MCOPY -s -i $RECOVERY_UEFI_IMG $RECOVERY_EFI_DIR '::/'
+fi
 
 # Combine the legacy BIOS and UEFI GRUB images images into an ISO.
 cd $RECOVERY_DIR && $XORRISO -outdev $RECOVERY_ISO_IMAGE \
     -map $RECOVERY_ISO_SYSROOT / \
-    -options_from_file $RECOVERY_CONF_DIR/xorriso-options.cfg
+    -options_from_file $RECOVERY_XORRISO_OPTIONS
 
-# The next step is to add a MS-DOS partition table with one entry for
-# the EFI image to the ISO image, so that it looks like a disk image.
-#
-# To create the MS-DOS partition entry for the efi.img (ESP) partition
-# we need to determine the iso9660 sectors (2048 byte sectors) of
-# /boot/efi.img in the CD-ROM and translate it into hard disk sectors
-# (512 byte).
-#
-# Then we create a bootable MS-DOS partition of type "0xEF", which a
-# UEFI firmware will recognize as a UEFI bootable image.
+if [ "$UEFI_ENABLE" = "yes" ] ; then
+    # The next step is to add a MS-DOS partition table with one entry for
+    # the EFI image to the ISO image, so that it looks like a disk image.
+    #
+    # To create the MS-DOS partition entry for the efi.img (ESP) partition
+    # we need to determine the iso9660 sectors (2048 byte sectors) of
+    # /boot/efi.img in the CD-ROM and translate it into hard disk sectors
+    # (512 byte).
+    #
+    # Then we create a bootable MS-DOS partition of type "0xEF", which a
+    # UEFI firmware will recognize as a UEFI bootable image.
 
-# sanity check
-$XORRISO -indev $RECOVERY_ISO_IMAGE \
-    -find /boot/efi.img -name efi.img -exec report_lba -- 2> /dev/null | grep -q efi.img || {
-    echo "ERROR: Unable to find efi.img in the .ISO image"
-    exit 1
-}
+    # sanity check
+    $XORRISO -indev $RECOVERY_ISO_IMAGE \
+        -find /boot/efi.img -name efi.img -exec report_lba -- 2> /dev/null | grep -q efi.img || {
+        echo "ERROR: Unable to find efi.img in the .ISO image"
+        exit 1
+    }
 
-# First determine the offset and size of the $RECOVERY_UEFI_IMG within
-# the .ISO
+    # First determine the offset and size of the $RECOVERY_UEFI_IMG within
+    # the .ISO
 
-# The output of the xorriso find command looks like:
-# Report layout: xt , Startlba ,   Blocks , Filesize , ISO image path
-# File data lba:  0 ,      132 ,       80 ,   163840 , '/boot/efi.img'
-EFI_IMG_START_BLOCK=$($XORRISO -indev $RECOVERY_ISO_IMAGE \
-    -find /boot/efi.img -name efi.img -exec report_lba -- 2> /dev/null | \
-    grep efi.img | awk '{ print $6 }')
-EFI_IMG_START_SECTOR=$(( $EFI_IMG_START_BLOCK * 2048 / 512 ))
+    # The output of the xorriso find command looks like:
+    # Report layout: xt , Startlba ,   Blocks , Filesize , ISO image path
+    # File data lba:  0 ,      132 ,       80 ,   163840 , '/boot/efi.img'
+    EFI_IMG_START_BLOCK=$($XORRISO -indev $RECOVERY_ISO_IMAGE \
+        -find /boot/efi.img -name efi.img -exec report_lba -- 2> /dev/null | \
+        grep efi.img | awk '{ print $6 }')
+    EFI_IMG_START_SECTOR=$(( $EFI_IMG_START_BLOCK * 2048 / 512 ))
 
-# Determine image size in sectors
-EFI_IMG_SIZE_BYTES=$(stat -c '%s' $RECOVERY_UEFI_IMG)
-EFI_IMG_SIZE_SECTORS=$(( $EFI_IMG_SIZE_BYTES / 512 ))
+    # Determine image size in sectors
+    EFI_IMG_SIZE_BYTES=$(stat -c '%s' $RECOVERY_UEFI_IMG)
+    EFI_IMG_SIZE_SECTORS=$(( $EFI_IMG_SIZE_BYTES / 512 ))
 
-# create a MS-DOS partition table with one partition pointing to the
-# EFI image.
-$(dirname $0)/mk-part-table.py $RECOVERY_ISO_IMAGE $EFI_IMG_START_SECTOR $EFI_IMG_SIZE_SECTORS
+    # create a MS-DOS partition table with one partition pointing to the
+    # EFI image.
+    $(dirname $0)/mk-part-table.py $RECOVERY_ISO_IMAGE $EFI_IMG_START_SECTOR $EFI_IMG_SIZE_SECTORS
+fi

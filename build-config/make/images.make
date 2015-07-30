@@ -360,20 +360,27 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(RECOVERY_CPIO) > $(RECOVERY_INITRD)
 	$(Q) touch $@
 
+ifeq ($(UEFI_ENABLE),yes)
+  RECOVERY_XORRISO_OPTIONS = $(RECOVERY_CONF_DIR)/xorriso-options-uefi.cfg
+else
+  RECOVERY_XORRISO_OPTIONS = $(RECOVERY_CONF_DIR)/xorriso-options-bios.cfg
+endif
 # Make hybrid .iso image containing the ONIE kernel and recovery intrd
 recovery-iso: $(RECOVERY_ISO_STAMP)
 $(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
-			$(RECOVERY_CONF_DIR)/grub-iso.cfg $(RECOVERY_CONF_DIR)/xorriso-options.cfg
+			$(RECOVERY_CONF_DIR)/grub-iso.cfg $(RECOVERY_XORRISO_OPTIONS)
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery Hybrid iso ===="
 	$(Q) Q=$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
 	     CONSOLE_DEV=$(CONSOLE_DEV) \
 	     CONSOLE_PORT=$(CONSOLE_PORT) \
 	     GRUB_DEFAULT_ENTRY=$(GRUB_DEFAULT_ENTRY) \
+	     UEFI_ENABLE=$(UEFI_ENABLE) \
 	     $(SCRIPTDIR)/onie-mk-iso.sh $(UPDATER_VMLINUZ) $(RECOVERY_INITRD) \
 		$(RECOVERY_DIR) \
 		$(MACHINE_CONF) $(RECOVERY_CONF_DIR) \
 		$(GRUB_HOST_LIB_I386_DIR) $(GRUB_HOST_BIN_I386_DIR) \
 		$(GRUB_HOST_LIB_UEFI_DIR) $(GRUB_HOST_BIN_UEFI_DIR) \
+		$(RECOVERY_XORRISO_OPTIONS) \
 		$(RECOVERY_ISO_IMAGE)
 	$(Q) touch $@
 
