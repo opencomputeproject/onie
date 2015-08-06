@@ -10,8 +10,8 @@
 #
 
 CROSSTOOL_NG_DESC		= crosstool-NG
-CROSSTOOL_NG_VERSION		= 1.19.0
-CROSSTOOL_NG_TARBALL		= crosstool-ng-$(CROSSTOOL_NG_VERSION).tar.bz2
+CROSSTOOL_NG_VERSION		= 1.21.0
+CROSSTOOL_NG_TARBALL		= crosstool-ng-$(CROSSTOOL_NG_VERSION).tar.xz
 CROSSTOOL_NG_URLS		+= $(ONIE_MIRROR) http://crosstool-ng.org/download/crosstool-ng
 CROSSTOOL_NG_BUILD_DIR		= $(BUILDDIR)/crosstool-ng
 CROSSTOOL_NG_STAMP_DIR		= $(CROSSTOOL_NG_BUILD_DIR)/stamp
@@ -27,26 +27,6 @@ CROSSTOOL_NG_STAMP		= $(CROSSTOOL_NG_SOURCE_STAMP) \
 				  $(CROSSTOOL_NG_PATCH_STAMP) \
 				  $(CROSSTOOL_NG_CONFIGURE_STAMP) \
 				  $(CROSSTOOL_NG_BUILD_STAMP) 
-
-# List of packages needed by crosstool-NG
-CT_NG_COMPONENTS		=	\
-	make-3.81.tar.bz2		\
-	m4-1.4.13.tar.xz		\
-	autoconf-2.65.tar.xz		\
-	automake-1.11.1.tar.bz2		\
-	libtool-2.2.6b.tar.lzma		\
-	gmp-4.3.2.tar.bz2		\
-	mpfr-2.4.2.tar.bz2		\
-	ppl-0.11.2.tar.lzma		\
-	cloog-ppl-0.15.10.tar.gz	\
-	mpc-1.0.1.tar.gz		\
-	libelf-0.8.13.tar.gz		\
-	binutils-2.22.tar.bz2		\
-	gcc-4.7.3.tar.bz2		\
-	duma_2_5_15.tar.gz		\
-	gdb-7.4.1.tar.bz2		\
-	ltrace_0.5.3.orig.tar.gz	\
-	strace-4.6.tar.xz
 
 # Setup a mirror to use for packages needed by crosstool-NG
 CROSSTOOL_ONIE_MIRROR  ?= $(ONIE_MIRROR)/crosstool-NG
@@ -65,10 +45,6 @@ $(CROSSTOOL_NG_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 	$(Q) echo "==== Getting upstream $(CROSSTOOL_NG_DESC) ===="
 	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
 		$(CROSSTOOL_NG_TARBALL) $(CROSSTOOL_NG_URLS)
-	$(Q) for F in ${CT_NG_COMPONENTS} ; do  echo "==== Getting upstream $${F} ====" ;\
-		$(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
-		$${F} $(CROSSTOOL_ONIE_MIRROR) || exit 1 ; \
-		done
 	$(Q) touch $@
 
 SOURCE += $(CROSSTOOL_NG_SOURCE_STAMP)
