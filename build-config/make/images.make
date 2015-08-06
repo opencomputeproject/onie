@@ -131,7 +131,14 @@ SYSROOT_LIBS	+= \
 endif
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)
-  SYSROOT_LIBS += libstdc++.so libstdc++.so.6 libstdc++.so.6.0.17
+  SYSROOT_LIBS += libstdc++.so libstdc++.so.6
+  ifeq ($(GCC_VERSION),4.9.2)
+    SYSROOT_LIBS += libstdc++.so.6.0.20
+  else ifeq ($(GCC_VERSION),4.7.3)
+    SYSROOT_LIBS += libstdc++.so.6.0.17
+  else
+    $(error C++ support: Unsupported GCC version: $(GCC_VERSION))
+  endif
 endif
 
 # Add librt if ACPI is enabled
@@ -160,6 +167,9 @@ endif
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
+		[ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
+			echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
+			exit 1; } ; \
 		find $(DEV_SYSROOT)/lib -name $$file | xargs -i \
 		cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
 	done
