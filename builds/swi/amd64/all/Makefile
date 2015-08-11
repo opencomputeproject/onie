@@ -26,7 +26,7 @@ endif
 # These are the local packages that must be build
 # for this SWI configuration.
 #
-ONL_REQUIRED_PACKAGES := kernel-3.14-x86-64-all:amd64 \
+ONL_REQUIRED_PACKAGES := kernel-3.2-deb7-x86-64-all:amd64 \
 			 kernel-x86-64:amd64 \
 			 initrd-amd64:amd64
 
