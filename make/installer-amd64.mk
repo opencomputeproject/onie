@@ -24,7 +24,9 @@ export INSTALLER_SWI
 export INSTALLER_NAME
 
 # Get the platform loaders from each platform package
-KERNELS			:= $(shell $(ONL_PKG_INSTALL) kernel-x86-64:amd64 --find-file kernel-x86_64) $(shell $(ONL_PKG_INSTALL) kernel-3.14-x86-64-all:amd64 --find-file kernel-3.14-x86_64-all)
+#KERNELS			:= $(shell $(ONL_PKG_INSTALL) kernel-x86-64:amd64 --find-file kernel-x86_64) $(shell $(ONL_PKG_INSTALL) kernel-3.14-x86-64-all:amd64 --find-file kernel-3.14-x86_64-all)
+KERNELS                 := $(shell $(ONL_PKG_INSTALL) kernel-x86-64:amd64 --find-file kernel-x86_64) $(shell $(ONL_PKG_INSTALL) kernel-3.2-deb7-x86-64-all:amd64 --find-file kernel-3.2-deb7-x86_64-all)
+
 INITRD			:= $(shell $(ONL_PKG_INSTALL) initrd-amd64:amd64 --find-file initrd-amd64)
 
 MKSHAR = $(ONL)/tools/mkshar
@@ -45,11 +47,15 @@ endif
 	>> installer.sh
 	$(ONL_V_GEN)set -o pipefail ;\
 	if $(ONL_V_P); then v="-v"; else v="--quiet"; fi ;\
-	$(MKSHAR) $(MKSHAR_OPTS) $@ $(ONL)/tools/sfx.sh.in installer.sh kernel-x86_64 kernel-3.14-x86_64-all initrd-amd64 lib *.swi $(INSTALLER_EXTRA_FILES)
+#	$(MKSHAR) $(MKSHAR_OPTS) $@ $(ONL)/tools/sfx.sh.in installer.sh kernel-x86_64 kernel-3.14-x86_64-all initrd-amd64 lib *.swi $(INSTALLER_EXTRA_FILES)
+	$(MKSHAR) $(MKSHAR_OPTS) $@ $(ONL)/tools/sfx.sh.in installer.sh kernel-x86_64 kernel-3.2-deb7-x86_64-all initrd-amd64 lib *.swi $(INSTALLER_EXTRA_FILES)
+
 ifdef INSTALLER_SWI
 	$(ONL_V_at)rm -f *.swi
 endif
-	$(ONL_V_at)rm -rf installer.sh ./lib ./usr kernel-x86_64 kernel-3.14-x86_64-all initrd-amd64
+#	$(ONL_V_at)rm -rf installer.sh ./lib ./usr kernel-x86_64 kernel-3.14-x86_64-all initrd-amd64
+	$(ONL_V_at)rm -rf installer.sh ./lib ./usr kernel-x86_64 kernel-3.2-deb7-x86_64-all initrd-amd64
+
 ifdef INSTALLER_CLEAN_FILES
 	$(ONL_V_at)rm -rf $(INSTALLER_CLEAN_FILES)
 endif

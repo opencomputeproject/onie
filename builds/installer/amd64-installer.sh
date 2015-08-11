@@ -342,7 +342,9 @@ installer_standard_gpt_install()
   installer_say "Installing kernel"
   mount -t ext4 $ONL_BOOT "$workdir/mnt"
 
-  cp "${installer_dir}/kernel-3.14-x86_64-all" "$workdir/mnt/."
+#  cp "${installer_dir}/kernel-3.14-x86_64-all" "$workdir/mnt/."
+  cp "${installer_dir}/kernel-3.2-deb7-x86_64-all" "$workdir/mnt/."
+
   cp "${installer_dir}/kernel-x86_64" "$workdir/mnt/."
   cp "${installer_dir}/initrd-amd64" "$workdir/mnt/."
   mkdir "$workdir/mnt/grub"
