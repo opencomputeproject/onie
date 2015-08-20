@@ -1,0 +1,138 @@
+diff --git a/sys_eeprom/onie_tlvinfo.c b/sys_eeprom/onie_tlvinfo.c
+index 84cfc53..c98ee7a 100755
+--- a/sys_eeprom/onie_tlvinfo.c
++++ b/sys_eeprom/onie_tlvinfo.c
+@@ -522,6 +522,51 @@ int prog_eeprom(u_int8_t * eeprom)
+     return 0;
+ }
+ 
++#include <fcntl.h>
++int save_eeprom(u_int8_t * eeprom, char *fname)
++{
++    int fd;
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++
++    if (!is_valid_tlvinfo_header(eeprom_hdr) || !is_checksum_valid(eeprom)) {
++        printf("ERROR: eeprom format invalid \n");
++    	return -1;
++    }
++    
++    fd = open(fname, O_CREAT|O_WRONLY|O_TRUNC, 0666);
++    if (fd < 0) {
++        printf("ERROR:open %s failed: \n", fname);
++    	return -1;
++    }
++    
++    //printf("save_eeprom size=%lu\n", sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen));
++    write(fd, eeprom, sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen) );
++    close(fd);
++    
++    return 0;
++}
++
++int load_eeprom(u_int8_t * eeprom, char *fname)
++{
++    int ret = 0;
++    int fd;
++    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++    
++    fd = open(fname, O_RDWR);
++    if (fd < 0) {
++        printf("ERROR:open %s failed: \n", fname);
++        return -1;
++    }
++    if( lseek(fd, 0, SEEK_SET) >= 0 && read(fd, eeprom, SYS_EEPROM_MAX_SIZE) >0) {
++        if (!is_valid_tlvinfo_header(eeprom_hdr) || !is_checksum_valid(eeprom)) {
++            printf("ERROR: eeprom format invalid \n");
++        	ret = -1;
++        }
++    }
++    close(fd);
++    return ret;
++}
++
+ /*
+  * is_sys_eeprom_valid - Is the EEPROM binary data in hardware valid
+  */
+diff --git a/sys_eeprom/onie_tlvinfo.h b/sys_eeprom/onie_tlvinfo.h
+index 5714f37..17e96c3 100644
+--- a/sys_eeprom/onie_tlvinfo.h
++++ b/sys_eeprom/onie_tlvinfo.h
+@@ -164,6 +164,8 @@ static inline const char* tlv_type2name(u_int8_t type)
+ void show_eeprom(u_int8_t *eeprom);
+ int read_eeprom(u_int8_t *eeprom);
+ int prog_eeprom(u_int8_t * eeprom);
++int save_eeprom(u_int8_t * eeprom, char *fname);
++int load_eeprom(u_int8_t * eeprom, char *fname);
+ void update_eeprom_header(u_int8_t *eeprom);
+ bool tlvinfo_find_tlv(u_int8_t *eeprom, u_int8_t tcode, int *eeprom_index);
+ bool tlvinfo_delete_tlv(u_int8_t * eeprom, u_int8_t code);
+diff --git a/sys_eeprom/sys_eeprom.c b/sys_eeprom/sys_eeprom.c
+index a77837f..199efa1 100644
+--- a/sys_eeprom/sys_eeprom.c
++++ b/sys_eeprom/sys_eeprom.c
+@@ -16,6 +16,10 @@ cmd_usage()
+ 	"   With no arguments display the EEPROM contents.\n"
+ 	"   -h --help\n"
+ 	"      Display usage\n"
++	"   -S --save [file name]\n"
++	"      Save TLV to local file.\n"
++	"   -L --load [file name]\n"
++	"      Load TLV from local file.\n"
+ 	"   -l --list\n"
+ 	"      List the understood TLV codes and names.\n"
+ 	"   -e --erase\n"
+@@ -46,13 +50,15 @@ int main(int argc, char * const argv[])
+ 	sizeof(tlv_code_list[0]);
+ 
+     char *tokens[tlv_code_count + 1];
+-    const char *short_options = "hels:g:";
++    const char *short_options = "hels:g:S:L:";
+     const struct option long_options[] = {
+ 	{"help",    no_argument,          0,    'h'},
+ 	{"list",    no_argument,          0,    'l'},
+ 	{"erase",   no_argument,          0,    'e'},
+ 	{"set",     required_argument,    0,    's'},
+ 	{"get",     required_argument,    0,    'g'},
++	{"save",    required_argument,    0,    'S'},
++	{"load",    required_argument,    0,    'L'},
+ 	{0,         0,                    0,      0},
+     };
+ 
+@@ -134,6 +140,36 @@ int main(int argc, char * const argv[])
+                 printf("ERROR: TLV code not present in EEPROM: 0x%02x\n", tcode);
+             }
+             goto syseeprom_err;
++	case 'S':
++	    {
++	        char fname[128];
++	        
++    		sscanf(optarg, "%s", fname);
++	        printf("save to file %s\n", fname);
++            if (read_eeprom(eeprom)) {
++                err = 1;
++                goto syseeprom_err;
++            }
++            
++            save_eeprom(eeprom, fname);
++        }
++        goto syseeprom_err;
++	case 'L':
++	    {
++	        char fname[128];
++	        
++    		sscanf(optarg, "%s", fname);
++	        printf("load from file %s\n", fname);
++	        
++            if(load_eeprom(eeprom, fname)) {
++    		    printf("ERROR: load file faile: %s\n", fname);
++                err = 1;
++                goto syseeprom_err;
++            }
++            
++            update = 1;
++        }
++        
+ 	break;
+ 
+ 	default:
