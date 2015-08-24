@@ -1,0 +1,112 @@
+Add ethernet phy BCM5461S Support
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+index 833f86f..c07d676 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c
+@@ -362,6 +362,9 @@ static s32 igb_get_invariants_82575(struct e1000_hw *hw)
+ 		phy->ops.get_cable_length   = igb_get_cable_length_82580;
+ 		phy->ops.get_phy_info       = igb_get_phy_info_82580;
+ 		break;
++	case BCM5461S_E_PHY_ID:
++		phy->type                   = e1000_phy_bcm5461s;
++		break;
+         case BCM54616_E_PHY_ID:
+ 		phy->type                   = e1000_phy_bcm54616;
+                 break;
+@@ -597,6 +600,10 @@ static s32 igb_phy_hw_reset_sgmii_82575(struct e1000_hw *hw)
+ 
+ 	ret_val = igb_phy_sw_reset(hw);
+ 
++	if (hw->phy.type == e1000_phy_bcm5461s) {
++		igb_phy_init_script_5461s(hw);
++	}
++
+ out:
+ 	return ret_val;
+ }
+@@ -1135,6 +1142,7 @@ static s32 igb_setup_copper_link_82575(struct e1000_hw *hw)
+ 	case e1000_phy_82580:
+ 		ret_val = igb_copper_link_setup_82580(hw);
+ 		break;
++	case e1000_phy_bcm5461s:
+ 	case e1000_phy_bcm54616:
+ 		ret_val = E1000_SUCCESS;
+ 		break;
+diff --git a/drivers/net/ethernet/intel/igb/e1000_defines.h b/drivers/net/ethernet/intel/igb/e1000_defines.h
+index 88be58d..0ab7463 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_defines.h
++++ b/drivers/net/ethernet/intel/igb/e1000_defines.h
+@@ -694,6 +694,7 @@
+ #define I82580_I_PHY_ID      0x015403A0
+ #define I350_I_PHY_ID        0x015403B0
+ #define M88_VENDOR           0x0141
++#define BCM5461S_E_PHY_ID    0x002060C0
+ #define BCM54616_E_PHY_ID    0x03625D10
+ 
+ /* M88E1000 Specific Registers */
+diff --git a/drivers/net/ethernet/intel/igb/e1000_hw.h b/drivers/net/ethernet/intel/igb/e1000_hw.h
+index ab7c843..eda538d 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_hw.h
++++ b/drivers/net/ethernet/intel/igb/e1000_hw.h
+@@ -121,6 +121,7 @@ enum e1000_phy_type {
+ 	e1000_phy_ife,
+ 	e1000_phy_82580,
+ 	e1000_phy_bcm54616,
++	e1000_phy_bcm5461s,
+ };
+ 
+ enum e1000_bus_type {
+diff --git a/drivers/net/ethernet/intel/igb/e1000_phy.c b/drivers/net/ethernet/intel/igb/e1000_phy.c
+index b17d7c2..7306ce3 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_phy.c
++++ b/drivers/net/ethernet/intel/igb/e1000_phy.c
+@@ -2120,6 +2120,36 @@ s32 igb_phy_init_script_igp3(struct e1000_hw *hw)
+ }
+ 
+ /**
++ *  igb_phy_init_script_5461s - Inits the BCM5461S PHY
++ *  @hw: pointer to the HW structure
++ *
++ *  Initializes a Broadcom Gigabit PHY.
++ **/
++s32 igb_phy_init_script_5461s(struct e1000_hw *hw)
++{
++	u16 mii_reg_led = 0;
++
++	hw_dbg("Running BCM5461S PHY init script\n");
++
++    /* 1. Speed LED (Set the Link LED mode), Shadow 00010, 0x1C.bit2=1 */
++	hw->phy.ops.write_reg(hw, 0x1C, 0x0800);
++	hw->phy.ops.read_reg(hw, 0x1C, &mii_reg_led);
++    mii_reg_led |= 0x0004;
++	hw->phy.ops.write_reg(hw, 0x1C, mii_reg_led | 0x8000);
++
++    /* 2. Active LED (Set the Link LED mode), Shadow 01001, 0x1C.bit4=1, 0x10.bit5=0 */
++	hw->phy.ops.write_reg(hw, 0x1C, 0x2400);
++	hw->phy.ops.read_reg(hw, 0x1C, &mii_reg_led);
++    mii_reg_led |= 0x0010;
++	hw->phy.ops.write_reg(hw, 0x1C, mii_reg_led | 0x8000);
++	hw->phy.ops.read_reg(hw, 0x10, &mii_reg_led);
++    mii_reg_led &= 0xffdf;
++	hw->phy.ops.write_reg(hw, 0x10, mii_reg_led);
++
++	return E1000_SUCCESS;
++}
++
++/**
+  * igb_power_up_phy_copper - Restore copper link in case of PHY power down
+  * @hw: pointer to the HW structure
+  *
+diff --git a/drivers/net/ethernet/intel/igb/e1000_phy.h b/drivers/net/ethernet/intel/igb/e1000_phy.h
+index 8510797..ca40976 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_phy.h
++++ b/drivers/net/ethernet/intel/igb/e1000_phy.h
+@@ -65,6 +65,7 @@ s32  igb_phy_has_link(struct e1000_hw *hw, u32 iterations,
+ void igb_power_up_phy_copper(struct e1000_hw *hw);
+ void igb_power_down_phy_copper(struct e1000_hw *hw);
+ s32  igb_phy_init_script_igp3(struct e1000_hw *hw);
++s32  igb_phy_init_script_5461s(struct e1000_hw *hw);
+ s32  igb_read_phy_reg_mdic(struct e1000_hw *hw, u32 offset, u16 *data);
+ s32  igb_write_phy_reg_mdic(struct e1000_hw *hw, u32 offset, u16 data);
+ s32  igb_read_phy_reg_i2c(struct e1000_hw *hw, u32 offset, u16 *data);
