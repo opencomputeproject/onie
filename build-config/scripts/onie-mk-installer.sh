@@ -90,16 +90,11 @@ cp -r $installer_dir/$arch/* $tmp_installdir
     cp $machine_dir/installer/install-platform $tmp_installdir
 }
 
-# Escape special chars in the user provide kernel cmdline string for use in
-# sed. Special chars are: \ / &
-EXTRA_CMDLINE_LINUX=`echo $EXTRA_CMDLINE_LINUX | sed -e 's/[\/&]/\\\&/g'`
-
 # Massage install-arch
 if [ "$arch" = "x86_64" ] ; then
     sed -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/" \
         -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/" \
         -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
-        -e "s/%%EXTRA_CMDLINE_LINUX%%/$EXTRA_CMDLINE_LINUX/" \
 	-i $tmp_installdir/install-arch
 elif [ "$arch" = "powerpc-softfloat" ] ; then
     sed -e "s/%%UPDATER_UBOOT_NAME%%/$UPDATER_UBOOT_NAME/" \
@@ -107,7 +102,7 @@ elif [ "$arch" = "powerpc-softfloat" ] ; then
 fi
 echo -n "."
 
-# Add optional installer configuration file
+# Add optional installer configuration files
 if [ "$arch" = "x86_64" ] ; then
     cp "$installer_conf" $tmp_installdir || exit 1
     echo -n "."
@@ -116,6 +111,12 @@ if [ "$arch" = "x86_64" ] ; then
     # make sure each var is 'exported' for GRUB shell
     sed -e 's/\(.*\)=\(.*$\)/\1=\2\nexport \1/' $machine_conf >> $GRUB_MACHINE_CONF
     echo "## End grub-machine.cfg" >> $GRUB_MACHINE_CONF
+    echo -n "."
+    GRUB_EXTRA_CMDLINE_CONF="$tmp_installdir/grub/grub-extra.cfg"
+    echo "## Begin grub-extra.cfg" > $GRUB_EXTRA_CMDLINE_CONF
+    echo "ONIE_EXTRA_CMDLINE_LINUX=\"$EXTRA_CMDLINE_LINUX\"" >> $GRUB_EXTRA_CMDLINE_CONF
+    echo "export ONIE_EXTRA_CMDLINE_LINUX" >> $GRUB_EXTRA_CMDLINE_CONF
+    echo "## End grub-extra.cfg" >> $GRUB_EXTRA_CMDLINE_CONF
     echo -n "."
 fi
 sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine.conf || exit 1

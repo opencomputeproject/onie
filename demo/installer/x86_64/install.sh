@@ -304,7 +304,7 @@ grub_cfg=$(mktemp)
 [ -r ./platform.conf ] && . ./platform.conf
 
 DEFAULT_GRUB_SERIAL_COMMAND="serial --port=%%CONSOLE_PORT%% --speed=%%CONSOLE_SPEED%% --word=8 --parity=no --stop=1"
-DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8 %%EXTRA_CMDLINE_LINUX%%"
+DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8"
 GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
 GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
 export GRUB_SERIAL_COMMAND
@@ -319,6 +319,11 @@ terminal_output serial
 set timeout=5
 
 EOF
+
+# Add any platform specific kernel command line arguments.  This sets
+# the $ONIE_EXTRA_CMDLINE_LINUX variable referenced above in
+# $GRUB_CMDLINE_LINUX.
+cat $onie_root_dir/grub/grub-extra.cfg >> $grub_cfg
 
 # Add the logic to support grub-reboot
 cat <<EOF >> $grub_cfg
@@ -348,7 +353,7 @@ cat <<EOF >> $grub_cfg
 menuentry '$demo_grub_entry' {
         search --no-floppy --label --set=root $demo_volume_label
         echo    'Loading ONIE Demo $demo_type kernel ...'
-        linux   /demo.vmlinuz $GRUB_CMDLINE_LINUX DEMO_TYPE=$demo_type
+        linux   /demo.vmlinuz $GRUB_CMDLINE_LINUX \$ONIE_EXTRA_CMDLINE_LINUX DEMO_TYPE=$demo_type
         echo    'Loading ONIE Demo $demo_type initial ramdisk ...'
         initrd  /demo.initrd
 }
