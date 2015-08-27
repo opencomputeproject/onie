@@ -65,16 +65,11 @@ mkdir $tmp_installdir || clean_up 1
 
 cp $installer_dir/$arch/install.sh $tmp_installdir || clean_up 1
 
-# Escape special chars in the user provide kernel cmdline string for use in
-# sed. Special chars are: \ / &
-EXTRA_CMDLINE_LINUX=`echo $EXTRA_CMDLINE_LINUX | sed -e 's/[\/&]/\\\&/g'`
-
 # Tailor the demo installer for OS mode or DIAG mode
 sed -i -e "s/%%DEMO_TYPE%%/$demo_type/g" \
        -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/g" \
        -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/g" \
        -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/g" \
-       -e "s/%%EXTRA_CMDLINE_LINUX%%/$EXTRA_CMDLINE_LINUX/" \
     $tmp_installdir/install.sh || clean_up 1
 echo -n "."
 cp $* $tmp_installdir || clean_up 1
