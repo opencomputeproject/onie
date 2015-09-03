@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #
@@ -39,6 +39,19 @@ fi
 
 [ -d "$installer_dir" ] || {
     echo "ERROR: installer directory does not exist: $installer_dir"
+    exit 1
+}
+
+if [ "$arch" = "powerpc-softfloat" -o "$arch" = "armv7a" ] ; then
+    # Both of these architectures share common installer code as they
+    # are both based on u-boot.
+    arch_dir="u-boot-arch"
+else
+    arch_dir="$arch"
+fi
+
+[ -d "$installer_dir/$arch_dir" ] || {
+    echo "ERROR: arch specific installer directory does not exist: $installer_dir/$arch"
     exit 1
 }
 
@@ -84,21 +97,24 @@ echo -n "."
 
 cp $installer_dir/install.sh $tmp_installdir || exit 1
 echo -n "."
-cp -r $installer_dir/$arch/* $tmp_installdir
+cp -r $installer_dir/$arch_dir/* $tmp_installdir
 
 [ -r $machine_dir/installer/install-platform ] && {
     cp $machine_dir/installer/install-platform $tmp_installdir
 }
 
 # Massage install-arch
-if [ "$arch" = "x86_64" ] ; then
+if [ "$arch_dir" = "x86_64" ] ; then
     sed -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/" \
         -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/" \
         -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
 	-i $tmp_installdir/install-arch
-elif [ "$arch" = "powerpc-softfloat" ] ; then
+elif [ "$arch_dir" = "u-boot-arch" ] ; then
     sed -e "s/%%UPDATER_UBOOT_NAME%%/$UPDATER_UBOOT_NAME/" \
 	-i $tmp_installdir/install-arch
+else
+    echo "Error: Unsupported architecture layout: $arch_dir"
+    exit 1
 fi
 echo -n "."
 

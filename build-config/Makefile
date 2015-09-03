@@ -1,8 +1,8 @@
 #-------------------------------------------------------------------------------
 #>
 #
-#  Copyright (C) 2013-2015 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014-2015 Carlos Cardenas <carlos@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #
@@ -168,6 +168,12 @@ ifneq (,$(MAKECMDGOALS))
 endif
 
 PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
+
+ifeq ($(UBOOT_ENABLE),yes)
+	ROOTFS_ARCH = u-boot-arch
+else
+	ROOTFS_ARCH = $(ONIE_ARCH)
+endif
 
 # Verify partition type
 ifneq ($(filter-out gpt msdos, $(PARTITION_TYPE)),)

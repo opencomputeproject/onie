@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
@@ -205,12 +205,12 @@ RUNTIME_ONIE_PLATFORM	?= $(ARCH)-$(RUNTIME_ONIE_MACHINE)-r$(MACHINE_REV)
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
 $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) rm -f $(SYSROOTDIR)/linuxrc
-	$(Q) cd $(ROOTCONFDIR) && ./install default $(SYSROOTDIR)
-	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie ] ; then \
-		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
+	$(Q) cd $(ROOTCONFDIR) && $(SCRIPTDIR)/install-rootfs.sh default $(SYSROOTDIR)
+	$(Q) if [ -d $(ROOTCONFDIR)/$(ROOTFS_ARCH)/sysroot-lib-onie ] ; then \
+		cp $(ROOTCONFDIR)/$(ROOTFS_ARCH)/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
 	     fi
-	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin ] ; then	\
-		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin/* $(SYSROOTDIR)/bin ; \
+	$(Q) if [ -d $(ROOTCONFDIR)/$(ROOTFS_ARCH)/sysroot-bin ] ; then	\
+		cp $(ROOTCONFDIR)/$(ROOTFS_ARCH)/sysroot-bin/* $(SYSROOTDIR)/bin ; \
 	     fi
 	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-lib-onie ] ; then \
 		cp $(MACHINEDIR)/rootconf/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
@@ -280,10 +280,11 @@ $(UPDATER_ONIE_TOOLS): $(SYSROOT_COMPLETE_STAMP) $(SCRIPTDIR)/onie-mk-tools.sh
 
 .SECONDARY: $(ITB_IMAGE)
 
-$(IMAGEDIR)/%.itb : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ)
+$(IMAGEDIR)/%.itb : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ) $(SCRIPTDIR)/onie-mk-itb.sh
 	$(Q) echo "==== Create $* u-boot multi-file .itb image ===="
-	$(Q) cd $(IMAGEDIR) && $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) \
-				$(MACHINE_PREFIX) $(SYSROOT_CPIO_XZ) $@
+	$(Q) cd $(IMAGEDIR) && \
+		V=$(V) $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) $(MACHINE_PREFIX) $(UBOOT_ITB_ARCH) \
+		$(KERNEL_VMLINUZ) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb $(SYSROOT_CPIO_XZ) $@
 
 $(UPDATER_ITB) : $(ITB_IMAGE)
 	ln -sf $< $@

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -20,9 +20,17 @@ if  [ ! -d $installer_dir ] || \
     exit 1
 fi
 
-if  [ ! -d $installer_dir/$arch ] || \
-    [ ! -r $installer_dir/$arch/install.sh ] ; then
-    echo "Error: Invalid arch installer directory: $installer_dir/$arch"
+if [ "$arch" = "powerpc-softfloat" -o "$arch" = "armv7a" ] ; then
+    # Both of these architectures share common installer code as they
+    # are both based on u-boot.
+    arch_dir="u-boot-arch"
+else
+    arch_dir="$arch"
+fi
+
+if  [ ! -d $installer_dir/$arch_dir ] || \
+    [ ! -r $installer_dir/$arch_dir/install.sh ] ; then
+    echo "Error: Invalid arch installer directory: $installer_dir/$arch_dir"
     exit 1
 fi
 
@@ -63,7 +71,7 @@ tmp_dir=$(mktemp --directory)
 tmp_installdir="$tmp_dir/installer"
 mkdir $tmp_installdir || clean_up 1
 
-cp $installer_dir/$arch/install.sh $tmp_installdir || clean_up 1
+cp $installer_dir/$arch_dir/install.sh $tmp_installdir || clean_up 1
 
 # Tailor the demo installer for OS mode or DIAG mode
 sed -i -e "s/%%DEMO_TYPE%%/$demo_type/g" \
