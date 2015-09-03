@@ -409,15 +409,21 @@ $(PXE_EFI64_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_ISO_STAMP) $(RECOVERY_
 	    $$(cat $(PXE_EFI64_GRUB_MODS))
 	$(Q) touch $@
 
+# Allow machines to optionally define image post-processing
+# instructions.  This makefile fragment can define rules for keeping
+# $(MACHINE_IMAGE_COMPLETE_STAMP) up to date, referenced by the final
+# $(IMAGE_COMPLETE_STAMP) target below.
+-include $(MACHINEDIR)/post-process.make
+
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
-$(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE)
+$(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE) $(MACHINE_IMAGE_COMPLETE_STAMP)
 	$(Q) touch $@
 
 USERSPACE_CLEAN += image-clean
 image-clean:
 	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
-	$(Q) rm -rf $(RECOVERY_DIR)
+	$(Q) rm -rf $(RECOVERY_DIR) $(MACHINE_IMAGE_COMPLETE_STAMP) $(MACHINE_IMAGE_PRODUCTS)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
 #
