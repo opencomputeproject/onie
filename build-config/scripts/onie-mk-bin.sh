@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2015 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -29,6 +29,10 @@ conf_file="$conf_dir/onie-rom.conf"
 # in the platform specific conf file.
 uimage_max_size=$(( 4 * 1024 * 1024 ))
 
+# Most platforms have a max u-boot size of 512KB.  You can override
+# this in the platform specific conf file.
+uboot_max_size=$(( 512 * 1024 ))
+
 . $conf_file
 
 [ -d "$image_dir" ] || {
@@ -53,6 +57,12 @@ UBOOT_BIN="$image_dir/${machine}.u-boot"
     echo "ERROR: u-boot binary '$UBOOT_BIN' does not exist."
     exit 1
 }
+
+uboot_size=$(stat -c '%s' $UBOOT_BIN)
+if [ $uboot_size -gt $uboot_max_size ] ; then
+    printf "ERROR: $UBOOT_BIN size (%d) is greater than max size: %d\n" $uboot_size $uboot_max_size
+    exit 1
+fi
 
 # Rummage u-boot directory for onie environment variables
 true ${uboot_machine="$(echo $machine | tr a-z A-Z)"}
@@ -82,6 +92,10 @@ fi
 
 if [ "$format" = "contiguous" ] ; then
     # single ROM image : u-boot + env + onie-uimage
+    # In increasing physical address space the order is:
+    #   low : onie-uimage
+    #   mid : u-boot env
+    #   high: u-boot
     total_sz=$(( $onie_uimage_size + $env_sector_size ))
     pad_file=$(tempfile)
     dd if=$onie_uimage of=$pad_file ibs=$total_sz conv=sync > /dev/null 2>&1 || {
@@ -90,6 +104,20 @@ if [ "$format" = "contiguous" ] ; then
     }
     cat $pad_file $UBOOT_BIN > $output_bin
     rm -f $pad_file
+elif [ "$format" = "contiguous-up" ] ; then
+    # single ROM image : u-boot + env + onie-uimage
+    # In increasing physical address space the order is:
+    #   low : u-boot
+    #   mid : u-boot env
+    #   high: onie-uimage
+    # Pad U-Boot to uboot_max_size.
+    total_sz=$(( $onie_uimage_size + $env_sector_size ))
+    dd if=$UBOOT_BIN of=$output_bin ibs=$uboot_max_size conv=sync > /dev/null 2>&1 || {
+        echo "ERROR: Problems with dd for $format image"
+        exit 1
+    }
+    head --bytes=$env_sector_size /dev/zero >> $output_bin
+    cat $onie_uimage >> $output_bin
 elif [ "$format" = "ubootenv_onie" ] ; then
     # discontinuous ROM -- emit u-boot separately from u-boot-env + onie-uimage
     # "Accton 5652 Format"
@@ -101,7 +129,9 @@ elif [ "$format" = "ubootenv_onie" ] ; then
     cp $UBOOT_BIN ${output_bin}.uboot
 elif [ "$format" = "uboot_ubootenv" ] ; then
     # discontinuous ROM -- emit u-boot+env separately from onie-uimage
-    # "DNI 6448 Format"
+    # In increasing physical address space the order of u-boot+env is:
+    #   low : u-boot env
+    #   high: u-boot
     cp $onie_uimage $output_bin
     pad_file=$(tempfile)
     dd if=/dev/zero of=$pad_file bs=$env_sector_size count=1 > /dev/null 2>&1 || {
@@ -109,6 +139,19 @@ elif [ "$format" = "uboot_ubootenv" ] ; then
         exit 1
     }
     cat $pad_file $UBOOT_BIN > ${output_bin}.uboot+env
+    rm -f $pad_file
+elif [ "$format" = "uboot_ubootenv-up" ] ; then
+    # discontinuous ROM -- emit u-boot+env separately from onie-uimage
+    # In increasing physical address space the order of u-boot+env is:
+    #   low : u-boot
+    #   high: u-boot env
+    cp $onie_uimage $output_bin
+    pad_file=$(tempfile)
+    dd if=/dev/zero of=$pad_file bs=$env_sector_size count=1 > /dev/null 2>&1 || {
+        echo "ERROR: Problems with dd for $format image"
+        exit 1
+    }
+    cat $UBOOT_BIN $pad_file > ${output_bin}.uboot+env
     rm -f $pad_file
 else
     echo "ERROR: Unknown ROM format '$format'."

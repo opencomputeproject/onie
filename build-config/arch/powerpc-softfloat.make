@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -15,10 +15,13 @@ CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
 
 KERNEL_ARCH		= powerpc
 KERNEL_DTB		?= $(MACHINE).dtb
-KERNEL_INSTALL_DEPS	+= $(KERNEL_DTB_INSTALL_STAMP)
+KERNEL_DTB_PATH		?= $(KERNEL_DTB)
+KERNEL_IMAGE_FILE	= $(LINUXDIR)/vmlinux.bin.gz
+KERNEL_INSTALL_DEPS	+= $(KERNEL_VMLINUZ_INSTALL_STAMP) $(KERNEL_DTB_INSTALL_STAMP)
 
 # This architecture requires U-Boot
 UBOOT_ENABLE = yes
+UBOOT_ITB_ARCH = ppc
 
 # Include MTD utilities
 MTDUTILS_ENABLE ?= yes
