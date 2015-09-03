@@ -9,27 +9,39 @@ QEMU_PATH="${QEMU_PATH:=/opt/qemu-2.4.0/bin}"
     echo "Error: Unable to find qemu-system-arm in QEMU_PATH: $QEMU_PATH"
     exit 1
 }
-DISK_IMG="$1"
-NOR0_IMG="$2"
-NOR1_IMG="$3"
+
+IMAGE_DIR="$1"
 
 usage() {
-    echo "$0: <disk_img> <nor0_img> <nor1_img>"
+    echo
+    echo "Usage: $0"
+    echo "$0: <image_directory>"
+    echo
+    echo "<image_directory> is the path containing the ONIE build products."
     exit 1
 }
 
+[ -d "$IMAGE_DIR" ] || {
+    echo "ERROR: Image directory does not exist: $IMAGE_DIR"
+    usage
+}
+
+DISK_IMG="${IMAGE_DIR}/onie-qemu_armv7a-r0-sd.img"
+NOR0_IMG="${IMAGE_DIR}/onie-qemu_armv7a-r0-nor0.img"
+NOR1_IMG="${IMAGE_DIR}/onie-qemu_armv7a-r0-nor1.img"
+
 [ -n "$DISK_IMG" -a -r "$DISK_IMG" ] || {
-    echo "Unable to read disk image: $DISK_IMG"
+    echo "ERROR: Unable to read disk image: $DISK_IMG"
     usage
 }
 
 [ -n "$NOR0_IMG" -a -r "$NOR0_IMG" ] || {
-    echo "Unable to read NOR0 image: $NOR0_IMG"
+    echo "ERROR: Unable to read NOR0 image: $NOR0_IMG"
     usage
 }
 
 [ -n "$NOR1_IMG" -a -r "$NOR1_IMG" ] || {
-    echo "Unable to read NOR1 image: $NOR1_IMG"
+    echo "ERROR: Unable to read NOR1 image: $NOR1_IMG"
     usage
 }
 
