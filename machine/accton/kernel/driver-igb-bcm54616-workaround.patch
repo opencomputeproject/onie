@@ -1,0 +1,80 @@
+
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+index 833f86f..867f080 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c
+@@ -1146,6 +1146,17 @@ static s32 igb_setup_copper_link_82575(struct e1000_hw *hw)
+ 	if (ret_val)
+ 		goto out;
+ 
++#if 1  //HW RD and Grace workaounrd on 2015-0710
++{
++	u16 phy_data;
++	hw->phy.ops.read_reg(hw,0x0,&phy_data);
++	phy_data |=0x8000;
++	hw->phy.ops.write_reg(hw,0x0,phy_data);
++	phy_data &=~(0x8000);
++	hw->phy.ops.write_reg(hw,0x0,phy_data);
++}
++#endif
++
+ 	ret_val = igb_setup_copper_link(hw);
+ out:
+ 	return ret_val;
+@@ -1268,6 +1279,31 @@ static s32 igb_setup_serdes_link_82575(struct e1000_hw *hw)
+ 		hw_dbg("Configuring Forced Link:PCS_LCTL=0x%08X\n", reg);
+ 	}
+ 
++#if 1
++{
++	u16 phy_data;
++	u16 phy_temp;
++	if (hw->mac.autoneg==1)
++	{
++		/* check the link partner speed support 1G */
++		hw->phy.ops.read_reg(hw,0xa,&phy_data);
++		hw->phy.ops.read_reg(hw,0xa,&phy_temp);
++		phy_data|=phy_temp;
++
++		if ((phy_data&0x7c00)!=0)
++		{
++			/*graceliu force link for HW RD ask*/
++			reg &= ~E1000_PCS_LCTL_AN_ENABLE;     /* Disable Autoneg*/
++			reg &= ~E1000_PCS_LCTL_FORCE_LINK;    /* Disable forcelink*/
++			reg &= ~E1000_PCS_LCTL_FSD;
++			reg |= E1000_PCS_LCTL_FLV_LINK_UP |   /* Force link up */
++			    E1000_PCS_LCTL_FSV_1000 |         /* Force 1000    */
++			    E1000_PCS_LCTL_FDV_FULL ;         /* SerDes Full duplex */
++		}
++	}
++}
++#endif
++
+ 	wr32(E1000_PCS_LCTL, reg);
+ 
+ 	if (!igb_sgmii_active_82575(hw))
+diff --git a/drivers/net/ethernet/intel/igb/e1000_phy.c b/drivers/net/ethernet/intel/igb/e1000_phy.c
+index b17d7c2..b16260f 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_phy.c
++++ b/drivers/net/ethernet/intel/igb/e1000_phy.c
+@@ -1972,6 +1972,9 @@ s32 igb_phy_sw_reset(struct e1000_hw *hw)
+ 	s32 ret_val = 0;
+ 	u16 phy_ctrl;
+ 
++	if (hw->phy.type == e1000_phy_bcm54616)
++		return E1000_SUCCESS;
++
+ 	if (!(hw->phy.ops.read_reg))
+ 		goto out;
+ 
+@@ -2147,6 +2150,9 @@ void igb_power_down_phy_copper(struct e1000_hw *hw)
+ {
+ 	u16 mii_reg = 0;
+ 
++	if (hw->phy.type == e1000_phy_bcm54616)
++		return;
++
+ 	/* The PHY will retain its settings across a power down/up cycle */
+ 	hw->phy.ops.read_reg(hw, PHY_CONTROL, &mii_reg);
+ 	mii_reg |= MII_CR_POWER_DOWN;
