@@ -169,6 +169,15 @@ check_for_diag()
                     else
                         echo "***Diag $p does not have the correct attribute flags"
                     fi
+
+                    # if found, check partition name
+                    partname=$(sgdisk -i $part /dev/$blk | grep 'Partition name')
+                    partname=${partname##*: }
+                    if [ $(echo "$partname" | egrep -e '-DIAG') ] ; then
+                        echo "Partition name $partname is valid"
+                    else
+                        echo "***Partition name is named incorrectly"
+                    fi
                 done
             fi
         else #not x86_64
