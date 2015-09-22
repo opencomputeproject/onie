@@ -161,11 +161,20 @@ check_for_diag()
                     blk=$(echo $dev_p | cut -d ' ' -f 1)
                     part=$(echo $dev_p | cut -d ' ' -f 2)
 
+                    # if found, check partition name
+                    partname=$(sgdisk -i $part /dev/$blk | grep 'Partition name')
+                    partname=${partname##*: }
+                    if [ $(echo "$partname" | egrep -e '-DIAG') ] ; then
+                        [ "$verbose" = "yes" ] && echo "Partition name $partname is valid"
+                    else
+                        echo "***Partition name is incorrectly named"
+                    fi
+
                     # if found, check attribute flags
                     attr=$(sgdisk -i $part /dev/$blk | grep 'Attribute flags')
                     attr=${attr##*: }
                     if [ "$attr" = "0000000000000001" ] ; then
-                        echo "Diag $p is valid"
+                        [ "$verbose" = "yes" ] && echo "Diag $p has valid attribute flags"
                     else
                         echo "***Diag $p does not have the correct attribute flags"
                     fi
@@ -177,7 +186,7 @@ check_for_diag()
             if [ -z $ret ]; then
                 echo "No Diagnostic image found"
             else
-                echo "Diagnostic image found"
+                [ "$verbose" = "yes" ] && echo "Diagnostic image found"
             fi
         fi
     fi
