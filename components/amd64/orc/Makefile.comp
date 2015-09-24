@@ -1,0 +1,79 @@
+# -*- Makefile -*-
+############################################################
+# <bsn.cl fy=2013 v=none>
+#
+#        Copyright 2013, 2014 BigSwitch Networks, Inc.
+#
+#
+#
+# </bsn.cl>
+############################################################
+############################################################
+#
+#
+############################################################
+ifndef ONL
+$(error $$ONL is undefined.)
+else
+include $(ONL)/make/config.mk
+endif
+
+ifndef TOOLCHAIN
+TOOLCHAIN = x86_64-linux-gnu
+endif
+export TOOLCHAIN
+
+
+
+MODULE := orc-build
+include $(BUILDER)/standardinit.mk
+
+LIBRARY := orc-build
+$(LIBRARY)_SUBDIR := $(dir $(lastword $(MAKEFILE_LIST)))
+include $(BUILDER)/lib.mk
+
+
+# Note: module system doesn't resolve transitive dependencies
+# ELS needs OS
+# uCli needs BigList and IOF
+DEPENDMODULES := orc AIM ELS OS uCli BigList IOF
+
+LIBONLP := $(shell $(ONL_PKG_INSTALL) onlp:amd64 --find-file libonlp.so)
+
+
+include $(BUILDER)/dependmodules.mk
+
+BINARY := orced
+$(BINARY)_LIBRARIES := $(LIBRARY_TARGETS)
+include $(BUILDER)/bin.mk
+
+SHAREDLIB := veth.so
+$(SHAREDLIB)_TARGETS := veth_drv
+include $(BUILDER)/so.mk
+
+SHAREDLIB := debug.so
+$(SHAREDLIB)_TARGETS := debug_drv
+include $(BUILDER)/so.mk
+
+include $(BUILDER)/targets.mk
+
+GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_MODULES_INIT=1
+GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_MAIN=1
+GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_PVS_SYSLOG=1
+GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_DAEMONIZE=1
+GLOBAL_CFLAGS += -DAIM_CONFIG_AIM_MAIN_FUNCTION="orc_main"
+
+GLOBAL_CFLAGS += -DORC_CONFIG_INCLUDE_AIM_MAIN=1
+GLOBAL_CFLAGS += -DORC_CONFIG_INCLUDE_UCLI=1
+GLOBAL_CFLAGS += -DORC_CONFIG_INCLUDE_CONSOLE_CLI=1
+GLOBAL_CFLAGS += -DORC_CONFIG_CONSOLE_PROMPT_DEFAULT=\"orc\"
+
+
+GLOBAL_CFLAGS += -fPIC
+
+GLOBAL_LINK_LIBS += -Wl,--unresolved-symbols=ignore-all # HACK; need to ignore shared for ONLP and object for veth.so
+GLOBAL_LINK_LIBS += $(LIBONLP)
+GLOBAL_LINK_LIBS += -g -ledit -ldl -rdynamic -lpthread   # pthreads is needed to unbork gdb
+
+
+include $(ONL)/make/deb-subdir.mk
