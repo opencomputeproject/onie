@@ -106,12 +106,13 @@ Now press RETURN here to jump into ONIE''s manual installer mode.  You should se
 
         ONIE:/ # 
 
-Then simply download the latest ONL installer from the website and run it.
+Then simply download the latest ONL installer for the appropriate
+architecture (powerpc or amd64) from the website and run it.
 
-        ONIE:/ # wget http://opennetlinux.org/binaries/latest.installer
+        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-amd64.installer
+
+        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-powerpc.installer
         Connecting to opennetlinux.org (107.170.237.53:80)
-        latest.installer     100% |*******************************|   164M  0:00:00 ETA
-        ONIE:/ # sh latest.installer 
         Open Network Installer running under ONIE.
         Installer Version: Open Network Linux e148b7a (powerpc.all,2014.05.21.18.57,e148b7a90131c07eb8d49f74316baf8f2aae92c6)
         Detected platform: powerpc-quanta-lb9-r0
