@@ -79,6 +79,15 @@ onl-kvm: all-components swi kvm-loader kvm-iso
 all-components:
 	export ONL=`pwd` && make -C $$ONL/builds/components
 
+all-closed-components:
+	export ONL=`pwd` && export ONL_CLOSED_SOURCE=1 && make -C $$ONL/builds/components
+
+ONLORG_DIR=/var/www/apt/debian/dists/unstable/main/
+opennetlinux.org: all-closed-components
+	scp debian/repo/amd64/*.deb opennetlinux.org:$(ONLORG_DIR)/binary-amd64
+	scp debian/repo/powerpc/*.deb opennetlinux.org:$(ONLORG_DIR)/binary-powerpc
+	ssh opennetlinux.org "cd /var/www/apt && make"
+
 installer:
 	export ONL=`pwd` && make -C $$ONL/builds/installer/$(ARCH)/all
 swi:
