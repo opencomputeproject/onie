@@ -1,12 +1,23 @@
 ############################################################
 # <bsn.cl fy=2013 v=none>
-# 
-#         Copyright 2013 Accton Technology Corporation.       
-# 
-# 
-# 
+#
+#         Copyright 2013 Accton Technology Corporation.
+#
+#
+#
 # </bsn.cl>
 ############################################################
+
+#
+# The IDPROM device is initialized last as part of this script.
+#
+# Assume that if the IDPROM device already exists then we
+# have already executed properly.
+#
+if [ -f /sys/devices/pci0000:00/0000:00:13.0/i2c-1/1-0057/eeprom ]; then
+    exit 0
+fi
+
 
 ########### initialize I2C bus 0 ###########
 # initialize CPLD
@@ -89,4 +100,8 @@ echo lm75 0x48 > /sys/bus/i2c/devices/i2c-61/new_device
 echo lm75 0x49 > /sys/bus/i2c/devices/i2c-62/new_device
 echo lm75 0x4a > /sys/bus/i2c/devices/i2c-63/new_device
 
+# IDPROM
+echo 24c02 0x57 > /sys/devices/pci0000:00/0000:00:13.0/i2c-1/new_device
+
 exit 0
+
