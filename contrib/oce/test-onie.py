@@ -321,6 +321,11 @@ def validate_network_info(test_args):
                         format(test_args['interface'], test_args['ip_cidr']))
         sys.exit(-3)
 
+    if dut_cidr.prefixlen == 32:
+        logger.critical('DUT CIDR prefixlen {0} is invalid'.
+                        format(dut_cidr.prefixlen))
+        sys.exit(-3)
+
 
 def prepare_test_case(test_args):
     '''
