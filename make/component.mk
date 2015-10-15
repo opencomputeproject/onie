@@ -40,7 +40,9 @@ component: component-deps
 
 deb: component-deps
 	$(ONL_V_at)$(MAKE) -f Makefile.comp deb $(ONL_MAKE_PARALLEL) $(ONL_MAKEFLAGS)
+
 clean:
+	$(ONL_V_at)$(ONL_PKG_INSTALL) $(ONL_REQUIRED_PACKAGES) --clean
 	$(ONL_V_at)$(MAKE) -f Makefile.comp clean $(ONL_MAKEFLAGS)
 
 

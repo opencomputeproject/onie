@@ -173,6 +173,8 @@ ap.add_argument("--find-file", help="Return path to given file.",
                 default=None)
 ap.add_argument("--find-dir", help="Return path to the given directory.",
                 default=None)
+ap.add_argument("--clean", help="Attempt to clean up local package.",
+                action='store_true')
 ap.add_argument("--build", help="Attempt to build local package if it exists.",
                 action='store_true')
 ap.add_argument("--add-pkg", nargs='+', action='append',
@@ -287,7 +289,9 @@ for pa in ops.packages[0]:
                                        package)
         if buildpath is not None:
             logger.info("can be built locally at %s", buildpath)
-            if ops.build:
+            if ops.clean:
+                check_call(('make', '-C', buildpath, 'clean',))
+            elif ops.build:
                 check_call(('make', '-C', buildpath, 'deb',))
                 packages = find_package(package_dir, package, arch)
         if len(packages) == 0:
