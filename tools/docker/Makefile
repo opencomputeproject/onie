@@ -6,7 +6,7 @@ ifndef ONL
 $(error Need to define $$ONL variable to use this Makefile)
 endif
 
-IMAGE=1.5
+IMAGE=1.6
 
 
 # needed to get SSH agent credential forwarding
