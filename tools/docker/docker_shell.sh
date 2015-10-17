@@ -10,7 +10,7 @@ if [ ! -z $MAKE_USER ] ; then
     useradd $MAKE_USER --uid $MAKE_UID
     echo "$MAKE_USER     ALL=(ALL:ALL) NOPASSWD:ALL" >> /etc/sudoers
     chown $MAKE_USER:$MAKE_USER /home/$MAKE_USER /root       # make sure we can write to home dir
-    sudo -E -u $MAKE_USER bash
+    sudo -u $MAKE_USER ONL=$ONL bash
 else
     bash
 fi
