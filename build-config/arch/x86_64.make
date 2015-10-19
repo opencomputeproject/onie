@@ -76,7 +76,7 @@ ifeq ($(UEFI_ENABLE),yes)
   FIRMWARE_TYPE ?= auto
 else
   # Without UEFI support force legacy BIOS firmware
-  FIRMWARE_TYPE = bios
+  FIRMWARE_TYPE ?= bios
 endif
 
 PXE_EFI64_ENABLE ?= no
