@@ -1,0 +1,54 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          fanled
+# Required-Start:    $remote_fs
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Load fan module led monitor
+### END INIT INFO
+
+onl_platform=$(cat /etc/onl_platform)
+PATH=/lib/platform-config/$onl_platform/sbin:/sbin:/usr/sbin:/bin:/usr/bin
+
+. /lib/lsb/init-functions
+
+DAEMON=/lib/platform-config/$onl_platform/sbin/fanledmonitor
+DESC="fan module led monitor"
+NAME="fanled"
+PIDFILE=/var/run/fanled.pid
+
+test -x $DAEMON || exit 0
+
+case "$1" in
+  start)
+        log_daemon_msg "Starting $DESC" "$NAME"
+        start-stop-daemon --start --quiet --background --pidfile $PIDFILE --startas $DAEMON
+        log_end_msg $?
+        ;;
+  stop)
+        log_daemon_msg "Stopping $DESC" "$NAME"
+        start-stop-daemon --stop --quiet --pidfile $PIDFILE --oknodo --startas $DAEMON
+        rm -f $PIDFILE
+        log_end_msg $?
+        ;;
+  restart)
+        $0 stop
+        sleep 3
+        $0 start
+        ;;
+  force-reload)
+        if start-stop-daemon --stop --test --quiet --pidfile $PIDFILE --startas $DAEMON ; then
+            $0 restart
+        fi
+        ;;
+  status)
+        status_of_proc $DAEMON $NAME && exit 0 || exit $?
+        ;;
+  *)
+        log_success_msg "Usage: /etc/init.d/fanled {start|stop|restart|force-reload|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

@@ -1,7 +1,9 @@
+#!/bin/sh
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 #
 #        Copyright 2013, 2014 Big Switch Networks, Inc.
+#        Copyright 2015 Quanta Computer Inc.
 #
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -19,22 +21,48 @@
 # </bsn.cl>
 ############################################################
 #
-# These are the platforms to include in this installer build.
+# Platform: Quanta LY8
 #
 ############################################################
-INSTALLER_PLATFORMS :=  x86-64-dell-s6000-s1220-r0 \
-			x86-64-dell-s4000-c2338-r0 \
-			x86-64-quanta-ly6-rangeley-r0 \
-			x86-64-quanta-ly8-rangeley-r0 \
-			x86-64-accton-as5712-54x-r0 \
-			x86-64-accton-as7512-32x-r0 \
-			x86-64-accton-as6712-32x-r0
 
+cur_dir=$(dirname $0)
+if [ -x $cur_dir/functions ]; then
+	. $cur_dir/functions
+else
+	echo "$cur_dir/functions not found"
+	exit 1
+fi
 
+usage() {
+    echo "One parameters <led color {green|orange|off}> required"
+}
 
+case $1 in
+    green)
+        p1=0
+        p2=1
+        ;;
 
+    orange)
+        p1=1
+        p2=0
+        ;;
+    off)
+        p1=1
+        p2=1
+        ;;
 
+    *)
+        usage
+        exit 1
+        ;;
+esac
 
+pca9555_20=$(gpio_find 20)
+pca9555_20p12=$(($pca9555_20 + $pca953x_p12))
+pca9555_20p13=$(($pca9555_20 + $pca953x_p13))
 
+gpio_set $pca9555_20p12 $p1
+gpio_set $pca9555_20p13 $p2
 
-
+exit 0

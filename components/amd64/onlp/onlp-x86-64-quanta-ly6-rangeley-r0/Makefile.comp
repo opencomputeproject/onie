@@ -1,0 +1,48 @@
+# -*- Makefile -*-
+############################################################
+ifndef ONL
+$(error $$ONL is not set)
+endif
+include $(ONL)/make/config.mk
+
+export TOOLCHAIN := x86_64-linux-gnu
+export ARCH := amd64
+
+MODULE := libonlp-x86-64-quanta-ly6-rangeley-r0
+include $(BUILDER)/standardinit.mk
+
+DEPENDMODULES := AIM x86_64_quanta_ly6_rangeley_r0 onlplib sff IOF
+DEPENDMODULE_HEADERS := onlp quanta_sys_eeprom
+
+include $(BUILDER)/dependmodules.mk
+
+SHAREDLIB := libonlp-x86-64-quanta-ly6-rangeley-r0.so
+$(SHAREDLIB)_TARGETS := $(ALL_TARGETS)
+include $(BUILDER)/so.mk
+.DEFAULT_GOAL := $(SHAREDLIB)
+
+GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_MODULES_INIT=1
+GLOBAL_CFLAGS += -DONLPLIB_CONFIG_INCLUDE_I2C=1
+GLOBAL_CFLAGS += -fPIC
+GLOBAL_LINK_LIBS += -lpthread
+
+include $(BUILDER)/targets.mk
+
+
+############################################################
+#
+# Build both the shared library and the onlpdump binary
+#
+############################################################
+.DEFAULT_GOAL=__start__
+
+__start__: $(SHAREDLIB) onlpdump
+ONLPDUMP_DIR := $(ONL_SUBMODULE_ONLP_QUANTA)/targets/x86_64_quanta_ly6_rangeley_r0/onlpdump
+
+onlpdump:
+	$(MAKE) -C $(ONLPDUMP_DIR) SUBMODULE_ONLP=$(ONL_SUBMODULE_ONLP) SUBMODULE_INFRA=$(ONL_SUBMODULE_INFRA) SUBMODULE_BIGCODE=$(ONL_SUBMODULE_BIGCODE) TOOLCHAIN=$(TOOLCHAIN) BUILD_DIR=$(ONLPDUMP_DIR)/build/$(TOOLCHAIN)
+	cp $(ONLPDUMP_DIR)/build/$(TOOLCHAIN)/bin/onlpdump .
+
+.PHONY: deb onlpdump
+deb:
+	$(MAKE) -C deb

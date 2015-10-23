@@ -1,7 +1,9 @@
+#!/bin/sh
 ############################################################
 # <bsn.cl fy=2013 v=onl>
 #
 #        Copyright 2013, 2014 Big Switch Networks, Inc.
+#        Copyright 2015 Quanta Computer Inc.
 #
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -19,22 +21,59 @@
 # </bsn.cl>
 ############################################################
 #
-# These are the platforms to include in this installer build.
+# Platform: Quanta LY6
 #
 ############################################################
-INSTALLER_PLATFORMS :=  x86-64-dell-s6000-s1220-r0 \
-			x86-64-dell-s4000-c2338-r0 \
-			x86-64-quanta-ly6-rangeley-r0 \
-			x86-64-quanta-ly8-rangeley-r0 \
-			x86-64-accton-as5712-54x-r0 \
-			x86-64-accton-as7512-32x-r0 \
-			x86-64-accton-as6712-32x-r0
 
+cur_dir=$(dirname $0)
+if [ -x $cur_dir/functions ]; then
+	. $cur_dir/functions
+else
+	echo "$cur_dir/functions not found"
+	exit 1
+fi
 
+usage() {
+    echo "Two parameters <devices {fan1|fan2|fan3}> and <led color {red|off}> required"
+}
 
+case $1 in
+    1|fan1)
+        offset=0
+        ;;
 
+    2|fan2)
+        offset=1
+        ;;
 
+    3|fan3)
+        offset=2
+        ;;
 
+    *)
+        usage
+        exit 1
+        ;;
+esac
 
+case $2 in
+    1|red)
+        p=1
+        ;;
+    0|off)
+        p=0
+        ;;
 
+    *)
+        usage
+        exit 1
+        ;;
+esac
 
+pca9555_24=$(gpio_find 24)
+pca9555_24p14=$(($pca9555_24 + $pca953x_p14))
+gpio=$(($pca9555_24p14 + $offset))
+
+gpio_set $gpio $p
+
+exit 0
