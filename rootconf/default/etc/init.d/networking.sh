@@ -83,8 +83,8 @@ config_ethmgmt_fallback()
     local intf=$1
     shift
 
-    # Remove any previously configured IP address
-    ip addr flush $intf
+    # Remove any previously configured, IPv4 addresses
+    ip -f inet addr flush dev $intf
 
     # Assign sequential static IP to each detected interface
     local interface_base_ip=$(( $base_ip + $intf_counter ))
