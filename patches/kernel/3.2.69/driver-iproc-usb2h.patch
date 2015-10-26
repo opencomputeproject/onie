@@ -1,0 +1,1283 @@
+Broadcom iProc (ARM Cortex-A9) USB2-Host Driver
+Sourced from Broadcom LDK 3.4.10
+
+diff --git a/drivers/bcmdrivers/usb2h/.gitignore b/drivers/bcmdrivers/usb2h/.gitignore
+new file mode 100644
+index 0000000..ce5045e
+--- /dev/null
++++ b/drivers/bcmdrivers/usb2h/.gitignore
+@@ -0,0 +1,8 @@
++/.built-in.o.cmd
++/built-in.o
++/modules.builtin
++/modules.order
++/.bcm-iproc.o.cmd
++/.iproc_usb2h.o.cmd
++/bcm-iproc.o
++/iproc_usb2h.o
+diff --git a/drivers/bcmdrivers/usb2h/Kconfig b/drivers/bcmdrivers/usb2h/Kconfig
+new file mode 100644
+index 0000000..8f5f8bb
+--- /dev/null
++++ b/drivers/bcmdrivers/usb2h/Kconfig
+@@ -0,0 +1,26 @@
++config IPROC_USB2H
++	tristate "USB 2.0 Host support"
++	select USB_EHCI_BCM
++	select USB_OHCI_BCM
++## this is for core/message.c:     err = utf16s_to_utf8s
++	depends on ARCH_IPROC
++	default n
++	help
++	  Add USB 2.0 Host support
++
++	  If unsure, say N.
++
++config USB_EHCI_BCM
++        bool "Support for Broadcom on-chip EHCI USB controller"
++        depends on USB_EHCI_HCD && ARCH_IPROC && IPROC_USB2H
++        select USB_EHCI_ROOT_HUB_TT
++        ---help---
++          Enables EHCI support for USB host controller on some Broadcom
++          SOCs.
++
++config USB_OHCI_BCM
++        bool "Support for Broadcom on-chip OHCI USB controller"
++        depends on USB_OHCI_HCD && ARCH_IPROC && IPROC_USB2H
++        ---help---
++          Enables OHCI support for USB host controller on some Broadcom
++          SOCs.
+diff --git a/drivers/bcmdrivers/usb2h/Makefile b/drivers/bcmdrivers/usb2h/Makefile
+new file mode 100644
+index 0000000..1ff9240
+--- /dev/null
++++ b/drivers/bcmdrivers/usb2h/Makefile
+@@ -0,0 +1,3 @@
++
++obj-$(CONFIG_IPROC_USB2H) := iproc_usb2h.o
++iproc_usb2h-objs := bcm-iproc.o
+diff --git a/drivers/bcmdrivers/usb2h/bcm-iproc.c b/drivers/bcmdrivers/usb2h/bcm-iproc.c
+new file mode 100755
+index 0000000..d006aad
+--- /dev/null
++++ b/drivers/bcmdrivers/usb2h/bcm-iproc.c
+@@ -0,0 +1,390 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/types.h>
++#include <linux/kernel.h>
++#include <linux/device.h>
++#include <linux/module.h>
++#include <linux/delay.h>
++#include <linux/io.h>
++#include <linux/clk.h>
++#include <linux/err.h>
++#include <linux/gpio.h>
++#include <linux/platform_device.h>
++#include <linux/suspend.h>
++#include <mach/memory.h>
++#include <linux/version.h>
++
++#include "usbh_cfg.h"
++
++#include "bcm_usbh.h"
++
++#define DEBUG
++#ifdef DEBUG
++#define dbg_printk(fmt, args...) printk(KERN_INFO "%s: " fmt, __func__, ## args)
++#else
++#define dbg_printk(fmt, args...)
++#endif
++
++#define IPROC_USB2_CLK_CONTROL_ENABLE	  (0x1800C180)
++#define IPROC_USB2_CLK_CONTROL_ENABLE_VA   HW_IO_PHYS_TO_VIRT(IPROC_USB2_CLK_CONTROL_ENABLE)
++#define IPROC_USB2_CLK_CONTROL_PLL		  (0x1800C164)
++#define IPROC_USB2_CLK_CONTROL_PLL_VA	   HW_IO_PHYS_TO_VIRT(IPROC_USB2_CLK_CONTROL_PLL)
++#define IPROC_STRAP_SKU_VECTOR			  (0x1810D500)
++#define IPROC_STRAP_SKU_VECTOR_VA          HW_IO_PHYS_TO_VIRT(IPROC_STRAP_SKU_VECTOR)
++#define IPROC_IDM_USB2_RESET_CONTROL	 (0x18115800)
++#define IPROC_IDM_USB2_RESET_CONTROL_VA   HW_IO_PHYS_TO_VIRT(IPROC_IDM_USB2_RESET_CONTROL)
++
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_NSP) || defined(CONFIG_MACH_KT2)
++#define IPROC_IDM_USB2_IO_CONTROL_DIRECT	USB2_IDM_IDM_IO_CONTROL_DIRECT
++#define IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA	HW_IO_PHYS_TO_VIRT(IPROC_IDM_USB2_IO_CONTROL_DIRECT)
++#endif
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#define IPROC_XGPLL							0x1803fc2c
++#define IPROC_XGPLL_VA						HW_IO_PHYS_TO_VIRT(IPROC_XGPLL)
++#define IPROC_USB_PHY_CTRL					IPROC_WRAP_USBPHY_CTRL
++#define IPROC_USB_PHY_CTRL_VA				HW_IO_PHYS_TO_VIRT(IPROC_USB_PHY_CTRL)
++#define IPROC_WRAP_MISC_STATUS				0x1803fc28
++#define IPROC_WRAP_MISC_STATUS_VA			HW_IO_PHYS_TO_VIRT(IPROC_WRAP_MISC_STATUS)
++#define IPROC_CLK_NDIV_40					0x80
++#define IPROC_CLK_NDIV_20					0x8C
++#define USB_CLK_NDIV_MASK					0xFE7FFE00
++#define USB_CLK_PLL_RESET_MASK				0xFF7FFE00
++#define USB_CLK_PHY_RESET_MASK				0xFFFFFE00
++#define USB_CLK_NDIV_40						0x30
++#define USB_CLK_NDIV_20						0x60
++#define ChipcommonA_GPIOIn_VA				HW_IO_PHYS_TO_VIRT(ChipcommonA_GPIOInput)
++#define ChipcommonA_GPIOOut_VA				HW_IO_PHYS_TO_VIRT(ChipcommonA_GPIOOut)
++#define ChipcommonA_GPIOOutEn_VA			HW_IO_PHYS_TO_VIRT(ChipcommonA_GPIOOutEn)
++#define SUPPLY_USBD_POWER					0xfffffffd
++#endif
++
++#define IPROC_SKU_STRAP_MASK 0xC
++
++struct usbh_ctrl_regs {
++	u32 mode;
++#define MODE_ULPI_TTL (1<<0)
++#define MODE_ULPI_PHY (1<<1)
++#define MODE_UTMI_TTL (1<<2)
++#define MODE_UTMI_PHY (1<<3)
++#define MODE_PORT_CFG(port, mode) ((mode) << (4 * port))
++
++	u32 strap_q;
++#define STRAP_PWR_STATE_VALID                (1 << 7)    /* ss_power_state_valid */
++#define STRAP_SIM_MODE                       (1 << 6)    /* ss_simulation_mode */
++#define STRAP_OHCI_CNTSEL_SIM                (1 << 5)    /* ohci_0_cntsel_i_n */
++#define STRAP_PWR_STATE_NXT_VALID            (1 << 4)    /* ss_nxt_power_state_valid_i */
++#define STRAP_PWR_STATE_NXT_SHIFT            2           /* ss_next_power_state_i */
++#define STRAP_PWR_STATE_NXT_MASK             (3 << STRAP_PWR_STATE_NXT_SHIFT)
++#define STRAP_PWR_STATE_SHIFT                0           /* ss_power_state_i */
++#define STRAP_PWR_STATE_MASK                 (3 << STRAP_PWR_STATE_SHIFT)
++
++	u32 framelen_adj_q;
++	u32 framelen_adj_qx[USBH_NUM_PORTS];
++	u32 misc;
++#define MISC_RESUME_R23_ENABLE               (1 << 4) /* ss_utmi_backward_enb_i */
++#define MISC_RESUME_R23_UTMI_PLUS_DISABLE    (1 << 3) /* ss_resume_utmi_pls_dis_i */
++#define MISC_ULPI_BYPASS_ENABLE              (1 << 2) /* ulpi_bypass_en_i */
++#define MISC_PORT_PWRDWN_OVERCURRENT         (1 << 1) /* ss_autoppd_on_overcur_en_i */
++#define MISC_OHCI_CLK_RESTART                (1 << 0) /* app_start_clk_i */
++
++};
++
++struct usbh_priv {
++	atomic_t probe_done;
++	volatile int init_cnt;
++	struct mutex lock;
++	struct device *dev;
++	struct usbh_cfg hw_cfg;
++	struct clk *peri_clk;
++	struct clk *ahb_clk;
++	struct clk *opt_clk;
++	struct usbh_ctrl_regs __iomem *ctrl_regs;
++};
++
++static struct usbh_priv usbh_data;
++
++int bcm_usbh_suspend(unsigned int host_index)
++{
++	return 0;
++}
++EXPORT_SYMBOL(bcm_usbh_suspend);
++
++int bcm_usbh_resume(unsigned int host_index)
++{
++	return 0;
++}
++EXPORT_SYMBOL(bcm_usbh_resume);
++
++/*
++ * Function to initialize USB host related low level hardware including PHY,
++ * clocks, etc.
++ *
++ * TODO: expand support for more than one host in the future if needed
++ */
++int bcm_usbh_init(unsigned int host_index)
++{
++#ifdef CONFIG_MACH_NS
++	int usb2_clk_cntrl, usb2_clk_enable, sku_vect;
++
++	sku_vect = readl_relaxed(IPROC_STRAP_SKU_VECTOR_VA);
++	if ((sku_vect & IPROC_SKU_STRAP_MASK) != 0x0)
++	{
++		/* enable clocks */
++		writel_relaxed(0xEA68, IPROC_USB2_CLK_CONTROL_ENABLE_VA);
++
++		usb2_clk_cntrl = readl_relaxed(IPROC_USB2_CLK_CONTROL_ENABLE_VA);
++		// printk("USB clk control enable register is: %08x\n", usb2_clk_cntrl);
++		writel_relaxed(0xDD10C3, IPROC_USB2_CLK_CONTROL_PLL_VA);
++
++		usb2_clk_enable = readl_relaxed(IPROC_USB2_CLK_CONTROL_PLL_VA);
++		// printk("USB clk enable register is: %08x\n", usb2_clk_enable);
++		writel_relaxed(0x0, IPROC_USB2_CLK_CONTROL_ENABLE_VA);
++
++		usb2_clk_cntrl = readl_relaxed(IPROC_USB2_CLK_CONTROL_ENABLE_VA);
++		// printk("USB clk control enable register is: %08x\n", usb2_clk_cntrl);
++	}
++#endif
++	return 0;
++}
++
++EXPORT_SYMBOL(bcm_usbh_init);
++
++/*
++ * Function to terminate USB host related low level hardware including PHY,
++ * clocks, etc.
++ *
++ * TODO: expand support for more than one host in the future if needed
++ */
++int bcm_usbh_term(unsigned int host_index)
++{
++	return 0;
++}
++EXPORT_SYMBOL(bcm_usbh_term);
++
++int InUSBDMode(void)
++{
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++	int usbd_detect;
++	usbd_detect = readl_relaxed(ChipcommonA_GPIOIn_VA);
++	if (usbd_detect & 1)
++	{
++		printk("%s: %d gpioin val %08x, ohci host mode will not be functional since in USBD mode\n", __FUNCTION__, __LINE__, usbd_detect);
++		printk("%s: %d to make ohci host mode work, appropriate jumper is needed on the board. Please refer to board schematics.\n",
++			__FUNCTION__, __LINE__);
++	}
++
++	return (usbd_detect & 1);
++#else
++	return 0;
++#endif
++}
++
++static int __devinit usbh_probe(struct platform_device *pdev)
++{
++	int ret;
++	struct resource *iomem, *ioarea;
++
++	memset(&usbh_data, 0, sizeof(usbh_data));
++
++	if (pdev->dev.platform_data == NULL) {
++		dev_err(&pdev->dev, "platform_data missing\n");
++		ret = -EFAULT;
++		goto err_exit;
++	}
++	memcpy(&usbh_data.hw_cfg, pdev->dev.platform_data,
++			sizeof(usbh_data.hw_cfg));
++	usbh_data.dev = &pdev->dev;
++
++	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (!iomem) {
++		dev_err(&pdev->dev, "no mem resource\n");
++		ret = -ENODEV;
++		goto err_exit;
++	}
++
++	/* mark the memory region as used */
++	ioarea = request_mem_region(iomem->start, resource_size(iomem),
++			pdev->name);
++	if (!ioarea) {
++		dev_err(&pdev->dev, "memory region already claimed\n");
++		ret = -EBUSY;
++		goto err_exit;
++	}
++
++	/* now map the I/O memory */
++	usbh_data.ctrl_regs = (struct usbh_ctrl_regs __iomem *)
++		ioremap(iomem->start, sizeof(usbh_data.ctrl_regs));
++	if (!usbh_data.ctrl_regs) {
++		dev_err(&pdev->dev, "failed to remap registers\n");
++		ret = -ENOMEM;
++		goto err_free_mem_region;
++	}
++
++	platform_set_drvdata(pdev, &usbh_data);
++	mutex_init(&usbh_data.lock);
++	usbh_data.init_cnt = 0;
++	atomic_set(&usbh_data.probe_done, 1);
++
++	return 0;
++
++err_free_mem_region:
++	release_mem_region(iomem->start, resource_size(iomem));
++
++err_exit:
++	memset(&usbh_data, 0, sizeof(usbh_data));
++	return ret;
++}
++
++static int __devexit usbh_remove(struct platform_device *pdev)
++{
++	struct usbh_priv *drv_data = platform_get_drvdata(pdev);
++	struct resource *iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++
++	atomic_set(&drv_data->probe_done, 0);
++	platform_set_drvdata(pdev, NULL);
++	iounmap(drv_data->ctrl_regs);
++	release_mem_region(iomem->start, resource_size(iomem));
++	memset(&usbh_data, 0, sizeof(usbh_data));
++
++	return 0;
++}
++
++static struct platform_driver usbh_driver =
++{
++	.driver = {
++		.name = "usbh",
++		.owner = THIS_MODULE,
++	},
++	.probe   = usbh_probe,
++	.remove  = usbh_remove,
++};
++
++static int __init usbh_init(void)
++{
++	int usb2_reset_state;
++
++
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++	int clk_enable, k;
++#if defined(CONFIG_MACH_HX4)
++	unsigned int iClk;
++#endif
++	unsigned int USBClk, usbdgpiopwr, pllStatus;
++
++	/* turn off power for USB device connected to the host */
++	usbdgpiopwr = readl_relaxed(ChipcommonA_GPIOOut_VA);
++	usbdgpiopwr |= 0x2;
++	writel_relaxed(usbdgpiopwr, ChipcommonA_GPIOOut_VA);
++	writel_relaxed(0x2, ChipcommonA_GPIOOutEn_VA);
++
++	/* Do USB PHY reset */
++	mdelay(100);
++	USBClk = readl_relaxed(IPROC_USB_PHY_CTRL_VA);
++	/* bring phy pll out of reset if not done already */
++	if ((USBClk & 0x01000000) == 0 )
++	{
++		USBClk |= 0x01000000;
++		writel_relaxed(USBClk, IPROC_USB_PHY_CTRL_VA);
++		pllStatus = readl_relaxed(IPROC_WRAP_MISC_STATUS_VA);
++		for (k = 0; k < 100000; k++)
++		{
++			if ((pllStatus & 2) == 2)
++			{
++				printk("USB phy pll locked\n");
++				break;
++			}
++			pllStatus = readl_relaxed(IPROC_WRAP_MISC_STATUS_VA);
++		}
++	}
++	writel_relaxed(USBClk & (~(1<<23)), IPROC_USB_PHY_CTRL_VA);
++	clk_enable = readl_relaxed(IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA);
++	printk("Initial usb2h clock is: %08x\n", clk_enable);
++	clk_enable |= 1;
++	writel_relaxed(clk_enable, IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA);
++	clk_enable = readl_relaxed(IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA);
++	printk("Initial usb2h clock now is: %08x\n", clk_enable);
++#if defined(CONFIG_MACH_HX4)
++	iClk = readl_relaxed(IPROC_XGPLL_VA);
++	USBClk = readl_relaxed(IPROC_USB_PHY_CTRL_VA);
++	printk("iClk = %08x, USBClk = %08x\n", iClk, USBClk);
++	if ((iClk & 0xff) == IPROC_CLK_NDIV_40)
++	{
++		writel_relaxed((USBClk & USB_CLK_NDIV_MASK) | USB_CLK_NDIV_40, IPROC_USB_PHY_CTRL_VA);
++		udelay(10);
++		writel_relaxed((USBClk & USB_CLK_PLL_RESET_MASK) | USB_CLK_NDIV_40, IPROC_USB_PHY_CTRL_VA);
++		udelay(10);
++		writel_relaxed((USBClk & USB_CLK_PHY_RESET_MASK) | USB_CLK_NDIV_40, IPROC_USB_PHY_CTRL_VA);
++		udelay(10);
++		USBClk = readl_relaxed(IPROC_USB_PHY_CTRL_VA);
++		printk("iClk = %08x, USBClk = %08x\n", iClk, USBClk);
++	}
++	else if ((iClk & 0xff) == IPROC_CLK_NDIV_20)
++	{
++		writel_relaxed((USBClk & USB_CLK_NDIV_MASK) | USB_CLK_NDIV_20, IPROC_USB_PHY_CTRL_VA);
++		udelay(10);
++		writel_relaxed((USBClk & USB_CLK_PLL_RESET_MASK) | USB_CLK_NDIV_20, IPROC_USB_PHY_CTRL_VA);
++		udelay(10);
++		writel_relaxed((USBClk & USB_CLK_PHY_RESET_MASK) | USB_CLK_NDIV_20, IPROC_USB_PHY_CTRL_VA);
++		udelay(10);
++		USBClk = readl_relaxed(IPROC_USB_PHY_CTRL_VA);
++		printk("iClk = %08x, USBClk = %08x\n", iClk, USBClk);
++	}
++#endif
++	mdelay(100);
++	writel_relaxed(USBClk | (1<<23), IPROC_USB_PHY_CTRL_VA);
++	udelay(100);
++#endif
++#if defined(CONFIG_MACH_NSP)
++	int clk_enable;
++	clk_enable = readl_relaxed(IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA);
++	printk("Initial usb2h clock is: %08x\n", clk_enable);
++	clk_enable |= 1;
++	writel_relaxed(clk_enable, IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA);
++	clk_enable = readl_relaxed(IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA);
++	printk("Initial usb2h clock now is: %08x\n", clk_enable);
++#endif
++
++	usb2_reset_state = readl_relaxed(IPROC_IDM_USB2_RESET_CONTROL_VA);
++	printk("Initial usb2_reset_state is: %08x\n", usb2_reset_state);
++	if ((usb2_reset_state & 1) == 1)
++	{
++		writel_relaxed(0x0, IPROC_IDM_USB2_RESET_CONTROL_VA);
++		usb2_reset_state = readl_relaxed(IPROC_IDM_USB2_RESET_CONTROL_VA);
++		printk("usb2_reset_state is set and now it is: %08x\n", usb2_reset_state);
++	}
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++	/* supply power for USB device connected to the host */
++	mdelay(100);
++	usbdgpiopwr = readl_relaxed(ChipcommonA_GPIOOut_VA);
++	usbdgpiopwr &= SUPPLY_USBD_POWER;
++	writel_relaxed(usbdgpiopwr, ChipcommonA_GPIOOut_VA);
++	writel_relaxed(0x2, ChipcommonA_GPIOOutEn_VA);
++#endif
++	return platform_driver_register(&usbh_driver);
++}
++
++static void __exit usbh_exit(void)
++{
++	platform_driver_unregister(&usbh_driver);
++}
++
++module_init(usbh_init);
++module_exit(usbh_exit);
++
++MODULE_AUTHOR("Broadcom");
++MODULE_DESCRIPTION("Broadcom USB host low-level driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/bcmdrivers/usb2h/bcm_usbh.h b/drivers/bcmdrivers/usb2h/bcm_usbh.h
+new file mode 100644
+index 0000000..019589a
+--- /dev/null
++++ b/drivers/bcmdrivers/usb2h/bcm_usbh.h
+@@ -0,0 +1,25 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef _BCM_USBH_H_
++#define _BCM_USBH_H_
++
++extern int bcm_usbh_init(unsigned int host_index);
++extern int bcm_usbh_term(unsigned int host_index);
++extern int bcm_usbh_suspend(unsigned int host_index);
++extern int bcm_usbh_resume(unsigned int host_index);
++
++#endif
+diff --git a/drivers/bcmdrivers/usb2h/ehci-bcm.c b/drivers/bcmdrivers/usb2h/ehci-bcm.c
+new file mode 100644
+index 0000000..62534b8
+--- /dev/null
++++ b/drivers/bcmdrivers/usb2h/ehci-bcm.c
+@@ -0,0 +1,383 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/platform_device.h>
++#include <linux/version.h>
++
++#include <mach/irqs.h>
++#include "bcm_usbh.h"
++
++#define BCM_USBEHCI_MODULE_DESCRIPTION    "Broadcom USB EHCI driver"
++#define BCM_USBEHCI_MODULE_VERSION        "1.0.0"
++
++#define BCM_USBEHCI_IRQF_FLAGS            (IRQF_DISABLED | IRQF_SHARED)
++#define BCM_USBEHCI_NAME                  "bcm-ehci"
++
++#define EHCI_INFO(pdev, fmt, args...) dev_info(&pdev->dev, fmt, ## args)
++#define EHCI_ERR(pdev, fmt, args...) dev_err(&pdev->dev, fmt, ## args)
++#define BCM_USB_FIFO_THRESHOLD            0x00800040
++
++struct usb_cfg
++{
++	void *virt_reg_base;
++	struct usb_hcd *hcd;
++};
++
++extern int usb_disabled(void);
++static int hcd_init(struct usb_hcd *hcd);
++
++static const struct hc_driver ehci_hcd_driver =
++{
++	.description = hcd_name,
++	.product_desc = BCM_USBEHCI_NAME,
++	.hcd_priv_size = sizeof(struct ehci_hcd),
++
++	/*
++    * generic hardware linkage
++	 */
++	.irq = ehci_irq,
++	.flags = HCD_USB2 | HCD_MEMORY | HCD_LOCAL_MEM,
++
++	/*
++	 * basic lifecycle operations
++	 */
++	.reset = hcd_init,
++	.start = ehci_run,
++	.stop = ehci_stop,
++	.shutdown = ehci_shutdown,
++
++	/*
++	 * managing i/o requests and associated device resources
++	 */
++	.urb_enqueue = ehci_urb_enqueue,
++	.urb_dequeue = ehci_urb_dequeue,
++	.endpoint_disable = ehci_endpoint_disable,
++	.endpoint_reset = ehci_endpoint_reset,
++
++	/*
++	 * scheduling support
++	 */
++	.get_frame_number = ehci_get_frame,
++
++	/*
++	 * root hub support
++	 */
++	.hub_status_data = ehci_hub_status_data,
++	.hub_control = ehci_hub_control,
++#ifdef CONFIG_PM
++	.bus_suspend = ehci_bus_suspend,
++	.bus_resume = ehci_bus_resume,
++#endif
++	.relinquish_port =  ehci_relinquish_port,
++	.port_handed_over = ehci_port_handed_over,
++	.clear_tt_buffer_complete = ehci_clear_tt_buffer_complete,
++};
++
++int hcd_init(struct usb_hcd *hcd)
++{
++	struct ehci_hcd *ehci;
++	int err;
++
++	if (!hcd) {
++		printk(KERN_ERR "invalid hcd pointer in %s\n", __FUNCTION__);
++		return -EINVAL;
++	}
++
++	ehci = hcd_to_ehci(hcd);
++
++	if ((err = ehci_halt(ehci)) < 0) {
++		printk(KERN_ERR "busnum %d: ehci_halt() failed, err=%d\n", hcd->self.busnum, err);
++		return err;
++	}
++
++	if ((err = ehci_init(hcd)) < 0) {
++		printk(KERN_ERR "busnum %d: ehci_init() failed, err=%d\n", hcd->self.busnum, err);
++		return err;
++	}
++
++	/*
++	 * Not sure why this is not set by ehci_init(). Convention seems to be
++	 * to do it here for reasons unknown. This is a "packed release number".
++	 */
++	ehci->sbrn = 0x20;
++
++	if ((err = ehci_reset(ehci)) < 0) {
++		printk(KERN_ERR "busnum %d: ehci_reset() failed, err=%d\n", hcd->self.busnum, err);
++		return err;
++	}
++
++	return 0;
++}
++
++int bcm_ehci_probe(struct platform_device *pdev)
++{
++	struct usb_cfg *usb;
++	struct usb_hcd *hcd;
++	struct ehci_hcd *ehci;
++	struct resource *iomem, *ioarea;
++	int ret, irq;
++
++	if (usb_disabled())
++		return -ENODEV;
++
++	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (!iomem) {
++		EHCI_ERR(pdev, "no mem resource\n");
++		ret = -ENOMEM;
++		goto err_exit;
++	}
++
++	/* get the irq info */
++	irq = platform_get_irq(pdev, 0);
++	if (!irq) {
++		EHCI_ERR(pdev, "no irq resource\n");
++		ret = -ENODEV;
++		goto err_exit;
++	}
++
++	ioarea = request_mem_region(iomem->start, resource_size(iomem), pdev->name);
++	if (!ioarea) {
++		EHCI_ERR(pdev, "memory region already claimed\n");
++		ret = -EBUSY;
++		goto err_exit;
++	}
++
++	usb = kzalloc(sizeof(*usb), GFP_KERNEL);
++	if (!usb) {
++		EHCI_ERR(pdev, "unable to allocate memory for private data\n");
++		ret = -ENOMEM;
++		goto err_free_iomem;
++	}
++
++	usb->virt_reg_base = ioremap(iomem->start, resource_size(iomem));
++	if (!usb->virt_reg_base) {
++		EHCI_ERR(pdev, "ioremap failed\n");
++		ret = -ENOMEM;
++		goto err_free_private_mem;
++	}
++
++	/* enable clock and PHY */
++	ret = bcm_usbh_init(pdev->id);
++	if (ret < 0) {
++		EHCI_ERR(pdev, "clock and PHY initialization failed\n");
++		goto err_io_unmap;
++	}
++
++	hcd = usb_create_hcd(&ehci_hcd_driver, &pdev->dev, (char *)pdev->name);
++	if (!hcd) {
++		EHCI_ERR(pdev, "usb_create_hcd failed\n");
++		ret = -ENOMEM;
++		goto err_usb_term;
++	}
++
++	/* struct ehci_regs def'd in Linux ehci.h which is included by Linux ehci-hcd.c */
++	usb->hcd = hcd;
++	hcd->rsrc_start = (unsigned int)usb->virt_reg_base;
++	hcd->rsrc_len = sizeof(struct ehci_regs);
++	hcd->regs = usb->virt_reg_base;
++
++	ehci = hcd_to_ehci(hcd);
++	ehci->caps = hcd->regs;
++	ehci->regs = hcd->regs + HC_LENGTH(ehci,ehci_readl(ehci, &ehci->caps->hc_capbase));
++
++	/* cache this readonly data; minimize chip reads */
++	ehci->hcs_params = ehci_readl(ehci, &ehci->caps->hcs_params);
++
++	ret = usb_add_hcd(hcd, irq, BCM_USBEHCI_IRQF_FLAGS);
++	if (ret) {
++		EHCI_ERR(pdev, "usb_add_hcd failed\n");
++		goto err_remove_hcd;
++	}
++
++	ehci_writel(ehci,BCM_USB_FIFO_THRESHOLD, &ehci->regs->reserved4[6]);
++
++
++	platform_set_drvdata(pdev, usb);
++
++	EHCI_INFO(pdev, "probe done\n");
++	return 0;
++
++err_remove_hcd:
++	//usb_remove_hcd(hcd);
++	//usb_put_hcd(hcd);
++
++err_usb_term:
++	bcm_usbh_term(pdev->id);
++
++err_io_unmap:
++	iounmap(usb->virt_reg_base);
++
++err_free_private_mem:
++	kfree(usb);
++
++err_free_iomem:
++	release_mem_region(iomem->start, resource_size(iomem));
++
++err_exit:
++	EHCI_ERR(pdev, "probe failed: %d\n", ret);
++	return ret;
++}
++
++int bcm_ehci_remove(struct platform_device *pdev)
++{
++	struct usb_cfg *usb = platform_get_drvdata(pdev);
++	struct usb_hcd *hcd = usb->hcd;
++	struct resource *iomem;
++
++	usb_remove_hcd(hcd);
++	usb_put_hcd(hcd);
++
++	bcm_usbh_term(pdev->id);
++	iounmap(usb->virt_reg_base);
++	kfree(usb);
++
++	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	release_mem_region(iomem->start, resource_size(iomem));
++
++	platform_set_drvdata(pdev, NULL);
++
++	return 0;
++}
++
++static void bcm_ehci_shutdown(struct platform_device *pdev)
++{
++	struct usb_cfg *usb = platform_get_drvdata(pdev);
++	struct usb_hcd *hcd = usb->hcd;
++
++	if (hcd->driver->shutdown)
++		hcd->driver->shutdown(hcd);
++}
++
++#ifdef CONFIG_PM
++static int bcm_ehci_suspend(struct platform_device *pdev, pm_message_t message)
++{
++	struct usb_cfg *usb = platform_get_drvdata(pdev);
++	struct usb_hcd *hcd = usb->hcd;
++	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
++	unsigned long flags;
++	int rc = 0;
++
++	if (time_before(jiffies, ehci->next_statechange))
++		msleep(10);
++
++	/* Root hub was already suspended. Disable irq emission and
++	 * mark HW unaccessible, bail out if RH has been resumed. Use
++	 * the spinlock to properly synchronize with possible pending
++	 * RH suspend or resume activity.
++	 *
++	 * This is still racy as hcd->state is manipulated outside of
++	 * any locks =P But that will be a different fix.
++	 */
++	spin_lock_irqsave (&ehci->lock, flags);
++	if (hcd->state != HC_STATE_SUSPENDED) {
++		rc = -EINVAL;
++		goto bail;
++	}
++	ehci_writel(ehci, 0, &ehci->regs->intr_enable);
++	(void)ehci_readl(ehci, &ehci->regs->intr_enable);
++
++	/* make sure snapshot being resumed re-enumerates everything */
++	if (message.event == PM_EVENT_PRETHAW) {
++		ehci_halt(ehci);
++		ehci_reset(ehci);
++	}
++
++	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
++	rc = bcm_usbh_suspend(pdev->id);
++
++bail:
++	spin_unlock_irqrestore (&ehci->lock, flags);
++
++	return rc;
++}
++
++static int bcm_ehci_resume(struct platform_device *pdev)
++{
++	struct usb_cfg *usb = platform_get_drvdata(pdev);
++	struct usb_hcd *hcd = usb->hcd;
++	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
++	int rc;
++
++	if (time_before(jiffies, ehci->next_statechange))
++		msleep(100);
++
++	rc = bcm_usbh_resume(pdev->id);
++
++	/* Mark hardware accessible again as we are out of D3 state by now */
++	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
++
++	/* If CF is still set, we maintained PCI Vaux power.
++	 * Just undo the effect of ehci_pci_suspend().
++	 */
++	if (ehci_readl(ehci, &ehci->regs->configured_flag) == FLAG_CF) {
++		int mask = INTR_MASK;
++
++		if (!hcd->self.root_hub->do_remote_wakeup)
++			mask &= ~STS_PCD;
++		ehci_writel(ehci, mask, &ehci->regs->intr_enable);
++		ehci_readl(ehci, &ehci->regs->intr_enable);
++		return 0;
++	}
++
++	ehci_dbg(ehci, "lost power, restarting\n");
++	usb_root_hub_lost_power(hcd->self.root_hub);
++
++	/*
++	 * Else reset, to cope with power loss or flush-to-storage
++	 * style "resume" having let BIOS kick in during reboot.
++	 */
++	(void)ehci_halt(ehci);
++	(void)ehci_reset(ehci);
++
++	/* emptying the schedule aborts any urbs */
++	spin_lock_irq(&ehci->lock);
++#warning "TODO: ehci->reclaim no longer part of struct ehci_hcd"
++	ehci_work(ehci);
++	spin_unlock_irq(&ehci->lock);
++
++	ehci_writel(ehci, ehci->command, &ehci->regs->command);
++	ehci_writel(ehci, FLAG_CF, &ehci->regs->configured_flag);
++	ehci_readl(ehci, &ehci->regs->command); /* unblock posted writes */
++
++	/* here we "know" root ports should always stay powered */
++	ehci_port_power(ehci, 1);
++
++	hcd->state = HC_STATE_SUSPENDED;
++
++	return 0;
++}
++
++#else
++#define bcm_ehci_suspend    NULL
++#define bcm_ehci_resume     NULL
++#endif /* CONFIG_PM */
++
++static struct platform_driver ehci_bcm_driver =
++{
++	.probe = bcm_ehci_probe,
++	.remove = bcm_ehci_remove,
++	.shutdown = bcm_ehci_shutdown,
++	.suspend = bcm_ehci_suspend,
++	.resume = bcm_ehci_resume,
++	.driver = {
++		.name = BCM_USBEHCI_NAME,
++		.owner = THIS_MODULE,
++	},
++};
++
++MODULE_DESCRIPTION(BCM_USBEHCI_MODULE_DESCRIPTION);
++MODULE_LICENSE("GPL");
++MODULE_VERSION(BCM_USBEHCI_MODULE_VERSION);
+diff --git a/drivers/bcmdrivers/usb2h/ohci-bcm.c b/drivers/bcmdrivers/usb2h/ohci-bcm.c
+new file mode 100644
+index 0000000..24b21fe
+--- /dev/null
++++ b/drivers/bcmdrivers/usb2h/ohci-bcm.c
+@@ -0,0 +1,314 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/platform_device.h>
++#include <linux/version.h>
++
++#include <mach/irqs.h>
++#include "bcm_usbh.h"
++
++#define BCM_USBOHCI_MODULE_DESCRIPTION      "Broadcom USB OHCI driver"
++#define BCM_USBOHCI_MODULE_VERSION          "1.0.0"
++
++#define BCM_USBOHCI_IRQF_FLAGS              (IRQF_DISABLED | IRQF_SHARED)
++#define BCM_USBOHCI_NAME                    "bcm-ohci"
++
++#define OHCI_INFO(pdev, fmt, args...) dev_info(&pdev->dev, fmt, ## args)
++#define OHCI_ERR(pdev, fmt, args...) dev_err(&pdev->dev, fmt, ## args)
++
++struct usb_cfg
++{
++	void *virt_reg_base;
++	struct usb_hcd *hcd;
++};
++
++extern int usb_disabled(void);
++extern int InUSBDMode(void);
++static int bcm_ohci_start(struct usb_hcd *hcd);
++
++static const struct hc_driver ohci_hcd_driver =
++{
++	.description = hcd_name,
++	.product_desc = BCM_USBOHCI_NAME,
++	.hcd_priv_size = sizeof(struct ohci_hcd),
++
++	/*
++	 * generic hardware linkage
++	 */
++	.irq = ohci_irq,
++	.flags = HCD_USB11 | HCD_MEMORY,
++
++	/*
++	 * basic lifecycle operations
++	 */
++	.start = bcm_ohci_start,
++	.stop = ohci_stop,
++	.shutdown = ohci_shutdown,
++#ifdef CONFIG_PM
++	.bus_suspend = ohci_bus_suspend,
++	.bus_resume = ohci_bus_resume,
++#endif
++
++	/*
++	 * managing i/o requests and associated device resources
++	 */
++	.urb_enqueue = ohci_urb_enqueue,
++	.urb_dequeue = ohci_urb_dequeue,
++	.endpoint_disable = ohci_endpoint_disable,
++
++	/*
++	 * scheduling support
++	 */
++	.get_frame_number = ohci_get_frame,
++
++	/*
++	 * root hub support
++	 */
++	.hub_status_data = ohci_hub_status_data,
++	.hub_control = ohci_hub_control,
++};
++
++static int bcm_ohci_start(struct usb_hcd *hcd)
++{
++	struct ohci_hcd *ohci;
++	int err;
++
++	if (!hcd) {
++		printk(KERN_ERR "invalid hcd pointer in %s\n", __FUNCTION__);
++		return -EINVAL;
++	}
++
++	ohci = hcd_to_ohci(hcd);
++
++	if ((err = ohci_init(ohci)) < 0) {
++		printk(KERN_ERR "busnum %d: ohci_init() failed, err=%d\n", hcd->self.busnum, err);
++		return err;
++	}
++
++	if ((err = ohci_run(ohci)) < 0) {
++		printk(KERN_ERR "busnum %d: ohci_run() failed, err=%d\n", hcd->self.busnum, err);
++		ohci_stop(hcd);
++		return err;
++	}
++
++	return 0;
++}
++
++int bcm_ohci_probe(struct platform_device *pdev)
++{
++	struct usb_cfg *usb;
++	struct usb_hcd *hcd;
++	struct resource *iomem, *ioarea;
++	int ret, irq;
++
++	if (usb_disabled())
++		return -ENODEV;
++
++	if (InUSBDMode())
++		return -ENODEV;
++
++	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (!iomem) {
++		OHCI_ERR(pdev, "no mem resource\n");
++		ret = -ENOMEM;
++		goto err_exit;
++	}
++
++	/* get the irq info */
++	irq = platform_get_irq(pdev, 0);
++	if (!irq) {
++		OHCI_ERR(pdev, "no irq resource\n");
++		ret = -ENODEV;
++		goto err_exit;
++	}
++
++	ioarea = request_mem_region(iomem->start, resource_size(iomem), pdev->name);
++	if (!ioarea) {
++		OHCI_ERR(pdev, "memory region already claimed\n");
++		ret = -EBUSY;
++		goto err_exit;
++	}
++
++	usb = kzalloc(sizeof(*usb), GFP_KERNEL);
++	if (!usb) {
++		OHCI_ERR(pdev, "unable to allocate memory for private data\n");
++		ret = -ENOMEM;
++		goto err_free_iomem;
++	}
++
++	usb->virt_reg_base = ioremap(iomem->start, resource_size(iomem));
++	if (!usb->virt_reg_base) {
++		OHCI_ERR(pdev, "ioremap failed\n");
++		ret = -ENOMEM;
++		goto err_free_private_mem;
++	}
++
++	/* enable clock and PHY */
++	ret = bcm_usbh_init(pdev->id);
++	if (ret < 0) {
++		OHCI_ERR(pdev, "clock and PHY initialization failed\n");
++		goto err_io_unmap;
++	}
++
++	hcd = usb_create_hcd(&ohci_hcd_driver, &pdev->dev, (char *)pdev->name);
++	if (!hcd) {
++		OHCI_ERR(pdev, "usb_create_hcd failed\n");
++		ret = -ENOMEM;
++		goto err_usb_term;
++	}
++
++	/* struct ohci_regs def'd in Linux ohci.h which is included by Linux ohci-hcd.c */
++	usb->hcd = hcd;
++	hcd->rsrc_start = (unsigned int)usb->virt_reg_base;
++	hcd->rsrc_len = sizeof(struct ohci_regs);
++	hcd->regs = usb->virt_reg_base;
++
++	ohci_hcd_init(hcd_to_ohci(hcd));
++
++	ret = usb_add_hcd(hcd, irq, BCM_USBOHCI_IRQF_FLAGS);
++	if (ret) {
++		OHCI_ERR(pdev, "usb_add_hcd failed\n");
++		goto err_remove_hcd;
++	}
++
++	platform_set_drvdata(pdev, usb);
++
++	OHCI_INFO(pdev, "probe done\n");
++	return 0;
++
++err_remove_hcd:
++	//usb_remove_hcd(hcd);
++	//usb_put_hcd(hcd);
++
++err_usb_term:
++	bcm_usbh_term(pdev->id);
++
++err_io_unmap:
++	iounmap(usb->virt_reg_base);
++
++err_free_private_mem:
++	kfree(usb);
++
++err_free_iomem:
++	release_mem_region(iomem->start, resource_size(iomem));
++
++err_exit:
++	OHCI_ERR(pdev, "probe failed: %d\n", ret);
++	return ret;
++}
++
++int bcm_ohci_remove(struct platform_device *pdev)
++{
++	struct usb_cfg *usb = platform_get_drvdata(pdev);
++	struct usb_hcd *hcd = usb->hcd;
++	struct resource *iomem;
++
++	usb_remove_hcd(hcd);
++	usb_put_hcd(hcd);
++
++	bcm_usbh_term(pdev->id);
++	iounmap(usb->virt_reg_base);
++	kfree(usb);
++
++	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	release_mem_region(iomem->start, resource_size(iomem));
++
++	platform_set_drvdata(pdev, NULL);
++
++	return 0;
++}
++
++static void bcm_ohci_shutdown(struct platform_device *pdev)
++{
++	struct usb_cfg *usb = platform_get_drvdata(pdev);
++	struct usb_hcd *hcd = usb->hcd;
++
++	if (hcd->driver->shutdown)
++		hcd->driver->shutdown(hcd);
++}
++
++#ifdef CONFIG_PM
++static int bcm_ohci_suspend(struct platform_device *pdev, pm_message_t message)
++{
++	struct usb_cfg *usb = platform_get_drvdata(pdev);
++	struct usb_hcd *hcd = usb->hcd;
++	struct ohci_hcd *ohci = hcd_to_ohci(hcd);
++	unsigned long flags;
++	int rc = 0;
++
++	/* Root hub was already suspended. Disable irq emission and
++	 * mark HW unaccessible, bail out if RH has been resumed. Use
++	 * the spinlock to properly synchronize with possible pending
++	 * RH suspend or resume activity.
++	 *
++	 * This is still racy as hcd->state is manipulated outside of
++	 * any locks =P But that will be a different fix.
++	 */
++	spin_lock_irqsave(&ohci->lock, flags);
++	if (hcd->state != HC_STATE_SUSPENDED) {
++		rc = -EINVAL;
++		goto bail;
++	}
++	ohci_writel(ohci, OHCI_INTR_MIE, &ohci->regs->intrdisable);
++	(void)ohci_readl(ohci, &ohci->regs->intrdisable);
++
++	/* make sure snapshot being resumed re-enumerates everything */
++	if (message.event == PM_EVENT_PRETHAW)
++		ohci_usb_reset(ohci);
++
++	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
++	rc = bcm_usbh_suspend(pdev->id);
++
++bail:
++	spin_unlock_irqrestore(&ohci->lock, flags);
++	return rc;
++}
++
++static int bcm_ohci_resume(struct platform_device *pdev)
++{
++	struct usb_cfg *usb = platform_get_drvdata(pdev);
++	struct usb_hcd *hcd = usb->hcd;
++
++	bcm_usbh_resume(pdev->id);
++
++	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
++	ohci_finish_controller_resume(hcd);
++
++	return 0;
++}
++#endif /* CONFIG_PM */
++
++/*
++ * Generic platform device driver definition.
++ */
++static struct platform_driver ohci_bcm_driver =
++{
++	.probe = bcm_ohci_probe,
++	.remove = bcm_ohci_remove,
++	.shutdown = bcm_ohci_shutdown,
++#ifdef CONFIG_PM
++	.suspend = bcm_ohci_suspend,
++	.resume = bcm_ohci_resume,
++#endif
++	.driver = {
++		.name = BCM_USBOHCI_NAME,
++		.owner = THIS_MODULE,
++	},
++};
++
++MODULE_DESCRIPTION(BCM_USBOHCI_MODULE_DESCRIPTION);
++MODULE_LICENSE("GPL");
++MODULE_VERSION(BCM_USBOHCI_MODULE_VERSION);
+diff --git a/drivers/bcmdrivers/usb2h/usbh_cfg.h b/drivers/bcmdrivers/usb2h/usbh_cfg.h
+new file mode 100644
+index 0000000..c00b0ae
+--- /dev/null
++++ b/drivers/bcmdrivers/usb2h/usbh_cfg.h
+@@ -0,0 +1,51 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef __ISLAND_USBH_CFG_H
++#define __ISLAND_USBH_CFG_H
++
++#define USBH_NUM_PORTS 3
++
++struct usbh_port_cfg {
++	/* GPIO for host power */
++	int pwr_gpio;
++
++	/* GPIO for power fault (over-current) detection */
++	int pwr_flt_gpio;
++
++	/* GPIO for PHY reset */
++	int reset_gpio;
++};
++
++/*
++ * USB Host related HW parameters
++ */
++struct usbh_cfg {
++	/* peripheral clock name string */
++	char *peri_clk_name;
++
++	/* AHB bus clock name string */
++	char *ahb_clk_name;
++
++	/* the block might require optional clock to be enabled */
++	char *opt_clk_name;
++
++	unsigned int num_ports;
++
++	struct usbh_port_cfg port[USBH_NUM_PORTS];
++};
++
++#endif
+diff --git a/drivers/usb/host/ehci-hcd.c b/drivers/usb/host/ehci-hcd.c
+index 2abdad6..aec3e79 100644
+--- a/drivers/usb/host/ehci-hcd.c
++++ b/drivers/usb/host/ehci-hcd.c
+@@ -1344,6 +1344,11 @@ MODULE_LICENSE ("GPL");
+ #define PLATFORM_DRIVER		ehci_xls_driver
+ #endif
+ 
++#ifdef CONFIG_USB_EHCI_BCM
++#include "../../bcmdrivers/usb2h/ehci-bcm.c"
++#define PLATFORM_DRIVER		ehci_bcm_driver
++#endif
++
+ #if !defined(PCI_DRIVER) && !defined(PLATFORM_DRIVER) && \
+     !defined(PS3_SYSTEM_BUS_DRIVER) && !defined(OF_PLATFORM_DRIVER) && \
+     !defined(XILINX_OF_PLATFORM_DRIVER)
+diff --git a/drivers/usb/host/ohci-hcd.c b/drivers/usb/host/ohci-hcd.c
+index b263919..1ef5c6d 100644
+--- a/drivers/usb/host/ohci-hcd.c
++++ b/drivers/usb/host/ohci-hcd.c
+@@ -1116,6 +1116,11 @@ MODULE_LICENSE ("GPL");
+ #define PLATFORM_DRIVER		ohci_xls_driver
+ #endif
+ 
++#ifdef CONFIG_USB_OHCI_BCM
++#include "../../bcmdrivers/usb2h/ohci-bcm.c"
++#define PLATFORM_DRIVER		ohci_bcm_driver
++#endif
++
+ #if	!defined(PCI_DRIVER) &&		\
+ 	!defined(PLATFORM_DRIVER) &&	\
+ 	!defined(OMAP1_PLATFORM_DRIVER) &&	\
