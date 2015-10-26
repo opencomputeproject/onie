@@ -1,0 +1,74 @@
+Save default env when crc is bad.
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+During boot when the environment is read from flash and a CRC is
+calculated and checked.  If the CRC is corrupt then a default
+environment that is compiled in is used instead.
+
+When this situation is detected the compiled in default environment is
+written to the flash, thus making sure the flash contains an
+environment with a valid CRC.
+
+diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
+index 6a7bf4b..079c693 100644
+--- a/arch/powerpc/lib/board.c
++++ b/arch/powerpc/lib/board.c
+@@ -1003,6 +1003,11 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	last_stage_init();
+ #endif
+ 
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++	WATCHDOG_RESET();
++	env_write_default_if_crc_bad();
++#endif
++
+ #if defined(CONFIG_CMD_BEDBUG)
+ 	WATCHDOG_RESET();
+ 	bedbug_init();
+diff --git a/common/env_common.c b/common/env_common.c
+index 906b41f..df0f1ba 100644
+--- a/common/env_common.c
++++ b/common/env_common.c
+@@ -240,3 +240,24 @@ int env_complete(char *var, int maxv, char *cmdv[], int bufsz, char *buf)
+ 	return found;
+ }
+ #endif
++
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++#if !defined(CONFIG_CMD_SAVEENV) || !defined(CONFIG_CMD_FLASH)
++#error CONFIG_CMD_SAVEENV and CONFIG_CMD_FLASH must both be enabled when CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD is enabled.
++#endif
++/*
++** Called by board_init_r() after last_stage_init().
++**
++** If the env in flash is corrupt then write the default env with a
++** valid CRC.
++**
++*/
++void env_write_default_if_crc_bad(void)
++{
++	env_t *env_ptr = (env_t *)CONFIG_ENV_ADDR;
++	if (crc32(0, env_ptr->data, ENV_SIZE) != env_ptr->crc) {
++		puts("Writing default environment\n");
++		saveenv();
++	}
++}
++#endif
+#diff --git a/include/environment.h b/include/environment.h
+#index e64b43d..82e1c0d 100644
+#--- a/include/environment.h
+#+++ b/include/environment.h
+#@@ -193,6 +193,10 @@ int set_default_vars(int nvars, char * const vars[]);
+# /* Import from binary representation into hash table */
+# int env_import(const char *buf, int check);
+# 
+#+#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
+#+void env_write_default_if_crc_bad(void);
+#+#endif
+#+
+# #endif /* DO_DEPS_ONLY */
+# 
+# #endif /* _ENVIRONMENT_H_ */
