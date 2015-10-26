@@ -42,6 +42,7 @@ class sysinfo(object):
     LABEL_VERSION='Label Version'
     MODEL_NAME='Model'
     SOFTWARE_VERSION='Software Version'
+    DEVICE_VERSION='Device Version'
 
 ############################################################
 #
