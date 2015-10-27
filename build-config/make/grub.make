@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -16,21 +17,28 @@ GRUB_BUILD_DIR		= $(MBUILDDIR)/grub
 GRUB_DIR		= $(GRUB_BUILD_DIR)/grub-$(GRUB_VERSION)
 GRUB_I386_DIR		= $(GRUB_BUILD_DIR)/grub-i386-pc
 GRUB_UEFI_DIR		= $(GRUB_BUILD_DIR)/grub-x86_64-efi
-GRUB_I386_COREBOOT_DIR		= $(GRUB_BUILD_DIR)/grub-i386-coreboot
+GRUB_I386_COREBOOT_DIR	= $(GRUB_BUILD_DIR)/grub-i386-coreboot
 
 GRUB_SRCPATCHDIR	= $(PATCHDIR)/grub
 GRUB_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/grub-download
 GRUB_SOURCE_STAMP	= $(STAMPDIR)/grub-source
 GRUB_PATCH_STAMP	= $(STAMPDIR)/grub-patch
-GRUB_CONFIGURE_I386_STAMP	= $(STAMPDIR)/grub-configure-i386-pc
-GRUB_CONFIGURE_UEFI_STAMP	= $(STAMPDIR)/grub-configure-x86_64-efi
-GRUB_CONFIGURE_I386_COREBOOT_STAMP	= $(STAMPDIR)/grub-configure-i386-coreboot
 GRUB_CONFIGURE_STAMP	= $(STAMPDIR)/grub-configure
-GRUB_BUILD_I386_STAMP	= $(STAMPDIR)/grub-build-i386-pc
-GRUB_BUILD_UEFI_STAMP	= $(STAMPDIR)/grub-build-x86_64-efi
-GRUB_BUILD_I386_COREBOOT_STAMP	= $(STAMPDIR)/grub-build-i386-coreboot
 GRUB_BUILD_STAMP	= $(STAMPDIR)/grub-build
 GRUB_INSTALL_STAMP	= $(STAMPDIR)/grub-install
+GRUB_CONFIGURE_I386_STAMP	= $(STAMPDIR)/grub-configure-i386-pc
+GRUB_BUILD_I386_STAMP		= $(STAMPDIR)/grub-build-i386-pc
+GRUB_INSTALL_I386_STAMP		= $(STAMPDIR)/grub-install-i386-pc
+ifeq ($(UEFI_ENABLE),yes)
+  GRUB_CONFIGURE_UEFI_STAMP	= $(STAMPDIR)/grub-configure-x86_64-efi
+  GRUB_BUILD_UEFI_STAMP		= $(STAMPDIR)/grub-build-x86_64-efi
+  GRUB_INSTALL_UEFI_STAMP	= $(STAMPDIR)/grub-install-x86_64-efi
+endif
+ifeq ($(FIRMWARE_TYPE),coreboot)
+  GRUB_CONFIGURE_I386_COREBOOT_STAMP	= $(STAMPDIR)/grub-configure-i386-coreboot
+  GRUB_BUILD_I386_COREBOOT_STAMP	= $(STAMPDIR)/grub-build-i386-coreboot
+  GRUB_INSTALL_I386_COREBOOT_STAMP	= $(STAMPDIR)/grub-install-i386-coreboot
+endif
 
 GRUB_STAMP		= $(GRUB_SOURCE_STAMP) \
 			  $(GRUB_PATCH_STAMP) \
@@ -42,6 +50,9 @@ GRUB_STAMP		= $(GRUB_SOURCE_STAMP) \
 			  $(GRUB_BUILD_UEFI_STAMP) \
 			  $(GRUB_BUILD_I386_COREBOOT_STAMP) \
 			  $(GRUB_BUILD_STAMP) \
+			  $(GRUB_INSTALL_I386_STAMP) \
+			  $(GRUB_INSTALL_UEFI_STAMP) \
+			  $(GRUB_INSTALL_I386_COREBOOT_STAMP) \
 			  $(GRUB_INSTALL_STAMP)
 
 # GRUB configuration options common to i386-pc and x86_64-efi
@@ -116,7 +127,6 @@ $(GRUB_CONFIGURE_UEFI_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_INSTALL_STAMP) | $(DEV_
 	$(Q) touch $@
 
 $(GRUB_CONFIGURE_I386_COREBOOT_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
-ifeq ($(FIRMWARE_TYPE), coreboot)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure grub-i386-coreboot-$(GRUB_VERSION) ===="
 	$(Q) mkdir -p $(GRUB_I386_COREBOOT_DIR)
@@ -129,10 +139,6 @@ ifeq ($(FIRMWARE_TYPE), coreboot)
 		CFLAGS="$(ONIE_CFLAGS)"				\
 		LDFLAGS="$(ONIE_LDFLAGS)"
 	$(Q) touch $@
-else
-	$(Q) touch $@
-endif
-
 
 grub-configure: $(GRUB_CONFIGURE_STAMP)
 $(GRUB_CONFIGURE_STAMP): $(GRUB_CONFIGURE_I386_STAMP) $(GRUB_CONFIGURE_UEFI_STAMP) $(GRUB_CONFIGURE_I386_COREBOOT_STAMP)
@@ -151,31 +157,41 @@ $(GRUB_BUILD_UEFI_STAMP): $(GRUB_CONFIGURE_STAMP)
 	$(Q) touch $@
 
 $(GRUB_BUILD_I386_COREBOOT_STAMP): $(GRUB_CONFIGURE_STAMP)
-ifeq ($(FIRMWARE_TYPE), coreboot)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building grub-i386-coreboot-$(GRUB_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(GRUB_I386_COREBOOT_DIR)
 	$(Q) touch $@
-else
-	$(Q) touch $@
-endif
 
 grub-build: $(GRUB_BUILD_STAMP)
 $(GRUB_BUILD_STAMP): $(GRUB_BUILD_I386_STAMP) $(GRUB_BUILD_UEFI_STAMP) $(GRUB_BUILD_I386_COREBOOT_STAMP)
 	$(Q) touch $@
 
-grub-install: $(GRUB_INSTALL_STAMP)
-$(GRUB_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_BUILD_STAMP)
+$(GRUB_INSTALL_I386_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_BUILD_I386_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing grub in $(DEV_SYSROOT) ===="
+	$(Q) echo "==== Installing grub-i386-pc in $(DEV_SYSROOT) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(GRUB_I386_DIR) install DESTDIR=$(DEV_SYSROOT)
+	$(Q) touch $@
+
+$(GRUB_INSTALL_UEFI_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_BUILD_UEFI_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Installing grub-x86_64-efi in $(DEV_SYSROOT) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(GRUB_UEFI_DIR) install DESTDIR=$(DEV_SYSROOT)
-ifeq ($(FIRMWARE_TYPE), coreboot)
+	$(Q) touch $@
+
+$(GRUB_INSTALL_I386_COREBOOT_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_BUILD_I386_COREBOOT_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Installing grub-i386-coreboot in $(DEV_SYSROOT) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(GRUB_I386_COREBOOT_DIR) install DESTDIR=$(DEV_SYSROOT)
-endif
+	$(Q) touch $@
+
+grub-install: $(GRUB_INSTALL_STAMP)
+$(GRUB_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_INSTALL_I386_STAMP) \
+	$(GRUB_INSTALL_UEFI_STAMP) $(GRUB_INSTALL_I386_COREBOOT_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Installing grub in $(SYSROOTDIR) ===="
 	$(Q) cp -a $(DEV_SYSROOT)/usr/lib/grub $(SYSROOTDIR)/usr/lib
 	$(Q) cp -a $(DEV_SYSROOT)/usr/share/grub $(SYSROOTDIR)/usr/share
 	$(Q) for f in $(GRUB_SBIN) ; do \
@@ -211,23 +227,36 @@ GRUB_HOST_BIN_I386_DIR		= $(GRUB_HOST_INSTALL_I386_DIR)/usr/bin
 GRUB_HOST_INSTALL_UEFI_DIR	= $(GRUB_HOST_BUILD_DIR)/x86_64-efi-install
 GRUB_HOST_LIB_UEFI_DIR		= $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/lib/grub/x86_64-efi
 GRUB_HOST_BIN_UEFI_DIR		= $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/bin
-GRUB_HOST_CONFIGURE_I386_STAMP	= $(STAMPDIR)/grub-host-configure-i386-pc
-GRUB_HOST_CONFIGURE_UEFI_STAMP	= $(STAMPDIR)/grub-host-configure-x86_64-efi
 GRUB_HOST_CONFIGURE_STAMP	= $(STAMPDIR)/grub-host-configure
-GRUB_HOST_BUILD_I386_STAMP	= $(STAMPDIR)/grub-host-build-i386-pc
-GRUB_HOST_BUILD_UEFI_STAMP	= $(STAMPDIR)/grub-host-build-x86_64-efi
 GRUB_HOST_BUILD_STAMP		= $(STAMPDIR)/grub-host-build
 GRUB_HOST_INSTALL_STAMP		= $(STAMPDIR)/grub-host-install
+GRUB_HOST_CONFIGURE_I386_STAMP	= $(STAMPDIR)/grub-host-configure-i386-pc
+GRUB_HOST_BUILD_I386_STAMP	= $(STAMPDIR)/grub-host-build-i386-pc
+GRUB_HOST_INSTALL_I386_STAMP	= $(STAMPDIR)/grub-host-install-i386-pc
+GRUB_HOST_UEFI_ENABLE		= no
+ifeq ($(UEFI_ENABLE),yes)
+  GRUB_HOST_UEFI_ENABLE = yes
+endif
+ifeq ($(PXE_EFI64_ENABLE),yes)
+  GRUB_HOST_UEFI_ENABLE = yes
+endif
+ifeq ($(GRUB_HOST_UEFI_ENABLE),yes)
+  GRUB_HOST_CONFIGURE_UEFI_STAMP= $(STAMPDIR)/grub-host-configure-x86_64-efi
+  GRUB_HOST_BUILD_UEFI_STAMP	= $(STAMPDIR)/grub-host-build-x86_64-efi
+  GRUB_HOST_INSTALL_UEFI_STAMP	= $(STAMPDIR)/grub-host-install-x86_64-efi
+endif
 
 PHONY += grub-host-configure grub-host-build grub-host-install grub-host-clean
 
-GRUB_HOST_STAMP = $(GRUB_HOST_CONFIGURE_STAMP) \
-		$(GRUB_HOST_CONFIGURE_I386_STAMP) \
-		$(GRUB_HOST_CONFIGURE_UEFI_STAMP) \
-		$(GRUB_HOST_BUILD_STAMP) \
-		$(GRUB_HOST_BUILD_I386_STAMP) \
-		$(GRUB_HOST_BUILD_UEFI_STAMP) \
-		$(GRUB_HOST_INSTALL_STAMP)
+GRUB_HOST_STAMP = $(GRUB_HOST_CONFIGURE_I386_STAMP) \
+		  $(GRUB_HOST_CONFIGURE_UEFI_STAMP) \
+		  $(GRUB_HOST_CONFIGURE_STAMP) \
+		  $(GRUB_HOST_BUILD_I386_STAMP) \
+		  $(GRUB_HOST_BUILD_UEFI_STAMP) \
+		  $(GRUB_HOST_BUILD_STAMP) \
+		  $(GRUB_HOST_INSTALL_I386_STAMP) \
+		  $(GRUB_HOST_INSTALL_UEFI_STAMP) \
+		  $(GRUB_HOST_INSTALL_STAMP)
 
 grub-host: $(GRUB_HOST_STAMP)
 
@@ -269,12 +298,20 @@ grub-host-build: $(GRUB_HOST_BUILD_STAMP)
 $(GRUB_HOST_BUILD_STAMP): $(GRUB_HOST_BUILD_I386_STAMP) $(GRUB_HOST_BUILD_UEFI_STAMP)
 	$(Q) touch $@
 
-grub-host-install: $(GRUB_HOST_INSTALL_STAMP)
-$(GRUB_HOST_INSTALL_STAMP): $(GRUB_HOST_BUILD_STAMP)
+$(GRUB_HOST_INSTALL_I386_STAMP): $(GRUB_HOST_BUILD_I386_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing grub-host in $(GRUB_HOST_INSTALL_DIR) ===="
+	$(Q) echo "==== Installing grub-host-i386-pc in $(GRUB_HOST_INSTALL_I386_DIR) ===="
 	$(Q) $(MAKE) -C $(GRUB_HOST_I386_DIR) install DESTDIR=$(GRUB_HOST_INSTALL_I386_DIR)
+	$(Q) touch $@
+
+$(GRUB_HOST_INSTALL_UEFI_STAMP): $(GRUB_HOST_BUILD_UEFI_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Installing grub-host-x86_64-efi in $(GRUB_HOST_INSTALL_UEFI_DIR) ===="
 	$(Q) $(MAKE) -C $(GRUB_HOST_UEFI_DIR) install DESTDIR=$(GRUB_HOST_INSTALL_UEFI_DIR)
+	$(Q) touch $@
+
+grub-host-install: $(GRUB_HOST_INSTALL_STAMP)
+$(GRUB_HOST_INSTALL_STAMP): $(GRUB_HOST_INSTALL_I386_STAMP) $(GRUB_HOST_INSTALL_UEFI_STAMP)
 	$(Q) touch $@
 
 USERSPACE_CLEAN += grub-host-clean

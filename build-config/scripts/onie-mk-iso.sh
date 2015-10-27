@@ -70,14 +70,16 @@ RECOVERY_ISO_IMAGE=${11}
     echo "ERROR: Does not look like valid GRUB i386-pc bin directory: $GRUB_HOST_BIN_I386_DIR"
     exit 1
 }
-[ -r "${GRUB_HOST_LIB_UEFI_DIR}/efinet.mod" ] || {
-    echo "ERROR: Does not look like valid GRUB x86_64-efi library directory: $GRUB_HOST_LIB_UEFI_DIR"
-    exit 1
-}
-[ -x "${GRUB_HOST_BIN_UEFI_DIR}/grub-mkimage" ] || {
-    echo "ERROR: Does not look like valid GRUB x86_64-efi bin directory: $GRUB_HOST_BIN_UEFI_DIR"
-    exit 1
-}
+if [ "$UEFI_ENABLE" = "yes" ] ; then
+    [ -r "${GRUB_HOST_LIB_UEFI_DIR}/efinet.mod" ] || {
+        echo "ERROR: Does not look like valid GRUB x86_64-efi library directory: $GRUB_HOST_LIB_UEFI_DIR"
+        exit 1
+    }
+    [ -x "${GRUB_HOST_BIN_UEFI_DIR}/grub-mkimage" ] || {
+        echo "ERROR: Does not look like valid GRUB x86_64-efi bin directory: $GRUB_HOST_BIN_UEFI_DIR"
+        exit 1
+    }
+fi
 [ -r "$RECOVERY_XORRISO_OPTIONS" ] || {
     echo "ERROR: Unable to read xorriso options file: $RECOVERY_XORRISO_OPTIONS"
     exit 1
