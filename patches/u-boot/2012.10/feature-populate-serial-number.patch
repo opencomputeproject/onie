@@ -1,0 +1,53 @@
+feature populate serial number env
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+At boot time populate the 'serial#' environment variable if it is not
+already set.  Where the serial number comes from (NOR flash, EEPROM,
+etc.) is board specific.
+
+diff --git a/README b/README
+index 08c20d5..ad0bcac 100644
+--- a/README
++++ b/README
+@@ -3258,6 +3258,11 @@ use the "saveenv" command to store a valid environment.
+ 		space for already greatly restricted images, including but not
+ 		limited to NAND_SPL configurations.
+ 
++- CONFIG_POPULATE_SERIAL_NUMBER
++       At boot time set the 'serial#' environment variable if
++       it is not already set.  Where to find the serial
++       number (EEPROM, NOR flash, etc.) is platform specific.
++
+ Low Level (hardware related) configuration options:
+ ---------------------------------------------------
+ 
+diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
+index 8bccc08..5a5ae81 100644
+--- a/arch/powerpc/lib/board.c
++++ b/arch/powerpc/lib/board.c
+@@ -863,6 +863,10 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	mac_read_from_eeprom();
+ #endif
+ 
++#ifdef CONFIG_POPULATE_SERIAL_NUMBER
++   populate_serial_number();
++#endif
++
+ #ifdef	CONFIG_HERMES
+ 	if ((gd->board_type >> 16) == 2)
+ 		bd->bi_ethspeed = gd->board_type & 0xFFFF;
+diff --git a/include/common.h b/include/common.h
+index c13dad3..530206b 100644
+--- a/include/common.h
++++ b/include/common.h
+@@ -321,6 +321,7 @@ int	checkdram     (void);
+ int	last_stage_init(void);
+ extern ulong monitor_flash_len;
+ int mac_read_from_eeprom(void);
++int populate_serial_number(void);
+ extern u8 _binary_dt_dtb_start[];	/* embedded device tree blob */
+ int set_cpu_clk_info(void);
+ 
