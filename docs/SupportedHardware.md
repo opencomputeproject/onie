@@ -14,7 +14,7 @@ Quanta
 <tr> <td> QuantaMesh T1048-LB9    <td> 48x1G  + 4x10G   <td> FreeScale P2020       <td> Broadcom BCM56534 (Firebolt3)    	<td> Supported and Tested   </tr>
 <tr> <td> QuantaMesh T1048-LB9A   <td> 48x1G  + 4x10G   <td> FreeScale P2020       <td> Broadcom BCM56534 (Firebolt3)    	<td> Supported, no ONIE, not regularly tested   </tr>
 <tr> <td> QuantaMesh T3048-LY2    <td> 48x10G + 4x40G   <td> FreeScale P2020       <td> Broadcom BCM56846 (Trident+)     	<td> Supported and Tested   </tr>
-<tr> <td> QuantaMesh T3048-LY8    <td> 48x10G + 4x40G   <td> Intel Rangely C2758 x86 <td> Broadcom BCM56854 (Trident2)            <td> Supported and run in the lab   </tr>
+<tr> <td> QuantaMesh T3048-LY8    <td> 48x10G + 6x40G   <td> Intel Rangely C2758 x86 <td> Broadcom BCM56854 (Trident2)            <td> Supported and run in the lab   </tr>
 <tr> <td> QuantaMesh T5032-LY6    <td> 32x40G  <td> Intel Rangely C2758 x86 <td> Broadcom BCM56850 (Trident2)            <td> Supported and run in the lab   </tr>
 </table>
 
