@@ -252,20 +252,10 @@ index ed24988..f6f7468 100644
  
  config MACH_IPROC_P7
 diff --git a/arch/arm/mach-iproc/board_bu.c b/arch/arm/mach-iproc/board_bu.c
-index b45588d..e385ceb 100644
+index b45588d..018eac9 100644
 --- a/arch/arm/mach-iproc/board_bu.c
 +++ b/arch/arm/mach-iproc/board_bu.c
-@@ -22,6 +22,9 @@
- #include <linux/dma-mapping.h>
- #include <linux/clkdev.h>
- #include <asm/hardware/gic.h>
-+#ifdef CONFIG_EARLY_DMA_ALLOC
-+#include <linux/early_dma_alloc.h>
-+#endif
- 
- 
- #include <linux/i2c.h>
-@@ -29,6 +32,7 @@
+@@ -29,6 +29,7 @@
  #include <linux/irq.h>
  #include <linux/input.h>
  #include <linux/i2c/tsc2007.h>
@@ -273,7 +263,7 @@ index b45588d..e385ceb 100644
  #include <linux/spi/spi.h>
  #include <mach/hardware.h>
  #include <asm/mach/arch.h>
-@@ -41,7 +45,7 @@
+@@ -41,7 +42,7 @@
  #include <mach/reg_utils.h>
  #include <linux/pwm.h>
  #include <linux/amba/bus.h>
@@ -282,7 +272,7 @@ index b45588d..e385ceb 100644
  
  #include "northstar.h"
  #include "common.h"
-@@ -379,7 +383,7 @@ static struct resource fa2_resources[] = {
+@@ -379,7 +380,7 @@ static struct resource fa2_resources[] = {
  #ifdef CONFIG_IPROC_I2C
  /* SMBus (I2C/BSC) block */
  
@@ -291,7 +281,7 @@ index b45588d..e385ceb 100644
  /* Helix4 */
  static struct resource smbus_resources[] = {
      [0] = {
-@@ -447,7 +451,8 @@ static struct platform_device board_smbus_device = {
+@@ -447,7 +448,8 @@ static struct platform_device board_smbus_device = {
      .num_resources = ARRAY_SIZE(smbus_resources),
      .resource = smbus_resources,
  };
@@ -301,7 +291,7 @@ index b45588d..e385ceb 100644
  static struct platform_device board_smbus_device1 = {
      .name= "iproc-smb",
      .id = 1,
-@@ -516,8 +521,10 @@ static struct resource usbh_ehci_resource[] = {
+@@ -516,8 +518,10 @@ static struct resource usbh_ehci_resource[] = {
  		.flags = IORESOURCE_MEM,
  	},
  	[1] = {
@@ -314,7 +304,7 @@ index b45588d..e385ceb 100644
  		.flags = IORESOURCE_IRQ,
  	},
  };
-@@ -546,8 +553,10 @@ static struct resource usbh_ohci_resource[] = {
+@@ -546,8 +550,10 @@ static struct resource usbh_ohci_resource[] = {
  		.flags = IORESOURCE_MEM,
  	},
  	[1] = {
@@ -327,7 +317,7 @@ index b45588d..e385ceb 100644
  		.flags = IORESOURCE_IRQ,
  	},
  };
-@@ -704,6 +713,160 @@ void configure_SATA_PHY ( void )
+@@ -704,6 +710,160 @@ void configure_SATA_PHY ( void )
  }
  #endif
  
@@ -488,20 +478,7 @@ index b45588d..e385ceb 100644
  #ifdef CONFIG_MACH_CYGNUS
  #include "include/mach/iproc_regs.h"
  #ifdef CONFIG_IPROC_DS1WM
-@@ -875,6 +1038,12 @@ void __init iproc_init_early(void)
- #ifdef CONFIG_CMA
- 	init_dma_coherent_pool_size(SZ_1M * 16);
- #endif
-+    /*
-+     * Allocate contiguous himem block for SDK usage
-+     */
-+#ifdef CONFIG_EARLY_DMA_ALLOC
-+    eda_init();
-+#endif
- }
- 
- static struct platform_device *board_sata_device[] __initdata = {
-@@ -886,7 +1055,7 @@ static struct platform_device *board_sata_device[] __initdata = {
+@@ -886,7 +1046,7 @@ static struct platform_device *board_sata_device[] __initdata = {
  static struct platform_device *board_devices[] __initdata = {
  #ifdef CONFIG_IPROC_I2C
      &board_smbus_device,
@@ -510,7 +487,7 @@ index b45588d..e385ceb 100644
      &board_smbus_device1,
  #endif
  #endif /* CONFIG_IPROC_I2C */
-@@ -1039,6 +1208,26 @@ void __init board_init(void)
+@@ -1039,6 +1199,26 @@ void __init board_init(void)
  	spi_register_board_info(bcm5301x_spi_device,
  	ARRAY_SIZE(bcm5301x_spi_device));
  
@@ -537,7 +514,7 @@ index b45588d..e385ceb 100644
  	printk(KERN_DEBUG "board_init: Leave\n");
  }
  
-@@ -1056,6 +1245,11 @@ MACHINE_START(IPROC, "Broadcom iProc")
+@@ -1056,6 +1236,11 @@ MACHINE_START(IPROC, "Broadcom iProc")
  	.init_machine = board_init,
  MACHINE_END
  
