@@ -1,0 +1,60 @@
+=========================================
+Installing ONIE on Freescale T2080RDB
+=========================================
+
+Cross-Compiling ONIE
+====================
+  $ cd build-config
+  $ make -j4 MACHINE=fsl_p2020rdbpca all
+
+When complete, the ONIE binaries are located in 'build/images':
+  -rw-r--r--   786432 Aug 26 11:25  fsl_t2080rdb-r0.u-boot
+  -rw-r--r-- 11272192 Aug 26 11:25  onie-fsl_t2080rdb-r0.bin
+
+
+Installing the ONIE binaries
+============================
+A single binary image needs to be installed on the NOR flash.
+
+Image -- ONIE kernel, u-boot, dtb and ramdisk
+name:  onie-fsl_t2080rdb-r0.bin
+
+
+First put the ONIE files on a TFTP server, the following directions
+assume the files are on the root of the TFTP server.
+ONIE defaults the serial console baud rate to 115200.
+You may need to adjust your terminal settings.
+
+
+Step 1 -- Update uboot image
+---------------------------------
+ => tftpboot fsl_t2080rdb-r0.u-boot
+ => protect off eff40000 +$filesize
+ => erase eff40000 +$filesize
+ => cp.b 1000000 eff40000 $filesize
+ => reset
+
+
+Step 2 -- Install onie-fsl_t2080rdb-r0.bin
+------------------------------------------
+Copying the image using TFTP and flash to the NOR flash::
+  => tftp onie-fsl_t2080rdb-r0.bin
+  => protect off $onie_start +${onie_sz.b} && erase $onie_start +${onie_sz.b}
+  => cp.b $loadaddr $onie_start ${onie_sz.b} && protect on $onie_start +${onie_sz.b}
+
+
+Step 3 -- Restart The System
+----------------------------
+You can interrupt the boot process by pressing any key during the count down:
+  => reset
+
+
+Step 4 -- Optional
+------------------
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this:
+  => setenv reboot_cmd rescue
+  => boot

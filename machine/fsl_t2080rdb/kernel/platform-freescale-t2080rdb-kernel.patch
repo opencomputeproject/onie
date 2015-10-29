@@ -1,0 +1,67 @@
+From 7648046b49b8d111d2ad9d10c571b6efb770e31c Mon Sep 17 00:00:00 2001
+From: Shengzhou Liu <Shengzhou.Liu@freescale.com>
+Date: Tue, 15 Sep 2015 22:50:06 +0800
+Subject: [PATCH] platform freescale t2080rdb kernel
+
+Add ONIE support for Freescale T2080RDB platform.
+
+Signed-off-by: Shengzhou Liu <Shengzhou.Liu@freescale.com>
+---
+ arch/powerpc/boot/dts/t208xrdb.dtsi | 39 ++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 38 insertions(+), 1 deletion(-)
+
+diff --git a/arch/powerpc/boot/dts/t208xrdb.dtsi b/arch/powerpc/boot/dts/t208xrdb.dtsi
+index 08d94c0..64ef2b9 100644
+--- a/arch/powerpc/boot/dts/t208xrdb.dtsi
++++ b/arch/powerpc/boot/dts/t208xrdb.dtsi
+@@ -69,9 +69,46 @@
+ 			#size-cells = <1>;
+ 			compatible = "cfi-flash";
+ 			reg = <0x0 0x0 0x8000000>;
+-
+ 			bank-width = <2>;
+ 			device-width = <1>;
++
++			partition@0 {
++				/* SoC RCW, this location must not be altered  */
++				reg = <0x0 0x00020000>;
++				label = "rcw (RO)";
++				read-only;
++			};
++
++			partition@1 {
++				/* maximum 12.87MB ONIE image */
++				reg = <0x00020000 0x00ce0000>;
++				label = "onie image";
++			};
++
++			partition@2 {
++				/* 50MB available for apps */
++				reg = <0x00d00000 0x03200000>;
++				label = "open";
++			};
++
++			partition@3 {
++				/* FMan ucode, 128KB, 1 sector */
++				reg = <0x07f00000 0x00020000>;
++				label = "fman-ucode";
++			};
++
++			partition@4 {
++				/* U-Boot environment varialbes, 128KB */
++				reg = <0x07f20000 0x00020000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++
++			partition@5 {
++				/* 768KB u-boot */
++				reg = <0x07f40000 0x000c0000>;
++				label = "uboot";
++			};
+ 		};
+ 
+ 		nand@1,0 {
+-- 
+1.9.1
+
