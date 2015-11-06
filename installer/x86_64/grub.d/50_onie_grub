@@ -92,7 +92,11 @@ onie_root_dir="${tmp_mnt}/onie"
 DEFAULT_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
 GRUB_ONIE_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_SERIAL_COMMAND"}
 
-(cat <<EOF
+rm -f $grub_cfg
+touch $grub_cfg
+
+if echo -n "$GRUB_CMDLINE_LINUX" | grep -q ttyS ; then
+    cat <<EOF >> $grub_cfg
 # begin: serial console config
 
 $GRUB_ONIE_SERIAL_COMMAND
@@ -101,7 +105,7 @@ terminal_output serial
 
 # end: serial console config
 EOF
-) > $grub_cfg
+fi
 
 # add the ONIE machine configuration data
 cat $onie_root_dir/grub/grub-machine.cfg >> $grub_cfg
