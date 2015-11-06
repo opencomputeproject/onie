@@ -108,6 +108,7 @@ if [ "$arch_dir" = "x86_64" ] ; then
     sed -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/" \
         -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/" \
         -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
+        -e "s/%%SERIAL_CONSOLE_ENABLE%%/$SERIAL_CONSOLE_ENABLE/" \
 	-i $tmp_installdir/install-arch
 elif [ "$arch_dir" = "u-boot-arch" ] ; then
     sed -e "s/%%UPDATER_UBOOT_NAME%%/$UPDATER_UBOOT_NAME/" \

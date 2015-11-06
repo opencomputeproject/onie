@@ -127,6 +127,7 @@ sed -e "s/<CONSOLE_SPEED>/$CONSOLE_SPEED/g"           \
     -e "s/<GRUB_DEFAULT_ENTRY>/$GRUB_DEFAULT_ENTRY/g" \
     -e "s/<CONSOLE_PORT>/$CONSOLE_PORT/g"             \
     -e "s/<EXTRA_CMDLINE_LINUX>/$EXTRA_CMDLINE_LINUX/" \
+    -e "s/<SERIAL_CONSOLE_ENABLE>/$SERIAL_CONSOLE_ENABLE/g" \
     "$MACHINE_CONF" $RECOVERY_CONF_DIR/grub-iso.cfg   \
     > $RECOVERY_ISO_SYSROOT/boot/grub/grub.cfg
 
