@@ -13,6 +13,7 @@
 #
 ############################################################
 import subprocess
+import os
 from onl.platform.base import *
 from onl.vendor.accton import *
 
@@ -37,6 +38,9 @@ class OpenNetworkPlatformImplementation(OpenNetworkPlatformAccton):
 
     def sys_oid_platform(self):
         return ".7712.32"
+
+    def baseconfig(self):
+        return os.system(os.path.join(self.platform_basedir(), "boot", "x86-64-accton-as7712-32x-rx-devices.sh")) == 0
 
 if __name__ == "__main__":
     print OpenNetworkPlatformImplementation()
