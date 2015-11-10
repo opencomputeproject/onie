@@ -118,9 +118,12 @@ ifeq ($(EXT3_4_ENABLE),yes)
 		$(MAKE) -C $(E2FSPROGS_DIR)/misc install
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(E2FSPROGS_DIR)/e2fsck install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
+		$(MAKE) -C $(E2FSPROGS_DIR)/resize install
 	$(Q) cp -av $(DEV_SYSROOT)/usr/sbin/{mke2fs,tune2fs} $(SYSROOTDIR)/usr/sbin/
 	$(Q) cp -av $(DEV_SYSROOT)/usr/bin/{chattr,lsattr} $(SYSROOTDIR)/usr/bin/
 	$(Q) cp -av $(DEV_SYSROOT)/usr/sbin/{e2fsck,fsck} $(SYSROOTDIR)/usr/sbin/
+	$(Q) cp -av $(DEV_SYSROOT)/usr/sbin/resize2fs $(SYSROOTDIR)/usr/sbin/
 	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext2
 	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext3
 	$(Q) ln -sf mke2fs $(SYSROOTDIR)/usr/sbin/mkfs.ext4
