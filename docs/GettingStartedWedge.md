@@ -73,17 +73,17 @@ password "onl"
 
 7) Configure the ma1 interface either via dhcp (dhclient ma1) or manually
 
-8) From the command prompt you can start fboss by using the init script 
-"/etc/init.d/fboss_wedge_agent start"
+8) From the command prompt you can start fboss by using the command 
+"service fboss_wedge_agent start"
 
-9) The first time you run the wedge init script, it will download the OpenNSL
-library from the Broadcom github account.
+9) The first time you start the fboss_wedge_agent service it will download 
+the OpenNSL library from the Broadcom github account.
 
 10) Once the library is installed, fboss_wedge_agent will start, using the
 default configuration located at /etc/fboss/ocp-demo.json
 
 11) You can confirm that the fboss_wedge_agent is running by issuing the
-command "/etc/init.d/fboss_wedge_agent status"
+command "service fboss_wedge_agent status"
 
 12) If fboss is running, you should see "[ ok ] fboss_wedge_agent is running."
 
