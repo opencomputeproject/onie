@@ -1,0 +1,76 @@
+Modify getCpuId() method and eeprom_open and eeprom_close() method
+
+diff --git a/sys_eeprom/i2c_chips.c b/sys_eeprom/i2c_chips.c
+index b39228b..cb07016 100755
+--- a/sys_eeprom/i2c_chips.c
++++ b/sys_eeprom/i2c_chips.c
+@@ -121,16 +121,10 @@ unsigned char getCpuId()
+ 	else
+ 	{
+ 		gpio_init(19);
+-		gpio_init(20);
+-		gpio_init(21);
+ 		gpio_set_dir(19,gpio_out);
+-		gpio_set_dir(20,gpio_out);
+-		gpio_set_dir(21,gpio_out);
+ 	}
+ 	/*read cpu id*/
+ 	cpu_id |= gpio_get_value(19) << 0 ;
+-	cpu_id |= gpio_get_value(20) << 1 ;
+-	cpu_id |= gpio_get_value(21) << 2 ;
+ 	if (iopl(0))
+ 	{		
+ 		perror("iopl");
+diff --git a/sys_eeprom/onie_tlvinfo.c b/sys_eeprom/onie_tlvinfo.c
+index 1781554..2fd70cb 100644
+--- a/sys_eeprom/onie_tlvinfo.c
++++ b/sys_eeprom/onie_tlvinfo.c
+@@ -730,11 +730,17 @@ int eeprom_open(int addr)
+ 	int ret =0;
+ 	unsigned char buf = 0x00;
+ 	int regNum = 0x123;;
+-	
+-	if((ret = getCtrlOfBus()) < 0)
++
++	if(getCpuId() == 0x01)
++	{
++	}
++	else
++	{		
++		if((ret = getCtrlOfBus()) < 0)
+ 			printf("ret = %d\n", ret);
+-	if((ret = enableChip(addr)) < 0)
++		if((ret = enableChip(addr)) < 0)
+ 			printf("ret = %d\n", ret);
++	}
+ 	ret = read_cpld(regNum, &buf);
+ 	buf &= ~(BIT0);
+ 	ret = write_cpld(regNum, buf);
+@@ -749,15 +755,22 @@ int eeprom_open(int addr)
+ }
+ int eeprom_close(int addr)
+ {
+-		int ret =0;
++	int ret =0;
+ 	unsigned char buf = 0x00;
+ 	int regNum = 0x123;;
+-	
+-	if((ret = getCtrlOfBus()) < 0)
++        if(getCpuId() == 0x01)
++        {
++        }
++        else
++        {
++		if((ret = getCtrlOfBus()) < 0)
+ 			printf("ret = %d\n", ret);
+-	if((ret = disableChip(addr)) < 0)
++		if((ret = disableChip(addr)) < 0)
+ 			printf("ret = %d\n", ret);
+-
++	}
++	ret = read_cpld(regNum, &buf);
++	buf |= BIT0;
++	ret = write_cpld(regNum, buf);	
+ 	return ret;
+ }
+ 
