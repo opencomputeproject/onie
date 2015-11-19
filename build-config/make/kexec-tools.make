@@ -29,7 +29,7 @@ KEXEC_STAMP		= $(KEXEC_SOURCE_STAMP) \
 			  $(KEXEC_BUILD_STAMP) \
 			  $(KEXEC_INSTALL_STAMP)
 
-PHONY += kexec-tools kexec-tools-download kexec-tools-source \
+PHONY += kexec-tools kexec-tools-download kexec-tools-source kexec-tools-patch \
 	 kexec-tools-configure kexec-tools-build kexec-tools-install kexec-tools-clean \
 	 kexec-tools-download-clean
 
@@ -54,12 +54,19 @@ $(KEXEC_SOURCE_STAMP): $(TREE_STAMP) | $(KEXEC_DOWNLOAD_STAMP)
 	$(Q) $(SCRIPTDIR)/extract-package $(KEXEC_BUILD_DIR) $(DOWNLOADDIR)/$(KEXEC_TARBALL)
 	$(Q) touch $@
 
+kexec-tools-patch: $(KEXEC_PATCH_STAMP)
+$(KEXEC_PATCH_STAMP): $(KEXEC_SOURCE_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "====  Patching kexec-tools-$(KEXEC_VERSION) ===="
+	$(Q) $(SCRIPTDIR)/apply-patch-series $(KEXEC_SRCPATCHDIR)/series $(KEXEC_DIR)
+	$(Q) touch $@
+
 # For PowerPC add booke support
 powerpc_KEXEC_CONFIG_OPTS = --with-booke
 
 kexec-tools-configure: $(KEXEC_CONFIGURE_STAMP)
 $(KEXEC_CONFIGURE_STAMP): $(ZLIB_INSTALL_STAMP) \
-				$(KEXEC_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+				$(KEXEC_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure kexec-tools-$(KEXEC_VERSION) ===="
 	$(Q) cd $(KEXEC_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
