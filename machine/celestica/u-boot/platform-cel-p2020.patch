@@ -1,0 +1,3372 @@
+
+
+diff --git a/board/celestica/p2020/Makefile b/board/celestica/p2020/Makefile
+new file mode 100644
+index 0000000..7bad579
+--- /dev/null
++++ b/board/celestica/p2020/Makefile
+@@ -0,0 +1,37 @@
++#
++# Copyright 2013, Cumulus Networks, Inc.
++#
++# Copyright 2004 Freescale Semiconductor.
++# (C) Copyright 2001-2006
++# Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++#
++# See file CREDITS for list of people who contributed to this
++# project.
++#
++# SPDX-License-Identifier:		GPL-2.0+
++#
++
++include $(TOPDIR)/config.mk
++
++LIB	= $(obj)lib$(BOARD).o
++
++COBJS-y	+= $(BOARD).o
++COBJS-y	+= law.o
++COBJS-y	+= tlb.o
++COBJS-y	+= sys_eeprom.o
++
++SRCS	:= $(SOBJS-y:.o=.S) $(COBJS-y:.o=.c)
++OBJS	:= $(addprefix $(obj),$(COBJS-y))
++SOBJS	:= $(addprefix $(obj),$(SOBJS-y))
++
++$(LIB):	$(obj).depend $(OBJS) $(SOBJS)
++	$(call cmd_link_o_target, $(OBJS))
++
++#########################################################################
++
++# defines $(obj).depend target
++include $(SRCTREE)/rules.mk
++
++sinclude $(obj).depend
++
++#########################################################################
+diff --git a/board/celestica/p2020/cel_d2030_cpld.h b/board/celestica/p2020/cel_d2030_cpld.h
+new file mode 100644
+index 0000000..175951d
+--- /dev/null
++++ b/board/celestica/p2020/cel_d2030_cpld.h
+@@ -0,0 +1,59 @@
++/*
++ * Celestica D2030 CPLD Platform Definitions
++ *
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ *
++ */
++
++#ifndef CEL_D2030_H__
++#define CEL_D2030_H__
++
++/*------------------------------------------------------------------------------
++ *
++ */
++
++#define CPLD1_REG_VERSION_OFFSET		(0x00)
++#  define CPLD1_VERSION_ID_MASK			(0xC0)
++#    define CPLD1_VERSION_ID			(0x40)
++#  define CPLD1_VERSION_MINOR_MASK		(0x0F)
++#  define CPLD1_VERSION_MINOR_SHIFT		(0)
++
++#define CPLD1_REG_SYS_LED_CTRL_OFFSET	(0x0A)
++#  define CPLD1_SYS_UBOOT_OK_MASK		(0x78)
++#    define CPLD1_SYS_UBOOT_OK			(0x50)
++
++#define CPLD1_REG_RESET_CTRL_OFFSET		(0x10)	/* all resets active low */
++#  define CPLD1_FLASH_NOR_WRITE_OK		(1 << 3)
++#  define CPLD1_RESET_WATCH_DOG_MASK	(1 << 2) /* Watchdog Reset */
++#  define CPLD1_RESET_CPU_HARD_L		(1 << 1) /* SW HARD Reset */
++#  define CPLD1_RESET_CPU_SOFT_L		(1 << 0) /* SW Soft Reset */
++
++#define CPLD1_REG_PSU_STATUS		(0x80)
++#  define CPLD1_PSU_1_MASK			(0x2A)
++#    define CPLD1_PSU_1_PRESENT_L	(1 << 5)
++#    define CPLD1_PSU_1_OK			(1 << 3)
++#    define CPLD1_PSU_1_ON			(1 << 1)
++#  define CPLD1_PSU_2_MASK			(0x15)
++#    define CPLD1_PSU_2_PRESENT_L	(1 << 4)
++#    define CPLD1_PSU_2_OK			(1 << 2)
++#    define CPLD1_PSU_2_ON			(1 << 0)
++
++#define CPLD1_REG_FAN_PRESENT_STATUS_OFFSET	(0x90)
++#  define CPLD1_FAN_PRESENT_MASK		(0x1F)
++#    define CPLD1_FAN_5_PRESENT			(1 << 4)
++#    define CPLD1_FAN_4_PRESENT			(1 << 3)
++#    define CPLD1_FAN_3_PRESENT			(1 << 2)
++#    define CPLD1_FAN_2_PRESENT			(1 << 1)
++#    define CPLD1_FAN_1_PRESENT			(1 << 0)
++
++
++#define CPLD1_REG_STATUS_LED_CTRL_OFFSET		(0x98)
++#  define CPLD1_STATUS_LED_MASK					(0x03)
++#    define CPLD1_STATUS_LED_GREEN				(0x00)
++#    define CPLD1_STATUS_LED_GREEN_1HZ_BLINK	(0x01)
++#    define CPLD1_STATUS_LED_GREEN_4HZ_BLINK	(0x02)
++#    define CPLD1_STATUS_LED_OFF				(0x03)
++
++
++#endif /* CEL_D2030_H__ */
+diff --git a/board/celestica/p2020/cel_kennisis_cpld.h b/board/celestica/p2020/cel_kennisis_cpld.h
+new file mode 100644
+index 0000000..c0cf0ae
+--- /dev/null
++++ b/board/celestica/p2020/cel_kennisis_cpld.h
+@@ -0,0 +1,219 @@
++/*
++ * Celestica Kennisis CPLD Platform Definitions
++ *
++ * Curt Brune <curt@cumulusnetworks.com>
++ * Vidya Ravipati <vidya@cumulusnetworks.com>
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ *
++ */
++
++#ifndef CEL_KENNISIS_H__
++#define CEL_KENNISIS_H__
++
++/*------------------------------------------------------------------------------
++ *
++ * register info from R0646-M0010-01 Rev1.0 Kennisis Functional Spec_121911.pdf
++ */
++
++#define CPLD_REG_VERSION_OFFSET		(0x00)
++#  define CPLD_VERSION_H_MASK		(0xF0)
++#  define CPLD_VERSION_H_SHIFT		(4)
++#  define CPLD_VERSION_L_MASK		(0x0F)
++#  define CPLD_VERSION_L_SHIFT		(0)
++
++#define CPLD_REG_SW_SCRATCH_OFFSET	(0x02)
++
++#define CPLD_REG_RESET_CTRL_1_OFFSET	(0x04)	/* all resets active low */
++#  define CPLD_RESET_BCM56634_L			(1 << 7) /* Triumph PHY */
++#  define CPLD_RESET_BCM54616S_L		(1 << 6) /* Front panel mgmt PHY */
++#  define CPLD_RESET_NOR_FLASH_L		(1 << 5)
++#  define CPLD_RESET_USB_PHY_L			(1 << 3)
++#  define CPLD_RESET_BCM8747_L			(1 << 1) /* 10GE PHY */
++
++#define CPLD_REG_RESET_CTRL_2_OFFSET	(0x06)	/* all resets active low */
++#  define CPLD_RESET_BCM54680_1_L		(1 << 7) /* 8x1G PHY BCM54280  */
++#  define CPLD_RESET_BCM54680_2_L		(1 << 6) /* 8x1G PHY BCM54280  */
++#  define CPLD_RESET_BCM54680_3_L		(1 << 5) /* 8x1G PHY BCM54280  */
++#  define CPLD_RESET_BCM54680_4_L		(1 << 4) /* 8x1G PHY BCM54280  */
++#  define CPLD_RESET_BCM54680_5_L		(1 << 3) /* 8x1G PHY BCM54280  */
++#  define CPLD_RESET_BCM54680_6_L		(1 << 2) /* 8x1G PHY BCM54280  */
++#  define CPLD_RESET_DDR3_L				(1 << 1)
++
++#define CPLD_REG_RESET_CTRL_0_OFFSET	(0x08)	/* all resets active low */
++#  define CPLD_RESET_CPU_SYS_L			(1 << 2) /* Control System Reset */
++#  define CPLD_RESET_WATCH_DOG_MASK		(1 << 1) /* Watchdog Reset */
++#  define CPLD_RESET_CPU_SRST_L			(1 << 0) /* P2020 SW Reset */
++
++#define CPLD_REG_SYS_LED_CTRL_OFFSET		(0x0A)
++#  define CPLD_SYS_UBOOT_OK_MASK			(0x78)
++#    define CPLD_SYS_UBOOT_OK				(0x50)
++#  define CPLD_SYS_LED_MASK					(0x07)
++#    define CPLD_SYS_LED_GREEN_SLOW_BLINK	(0x00)
++#    define CPLD_SYS_LED_GREEN_FAST_BLINK	(0x01)
++#    define CPLD_SYS_LED_GREEN				(0x02)
++#    define CPLD_SYS_LED_RED_SLOW_BLINK		(0x03)
++#    define CPLD_SYS_LED_RED_FAST_BLINK		(0x04)
++#    define CPLD_SYS_LED_RED				(0x05)
++
++#define CPLD_REG_RTC_STATE_OFFSET		(0x0E)
++#  define CPLD_3V_PWR_GOOD              (1 << 7)
++#  define CPLD_EMC2305_ALARM_STATUS		(1 << 6)
++#  define CPLD_RTC_INTA_STATUS			(1 << 5)
++#  define CPLD_RTC_INTB_STATUS			(1 << 4)
++#  define CPLD_EMC2305_ALARM_CHANGE		(1 << 3)
++#  define CPLD_RTC_INTA_CHANGE			(1 << 2)
++#  define CPLD_RTC_INTB_CHANGE			(1 << 1)
++
++#define CPLD_REG_TEMP_STATUS_OFFSET	(0x10) /* TEMP Sensor Status */
++#  define CPLD_TEMP_STATUS_8_OK		(1 << 7) /* 0 - Over temp, 1- below temp */
++#  define CPLD_TEMP_STATUS_7_OK		(1 << 6)
++#  define CPLD_TEMP_STATUS_6_OK		(1 << 5)
++#  define CPLD_TEMP_STATUS_5_OK		(1 << 4)
++#  define CPLD_TEMP_STATUS_4_OK		(1 << 3)
++#  define CPLD_TEMP_STATUS_3_OK		(1 << 2)
++#  define CPLD_TEMP_STATUS_2_OK		(1 << 1)
++#  define CPLD_TEMP_STATUS_1_OK		(1 << 0)
++
++#define CPLD_REG_TEMP_INT_OFFSET	(0x12) /* TEMP Sensor Interrupt */
++#  define CPLD_TEMP_INT_8_L			(1 << 7) /* 1 - Over temp, 0 - below temp */
++#  define CPLD_TEMP_INT_7_L			(1 << 6)
++#  define CPLD_TEMP_INT_6_L			(1 << 5)
++#  define CPLD_TEMP_INT_5_L			(1 << 4)
++#  define CPLD_TEMP_INT_4_L			(1 << 3)
++#  define CPLD_TEMP_INT_3_L			(1 << 2)
++#  define CPLD_TEMP_INT_2_L			(1 << 1)
++#  define CPLD_TEMP_INT_1_L			(1 << 0)
++
++#define CPLD_REG_SFP_DRVR_CTRL_OFFSET	(0x14) /* SFP Driver Control */
++#  define CPLD_SFP_TXONOFF_1		(1 << 3) /* BCM8747 PMD Transmit DRVR */
++#  define CPLD_SFP_TXONOFF_2		(1 << 2)
++#  define CPLD_SFP_TXONOFF_3		(1 << 1)
++#  define CPLD_SFP_TXONOFF_4		(1 << 0)
++
++#define CPLD_REG_SFP_STATUS_1_OFFSET	(0x18) /* SFP Status Register 1 */
++#  define CPLD_SFP_PCMULK_1		(1 << 7) /* BCM8747 PMD CMU lock detect */
++#  define CPLD_SFP_PCMULK_2		(1 << 6)
++#  define CPLD_SFP_PCMULK_3		(1 << 5)
++#  define CPLD_SFP_PCMULK_4		(1 << 4)
++#  define CPLD_SFP_PCDRLK_1		(1 << 3) /* BCM8747 PMD CDR lock detect */
++#  define CPLD_SFP_PCDRLK_2		(1 << 2)
++#  define CPLD_SFP_PCDRLK_3		(1 << 1)
++#  define CPLD_SFP_PCDRLK_4		(1 << 0)
++
++#define CPLD_REG_SFP_STATUS_2_OFFSET	(0x1A) /* SFP Status Register 2 */
++#  define CPLD_SFP_PLOSB_1_L	(1 << 7) /* BCM8747 PMD LOS */
++#  define CPLD_SFP_PLOSB_2_L	(1 << 6)
++#  define CPLD_SFP_PLOSB_3_L	(1 << 5)
++#  define CPLD_SFP_PLOSB_4_L	(1 << 4)
++#  define CPLD_SFP_LASI_1_L		(1 << 3) /* BCM8747 PMD link alarm status INT */
++#  define CPLD_SFP_LASI_2_L		(1 << 2)
++#  define CPLD_SFP_LASI_3_L		(1 << 1)
++#  define CPLD_SFP_LASI_4_L		(1 << 0)
++
++#define CPLD_REG_SFP_INT_1_OFFSET	(0x1C) /* SFP Interrupt Register 1 */
++#  define CPLD_SFP_INT_PCMULK_1		(1 << 7) /* BCM8747 PMD CMU lock detect */
++#  define CPLD_SFP_INT_PCMULK_2		(1 << 6)
++#  define CPLD_SFP_INT_PCMULK_3		(1 << 5)
++#  define CPLD_SFP_INT_PCMULK_4		(1 << 4)
++#  define CPLD_SFP_INT_PCDRLK_1		(1 << 3) /* BCM8747 PMD CDR lock detect */
++#  define CPLD_SFP_INT_PCDRLK_2		(1 << 2)
++#  define CPLD_SFP_INT_PCDRLK_3		(1 << 1)
++#  define CPLD_SFP_INT_PCDRLK_4		(1 << 0)
++
++#define CPLD_REG_SFP_INT_2_OFFSET	(0x1E) /* SFP Interrupt Register 2 */
++#  define CPLD_SFP_PLOSB_1_L	(1 << 7) /* BCM8747 PMD LOS */
++#  define CPLD_SFP_PLOSB_2_L	(1 << 6)
++#  define CPLD_SFP_PLOSB_3_L	(1 << 5)
++#  define CPLD_SFP_PLOSB_4_L	(1 << 4)
++#  define CPLD_SFP_LASI_1_L		(1 << 3) /* BCM8747 PMD link alarm status INT */
++#  define CPLD_SFP_LASI_2_L		(1 << 2)
++#  define CPLD_SFP_LASI_3_L		(1 << 1)
++#  define CPLD_SFP_LASI_4_L		(1 << 0)
++
++#define CPLD_REG_PHY_STATUS_OFFSET	(0x20) /* PHY Status */
++#  define CPLD_PHY_STATUS_6_L		(1 << 6)
++#  define CPLD_PHY_STATUS_5_L		(1 << 5)
++#  define CPLD_PHY_STATUS_4_L		(1 << 4)
++#  define CPLD_PHY_STATUS_3_L		(1 << 3)
++#  define CPLD_PHY_STATUS_2_L		(1 << 2)
++#  define CPLD_PHY_STATUS_1_L		(1 << 1)
++#  define CPLD_BCM5461_STATUS_L		(1 << 0)
++
++#define CPLD_REG_PHY_INT_OFFSET	(0x22) /* PHY Interrupt */
++#  define CPLD_PHY_INT_6		(1 << 6)
++#  define CPLD_PHY_INT_5		(1 << 5)
++#  define CPLD_PHY_INT_4		(1 << 4)
++#  define CPLD_PHY_INT_3		(1 << 3)
++#  define CPLD_PHY_INT_2		(1 << 2)
++#  define CPLD_PHY_INT_1		(1 << 1)
++#  define CPLD_BCM5461_INT		(1 << 0)
++
++#define CPLD_REG_SFP_RS_CTRL_OFFSET	(0x28) /* SFP RS Control */
++#  define CPLD_SFP_PLUS_RS4_MASK	(0xC0)
++#    define CPLD_SFP_PLUS_RS4_1		(1 << 7)
++#    define CPLD_SFP_PLUS_RS4_0		(1 << 6)
++#  define CPLD_SFP_PLUS_RS3_MASK	(0x30)
++#    define CPLD_SFP_PLUS_RS3_1		(1 << 5)
++#    define CPLD_SFP_PLUS_RS3_0		(1 << 4)
++#  define CPLD_SFP_PLUS_RS2_MASK	(0x0C)
++#    define CPLD_SFP_PLUS_RS2_1		(1 << 3)
++#    define CPLD_SFP_PLUS_RS2_0		(1 << 2)
++#  define CPLD_SFP_PLUS_RS1_MASK	(0x03)
++#    define CPLD_SFP_PLUS_RS1_1		(1 << 1)
++#    define CPLD_SFP_PLUS_RS1_0		(1 << 0)
++
++#define CPLD_REG_FAN_STATUS_OFFSET	(0x2A) /* Fan Status */
++#  define CPLD_FAN_PRESENT_MASK		(0x07)
++#    define CPLD_FAN_5_PRESENT_L	(1 << 4)
++#    define CPLD_FAN_4_PRESENT_L	(1 << 3)
++#    define CPLD_FAN_3_PRESENT_L	(1 << 2)
++#    define CPLD_FAN_2_PRESENT_L	(1 << 1)
++#    define CPLD_FAN_1_PRESENT_L	(1 << 0)
++
++#define CPLD_REG_PSU_STATUS_1_OFFSET	(0x2C)
++#  define CPLD_PSU_ALERT_1_MASK		(0x0A)
++#    define CPLD_PSU_ALERT_1_STATUS	(1 << 3)
++#    define CPLD_PSU_ALERT_1_INT	(1 << 1)
++#  define CPLD_PSU_ALERT_2_MASK		(0x05)
++#    define CPLD_PSU_ALERT_2_STATUS	(1 << 2)
++#    define CPLD_PSU_ALERT_2_INT	(1 << 0)
++
++#define CPLD_REG_PSU_STATUS_2_OFFSET   (0x2E)
++#  define CPLD_PSU_1_MASK			(0x22)
++#    define CPLD_PSU_1_PRESENT_L	(1 << 5)
++#    define CPLD_PSU_1_PSON			(1 << 3)
++#    define CPLD_PSU_1_OK			(1 << 1)
++#  define CPLD_PSU_2_MASK			(0x11)
++#    define CPLD_PSU_2_PRESENT_L	(1 << 4)
++#    define CPLD_PSU_2_PSON			(1 << 2)
++#    define CPLD_PSU_2_OK			(1 << 0)
++
++
++#define CPLD_REG_FLASH_WRITE_OFFSET	(0x30)
++#  define CPLD_FLASH_NAND_WRITE_OK	(1 << 1)
++#  define CPLD_FLASH_NOR_WRITE_OK	(1 << 0)
++
++#define CPLD_REG_UBOOT_CFG_STATUS_OFFSET	(0x32)
++#  define CPLD_UBOOT_CFG_NOR_FLASH		(0x03)
++#  define CPLD_UBOOT_CFG_NAND_FLASH		(0x0C)
++
++#define CPLD_REG_RESET_STATUS_OFFSET	(0x34)
++#  define CPLD_RESET_FSM				(1 << 4)
++#  define CPLD_RESET_WDO				(1 << 3)
++#  define CPLD_RESET_CPU_SW				(1 << 2)
++#  define CPLD_RESET_CPU_HW				(1 << 1)
++#  define CPLD_RESET_POR				(1 << 0)
++
++#define CPLD_REG_NCP4200_STATUS_OFFSET	(0x36)
++#  define CPLD_NCP4200_ALERT_L			(1 << 1)
++#  define CPLD_NCP4200_FAULT_L			(1 << 0)
++
++#define CPLD_REG_NCP4200_CTRL_OFFSET	(0x38)
++#  define CPLD_NCP4200_PWR_SAVE_CTRL	(1 << 0)
++
++#define CPLD_BOARD_VERSION_OFFSET		(0x3E)
++#  define CPLD_BOARD_VERSION_MASK		(0xff)
++#  define CPLD_BOARD_VERSION_SHIFT		0
++
++#endif /* CEL_KENNISIS_H__ */
+diff --git a/board/celestica/p2020/cel_redstone_cpld.h b/board/celestica/p2020/cel_redstone_cpld.h
+new file mode 100644
+index 0000000..f262fcb
+--- /dev/null
++++ b/board/celestica/p2020/cel_redstone_cpld.h
+@@ -0,0 +1,508 @@
++/*
++ * Celestica Redstone CPLD Platform Definitions
++ *
++ * Curt Brune <curt@cumulusnetworks.com>
++ * Vidya Ravipati <vidya@cumulusnetworks.com>
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ *
++ */
++
++#ifndef CEL_REDSTONE_H__
++#define CEL_REDSTONE_H__
++
++/*------------------------------------------------------------------------------
++ *
++ * register info from R0697-M0010-01 Rev0.1 Redstone D2020 Assembly Spec 0917.pdf
++ */
++
++#define CPLD1_REG_VERSION_OFFSET		(0x00)
++#  define CPLD1_VERSION_ID_MASK			(0xC0)
++#    define CPLD1_VERSION_ID			(0x40)
++#  define CPLD1_VERSION_MINOR_MASK		(0x0F)
++#  define CPLD1_VERSION_MINOR_SHIFT		(0)
++
++#define CPLD1_REG_PLAT_TYPE_OFFSET		(0x02)
++#  define CPLD1_PLAT_HW_MASK			(0xC0)
++#    define CPLD1_PLAT_CELESTICA		(0x00)
++#    define CPLD1_PLAT_DCN				(0x40)
++#    define CPLD1_PLAT_TENCENT			(0x80)
++#    define CPLD1_PLAT_JUNIPER			(0xC0)
++#  define CPLD1_PLAT_BOARD_ID_MASK		(0x10)
++#    define CPLD1_PLAT_BOARD_84757		(0x00)
++#    define CPLD1_PLAT_BOARD_84754		(0x10)
++#  define CPLD1_PLAT_BOARD_VER_MASK		(0x03)
++
++#define CPLD1_REG_SW_SCRATCH_OFFSET		(0x04)
++
++#define CPLD1_REG_SYS_LED_CTRL_OFFSET	(0x0A)
++#  define CPLD1_SYS_UBOOT_OK_MASK		(0x78)
++#    define CPLD1_SYS_UBOOT_OK			(0x50)
++
++#define CPLD1_REG_RESET_CTRL_OFFSET		(0x10)	/* all resets active low */
++#  define CPLD1_FLASH_NOR_WRITE_OK		(1 << 3)
++#  define CPLD1_RESET_WATCH_DOG_MASK	(1 << 2) /* Watchdog Reset */
++#  define CPLD1_RESET_CPU_HARD_L		(1 << 1) /* SW HARD Reset */
++#  define CPLD1_RESET_CPU_SOFT_L		(1 << 0) /* SW Soft Reset */
++
++#define CPLD1_REG_RESET_SRC_OFFSET		(0x12) /* Reset Source */
++#  define CPLD1_REG_RESET_SRC_MASK		(0x0F)
++#    define CPLD1_RESET_PWR_ON			(1 << 3) /* Power On Reset */
++#    define CPLD1_RESET_WATCH_DOG		(1 << 2) /* Watchdog Reset */
++#    define CPLD1_RESET_CPU_HARD		(1 << 1) /* SW-set hard Reset */
++#    define CPLD1_RESET_CPU_SOFT		(1 << 0) /* CPU request Reset */
++
++#define CPLD1_REG_RESET_CTRL_1_OFFSET	(0x14)	/* all resets active low */
++#  define CPLD1_RESET_DDR3_L			(1 << 6)
++#  define CPLD1_RESET_NOR_FLASH_L		(1 << 5)
++#  define CPLD2_RESET_L					(1 << 4)
++#  define CPLD3_RESET_L					(1 << 3)
++#  define CPLD1_RESET_USB_PHY_L			(1 << 2)
++#  define CPLD1_RESET_BCM54616S_L		(1 << 1) /* Front panel mgmt PHY */
++#  define CPLD_RESET_BCM56846_L			(1 << 0) /* Trident PHY */
++
++#define CPLD1_REG_RESET_CTRL_2_OFFSET	(0x16)	/* all resets active low */
++#  define CPLD1_RESET_BCM84740_4_L		(1 << 7) /* 40G QSFP BCM84740  */
++#  define CPLD1_RESET_BCM84740_3_L		(1 << 6) /* 40G QSFP BCM84740  */
++#  define CPLD1_RESET_BCM84740_2_L		(1 << 5) /* 40G QSFP BCM84740  */
++#  define CPLD1_RESET_BCM84740_1_L		(1 << 4) /* 40G QSFP BCM84740  */
++#  define CPLD1_RESET_BCM84757_4_L		(1 << 3) /* 10GbE PHY */
++#  define CPLD1_RESET_BCM84757_3_L		(1 << 2) /* 10GbE PHY */
++#  define CPLD1_RESET_BCM84757_2_L		(1 << 1) /* 10GbE PHY */
++#  define CPLD1_RESET_BCM84757_1_L		(1 << 0) /* 10GbE PHY */
++
++#define CPLD1_REG_INT_STATUS_OFFSET		(0x18)
++#  define CPLD1_INT_THERMAL_L			(1 << 5)
++#  define CPLD1_INT_PSU_L				(1 << 3) /* PSU_R_ALERT & PSU_L_ALERT */
++#  define CPLD1_INT_SFPP_17_48			(1 << 2) /* SFPP 17-48 RXLOS */
++#  define CPLD1_INT_BCM84757_LAS_ALL	(1 << 1) /* BCM84757_1_LASI0 ~ BCM84757_4_LASI3 */
++#  define CPLD1_INT_BCM84740_LAS_ALL	(1 << 0) /* BCM84740_1_LASI0 ~ BCM84740_4_LASI3 */
++
++#define CPLD1_REG_INT0_SRC_STATUS_OFFSET	(0x20)
++#  define CPLD1_INT_BCM84740_4_L		(1 << 3)
++#  define CPLD1_INT_BCM84740_3_L		(1 << 2)
++#  define CPLD1_INT_BCM84740_2_L		(1 << 1)
++#  define CPLD1_INT_BCM84740_1_L		(1 << 0)
++
++#define CPLD1_REG1_INT1_SRC_STATUS_OFFSET	(0x22)
++#  define CPLD1_INT_BCM84757_2_PORT_3_L		(1 << 7)
++#  define CPLD1_INT_BCM84757_2_PORT_2_L		(1 << 6)
++#  define CPLD1_INT_BCM84757_2_PORT_1_L		(1 << 5)
++#  define CPLD1_INT_BCM84757_2_PORT_0_L		(1 << 4)
++#  define CPLD1_INT_BCM84757_1_PORT_3_L		(1 << 3)
++#  define CPLD1_INT_BCM84757_1_PORT_2_L		(1 << 2)
++#  define CPLD1_INT_BCM84757_1_PORT_1_L		(1 << 1)
++#  define CPLD1_INT_BCM84757_1_PORT_0_L		(1 << 0)
++
++#define CPLD1_REG2_INT1_SRC_STATUS_OFFSET	(0x24)
++#  define CPLD1_INT_BCM84757_4_PORT_3_L		(1 << 7)
++#  define CPLD1_INT_BCM84757_4_PORT_2_L		(1 << 6)
++#  define CPLD1_INT_BCM84757_4_PORT_1_L		(1 << 5)
++#  define CPLD1_INT_BCM84757_4_PORT_0_L		(1 << 4)
++#  define CPLD1_INT_BCM84757_3_PORT_3_L		(1 << 3)
++#  define CPLD1_INT_BCM84757_3_PORT_2_L		(1 << 2)
++#  define CPLD1_INT_BCM84757_3_PORT_1_L		(1 << 1)
++#  define CPLD1_INT_BCM84757_3_PORT_0_L		(1 << 0)
++
++#define CPLD1_REG1_INT2_SRC_STATUS_OFFSET	(0x26)
++#  define CPLD1_INT_SFP_24_RXLOS_L			(1 << 7)
++#  define CPLD1_INT_SFP_23_RXLOS_L			(1 << 6)
++#  define CPLD1_INT_SFP_22_RXLOS_L			(1 << 5)
++#  define CPLD1_INT_SFP_21_RXLOS_L			(1 << 4)
++#  define CPLD1_INT_SFP_20_RXLOS_L			(1 << 3)
++#  define CPLD1_INT_SFP_19_RXLOS_L			(1 << 2)
++#  define CPLD1_INT_SFP_18_RXLOS_L			(1 << 1)
++#  define CPLD1_INT_SFP_17_RXLOS_L			(1 << 0)
++
++#define CPLD1_REG2_INT2_SRC_STATUS_OFFSET	(0x28)
++#  define CPLD1_INT_SFP_48_RXLOS_L			(1 << 7)
++#  define CPLD1_INT_SFP_47_RXLOS_L			(1 << 6)
++#  define CPLD1_INT_SFP_46_RXLOS_L			(1 << 5)
++#  define CPLD1_INT_SFP_45_RXLOS_L			(1 << 4)
++#  define CPLD1_INT_SFP_44_RXLOS_L			(1 << 3)
++#  define CPLD1_INT_SFP_43_RXLOS_L			(1 << 2)
++#  define CPLD1_INT_SFP_42_RXLOS_L			(1 << 1)
++#  define CPLD1_INT_SFP_41_RXLOS_L			(1 << 0)
++
++#define CPLD1_REG_INT3_SRC_STATUS_OFFSET	(0x2A)
++#  define CPLD1_INT_PSU_L_L		(1 << 1)
++#  define CPLD1_INT_PSU_R_L		(1 << 0)
++
++#define CPLD1_REG_INT4_SRC_STATUS_OFFSET	(0x2C)
++#  define CPLD1_INT_RTC_B_L		(1 << 1)
++#  define CPLD1_INT_RTC_A_L		(1 << 0)
++
++#define CPLD1_REG_INT5_SRC_STATUS_OFFSET	(0x2E)
++#  define CPLD1_INT_THERMAL_SENSOR_6_L		(1 << 5)
++#  define CPLD1_INT_THERMAL_SENSOR_5_L		(1 << 4)
++#  define CPLD1_INT_THERMAL_SENSOR_4_L		(1 << 3)
++#  define CPLD1_INT_THERMAL_SENSOR_3_L		(1 << 2)
++#  define CPLD1_INT_THERMAL_SENSOR_2_L		(1 << 1)
++#  define CPLD1_INT_THERMAL_SENSOR_1_L		(1 << 0)
++
++#define CPLD1_REG_INT0_SRC_CHANGE_OFFSET	(0x40)
++#  define CPLD1_INT_CHANGE_BCM84740_4       (1 << 3)
++#  define CPLD1_INT_CHANGE_BCM84740_3       (1 << 2)
++#  define CPLD1_INT_CHANGE_BCM84740_2       (1 << 1)
++#  define CPLD1_INT_CHANGE_BCM84740_1       (1 << 0)
++
++#define CPLD1_REG1_INT1_SRC_CHANGE_OFFSET	(0x42)
++#  define CPLD1_INT_CHANGE_BCM84757_2_PORT_3    (1 << 7)
++#  define CPLD1_INT_CHANGE_BCM84757_2_PORT_2	(1 << 6)
++#  define CPLD1_INT_CHANGE_BCM84757_2_PORT_1	(1 << 5)
++#  define CPLD1_INT_CHANGE_BCM84757_2_PORT_0	(1 << 4)
++#  define CPLD1_INT_CHANGE_BCM84757_1_PORT_3	(1 << 3)
++#  define CPLD1_INT_CHANGE_BCM84757_1_PORT_2	(1 << 2)
++#  define CPLD1_INT_CHANGE_BCM84757_1_PORT_1	(1 << 1)
++#  define CPLD1_INT_CHANGE_BCM84757_1_PORT_0	(1 << 0)
++
++#define CPLD1_REG2_INT1_SRC_CHANGE_OFFSET	(0x44)
++#  define CPLD1_INT_CHANGE_BCM84757_4_PORT_3    (1 << 7)
++#  define CPLD1_INT_CHANGE_BCM84757_4_PORT_2	(1 << 6)
++#  define CPLD1_INT_CHANGE_BCM84757_4_PORT_1	(1 << 5)
++#  define CPLD1_INT_CHANGE_BCM84757_4_PORT_0	(1 << 4)
++#  define CPLD1_INT_CHANGE_BCM84757_3_PORT_3	(1 << 3)
++#  define CPLD1_INT_CHANGE_BCM84757_3_PORT_2	(1 << 2)
++#  define CPLD1_INT_CHANGE_BCM84757_3_PORT_1	(1 << 1)
++#  define CPLD1_INT_CHANGE_BCM84757_3_PORT_0	(1 << 0)
++
++#define CPLD1_REG1_INT2_SRC_CHANGE_OFFSET	(0x46)
++#  define CPLD1_INT_CHANGE_SFP_24_RXLOS		(1 << 7)
++#  define CPLD1_INT_CHANGE_SFP_23_RXLOS		(1 << 6)
++#  define CPLD1_INT_CHANGE_SFP_22_RXLOS		(1 << 5)
++#  define CPLD1_INT_CHANGE_SFP_21_RXLOS		(1 << 4)
++#  define CPLD1_INT_CHANGE_SFP_20_RXLOS		(1 << 3)
++#  define CPLD1_INT_CHANGE_SFP_19_RXLOS		(1 << 2)
++#  define CPLD1_INT_CHANGE_SFP_18_RXLOS		(1 << 1)
++#  define CPLD1_INT_CHANGE_SFP_17_RXLOS		(1 << 0)
++
++#define CPLD1_REG2_INT2_SRC_CHANGE_OFFSET	(0x48)
++#  define CPLD1_INT_CHANGE_SFP_48_RXLOS		(1 << 7)
++#  define CPLD1_INT_CHANGE_SFP_47_RXLOS		(1 << 6)
++#  define CPLD1_INT_CHANGE_SFP_46_RXLOS		(1 << 5)
++#  define CPLD1_INT_CHANGE_SFP_45_RXLOS		(1 << 4)
++#  define CPLD1_INT_CHANGE_SFP_44_RXLOS		(1 << 3)
++#  define CPLD1_INT_CHANGE_SFP_43_RXLOS		(1 << 2)
++#  define CPLD1_INT_CHANGE_SFP_42_RXLOS		(1 << 1)
++#  define CPLD1_INT_CHANGE_SFP_41_RXLOS		(1 << 0)
++
++#define CPLD1_REG_INT3_SRC_CHANGE_OFFSET	(0x4A)
++#  define CPLD1_INT_CHANGE_PSU_L	(1 << 1)
++#  define CPLD1_INT_CHANGE_PSU_R	(1 << 0)
++
++#define CPLD1_REG_INT4_SRC_CHANGE_OFFSET	(0x4C)
++#  define CPLD1_INT_CHANGE_RTC_B		(1 << 1)
++#  define CPLD1_INT_CHANGE_RTC_A		(1 << 0)
++
++#define CPLD1_REG_INT5_SRC_CHANGE_OFFSET	(0x4E)
++#  define CPLD1_INT_CHANGE_THERMAL_SENSOR_6		(1 << 5)
++#  define CPLD1_INT_CHANGE_THERMAL_SENSOR_5		(1 << 4)
++#  define CPLD1_INT_CHANGE_THERMAL_SENSOR_4		(1 << 3)
++#  define CPLD1_INT_CHANGE_THERMAL_SENSOR_3		(1 << 2)
++#  define CPLD1_INT_CHANGE_THERMAL_SENSOR_2		(1 << 1)
++#  define CPLD1_INT_CHANGE_THERMAL_SENSOR_1		(1 << 0)
++
++#define CPLD1_REG_INT0_SRC_MASK_OFFSET		(0x60)
++#  define CPLD1_INT_MASK_BCM84740_4_L		(1 << 3)
++#  define CPLD1_INT_MASK_BCM84740_3_L		(1 << 2)
++#  define CPLD1_INT_MASK_BCM84740_2_L		(1 << 1)
++#  define CPLD1_INT_MASK_BCM84740_1_L		(1 << 0)
++
++#define CPLD1_REG1_INT1_SRC_MASK_OFFSET		(0x62)
++#  define CPLD1_INT_MASK_BCM84757_2_PORT_3_L	(1 << 7)
++#  define CPLD1_INT_MASK_BCM84757_2_PORT_2_L	(1 << 6)
++#  define CPLD1_INT_MASK_BCM84757_2_PORT_1_L	(1 << 5)
++#  define CPLD1_INT_MASK_BCM84757_2_PORT_0_L	(1 << 4)
++#  define CPLD1_INT_MASK_BCM84757_1_PORT_3_L	(1 << 3)
++#  define CPLD1_INT_MASK_BCM84757_1_PORT_2_L	(1 << 2)
++#  define CPLD1_INT_MASK_BCM84757_1_PORT_1_L	(1 << 1)
++#  define CPLD1_INT_MASK_BCM84757_1_PORT_0_L	(1 << 0)
++
++#define CPLD1_REG2_INT1_SRC_MASK_OFFSET		(0x64)
++#  define CPLD1_INT_MASK_BCM84757_4_PORT_3_L	(1 << 7)
++#  define CPLD1_INT_MASK_BCM84757_4_PORT_2_L	(1 << 6)
++#  define CPLD1_INT_MASK_BCM84757_4_PORT_1_L	(1 << 5)
++#  define CPLD1_INT_MASK_BCM84757_4_PORT_0_L	(1 << 4)
++#  define CPLD1_INT_MASK_BCM84757_3_PORT_3_L	(1 << 3)
++#  define CPLD1_INT_MASK_BCM84757_3_PORT_2_L	(1 << 2)
++#  define CPLD1_INT_MASK_BCM84757_3_PORT_1_L	(1 << 1)
++#  define CPLD1_INT_MASK_BCM84757_3_PORT_0_L	(1 << 0)
++
++#define CPLD1_REG1_INT2_SRC_MASK_OFFSET		(0x66)
++#  define CPLD1_INT_MASK_SFP_24_RXLOS_L		(1 << 7)
++#  define CPLD1_INT_MASK_SFP_23_RXLOS_L		(1 << 6)
++#  define CPLD1_INT_MASK_SFP_22_RXLOS_L		(1 << 5)
++#  define CPLD1_INT_MASK_SFP_21_RXLOS_L		(1 << 4)
++#  define CPLD1_INT_MASK_SFP_20_RXLOS_L		(1 << 3)
++#  define CPLD1_INT_MASK_SFP_19_RXLOS_L		(1 << 2)
++#  define CPLD1_INT_MASK_SFP_18_RXLOS_L		(1 << 1)
++#  define CPLD1_INT_MASK_SFP_17_RXLOS_L		(1 << 0)
++
++#define CPLD1_REG2_INT2_SRC_MASK_OFFSET		(0x68)
++#  define CPLD1_INT_MASK_SFP_48_RXLOS_L		(1 << 7)
++#  define CPLD1_INT_MASK_SFP_47_RXLOS_L		(1 << 6)
++#  define CPLD1_INT_MASK_SFP_46_RXLOS_L		(1 << 5)
++#  define CPLD1_INT_MASK_SFP_45_RXLOS_L		(1 << 4)
++#  define CPLD1_INT_MASK_SFP_44_RXLOS_L		(1 << 3)
++#  define CPLD1_INT_MASK_SFP_43_RXLOS_L		(1 << 2)
++#  define CPLD1_INT_MASK_SFP_42_RXLOS_L		(1 << 1)
++#  define CPLD1_INT_MASK_SFP_41_RXLOS_L		(1 << 0)
++
++#define CPLD1_REG_INT3_SRC_MASK_OFFSET	(0x6A)
++#  define CPLD1_INT_MASK_PSU_L_L		(1 << 1)
++#  define CPLD1_INT_MASK_PSU_R_L		(1 << 0)
++
++#define CPLD1_REG_INT4_SRC_MASK_OFFSET	(0x6C)
++#  define CPLD1_INT_MASK_RTC_B_L		(1 << 1)
++#  define CPLD1_INT_MASK_RTC_A_L		(1 << 0)
++
++#define CPLD1_REG_INT5_SRC_MASK_OFFSET	(0x6E)
++#  define CPLD1_INT_MASK_THERMAL_SENSOR_6_L		(1 << 5)
++#  define CPLD1_INT_MASK_THERMAL_SENSOR_5_L		(1 << 4)
++#  define CPLD1_INT_MASK_THERMAL_SENSOR_4_L		(1 << 3)
++#  define CPLD1_INT_MASK_THERMAL_SENSOR_3_L		(1 << 2)
++#  define CPLD1_INT_MASK_THERMAL_SENSOR_2_L		(1 << 1)
++#  define CPLD1_INT_MASK_THERMAL_SENSOR_1_L		(1 << 0)
++
++#define CPLD1_REG_PSU_STATUS		(0x80)
++#  define CPLD1_PSU_1_MASK			(0x2A)
++#    define CPLD1_PSU_1_PRESENT_L	(1 << 5)
++#    define CPLD1_PSU_1_OK			(1 << 3)
++#    define CPLD1_PSU_1_ON			(1 << 1)
++#  define CPLD1_PSU_2_MASK			(0x15)
++#    define CPLD1_PSU_2_PRESENT_L	(1 << 4)
++#    define CPLD1_PSU_2_OK			(1 << 2)
++#    define CPLD1_PSU_2_ON			(1 << 0)
++
++#define CPLD1_REG1_BCM84757_TX_CTRL_OFFSET	(0x88)
++#  define CPLD1_TXCTRL_BCM84757_2_PORT_3	(1 << 7)
++#  define CPLD1_TXCTRL_BCM84757_2_PORT_2	(1 << 6)
++#  define CPLD1_TXCTRL_BCM84757_2_PORT_1	(1 << 5)
++#  define CPLD1_TXCTRL_BCM84757_2_PORT_0	(1 << 4)
++#  define CPLD1_TXCTRL_BCM84757_1_PORT_3	(1 << 3)
++#  define CPLD1_TXCTRL_BCM84757_1_PORT_2	(1 << 2)
++#  define CPLD1_TXCTRL_BCM84757_1_PORT_1	(1 << 1)
++#  define CPLD1_TXCTRL_BCM84757_1_PORT_0	(1 << 0)
++
++#define CPLD1_REG2_BCM84757_TX_CTRL_OFFSET	(0x8A)
++#  define CPLD1_TXCTRL_BCM84757_2_PORT_3	(1 << 7)
++#  define CPLD1_TXCTRL_BCM84757_2_PORT_2	(1 << 6)
++#  define CPLD1_TXCTRL_BCM84757_2_PORT_1	(1 << 5)
++#  define CPLD1_TXCTRL_BCM84757_2_PORT_0	(1 << 4)
++#  define CPLD1_TXCTRL_BCM84757_1_PORT_3	(1 << 3)
++#  define CPLD1_TXCTRL_BCM84757_1_PORT_2	(1 << 2)
++#  define CPLD1_TXCTRL_BCM84757_1_PORT_1	(1 << 1)
++#  define CPLD1_TXCTRL_BCM84757_1_PORT_0	(1 << 0)
++
++#define CPLD1_REG_BCM84740_TX_CTRL_OFFSET	(0x8C)
++#  define CPLD1_LNKUP_CTRL_QPHY4_PCS	(1 << 7)
++#  define CPLD1_LNKUP_CTRL_QPHY3_PCS	(1 << 6)
++#  define CPLD1_LNKUP_CTRL_QPHY2_PCS	(1 << 5)
++#  define CPLD1_LNKUP_CTRL_QPHY1_PCS	(1 << 4)
++#  define CPLD1_TXCTRL_BCM84740_4		(1 << 3)
++#  define CPLD1_TXCTRL_BCM84740_3		(1 << 2)
++#  define CPLD1_TXCTRL_BCM84740_2		(1 << 1)
++#  define CPLD1_TXCTRL_BCM84740_1		(1 << 0)
++
++#define CPLD1_REG_FAN_PRESENT_STATUS_OFFSET	(0x90)
++#  define CPLD1_FAN_PRESENT_MASK		(0x1F)
++#    define CPLD1_FAN_5_PRESENT			(1 << 4)
++#    define CPLD1_FAN_4_PRESENT			(1 << 3)
++#    define CPLD1_FAN_3_PRESENT			(1 << 2)
++#    define CPLD1_FAN_2_PRESENT			(1 << 1)
++#    define CPLD1_FAN_1_PRESENT			(1 << 0)
++
++#define CPLD1_REG1_BCM84757_EDC_STATUS_OFFSET	(0x92)
++#  define CPLD1_EDC_BCM84757_2_CNVTR_3	(1 << 7)
++#  define CPLD1_EDC_BCM84757_2_CNVTR_2	(1 << 6)
++#  define CPLD1_EDC_BCM84757_2_PORT_1	(1 << 5)
++#  define CPLD1_EDC_BCM84757_2_CNVTR_0	(1 << 4)
++#  define CPLD1_EDC_BCM84757_1_CNVTR_3	(1 << 3)
++#  define CPLD1_EDC_BCM84757_1_CNVTR_2	(1 << 2)
++#  define CPLD1_EDC_BCM84757_1_CNVTR_1	(1 << 1)
++#  define CPLD1_EDC_BCM84757_1_CNVTR_0	(1 << 0)
++
++#define CPLD1_REG2_BCM84757_EDC_STATUS_OFFSET	(0x94)
++#  define CPLD1_EDC_BCM84757_4_CNVTR_3	(1 << 7)
++#  define CPLD1_EDC_BCM84757_4_CNVTR_2	(1 << 6)
++#  define CPLD1_EDC_BCM84757_4_PORT_1	(1 << 5)
++#  define CPLD1_EDC_BCM84757_4_CNVTR_0	(1 << 4)
++#  define CPLD1_EDC_BCM84757_3_CNVTR_3	(1 << 3)
++#  define CPLD1_EDC_BCM84757_3_CNVTR_2	(1 << 2)
++#  define CPLD1_EDC_BCM84757_3_CNVTR_1	(1 << 1)
++#  define CPLD1_EDC_BCM84757_3_CNVTR_0	(1 << 0)
++
++#define CPLD1_REG2_BCM84757_SERDES_BOOT_SRC_OFFSET	(0x96)
++#  define CPLD1_BOOT_SDK_BCM84757_4		(1 << 3)
++#  define CPLD1_BOOT_SDK_BCM84757_3		(1 << 2)
++#  define CPLD1_BOOT_SDK_BCM84757_2		(1 << 1)
++#  define CPLD1_BOOT_SDK_BCM84757_1		(1 << 0)
++
++#define CPLD1_REG_STATUS_LED_CTRL_OFFSET		(0x98)
++#  define CPLD1_STATUS_LED_MASK					(0x03)
++#    define CPLD1_STATUS_LED_GREEN				(0x00)
++#    define CPLD1_STATUS_LED_GREEN_1HZ_BLINK	(0x01)
++#    define CPLD1_STATUS_LED_GREEN_4HZ_BLINK	(0x02)
++#    define CPLD1_STATUS_LED_OFF				(0x03)
++
++/* CPLD_2 and CPLD_3 Register Mapping */
++#define CPLD2_REG_VERSION_OFFSET	(0x00)
++#  define CPLD2_VERSION_ID_MASK		(0xC0)
++#  	 define CPLD2_VERSION_ID		(0x80)
++#  define CPLD2_VERSION_MINOR_MASK	(0x3F)
++
++#define CPLD2_REG_SW_SCRATCH_OFFSET	(0x02)
++
++#define CPLD3_REG_VERSION_OFFSET	(0x04)
++#  define CPLD3_VERSION_ID_MASK		(0xC0)
++#  	 define CPLD3_VERSION_ID		(0x80)
++#  define CPLD3_VERSION_MINOR_MASK	(0x3F)
++
++#define CPLD3_REG_SW_SCRATCH_OFFSET	(0x06)
++
++#define CPLD2_REG_PORT_LED_CLEAR_OFFSET	(0x08)
++/* Make sure to set the bit to 0 for 56846 control*/
++#  define CPLD2_LED_CLEAR_SFPP_1_30	(1 << 0)
++
++#define CPLD3_REG_PORT_LED_CLEAR_OFFSET	(0x0A)
++#  define CPLD3_LED_CLEAR_SFPP_33_48_QSFP1_4	(1 << 1)
++#  define CPLD3_LED_CLEAR_SFPP_31_32			(1 << 0)
++
++#define CPLD2_REG_I2C_PORT_ID_OFFSET	(0x10)
++#  define CPLD2_I2C_BAUD_RATE_MASK		(0xC0)
++#    define CPLD2_BAUD_RATE_50KHz		(0x00)
++#    define CPLD2_BAUD_RATE_100KHz		(0x40)
++
++#define CPLD2_REG_I2C_OPCODE_OFFSET		(0x12)
++#  define CPLD2_I2C_DATA_LEN_MASK		(0xF0)
++#  define CPLD2_I2C_DATA_LEN_SHIFT		(4)
++#  define CPLD2_I2C_CMD_LEN_MASK		(0x03)
++#    define CPLD2_I2C_CMD_CUR_ADDR		(0x00)
++#    define CPLD2_I2C_CMD_REC_SW_ADDR	(0x01)
++
++#define CPLD2_REG_DEV_ADDR_OFFSET		(0x14)
++#  define CPLD2_I2C_SLAVE_ADDR_MASK		(0xFE)
++#  define CPLD2_I2C_CMD_INDICATOR_MASK	(0x01)
++#    define CPLD2_I2C_CMD_WRITE_OP		(0x00)
++#    define CPLD2_I2C_CMD_READ_OP		(0x01)
++
++#define CPLD2_REG_I2C_CMD_BYTE0_OFFSET	(0x18)
++
++/* Byte 1 & 2 not used in Redstone */
++#define CPLD2_REG_I2C_CMD_BYTE1_OFFSET	(0x1A)
++#define CPLD2_REG_I2C_CMD_BYTE2_OFFSET	(0x1C)
++
++#define CPLD2_REG_I2C_STATUS_SW_RESET_OFFSET	(0x1E)
++#  define CPLD2_I2C_MASTER_ERR			(1 << 7)
++#  define CPLD2_I2C_BUSY_INDICATOR		(1 << 6)
++#  define CPLD2_I2C_MASTER_SOFT_RESET_L	(1 << 0)
++
++
++/* I2C Write data Byte 0-7 Register */
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE0_OFFSET	(0x20)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE1_OFFSET	(0x22)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE2_OFFSET	(0x24)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE3_OFFSET	(0x26)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE4_OFFSET	(0x28)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE5_OFFSET	(0x2A)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE6_OFFSET	(0x2C)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE7_OFFSET	(0x2E)
++
++/* I2C Write data Byte 0-7 Register */
++#define CPLD2_REG_I2C_READ_DATA_BYTE0_OFFSET	(0x30)
++#define CPLD2_REG_I2C_READ_DATA_BYTE1_OFFSET	(0x32)
++#define CPLD2_REG_I2C_READ_DATA_BYTE2_OFFSET	(0x34)
++#define CPLD2_REG_I2C_READ_DATA_BYTE3_OFFSET	(0x36)
++#define CPLD2_REG_I2C_READ_DATA_BYTE4_OFFSET	(0x38)
++#define CPLD2_REG_I2C_READ_DATA_BYTE5_OFFSET	(0x3A)
++#define CPLD2_REG_I2C_READ_DATA_BYTE6_OFFSET	(0x3C)
++#define CPLD2_REG_I2C_READ_DATA_BYTE7_OFFSET	(0x3E)
++
++#define CPLD3_REG_I2C_PORT_ID_OFFSET	(0x40)
++#  define CPLD3_I2C_BAUD_RATE_MASK		(0xC0)
++#    define CPLD3_BAUD_RATE_50KHz		(0x00)
++#    define CPLD3_BAUD_RATE_100KHz		(0x40)
++
++#define CPLD3_REG_I2C_OPCODE_OFFSET		(0x42)
++#  define CPLD3_I2C_DATA_LEN_MASK		(0xF0)
++#  define CPLD3_I2C_DATA_LEN_SHIFT		(4)
++#  define CPLD3_I2C_CMD_LEN_MASK		(0x03)
++#    define CPLD3_I2C_CMD_CUR_ADDR		(0x00)
++#    define CPLD3_I2C_CMD_REC_SW_ADDR	(0x01)
++
++#define CPLD3_REG_DEV_ADDR_OFFSET		(0x44)
++#  define CPLD3_I2C_SLAVE_ADDR_MASK		(0xFE)
++#  define CPLD3_I2C_CMD_INDICATOR_MASK	(0x01)
++#    define CPLD3_I2C_CMD_WRITE_OP		(0x00)
++#    define CPLD3_I2C_CMD_READ_OP		(0x01)
++
++#define CPLD3_REG_I2C_CMD_BYTE0_OFFSET	(0x48)
++
++/* Byte 1 & 2 not used in Redstone */
++#define CPLD3_REG_I2C_CMD_BYTE1_OFFSET	(0x4A)
++#define CPLD3_REG_I2C_CMD_BYTE2_OFFSET	(0x4C)
++
++#define CPLD3_REG_I2C_STATUS_SW_RESET_OFFSET	(0x4E)
++#  define CPLD3_I2C_MASTER_ERR			(1 << 7)
++#  define CPLD3_I2C_BUSY_INDICATOR		(1 << 6)
++#  define CPLD3_I2C_MASTER_SOFT_RESET_L	(1 << 0)
++
++/* I2C Write data Byte 0-7 Register */
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE0_OFFSET	(0x50)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE1_OFFSET	(0x52)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE2_OFFSET	(0x54)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE3_OFFSET	(0x56)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE4_OFFSET	(0x58)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE5_OFFSET	(0x5A)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE6_OFFSET	(0x5C)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE7_OFFSET	(0x5E)
++
++/* I2C Write data Byte 0-7 Register */
++#define CPLD3_REG_I2C_READ_DATA_BYTE0_OFFSET	(0x60)
++#define CPLD3_REG_I2C_READ_DATA_BYTE1_OFFSET	(0x62)
++#define CPLD3_REG_I2C_READ_DATA_BYTE2_OFFSET	(0x64)
++#define CPLD3_REG_I2C_READ_DATA_BYTE3_OFFSET	(0x66)
++#define CPLD3_REG_I2C_READ_DATA_BYTE4_OFFSET	(0x68)
++#define CPLD3_REG_I2C_READ_DATA_BYTE5_OFFSET	(0x6A)
++#define CPLD3_REG_I2C_READ_DATA_BYTE6_OFFSET	(0x6C)
++#define CPLD3_REG_I2C_READ_DATA_BYTE7_OFFSET	(0x6E)
++
++#define CPLD23_REG_SFPP_17_OFFSET	(0x70)
++#define CPLD23_REG_SFPP_18_OFFSET	(0x72)
++#define CPLD23_REG_SFPP_19_OFFSET	(0x74)
++#define CPLD23_REG_SFPP_20_OFFSET	(0x76)
++#define CPLD23_REG_SFPP_21_OFFSET	(0x78)
++#define CPLD23_REG_SFPP_22_OFFSET	(0x7A)
++#define CPLD23_REG_SFPP_23_OFFSET	(0x7C)
++#define CPLD23_REG_SFPP_24_OFFSET	(0x7E)
++#define CPLD23_REG_SFPP_25_OFFSET	(0x80)
++#define CPLD23_REG_SFPP_26_OFFSET	(0x82)
++#define CPLD23_REG_SFPP_27_OFFSET	(0x84)
++#define CPLD23_REG_SFPP_28_OFFSET	(0x86)
++#define CPLD23_REG_SFPP_29_OFFSET	(0x88)
++#define CPLD23_REG_SFPP_30_OFFSET	(0x8A)
++#define CPLD23_REG_SFPP_31_OFFSET	(0x8C)
++#define CPLD23_REG_SFPP_32_OFFSET	(0x8E)
++#define CPLD23_REG_SFPP_33_OFFSET	(0x90)
++#define CPLD23_REG_SFPP_34_OFFSET	(0x92)
++#define CPLD23_REG_SFPP_35_OFFSET	(0x94)
++#define CPLD23_REG_SFPP_36_OFFSET	(0x96)
++#define CPLD23_REG_SFPP_37_OFFSET	(0x98)
++#define CPLD23_REG_SFPP_38_OFFSET	(0x9A)
++#define CPLD23_REG_SFPP_39_OFFSET	(0x9C)
++#define CPLD23_REG_SFPP_40_OFFSET	(0x9E)
++#define CPLD23_REG_SFPP_41_OFFSET	(0xA0)
++#define CPLD23_REG_SFPP_42_OFFSET	(0xA2)
++#define CPLD23_REG_SFPP_43_OFFSET	(0xA4)
++#define CPLD23_REG_SFPP_44_OFFSET	(0xA6)
++#define CPLD23_REG_SFPP_45_OFFSET	(0xA8)
++#define CPLD23_REG_SFPP_46_OFFSET	(0xAA)
++#define CPLD23_REG_SFPP_47_OFFSET	(0xAC)
++#define CPLD23_REG_SFPP_48_OFFSET	(0xAE)
++#  define CPLD23_SFPP_SPEED_RS0		(1 << 4) /* 0-1G, 1-10G */
++#  define CPLD23_SFPP_SPEED_RS1		(1 << 3)
++#  define CPLD23_SFPP_PRESENT		(1 << 2) /* 0-Present, 1-Absent */
++#  define CPLD23_SFPP_TX_FAIL		(1 << 1)
++#  define CPLD23_SFPP_TX_DISABLE	(1 << 0)
++
++#endif /* CEL_REDSTONE_H__ */
+diff --git a/board/celestica/p2020/cel_smallstone_cpld.h b/board/celestica/p2020/cel_smallstone_cpld.h
+new file mode 100644
+index 0000000..ac1c37a
+--- /dev/null
++++ b/board/celestica/p2020/cel_smallstone_cpld.h
+@@ -0,0 +1,498 @@
++/*
++ * Celestica Smallstone CPLD Platform Definitions
++ *
++ * Curt Brune <curt@cumulusnetworks.com>
++ * Vidya Ravipati <vidya@cumulusnetworks.com>
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ *
++ */
++
++#ifndef CEL_SMALLSTONE_H__
++#define CEL_SMALLSTONE_H__
++
++/*------------------------------------------------------------------------------
++ *
++ * Register info from:
++ * R0694-M0010-01 Rev0.2 Smallstone Assembly Specification 20130613.pdf
++ *
++ */
++
++#define CPLD1_REG_VERSION_OFFSET		(0x00)
++#  define CPLD_VERSION_H_MASK			(0xF0)
++#  define CPLD_VERSION_H_SHIFT			(4)
++#  define CPLD_VERSION_L_MASK			(0x0F)
++#  define CPLD_VERSION_L_SHIFT			(0)
++
++#define CPLD1_REG_PLAT_TYPE_OFFSET		(0x02)
++
++#define CPLD1_REG_SW_SCRATCH_OFFSET		(0x04)
++
++#define CPLD1_REG_BOOT_STATUS_OFFSET		(0x0A)
++#  define CPLD1_SYS_UBOOT_OK_MASK		(0x78)
++#    define CPLD1_SYS_UBOOT_OK			(0x50)
++
++#define CPLD1_REG_RESET_CTRL_OFFSET		(0x10)	/* all resets active low */
++#  define CPLD1_FLASH_NOR_WRITE_OK		(1 << 3)
++#  define CPLD1_RESET_WATCH_DOG_MASK		(1 << 2) /* Watchdog Reset */
++#  define CPLD1_RESET_CPU_HARD_L		(1 << 1) /* SW HARD Reset */
++#  define CPLD1_RESET_CPU_SOFT_L		(1 << 0) /* SW Soft Reset */
++
++#define CPLD1_REG_RESET_SRC_OFFSET		(0x12) /* Reset Source */
++#  define CPLD1_REG_RESET_SRC_MASK		(0x0F)
++#    define CPLD1_RESET_PWR_ON			(1 << 3) /* Power On Reset */
++#    define CPLD1_RESET_WATCH_DOG		(1 << 2) /* Watchdog Reset */
++#    define CPLD1_RESET_CPU_HARD		(1 << 1) /* SW-set hard Reset */
++#    define CPLD1_RESET_CPU_SOFT		(1 << 0) /* CPU request Reset */
++
++#define CPLD1_REG_RESET_CTRL_1_OFFSET	(0x14)	/* all resets active low */
++#  define CPLD1_RESET_DDR3_L			(1 << 6)
++#  define CPLD1_RESET_NOR_FLASH_L		(1 << 5)
++#  define CPLD2_RESET_L				(1 << 4)
++#  define CPLD3_RESET_L				(1 << 3)
++#  define CPLD1_RESET_USB_PHY_L			(1 << 2)
++#  define CPLD1_RESET_BCM54616S_L		(1 << 1) /* Front panel mgmt PHY */
++#  define CPLD_RESET_BCM56846_L			(1 << 0) /* Trident PHY */
++
++#define CPLD1_REG_INT_STATUS_OFFSET	(0x18)
++#  define CPLD1_INT_EMC2305_L			(1 << 6)
++#  define CPLD1_INT_THERMAL_L			(1 << 5)
++#  define CPLD1_INT_RTC_L			(1 << 4) /* RTC_INT_B and RTC_INT_A */
++#  define CPLD1_INT_PSU_L			(1 << 3) /* PSU_R_ALERT & PSU_L_ALERT */
++#  define CPLD1_INT_QSFP_ABS			(1 << 2) /* CPLD2_QSFP1_16_ABS and CPLD3_QSFP17_32_ABS */
++#  define CPLD1_INT_QSFP_INT			(1 << 1) /* CPLD2_QSFP1_16_INT and CPLD3_QSFP17_32_INT */
++
++#define CPLD1_REG_INT0_SRC_STATUS_OFFSET	(0x20)
++
++#define CPLD1_REG_INT1_SRC_STATUS_OFFSET	(0x22)
++#  define CPLD1_INT1_QSFP01_16_INT_L		(1 << 1)
++#  define CPLD1_INT1_QSFP17_32_INT_L		(1 << 0)
++
++#define CPLD1_REG_INT2_SRC_STATUS_OFFSET	(0x26)
++#  define CPLD1_INT2_QSFP01_16_ABS_L		(1 << 1)
++#  define CPLD1_INT2_QSFP17_32_ABS_L		(1 << 0)
++
++#define CPLD1_REG_INT3_SRC_STATUS_OFFSET	(0x2A)
++#  define CPLD1_INT3_PSU_L_L			(1 << 1)
++#  define CPLD1_INT3_PSU_R_L			(1 << 0)
++
++#define CPLD1_REG_INT4_SRC_STATUS_OFFSET	(0x2C)
++#  define CPLD1_INT4_RTC_B_L			(1 << 1)
++#  define CPLD1_INT4_RTC_A_L			(1 << 0)
++
++#define CPLD1_REG_INT5_SRC_STATUS_OFFSET	(0x2E)
++#  define CPLD1_INT5_THERMAL_SENSOR_5_L		(1 << 4)
++#  define CPLD1_INT5_THERMAL_SENSOR_4_L		(1 << 3)
++#  define CPLD1_INT5_THERMAL_SENSOR_3_L		(1 << 2)
++#  define CPLD1_INT5_THERMAL_SENSOR_2_L		(1 << 1)
++#  define CPLD1_INT5_THERMAL_SENSOR_1_L		(1 << 0)
++
++#define CPLD1_REG_INT6_SRC_STATUS_OFFSET	(0x30)
++#  define CPLD1_INT6_EMC2305_L			(1 << 0)
++
++#define CPLD1_REG_INT0_SRC_CHANGE_OFFSET	(0x40)
++
++#define CPLD1_REG_INT1_SRC_CHANGE_OFFSET	(0x42)
++
++#define CPLD1_REG_INT2_SRC_CHANGE_OFFSET	(0x46)
++
++#define CPLD1_REG_INT3_SRC_CHANGE_OFFSET	(0x4A)
++
++#define CPLD1_REG_INT4_SRC_CHANGE_OFFSET	(0x4C)
++
++#define CPLD1_REG_INT5_SRC_CHANGE_OFFSET	(0x4E)
++
++#define CPLD1_REG_INT6_SRC_CHANGE_OFFSET	(0x50)
++
++#define CPLD1_REG_INT0_SRC_MASK_OFFSET		(0x60)
++
++#define CPLD1_REG_INT1_SRC_MASK_OFFSET		(0x62)
++
++#define CPLD1_REG_INT2_SRC_MASK_OFFSET		(0x66)
++
++#define CPLD1_REG_INT3_SRC_MASK_OFFSET		(0x6A)
++
++#define CPLD1_REG_INT4_SRC_MASK_OFFSET		(0x6C)
++
++#define CPLD1_REG_INT5_SRC_MASK_OFFSET		(0x6E)
++
++#define CPLD1_REG_INT6_SRC_MASK_OFFSET		(0x70)
++
++#define CPLD1_REG_PSU_STATUS		(0x80)
++#  define CPLD1_PSU_1_MASK			(0x2A)
++#    define CPLD1_PSU_1_PRESENT_L		(1 << 5)
++#    define CPLD1_PSU_1_OK			(1 << 3)
++#    define CPLD1_PSU_1_ON			(1 << 1)
++#  define CPLD1_PSU_2_MASK			(0x15)
++#    define CPLD1_PSU_2_PRESENT_L		(1 << 4)
++#    define CPLD1_PSU_2_OK			(1 << 2)
++#    define CPLD1_PSU_2_ON			(1 << 0)
++
++#define CPLD1_REG_FAN_PRESENT_STATUS_OFFSET	(0x90)
++#  define CPLD1_FAN_PRESENT_MASK		(0x1F)
++#    define CPLD1_FAN_5_PRESENT			(1 << 4)
++#    define CPLD1_FAN_4_PRESENT			(1 << 3)
++#    define CPLD1_FAN_3_PRESENT			(1 << 2)
++#    define CPLD1_FAN_2_PRESENT			(1 << 1)
++#    define CPLD1_FAN_1_PRESENT			(1 << 0)
++
++#define CPLD1_REG_STATUS_LED_CTRL_OFFSET	(0x98)
++#  define CPLD1_STATUS_LED_MASK			(0x03)
++#    define CPLD1_STATUS_LED_GREEN		(0x00)
++#    define CPLD1_STATUS_LED_GREEN_1HZ_BLINK	(0x01)
++#    define CPLD1_STATUS_LED_GREEN_4HZ_BLINK	(0x02)
++#    define CPLD1_STATUS_LED_OFF		(0x03)
++
++#define CPLD1_REG_NCP4200_STATUS_OFFSE		(0x9A)
++#  define CPLD1_BCM56850_ROV3			(1 << 3)
++#  define CPLD1_BCM56850_ROV2			(1 << 2)
++#  define CPLD1_BCM56850_ROV1			(1 << 1)
++#  define CPLD1_BCM56850_ROV0			(1 << 0)
++
++/* CPLD_2 and CPLD_3 Register Mapping */
++#define CPLD2_REG_VERSION_OFFSET	(0x00)
++
++#define CPLD2_REG_SW_SCRATCH_OFFSET	(0x02)
++
++#define CPLD3_REG_VERSION_OFFSET	(0x04)
++
++#define CPLD3_REG_SW_SCRATCH_OFFSET	(0x06)
++
++#define CPLD2_REG_PORT_LED_CLEAR_OFFSET	(0x08)
++/* Make sure to set the bit to 0 for BCM control*/
++#  define CPLD2_LED_CLEAR_QSFP_01_16	(1 << 0)
++
++#define CPLD3_REG_PORT_LED_CLEAR_OFFSET	(0x0A)
++#  define CPLD3_LED_CLEAR_QSFP_17_32	(1 << 0)
++
++#define CPLD2_REG_I2C_PORT_ID_OFFSET	(0x10)
++#  define CPLD_I2C_BAUD_RATE_MASK		(0x40)
++#    define CPLD_BAUD_RATE_50KHz		(0x00)
++#    define CPLD_BAUD_RATE_100KHz		(0x40)
++#  define CPLD_I2C_ID_MASK			(0x3F)
++
++#define CPLD2_REG_I2C_OPCODE_OFFSET	(0x12)
++#  define CPLD_I2C_DATA_LEN_MASK		(0xF0)
++#  define CPLD_I2C_DATA_LEN_SHIFT		(4)
++#  define CPLD_I2C_CMD_LEN_MASK		(0x03)
++#    define CPLD_I2C_CMD_CUR_ADDR		(0x00)
++#    define CPLD_I2C_CMD_REC_SW_ADDR		(0x01)
++
++#define CPLD2_REG_I2C_DEV_ADDR_OFFSET	(0x14)
++#  define CPLD_I2C_SLAVE_ADDR_MASK		(0xFE)
++#  define CPLD_I2C_CMD_INDICATOR_MASK		(0x01)
++#    define CPLD_I2C_CMD_WRITE_OP		(0x00)
++#    define CPLD_I2C_CMD_READ_OP		(0x01)
++
++#define CPLD2_REG_I2C_CMD_BYTE0_OFFSET	(0x18)
++
++/* Byte 1 & 2 not used in Redstone */
++#define CPLD2_REG_I2C_CMD_BYTE1_OFFSET	(0x1A)
++#define CPLD2_REG_I2C_CMD_BYTE2_OFFSET	(0x1C)
++
++#define CPLD2_REG_I2C_STATUS_SW_RESET_OFFSET	(0x1E)
++#  define CPLD_I2C_MASTER_ERR			(1 << 7)
++#  define CPLD_I2C_BUSY_INDICATOR		(1 << 6)
++#  define CPLD_I2C_MASTER_SOFT_RESET_L	(1 << 0)
++
++
++/* I2C Write data Byte 0-7 Register */
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE0_OFFSET	(0x20)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE1_OFFSET	(0x22)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE2_OFFSET	(0x24)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE3_OFFSET	(0x26)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE4_OFFSET	(0x28)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE5_OFFSET	(0x2A)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE6_OFFSET	(0x2C)
++#define CPLD2_REG_I2C_WRITE_DATA_BYTE7_OFFSET	(0x2E)
++
++/* I2C Read data Byte 0-7 Register */
++#define CPLD2_REG_I2C_READ_DATA_BYTE0_OFFSET	(0x30)
++#define CPLD2_REG_I2C_READ_DATA_BYTE1_OFFSET	(0x32)
++#define CPLD2_REG_I2C_READ_DATA_BYTE2_OFFSET	(0x34)
++#define CPLD2_REG_I2C_READ_DATA_BYTE3_OFFSET	(0x36)
++#define CPLD2_REG_I2C_READ_DATA_BYTE4_OFFSET	(0x38)
++#define CPLD2_REG_I2C_READ_DATA_BYTE5_OFFSET	(0x3A)
++#define CPLD2_REG_I2C_READ_DATA_BYTE6_OFFSET	(0x3C)
++#define CPLD2_REG_I2C_READ_DATA_BYTE7_OFFSET	(0x3E)
++
++/* Bits are same as CPLD2_REG_I2C_PORT_ID */
++#define CPLD3_REG_I2C_PORT_ID_OFFSET	(0x40)
++
++/* Bits are same as CPLD2_REG_I2C_OPCODE */
++#define CPLD3_REG_I2C_OPCODE_OFFSET		(0x42)
++
++/* Bits are same as CPLD2_REG_I2C_DEV_ADDR */
++#define CPLD3_REG_I2C_DEV_ADDR_OFFSET		(0x44)
++
++#define CPLD3_REG_I2C_CMD_BYTE0_OFFSET	(0x48)
++
++/* Byte 1 & 2 not used in Redstone */
++#define CPLD3_REG_I2C_CMD_BYTE1_OFFSET	(0x4A)
++#define CPLD3_REG_I2C_CMD_BYTE2_OFFSET	(0x4C)
++
++/* Bits are same as CPLD2_REG_I2C_STATUS_SW_RESET */
++#define CPLD3_REG_I2C_STATUS_SW_RESET_OFFSET	(0x4E)
++
++/* I2C Write data Byte 0-7 Register */
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE0_OFFSET	(0x50)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE1_OFFSET	(0x52)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE2_OFFSET	(0x54)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE3_OFFSET	(0x56)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE4_OFFSET	(0x58)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE5_OFFSET	(0x5A)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE6_OFFSET	(0x5C)
++#define CPLD3_REG_I2C_WRITE_DATA_BYTE7_OFFSET	(0x5E)
++
++/* I2C Read data Byte 0-7 Register */
++#define CPLD3_REG_I2C_READ_DATA_BYTE0_OFFSET	(0x60)
++#define CPLD3_REG_I2C_READ_DATA_BYTE1_OFFSET	(0x62)
++#define CPLD3_REG_I2C_READ_DATA_BYTE2_OFFSET	(0x64)
++#define CPLD3_REG_I2C_READ_DATA_BYTE3_OFFSET	(0x66)
++#define CPLD3_REG_I2C_READ_DATA_BYTE4_OFFSET	(0x68)
++#define CPLD3_REG_I2C_READ_DATA_BYTE5_OFFSET	(0x6A)
++#define CPLD3_REG_I2C_READ_DATA_BYTE6_OFFSET	(0x6C)
++#define CPLD3_REG_I2C_READ_DATA_BYTE7_OFFSET	(0x6E)
++
++#define CPLD3_REG_QSFP_01_08_RESET_OFFSET	(0x70)
++#  define CPLD3_QSFP_08_RESET	(1 << 7)
++#  define CPLD3_QSFP_07_RESET	(1 << 6)
++#  define CPLD3_QSFP_06_RESET	(1 << 5)
++#  define CPLD3_QSFP_05_RESET	(1 << 4)
++#  define CPLD3_QSFP_04_RESET	(1 << 3)
++#  define CPLD3_QSFP_03_RESET	(1 << 2)
++#  define CPLD3_QSFP_02_RESET	(1 << 1)
++#  define CPLD3_QSFP_01_RESET	(1 << 0)
++
++#define CPLD3_REG_QSFP_09_16_RESET_OFFSET	(0x72)
++#  define CPLD3_QSFP_16_RESET	(1 << 7)
++#  define CPLD3_QSFP_15_RESET	(1 << 6)
++#  define CPLD3_QSFP_14_RESET	(1 << 5)
++#  define CPLD3_QSFP_13_RESET	(1 << 4)
++#  define CPLD3_QSFP_12_RESET	(1 << 3)
++#  define CPLD3_QSFP_11_RESET	(1 << 2)
++#  define CPLD3_QSFP_10_RESET	(1 << 1)
++#  define CPLD3_QSFP_09_RESET	(1 << 0)
++
++#define CPLD3_REG_QSFP_01_08_LPMOD_OFFSET	(0x74)
++#  define CPLD3_QSFP_08_LPMOD	(1 << 7)
++#  define CPLD3_QSFP_07_LPMOD	(1 << 6)
++#  define CPLD3_QSFP_06_LPMOD	(1 << 5)
++#  define CPLD3_QSFP_05_LPMOD	(1 << 4)
++#  define CPLD3_QSFP_04_LPMOD	(1 << 3)
++#  define CPLD3_QSFP_03_LPMOD	(1 << 2)
++#  define CPLD3_QSFP_02_LPMOD	(1 << 1)
++#  define CPLD3_QSFP_01_LPMOD	(1 << 0)
++
++#define CPLD3_REG_QSFP_09_16_LPMOD_OFFSET	(0x76)
++#  define CPLD3_QSFP_16_LPMOD	(1 << 7)
++#  define CPLD3_QSFP_15_LPMOD	(1 << 6)
++#  define CPLD3_QSFP_14_LPMOD	(1 << 5)
++#  define CPLD3_QSFP_13_LPMOD	(1 << 4)
++#  define CPLD3_QSFP_12_LPMOD	(1 << 3)
++#  define CPLD3_QSFP_11_LPMOD	(1 << 2)
++#  define CPLD3_QSFP_10_LPMOD	(1 << 1)
++#  define CPLD3_QSFP_09_LPMOD	(1 << 0)
++
++#define CPLD3_REG_QSFP_01_08_INT_OFFSET		(0x80)
++#  define CPLD3_QSFP_08_INT	(1 << 7)
++#  define CPLD3_QSFP_07_INT	(1 << 6)
++#  define CPLD3_QSFP_06_INT	(1 << 5)
++#  define CPLD3_QSFP_05_INT	(1 << 4)
++#  define CPLD3_QSFP_04_INT	(1 << 3)
++#  define CPLD3_QSFP_03_INT	(1 << 2)
++#  define CPLD3_QSFP_02_INT	(1 << 1)
++#  define CPLD3_QSFP_01_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_09_16_INT_OFFSET		(0x82)
++#  define CPLD3_QSFP_16_INT	(1 << 7)
++#  define CPLD3_QSFP_15_INT	(1 << 6)
++#  define CPLD3_QSFP_14_INT	(1 << 5)
++#  define CPLD3_QSFP_13_INT	(1 << 4)
++#  define CPLD3_QSFP_12_INT	(1 << 3)
++#  define CPLD3_QSFP_11_INT	(1 << 2)
++#  define CPLD3_QSFP_10_INT	(1 << 1)
++#  define CPLD3_QSFP_09_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_01_08_ABS_OFFSET		(0x84)
++#  define CPLD3_QSFP_08_ABS	(1 << 7)
++#  define CPLD3_QSFP_07_ABS	(1 << 6)
++#  define CPLD3_QSFP_06_ABS	(1 << 5)
++#  define CPLD3_QSFP_05_ABS	(1 << 4)
++#  define CPLD3_QSFP_04_ABS	(1 << 3)
++#  define CPLD3_QSFP_03_ABS	(1 << 2)
++#  define CPLD3_QSFP_02_ABS	(1 << 1)
++#  define CPLD3_QSFP_01_ABS	(1 << 0)
++
++#define CPLD3_REG_QSFP_09_16_ABS_OFFSET		(0x86)
++#  define CPLD3_QSFP_16_ABS	(1 << 7)
++#  define CPLD3_QSFP_15_ABS	(1 << 6)
++#  define CPLD3_QSFP_14_ABS	(1 << 5)
++#  define CPLD3_QSFP_13_ABS	(1 << 4)
++#  define CPLD3_QSFP_12_ABS	(1 << 3)
++#  define CPLD3_QSFP_11_ABS	(1 << 2)
++#  define CPLD3_QSFP_10_ABS	(1 << 1)
++#  define CPLD3_QSFP_09_ABS	(1 << 0)
++
++#define CPLD3_REG_QSFP_01_08_ABS_INT_OFFSET	(0x88)
++#  define CPLD3_QSFP_08_ABS_INT	(1 << 7)
++#  define CPLD3_QSFP_07_ABS_INT	(1 << 6)
++#  define CPLD3_QSFP_06_ABS_INT	(1 << 5)
++#  define CPLD3_QSFP_05_ABS_INT	(1 << 4)
++#  define CPLD3_QSFP_04_ABS_INT	(1 << 3)
++#  define CPLD3_QSFP_03_ABS_INT	(1 << 2)
++#  define CPLD3_QSFP_02_ABS_INT	(1 << 1)
++#  define CPLD3_QSFP_01_ABS_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_09_16_ABS_INT_OFFSET	(0x8A)
++#  define CPLD3_QSFP_16_ABS_INT	(1 << 7)
++#  define CPLD3_QSFP_15_ABS_INT	(1 << 6)
++#  define CPLD3_QSFP_14_ABS_INT	(1 << 5)
++#  define CPLD3_QSFP_13_ABS_INT	(1 << 4)
++#  define CPLD3_QSFP_12_ABS_INT	(1 << 3)
++#  define CPLD3_QSFP_11_ABS_INT	(1 << 2)
++#  define CPLD3_QSFP_10_ABS_INT	(1 << 1)
++#  define CPLD3_QSFP_09_ABS_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_01_08_I2C_INT_OFFSET	(0x8C)
++#  define CPLD3_QSFP_08_I2C_INT	(1 << 7)
++#  define CPLD3_QSFP_07_I2C_INT	(1 << 6)
++#  define CPLD3_QSFP_06_I2C_INT	(1 << 5)
++#  define CPLD3_QSFP_05_I2C_INT	(1 << 4)
++#  define CPLD3_QSFP_04_I2C_INT	(1 << 3)
++#  define CPLD3_QSFP_03_I2C_INT	(1 << 2)
++#  define CPLD3_QSFP_02_I2C_INT	(1 << 1)
++#  define CPLD3_QSFP_01_I2C_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_09_16_I2C_INT_OFFSET	(0x8E)
++#  define CPLD3_QSFP_16_I2C_INT	(1 << 7)
++#  define CPLD3_QSFP_15_I2C_INT	(1 << 6)
++#  define CPLD3_QSFP_14_I2C_INT	(1 << 5)
++#  define CPLD3_QSFP_13_I2C_INT	(1 << 4)
++#  define CPLD3_QSFP_12_I2C_INT	(1 << 3)
++#  define CPLD3_QSFP_11_I2C_INT	(1 << 2)
++#  define CPLD3_QSFP_10_I2C_INT	(1 << 1)
++#  define CPLD3_QSFP_09_I2C_INT	(1 << 0)
++
++/* Ports 18 - 32 Start Here */
++#define CPLD3_REG_QSFP_17_24_RESET_OFFSET	(0xA0)
++#  define CPLD3_QSFP_24_RESET	(1 << 7)
++#  define CPLD3_QSFP_23_RESET	(1 << 6)
++#  define CPLD3_QSFP_22_RESET	(1 << 5)
++#  define CPLD3_QSFP_21_RESET	(1 << 4)
++#  define CPLD3_QSFP_20_RESET	(1 << 3)
++#  define CPLD3_QSFP_19_RESET	(1 << 2)
++#  define CPLD3_QSFP_18_RESET	(1 << 1)
++#  define CPLD3_QSFP_17_RESET	(1 << 0)
++
++#define CPLD3_REG_QSFP_25_32_RESET_OFFSET	(0xA2)
++#  define CPLD3_QSFP_32_RESET	(1 << 7)
++#  define CPLD3_QSFP_31_RESET	(1 << 6)
++#  define CPLD3_QSFP_30_RESET	(1 << 5)
++#  define CPLD3_QSFP_29_RESET	(1 << 4)
++#  define CPLD3_QSFP_28_RESET	(1 << 3)
++#  define CPLD3_QSFP_27_RESET	(1 << 2)
++#  define CPLD3_QSFP_26_RESET	(1 << 1)
++#  define CPLD3_QSFP_25_RESET	(1 << 0)
++
++#define CPLD3_REG_QSFP_17_24_LPMOD_OFFSET	(0xA4)
++#  define CPLD3_QSFP_24_LPMOD	(1 << 7)
++#  define CPLD3_QSFP_23_LPMOD	(1 << 6)
++#  define CPLD3_QSFP_22_LPMOD	(1 << 5)
++#  define CPLD3_QSFP_21_LPMOD	(1 << 4)
++#  define CPLD3_QSFP_20_LPMOD	(1 << 3)
++#  define CPLD3_QSFP_19_LPMOD	(1 << 2)
++#  define CPLD3_QSFP_18_LPMOD	(1 << 1)
++#  define CPLD3_QSFP_17_LPMOD	(1 << 0)
++
++#define CPLD3_REG_QSFP_25_32_LPMOD_OFFSET	(0xA6)
++#  define CPLD3_QSFP_32_LPMOD	(1 << 7)
++#  define CPLD3_QSFP_31_LPMOD	(1 << 6)
++#  define CPLD3_QSFP_30_LPMOD	(1 << 5)
++#  define CPLD3_QSFP_29_LPMOD	(1 << 4)
++#  define CPLD3_QSFP_28_LPMOD	(1 << 3)
++#  define CPLD3_QSFP_27_LPMOD	(1 << 2)
++#  define CPLD3_QSFP_26_LPMOD	(1 << 1)
++#  define CPLD3_QSFP_25_LPMOD	(1 << 0)
++
++#define CPLD3_REG_QSFP_17_24_INT_OFFSET		(0xB0)
++#  define CPLD3_QSFP_24_INT	(1 << 7)
++#  define CPLD3_QSFP_23_INT	(1 << 6)
++#  define CPLD3_QSFP_22_INT	(1 << 5)
++#  define CPLD3_QSFP_21_INT	(1 << 4)
++#  define CPLD3_QSFP_20_INT	(1 << 3)
++#  define CPLD3_QSFP_19_INT	(1 << 2)
++#  define CPLD3_QSFP_18_INT	(1 << 1)
++#  define CPLD3_QSFP_17_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_25_32_INT_OFFSET		(0xC2)
++#  define CPLD3_QSFP_32_INT	(1 << 7)
++#  define CPLD3_QSFP_31_INT	(1 << 6)
++#  define CPLD3_QSFP_30_INT	(1 << 5)
++#  define CPLD3_QSFP_29_INT	(1 << 4)
++#  define CPLD3_QSFP_28_INT	(1 << 3)
++#  define CPLD3_QSFP_27_INT	(1 << 2)
++#  define CPLD3_QSFP_26_INT	(1 << 1)
++#  define CPLD3_QSFP_25_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_17_24_ABS_OFFSET		(0xC4)
++#  define CPLD3_QSFP_24_ABS	(1 << 7)
++#  define CPLD3_QSFP_23_ABS	(1 << 6)
++#  define CPLD3_QSFP_22_ABS	(1 << 5)
++#  define CPLD3_QSFP_21_ABS	(1 << 4)
++#  define CPLD3_QSFP_20_ABS	(1 << 3)
++#  define CPLD3_QSFP_19_ABS	(1 << 2)
++#  define CPLD3_QSFP_18_ABS	(1 << 1)
++#  define CPLD3_QSFP_17_ABS	(1 << 0)
++
++#define CPLD3_REG_QSFP_25_32_ABS_OFFSET		(0xC6)
++#  define CPLD3_QSFP_32_ABS	(1 << 7)
++#  define CPLD3_QSFP_31_ABS	(1 << 6)
++#  define CPLD3_QSFP_30_ABS	(1 << 5)
++#  define CPLD3_QSFP_29_ABS	(1 << 4)
++#  define CPLD3_QSFP_28_ABS	(1 << 3)
++#  define CPLD3_QSFP_27_ABS	(1 << 2)
++#  define CPLD3_QSFP_26_ABS	(1 << 1)
++#  define CPLD3_QSFP_25_ABS	(1 << 0)
++
++#define CPLD3_REG_QSFP_17_24_ABS_INT_OFFSET	(0xC8)
++#  define CPLD3_QSFP_24_ABS_INT	(1 << 7)
++#  define CPLD3_QSFP_23_ABS_INT	(1 << 6)
++#  define CPLD3_QSFP_22_ABS_INT	(1 << 5)
++#  define CPLD3_QSFP_21_ABS_INT	(1 << 4)
++#  define CPLD3_QSFP_20_ABS_INT	(1 << 3)
++#  define CPLD3_QSFP_19_ABS_INT	(1 << 2)
++#  define CPLD3_QSFP_18_ABS_INT	(1 << 1)
++#  define CPLD3_QSFP_17_ABS_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_25_32_ABS_INT_OFFSET	(0xCA)
++#  define CPLD3_QSFP_32_ABS_INT	(1 << 7)
++#  define CPLD3_QSFP_31_ABS_INT	(1 << 6)
++#  define CPLD3_QSFP_30_ABS_INT	(1 << 5)
++#  define CPLD3_QSFP_29_ABS_INT	(1 << 4)
++#  define CPLD3_QSFP_28_ABS_INT	(1 << 3)
++#  define CPLD3_QSFP_27_ABS_INT	(1 << 2)
++#  define CPLD3_QSFP_26_ABS_INT	(1 << 1)
++#  define CPLD3_QSFP_25_ABS_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_17_24_I2C_INT_OFFSET	(0xCC)
++#  define CPLD3_QSFP_24_I2C_INT	(1 << 7)
++#  define CPLD3_QSFP_23_I2C_INT	(1 << 6)
++#  define CPLD3_QSFP_22_I2C_INT	(1 << 5)
++#  define CPLD3_QSFP_21_I2C_INT	(1 << 4)
++#  define CPLD3_QSFP_20_I2C_INT	(1 << 3)
++#  define CPLD3_QSFP_19_I2C_INT	(1 << 2)
++#  define CPLD3_QSFP_18_I2C_INT	(1 << 1)
++#  define CPLD3_QSFP_17_I2C_INT	(1 << 0)
++
++#define CPLD3_REG_QSFP_25_32_I2C_INT_OFFSET	(0xCE)
++#  define CPLD3_QSFP_32_I2C_INT	(1 << 7)
++#  define CPLD3_QSFP_31_I2C_INT	(1 << 6)
++#  define CPLD3_QSFP_30_I2C_INT	(1 << 5)
++#  define CPLD3_QSFP_29_I2C_INT	(1 << 4)
++#  define CPLD3_QSFP_28_I2C_INT	(1 << 3)
++#  define CPLD3_QSFP_27_I2C_INT	(1 << 2)
++#  define CPLD3_QSFP_26_I2C_INT	(1 << 1)
++#  define CPLD3_QSFP_25_I2C_INT	(1 << 0)
++
++#endif /* CEL_SMALLSTONE_H__ */
+diff --git a/board/celestica/p2020/eeprom.h b/board/celestica/p2020/eeprom.h
+new file mode 100644
+index 0000000..22e6da8
+--- /dev/null
++++ b/board/celestica/p2020/eeprom.h
+@@ -0,0 +1,37 @@
++/*
++ * Copyright 2004 Freescale Semiconductor.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * SPDX-License-Identifier:		GPL-2.0+
++ */
++
++#ifndef __EEPROM_H_
++#define __EEPROM_H_
++
++
++/*
++ * EEPROM Board System Register interface.
++ */
++
++
++/*
++ * CPU Board Revision
++ */
++#define MPC85XX_CPU_BOARD_REV(maj, min)	((((maj)&0xff) << 8) | ((min) & 0xff))
++#define MPC85XX_CPU_BOARD_MAJOR(rev)	(((rev) >> 8) & 0xff)
++#define MPC85XX_CPU_BOARD_MINOR(rev)	((rev) & 0xff)
++
++#define MPC85XX_CPU_BOARD_REV_UNKNOWN	MPC85XX_CPU_BOARD_REV(0,0)
++#define MPC85XX_CPU_BOARD_REV_1_0	MPC85XX_CPU_BOARD_REV(1,0)
++#define MPC85XX_CPU_BOARD_REV_1_1	MPC85XX_CPU_BOARD_REV(1,1)
++
++/*
++ * Returns CPU board revision register as a 16-bit value with
++ * the Major in the high byte, and Minor in the low byte.
++ */
++extern unsigned int get_cpu_board_revision(void);
++
++
++#endif	/* __CADMUS_H_ */
+diff --git a/board/celestica/p2020/law.c b/board/celestica/p2020/law.c
+new file mode 100644
+index 0000000..ab95d6e
+--- /dev/null
++++ b/board/celestica/p2020/law.c
+@@ -0,0 +1,25 @@
++/*
++ * Copyright 2013 Cumulus Networks, Inc.
++ * Copyright 2008-2010 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * SPDX-License-Identifier:		GPL-2.0+
++ *
++ */
++
++#include <common.h>
++#include <asm/fsl_law.h>
++#include <asm/mmu.h>
++
++struct law_entry law_table[] = {
++	SET_LAW(CONFIG_SYS_FLASH_BASE, LAW_SIZE_256M, LAW_TRGT_IF_LBC),
++	SET_LAW(CONFIG_SYS_NAND_BASE_PHYS, LAW_SIZE_1M, LAW_TRGT_IF_LBC),
++	SET_LAW(CONFIG_SYS_CPLD_BASE_PHYS, LAW_SIZE_1M, LAW_TRGT_IF_LBC),
++};
++
++int num_law_entries = ARRAY_SIZE(law_table);
+diff --git a/board/celestica/p2020/p2020.c b/board/celestica/p2020/p2020.c
+new file mode 100644
+index 0000000..b0dfea3
+--- /dev/null
++++ b/board/celestica/p2020/p2020.c
+@@ -0,0 +1,754 @@
++/*
++ * Copyright 2013 Cumulus Networks, Inc.
++ *
++ * Copyright 2004, 2007, 200 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2002 Scott McNutt <smcnutt@artesyncp.com>
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * SPDX-License-Identifier:		GPL-2.0+
++ *
++ */
++
++#include <common.h>
++#include <command.h>
++#include <config.h>
++#include <pci.h>
++#include <asm/processor.h>
++#include <asm/mmu.h>
++#include <asm/cache.h>
++#include <asm/immap_85xx.h>
++#include <asm/fsl_pci.h>
++#include <asm/fsl_ddr_sdram.h>
++#include <asm/io.h>
++#include <miiphy.h>
++#include <libfdt.h>
++#include <fdt_support.h>
++#include <fsl_mdio.h>
++#include <tsec.h>
++#include <broadcom_phy.h>
++#include <asm/fsl_law.h>
++#include <asm/mp.h>
++#include <netdev.h>
++#include <sys_eeprom.h>
++
++#include <asm/fsl_serdes.h>
++#include <spd_sdram.h>
++#include <i2c.h>
++
++DECLARE_GLOBAL_DATA_PTR;
++
++#if   defined(CONFIG_CEL_REDSTONE)
++#elif defined(CONFIG_CEL_KENNISIS)
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#elif defined(CONFIG_CEL_D2030)
++#else
++#error "Platform define error!"
++#endif
++
++#if defined(CONFIG_CEL_REDSTONE)
++#include "cel_redstone_cpld.h"
++#elif defined(CONFIG_CEL_KENNISIS)
++#include "cel_kennisis_cpld.h"
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#include "cel_smallstone_cpld.h"
++#elif defined(CONFIG_CEL_D2030)
++#include "cel_d2030_cpld.h"
++#else
++#error "Unknown Celestica Platform"
++#endif
++
++extern int macsn_read_from_eeprom(void);
++
++static int write_cpld_boot_ok(void);
++
++/*******************************************************************************
++ *
++ * Early initialization
++ *
++ */
++int board_early_init_f(void)
++{
++	write_cpld_boot_ok();
++	return 0;
++}
++
++/*******************************************************************************
++ *
++ * Initialize board and the local bus
++ */
++void
++local_bus_init(void)
++{
++	volatile ccsr_gur_t *gur = (void *)(CONFIG_SYS_MPC85xx_GUTS_ADDR);
++	volatile fsl_lbc_t *lbc = LBC_BASE_ADDR;
++
++	uint clkdiv;
++	sys_info_t sysinfo;
++
++	get_sys_info(&sysinfo);
++	clkdiv = (lbc->lcrr & LCRR_CLKDIV) * 2;
++
++	gur->lbiuiplldcr1 = 0x00078080;
++	if (clkdiv == 16) {
++		gur->lbiuiplldcr0 = 0x7c0f1bf0;
++	} else if (clkdiv == 8) {
++		gur->lbiuiplldcr0 = 0x6c0f1bf0;
++	} else if (clkdiv == 4) {
++		gur->lbiuiplldcr0 = 0x5c0f1bf0;
++	}
++
++	lbc->lcrr |= 0x00030000;
++
++	asm("sync;isync;msync");
++
++	lbc->ltesr = 0xffffffff;	/* Clear LBC error interrupts */
++	lbc->lteir = 0xffffffff;	/* Enable LBC error interrupts */
++}
++
++int
++write_cpld_boot_ok(void)
++{
++	uint8_t config;
++
++#if defined(CONFIG_CEL_REDSTONE)
++#  define CPLD_UBOOT_OFFSET  CPLD1_REG_SYS_LED_CTRL_OFFSET
++#  define CPLD_UBOOT_OK_MASK CPLD1_SYS_UBOOT_OK_MASK
++#  define CPLD_UBOOT_OK      CPLD1_SYS_UBOOT_OK
++#elif defined(CONFIG_CEL_D2030)
++#  define CPLD_UBOOT_OFFSET  CPLD1_REG_SYS_LED_CTRL_OFFSET
++#  define CPLD_UBOOT_OK_MASK CPLD1_SYS_UBOOT_OK_MASK
++#  define CPLD_UBOOT_OK      CPLD1_SYS_UBOOT_OK
++#elif defined(CONFIG_CEL_KENNISIS)
++#  define CPLD_UBOOT_OFFSET  CPLD_REG_SYS_LED_CTRL_OFFSET
++#  define CPLD_UBOOT_OK_MASK CPLD_SYS_UBOOT_OK_MASK
++#  define CPLD_UBOOT_OK      CPLD_SYS_UBOOT_OK
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#  define CPLD_UBOOT_OFFSET  CPLD1_REG_BOOT_STATUS_OFFSET
++#  define CPLD_UBOOT_OK_MASK CPLD1_SYS_UBOOT_OK_MASK
++#  define CPLD_UBOOT_OK      CPLD1_SYS_UBOOT_OK
++#else
++#error "Unknown Celestica Platform"
++#endif
++
++	config = inb(CONFIG_SYS_CPLD_BASE+ CPLD_UBOOT_OFFSET);
++	config &= ~CPLD_UBOOT_OK_MASK;
++	config |= CPLD_UBOOT_OK;
++	outb(config, CONFIG_SYS_CPLD_BASE+ CPLD_UBOOT_OFFSET);
++
++#if defined (CONFIG_CEL_D2030)
++	config = inb(CONFIG_SYS_CPLD_BASE+ CPLD1_REG_RESET_CTRL_OFFSET);
++	config |= CPLD1_RESET_WATCH_DOG_MASK;
++	outb(config, CONFIG_SYS_CPLD_BASE+ CPLD1_REG_RESET_CTRL_OFFSET);
++#endif
++
++	return 0;
++}
++
++int checkboard(void)
++{
++	u8    cpld_ver;
++
++#if defined(CONFIG_CEL_REDSTONE)
++#  define CEL_VERSION_REG CPLD1_REG_VERSION_OFFSET
++#elif defined(CONFIG_CEL_D2030)
++#  define CEL_VERSION_REG CPLD1_REG_VERSION_OFFSET
++#elif defined(CONFIG_CEL_KENNISIS)
++#  define CEL_VERSION_REG CPLD_REG_VERSION_OFFSET
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#  define CEL_VERSION_REG CPLD1_REG_VERSION_OFFSET
++#else
++#error "Unknown Celestica Platform"
++#endif
++
++	local_bus_init();
++
++	cpld_ver = inb(CONFIG_SYS_CPLD_BASE+ CEL_VERSION_REG);
++
++	printf("Board: " CONFIG_BOARDNAME " (cpld_ver: %d.%d)\n",
++	       cpld_ver >> 4, cpld_ver & 0xf);
++
++	return 0;
++}
++
++/*
++ * Fixed sdram init
++ */
++
++phys_size_t fixed_sdram(void)
++{
++	volatile ccsr_ddr_t *ddr = (ccsr_ddr_t *)CONFIG_SYS_MPC8xxx_DDR_ADDR;
++
++	ddr->cs0_bnds = CONFIG_SYS_DDR_CS0_BNDS;
++	ddr->cs0_config = CONFIG_SYS_DDR_CS0_CONFIG;
++	ddr->timing_cfg_3 = CONFIG_SYS_DDR_TIMING_3;
++	ddr->timing_cfg_0 = CONFIG_SYS_DDR_TIMING_0;
++	ddr->timing_cfg_1 = CONFIG_SYS_DDR_TIMING_1;
++	ddr->timing_cfg_2 = CONFIG_SYS_DDR_TIMING_2;
++	ddr->sdram_cfg_2 = CONFIG_SYS_DDR_CONTROL2;
++	ddr->sdram_mode = CONFIG_SYS_DDR_MODE_1;
++	ddr->sdram_mode_2 = CONFIG_SYS_DDR_MODE_2;
++	ddr->sdram_md_cntl = CONFIG_SYS_DDR_MODE_CTRL;
++	ddr->sdram_interval = CONFIG_SYS_DDR_INTERVAL;
++	ddr->sdram_data_init = CONFIG_SYS_DDR_DATA_INIT;
++	ddr->sdram_clk_cntl = CONFIG_SYS_DDR_CLK_CTRL;
++	ddr->timing_cfg_4 = CONFIG_SYS_DDR_TIMING_4;
++	ddr->timing_cfg_5 = CONFIG_SYS_DDR_TIMING_5;
++	ddr->ddr_zq_cntl = CONFIG_SYS_DDR_ZQ_CNTL;
++	ddr->ddr_wrlvl_cntl = CONFIG_SYS_DDR_WRLVL_CNTL;
++	ddr->ddr_cdr1 = CONFIG_SYS_DDR_CDR1;
++	ddr->ddr_cdr2 = CONFIG_SYS_DDR_CDR2;
++#ifdef CONFIG_DDR_ECC
++	ddr->err_int_en = CONFIG_SYS_DDR_ERR_INT_EN;
++	ddr->err_disable = CONFIG_SYS_DDR_ERR_DIS;
++	ddr->err_sbe = CONFIG_SYS_DDR_SBE;
++#endif
++
++	asm("sync;isync");
++	udelay(500);
++
++	ddr->sdram_cfg = CONFIG_SYS_DDR_CONTROL;
++
++#if defined(CONFIG_ECC_INIT_VIA_DDRCONTROLLER)
++	debug("DDR - 1st controller: memory initializing\n");
++	/*
++	 * Poll until memory is initialized.
++	 * 512 Meg at 400 might hit this 200 times or so.
++	 */
++#define DDR_CONTROL2_D_INIT (1 << 4)
++	while ((ddr->sdram_cfg_2 & DDR_CONTROL2_D_INIT) != 0)
++		udelay(1000);
++	debug("DDR: memory initialized\n\n");
++	asm("sync; isync");
++	udelay(500);
++#endif
++
++	if (set_ddr_laws(CONFIG_SYS_DDR_SDRAM_BASE,
++			 CONFIG_SYS_SDRAM_SIZE * (1UL<<20),
++			 LAW_TRGT_IF_DDR) < 0) {
++		printf("ERROR setting Local Access Windows for DDR\n");
++		return 0;
++	};
++	return CONFIG_SYS_SDRAM_SIZE * (1UL<<20);
++}
++
++int board_early_init_r(void)
++{
++	const unsigned int flashbase = CONFIG_SYS_FLASH_BASE;
++	const u8 flash_esel = find_tlb_idx((void *)flashbase, 1);
++
++	/*
++	 * Remap Boot flash region to caching-inhibited
++	 * so that flash can be erased properly.
++	 */
++
++	/* Flush d-cache and invalidate i-cache of any FLASH data */
++	flush_dcache();
++	invalidate_icache();
++
++	/* invalidate existing TLB entry for flash */
++	disable_tlb(flash_esel);
++
++	set_tlb(1, flashbase, CONFIG_SYS_FLASH_BASE_PHYS,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++			0, flash_esel, BOOKE_PAGESZ_256M, 1);
++
++	return 0;
++}
++
++/*
++	* The hardware monitor / fan controller is a EMC2305.
++	*
++	* This board has five fans connected as FAN1-FAN5.
++	*
++	*/
++
++#define HW_MON_I2C_BUS      (1)
++#define HW_MON_I2C_ADDR     (0x4D)
++#define HW_MON_FAN_COUNT    (5)
++
++static void hwmon_init(void)
++{
++	u8 data;
++	u8 addr = HW_MON_I2C_ADDR;
++	int bus, ret, err = 0, i;
++	int fan_driver_reg[HW_MON_FAN_COUNT] = { 0x30, 0x40, 0x50, 0x60, 0x70 };
++
++	bus = i2c_get_bus_num();
++
++	/* Fan Control is on Bus 2*/
++	i2c_set_bus_num(HW_MON_I2C_BUS);
++
++	for (i = 0; i < HW_MON_FAN_COUNT; i++) {
++		/* Default config:RPM-based Fan speed Control Algorithm disabled */
++		/* Set the fan speed to 50% duty cycle */
++		data = 0x80;
++		ret = i2c_write(addr, fan_driver_reg[i], 1, &data, 1);
++		if (ret != 0) {
++			printf("ERROR writing reg %x\n", fan_driver_reg[i]);
++			err++;
++		}
++	}
++
++	if (err !=0) {
++		printf("WARNING -- Problems setting the fan speeds!\n");
++	}
++
++	/* Restore i2c bus */
++	i2c_set_bus_num(bus);
++
++	return;
++}
++
++
++/**
++ *  Check if the hardware EEPROM data is the new TLV format.
++ *
++ *  If the hardware format is valid do nothing.
++ *
++ *  If the hardware contents are bad try the old EEPROM format.
++ *  Attempt to populate the base MAC address and the serial number
++ *  environment variables.
++ */
++
++static int handle_old_eeprom(void)
++{
++	/* Check if the EEPROM contents is the new format */
++	if (is_sys_eeprom_valid())
++		return 0;
++
++	return macsn_read_from_eeprom();
++}
++
++/********************************************************************************
++ *
++ * MISC initializations after relocating to RAM.  Full C environment available.
++ * Before configuring network interfaces.
++ *
++ * Go through the CPLD register spec and set interesting bits here.
++ */
++
++int misc_init_r (void)
++{
++
++	/*
++	 * Check for the old EEPROM format and take appropriate
++	 * action if found.  See handle_old_eeprom() above.
++	 */
++	handle_old_eeprom();
++
++	hwmon_init();
++
++	return 0;
++}
++
++/*
++ *
++ * setup PCI
++ *
++ * Cribbed from board/freescale/mpc8536ds/mpc8536ds.c
++ *
++ */
++
++
++#ifdef CONFIG_PCI
++void pci_init_board(void)
++{
++	fsl_pcie_init_board(0);
++}
++#endif
++
++/*******************************************************************************
++ *
++ * PCI device tree massaging
++ */
++#if defined(CONFIG_OF_BOARD_SETUP)
++void ft_board_setup(void *blob, bd_t *bd)
++{
++	ft_cpu_setup(blob, bd);
++
++	FT_FSL_PCI_SETUP;
++}
++#endif
++
++/* apply errata for the front panel mgmt phy */
++int board_phy_config(struct phy_device *phydev)
++{
++	unsigned short shdw;
++	unsigned short ctrl;
++
++	/*
++	 ** Overall goal is to disable Auto-Neg in the 1000Base-X MII
++	 ** Control register.  Need to wind our way through the MII
++	 ** register indirections to get there.
++	 **
++	 */
++	enum {
++		MIIM_BCM54XX_SHD_LED_CTRL       = 0x09,
++		MIIM_BCM54XX_SHD_LED_CTRL_ACT_LINK_EN   = 0x10,
++		MIIM_BCM54XX_SHD_LED_CTRL_ACT_EN    = 0x08,
++		MIIM_BCM54XX_SHD_LED_SEL_1      = 0x0D,
++		MIIM_BCM54XX_SHD_LED_SEL_2      = 0x0E,
++		MIIM_BCM54XX_SHD_MODE_CTRL      = 0x1f,
++		MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG   = 0x0001,
++		MIIM_BCM54XX_SHD_MODE_CTRL_SEL_1   = 0x0002,
++		MIIM_BCM54XX_SHD_MODE_CTRL_SEL_2   = 0x0004,
++	};
++
++	enum {
++		MIIM_BCM5461S_SHD_LED_LINKSPD1      = 0x0,
++		MIIM_BCM5461S_SHD_LED_LINKSPD2,
++		MIIM_BCM5461S_SHD_LED_XMITLED,
++		MIIM_BCM5461S_SHD_LED_ACTIVITYLED,
++		MIIM_BCM5461S_SHD_LED_FXLED,
++		MIIM_BCM5461S_SHD_LED_SLAVE,
++		MIIM_BCM5461S_SHD_LED_INTR,
++		MIIM_BCM5461S_SHD_LED_QUALITY,
++		MIIM_BCM5461S_SHD_LED_RCVLED,
++		MIIM_BCM5461S_SHD_LED_RESERVED1,
++		MIIM_BCM5461S_SHD_LED_MULTICOLOR1,
++		MIIM_BCM5461S_SHD_LED_OPENSHORT,
++		MIIM_BCM5461S_SHD_LED_RESERVED2,
++		MIIM_BCM5461S_SHD_LED_RESERVED3,
++		MIIM_BCM5461S_SHD_LED_OFF,
++		MIIM_BCM5461S_SHD_LED_ON,
++	};
++
++	enum {
++		MIIM_BCM5461S_LED1_SHIFT = 0,
++		MIIM_BCM5461S_LED2_SHIFT = 4,
++		MIIM_BCM5461S_LED3_SHIFT = 0,
++		MIIM_BCM5461S_LED4_SHIFT = 4,
++	};
++
++	if (phydev->drv->config)
++		phydev->drv->config(phydev);
++
++	/*
++	** Step 1 -- via the shadow control register (0x1c) access the
++	** "MODE CONTROL" register, selecting the 1000Base-X register
++	** set (SGMII side, facing eTSEC).  Future accesses to offsets
++	** 0x0 - 0xF will hit the 1000Base-X registers.
++	*/
++	shdw = MIIM_BCM54XX_SHD_VAL(MIIM_BCM54XX_SHD_MODE_CTRL);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	shdw = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD);
++	shdw |= MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG;
++#if defined(CONFIG_CEL_KENNISIS)
++	/*
++	 * The reason is the strapping resistors for the 5461S PHY
++	 * (the INTF_SEL[1:0] signals in the BCM spec) on Kennisis are
++	 * incorrectly set for GBIC mode.  On Redstone and Smallstone
++	 * the INTF_SEL[1:0] signals are strapped to SGMII mode and
++	 * things just work.
++	 */
++	shdw &= ~(MIIM_BCM54XX_SHD_MODE_CTRL_SEL_1);
++	shdw |= MIIM_BCM54XX_SHD_MODE_CTRL_SEL_2;
++#endif
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_MODE_CTRL,
++				shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	/*
++	** Step 2 -- Disable Auto-Neg.  This is a regular access to
++	** the MII control register (0x0), however the 1000Base-X
++	** register set is selected from step 1.
++	*/
++	ctrl = phy_read(phydev, MDIO_DEVAD_NONE, MII_BMCR);
++	ctrl &= ~BMCR_ANENABLE;
++	phy_write(phydev, MDIO_DEVAD_NONE, MII_BMCR, ctrl);
++
++	/*
++	** Step 3 -- Restore the access to the 1000Base-T register set
++	** (copper, network side) via the shadow control register
++	** (0x1c).  Future accesses to offsets 0x0 - 0xF will hit the
++	** 1000Base-T registers.
++	`*/
++	shdw &= ~MIIM_BCM54XX_SHD_MODE_CTRL_SERDES_REG;
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_MODE_CTRL,
++				shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++#if defined(CONFIG_CEL_KENNISIS)
++	/*
++	 * The AutoNeg values should also be updated once we set
++	 * the mode to SGMII mode from GBIC mode.
++	 */
++	ctrl = ADVERTISE_ALL | ADVERTISE_CSMA;
++	phy_write(phydev, MDIO_DEVAD_NONE, MII_ADVERTISE, ctrl);
++#endif
++
++#if defined(CONFIG_CEL_REDSTONE) || defined(CONFIG_CEL_SMALLSTONE) || defined(CONFIG_CEL_D2030) 
++	/* Set PHY LEDs */
++
++	/*
++	 * Step 1 - Use LED1 to drive the right 'Activity LED'
++	 *
++	 * LED2 is unused.
++	 */
++	shdw =  (MIIM_BCM5461S_SHD_LED_ACTIVITYLED << MIIM_BCM5461S_LED1_SHIFT) |
++				(MIIM_BCM5461S_SHD_LED_OFF << MIIM_BCM5461S_LED2_SHIFT);
++
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_SEL_1, shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	/*
++	 * Step 2 - on the right 'Activity LED' drive link and activity
++	 *
++	 * This makes the LED solid green on link and flickers dark on
++	 * activity.
++	 */
++	shdw = MIIM_BCM54XX_SHD_VAL(MIIM_BCM54XX_SHD_LED_CTRL);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	shdw = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD);
++	shdw |= MIIM_BCM54XX_SHD_LED_CTRL_ACT_LINK_EN;
++	shdw |= MIIM_BCM54XX_SHD_LED_CTRL_ACT_EN;
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_CTRL,
++				shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	/*
++	 * Step 3 - disable left 'Link speed LED'
++	 */
++	shdw =  (MIIM_BCM5461S_SHD_LED_OFF << MIIM_BCM5461S_LED4_SHIFT) |
++			(MIIM_BCM5461S_SHD_LED_OFF << MIIM_BCM5461S_LED3_SHIFT);
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_SEL_2,
++			shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++#elif defined(CONFIG_CEL_KENNISIS)
++
++	/*
++	 * Step 1 - Use LED1 to drive the right 'Activity LED'
++	 *
++	 * LED2 is unused.
++	 */
++
++	shdw =  (MIIM_BCM5461S_SHD_LED_ACTIVITYLED << MIIM_BCM5461S_LED2_SHIFT) |
++				(MIIM_BCM5461S_SHD_LED_OFF << MIIM_BCM5461S_LED1_SHIFT);
++
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_SEL_1, shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++	/*
++	 * Step 2 - on the right 'Activity LED' drive link and activity
++	 *
++	 * This makes the LED solid green on link and flickers dark on
++	 * activity.
++	 */
++	shdw = MIIM_BCM54XX_SHD_VAL(MIIM_BCM54XX_SHD_LED_CTRL);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	shdw = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD);
++	shdw |= MIIM_BCM54XX_SHD_LED_CTRL_ACT_LINK_EN;
++	shdw |= MIIM_BCM54XX_SHD_LED_CTRL_ACT_EN;
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_CTRL,
++				shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++
++	/*
++	 * Step 3 - disable left 'Link speed LED'
++	 */
++	shdw =  (MIIM_BCM5461S_SHD_LED_OFF << MIIM_BCM5461S_LED4_SHIFT) |
++			(MIIM_BCM5461S_SHD_LED_OFF << MIIM_BCM5461S_LED3_SHIFT);
++	shdw = 0xee;
++	shdw = MIIM_BCM54XX_SHD_WR_ENCODE(MIIM_BCM54XX_SHD_LED_SEL_2,
++			shdw);
++	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_BCM54XX_SHD, shdw);
++#else
++#error "Unknown Celestica Platform"
++#endif
++
++	return 0;
++}
++
++#ifdef CONFIG_TSEC_ENET
++int board_eth_init(bd_t *bis)
++{
++	struct fsl_pq_mdio_info mdio_info;
++	struct tsec_info_struct tsec_info[4];
++	int num = 0;
++
++#ifdef CONFIG_TSEC1
++	SET_STD_TSEC_INFO(tsec_info[num], 1);
++	num++;
++#endif
++#ifdef CONFIG_TSEC2
++	SET_STD_TSEC_INFO(tsec_info[num], 2);
++	if (is_serdes_configured(SGMII_TSEC2)) {
++		puts("eTSEC2 is in sgmii mode.\n");
++		tsec_info[num].flags |= TSEC_SGMII;
++	}
++	num++;
++#endif
++#ifdef CONFIG_TSEC3
++	SET_STD_TSEC_INFO(tsec_info[num], 3);
++	if (is_serdes_configured(SGMII_TSEC3)) {
++		puts("eTSEC3 is in sgmii mode.\n");
++		tsec_info[num].flags |= TSEC_SGMII;
++	}
++	num++;
++#endif
++
++	if (!num) {
++		printf("No TSECs initialized\n");
++		return 0;
++	}
++
++
++	mdio_info.regs = (struct tsec_mii_mng *)CONFIG_SYS_MDIO_BASE_ADDR;
++	mdio_info.name = DEFAULT_MII_NAME;
++
++	fsl_pq_mdio_init(bis, &mdio_info);
++
++	tsec_eth_init(bis, tsec_info, num);
++
++	return pci_eth_init(bis);
++}
++#endif
++
++void fdt_fixup_board(void *fdt)
++{
++}
++
++/**
++ *  Configure the front panel LEDs based on hardware status
++ */
++static void init_leds (void)
++{
++	uint8_t config;
++	uint8_t psu_status;
++	uint8_t psu_1_status;
++	uint8_t psu_2_status;
++	uint8_t fan_status;
++	uint8_t fan_present_status;
++	uint8_t err = 0;
++	uint8_t i = 0;
++
++
++#if defined(CONFIG_CEL_REDSTONE) || defined(CONFIG_CEL_SMALLSTONE) || defined(CONFIG_CEL_D2030) 
++
++	/* Set power depending on status. */
++	psu_status = inb(CONFIG_SYS_CPLD_BASE+CPLD1_REG_PSU_STATUS);
++	psu_1_status = psu_status & CPLD1_PSU_1_MASK;
++	psu_2_status = psu_status & CPLD1_PSU_2_MASK;
++
++	/*
++	 * If a PSU is present and has bad status then note power is
++	 * bad.
++	 */
++	if (!(psu_1_status & CPLD1_PSU_1_PRESENT_L)) {
++		if (!(psu_1_status & CPLD1_PSU_1_OK)) {
++			printf("WARNING:  Power Supply 1 is bad.\n");
++			err++;
++		}
++	} else {
++		printf("INFO: Power Supply 1 is not present.\n");
++	}
++
++	if (!(psu_2_status & CPLD1_PSU_2_PRESENT_L)) {
++		if (!(psu_2_status & CPLD1_PSU_2_OK)) {
++			printf("WARNING: Power Supply 2 is bad.\n");
++			err++;
++		}
++	} else {
++		printf("INFO: Power Supply 2 is not present.\n");
++	}
++
++	/* Set fan depending on status. */
++	fan_status = inb(CONFIG_SYS_CPLD_BASE+CPLD1_REG_FAN_PRESENT_STATUS_OFFSET);
++	fan_present_status = fan_status & CPLD1_FAN_PRESENT_MASK;
++
++	if (fan_present_status) {
++		for (i = 0 ; i < 5; i++) {
++			if (!(fan_present_status & (1 << i))) {
++				continue;
++			}
++			printf("WARNING: Fan unit %d is not present.\n", i+1);
++		}
++		err++;
++	}
++
++	/*
++	* Set the status led to blinking/solid green
++	*/
++	config = inb(CONFIG_SYS_CPLD_BASE+CPLD1_REG_STATUS_LED_CTRL_OFFSET);
++	config &= ~CPLD1_STATUS_LED_MASK;
++	if (err) {
++		config |= CPLD1_STATUS_LED_GREEN_4HZ_BLINK;
++	} else {
++		config |= CPLD1_STATUS_LED_GREEN;
++	}
++	outb(config, CONFIG_SYS_CPLD_BASE+CPLD1_REG_STATUS_LED_CTRL_OFFSET);
++
++#elif defined(CONFIG_CEL_KENNISIS)
++
++	/* Set power depending on status. */
++	psu_status = inb(CONFIG_SYS_CPLD_BASE+CPLD_REG_PSU_STATUS_2_OFFSET);
++	psu_1_status = psu_status & CPLD_PSU_1_MASK;
++	psu_2_status = psu_status & CPLD_PSU_2_MASK;
++
++	/*
++	 * If a PSU is present and has bad status then note power is
++	 * bad.
++	 */
++	if (!(psu_1_status & CPLD_PSU_1_PRESENT_L)) {
++		if (!(psu_1_status & CPLD_PSU_1_OK)) {
++			printf("WARNING:  Power Supply 1 is bad.\n");
++			err++;
++		}
++	} else {
++		printf("INFO: Power Supply 1 is not present.\n");
++	}
++
++	if (!(psu_2_status & CPLD_PSU_2_PRESENT_L)) {
++		if (!(psu_2_status & CPLD_PSU_2_OK)) {
++			printf("WARNING: Power Supply 2 is bad.\n");
++			err++;
++		}
++	} else {
++		printf("INFO: Power Supply 2 is not present.\n");
++	}
++
++	/*
++	 * Assumption: Kennisis has only 3 fans and Fan4 and Fan5 are absent
++	 * by default and error should not be reported for these fans
++	 */
++	fan_status = inb(CONFIG_SYS_CPLD_BASE+CPLD_REG_FAN_STATUS_OFFSET);
++	fan_present_status = fan_status & CPLD_FAN_PRESENT_MASK;
++
++	if (fan_present_status) {
++		for (i = 0; i < 3; i++) {
++			if (!(fan_present_status & (1 << i))) {
++				continue;
++			}
++			printf("WARNING: Fan unit %d is not present.\n", i+1);
++		}
++		err++;
++	}
++
++	/*
++	* Set the status led to blinking/solid green
++	*/
++	config = inb(CONFIG_SYS_CPLD_BASE+CPLD_REG_SYS_LED_CTRL_OFFSET);
++	config &= ~CPLD_SYS_LED_MASK;
++	if (err) {
++		config |= CPLD_SYS_LED_GREEN_FAST_BLINK;
++	} else {
++		config |= CPLD_SYS_LED_GREEN;
++	}
++	outb(config, CONFIG_SYS_CPLD_BASE+CPLD_REG_SYS_LED_CTRL_OFFSET);
++#else
++#error "Unknown Celestica Platform"
++#endif
++	return ;
++}
++int last_stage_init(void)
++{
++    init_leds();
++
++    return 0;
++}
+diff --git a/board/celestica/p2020/sys_eeprom.c b/board/celestica/p2020/sys_eeprom.c
+new file mode 100644
+index 0000000..fcb140d
+--- /dev/null
++++ b/board/celestica/p2020/sys_eeprom.c
+@@ -0,0 +1,551 @@
++/*
++ * Copyright 2006, 2008-2009, 2011 Freescale Semiconductor
++ * York Sun (yorksun@freescale.com)
++ * Haiying Wang (haiying.wang@freescale.com)
++ * Timur Tabi (timur@freescale.com)
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * SPDX-License-Identifier:		GPL-2.0+
++ */
++
++#include <common.h>
++#include <command.h>
++#include <i2c.h>
++#include <linux/ctype.h>
++
++#ifdef CONFIG_SYS_I2C_EEPROM_CCID
++#include "eeprom.h"
++#define MAX_NUM_PORTS	8
++#endif
++
++/*
++ * Celestica NXID modifications:
++ *  - res_1 repurposed as serial number
++ *  - sn repurposed as product name
++ *  - mac addresses start at index 1 (mac 0 is blank)
++ */
++#ifdef CONFIG_SYS_I2C_EEPROM_CELESTICA_NXID
++#define CONFIG_SYS_I2C_EEPROM_NXID
++#define MAX_NUM_PORTS	24
++#define NXID_VERSION	1
++#endif
++
++/**
++ * static eeprom: EEPROM layout for CCID or Celestica-modified NXID formats
++ *
++ * See application note AN3638 for details.
++ */
++static struct __attribute__ ((__packed__)) eeprom {
++#ifdef CONFIG_SYS_I2C_EEPROM_CCID
++	u8 id[4];         /* 0x00 - 0x03 EEPROM Tag 'CCID' */
++	u8 major;         /* 0x04        Board revision, major */
++	u8 minor;         /* 0x05        Board revision, minor */
++	u8 sn[10];        /* 0x06 - 0x0F Serial Number*/
++	u8 errata[2];     /* 0x10 - 0x11 Errata Level */
++	u8 date[6];       /* 0x12 - 0x17 Build Date */
++	u8 res_0[40];     /* 0x18 - 0x3f Reserved */
++	u8 mac_count;     /* 0x40        Number of MAC addresses */
++	u8 mac_flag;      /* 0x41        MAC table flags */
++	u8 mac[MAX_NUM_PORTS][6];     /* 0x42 - 0x71 MAC addresses */
++	u32 crc;          /* 0x72        CRC32 checksum */
++#endif
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++	u8 id[4];         /* 0x00 - 0x03 EEPROM Tag 'NXID' */
++	u8 prod_name[12]; /* 0x04 - 0x0F Celestica Product Name */
++	u8 errata[5];     /* 0x10 - 0x14 Errata Level */
++	u8 date[6];       /* 0x15 - 0x1a Build Date */
++	u8 res_0;         /* 0x1b        Reserved */
++	u32 version;      /* 0x1c - 0x1f NXID Version */
++	u8 tempcal[8];    /* 0x20 - 0x27 Temperature Calibration Factors */
++	u8 tempcalsys[2]; /* 0x28 - 0x29 System Temperature Calibration Factors */
++	u8 tempcalflags;  /* 0x2a        Temperature Calibration Flags */
++	u8 sn[21];        /* 0x2b - 0x3f Celestica Serial Number */
++	u8 mac_count;     /* 0x40        Number of MAC addresses */
++	u8 mac_flag;      /* 0x41        MAC table flags */
++	u8 mac[MAX_NUM_PORTS][6];     /* 0x42 - x MAC addresses */
++	u32 crc;          /* x+1         CRC32 checksum */
++#endif
++} e;
++
++/* Set to 1 if we've read EEPROM into memory */
++static int has_been_read = 0;
++
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++/* Is this a valid NXID EEPROM? */
++#define is_valid ((e.id[0] == 'N') || (e.id[1] == 'X') || \
++		  (e.id[2] == 'I') || (e.id[3] == 'D'))
++#endif
++
++#ifdef CONFIG_SYS_I2C_EEPROM_CCID
++/* Is this a valid CCID EEPROM? */
++#define is_valid ((e.id[0] == 'C') || (e.id[1] == 'C') || \
++		  (e.id[2] == 'I') || (e.id[3] == 'D'))
++#endif
++
++/**
++ * show_eeprom - display the contents of the EEPROM
++ */
++static void show_eeprom(void)
++{
++	int i;
++	unsigned int crc;
++
++	/* EEPROM tag ID, either CCID or NXID */
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++	printf("ID: %c%c%c%c v%u\n", e.id[0], e.id[1], e.id[2], e.id[3],
++		be32_to_cpu(e.version));
++#else
++	printf("ID: %c%c%c%c\n", e.id[0], e.id[1], e.id[2], e.id[3]);
++#endif
++
++	/* Serial number */
++	printf("SN: %s\n", e.sn);
++
++	/* Errata level. */
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++	printf("Errata: %s\n", e.errata);
++#else
++	printf("Errata: %c%c\n",
++		e.errata[0] ? e.errata[0] : '.',
++		e.errata[1] ? e.errata[1] : '.');
++#endif
++
++	/* Build date, BCD date values, as YYMMDDhhmmss */
++	printf("Build date: 20%02x/%02x/%02x %02x:%02x:%02x %s\n",
++		e.date[0], e.date[1], e.date[2],
++		e.date[3] & 0x7F, e.date[4], e.date[5],
++		e.date[3] & 0x80 ? "PM" : "");
++
++	/* Show MAC addresses  */
++	for (i = 0; i < min(e.mac_count, MAX_NUM_PORTS); i++) {
++
++		u8 *p = e.mac[i];
++
++		printf("Eth%u: %02x:%02x:%02x:%02x:%02x:%02x\n", i,
++			p[0], p[1], p[2], p[3],	p[4], p[5]);
++	}
++
++	crc = crc32(0, (void *)&e, sizeof(e) - 4);
++
++	if (crc == be32_to_cpu(e.crc))
++		printf("CRC: %08x\n", be32_to_cpu(e.crc));
++	else
++		printf("CRC: %08x (should be %08x)\n",
++			be32_to_cpu(e.crc), crc);
++
++#ifdef DEBUG
++	printf("EEPROM dump: (0x%x bytes)\n", sizeof(e));
++	for (i = 0; i < sizeof(e); i++) {
++		if ((i % 16) == 0)
++			printf("%02X: ", i);
++		printf("%02X ", ((u8 *)&e)[i]);
++		if (((i % 16) == 15) || (i == sizeof(e) - 1))
++			printf("\n");
++	}
++#endif
++}
++
++/**
++ * read_eeprom - read the EEPROM into memory
++ */
++static int read_eeprom(void)
++{
++	int ret;
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	unsigned int bus;
++#endif
++
++	if (has_been_read)
++		return 0;
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	bus = i2c_get_bus_num();
++	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
++#endif
++
++	ret = i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, 0, CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
++		(void *)&e, sizeof(e));
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	i2c_set_bus_num(bus);
++#endif
++
++#ifdef DEBUG
++	show_eeprom();
++#endif
++
++	has_been_read = (ret == 0) ? 1 : 0;
++
++	return ret;
++}
++
++/**
++ *  update_crc - update the CRC
++ *
++ *  This function should be called after each update to the EEPROM structure,
++ *  to make sure the CRC is always correct.
++ */
++static void update_crc(void)
++{
++	u32 crc;
++
++	crc = crc32(0, (void *)&e, sizeof(e) - 4);
++	e.crc = cpu_to_be32(crc);
++}
++
++/**
++ * prog_eeprom - write the EEPROM from memory
++ */
++static int prog_eeprom(void)
++{
++	int ret = 0;
++	int i;
++	void *p;
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	unsigned int bus;
++#endif
++
++	/* Set the reserved values to 0xFF   */
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++	e.res_0 = 0xFF;
++#else
++	memset(e.res_0, 0xFF, sizeof(e.res_0));
++#endif
++	update_crc();
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	bus = i2c_get_bus_num();
++	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
++#endif
++
++	/*
++	 * The AT24C02 datasheet says that data can only be written in page
++	 * mode, which means 8 bytes at a time, and it takes up to 5ms to
++	 * complete a given write.
++	 */
++	for (i = 0, p = &e; i < sizeof(e); i += 8, p += 8) {
++		ret = i2c_write(CONFIG_SYS_I2C_EEPROM_ADDR, i, CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
++			p, min((sizeof(e) - i), 8));
++		if (ret)
++			break;
++		udelay(5000);	/* 5ms write cycle timing */
++	}
++
++	if (!ret) {
++		/* Verify the write by reading back the EEPROM and comparing */
++		struct eeprom e2;
++
++		ret = i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, 0,
++			CONFIG_SYS_I2C_EEPROM_ADDR_LEN, (void *)&e2, sizeof(e2));
++		if (!ret && memcmp(&e, &e2, sizeof(e)))
++			ret = -1;
++	}
++
++#ifdef CONFIG_SYS_EEPROM_BUS_NUM
++	i2c_set_bus_num(bus);
++#endif
++
++	if (ret) {
++		printf("Programming failed.\n");
++		has_been_read = 0;
++		return -1;
++	}
++
++	printf("Programming passed.\n");
++	return 0;
++}
++
++/**
++ * h2i - converts hex character into a number
++ *
++ * This function takes a hexadecimal character (e.g. '7' or 'C') and returns
++ * the integer equivalent.
++ */
++static inline u8 h2i(char p)
++{
++	if ((p >= '0') && (p <= '9'))
++		return p - '0';
++
++	if ((p >= 'A') && (p <= 'F'))
++		return (p - 'A') + 10;
++
++	if ((p >= 'a') && (p <= 'f'))
++		return (p - 'a') + 10;
++
++	return 0;
++}
++
++/**
++ * set_date - stores the build date into the EEPROM
++ *
++ * This function takes a pointer to a string in the format "YYMMDDhhmmss"
++ * (2-digit year, 2-digit month, etc), converts it to a 6-byte BCD string,
++ * and stores it in the build date field of the EEPROM local copy.
++ */
++static void set_date(const char *string)
++{
++	unsigned int i;
++
++	if (strlen(string) != 12) {
++		printf("Usage: mac date YYMMDDhhmmss\n");
++		return;
++	}
++
++	for (i = 0; i < 6; i++)
++		e.date[i] = h2i(string[2 * i]) << 4 | h2i(string[2 * i + 1]);
++
++	update_crc();
++}
++
++/**
++ * set_mac_address - stores a MAC address into the EEPROM
++ *
++ * This function takes a pointer to MAC address string
++ * (i.e."XX:XX:XX:XX:XX:XX", where "XX" is a two-digit hex number) and
++ * stores it in one of the MAC address fields of the EEPROM local copy.
++ */
++static void set_mac_address(unsigned int index, const char *string)
++{
++	char *p = (char *) string;
++	unsigned int i;
++
++	if ((index >= MAX_NUM_PORTS) || !string) {
++		printf("Usage: mac <n> XX:XX:XX:XX:XX:XX\n");
++		return;
++	}
++
++	for (i = 0; *p && (i < 6); i++) {
++		e.mac[index][i] = simple_strtoul(p, &p, 16);
++		if (*p == ':')
++			p++;
++	}
++
++	update_crc();
++}
++
++int do_mac(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
++{
++	char cmd;
++
++	if (argc == 1) {
++		show_eeprom();
++		return 0;
++	}
++
++	cmd = argv[1][0];
++
++	if (cmd == 'r') {
++		read_eeprom();
++		return 0;
++	}
++
++	if (cmd == 'i') {
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++		memcpy(e.id, "NXID", sizeof(e.id));
++		e.version = NXID_VERSION;
++#else
++		memcpy(e.id, "CCID", sizeof(e.id));
++#endif
++		update_crc();
++		return 0;
++	}
++
++	if (!is_valid) {
++		printf("Please read the EEPROM ('r') and/or set the ID ('i') first.\n");
++		return 0;
++	}
++
++	if (argc == 2) {
++		switch (cmd) {
++		case 's':	/* save */
++			prog_eeprom();
++			break;
++		default:
++			return cmd_usage(cmdtp);
++		}
++
++		return 0;
++	}
++
++	/* We know we have at least one parameter  */
++
++	switch (cmd) {
++	case 'n':	/* serial number */
++		memset(e.sn, 0, sizeof(e.sn));
++		strncpy((char *)e.sn, argv[2], sizeof(e.sn) - 1);
++		update_crc();
++		break;
++	case 'e':	/* errata */
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++		memset(e.errata, 0, 5);
++		strncpy((char *)e.errata, argv[2], 4);
++#else
++		e.errata[0] = argv[2][0];
++		e.errata[1] = argv[2][1];
++#endif
++		update_crc();
++		break;
++	case 'd':	/* date BCD format YYMMDDhhmmss */
++		set_date(argv[2]);
++		break;
++	case 'p':	/* MAC table size */
++		e.mac_count = simple_strtoul(argv[2], NULL, 16);
++		update_crc();
++		break;
++	case '0' ... '9':	/* "mac 0" through "mac 22" */
++		set_mac_address(simple_strtoul(argv[1], NULL, 10), argv[2]);
++		break;
++	case 'h':	/* help */
++	default:
++		return cmd_usage(cmdtp);
++	}
++
++	return 0;
++}
++
++/**
++ * macsn_read_from_eeprom - read the serial number and MAC addresses from EEPROM
++ *
++ * This function reads the serial number and MAC addresses from EEPROM and sets the
++ * appropriate environment variables for each one read.
++ *
++ * The environment variables are only set if they haven't been set already.
++ * This ensures that any user-saved variables are never overwritten.
++ *
++ * This function must be called after relocation.
++ *
++ * For NXID v1 EEPROMs, we support loading and up-converting the older NXID v0
++ * format.  In a v0 EEPROM, there are only eight MAC addresses and the CRC is
++ * located at a different offset.
++ */
++int macsn_read_from_eeprom(void)
++{
++	u32 crc, crc_offset = offsetof(struct eeprom, crc);
++	u32 *crcp; /* Pointer to the CRC in the data read from the EEPROM */
++
++	puts("EEPROM: ");
++
++	if (read_eeprom()) {
++		printf("Read failed.\n");
++		return -1;
++	}
++
++	if (!is_valid) {
++		printf("Invalid ID (%02x %02x %02x %02x)\n",
++		       e.id[0], e.id[1], e.id[2], e.id[3]);
++		return -1;
++	}
++
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++	/*
++	 * If we've read an NXID v0 EEPROM, then we need to set the CRC offset
++	 * to where it is in v0.
++	 */
++	if (e.version == 0)
++		crc_offset = 0x72;
++#endif
++
++	crc = crc32(0, (void *)&e, crc_offset);
++	crcp = (void *)&e + crc_offset;
++	if (crc != be32_to_cpu(*crcp)) {
++		printf("CRC mismatch (%08x != %08x)\n", crc, be32_to_cpu(e.crc));
++		return -1;
++	}
++
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++	/*
++	 * MAC address #9 in v1 occupies the same position as the CRC in v0.
++	 * Erase it so that it's not mistaken for a MAC address.  We'll
++	 * update the CRC later.
++	 */
++	if (e.version == 0)
++		memset(e.mac[8], 0xff, 6);
++#endif
++
++	/* Celestica management port mac address is at mac[1] */
++	#define MGMT_MAC_IDX 1
++	if (memcmp(&e.mac[MGMT_MAC_IDX], "\0\0\0\0\0\0", 6) &&
++	    memcmp(&e.mac[MGMT_MAC_IDX], "\xFF\xFF\xFF\xFF\xFF\xFF", 6)) {
++		char ethaddr[18];
++		char enetvar[9];
++
++		sprintf(ethaddr, "%02X:%02X:%02X:%02X:%02X:%02X",
++			e.mac[MGMT_MAC_IDX][0],
++			e.mac[MGMT_MAC_IDX][1],
++			e.mac[MGMT_MAC_IDX][2],
++			e.mac[MGMT_MAC_IDX][3],
++			e.mac[MGMT_MAC_IDX][4],
++			e.mac[MGMT_MAC_IDX][5]);
++		sprintf(enetvar, "ethaddr");
++		/* Only initialize environment variables that are blank
++		 * (i.e. have not yet been set)
++		 */
++		if (!getenv(enetvar)) {
++			setenv(enetvar, ethaddr);
++		}
++	}
++
++	if (!getenv("serial#")) {
++		setenv("serial#", (char *)e.sn);
++	}
++
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++	printf("%c%c%c%c v%u\n", e.id[0], e.id[1], e.id[2], e.id[3],
++		be32_to_cpu(e.version));
++#else
++	printf("%c%c%c%c\n", e.id[0], e.id[1], e.id[2], e.id[3]);
++#endif
++
++#ifdef CONFIG_SYS_I2C_EEPROM_NXID
++	/*
++	 * Now we need to upconvert the data into v1 format.  We do this last so
++	 * that at boot time, U-Boot will still say "NXID v0".
++	 */
++	if (e.version == 0) {
++		e.version = NXID_VERSION;
++		update_crc();
++	}
++#endif
++
++	return 0;
++}
++
++#ifdef CONFIG_SYS_I2C_EEPROM_CCID
++
++/**
++ * get_cpu_board_revision - get the CPU board revision on 85xx boards
++ *
++ * Read the EEPROM to determine the board revision.
++ *
++ * This function is called before relocation, so we need to read a private
++ * copy of the EEPROM into a local variable on the stack.
++ *
++ * Also, we assume that CONFIG_SYS_EEPROM_BUS_NUM == CONFIG_SYS_SPD_BUS_NUM.  The global
++ * variable i2c_bus_num must be compile-time initialized to CONFIG_SYS_SPD_BUS_NUM,
++ * so that the SPD code will work.  This means that all pre-relocation I2C
++ * operations can only occur on the CONFIG_SYS_SPD_BUS_NUM bus.  So if
++ * CONFIG_SYS_EEPROM_BUS_NUM != CONFIG_SYS_SPD_BUS_NUM, then we can't read the EEPROM when
++ * this function is called.  Oh well.
++ */
++unsigned int get_cpu_board_revision(void)
++{
++	struct board_eeprom {
++		u32 id;           /* 0x00 - 0x03 EEPROM Tag 'CCID' */
++		u8 major;         /* 0x04        Board revision, major */
++		u8 minor;         /* 0x05        Board revision, minor */
++	} be;
++
++	i2c_read(CONFIG_SYS_I2C_EEPROM_ADDR, 0, CONFIG_SYS_I2C_EEPROM_ADDR_LEN,
++		(void *)&be, sizeof(be));
++
++	if (be.id != (('C' << 24) | ('C' << 16) | ('I' << 8) | 'D'))
++		return MPC85XX_CPU_BOARD_REV(0, 0);
++
++	if ((be.major == 0xff) && (be.minor == 0xff))
++		return MPC85XX_CPU_BOARD_REV(0, 0);
++
++	return MPC85XX_CPU_BOARD_REV(be.major, be.minor);
++}
++#endif
+diff --git a/board/celestica/p2020/tlb.c b/board/celestica/p2020/tlb.c
+new file mode 100644
+index 0000000..ff99032
+--- /dev/null
++++ b/board/celestica/p2020/tlb.c
+@@ -0,0 +1,82 @@
++/*
++ * Copyright 2013 Cumulus Networks, Inc.
++ * Copyright 2008-2009 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * SPDX-License-Identifier:     GPL-2.0+
++ *
++ */
++
++#include <common.h>
++#include <asm/mmu.h>
++
++struct fsl_e_tlb_entry tlb_table[] = {
++	/* TLB 0 - for temp stack in cache */
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 4 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 4 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 8 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 8 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 12 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 12 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++
++	/* TLB 1 */
++	/* *I*** - Covers boot page */
++	SET_TLB_ENTRY(1, 0xfffff000, 0xfffff000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 0, BOOKE_PAGESZ_4K, 1),
++
++	/* *I*G* - CCSRBAR */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CCSRBAR, CONFIG_SYS_CCSRBAR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 1, BOOKE_PAGESZ_1M, 1),
++
++	/* W**G* - Flash, localbus */
++	/* This will be changed to *I*G* after relocation to RAM. */
++	SET_TLB_ENTRY(1, CONFIG_SYS_FLASH_BASE, CONFIG_SYS_FLASH_BASE_PHYS,
++		      MAS3_SX|MAS3_SR, MAS2_W|MAS2_G,
++		      0, 2, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCIe1 MEM -- first 256M */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_MEM_VIRT, CONFIG_SYS_PCIE1_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 3, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCIe1 MEM -- second 256M */
++	SET_TLB_ENTRY(1, (CONFIG_SYS_PCIE1_MEM_VIRT + 0x10000000),
++		      (CONFIG_SYS_PCIE1_MEM_PHYS + 0x10000000),
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 4, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCI I/O */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_IO_VIRT, CONFIG_SYS_PCIE1_IO_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 5, BOOKE_PAGESZ_256K, 1),
++
++	/* *I*G* - NAND */
++	SET_TLB_ENTRY(1, CONFIG_SYS_NAND_BASE, CONFIG_SYS_NAND_BASE_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 6, BOOKE_PAGESZ_1M, 1),
++
++	/* *I*G* - CPLD */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CPLD_BASE, CONFIG_SYS_CPLD_BASE_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 7, BOOKE_PAGESZ_1M, 1),
++
++};
++
++int num_tlb_entries = ARRAY_SIZE(tlb_table);
+diff --git a/boards.cfg b/boards.cfg
+index e4b0d44..9354fbf 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -1108,5 +1108,10 @@ gr_xc3s_1500                 sparc       leon3       -                   gaisler
+ coreboot-x86                 x86         x86        coreboot            chromebook-x86 coreboot    coreboot:SYS_TEXT_BASE=0x01110000
+ eNET                         x86         x86        eNET                -              sc520       eNET:SYS_TEXT_BASE=0x38040000
+ eNET_SRAM                    x86         x86        eNET                -              sc520       eNET:SYS_TEXT_BASE=0x19000000
++CEL_P2020                    powerpc     mpc85xx     p2020               celestica      -           CEL_P2020
++CEL_REDSTONE-R0              powerpc     mpc85xx     p2020               celestica      -           CEL_P2020:CEL_REDSTONE,ONIE_PLATFORM_REV=0
++CEL_D2030-R0                 powerpc     mpc85xx     p2020               celestica      -           CEL_P2020:CEL_D2030,ONIE_PLATFORM_REV=0
++CEL_KENNISIS-R0              powerpc     mpc85xx     p2020               celestica      -           CEL_P2020:CEL_KENNISIS,ONIE_PLATFORM_REV=0
++CEL_SMALLSTONE-R0            powerpc     mpc85xx     p2020               celestica      -           CEL_P2020:CEL_SMALLSTONE,ONIE_PLATFORM_REV=0
+ # Target                     ARCH        CPU         Board name          Vendor	        SoC         Options
+ ########################################################################################################################
+diff --git a/include/configs/CEL_P2020.h b/include/configs/CEL_P2020.h
+new file mode 100644
+index 0000000..09a9f3f
+--- /dev/null
++++ b/include/configs/CEL_P2020.h
+@@ -0,0 +1,519 @@
++/*
++ * Copyright 2013 Cumulus Networks, Inc.
++ *
++ * Curt Brune <curt@cumulusnetworks.com>
++ * Vidya Ravipati <vidya@cumulusnetworks.com>
++ *
++ * Portions Copyright 2007-2009 Freescale Semiconductor, Inc.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * SPDX-License-Identifier:		GPL-2.0+
++ *
++ */
++
++/*
++ * Celestica Redstone network switch board configuration file
++ */
++#ifndef __CONFIG_H
++#define __CONFIG_H
++
++#include "configs/common_config.h"
++
++/* High Level Configuration Options */
++#define CONFIG_BOOKE		1	/* BOOKE */
++#define CONFIG_E500		1	/* BOOKE e500 family */
++#define CONFIG_MPC85xx		1	/* MPC8540/60/55/41/48 */
++#define CONFIG_P2020		1	/* P2020 specific */
++#if defined(CONFIG_CEL_REDSTONE)
++#define CONFIG_BOARDNAME        "Celestica Redstone"
++#elif defined(CONFIG_CEL_D2030)
++#define CONFIG_BOARDNAME        "Celestica D2030"
++#elif defined(CONFIG_CEL_KENNISIS)
++#define CONFIG_BOARDNAME        "Celestica Kennisis"
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#define CONFIG_BOARDNAME        "Celestica Smallstone"
++#else
++#error "Unknown Celestica Platform"
++#endif
++#define CONFIG_MP		1	/* support multiple processors */
++
++#define CONFIG_FSL_ELBC		1	/* Has Enhanced localbus controller */
++#define CONFIG_PCI		1	/* enable any pci type devices */
++#define CONFIG_PCIE1		1	/* PCIE controller 1 */
++#undef  CONFIG_PCIE2			/* PCIE controller 2 */
++#undef	CONFIG_PCIE3			/* PCIE controller 3 */
++#define CONFIG_FSL_PCI_INIT	1	/* Use common FSL init code */
++#define CONFIG_FSL_PCIE_RESET	1	/* need PCIe reset errata */
++#define CONFIG_SYS_PCI_64BIT	1	/* enable 64-bit PCI resources */
++
++#define CONFIG_FSL_LAW		1	/* Use common FSL init code */
++
++#define CONFIG_TSEC_ENET		/* tsec ethernet support */
++
++#define CONFIG_SYS_CLK_FREQ	66666666
++#define CONFIG_DDR_CLK_FREQ	66666666
++
++/*
++ * These can be toggled for performance analysis, otherwise use default.
++ */
++#define CONFIG_L2_CACHE			/* toggle L2 cache */
++#define CONFIG_BTB			/* toggle branch predition */
++
++/*
++ * Only possible on E500 Version 2 or newer cores.
++ */
++#define CONFIG_ENABLE_36BIT_PHYS	1
++
++#define CONFIG_PANIC_HANG		1    /* do not reset board on panic */
++
++/*
++ * Base addresses -- Note these are effective addresses where the
++ * actual resources get mapped (not physical addresses)
++ */
++#define CONFIG_SYS_CCSRBAR		0xffe00000	/* relocated CCSRBAR */
++/* physical addr of CCSRBAR */
++#define CONFIG_SYS_CCSRBAR_PHYS_LOW	CONFIG_SYS_CCSRBAR
++
++/* DDR DRAM Setup */
++
++#define CONFIG_FSL_DDR3			1
++#undef	CONFIG_FSL_DDR_INTERACTIVE
++
++#define	CONFIG_DDR_ECC
++#define CONFIG_ECC_INIT_VIA_DDRCONTROLLER
++#define CONFIG_MEM_INIT_VALUE		0xdeadbeef
++
++/* DDR is system memory*/
++#define CONFIG_SYS_DDR_SDRAM_BASE	0x00000000
++#define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
++#define CONFIG_SYS_MEMTEST_START	0x00000000	/* memtest works on */
++#define CONFIG_SYS_MEMTEST_END		0x7fffffff
++
++#define CONFIG_NUM_DDR_CONTROLLERS	1
++#define CONFIG_DIMM_SLOTS_PER_CTLR	1
++#define CONFIG_CHIP_SELECTS_PER_CTRL	1
++
++#define CONFIG_SYS_SDRAM_SIZE		2048
++
++#define CONFIG_SYS_DDR_CS0_BNDS		0x0000007f
++#define CONFIG_SYS_DDR_CS0_CONFIG	0x80014302
++#define CONFIG_SYS_DDR_TIMING_0		0x00660804
++#define CONFIG_SYS_DDR_TIMING_2		0x0fa888cd
++#define CONFIG_SYS_DDR_MODE_CTRL	0x00000000
++
++#if defined(CONFIG_CEL_REDSTONE) || defined(CONFIG_CEL_D2030)
++#define CONFIG_SYS_DDR_TIMING_1		0x6f6bd844
++#define CONFIG_SYS_DDR_TIMING_3		0x00040000
++#define CONFIG_SYS_DDR_MODE_1		0x00421422
++#define CONFIG_SYS_DDR_MODE_2		0x04000000
++#define CONFIG_SYS_DDR_INTERVAL		0x04B00100
++#elif defined(CONFIG_CEL_KENNISIS)
++#define CONFIG_SYS_DDR_TIMING_1		0x5f59d533
++#define CONFIG_SYS_DDR_TIMING_3		0x00040000
++#define CONFIG_SYS_DDR_MODE_1		0x00061212
++#define CONFIG_SYS_DDR_MODE_2		0x02000000
++#define CONFIG_SYS_DDR_INTERVAL		0x0a280100
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#define CONFIG_SYS_DDR_TIMING_1		0x5f59d533
++#define CONFIG_SYS_DDR_TIMING_3		0x00040000
++#define CONFIG_SYS_DDR_MODE_1		0x00061212
++#define CONFIG_SYS_DDR_MODE_2		0x02000000
++#define CONFIG_SYS_DDR_INTERVAL		0x0a280100
++#else
++#error "Unknown Celestica Platform"
++#endif
++
++#define CONFIG_SYS_DDR_DATA_INIT	0xdeadbeef
++#define CONFIG_SYS_DDR_CLK_CTRL		0x02000000
++#define CONFIG_SYS_DDR_TIMING_4		0x00220001
++#define CONFIG_SYS_DDR_TIMING_5		0x03401400
++#define CONFIG_SYS_DDR_ZQ_CNTL		0x00000000
++#define CONFIG_SYS_DDR_WRLVL_CNTL	0x8645f607
++#define CONFIG_SYS_DDR_CONTROL		0xE7000000
++#define CONFIG_SYS_DDR_CONTROL2		0x24401010
++#define CONFIG_SYS_DDR_CDR1		0x00040000
++#define CONFIG_SYS_DDR_CDR2		0x00000000
++#define CONFIG_SYS_DDR_ERR_INT_EN	0x00000000
++#define CONFIG_SYS_DDR_ERR_DIS		0x00000000
++#define CONFIG_SYS_DDR_SBE		0x00000000
++
++#undef CONFIG_CLOCKS_IN_MHZ
++
++/*
++ * Memory map
++ *
++ * 0x0000_0000	0x7fff_ffff	DDR			2G cacheable
++ * 0xa000_0000	0xdfff_ffff	PCI Express Mem 1	1G non-cacheable
++ *
++ * Localbus non-cacheable
++ * 0xec00_0000  0xefff_ffff	FLASH                   64M
++ * 0xffa0_0000	0xffaf_ffff	NAND Flash  		1M
++ * 0xffb0_0000	0xffbf_ffff	CPLD        		1M
++ * 0xffc2_0000	0xffc5_ffff	PCI Express IO		64K non-cacheable
++ * 0xffd0_0000	0xffd0_3fff	L1 for stack		16K
++ * 0xffe0_0000	0xffef_ffff	CCSR			1M
++ */
++
++/*
++ * Local Bus Definitions
++ */
++
++/*
++ * FLASH on the Local Bus - CS0
++ * One bank, 64M, with 32-bit data width
++ * Boot from BR0/OR0 bank at 0xe800_0000
++ *
++ * BR0:
++ *    Base address 0 = 0xec00_0000 = BR0[0:16] = 1110 1100 0000 0000 0
++ *    Port Size = 16 bits = BRx[19:20] = 10
++ *    Use GPCM = BRx[24:26] = 000
++ *    Valid = BRx[31] = 1
++ *
++ * 0	4    8	  12   16   20	 24   28
++ * 1110 1000 0000 0000 0001 0000 0000 0001 = e8001001	 BR0
++ *
++ * OR0:
++ *    Addr Mask = 64M = ORx[0:16] = 1111 1100 0000 0000 0
++ *    Reserved ORx[17:18] = 00
++ *    BCTLD = LBCTL not asserted = ORx[19] = 0
++ *    CSNT = ORx[20] = 1
++ *    ACS = half cycle delay = ORx[21:22] = 11
++ *    XACS = no extra setup = ORx[23] = 1
++ *    SCY = 2 = ORx[24:27] = 0101
++ *    SETA = cycle terminated internaly = ORx[28] = 0
++ *    TRLX = use relaxed timing = ORx[29] = 1
++ *    EHTR = use relaxed timing = ORx[30] = 1
++ *    EAD = use external address latch delay = OR[31] = 1
++ *
++ * 0	4    8	  12   16   20	 24   28
++ * 1111 1100 0000 0000 0000 1111 0101 0111 = fc000f57    OR0
++ */
++
++/* start of FLASH 64M */
++#define CONFIG_SYS_FLASH_BASE		0xec000000
++#define	CONFIG_SYS_FLASH_BASE_PHYS	CONFIG_SYS_FLASH_BASE
++
++#define CONFIG_FLASH_BR_PRELIM \
++	(BR_PHYS_ADDR(CONFIG_SYS_FLASH_BASE_PHYS) | BR_PS_16 | BR_V)
++#define CONFIG_FLASH_OR_PRELIM		0xfc000f57
++
++#define CONFIG_SYS_FLASH_BANKS_LIST	{CONFIG_SYS_FLASH_BASE}
++
++#define CONFIG_SYS_MAX_FLASH_BANKS	1		/* number of banks */
++/* sectors per device  sectors) */
++#define CONFIG_SYS_MAX_FLASH_SECT	(128 * 8)
++/* Flash Erase Timeout (ms) */
++#define CONFIG_SYS_FLASH_ERASE_TOUT	60000
++/* Flash Write Timeout (ms) */
++#define CONFIG_SYS_FLASH_WRITE_TOUT	500
++/* Flash Full Buffer Write Timeout (ms) */
++#define CONFIG_SYS_FLASH_BUFFER_WRITE_TOUT	500
++
++#ifndef CONFIG_SYS_TEXT_BASE
++#define CONFIG_SYS_TEXT_BASE        0xeff80000
++#endif
++
++#ifndef CONFIG_RESET_VECTOR_ADDRESS
++#define CONFIG_RESET_VECTOR_ADDRESS 0xeffffffc
++#endif
++
++#ifndef CONFIG_SYS_MONITOR_BASE
++#define CONFIG_SYS_MONITOR_BASE CONFIG_SYS_TEXT_BASE    /* start of monitor */
++#endif
++
++#define CONFIG_FLASH_CFI_DRIVER
++#define CONFIG_SYS_FLASH_CFI
++#define CONFIG_SYS_FLASH_EMPTY_INFO
++#define CONFIG_FLASH_SHOW_PROGRESS	45
++#define CONFIG_SYS_FLASH_USE_BUFFER_WRITE
++#undef CONFIG_SYS_WRITE_SWAPPED_DATA
++/*#define CONFIG_SYS_FLASH_PROTECTION*/
++
++#define	CONFIG_BOARD_EARLY_INIT_R	1	/* Call board_early_init_r */
++#define	CONFIG_BOARD_EARLY_INIT_F	1	/* Call board_early_init_f */
++/* FDT fixups before handing to the kernel */
++#define CONFIG_MISC_INIT_R		1	/* call misc_init_r */
++#define CONFIG_LAST_STAGE_INIT	1	/* Last minute info/fixups */
++
++#define CONFIG_SYS_INIT_RAM_LOCK	1
++#define CONFIG_SYS_INIT_RAM_ADDR	0xffd00000	/* Initial L1 address */
++/* End of used area in RAM */
++#define CONFIG_SYS_INIT_RAM_SIZE	0x00004000
++/* Initial L1  address */
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS   CONFIG_SYS_INIT_RAM_ADDR
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH 0
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW CONFIG_SYS_INIT_RAM_ADDR_PHYS
++
++/* num bytes initial data */
++#define CONFIG_SYS_GBL_DATA_SIZE	1024
++#define CONFIG_SYS_GBL_DATA_OFFSET \
++	(CONFIG_SYS_INIT_RAM_SIZE - CONFIG_SYS_GBL_DATA_SIZE)
++#define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
++
++/* Reserve 512 kB for Mon */
++#define CONFIG_SYS_MONITOR_LEN		(512 * 1024)
++/* Reserved for malloc */
++#define CONFIG_SYS_MALLOC_LEN		    (512 * 1024)
++
++/* Nor Base Address */
++#define CONFIG_SYS_BR0_PRELIM		CONFIG_FLASH_BR_PRELIM
++/* Nor Options */
++#define CONFIG_SYS_OR0_PRELIM		CONFIG_FLASH_OR_PRELIM
++
++/* Serial Port */
++#if defined(CONFIG_CEL_REDSTONE) || defined(CONFIG_CEL_D2030) 
++#define CONFIG_CONS_INDEX	2
++#elif defined(CONFIG_CEL_KENNISIS)
++#define CONFIG_CONS_INDEX   1
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#define CONFIG_CONS_INDEX   2
++#else
++#error "Unknown Celestica Platform"
++#endif
++#define CONFIG_SYS_NS16550
++#define CONFIG_SYS_NS16550_SERIAL
++#define CONFIG_SYS_NS16550_REG_SIZE	1
++#define CONFIG_SYS_NS16550_CLK		get_bus_freq(0)
++
++#define CONFIG_SYS_NS16550_COM1	(CONFIG_SYS_CCSRBAR+0x4500)
++#define CONFIG_SYS_NS16550_COM2	(CONFIG_SYS_CCSRBAR+0x4600)
++
++/* I2C  */
++#define CONFIG_FSL_I2C		/* Use FSL common I2C driver */
++#define CONFIG_HARD_I2C		/* I2C with hardware support*/
++#undef	CONFIG_SOFT_I2C		/* I2C bit-banged */
++/* I2C speed and slave address */
++#define CONFIG_SYS_I2C_SPEED		100000
++#define CONFIG_SYS_I2C_OFFSET		0x3000
++#define CONFIG_SYS_I2C2_OFFSET		0x3100
++
++#define CONFIG_I2C_MULTI_BUS
++#define	CONFIG_SYS_MAX_I2C_BUS		2
++#define	CONFIG_I2C_CMD_TREE
++
++/*
++ * NAND on the local bus - CS1
++ */
++#define CONFIG_SYS_NAND_BASE            0xffa00000
++#define CONFIG_SYS_NAND_BASE_PHYS       CONFIG_SYS_NAND_BASE
++#define CONFIG_SYS_NAND_BASE_LIST       {CONFIG_SYS_NAND_BASE}
++#define CONFIG_SYS_MAX_NAND_DEVICE      1
++#define NAND_MAX_CHIPS                  1
++#define CONFIG_CMD_NAND                 1
++#define CONFIG_NAND_FSL_ELBC            1
++#define CONFIG_SYS_NAND_BLOCK_SIZE      (128*1024)
++#define CONFIG_NAND_BR_PRELIM   (CONFIG_SYS_NAND_BASE_PHYS | \
++                                 (2<<BR_DECC_SHIFT) | BR_PS_8 | BR_MS_FCM | BR_V)
++
++#define CONFIG_NAND_OR_PRELIM   (OR_AM_128KB | OR_FCM_PGS | OR_FCM_CSCT | \
++                                 OR_FCM_SCY_1 | OR_FCM_TRLX | OR_FCM_EHTR)
++#define CONFIG_SYS_BR1_PRELIM  CONFIG_NAND_BR_PRELIM
++#define CONFIG_SYS_OR1_PRELIM  CONFIG_NAND_OR_PRELIM
++
++
++/*
++ * CPLD on the Local Bus - CS2
++ */
++
++#define CONFIG_SYS_CPLD_BASE	0xffb00000
++#define CONFIG_SYS_CPLD_BASE_PHYS CONFIG_SYS_CPLD_BASE
++#define CONFIG_SYS_BR2_PRELIM	(CONFIG_SYS_CPLD_BASE | BR_PS_8 | BR_V)
++#define CONFIG_SYS_OR2_PRELIM   (OR_AM_128KB | OR_GPCM_CSNT | OR_GPCM_XACS |  \
++                                 OR_GPCM_SCY_15 | OR_GPCM_TRLX | \
++                                 OR_GPCM_EHTR | OR_GPCM_EAD)
++
++
++#if defined(CONFIG_CEL_REDSTONE) || defined(CONFIG_CEL_SMALLSTONE) || defined(CONFIG_CEL_D2030) 
++#define CONFIG_SYS_LPSRAM_ADDR  0xffb80000
++#define CPLD_I2C_LED_ADDR               0xffb40000
++#define CONFIG_SYS_LPSRAM_ADDR_PHYS     CONFIG_SYS_LPSRAM_ADDR
++#define CPLD_I2C_LED_ADDR_PHYS CPLD_I2C_LED_ADDR
++
++#define CONFIG_SYS_BR3_PRELIM   (CONFIG_SYS_LPSRAM_ADDR | BR_PS_8 | BR_V)
++#define CONFIG_SYS_OR3_PRELIM   (OR_AM_128KB | OR_GPCM_CSNT | OR_GPCM_XACS | \
++                                OR_GPCM_SCY_15 | OR_GPCM_TRLX | \
++                                OR_GPCM_EHTR | OR_GPCM_EAD)
++
++#define CONFIG_SYS_BR4_PRELIM   (CPLD_I2C_LED_ADDR | BR_PS_8 | BR_V)
++#define CONFIG_SYS_OR4_PRELIM   (OR_AM_128KB | OR_GPCM_CSNT | OR_GPCM_XACS | \
++                                OR_GPCM_SCY_15 | OR_GPCM_TRLX | \
++                                OR_GPCM_EHTR | OR_GPCM_EAD)
++#endif
++/*
++ * General PCI
++ * Memory space is mapped 1-1, but I/O space must start from 0.
++ */
++
++/*
++ * Keep these sizes in sync with the LAWs
++ */
++#ifdef CONFIG_PCIE1
++#define CONFIG_SYS_PCIE1_MEM_VIRT	0xa0000000
++#define CONFIG_SYS_PCIE1_MEM_BUS	0xa0000000
++#define CONFIG_SYS_PCIE1_MEM_PHYS	0xa0000000
++#define CONFIG_SYS_PCIE1_MEM_SIZE	0x20000000	/* 512M */
++#define CONFIG_SYS_PCIE1_IO_VIRT	0xffc20000
++#define CONFIG_SYS_PCIE1_IO_BUS		0x00000000
++#define CONFIG_SYS_PCIE1_IO_PHYS	0xffc20000
++#define CONFIG_SYS_PCIE1_IO_SIZE	0x00010000	/* 64K */
++#endif
++
++#define CONFIG_PCI_SCAN_SHOW        /* show pci devices on startup */
++
++/*
++ * Networking
++ */
++
++#if defined(CONFIG_TSEC_ENET)
++
++#define CONFIG_MII		1	/* MII PHY management */
++/*#define CONFIG_MII_DEFAULT_TSEC 2 */       /* allow unregistered phys */
++#undef CONFIG_MII_DEFAULT_TSEC
++#undef CONFIG_TSEC1
++#define CONFIG_TSEC2
++#undef CONFIG_TSEC3			/* Ethernet  */
++#define	CONFIG_TSEC2_NAME	"eth0"
++
++#define TSEC2_PHY_ADDR		3
++#define TSEC2_PHYIDX		0
++#define TSEC2_FLAGS		(TSEC_GIGABIT | TSEC_SGMII)
++
++#define CONFIG_SYS_TBIPA_VALUE  0x10
++#define CONFIG_TSEC_TBIANA_SETTINGS 0x4001 /* SGMII mode. Refer to Freescale AN3869 */^M
++#define CONFIG_TSEC_TBICR_SETTINGS (TBICR_PHY_RESET | TBICR_FULL_DUPLEX | TBICR_SPEED1_SET)
++
++#define CONFIG_ETHPRIME		"eth0"
++
++#define CONFIG_PHY_GIGE		1	/* Include GbE speed/duplex detection */
++#endif	/* CONFIG_TSEC_ENET */
++
++/*
++ * Environment
++ */
++#define CONFIG_ENV_IS_IN_FLASH	1
++#define CONFIG_ENV_ADDR		0xeff60000
++#define CONFIG_ENV_SECT_SIZE	0x00020000	/* 128K (one sector) */
++
++/*
++ * eSDHC - Enhanced Secure Digial Host Controller
++ */
++#undef CONFIG_MMC
++
++/*
++ * I2C2 EEPROM
++ */
++#define CONFIG_CMD_EEPROM		/* EEPROM read/write support	*/
++#define CONFIG_ID_EEPROM
++#define CONFIG_SYS_I2C_MAC_OFFSET
++#define CONFIG_SYS_EEPROM_BUS_NUM		0
++#define CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS	5
++#define CONFIG_SYS_EEPROM_PAGE_WRITE_BITS	3
++#define CONFIG_SYS_I2C_EEPROM_ADDR		0x50
++#define CONFIG_SYS_I2C_EEPROM_ADDR_LEN		2
++#define CONFIG_SYS_I2C_EEPROM_CELESTICA_NXID
++#define CONFIG_CMD_SYS_EEPROM			/* TLV EEPROM format */
++#define CONFIG_SYS_EEPROM_MAX_SIZE		0x2000  /* 8192 byte */
++#define CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO
++#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
++#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	1
++
++/*
++ * Enable USB support
++ */
++#define CONFIG_CMD_USB	1	/* USB Support                */
++#define CONFIG_USB_EHCI	1	/* USB EHCI host controller       */
++#define CONFIG_USB_EHCI_FSL	1	/* Freescale USB EHCI host controller */
++#define CONFIG_USB_STORAGE	1	/* support for USB storage devices    */
++#define CONFIG_EHCI_HCD_INIT_AFTER_RESET
++
++#undef	CONFIG_WATCHDOG		/* watchdog disabled */
++
++/*
++ * Miscellaneous configurable options
++ */
++#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address */
++#if defined(CONFIG_CEL_REDSTONE)
++#define CONFIG_SYS_PROMPT	"cel_redstone-> " /* Monitor Command Prompt */
++#elif defined(CONFIG_CEL_D2030)
++#define CONFIG_SYS_PROMPT	"cel_d2030-> " /* Monitor Command Prompt */
++#elif defined(CONFIG_CEL_KENNISIS)
++#define CONFIG_SYS_PROMPT	"cel_kennisis-> " /* Monitor Command Prompt */
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#define CONFIG_SYS_PROMPT	"cel_smallstone-> " /* Monitor Command Prompt */
++#else
++#error "Unknown Celestica Platform"
++#endif
++#define CONFIG_SYS_HZ           1000            /* decrementer freq: 1ms ticks */
++#define CONFIG_SYS_LOADS_BAUD_CHANGE	1	/* allow baudrate change */
++
++#if defined(CONFIG_CMD_KGDB)
++#define CONFIG_KGDB_BAUDRATE	CONFIG_BAUDRATE	/* speed to run kgdb serial port */
++#define CONFIG_KGDB_SER_INDEX	1	/* which serial port to use */
++#endif
++
++/*
++ * Enable common MTD filesystems
++ */
++#define CONFIG_CMD_JFFS2
++#define CONFIG_CMD_UBI
++#define CONFIG_CMD_UBIFS
++#define CONFIG_RBTREE			/* required by UBIFS */
++#define CONFIG_LZO			/* required by UBIFS */
++#define CONFIG_MTD_DEVICE               /* required by UBI */
++#define CONFIG_CMD_MTDPARTS		/* required by UBI */
++#define CONFIG_MTD_PARTITIONS
++
++
++/*
++ * Environment Configuration
++ */
++
++#if defined(CONFIG_TSEC_ENET)
++#define CONFIG_HAS_ETH0
++#endif
++
++#if defined(CONFIG_CEL_REDSTONE)
++#define CONFIG_HOSTNAME		cel-red-unknown
++#elif defined(CONFIG_CEL_D2030)
++#define CONFIG_HOSTNAME		cel-d2030-unknown
++#elif defined(CONFIG_CEL_KENNISIS)
++#define CONFIG_HOSTNAME		cel-ken-unknown
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#define CONFIG_HOSTNAME		cel-small-unknown
++#else
++#error "Unknown Celestica Platform"
++#endif
++
++/*default location for tftp and bootm*/
++#define CONFIG_LOADADDR		0x08000000
++
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#if defined(CONFIG_CEL_REDSTONE) || defined(CONFIG_CEL_D2030)
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS1\0"
++#elif defined(CONFIG_CEL_KENNISIS)
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS0\0"
++#elif defined(CONFIG_CEL_SMALLSTONE)
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS1\0"
++#else
++#error "Unknown Celestica Platform"
++#endif
++
++#define CONFIG_CEL_P2020_ENV	\
++	"onie_start=0xefb60000\0"	\
++	"onie_sz.b=0x00400000\0"
++
++#define	CONFIG_EXTRA_ENV_SETTINGS		\
++	CONFIG_CEL_P2020_ENV			\
++	CONFIG_PLATFORM_ENV			\
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++#endif	/* __CONFIG_H */
