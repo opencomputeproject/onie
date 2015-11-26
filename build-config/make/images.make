@@ -183,9 +183,7 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) mkdir -p $(CHECKROOT) && \
 	     $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
 		-s $(SYSROOTDIR) -d $(CHECKDIR) && \
-		(cd $(SYSROOTDIR) && find . > $(SYSFILES)) && \
-		(cd $(CHECKDIR) && find . > $(CHECKFILES)) && \
-		diff -q $(SYSFILES) $(CHECKFILES) > /dev/null 2>&1 || { \
+		diff -qr $(SYSROOTDIR) $(CHECKDIR) > /dev/null 2>&1 || { \
 			(echo "ERROR: Missing files in SYSROOTDIR:" && \
 			 diff $(SYSFILES) $(CHECKFILES) ; \
 			 false) \
