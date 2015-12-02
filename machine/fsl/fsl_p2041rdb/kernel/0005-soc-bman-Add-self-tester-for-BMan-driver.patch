@@ -1,0 +1,589 @@
+From 3a249217d9ffaf3d2f13dda8db1d69d8d9fa9fe8 Mon Sep 17 00:00:00 2001
+From: Geoff Thorpe <Geoff.Thorpe@freescale.com>
+Date: Wed, 13 Mar 2013 04:08:11 -0500
+Subject: [PATCH 05/53] soc/bman: Add self-tester for BMan driver
+
+Add a self test for the DPAA 1.0 Buffer Manager driver. This
+test ensures that the driver can properly acquire and release
+buffers using the BMan portal infrastructure.
+
+Signed-off-by: Geoff Thorpe <Geoff.Thorpe@freescale.com>
+Signed-off-by: Emil Medve <Emilian.Medve@Freescale.com>
+Signed-off-by: Roy Pledge <Roy.Pledge@freescale.com>
+---
+ drivers/soc/fsl/qbman/Kconfig            |  26 ++++
+ drivers/soc/fsl/qbman/Makefile           |   4 +
+ drivers/soc/fsl/qbman/bman_test.c        |  56 +++++++++
+ drivers/soc/fsl/qbman/bman_test.h        |  34 ++++++
+ drivers/soc/fsl/qbman/bman_test_api.c    | 184 ++++++++++++++++++++++++++++
+ drivers/soc/fsl/qbman/bman_test_thresh.c | 198 +++++++++++++++++++++++++++++++
+ drivers/soc/fsl/qbman/dpaa_sys.h         |   1 +
+ 7 files changed, 503 insertions(+)
+ create mode 100644 drivers/soc/fsl/qbman/bman_test.c
+ create mode 100644 drivers/soc/fsl/qbman/bman_test.h
+ create mode 100644 drivers/soc/fsl/qbman/bman_test_api.c
+ create mode 100644 drivers/soc/fsl/qbman/bman_test_thresh.c
+
+diff --git a/drivers/soc/fsl/qbman/Kconfig b/drivers/soc/fsl/qbman/Kconfig
+index 1ff52a8..1f2063a 100644
+--- a/drivers/soc/fsl/qbman/Kconfig
++++ b/drivers/soc/fsl/qbman/Kconfig
+@@ -28,6 +28,32 @@ config FSL_BMAN_PORTAL
+ 	help
+ 		FSL BMan portal driver
+ 
++config FSL_BMAN_TEST
++	tristate "BMan self-tests"
++	default n
++	help
++		Compile self-test code
++
++config FSL_BMAN_TEST_API
++	bool "High-level API self-test"
++	depends on FSL_BMAN_TEST
++	default y
++	help
++		This requires the presence of cpu-affine portals, and performs
++		high-level API testing with them (whichever portal(s) are affine
++		to the cpu(s) the test executes on).
++
++config FSL_BMAN_TEST_THRESH
++	bool "Thresholds self-test"
++	depends on FSL_BMAN_TEST
++	default y
++	help
++	  Multi-threaded (SMP) test of BMan pool depletion. A pool is seeded
++	  before multiple threads (one per cpu) create pool objects to track
++	  depletion state changes. The pool is then drained to empty by a
++	  "drainer" thread, and the other threads that they observe exactly
++	  the depletion state changes that are expected.
++
+ config FSL_QMAN
+ 	bool "QMan device management"
+ 	default n
+diff --git a/drivers/soc/fsl/qbman/Makefile b/drivers/soc/fsl/qbman/Makefile
+index 0d96598..04509c3 100644
+--- a/drivers/soc/fsl/qbman/Makefile
++++ b/drivers/soc/fsl/qbman/Makefile
+@@ -5,6 +5,10 @@ obj-$(CONFIG_FSL_BMAN)				+= bman.o
+ obj-$(CONFIG_FSL_BMAN_PORTAL)			+= bman-portal.o
+ bman-portal-y					 = bman_portal.o bman_api.o	\
+ 						   bman_utils.o
++obj-$(CONFIG_FSL_BMAN_TEST)			+= bman-test.o
++bman-test-y					 = bman_test.o
++bman-test-$(CONFIG_FSL_BMAN_TEST_API)		+= bman_test_api.o
++bman-test-$(CONFIG_FSL_BMAN_TEST_THRESH)	+= bman_test_thresh.o
+ 
+ obj-$(CONFIG_FSL_QMAN)				+= qman_api.o qman_utils.o qman_driver.o
+ obj-$(CONFIG_FSL_QMAN_CONFIG)			+= qman.o qman_portal.o
+diff --git a/drivers/soc/fsl/qbman/bman_test.c b/drivers/soc/fsl/qbman/bman_test.c
+new file mode 100644
+index 0000000..9298093
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/bman_test.c
+@@ -0,0 +1,56 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "bman_test.h"
++
++MODULE_AUTHOR("Geoff Thorpe");
++MODULE_LICENSE("Dual BSD/GPL");
++MODULE_DESCRIPTION("BMan testing");
++
++static int test_init(void)
++{
++#ifdef CONFIG_FSL_BMAN_TEST_API
++	int loop = 1;
++
++	while (loop--)
++		bman_test_api();
++#endif
++#ifdef CONFIG_FSL_BMAN_TEST_THRESH
++	bman_test_thresh();
++#endif
++	return 0;
++}
++
++static void test_exit(void)
++{
++}
++
++module_init(test_init);
++module_exit(test_exit);
+diff --git a/drivers/soc/fsl/qbman/bman_test.h b/drivers/soc/fsl/qbman/bman_test.h
+new file mode 100644
+index 0000000..9c51c38
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/bman_test.h
+@@ -0,0 +1,34 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "bman_priv.h"
++
++void bman_test_api(void);
++void bman_test_thresh(void);
+diff --git a/drivers/soc/fsl/qbman/bman_test_api.c b/drivers/soc/fsl/qbman/bman_test_api.c
+new file mode 100644
+index 0000000..2f1bf74
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/bman_test_api.c
+@@ -0,0 +1,184 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "bman_test.h"
++
++/*************/
++/* constants */
++/*************/
++
++#define PORTAL_OPAQUE	((void *)0xf00dbeef)
++#define POOL_OPAQUE	((void *)0xdeadabba)
++#define NUM_BUFS	93
++#define LOOPS		3
++#define BMAN_TOKEN_MASK 0x00FFFFFFFFFFLLU
++
++/***************/
++/* global vars */
++/***************/
++
++static struct bman_pool *pool;
++static int depleted;
++static struct bm_buffer bufs_in[NUM_BUFS] ____cacheline_aligned;
++static struct bm_buffer bufs_out[NUM_BUFS] ____cacheline_aligned;
++static int bufs_received;
++
++/* Predeclare the callback so we can instantiate pool parameters */
++static void depletion_cb(struct bman_portal *, struct bman_pool *, void *, int);
++
++/**********************/
++/* internal functions */
++/**********************/
++
++static void bufs_init(void)
++{
++	int i;
++
++	for (i = 0; i < NUM_BUFS; i++)
++		bm_buffer_set64(&bufs_in[i], 0xfedc01234567LLU * i);
++	bufs_received = 0;
++}
++
++static inline int bufs_cmp(const struct bm_buffer *a, const struct bm_buffer *b)
++{
++	if ((bman_ip_rev == BMAN_REV20) || (bman_ip_rev == BMAN_REV21)) {
++
++		/* On SoCs with BMan revison 2.0, BMan only respects the 40
++		 * LS-bits of buffer addresses, masking off the upper 8-bits on
++		 * release commands. The API provides for 48-bit addresses
++		 * because some SoCs support all 48-bits. When generating
++		 * garbage addresses for testing, we either need to zero the
++		 * upper 8-bits when releasing to BMan (otherwise we'll be
++		 * disappointed when the buffers we acquire back from BMan
++		 * don't match), or we need to mask the upper 8-bits off when
++		 * comparing. We do the latter.
++		 */
++		if ((bm_buffer_get64(a) & BMAN_TOKEN_MASK)
++				< (bm_buffer_get64(b) & BMAN_TOKEN_MASK))
++			return -1;
++		if ((bm_buffer_get64(a) & BMAN_TOKEN_MASK)
++				> (bm_buffer_get64(b) & BMAN_TOKEN_MASK))
++			return 1;
++	} else {
++		if (bm_buffer_get64(a) < bm_buffer_get64(b))
++			return -1;
++		if (bm_buffer_get64(a) > bm_buffer_get64(b))
++			return 1;
++	}
++
++	return 0;
++}
++
++static void bufs_confirm(void)
++{
++	int i, j;
++
++	for (i = 0; i < NUM_BUFS; i++) {
++		int matches = 0;
++
++		for (j = 0; j < NUM_BUFS; j++)
++			if (!bufs_cmp(&bufs_in[i], &bufs_out[j]))
++				matches++;
++		BUG_ON(matches != 1);
++	}
++}
++
++/********/
++/* test */
++/********/
++
++static void depletion_cb(struct bman_portal *__portal, struct bman_pool *__pool,
++			void *pool_ctx, int __depleted)
++{
++	BUG_ON(__pool != pool);
++	BUG_ON(pool_ctx != POOL_OPAQUE);
++	depleted = __depleted;
++}
++
++void bman_test_api(void)
++{
++	struct bman_pool_params pparams = {
++		.flags = BMAN_POOL_FLAG_DEPLETION | BMAN_POOL_FLAG_DYNAMIC_BPID,
++		.cb = depletion_cb,
++		.cb_ctx = POOL_OPAQUE,
++	};
++	int i, loops = LOOPS;
++
++	bufs_init();
++
++	pr_info("	--- Starting high-level test ---\n");
++
++	pool = bman_new_pool(&pparams);
++	BUG_ON(!pool);
++
++	/*******************/
++	/* Release buffers */
++	/*******************/
++do_loop:
++	i = 0;
++	while (i < NUM_BUFS) {
++		u32 flags = BMAN_RELEASE_FLAG_WAIT;
++		int num = 8;
++
++		if ((i + num) > NUM_BUFS)
++			num = NUM_BUFS - i;
++		if ((i + num) == NUM_BUFS)
++			flags |= BMAN_RELEASE_FLAG_WAIT_SYNC;
++		if (bman_release(pool, bufs_in + i, num, flags))
++			panic("bman_release() failed\n");
++		i += num;
++	}
++
++	/*******************/
++	/* Acquire buffers */
++	/*******************/
++	while (i > 0) {
++		int tmp, num = 8;
++
++		if (num > i)
++			num = i;
++		tmp = bman_acquire(pool, bufs_out + i - num, num, 0);
++		BUG_ON(tmp != num);
++		i -= num;
++	}
++	i = bman_acquire(pool, NULL, 1, 0);
++	BUG_ON(i > 0);
++
++	bufs_confirm();
++
++	if (--loops)
++		goto do_loop;
++
++	/************/
++	/* Clean up */
++	/************/
++	bman_free_pool(pool);
++	pr_info("	--- Finished high-level test ---\n");
++}
+diff --git a/drivers/soc/fsl/qbman/bman_test_thresh.c b/drivers/soc/fsl/qbman/bman_test_thresh.c
+new file mode 100644
+index 0000000..41372a1
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/bman_test_thresh.c
+@@ -0,0 +1,198 @@
++/* Copyright 2010 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "bman_test.h"
++
++/* Test constants */
++#define TEST_NUMBUFS	129728
++#define TEST_EXIT	129536
++#define TEST_ENTRY	129024
++
++struct affine_test_data {
++	struct task_struct *t;
++	int cpu;
++	int expect_affinity;
++	int drain;
++	int num_enter;
++	int num_exit;
++	struct list_head node;
++	struct completion wakethread;
++	struct completion wakeparent;
++};
++
++static void cb_depletion(struct bman_portal *portal,
++			struct bman_pool *pool,
++			void *opaque,
++			int depleted)
++{
++	struct affine_test_data *data = opaque;
++	int c = smp_processor_id();
++
++	pr_info("%s(): bpid=%d, depleted=%d, cpu=%d, original=%d\n", __func__,
++		bman_get_params(pool)->bpid, !!depleted, c, data->cpu);
++	/* We should be executing on the CPU of the thread that owns the pool if
++	 * and that CPU has an affine portal (ie. it isn't slaved). */
++	BUG_ON((c != data->cpu) && data->expect_affinity);
++	BUG_ON((c == data->cpu) && !data->expect_affinity);
++	if (depleted)
++		data->num_enter++;
++	else
++		data->num_exit++;
++}
++
++/* Params used to set up a pool, this also dynamically allocates a BPID */
++static const struct bman_pool_params params_nocb = {
++	.flags = BMAN_POOL_FLAG_DYNAMIC_BPID | BMAN_POOL_FLAG_THRESH,
++	.thresholds = { TEST_ENTRY, TEST_EXIT, 0, 0 }
++};
++
++/* Params used to set up each cpu's pool with callbacks enabled */
++static struct bman_pool_params params_cb = {
++	.bpid = 0, /* will be replaced to match pool_nocb */
++	.flags = BMAN_POOL_FLAG_DEPLETION,
++	.cb = cb_depletion
++};
++
++static struct bman_pool *pool_nocb;
++static LIST_HEAD(threads);
++
++static int affine_test(void *__data)
++{
++	struct bman_pool *pool;
++	struct affine_test_data *data = __data;
++	struct bman_pool_params my_params = params_cb;
++
++	pr_info("Thread %d: starting\n", data->cpu);
++	/* create the pool */
++	my_params.cb_ctx = data;
++	pool = bman_new_pool(&my_params);
++	BUG_ON(!pool);
++	complete(&data->wakeparent);
++	wait_for_completion(&data->wakethread);
++	init_completion(&data->wakethread);
++
++	/* if we're the drainer, we get signalled for that */
++	if (data->drain) {
++		struct bm_buffer buf;
++		int ret;
++
++		pr_info("Thread %d: draining...\n", data->cpu);
++		do {
++			ret = bman_acquire(pool, &buf, 1, 0);
++		} while (ret > 0);
++		pr_info("Thread %d: draining done.\n", data->cpu);
++		complete(&data->wakeparent);
++		wait_for_completion(&data->wakethread);
++		init_completion(&data->wakethread);
++	}
++
++	/* cleanup */
++	bman_free_pool(pool);
++	while (!kthread_should_stop())
++		cpu_relax();
++	pr_info("Thread %d: exiting\n", data->cpu);
++	return 0;
++}
++
++static struct affine_test_data *start_affine_test(int cpu, int drain)
++{
++	struct affine_test_data *data = kmalloc(sizeof(*data), GFP_KERNEL);
++
++	if (!data)
++		return NULL;
++	data->cpu = cpu;
++	data->expect_affinity = cpumask_test_cpu(cpu, bman_affine_cpus());
++	data->drain = drain;
++	data->num_enter = 0;
++	data->num_exit = 0;
++	init_completion(&data->wakethread);
++	init_completion(&data->wakeparent);
++	list_add_tail(&data->node, &threads);
++	data->t = kthread_create(affine_test, data, "threshtest%d", cpu);
++	BUG_ON(IS_ERR(data->t));
++	kthread_bind(data->t, cpu);
++	wake_up_process(data->t);
++	return data;
++}
++
++void bman_test_thresh(void)
++{
++	int loop = TEST_NUMBUFS;
++	int ret, num_cpus = 0;
++	struct affine_test_data *data, *drainer = NULL;
++
++	pr_info("%s(): Start\n", __func__);
++
++	/* allocate a BPID and seed it */
++	pool_nocb = bman_new_pool(&params_nocb);
++	BUG_ON(!pool_nocb);
++	while (loop--) {
++		struct bm_buffer buf;
++
++		bm_buffer_set64(&buf, 0x0badbeef + loop);
++		ret = bman_release(pool_nocb, &buf, 1,
++					BMAN_RELEASE_FLAG_WAIT);
++		BUG_ON(ret);
++	}
++	while (!bman_rcr_is_empty())
++		cpu_relax();
++	pr_info("%s(): Buffers are in\n", __func__);
++
++	/* create threads and wait for them to create pools */
++	params_cb.bpid = bman_get_params(pool_nocb)->bpid;
++	for_each_cpu(loop, cpu_online_mask) {
++		data = start_affine_test(loop, drainer ? 0 : 1);
++		BUG_ON(!data);
++		if (!drainer)
++			drainer = data;
++		num_cpus++;
++		wait_for_completion(&data->wakeparent);
++	}
++
++	/* signal the drainer to start draining */
++	complete(&drainer->wakethread);
++	wait_for_completion(&drainer->wakeparent);
++	init_completion(&drainer->wakeparent);
++
++	/* tear down */
++	list_for_each_entry_safe(data, drainer, &threads, node) {
++		complete(&data->wakethread);
++		ret = kthread_stop(data->t);
++		BUG_ON(ret);
++		list_del(&data->node);
++		/* check that we get the expected callbacks (and no others) */
++		BUG_ON(data->num_enter != 1);
++		BUG_ON(data->num_exit != 0);
++		kfree(data);
++	}
++	bman_free_pool(pool_nocb);
++
++	pr_info("%s(): Done\n", __func__);
++}
+diff --git a/drivers/soc/fsl/qbman/dpaa_sys.h b/drivers/soc/fsl/qbman/dpaa_sys.h
+index d3d6fc4..cef9095 100644
+--- a/drivers/soc/fsl/qbman/dpaa_sys.h
++++ b/drivers/soc/fsl/qbman/dpaa_sys.h
+@@ -37,6 +37,7 @@
+ #include <linux/of_address.h>
+ #include <linux/of_irq.h>
+ #include <linux/of_reserved_mem.h>
++#include <linux/kthread.h>
+ #include <linux/platform_device.h>
+ #include <linux/ctype.h>
+ 
+-- 
+2.1.0.27.g96db324
+
