@@ -23,10 +23,10 @@
 #
 ############################################################
 INSTALLER_PLATFORMS :=  powerpc-as4600-54t \
-            powerpc-accton-as4600-54t-r0 \
+			powerpc-accton-as4600-54t-r0 \
 			powerpc-as5600-52x \
 			powerpc-as5610-52x \
-            powerpc-accton-as5610-52x-r0 \
+			powerpc-accton-as5610-52x-r0 \
 			powerpc-as5710-54x-r0a \
 			powerpc-as5710-54x-r0b \
 			powerpc-as6700-32x-r0 \
