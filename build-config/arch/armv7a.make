@@ -48,6 +48,9 @@ PARTED_ENABLE = yes
 # Include ext3/4 file system tools
 EXT3_4_ENABLE = yes
 
+# Include btrfs file system tools
+BTRFS_PROGS_ENABLE = yes
+
 # Default to include the i2ctools.  A particular machine.make can
 # override this.
 I2CTOOLS_ENABLE ?= yes
