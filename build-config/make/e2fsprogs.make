@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -9,10 +9,10 @@
 # This is a makefile fragment that defines the build of e2fsprogs
 #
 
-E2FSPROGS_VERSION		= 1.42.8
+E2FSPROGS_VERSION		= 1.42.13
 E2FSPROGS_TARBALL		= e2fsprogs-$(E2FSPROGS_VERSION).tar.xz
 E2FSPROGS_TARBALL_URLS		+= $(ONIE_MIRROR) \
-				   https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.42.8
+				   https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v$(E2FSPROGS_VERSION)
 E2FSPROGS_BUILD_DIR		= $(MBUILDDIR)/e2fsprogs
 E2FSPROGS_DIR			= $(E2FSPROGS_BUILD_DIR)/e2fsprogs-$(E2FSPROGS_VERSION)
 
