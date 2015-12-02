@@ -26,6 +26,12 @@ UBOOT_ITB_ARCH = ppc
 # Include MTD utilities
 MTDUTILS_ENABLE ?= yes
 
+# Include ext3/4 file system tools - also required for BTRFS
+EXT3_4_ENABLE ?= yes
+
+# Include btrfs file system tools
+BTRFS_PROGS_ENABLE ?= yes
+
 PLATFORM_IMAGE_COMPLETE = $(IMAGE_BIN_STAMP) $(IMAGE_UPDATER_STAMP)
 UPDATER_IMAGE_PARTS = $(UPDATER_ITB) $(UPDATER_UBOOT)
 UPDATER_IMAGE_PARTS_COMPLETE = $(UPDATER_ITB) $(UBOOT_INSTALL_STAMP)

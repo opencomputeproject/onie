@@ -322,6 +322,9 @@ endif
 ifeq ($(GRUB_ENABLE),yes)
   include make/grub.make
 endif
+ifeq ($(BTRFS_PROGS_ENABLE),yes)
+  include make/btrfs-progs.make
+endif
 ifeq ($(UEFI_ENABLE),yes)
   include make/efivar.make
   include make/efibootmgr.make
