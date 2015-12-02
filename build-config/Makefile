@@ -301,11 +301,14 @@ include make/compiler.make
 include make/busybox.make
 include make/zlib.make
 include make/lzo.make
-include make/e2fsprogs.make
+include make/util-linux.make
 ifeq ($(MTDUTILS_ENABLE),yes)
   include make/mtdutils.make
 endif
 include make/dropbear.make
+ifeq ($(EXT3_4_ENABLE),yes)
+  include make/e2fsprogs.make
+endif
 ifeq ($(GPT_ENABLE),yes)
   include make/popt.make
   include make/gptfdisk.make
