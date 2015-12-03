@@ -31,9 +31,11 @@ Accton/Edge-Core
 <tr> <td> Accton AS5610-52X       <td> 48x10G  + 4x40G   <td> FreeScale P2020       <td> Broadcom BCM56846 (Trident+)      <td> Supported and Tested   </tr>
 <tr> <td> Accton AS5710-54X       <td> 48x10G + 6x40G   <td> FreeScale P2041       <td> Broadcom BCM56854 (Trident2)      <td> Supported and Tested   </tr>
 <tr> <td> Accton AS6700-32X       <td> 32x40G           <td> FreeScale P2041       <td> Broadcom BCM56850 (Trident2)      <td> Supported and Tested   </tr>
-<tr> <td> Accton AS5712-54X       <td> 48x10G + 6x40G   <td> Intel Rangely C2538 x86<td> Broadcom BCM56854 (Trident2)      <td> Supported and Tested   </tr>
+<tr> <td> Accton AS5712-54X       <td> 48x10G + 6x40G   <td> Intel Rangely C2538 x86 <td> Broadcom BCM56854 (Trident2)      <td> Supported and Tested   </tr>
 <tr> <td> Accton AS6712-32X       <td> 32x40G           <td> Intel Rangely C2538 x86 <td> Broadcom BCM56850 (Trident2)      <td> Supported and Tested   </tr>
-
+<tr> <td> Accton AS5812-54T       <td> 48x10G + 6x40G   <td> UNK <td> UNK      <td> Supported </tr>
+<tr> <td> Accton AS5812-54X       <td> 48x10G + 6x40G   <td> UNK <td> UNK      <td> Supported </tr>
+<tr> <td> Accton AS6812-32X       <td> 32x40G           <td> UNK <td> UNK      <td> Supported </tr>
 </table>
 
 DNI/Agema
