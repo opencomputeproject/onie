@@ -1,4 +1,5 @@
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -217,21 +218,35 @@ bios_boot_onie_install()
 {
     local onie_dev="$(onie_get_boot_dev)"
     local boot_dev="$(onie_get_boot_disk)"
+    [ -r /etc/machine.conf ] && . /etc/machine.conf
+    if [ "$onie_firmware" = "coreboot" ] ; then
+        local grub_target="i386-coreboot"
+        local core_img="$onie_boot_mnt/grub/$grub_target/core.elf"
+    else
+        local grub_target="i386-pc"
+        local core_img="$onie_boot_mnt/grub/$grub_target/core.img"
+    fi
+    local boot_mod_dir="$onie_boot_mnt/grub/$grub_target"
+    local grub_mod_dir="/usr/lib/grub/$grub_target"
 
     # Re-install ONIE GRUB in MBR and ONIE partition
-    local core_img="$onie_boot_mnt/grub/i386-pc/core.img"
     [ -f "$core_img" ] && chattr -i $core_img
-    grub-install --boot-directory="$onie_boot_mnt" --recheck "$boot_dev" || {
+    grub-install --target="$grub_target" --install-modules="" \
+        --boot-directory="$onie_boot_mnt" --recheck "$boot_dev" || {
         echo "ERROR: grub-install failed on: $boot_dev"
+        cp -a $grub_mod_dir/*.mod $boot_mod_dir
         exit 1
     }
     local grub_install_log=$(mktemp)
-    grub-install --force --boot-directory="$onie_boot_mnt" \
+    grub-install --target="$grub_target" --install-modules="" \
+        --force --boot-directory="$onie_boot_mnt" \
         --recheck "$onie_dev" > /$grub_install_log 2>&1 || {
         echo "ERROR: grub-install failed on: $onie_dev"
+        cp -a $grub_mod_dir/*.mod $boot_mod_dir
         cat $grub_install_log && rm -f $grub_install_log
         exit 1
     }
+    cp -a $grub_mod_dir/*.mod $boot_mod_dir
     rm -f $grub_install_log
     [ -f "$core_img" ] && chattr +i $core_img
 
