@@ -51,7 +51,9 @@ DEMO_TRIM = \
    etc/rc0.d/K25discover.sh	\
    etc/rc3.d/S50discover.sh	\
    etc/rc6.d/K25discover.sh	\
+   etc/rcS.d/S03boot-mode.sh	\
    etc/init.d/discover.sh	\
+   etc/init.d/boot-mode.sh	\
    bin/discover			\
    bin/uninstaller		\
    bin/onie-uninstaller		\
