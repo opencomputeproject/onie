@@ -8,6 +8,11 @@ builds an ONIE-compatible installer and a switch image which contains a complete
 Debian distribution with added drivers and configuration for running on bare metal
 switches.
 
+License
+-----
+
+Licenses for the software are available at the applicable level of the software repository under the "LICENSE" file.  Download and use of the software implies consent.
+
 Documentation
 -------------
 
