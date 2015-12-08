@@ -499,6 +499,14 @@ install_grub()
     local location="$1"
     local boot_dev="$2"
     local boot_dir="$3"
+    if [ "$onie_firmware" = "coreboot" ] ; then
+        local grub_target="i386-coreboot"
+        local core_img="$boot_dir/grub/$grub_target/core.elf"
+    else
+        local grub_target="i386-pc"
+        local core_img="$boot_dir/grub/$grub_target/core.img"
+    fi
+    local grub_lib_dir="/usr/lib/grub/$grub_target"
 
     [ "$verbose" = "yes" ] && echo "Installing GRUB in device: $boot_dev, boot-directory: $boot_dir"
 
@@ -519,18 +527,14 @@ install_grub()
         # boot sector or a partitionless disk, not in case of
         # installation to MBR.
 
-        core_img="$boot_dir/grub/i386-pc/core.img"
         # remove immutable flag if file exists during an update.
         [ -f "$core_img" ] && chattr -i $core_img
     fi
 
-    grub_install_target=i386-pc
-    [ "${onie_firmware}" = "coreboot" ] && grub_install_target=i386-coreboot
-    grub_install_directory=/usr/lib/grub/${grub_install_target}
     grub_install_log=$(mktemp)
     grub-install \
-        --target=${grub_install_target} \
-        --directory=${grub_install_directory} \
+        --target="$grub_target" \
+        --directory="$grub_lib_dir" \
         --force \
         --boot-directory="$boot_dir" \
         --recheck \

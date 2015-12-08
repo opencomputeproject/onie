@@ -156,9 +156,21 @@ demo_install_grub()
     local demo_mnt="$1"
     local blk_dev="$2"
 
+    # get running machine from conf file
+    [ -r /etc/machine.conf ] && . /etc/machine.conf
+
+    if [ "$onie_firmware" = "coreboot" ] ; then
+        local grub_target="i386-coreboot"
+        local core_img="$demo_mnt/grub/$grub_target/core.elf"
+    else
+        local grub_target="i386-pc"
+        local core_img="$demo_mnt/grub/$grub_target/core.img"
+    fi
+
     # Pretend we are a major distro and install GRUB into the MBR of
     # $blk_dev.
-    grub-install --boot-directory="$demo_mnt" --recheck "$blk_dev" || {
+    grub-install --target="$grub_target" \
+        --boot-directory="$demo_mnt" --recheck "$blk_dev" || {
         echo "ERROR: grub-install failed on: $blk_dev"
         exit 1
     }
@@ -183,12 +195,12 @@ demo_install_grub()
         # boot sector or a partitionless disk, not in case of
         # installation to MBR.
 
-        core_img="$demo_mnt/grub/i386-pc/core.img"
         # remove immutable flag if file exists during the update.
         [ -f "$core_img" ] && chattr -i $core_img
 
         grub_install_log=$(mktemp)
-        grub-install --force --boot-directory="$demo_mnt" \
+        grub-install --target="$grub_target" \
+            --force --boot-directory="$demo_mnt" \
             --recheck "$demo_dev" > /$grub_install_log 2>&1 || {
             echo "ERROR: grub-install failed on: $demo_dev"
             cat $grub_install_log && rm -f $grub_install_log
