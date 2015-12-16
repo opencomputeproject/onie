@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -104,18 +104,9 @@ cp -r $installer_dir/$arch_dir/* $tmp_installdir
 }
 
 # Massage install-arch
-if [ "$arch_dir" = "x86_64" ] ; then
-    sed -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/" \
-        -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/" \
-        -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
-        -e "s/%%SERIAL_CONSOLE_ENABLE%%/$SERIAL_CONSOLE_ENABLE/" \
-	-i $tmp_installdir/install-arch
-elif [ "$arch_dir" = "u-boot-arch" ] ; then
+if [ "$arch_dir" = "u-boot-arch" ] ; then
     sed -e "s/%%UPDATER_UBOOT_NAME%%/$UPDATER_UBOOT_NAME/" \
 	-i $tmp_installdir/install-arch
-else
-    echo "Error: Unsupported architecture layout: $arch_dir"
-    exit 1
 fi
 echo -n "."
 
@@ -123,6 +114,49 @@ echo -n "."
 if [ "$arch" = "x86_64" ] ; then
     cp "$installer_conf" $tmp_installdir || exit 1
     echo -n "."
+
+    if [ "$SERIAL_CONSOLE_ENABLE" = "yes" ] ; then
+        DEFAULT_GRUB_SERIAL_COMMAND="serial --port=$CONSOLE_PORT --speed=$CONSOLE_SPEED --word=8 --parity=no --stop=1"
+        DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS${CONSOLE_DEV},${CONSOLE_SPEED}n8"
+        DEFAULT_GRUB_TERMINAL_INPUT="serial"
+        DEFAULT_GRUB_TERMINAL_OUTPUT="serial"
+    else
+        DEFAULT_GRUB_SERIAL_COMMAND=""
+        DEFAULT_GRUB_CMDLINE_LINUX=""
+        DEFAULT_GRUB_TERMINAL_INPUT="console"
+        DEFAULT_GRUB_TERMINAL_OUTPUT="console"
+    fi
+    GRUB_DEFAULT_CONF="$tmp_installdir/grub/grub-variables"
+    cat <<EOF >> $GRUB_DEFAULT_CONF
+## Begin grub-variables
+
+# default variables
+DEFAULT_GRUB_SERIAL_COMMAND="$DEFAULT_GRUB_SERIAL_COMMAND"
+DEFAULT_GRUB_CMDLINE_LINUX="$DEFAULT_GRUB_CMDLINE_LINUX"
+DEFAULT_GRUB_TERMINAL_INPUT="$DEFAULT_GRUB_TERMINAL_INPUT"
+DEFAULT_GRUB_TERMINAL_OUTPUT="$DEFAULT_GRUB_TERMINAL_OUTPUT"
+# overridden if they have been defined in the environment
+GRUB_SERIAL_COMMAND=\${GRUB_SERIAL_COMMAND:-"\$DEFAULT_GRUB_SERIAL_COMMAND"}
+GRUB_TERMINAL_INPUT=\${GRUB_TERMINAL_INPUT:-"\$DEFAULT_GRUB_TERMINAL_INPUT"}
+GRUB_TERMINAL_OUTPUT=\${GRUB_TERMINAL_OUTPUT:-"\$DEFAULT_GRUB_TERMINAL_OUTPUT"}
+GRUB_CMDLINE_LINUX=\${GRUB_CMDLINE_LINUX:-"\$DEFAULT_GRUB_CMDLINE_LINUX"}
+export GRUB_SERIAL_COMMAND
+export GRUB_TERMINAL_INPUT
+export GRUB_TERMINAL_OUTPUT
+export GRUB_CMDLINE_LINUX
+
+# variables for ONIE itself
+GRUB_ONIE_SERIAL_COMMAND=\$GRUB_SERIAL_COMMAND
+DEFAULT_CMDLINE="\$GRUB_CMDLINE_LINUX \$GRUB_CMDLINE_LINUX_DEFAULT \$GRUB_ONIE_PLATFORM_ARGS \$GRUB_ONIE_DEBUG_ARGS"
+GRUB_ONIE_CMDLINE_LINUX=\${GRUB_ONIE_CMDLINE_LINUX:-"\$DEFAULT_CMDLINE"}
+ONIE_CMDLINE="quiet \$GRUB_ONIE_CMDLINE_LINUX \\\$ONIE_EXTRA_CMDLINE_LINUX"
+export GRUB_ONIE_SERIAL_COMMAND
+export ONIE_CMDLINE
+
+## End grub-variables
+EOF
+    echo -n "."
+
     GRUB_MACHINE_CONF="$tmp_installdir/grub/grub-machine.cfg"
     echo "## Begin grub-machine.cfg" > $GRUB_MACHINE_CONF
     # make sure each var is 'exported' for GRUB shell

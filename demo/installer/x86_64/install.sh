@@ -315,28 +315,8 @@ grub_cfg=$(mktemp)
 
 [ -r ./platform.conf ] && . ./platform.conf
 
-SERIAL_CONSOLE_ENABLE="%%SERIAL_CONSOLE_ENABLE%%"
-
-if [ "$SERIAL_CONSOLE_ENABLE" = "yes" ] ; then
-    DEFAULT_GRUB_SERIAL_COMMAND="serial --port=%%CONSOLE_PORT%% --speed=%%CONSOLE_SPEED%% --word=8 --parity=no --stop=1"
-    DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS%%CONSOLE_DEV%%,%%CONSOLE_SPEED%%n8"
-    DEFAULT_GRUB_TERMINAL_INPUT="serial"
-    DEFAULT_GRUB_TERMINAL_OUTPUT="serial"
-else
-    DEFAULT_GRUB_SERIAL_COMMAND=""
-    DEFAULT_GRUB_CMDLINE_LINUX=""
-    DEFAULT_GRUB_TERMINAL_INPUT="console"
-    DEFAULT_GRUB_TERMINAL_OUTPUT="console"
-fi
-
-GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
-GRUB_TERMINAL_INPUT=${GRUB_TERMINAL_INPUT:-"$DEFAULT_GRUB_TERMINAL_INPUT"}
-GRUB_TERMINAL_OUTPUT=${GRUB_TERMINAL_OUTPUT:-"$DEFAULT_GRUB_TERMINAL_OUTPUT"}
-GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
-export GRUB_SERIAL_COMMAND
-export GRUB_TERMINAL_INPUT
-export GRUB_TERMINAL_OUTPUT
-export GRUB_CMDLINE_LINUX
+# import console config and linux cmdline
+. $onie_root_dir/grub/grub-variables
 
 # Add common configuration, like the timeout and serial console.
 cat <<EOF > $grub_cfg

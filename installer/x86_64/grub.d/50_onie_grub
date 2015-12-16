@@ -82,15 +82,14 @@ onie_root_dir="${tmp_mnt}/onie"
     exit 1
 }
 
-# Serial console configuration.  Presumably the host OS has already
-# setup the following GRUB configuration variables, as is standard
-# practice when configuring GRUB for a serial console:
-#
-#  GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"
-#  GRUB_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
-
-DEFAULT_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
-GRUB_ONIE_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_SERIAL_COMMAND"}
+# - backward compatible with present NOS/DIAG installers
+# - If NOS/DIAG installer does not export GRUB_SERIAL_COMMAND and
+#   GRUB_CMDLINE_LINUX, ONIE will use the default/correct ones.
+if [ -z "$GRUB_ONIE_SERIAL_COMMAND" ] ||
+    [ -z "$ONIE_CMDLINE" ] ||
+    [ -z "$GRUB_CMDLINE_LINUX" ] ; then
+. $onie_root_dir/grub/grub-variables
+fi
 
 rm -f $grub_cfg
 touch $grub_cfg
@@ -116,10 +115,6 @@ cat $onie_root_dir/grub/grub-extra.cfg >> $grub_cfg
 # add ONIE configuration common to all ONIE boot modes
 cat $onie_root_dir/grub/grub-common.cfg >> $grub_cfg
 
-DEFAULT_CMDLINE="$GRUB_CMDLINE_LINUX $GRUB_CMDLINE_LINUX_DEFAULT $GRUB_ONIE_PLATFORM_ARGS $GRUB_ONIE_DEBUG_ARGS"
-GRUB_ONIE_CMDLINE_LINUX=${GRUB_ONIE_CMDLINE_LINUX:-"$DEFAULT_CMDLINE"}
-
-ONIE_CMDLINE="quiet $GRUB_ONIE_CMDLINE_LINUX \$ONIE_EXTRA_CMDLINE_LINUX"
 for mode in install rescue uninstall update embed ; do
     case "$mode" in
         install)
