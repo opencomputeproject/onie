@@ -33,13 +33,5 @@ INSTALLER_PLATFORMS :=  x86-64-dell-s6000-s1220-r0 \
 			x86-64-accton-as7712-32x-r0 \
 			x86-64-accton-as6712-32x-r0 \
 			x86-64-accton-as6812-32x-r0 \
-                        x86-64-wnc-sst1-n1-r0
-
-
-
-
-
-
-
-
-
+			x86-64-wnc-sst1-n1-r0 \
+			x86-64-im-n29xx-t40n-r0
