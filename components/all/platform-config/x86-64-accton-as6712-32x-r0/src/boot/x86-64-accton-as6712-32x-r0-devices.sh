@@ -52,13 +52,19 @@ echo as6712_32x_sfp32 0x50 > /sys/bus/i2c/devices/i2c-33/new_device
 # initiate multiplexer (PCA9548)
 echo pca9548 0x70 > /sys/bus/i2c/devices/i2c-1/new_device
 
-# initiate PSU-1
+# initiate PSU-1 AC Power
 echo as6712_32x_psu 0x38 > /sys/bus/i2c/devices/i2c-35/new_device
 echo cpr_4011_4mxx 0x3C > /sys/bus/i2c/devices/i2c-35/new_device
 
-# initiate PSU-2
+# initiate PSU-2 AC Power
 echo as6712_32x_psu 0x3b > /sys/bus/i2c/devices/i2c-36/new_device
 echo cpr_4011_4mxx 0x3F > /sys/bus/i2c/devices/i2c-36/new_device
+
+# initiate PSU-1 DC Power
+echo as6712_32x_psu 0x50 > /sys/bus/i2c/devices/i2c-35/new_device
+
+# initiate PSU-2 DC Power
+echo as6712_32x_psu 0x53 > /sys/bus/i2c/devices/i2c-36/new_device
 
 # initiate lm75
 echo lm75 0x48 > /sys/bus/i2c/devices/i2c-38/new_device
