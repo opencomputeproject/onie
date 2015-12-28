@@ -98,7 +98,7 @@ do_visit_blkid_part()
       if test "$MINPART"; then
         if test $MINPART -le $part; then
           MINPART=$(( $part + 1 ))
-	fi
+        fi
       else
         MINPART=$(( $part + 1 ))
       fi
@@ -106,7 +106,7 @@ do_visit_blkid_part()
   esac
 }
 
-find_gpt()
+find_main_partition()
 {
   DEV=
   MINPART=
@@ -212,6 +212,25 @@ do_handle_disk()
   return 0
 }
 
+do_handle_disk_msdos()
+{
+  local dev sz model typ flags
+  dev=$1; shift
+  sz=$1; shift
+  model=$1; shift
+  typ=$1; shift
+  flags=$1; shift
+
+  if test "$typ" != "msdos"; then
+    installer_say "*** invalid partition table: $typ"
+    return 1
+  fi
+  BLOCKS=`echo "$sz" | sed -e 's/[s]$//`
+  installer_say "found a disk with $BLOCKS blocks"
+
+  return 0
+}
+
 do_maybe_delete()
 {
   local part start end sz fs label flags
@@ -286,9 +305,51 @@ partition_gpt()
   return 0
 }
 
+partition_msdos()
+{
+  local start end part
+
+  installer_say "Creating 32GiB for ONL boot"
+  start=$NEXTBLOCK
+  end=$(( $start + 65535 ))
+
+  parted -s $DEV unit s mkpart primary ext4 ${start}s ${end}s || return 1
+  tune2fs -L "ONL-BOOT" $DEV || return 1
+  parted $DEV set $MINPART boot on || return 1
+  mkfs.ext4 -L "ONL-BOOT" ${DEV}${MINPART}
+  ONL_BOOT=${DEV}${MINPART}
+
+  NEXTBLOCK=$(( $end + 1 ))
+  MINPART=$(( $MINPART + 1 ))
+
+  # Ha ha, blkid doesn't recognize 32MiB vfat
+  # partitions; 33MiB seems to be large enough
+  installer_say "Creating /mnt/flash"
+  start=$NEXTBLOCK
+  end=$(( $start + 33 * 1048576 / 512 ))
+
+  parted -s $DEV unit s mkpart primary fat32 ${start}s ${end}s || return 1
+  tune2fs -L "FLASH" $DEV || return 1
+  mkfs.vfat -n "FLASH" ${DEV}${MINPART}
+  FLASH=${DEV}${MINPART}
+
+  NEXTBLOCK=$(( $end + 1 ))
+  MINPART=$(( $MINPART + 1 ))
+
+  installer_say "Allocating remainder for /mnt/flash2"
+  start=$NEXTBLOCK
+
+  parted -s $DEV unit s mkpart primary fat32 ${start}s "100%" || return 1
+  tune2fs -L "FLASH2" $DEV || return 1
+  mkfs.vfat -n "FLASH2" ${DEV}${MINPART}
+  FLASH2=${DEV}${MINPART}
+
+  return 0
+}
+
 installer_standard_gpt_install()
 {
-  find_gpt || return 1
+  find_main_partition || return 1
   installer_say "Installing to $DEV starting at partition $MINPART"
 
   visit_parted $DEV do_handle_disk do_maybe_delete || return 1
@@ -308,6 +369,80 @@ installer_standard_gpt_install()
   fi
 
   partition_gpt || return 1
+
+  installer_say "Installing boot files to $ONL_BOOT"
+  mkdir "$workdir/mnt"
+
+  if test -f "${installer_dir}/boot-config"; then
+    installer_say "Installing boot-config"
+    mount $FLASH "$workdir/mnt"
+    cp "${installer_dir}/boot-config" "$workdir/mnt/boot-config"
+    umount "$workdir/mnt"
+  else
+    installer_say "Warning: No boot-config. Manual booting will be required."
+  fi
+
+  if test -f "${installer_platform_dir}/swi-config"; then
+    . "${installer_platform_dir}/swi-config"
+  elif test -f "${installer_dir}/swi-config"; then
+    . "${installer_dir}/swi-config"
+  fi
+
+  if test -f "${SWISRC}"; then
+    if test ! "${SWIDST}"; then
+      SWIDST="$(basename ${SWISRC})"
+    fi
+    installer_say "Installing ONL Software Image (${SWIDST})..."
+    mount $FLASH2 "$workdir/mnt"
+    cp "${SWISRC}" "$workdir/mnt/${SWIDST}"
+    umount "$workdir/mnt"
+  else
+    installer_say "No ONL Software Image available for installation. Post-install ZTN installation will be required."
+  fi
+
+  installer_say "Installing kernel"
+  mount -t ext4 $ONL_BOOT "$workdir/mnt"
+
+#  cp "${installer_dir}/kernel-3.14-x86_64-all" "$workdir/mnt/."
+  cp "${installer_dir}/kernel-3.2-deb7-x86_64-all" "$workdir/mnt/."
+
+  cp "${installer_dir}/kernel-x86_64" "$workdir/mnt/."
+  cp "${installer_dir}/initrd-amd64" "$workdir/mnt/."
+  mkdir "$workdir/mnt/grub"
+  cp "${installer_platform_dir}/boot/grub.cfg" "$workdir/mnt/grub/grub.cfg"
+
+  installer_say "Installing GRUB"
+  grub-install --boot-directory="$workdir/mnt" $DEV
+
+  # leave the GRUB directory mounted,
+  # so we can manipulate the GRUB environment
+  BOOTDIR="$workdir/mnt"
+
+  return 0
+}
+
+installer_standard_msdos_install()
+{
+  find_main_partition || return 1
+  installer_say "Installing to $DEV starting at partition $MINPART"
+
+  visit_parted $DEV do_handle_disk_msdos do_maybe_delete || return 1
+
+  if test "$BLOCKS"; then
+    installer_say "found a disk with $BLOCKS blocks"
+  else
+    installer_say "*** cannot get block count for $DEV"
+    return 1
+  fi
+
+  if test "$NEXTBLOCK"; then
+    installer_say "next usable block is at $NEXTBLOCK"
+  else
+    installer_say "*** cannot find a starting block"
+    return 1
+  fi
+
+  partition_msdos || return 1
 
   installer_say "Installing boot files to $ONL_BOOT"
   mkdir "$workdir/mnt"

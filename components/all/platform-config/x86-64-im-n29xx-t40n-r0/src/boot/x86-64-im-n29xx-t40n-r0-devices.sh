@@ -1,7 +1,7 @@
 ############################################################
-# <bsn.cl fy=2013 v=onl>
 #
-#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#    Copyright 2014 Big Switch Networks, Inc.
+#    Copyright 2015 Interface Masters Technologies, Inc.
 #
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -16,22 +16,22 @@
 # language governing permissions and limitations under the
 # License.
 #
-# </bsn.cl>
 ############################################################
-#
-# These are the platforms to include in this installer build.
-#
+# x86-64-im-n29xx-t40n-r0
 ############################################################
-INSTALLER_PLATFORMS :=  x86-64-dell-s6000-s1220-r0 \
-			x86-64-dell-s4000-c2338-r0 \
-			x86-64-quanta-ly6-rangeley-r0 \
-			x86-64-quanta-ly8-rangeley-r0 \
-			x86-64-accton-as5712-54x-r0 \
-			x86-64-accton-as5812-54x-r0 \
-			x86-64-accton-as5812-54t-r0 \
-			x86-64-accton-as7512-32x-r0 \
-			x86-64-accton-as7712-32x-r0 \
-			x86-64-accton-as6712-32x-r0 \
-			x86-64-accton-as6812-32x-r0 \
-			x86-64-wnc-sst1-n1-r0 \
-			x86-64-im-n29xx-t40n-r0
+
+function lpc_init {
+   ID=`setpci -s 00:1f.0 VENDOR_ID.L 2>/dev/null`
+   if [ "$ID" = "1e558086" ]; then
+      setpci -s 00:1f.0 VENDOR_ID+0x88.L=0x00fc0701
+   else
+      ID=`setpci -s 00:14.3 VENDOR_ID.L 2>/dev/null`
+      if [ "$ID" = "439d1002" ]; then
+         setpci -s 00:14.3 VENDOR_ID+0x4a.B=0x0c
+      fi
+   fi
+}
+
+lpc_init
+
+exit 0

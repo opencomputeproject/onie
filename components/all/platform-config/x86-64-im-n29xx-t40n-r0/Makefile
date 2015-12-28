@@ -1,7 +1,8 @@
 ############################################################
-# <bsn.cl fy=2013 v=onl>
+# <bsn.cl fy=2014 v=onl>
 #
-#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#        Copyright 2014 Big Switch Networks, Inc.
+#        Copyright 2015 Interface Masters Technologies, Inc.
 #
 # Licensed under the Eclipse Public License, Version 1.0 (the
 # "License"); you may not use this file except in compliance
@@ -19,19 +20,15 @@
 # </bsn.cl>
 ############################################################
 #
-# These are the platforms to include in this installer build.
+#
 #
 ############################################################
-INSTALLER_PLATFORMS :=  x86-64-dell-s6000-s1220-r0 \
-			x86-64-dell-s4000-c2338-r0 \
-			x86-64-quanta-ly6-rangeley-r0 \
-			x86-64-quanta-ly8-rangeley-r0 \
-			x86-64-accton-as5712-54x-r0 \
-			x86-64-accton-as5812-54x-r0 \
-			x86-64-accton-as5812-54t-r0 \
-			x86-64-accton-as7512-32x-r0 \
-			x86-64-accton-as7712-32x-r0 \
-			x86-64-accton-as6712-32x-r0 \
-			x86-64-accton-as6812-32x-r0 \
-			x86-64-wnc-sst1-n1-r0 \
-			x86-64-im-n29xx-t40n-r0
+
+ifndef ONL
+$(error $$ONL is undefined.)
+endif
+
+# ONL_REQUIRED_SUBMODULES :=
+ONL_REQUIRED_PACKAGES := vendor-config-onl:all vendor-config-imt:all
+
+include $(ONL)/make/component.mk
