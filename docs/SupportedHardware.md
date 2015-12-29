@@ -58,5 +58,18 @@ Dell
 <tr> <td> S4810-ON            <td> 48x10G  + 4x40G  <td> FreeScale P2020        <td> Broadcom BCM56845 (Trident)     <td> Supported and Tested   </tr>
 <tr> <td> S4048-ON            <td> 48x10G  + 6x40G  <td> Intel Atom C2338       <td> Broadcom BCM56854 (Trident2)     <td> Supported and Tested   </tr>
 <tr> <td> S6000-ON            <td> 32x40G           <td> Intel Atom S1220       <td> Broadcom BCM56850 (Trident2)     <td> Supported and Tested   </tr>
+</table>
 
+Interface Masters Technologies, Inc.
+---
+<table class="table table-striped table-hover">
+<thead>
+<tr class="info">
+     <th> Device          <th> Ports       <th> CPU        <th> Forwarding       <th> Modular I/O configurations       <th> Support Status     </tr>
+</thead>
+<tr> <td> Niagara 2948X12XLm   <td> 48x10G  + 12x40G  <td> Intel/AMD x86    <td> Broadcom BCM56850 (Trident2)   <td> Yes    <td> Supported and Tested   </tr>
+<tr> <td> Niagara 2960X6XLm    <td> 60x10G  + 6x40G   <td> Intel/AMD x86    <td> Broadcom BCM56850 (Trident2)   <td> Yes    <td> Supported and Tested   </tr>
+<tr> <td> Niagara 2972Xm       <td> 72x10G            <td> Intel/AMD x86    <td> Broadcom BCM56850 (Trident2)   <td> Yes    <td> Supported and Tested   </tr>
+<tr> <td> Niagara 2932XL       <td> 32x40G            <td> Intel/AMD x86    <td> Broadcom BCM56850 (Trident2)   <td> No     <td> Supported and Tested   </tr>
+<tr> <td> Niagara 2948X6XL     <td> 48x10G  + 6x40G   <td> Intel/AMD x86    <td> Broadcom BCM56850 (Trident2)   <td> No     <td> Supported and Tested   </tr>
 </table>
