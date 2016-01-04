@@ -33,6 +33,9 @@ class OpenNetworkPlatformImplementation(OpenNetworkPlatformIMT):
     def _plat_oid_table(self):
         return None
 
+    def sys_oid_platform(self):
+        return ".30324.29"
+        
     def get_environment(self):
         return "Not implemented."
 
