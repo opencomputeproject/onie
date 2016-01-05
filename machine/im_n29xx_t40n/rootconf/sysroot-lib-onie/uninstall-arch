@@ -1,0 +1,195 @@
+# x86_64 specific uninstall routine
+
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+[ -r "$lib_dir/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. $lib_dir/onie-blkdev-common
+
+if [ "$onie_partition_type" = "gpt" ] ; then
+    # Helper functions
+    delete_partition="delete_gpt_partition"
+    should_delete_partition="should_delete_gpt_partition"
+elif [ "$onie_partition_type" = "msdos" ] ; then
+    # Helper functions
+    delete_partition="delete_msdos_partition"
+    should_delete_partition="should_delete_msdos_partition"
+else
+    echo "ERROR: Unsupported partition type: $onie_partition_type"
+    exit 1
+fi
+
+# Deletes a GPT partition
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+delete_gpt_partition()
+{
+    sgdisk -d $2 /dev/$1 > /dev/null 2>&1
+}
+
+# Deletes a MSDOS partition
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+delete_msdos_partition()
+{
+    parted -s /dev/$1 rm $2 > /dev/null 2>&1
+}
+
+# Erase a block device partition
+# Step 1 -- Overwrite the partition with random data
+# Step 2 -- Remove the partition from the partition table
+erase_part()
+{
+    blk_dev="$1"
+    part="$2"
+
+    device="${blk_dev}$part"
+    dev_sz=$(blockdev --getsize64 /dev/$device)
+    cur_sz=0
+    count=0
+    n_mb=8
+    step=$(( $n_mb * 1024 * 1024 ))
+    total=$(( $dev_sz + $step - 1 ))
+    total=$(( $total / $step ))
+    mb_sz=$(( $dev_sz / ( 1024 * 1024 ) ))
+    printf "${log_pre}Erasing internal mass storage device: /dev/$device (${mb_sz}MB)\n"
+    if [ "$onie_testing" != "y" ] ; then
+        dd if=/dev/urandom of=/tmp/junk.bin bs=1M count=$n_mb > /dev/null 2>&1
+        while [ $cur_sz -lt $dev_sz ] ; do
+            dd if=/tmp/junk.bin of=/dev/$device bs=$step seek=$count > /dev/null 2>&1
+            count=$(( $count + 1 ))
+            cur_sz=$(( $step * $count ))
+            printf "\r  Percent complete: %02u%%" $(( ($count * 100) / $total ))
+        done
+        printf "\n"
+    fi
+    printf "${log_pre}Erase complete.\n"
+
+    if [ "$onie_testing" != "y" ] ; then
+        printf "${log_pre}Deleting partition $part from /dev/$blk_dev\n"
+        eval $delete_partition $blk_dev $part || {
+            printf "${log_pre}Unable to remove partition $part on /dev/$blk_dev\n"
+            return 1
+        }
+    fi
+}
+
+# When deleting partitions this function determines whether or not to
+# keep the specified GPT partition.
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+#
+# Returns 0 to delete the partition.
+should_delete_gpt_partition()
+{
+    name="$(sgdisk -i $2 /dev/$1 | grep 'Partition name:')"
+    name=${name#*"'"}
+    name=${name%"'"*}
+    case "$name" in
+        GRUB-BOOT|ONIE-BOOT)
+            # echo "skipping ONIE part"
+            return 1
+            ;;
+        *-DIAG)
+            # check system attributes
+            attr=$(sgdisk -i $2 /dev/$1 | grep 'Attribute flags')
+            attr=${attr##*: }
+            if [ "$attr" = "0000000000000001" ] ; then
+                # system attribute is set, skip this part
+                # echo "skipping DIAG part"
+                return 1
+            fi
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+    return 0
+}
+
+# When deleting partitions this function determines whether or not to
+# keep the specified msdos partition.
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+#
+# Returns 0 to delete the partition.
+should_delete_msdos_partition()
+{
+    # check for ONIE-BOOT file system volume label
+    blkid /dev/${1}$2 | \
+	egrep -q 'LABEL=("ONIE-BOOT"|"BOOT"|".*-DIAG") .+$' && return 1
+    return 0
+}
+
+uninstall_system()
+{
+
+    # Clean up block device that contains ONIE
+    onie_dev=$(onie_get_boot_dev)
+    blk_dev=$(echo $onie_dev | sed -e 's/[0-9]//' | sed -e 's#/dev/##')
+
+    [ -b "/dev/$blk_dev" ] || {
+        echo "Error: Unable to determine block device of ONIE install"
+        exit 1
+    }
+
+    # Wipe out and delete all partitions, except for important ones,
+    # like GRUB, ONIE and possibly a DIAG.
+    ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev//" | while read part ; do
+        if eval $should_delete_partition $blk_dev $part ; then
+            erase_part $blk_dev $part
+        fi
+    done
+
+    # Re-install ONIE GRUB in the MBR as the NOS we just removed
+    # probably installed there.
+
+    boot_dev="/dev/$blk_dev"
+
+    # Install ONIE GRUB in MBR and ONIE partition
+    core_img="$onie_boot_mnt/grub/i386-pc/core.img"
+    [ -f "$core_img" ] && chattr -i $core_img
+    grub-install --boot-directory="$onie_boot_mnt" --recheck "$boot_dev" || {
+        echo "ERROR: grub-install failed on: $boot_dev"
+        exit 1
+    }
+    grub_install_log=$(mktemp)
+    grub-install --force --boot-directory="$onie_boot_mnt" \
+        --recheck "$onie_dev" > /$grub_install_log 2>&1 || {
+        echo "ERROR: grub-install failed on: $onie_dev"
+        cat $grub_install_log && rm -f $grub_install_log
+        exit 1
+    }
+    rm -f $grub_install_log
+    [ -f "$core_img" ] && chattr +i $core_img
+
+    # If there is a diag partition add a chainload entry for it.
+    diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
+    if [ -n "$diag_label" ] ; then
+        cat <<EOF >> $grub_root_dir/grub.cfg
+menuentry '$diag_label $onie_platform' {
+        search --no-floppy --label --set=root $diag_label
+        echo    'Loading $diag_label $onie_platform ...'
+        chainloader +1
+}
+EOF
+    fi
+
+    # Return to install mode on the next boot
+    onie-boot-mode -q -o install
+
+    return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

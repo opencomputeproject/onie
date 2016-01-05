@@ -4,6 +4,8 @@
 
 ONIE_ARCH ?= x86_64
 
+ARCHDIR = $(MACHINEDIR)/arch
+
 VENDOR_REV ?= ONIE
 
 # Translate hardware revision to ONIE hardware revision

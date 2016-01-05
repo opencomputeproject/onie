@@ -1,0 +1,44 @@
+# platform specific uninstall routine
+
+# Install GRUB initial grub.cfg file.
+#
+# Set a few GRUB_xxx environment variables that will be picked up and
+# used by the 50_onie_grub script.  This is similiar to what an OS
+# would specify in /etc/default/grub.
+install_grub_config()
+{
+    local boot_dir="$1"
+
+    SERIAL_CONSOLE_ENABLE="yes"
+
+    if [ "$SERIAL_CONSOLE_ENABLE" = "yes" ] ; then
+        DEFAULT_GRUB_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
+        DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"
+        DEFAULT_GRUB_TERMINAL_INPUT="serial"
+        DEFAULT_GRUB_TERMINAL_OUTPUT="serial"
+    else
+        DEFAULT_GRUB_SERIAL_COMMAND=""
+        DEFAULT_GRUB_CMDLINE_LINUX=""
+        DEFAULT_GRUB_TERMINAL_INPUT="console"
+        DEFAULT_GRUB_TERMINAL_OUTPUT="console"
+    fi
+    GRUB_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_GRUB_SERIAL_COMMAND"}
+    GRUB_TERMINAL_INPUT=${GRUB_TERMINAL_INPUT:-"$DEFAULT_GRUB_TERMINAL_INPUT"}
+    GRUB_TERMINAL_OUTPUT=${GRUB_TERMINAL_OUTPUT:-"$DEFAULT_GRUB_TERMINAL_OUTPUT"}
+    GRUB_CMDLINE_LINUX=${GRUB_CMDLINE_LINUX:-"$DEFAULT_GRUB_CMDLINE_LINUX"}
+    export GRUB_SERIAL_COMMAND
+    export GRUB_TERMINAL_INPUT
+    export GRUB_TERMINAL_OUTPUT
+    export GRUB_CMDLINE_LINUX
+
+    $boot_dir/onie/grub.d/50_onie_grub >> $grub_root_dir/grub.cfg
+}
+
+[ -r "$lib_dir/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. $lib_dir/onie-blkdev-common
+
+install_grub_config $onie_boot_mnt
+rm -f $onie_boot_mnt/* 2>/dev/null

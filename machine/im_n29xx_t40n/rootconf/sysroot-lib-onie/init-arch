@@ -1,0 +1,68 @@
+# Early boot time initializations for x86_64 architectures
+
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+. /lib/onie/onie-blkdev-common
+
+# Mount the ONIE partition at boot.  If the disk partition is
+# unavailable (we are netbooted with a blank hard disk for example)
+# then just create $onie_config_dir in the current ramdisk and
+# proceed.
+
+mkdir -p $onie_boot_mnt
+
+delay=70
+cnt=0
+while [ $cnt -lt $delay ] ; do
+    device=$(onie_get_boot_dev)
+    [ -n "$device" ] && break;
+    cnt=$(( $cnt + 1 ))
+    sleep 0.1
+done
+
+if [ -n "$use_onie_mount_partitions" ] ; then
+onie_mount_partitions write keep_mounted
+else
+
+if [ -n "$device" ] ; then
+
+    # Create an /etc/fstab entry
+    (cat <<EOF
+# FSTAB entry for the ONIE-BOOT partition mounted on /boot
+
+LABEL=ONIE-BOOT $onie_boot_mnt $onie_boot_fs_type    defaults,rw,errors=remount-ro	0	1
+EOF
+) > /etc/fstab
+
+    # Check the filesystem for errors
+    run_fsck $device || {
+        echo "ERROR: Problems checking $onie_boot_label filesystem"
+        # Use a ramdisk directory for onie_config_dir
+        break
+    }
+
+    # mount the ONIE-BOOT partition
+    echo "Info: Mounting LABEL=$onie_boot_label on $onie_boot_mnt ..."
+    mount $onie_boot_mnt || {
+        echo "ERROR: Problems mounting $onie_boot_label filesystem on $onie_boot_mnt"
+        # Use a ramdisk directory for onie_config_dir
+    }
+
+else
+
+    if [ "$boot_env" != "recovery" ] ; then
+        echo "ERROR: Getting ONIE boot device timeout"
+    fi
+
+fi
+
+mkdir -p $onie_config_dir
+fi
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
