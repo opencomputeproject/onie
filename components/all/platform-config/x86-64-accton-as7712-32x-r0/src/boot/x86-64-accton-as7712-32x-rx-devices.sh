@@ -8,6 +8,16 @@
 # </bsn.cl>
 ############################################################
 
+#
+# The IDPROM device is initialized last as part of this script.
+#
+# Assume that if the IDPROM device already exists then we
+# have already executed properly.
+#
+if [ -f /sys/devices/pci0000:00/0000:00:13.0/i2c-1/1-0057/eeprom ]; then
+    exit 0
+fi
+
 ########### initialize I2C bus 0 ###########
 # initiate multiplexer (PCA9548)
 echo pca9548 0x76 > /sys/bus/i2c/devices/i2c-0/new_device
@@ -76,5 +86,8 @@ echo as7712_32x_sfp21 0x50 > /sys/bus/i2c/devices/i2c-46/new_device
 echo as7712_32x_sfp22 0x50 > /sys/bus/i2c/devices/i2c-47/new_device
 echo as7712_32x_sfp23 0x50 > /sys/bus/i2c/devices/i2c-48/new_device
 echo as7712_32x_sfp24 0x50 > /sys/bus/i2c/devices/i2c-49/new_device
+
+# IDPROM
+echo 24c02 0x57 > /sys/devices/pci0000:00/0000:00:13.0/i2c-1/new_device
 
 exit 0
