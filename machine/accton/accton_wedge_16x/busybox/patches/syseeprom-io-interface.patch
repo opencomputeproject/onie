@@ -1,10 +1,10 @@
 implement syseeprom IO interface for the machine
 
 diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 7c7416b..2b95ced 100644
+index 7f88dbc..5dc3b1e 100644
 --- a/miscutils/Kbuild.src
 +++ b/miscutils/Kbuild.src
-@@ -51,6 +51,6 @@ lib-$(CONFIG_VOLNAME)     += volname.o
+@@ -51,7 +51,7 @@ lib-$(CONFIG_VOLNAME)     += volname.o
  lib-$(CONFIG_WALL)        += wall.o
  lib-$(CONFIG_WATCHDOG)    += watchdog.o
  lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
@@ -12,12 +12,13 @@ index 7c7416b..2b95ced 100644
 +lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c_alt.o
  lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
  lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
+ lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
 diff --git a/miscutils/sys_eeprom_i2c_alt.c b/miscutils/sys_eeprom_i2c_alt.c
 new file mode 100644
-index 0000000..51eb086
+index 0000000..54876a2
 --- /dev/null
 +++ b/miscutils/sys_eeprom_i2c_alt.c
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,190 @@
 +#include "libbb.h"
 +#include "onie_tlvinfo.h"
 +#include "sys_eeprom.h"
@@ -34,26 +35,32 @@ index 0000000..51eb086
 +
 +static int tty_open(void)
 +{
++    int i = 20;
 +    struct termios attr;
 +
 +    if (tty_fd > -1)
 +        return 0;
 +
-+    if ((tty_fd = open(TTY_DEVICE, O_RDWR | O_NOCTTY | O_NDELAY)) > -1)
++    do
 +    {
-+        tcgetattr(tty_fd, &attr);
-+        attr.c_cflag = B57600 | CS8 | CLOCAL | CREAD;
-+        attr.c_iflag = IGNPAR;
-+        attr.c_oflag = 0;
-+        attr.c_lflag = 0;
-+        attr.c_cc[VMIN] = (unsigned char)
-+            ((MAXIMUM_TTY_STRING_LENGTH > 0xFF) ?  0xFF : MAXIMUM_TTY_STRING_LENGTH);
-+        attr.c_cc[VTIME] = 0;
-+        cfsetospeed(&attr, B57600);
-+        cfsetispeed(&attr, B57600);
-+        tcsetattr(tty_fd, TCSANOW, &attr);
-+        return 0;
-+    }
++        if ((tty_fd = open(TTY_DEVICE, O_RDWR | O_NOCTTY | O_NDELAY)) > -1)
++        {
++            tcgetattr(tty_fd, &attr);
++            attr.c_cflag = B57600 | CS8 | CLOCAL | CREAD;
++            attr.c_iflag = IGNPAR;
++            attr.c_oflag = 0;
++            attr.c_lflag = 0;
++            attr.c_cc[VMIN] = (unsigned char)
++                ((MAXIMUM_TTY_STRING_LENGTH > 0xFF) ?  0xFF : MAXIMUM_TTY_STRING_LENGTH);
++            attr.c_cc[VTIME] = 0;
++            cfsetospeed(&attr, B57600);
++            cfsetispeed(&attr, B57600);
++            tcsetattr(tty_fd, TCSANOW, &attr);
++            return 0;
++        }
++        i--;
++        usleep(100000);
++    } while (i > 0);
 +    return -1;
 +}
 +
@@ -76,21 +83,27 @@ index 0000000..51eb086
 +
 +static int tty_login(void)
 +{
-+    snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "\r");
-+    if (!tty_exec_buf(0, TTY_PROMPT))
-+        return 0;
-+    if (strstr(tty_buf, "bmc login:") != NULL)
++    int i = 10;
++    do
 +    {
-+        snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "root\r");
-+        if (!tty_exec_buf(0, "Password:"))
++        snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "\r\r");
++        if (!tty_exec_buf(0, TTY_PROMPT))
++            return 0;
++        if (strstr(tty_buf, "bmc login:") != NULL)
 +        {
-+            snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "0penBmc\r");
-+            if (!tty_exec_buf(0, TTY_PROMPT))
++            snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "root\r");
++            if (!tty_exec_buf(0, "Password:"))
 +            {
-+                return 0;
++                snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "0penBmc\r");
++                if (!tty_exec_buf(0, TTY_PROMPT))
++                {
++                    return 0;
++                }
 +            }
 +        }
-+    }
++        i--;
++        usleep(50000);
++    } while (i > 0);
 +    return -1;
 +}
 +
