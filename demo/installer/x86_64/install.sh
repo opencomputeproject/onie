@@ -313,22 +313,8 @@ cp demo.vmlinuz demo.initrd $demo_mnt
 # store installation log in demo file system
 onie-support $demo_mnt
 
-if [ "$firmware" = "uefi" ] ; then
-    demo_install_uefi_grub "$demo_mnt" "$blk_dev"
-else
-    demo_install_grub "$demo_mnt" "$blk_dev"
-fi
-
 # The persistent ONIE directory location
 onie_root_dir=/mnt/onie-boot/onie
-
-# Create a minimal grub.cfg that allows for:
-#   - configure the serial console
-#   - allows for grub-reboot to work
-#   - a menu entry for the DEMO OS
-#   - menu entries for ONIE
-
-grub_cfg=$(mktemp)
 
 # Set a few GRUB_xxx environment variables that will be picked up and
 # used by the 50_onie_grub script.  This is similiar to what an OS
@@ -342,8 +328,45 @@ grub_cfg=$(mktemp)
 # import console config and linux cmdline
 . $onie_root_dir/grub/grub-variables
 
-# Add common configuration, like the timeout and serial console.
-cat <<EOF > $grub_cfg
+# If ONIE supports boot command feeding,
+# adds DEMO DIAG bootcmd to ONIE.
+if grep -q 'ONIE_SUPPORT_BOOTCMD_FEEDING' $onie_root_dir/grub.d/50_onie_grub &&
+    [ "$demo_type" = "DIAG" ] ; then
+    cat <<EOF > $onie_root_dir/grub/diag-bootcmd.cfg
+diag_menu="Demo $demo_type"
+function diag_bootcmd {
+  search --no-floppy --label --set=root $demo_volume_label
+  echo    'Loading ONIE Demo $demo_type kernel ...'
+  linux   /demo.vmlinuz $GRUB_CMDLINE_LINUX \$ONIE_EXTRA_CMDLINE_LINUX DEMO_TYPE=$demo_type
+  echo    'Loading ONIE Demo $demo_type initial ramdisk ...'
+  initrd  /demo.initrd
+  boot
+}
+EOF
+
+    # Update ONIE grub configuration -- use the grub fragment provided by the
+    # ONIE distribution.
+    $onie_root_dir/grub.d/50_onie_grub > /dev/null
+
+else
+    # Install a separate GRUB for DEMO DIAG or NOS
+    # that supports GRUB chainload function.
+
+    if [ "$firmware" = "uefi" ] ; then
+        demo_install_uefi_grub "$demo_mnt" "$blk_dev"
+    else
+        demo_install_grub "$demo_mnt" "$blk_dev"
+    fi
+
+    # Create a minimal grub.cfg that allows for:
+    #   - configure the serial console
+    #   - allows for grub-reboot to work
+    #   - a menu entry for the DEMO OS
+    #   - menu entries for ONIE
+    grub_cfg=$(mktemp)
+
+    # Add common configuration, like the timeout and serial console.
+    cat <<EOF > $grub_cfg
 $GRUB_SERIAL_COMMAND
 terminal_input $GRUB_TERMINAL_INPUT
 terminal_output $GRUB_TERMINAL_OUTPUT
@@ -352,13 +375,13 @@ set timeout=5
 
 EOF
 
-# Add any platform specific kernel command line arguments.  This sets
-# the $ONIE_EXTRA_CMDLINE_LINUX variable referenced above in
-# $GRUB_CMDLINE_LINUX.
-cat $onie_root_dir/grub/grub-extra.cfg >> $grub_cfg
+    # Add any platform specific kernel command line arguments.  This sets
+    # the $ONIE_EXTRA_CMDLINE_LINUX variable referenced above in
+    # $GRUB_CMDLINE_LINUX.
+    cat $onie_root_dir/grub/grub-extra.cfg >> $grub_cfg
 
-# Add the logic to support grub-reboot
-cat <<EOF >> $grub_cfg
+    # Add the logic to support grub-reboot
+    cat <<EOF >> $grub_cfg
 if [ -s \$prefix/grubenv ]; then
   load_env
 fi
@@ -370,9 +393,9 @@ fi
 
 EOF
 
-# Add a menu entry for the DEMO OS
-demo_grub_entry="Demo $demo_type"
-cat <<EOF >> $grub_cfg
+    # Add a menu entry for the DEMO OS
+    demo_grub_entry="Demo $demo_type"
+    cat <<EOF >> $grub_cfg
 menuentry '$demo_grub_entry' {
         search --no-floppy --label --set=root $demo_volume_label
         echo    'Loading ONIE Demo $demo_type kernel ...'
@@ -382,11 +405,13 @@ menuentry '$demo_grub_entry' {
 }
 EOF
 
-# Add menu entries for ONIE -- use the grub fragment provided by the
-# ONIE distribution.
-$onie_root_dir/grub.d/50_onie_grub >> $grub_cfg
+    # Add menu entries for ONIE -- use the grub fragment provided by the
+    # ONIE distribution.
+    $onie_root_dir/grub.d/50_onie_grub >> $grub_cfg
 
-cp $grub_cfg $demo_mnt/grub/grub.cfg
+    cp $grub_cfg $demo_mnt/grub/grub.cfg
+
+fi
 
 # clean up
 umount $demo_mnt || {

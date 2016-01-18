@@ -1,7 +1,7 @@
 # x86_64 specific ONIE installer functions
 
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #
@@ -463,6 +463,11 @@ install_grub_config()
         exit 1
     }
 
+    # Restore the previous diag_bootcmd.cfg file
+    if [ "$preserve_diag_bootcmd" = "yes" ] ; then
+        cp /tmp/preserve_diag_bootcmd $diag_bootcmd_file
+    fi
+
     # import console config and linux cmdline
     . $boot_dir/onie/grub/grub-variables
 
@@ -628,6 +633,12 @@ install_onie()
         if [ -d $onie_update_dir ] ; then
             preserve_update_dir=yes
             cp -a $onie_update_dir /tmp/preserve-update
+        fi
+        if [ "$onie_boot_reason" != "embed" ] ; then
+            if [ -r $diag_bootcmd_file ] ; then
+                preserve_diag_bootcmd=yes
+                cp $diag_bootcmd_file /tmp/preserve_diag_bootcmd
+            fi
         fi
         umount $onie_boot_mnt > /dev/null 2>&1
     fi
