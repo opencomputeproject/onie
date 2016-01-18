@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -167,14 +167,9 @@ demo_install_grub()
         local core_img="$demo_mnt/grub/$grub_target/core.img"
     fi
 
-    # Pretend we are a major distro and install GRUB into the MBR of
-    # $blk_dev.
-    grub-install --target="$grub_target" \
-        --boot-directory="$demo_mnt" --recheck "$blk_dev" || {
-        echo "ERROR: grub-install failed on: $blk_dev"
-        exit 1
-    }
-
+    # keep grub loading ONIE page after installing diag.
+    # So that it is not necessary to set "ONIE" as default boot
+    # mode in diag's grub.cfg.
     if [ "$demo_type" = "DIAG" ] ; then
         # Install GRUB in the partition also.  This allows for
         # chainloading the DIAG image from another OS.
@@ -211,6 +206,15 @@ demo_install_grub()
         # restore immutable flag on the core.img file as discussed
         # above.
         [ -f "$core_img" ] && chattr +i $core_img
+
+    else
+        # Pretend we are a major distro and install GRUB into the MBR of
+        # $blk_dev.
+        grub-install --target="$grub_target" \
+            --boot-directory="$demo_mnt" --recheck "$blk_dev" || {
+            echo "ERROR: grub-install failed on: $blk_dev"
+            exit 1
+        }
 
     fi
 
@@ -260,6 +264,26 @@ demo_install_uefi_grub()
         echo "ERROR: efibootmgr failed to create new boot variable on: $blk_dev"
         exit 1
     }
+
+    # keep grub loading ONIE page after installing diag.
+    # So that it is not necessary to set "ONIE" as default boot
+    # mode in diag's grub.cfg.
+    if [ "$demo_type" = "DIAG" ] ; then
+        boot_num=$(efibootmgr -v | grep "ONIE: " | grep ')/File(' | \
+            tail -n 1 | awk '{ print $1 }' | sed -e 's/Boot//' -e 's/\*//')
+        boot_order=$(efibootmgr | grep BootOrder: | awk '{ print $2 }' | \
+            sed -e s/,$boot_num// -e s/$boot_num,// -e s/$boot_num//)
+        if [ -n "$boot_order" ] ; then
+            boot_order="${boot_num},$boot_order"
+        else
+            boot_order="$boot_num"
+        fi
+        efibootmgr --quiet --bootorder "$boot_order" || {
+            echo "ERROR: efibootmgr failed to set new boot order"
+            return 1
+        }
+
+    fi
 
 }
 
@@ -345,15 +369,6 @@ if [ "\${next_entry}" ] ; then
 fi
 
 EOF
-
-if [ "$demo_type" = "DIAG" ] ; then
-    # Make sure ONIE install mode is the default boot mode for the
-    # diag partition.
-    cat <<EOF >> $grub_cfg
-set default=ONIE
-EOF
-    $onie_root_dir/tools/bin/onie-boot-mode -q -o install
-fi
 
 # Add a menu entry for the DEMO OS
 demo_grub_entry="Demo $demo_type"

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -147,11 +147,7 @@ export GRUB_CMDLINE_LINUX
 
 # variables for ONIE itself
 GRUB_ONIE_SERIAL_COMMAND=\$GRUB_SERIAL_COMMAND
-DEFAULT_CMDLINE="\$GRUB_CMDLINE_LINUX \$GRUB_CMDLINE_LINUX_DEFAULT \$GRUB_ONIE_PLATFORM_ARGS \$GRUB_ONIE_DEBUG_ARGS"
-GRUB_ONIE_CMDLINE_LINUX=\${GRUB_ONIE_CMDLINE_LINUX:-"\$DEFAULT_CMDLINE"}
-ONIE_CMDLINE="quiet \$GRUB_ONIE_CMDLINE_LINUX \\\$ONIE_EXTRA_CMDLINE_LINUX"
 export GRUB_ONIE_SERIAL_COMMAND
-export ONIE_CMDLINE
 
 ## End grub-variables
 EOF

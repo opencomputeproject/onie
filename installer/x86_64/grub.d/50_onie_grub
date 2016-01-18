@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2015-2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -54,6 +54,39 @@ fi
 # Step 2 -- Update ONIE's GRUB configuration in the ONIE-BOOT
 # partition.
 
+diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
+add_diag_bootcmd()
+{
+    cat <<EOF >> $grub_cfg
+diag_menu="$diag_label"
+EOF
+    if [ -d "/sys/firmware/efi/efivars" ] && [ -f "${uefi_root}/$onie_uefi_grub" ] ; then
+        # UEFI firmware
+        diag_uefi_grub=$(efibootmgr -v | grep $diag_label | sed -e 's/.*)\/File(//' -e 's/)//' -e 's/\\/\//g')
+        if [ -f "$uefi_root/$diag_uefi_grub" ] ; then
+            cat <<EOF >> $grub_cfg
+function diag_bootcmd {
+  set root='(hd0,gpt1)'
+  search --no-floppy --fs-uuid --set=root $uefi_uuid
+  echo    "Loading $diag_label \$onie_platform ..."
+  chainloader /$diag_uefi_grub
+  boot
+}
+EOF
+        fi
+    else
+        # legacy BIOS firmware
+        cat <<EOF >> $grub_cfg
+function diag_bootcmd {
+  search --no-floppy --label --set=root $diag_label
+  echo    "Loading $diag_label \$onie_platform ..."
+  chainloader ${default_chainloader}
+  boot
+}
+EOF
+    fi
+}
+
 tmp_mnt=
 onie_umount_partition()
 {
@@ -86,7 +119,6 @@ onie_root_dir="${tmp_mnt}/onie"
 # - If NOS/DIAG installer does not export GRUB_SERIAL_COMMAND and
 #   GRUB_CMDLINE_LINUX, ONIE will use the default/correct ones.
 if [ -z "$GRUB_ONIE_SERIAL_COMMAND" ] ||
-    [ -z "$ONIE_CMDLINE" ] ||
     [ -z "$GRUB_CMDLINE_LINUX" ] ; then
 . $onie_root_dir/grub/grub-variables
 fi
@@ -106,71 +138,36 @@ terminal_output serial
 EOF
 fi
 
+# Look for an ONIE compatible DIAG image and add a boot entry for it.
+cat <<EOF >> $grub_cfg
+# begin: diag boot command
+
+EOF
+if [ -n "$diag_label" ]  ; then
+    add_diag_bootcmd
+fi
+cat <<EOF >> $grub_cfg
+
+# end: diag boot command
+EOF
+
 # add the ONIE machine configuration data
 cat $onie_root_dir/grub/grub-machine.cfg >> $grub_cfg
 
 # add extra platform specific kernel command line options
 cat $onie_root_dir/grub/grub-extra.cfg >> $grub_cfg
 
+cat <<EOF >> $grub_cfg
+# begin: ONIE bootargs
+
+onie_initargs="$GRUB_CMDLINE_LINUX"
+onie_initargs_default="$GRUB_CMDLINE_LINUX_DEFAULT"
+onie_platformargs="$GRUB_ONIE_PLATFORM_ARGS"
+onie_debugargs="$GRUB_ONIE_DEBUG_ARGS"
+GRUB_ONIE_CMDLINE_LINUX="$GRUB_ONIE_CMDLINE_LINUX"
+
+# end: ONIE bootargs
+EOF
+
 # add ONIE configuration common to all ONIE boot modes
 cat $onie_root_dir/grub/grub-common.cfg >> $grub_cfg
-
-for mode in install rescue uninstall update embed ; do
-    case "$mode" in
-        install)
-            boot_message="ONIE: OS Install Mode ..."
-            ;;
-        rescue)
-            boot_message="ONIE: Rescue Mode ..."
-            ;;
-        uninstall)
-            boot_message="ONIE: OS Uninstall Mode ..."
-            ;;
-        update)
-            boot_message="ONIE: ONIE Update Mode ..."
-            ;;
-        embed)
-            boot_message="ONIE: ONIE Embed Mode ..."
-            ;;
-        *)
-            ;;
-    esac
-    (cat <<EOF
-menuentry "\$onie_menu_$mode" {
-        onie_entry_start
-        echo    "$boot_message"
-        linux   /onie/vmlinuz-\${onie_kernel_version}-onie $ONIE_CMDLINE boot_reason=$mode
-        initrd  /onie/initrd.img-\${onie_kernel_version}-onie
-        onie_entry_end
-}
-EOF
-    ) >> $grub_cfg
-done
-
-# Look for an ONIE compatible DIAG image and add a boot entry for it.
-diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
-if [ -n "$diag_label" ]  ; then
-    if [ -d "/sys/firmware/efi/efivars" ] && [ -f "${uefi_root}/$onie_uefi_grub" ] ; then
-        # UEFI firmware
-        diag_uefi_grub=$(efibootmgr -v | grep $diag_label | sed -e 's/.*)\/File(//' -e 's/)//' -e 's/\\/\//g')
-        if [ -f "$uefi_root/$diag_uefi_grub" ] ; then
-            cat <<EOF >> $grub_cfg
-menuentry '$diag_label' {
-	set root='(hd0,gpt1)'
-	search --no-floppy --fs-uuid --set=root $uefi_uuid
-        echo    'Loading $diag_label $onie_platform ...'
-	chainloader /$diag_uefi_grub
-}
-EOF
-        fi
-    else
-        # legacy BIOS firmware
-        cat <<EOF >> $grub_cfg
-menuentry '$diag_label' {
-        search --no-floppy --label --set=root $diag_label
-        echo    'Loading $diag_label $onie_platform ...'
-        chainloader ${default_chainloader}
-}
-EOF
-    fi
-fi
