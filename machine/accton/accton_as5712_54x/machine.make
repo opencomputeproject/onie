@@ -29,13 +29,6 @@ I2CTOOLS_SYSEEPROM = no
 # Console parameters
 CONSOLE_DEV = 1
 
-# Set Linux kernel version
-LINUX_VERSION		= 3.2
-LINUX_MINOR_VERSION	= 69
-
-# Specify uClibc version
-UCLIBC_VERSION = 0.9.32.1
-
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
