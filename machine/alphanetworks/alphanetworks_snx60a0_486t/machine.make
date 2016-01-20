@@ -24,19 +24,21 @@ VENDOR_ID = 31874
 
 # Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
+I2CTOOLS_SYSEEPROM = no
 
 # Console parameters
 CONSOLE_DEV = 1
+
+# Set Linux kernel version
+LINUX_VERSION		= 3.14
+LINUX_MINOR_VERSION	= 27
+
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
 
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
 # mode: makefile-gmake
 # End:
-
-LINUX_VERSION		= 3.14
-LINUX_MINOR_VERSION	= 27
-
-# Specify uClibc version
-UCLIBC_VERSION = 0.9.32.1
 
