@@ -6,6 +6,8 @@ ONIE_ARCH ?= x86_64
 
 VENDOR_REV ?= ONIE
 
+UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/onie-blkdev-common
+
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),ONIE)
   MACHINE_REV = 0
