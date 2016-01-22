@@ -29,13 +29,19 @@ do
       umount "${mountdir}/proc"
       umount "${mountdir}/boot"
       umount "${mountdir}/dev"
-      if [ -f "${mountdir}/etc/fstab" ]
-      then
-        (grep -v /boot "${mountdir}/etc/fstab"
-        echo -e "UUID=${boot_uuid}\t/boot\text2\tdefaults,noatime\t0\t1") \
-        > /tmp/fstab  && \
-        cat /tmp/fstab  > "${mountdir}/etc/fstab"
-        rm /tmp/fstab
+      if [ -f "${mountdir}/etc/fstab" ]; then
+	  os_boot_uuid=$(tr '\t' ' ' < "${mountdir}/etc/fstab" | \
+	      grep -E '^UUID=.* +/boot +' | \
+	      sed -e 's/^UUID=//' -e 's/ .*$//g')
+          if [ -n "$os_boot_uuid" ]; then
+	   blkid | grep -qF 'UUID="'"${os_boot_uuid}"'"' || \
+           ((grep -vE '^UUID=.*/boot' "${mountdir}/etc/fstab"
+	   echo -e "UUID=${boot_uuid}\t/boot\text2\tdefaults,noatime\t0\t1") \
+	       > /tmp/fstab  && \
+	       cat /tmp/fstab  > "${mountdir}/etc/fstab"
+               rm /tmp/fstab
+	   )
+	  fi
       fi
       umount "${mountdir}"
     fi
