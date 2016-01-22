@@ -23,12 +23,6 @@ do
       mount --bind "${common_boot_mnt}" "${mountdir}/boot" && \
       mount --bind /proc "${mountdir}/proc" && \
       mount --bind /sys "${mountdir}/sys" && \
-      chroot "${mountdir}" grub-install "${onie_dev}" &&
-      chroot "${mountdir}" update-grub
-      umount "${mountdir}/sys"
-      umount "${mountdir}/proc"
-      umount "${mountdir}/boot"
-      umount "${mountdir}/dev"
       if [ -f "${mountdir}/etc/fstab" ]; then
 	  os_boot_uuid=$(tr '\t' ' ' < "${mountdir}/etc/fstab" | \
 	      grep -E '^UUID=.* +/boot +' | \
@@ -40,9 +34,15 @@ do
 	       > /tmp/fstab  && \
 	       cat /tmp/fstab  > "${mountdir}/etc/fstab"
                rm /tmp/fstab
+	       chroot "${mountdir}" grub-install "${onie_dev}" &&
+	       chroot "${mountdir}" update-grub
 	   )
 	  fi
       fi
+      umount "${mountdir}/sys"
+      umount "${mountdir}/proc"
+      umount "${mountdir}/boot"
+      umount "${mountdir}/dev"
       umount "${mountdir}"
     fi
   fi
