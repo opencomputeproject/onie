@@ -9,8 +9,8 @@ post_install()
 {
 echo "Updating IM platform"
 mountdir=$(mktemp -d /tmp/partXXXXXX)
-boot_uuid=$(blkid | grep -F 'LABEL="ONIE-BOOT"' | \
- tr ' ' '\n'| grep UUID | cut -d\" -f2) 
+boot_uuid=$(blkid | grep -F 'LABEL="'"${onie_boot_label}"'"' | \
+ tr ' ' '\n'| grep UUID | cut -d\" -f2)
 for part in $(seq 1 8)
 do
   mount | grep -qE "^${onie_dev}${part}"
@@ -58,14 +58,14 @@ install_onie()
     init_onie_install
 
     echo "Installing ONIE on: $onie_dev"
-    
+
     if [ -n "$pre_install_hook" ]; then
         eval $pre_install_hook || {
             echo "Error: pre-install failed"
             exit 1
         }
     fi
- 
+
     if [ "$onie_boot_reason" = "embed" ] ; then
         # umount any partitions that might be mounted on this disk
         for p in $(seq 8) ; do
