@@ -8,10 +8,10 @@ UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/onie-blkd
 
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),ONIE)
-  MACHINE_REV = 0
+    MACHINE_REV = 0
 else
-  $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
-  $(error Unknown VENDOR_REV)
+    $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
+    $(error Unknown VENDOR_REV)
 endif
 
 # Vendor ID -- IANA Private Enterprise Number:
@@ -26,8 +26,8 @@ I2CTOOLS_ENABLE = no
 PARTITION_TYPE = msdos
 
 # Set Linux kernel version
-LINUX_VERSION		= 3.2
-LINUX_MINOR_VERSION	= 69
+LINUX_VERSION       = 3.2
+LINUX_MINOR_VERSION = 69
 
 # Specify uClibc version
 UCLIBC_VERSION = 0.9.32.1
