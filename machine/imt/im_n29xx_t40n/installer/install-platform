@@ -2,52 +2,52 @@
 
 pre_install()
 {
-echo "IM platform installer"
+    echo "IM platform installer"
 }
 
 post_install()
 {
-echo "Updating IM platform"
-mountdir=$(mktemp -d /tmp/partXXXXXX)
-boot_uuid=$(blkid | grep -F 'LABEL="'"${onie_boot_label}"'"' | \
- tr ' ' '\n'| grep UUID | cut -d\" -f2)
-for part in $(seq 1 8)
-do
-  mount | grep -qE "^${onie_dev}${part}"
-  if [ "$?" != "0" ]
-  then
-    if mount "${onie_dev}${part}" "${mountdir}" 2>/dev/null
-    then
-      mount none -t tmpfs "${mountdir}/dev" && \
-      cp -a /dev/* "${mountdir}/dev/" && \
-      mount --bind "${common_boot_mnt}" "${mountdir}/boot" && \
-      mount --bind /proc "${mountdir}/proc" && \
-      mount --bind /sys "${mountdir}/sys" && \
-      if [ -f "${mountdir}/etc/fstab" ]; then
-	  os_boot_uuid=$(tr '\t' ' ' < "${mountdir}/etc/fstab" | \
-	      grep -E '^UUID=.* +/boot +' | \
-	      sed -e 's/^UUID=//' -e 's/ .*$//g')
-          if [ -n "$os_boot_uuid" ]; then
-	   blkid | grep -qF 'UUID="'"${os_boot_uuid}"'"' || \
-           ((grep -vE '^UUID=.*/boot' "${mountdir}/etc/fstab"
-	   echo -e "UUID=${boot_uuid}\t/boot\text2\tdefaults,noatime\t0\t1") \
-	       > /tmp/fstab  && \
-	       cat /tmp/fstab  > "${mountdir}/etc/fstab"
-               rm /tmp/fstab
-	       chroot "${mountdir}" grub-install "${onie_dev}" &&
-	       chroot "${mountdir}" update-grub
-	   )
-	  fi
-      fi
-      umount "${mountdir}/sys"
-      umount "${mountdir}/proc"
-      umount "${mountdir}/boot"
-      umount "${mountdir}/dev"
-      umount "${mountdir}"
-    fi
-  fi
-done
-rmdir "${mountdir}"
+    echo "Updating IM platform"
+    mountdir=$(mktemp -d /tmp/partXXXXXX)
+    boot_uuid=$(blkid | grep -F 'LABEL="'"${onie_boot_label}"'"' | \
+            tr ' ' '\n'| grep UUID | cut -d\" -f2)
+    for part in $(seq 1 8)
+        do
+            mount | grep -qE "^${onie_dev}${part}"
+            if [ "$?" != "0" ]
+                then
+                    if mount "${onie_dev}${part}" "${mountdir}" 2>/dev/null
+                        then
+                            mount none -t tmpfs "${mountdir}/dev" && \
+                            cp -a /dev/* "${mountdir}/dev/" && \
+                            mount --bind "${common_boot_mnt}" "${mountdir}/boot" && \
+                            mount --bind /proc "${mountdir}/proc" && \
+                            mount --bind /sys "${mountdir}/sys" && \
+                            if [ -f "${mountdir}/etc/fstab" ]; then
+                                os_boot_uuid=$(tr '\t' ' ' < "${mountdir}/etc/fstab" | \
+                                grep -E '^UUID=.* +/boot +' | \
+                                sed -e 's/^UUID=//' -e 's/ .*$//g')
+                                if [ -n "$os_boot_uuid" ]; then
+                                    blkid | grep -qF 'UUID="'"${os_boot_uuid}"'"' || \
+                                    ((grep -vE '^UUID=.*/boot' "${mountdir}/etc/fstab"
+                                    echo -e "UUID=${boot_uuid}\t/boot\text2\tdefaults,noatime\t0\t1") \
+                                    > /tmp/fstab  && \
+                                    cat /tmp/fstab  > "${mountdir}/etc/fstab"
+                                    rm /tmp/fstab
+                                    chroot "${mountdir}" grub-install "${onie_dev}" &&
+                                    chroot "${mountdir}" update-grub
+                                    )
+                                fi
+                            fi
+                            umount "${mountdir}/sys"
+                            umount "${mountdir}/proc"
+                            umount "${mountdir}/boot"
+                            umount "${mountdir}/dev"
+                            umount "${mountdir}"
+                    fi
+            fi
+            done
+            rmdir "${mountdir}"
 }
 
 #pre_install_hook=pre_install
@@ -60,7 +60,6 @@ post_install_hook=post_install
 # is extracted.
 install_onie()
 {
-
     init_onie_install
 
     echo "Installing ONIE on: $onie_dev"
@@ -172,10 +171,10 @@ install_onie()
 
     # Restore the previous update directory
     if [ "$preserve_update_dir" = "yes" ] ; then
-	rm -rf $onie_update_dir
+        rm -rf $onie_update_dir
         cp -a /tmp/preserve-update $onie_update_dir
-	mv $onie_update_dir/bootfiles/* $onie_boot_mnt
-	rmdir $onie_update_dir/bootfiles
+        mv $onie_update_dir/bootfiles/* $onie_boot_mnt
+        rmdir $onie_update_dir/bootfiles
     fi
 
     # Return to default boot mode on the next boot.  Use this
@@ -193,7 +192,6 @@ install_onie()
     if [ -x /usr/bin/onie-syseeprom ] ; then
         onie-syseeprom -s 0x28="$image_platform",0x29="$image_version" > /dev/null
     fi
-
 }
 
 # Local Variables:
