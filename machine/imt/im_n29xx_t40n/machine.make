@@ -1,6 +1,4 @@
-# Interface Masters Niagra 29XX Series
-# CPU Module: Congatec conga-BAF/T40N
-# CPU: AMD G-Series T40N
+# Interface Masters Niagara 29XX Series
 
 ONIE_ARCH ?= x86_64
 
