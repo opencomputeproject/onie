@@ -395,7 +395,8 @@ EOF
 
     # Add a menu entry for the DEMO OS
     demo_grub_entry="Demo $demo_type"
-    cat <<EOF >> $grub_cfg
+    if [ "$demo_type" = "DIAG" ] ; then
+        cat <<EOF >> $grub_cfg
 menuentry '$demo_grub_entry' {
         search --no-floppy --label --set=root $demo_volume_label
         echo    'Loading ONIE Demo $demo_type kernel ...'
@@ -404,6 +405,21 @@ menuentry '$demo_grub_entry' {
         initrd  /demo.initrd
 }
 EOF
+    else
+        i=1
+        while [ $i -le 2 ] ; do
+            cat <<EOF >> $grub_cfg
+menuentry '$demo_grub_entry #$i' {
+        search --no-floppy --label --set=root $demo_volume_label
+        echo    'Loading ONIE Demo $demo_type kernel ...'
+        linux   /demo.vmlinuz $GRUB_CMDLINE_LINUX \$ONIE_EXTRA_CMDLINE_LINUX DEMO_TYPE=$demo_type DEMO_MENU_ENTRY_NO=$i
+        echo    'Loading ONIE Demo $demo_type initial ramdisk ...'
+        initrd  /demo.initrd
+}
+EOF
+            i=$(( $i + 1 ))
+        done
+    fi
 
     # Add menu entries for ONIE -- use the grub fragment provided by the
     # ONIE distribution.

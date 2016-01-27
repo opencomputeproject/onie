@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2014-15 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -13,7 +14,8 @@ mkdir -p $demo_mnt || {
     exit 1
 }
 
-demo_type=$(demo_type_get)
+demo_import_cmdline
+
 [ -n "$demo_type" ] || {
     echo "Error: Unable to find DEMO_TYPE on kernel command line"
     exit 1
