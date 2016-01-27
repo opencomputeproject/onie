@@ -170,44 +170,7 @@ demo_install_grub()
     # keep grub loading ONIE page after installing diag.
     # So that it is not necessary to set "ONIE" as default boot
     # mode in diag's grub.cfg.
-    if [ "$demo_type" = "DIAG" ] ; then
-        # Install GRUB in the partition also.  This allows for
-        # chainloading the DIAG image from another OS.
-        #
-        # We are installing GRUB in a partition, as opposed to the
-        # MBR.  With this method block lists are used to refer to the
-        # the core.img file.  The sector locations of core.img may
-        # change whenever the file system in the partition is being
-        # altered (files copied, deleted etc.). For more info, see
-        # https://bugzilla.redhat.com/show_bug.cgi?id=728742 and
-        # https://bugzilla.redhat.com/show_bug.cgi?id=730915.
-        #
-        # The workaround for this is to set the immutable flag on
-        # /boot/grub/i386-pc/core.img using the chattr command so that
-        # the sector locations of the core.img file in the disk is not
-        # altered. The immutable flag on /boot/grub/i386-pc/core.img
-        # needs to be set only if GRUB is installed to a partition
-        # boot sector or a partitionless disk, not in case of
-        # installation to MBR.
-
-        # remove immutable flag if file exists during the update.
-        [ -f "$core_img" ] && chattr -i $core_img
-
-        grub_install_log=$(mktemp)
-        grub-install --target="$grub_target" \
-            --force --boot-directory="$demo_mnt" \
-            --recheck "$demo_dev" > /$grub_install_log 2>&1 || {
-            echo "ERROR: grub-install failed on: $demo_dev"
-            cat $grub_install_log && rm -f $grub_install_log
-            exit 1
-        }
-        rm -f $grub_install_log
-
-        # restore immutable flag on the core.img file as discussed
-        # above.
-        [ -f "$core_img" ] && chattr +i $core_img
-
-    else
+    if [ "$demo_type" = "OS" ] ; then
         # Pretend we are a major distro and install GRUB into the MBR of
         # $blk_dev.
         grub-install --target="$grub_target" \
@@ -215,8 +178,43 @@ demo_install_grub()
             echo "ERROR: grub-install failed on: $blk_dev"
             exit 1
         }
-
     fi
+
+    # Install GRUB in the partition also.  This allows for
+    # chainloading the DIAG or NOS image from another OS.
+    #
+    # We are installing GRUB in a partition, as opposed to the
+    # MBR.  With this method block lists are used to refer to the
+    # the core.img file.  The sector locations of core.img may
+    # change whenever the file system in the partition is being
+    # altered (files copied, deleted etc.). For more info, see
+    # https://bugzilla.redhat.com/show_bug.cgi?id=728742 and
+    # https://bugzilla.redhat.com/show_bug.cgi?id=730915.
+    #
+    # The workaround for this is to set the immutable flag on
+    # /boot/grub/i386-pc/core.img using the chattr command so that
+    # the sector locations of the core.img file in the disk is not
+    # altered. The immutable flag on /boot/grub/i386-pc/core.img
+    # needs to be set only if GRUB is installed to a partition
+    # boot sector or a partitionless disk, not in case of
+    # installation to MBR.
+
+    # remove immutable flag if file exists during the update.
+    [ -f "$core_img" ] && chattr -i $core_img
+
+    grub_install_log=$(mktemp)
+    grub-install --target="$grub_target" \
+        --force --boot-directory="$demo_mnt" \
+        --recheck "$demo_dev" > /$grub_install_log 2>&1 || {
+        echo "ERROR: grub-install failed on: $demo_dev"
+        cat $grub_install_log && rm -f $grub_install_log
+        exit 1
+    }
+    rm -f $grub_install_log
+
+    # restore immutable flag on the core.img file as discussed
+    # above.
+    [ -f "$core_img" ] && chattr +i $core_img
 
 }
 
@@ -328,6 +326,21 @@ onie_root_dir=/mnt/onie-boot/onie
 # import console config and linux cmdline
 . $onie_root_dir/grub/grub-variables
 
+demo_grub_entry="Demo $demo_type"
+
+# Set a few NOS_xxx environment variables that will be picked up and
+# used by the 50_onie_grub script to generate GRUB menu entry for
+# chainloading NOS's GRUB
+#
+# NOS_BOOT_PARTITION_LABEL
+# NOS_CHAINLOAD_MENU
+if [ "$demo_type" = "OS" ] ; then
+    NOS_BOOT_PARTITION_LABEL="$demo_volume_label"
+    NOS_CHAINLOAD_MENU="$demo_grub_entry chainload"
+    export NOS_BOOT_PARTITION_LABEL
+    export NOS_CHAINLOAD_MENU
+fi
+
 # If ONIE supports boot command feeding,
 # adds DEMO DIAG bootcmd to ONIE.
 if grep -q 'ONIE_SUPPORT_BOOTCMD_FEEDING' $onie_root_dir/grub.d/50_onie_grub &&
@@ -394,7 +407,6 @@ fi
 EOF
 
     # Add a menu entry for the DEMO OS
-    demo_grub_entry="Demo $demo_type"
     if [ "$demo_type" = "DIAG" ] ; then
         cat <<EOF >> $grub_cfg
 menuentry '$demo_grub_entry' {
