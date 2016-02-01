@@ -109,9 +109,8 @@ Now press RETURN here to jump into ONIE''s manual installer mode.  You should se
 Then simply download the latest ONL installer for the appropriate
 architecture (powerpc or amd64) from the website and run it.
 
-        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-amd64.installer
+        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-($arch).installer
 
-        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-powerpc.installer
         Connecting to opennetlinux.org (107.170.237.53:80)
         Open Network Installer running under ONIE.
         Installer Version: Open Network Linux e148b7a (powerpc.all,2014.05.21.18.57,e148b7a90131c07eb8d49f74316baf8f2aae92c6)
@@ -123,8 +122,16 @@ architecture (powerpc or amd64) from the website and run it.
         ...
 
 
+Note: 
+	1)If there is diffrent OS running on the swicth already.Then stop it at U-boot mode,
+	      => printenv
+           check the onie details.Open the ONIE in rescue mode by,
+	      => run onie_rescue
+           It will take you to the ONIE environment.
 
-
+       2) To load ONL installer from ONIE directly from the devlopement environment ,Just run a http server directly from the location (example:python -m SimpleHTTPServer 8000) and access it as,
+	   exmaple: ONIE:/ # install_url http://10.6.0.3:8000/onl-c82f711-powerpc-all.2016.01.22.01.25.installer.
+ 
 ONL NFS Root Directory
 ------------------------------------------------
 
