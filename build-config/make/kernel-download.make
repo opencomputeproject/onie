@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #
@@ -16,7 +16,7 @@
 
 LINUX_VERSION		?= 4.1
 LINUX_MAJOR_VERSION	= $(firstword $(subst ., ,$(LINUX_VERSION)))
-LINUX_MINOR_VERSION	?= 12
+LINUX_MINOR_VERSION	?= 17
 LINUX_RELEASE		?= $(LINUX_VERSION).$(LINUX_MINOR_VERSION)
 LINUX_TARBALL		?= linux-$(LINUX_RELEASE).tar.xz
 export LINUX_TARBALL
