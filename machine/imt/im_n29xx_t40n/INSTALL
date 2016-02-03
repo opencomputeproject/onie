@@ -8,15 +8,18 @@ Cross-Compiling ONIE
 Change directories to ``build-config`` to compile ONIE.
 
 To compile ONIE first change directories to ``build-config`` and then
-type ``"make MACHINE=im_n29xx_t40n all"``.  For example::
+type ``"make MACHINEROOT=../machine/imt MACHINE=im_n29xx_t40n all"``.  For example::
 
   $ cd build-config
-  $ make -j4 MACHINE=im_n29xx_t40n all
+  $ make -j4 MACHINEROOT=../machine/imt MACHINE=im_n29xx_t40n all
 
 When complete, the ONIE binaries are located in
 ``build/images``::
 
-  -rw-r--r-- 4849664 May  7 12:06 onie-im_n29xx_t40n-r0.bin
+-rw-rw-r-- 1 5510820  Jan 28 14:30 im_n29xx_t40n-r0.initrd
+-rw-rw-r-- 1 3356624  Jan 28 14:29 im_n29xx_t40n-r0.vmlinuz
+-rw-rw-r-- 1 20381696 Jan 28 14:30 onie-recovery-x86_64-im_n29xx_t40n-r0.iso
+-rw-rw-r-- 1 8910711  Jan 28 14:30 onie-updater-x86_64-im_n29xx_t40n-r0
 
 Note on ONIE id for Interface Masters Niagara 29XX Series
 =========================================================
@@ -31,9 +34,72 @@ can find below.
 Interface Masters Niagara 29XX Series Supported Hardware
 ========================================================
 
-TBW (To Be Written)
+Device               Ports              CPU             Forwarding                     Modular I/O configurations
+==================   ================   =============   ============================   =========================
+Niagara 2948X12XLm   48x10G  + 12x40G   Intel/AMD x86   Broadcom BCM56850 (Trident2)   Yes
+Niagara 2960X6XLm    60x10G  + 6x40G    Intel/AMD x86   Broadcom BCM56850 (Trident2)   Yes
+Niagara 2972Xm       72x10G             Intel/AMD x86   Broadcom BCM56850 (Trident2)   Yes
+Niagara 2932XL       32x40G             Intel/AMD x86   Broadcom BCM56850 (Trident2)   No
+Niagara 2948X6XL     48x10G  + 6x40G    Intel/AMD x86   Broadcom BCM56850 (Trident2)   No
 
 Installing the ONIE binaries
 ============================
 
-TBW (To Be Written)
+Installation on blank machine is performed through PXE (Preboot Execution Environment).
+
+For that you need to set network boot and related options in Niagara Switch BIOS:
+
+    Advanced:
+        PCI ROM Priority = Legacy ROM
+        Launch PXE Option ROM = Enabled
+        Launch Storage Option = Enabled
+        Onboard LAN = Enabled
+        Launch Onboard LAN PX = Enabled
+    Boot:
+        Quiet Boot = Disabled
+        1st Boot Device = Sata 0 Drive
+        2nd Boot Device = Onboard LAN
+        3rd-..-8th = Disabled
+
+DHCP Server configuration should include the following options:
+
+    allow booting;
+    allow bootp;
+
+    subnet 192.168.157.0 netmask 255.255.255.0 {
+        range dynamic-bootp 192.168.157.157 192.168.157.167;
+        option subnet-mask 255.255.255.0;
+        option broadcast-address 192.168.157.255;
+        option domain-name-servers 8.8.8.8;
+        option routers 192.168.157.98;
+        next-server 192.168.157.98;
+        filename "pxelinux.0";
+    }
+
+Now on tftp server you should have the following files:
+
+    $cd /tftpboot
+    $ ls -1R
+        im_n29xx_t40n-r0.initrd
+        im_n29xx_t40n-r0.vmlinuz
+        onie-updater-x86_64-im_n29xx_t40n-r0
+        pxelinux.0
+        ./pxelinux.cfg:
+            default
+
+PXE Linux configuration is the following:
+
+    $ cat pxelinux.cfg/default
+        SERIAL 0 115200 0
+        DEFAULT linux
+        LABEL linux
+          SAY Now booting the kernel from SYSLINUX...
+          KERNEL im_n29xx_t40n-r0.vmlinuz
+          APPEND ro console=tty0 console=ttyS0,115200n8 boot_reason=embed
+          INITRD im_n29xx_t40n-r0.initrd
+
+Once you configure this correctly on switch boot PXE installation would start and ONIE would be installed to /dev/sda1 partition.
+
+To force PXE installation you can erase MBR record on Niagara Switch (BE SURE YOU UNDERSTAND WHAT YOU DO):
+
+    $ dd if=/dev/zero of=/dev/sda bs=512 count=1
