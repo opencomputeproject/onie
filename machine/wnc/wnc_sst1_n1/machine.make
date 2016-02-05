@@ -42,6 +42,11 @@ LINUX_MINOR_VERSION	= 27
 # Set the desired uClibc version
 UCLIBC_VERSION = 0.9.33.2
 
+#UEFI_ENABLE = yes
+
+# build ipmitool for default
+IPMITOOL_ENABLE = yes
+
 #
 # Console parameters can be defined here (default values are in
 # build-config/arch/x86_64.make).

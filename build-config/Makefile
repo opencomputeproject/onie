@@ -343,6 +343,9 @@ ifeq ($(FLASHROM_ENABLE),yes)
 endif
 include make/images.make
 include make/demo.make
+ifeq ($(IPMITOOL_ENABLE),yes)
+  include make/ipmitool.make
+endif
 
 #-------------------------------------------------------------------------------
 #
