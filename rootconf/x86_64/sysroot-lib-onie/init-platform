@@ -1,0 +1,48 @@
+# -*- shell-script -*-
+
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Demonstration of the init-platform functionality
+
+# This script fragment is sourced by /etc/init.d/init-arch.sh, which
+# in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+# A machine can use this feature to run any early boot scripts needed
+# by the machine.  A typical usage would be to initialize specific
+# hardware devices.
+
+# Use this function to perform any initializations required by the
+# architecture specific initialization.  This function executes before
+# the architecture initializations.
+init_platform_pre_arch()
+{
+    ipmidev_num=`cat /proc/devices | grep ipmidev | cut -d ' ' -f 1`
+    mknod /dev/ipmi0 c $ipmidev_num 0 > /dev/null 2>&1
+    ipmitool raw 0x30 0xb4
+    echo "wait a while, virtual disk for onie eeprom will up...."
+    sleep 15
+
+    # check virtual disk with sdb to sdd, used for onie eeprom
+    for var in sdb sdc sdd
+    do
+        echo "Check with /dev/$var."
+        if [ $var == "sdb" ]; then
+            check=`cat /sys/block/sdb/device/model | grep HDisk0`
+        elif [ $var == "sdc" ]; then
+            check=`cat /sys/block/sdc/device/model | grep HDisk0`
+        else
+            check=`cat /sys/block/sdd/device/model | grep HDisk0`
+        fi
+        if [ "$check" != "" ]; then
+            echo "get virtual disk with /dev/$var"
+            ln -s /dev/$var /dev/onie-info > /dev/null 2>&1
+            break;
+        else
+            echo "/dev/$var is not virtual disk...."
+        fi
+    done
+}
+
