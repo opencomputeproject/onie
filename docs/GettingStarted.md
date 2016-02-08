@@ -109,7 +109,7 @@ Now press RETURN here to jump into ONIE''s manual installer mode.  You should se
 Then simply download the latest ONL installer for the appropriate
 architecture (powerpc or amd64) from the website and run it.
 
-        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-($ARCH).installer
+        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-$ARCH.installer
 
         Connecting to opennetlinux.org (107.170.237.53:80)
         Open Network Installer running under ONIE.
@@ -128,12 +128,11 @@ Note:
        2) To load ONL installer from ONIE directly from the devlopement environment,
        	
        	run a http server directly from the location (example:python -m SimpleHTTPServer 8000) and access it as,
-	   example: ONIE:/ # install_url http://buildmachine:/path/to/ONL.installer.
+	   example: ONIE:/ # install_url http://buildmachine:/path/to/onl-09b7bba-powerpc-all.2016.02.05.05.17.installer # update for specific file/date/build
 
 Also, you can use install via scp with two steps,
 
-       example: ONIE:/ # scp [username]@buildmachine:/path/to/ONL.installer 
-       		(ONL.installer # update for specific file/date/build)
+       example: ONIE:/ # scp [username]@buildmachine:/path/to/onl-09b7bba-powerpc-all.2016.02.05.05.17.installer  ONL.installer # update for specific file/date/build
                 ONIE:/ # sh ONL.installer
 
 ONL NFS Root Directory
