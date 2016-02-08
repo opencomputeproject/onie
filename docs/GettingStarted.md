@@ -123,13 +123,11 @@ architecture (powerpc or amd64) from the website and run it.
 
 
 Note: 
-	1) If there is different OS(other than ONL) running on the swicth.Then halt the loading process at U-boot mode,
-	      => printenv
-           check the onie details.Open the ONIE in rescue mode,(while ONIE has many different installation modes, we recommend the rescue mode for doing a manual (read: via console) because it disables the automatic ONIE server discovery.)
-	      => run onie_rescue
-           It will take you to the ONIE environment.
+	1) If there is different OS(other than ONL) running on the swicth.Then halt the booting process at U-boot mode, Then check for the ONIE deatils in the environment(=> printenv). Open the ONIE in rescue mode, while ONIE has many different installation modes, we recommend the rescue mode for doing a manual (read: via console) because it disables the automatic ONIE server discovery. Then run (=> run onie_rescue) command to take you to the ONIE environment.
 
-       2) To load ONL installer from ONIE directly from the devlopement environment, run a http server directly from the location (example:python -m SimpleHTTPServer 8000) and access it as,
+       2) To load ONL installer from ONIE directly from the devlopement environment,
+       	
+       	run a http server directly from the location (example:python -m SimpleHTTPServer 8000) and access it as,
 	   example: ONIE:/ # install_url http://buildmachine:/path/to/ONL.installer.
 
 Also, you can use install via scp with two steps,
