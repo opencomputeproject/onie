@@ -123,7 +123,7 @@ architecture (powerpc or amd64) from the website and run it.
 
 
 Note: 
-	1)If there is different OS(other than ONL) running on the swicth.Then halt the loading process at U-boot mode,
+	1) If there is different OS(other than ONL) running on the swicth.Then halt the loading process at U-boot mode,
 	      => printenv
            check the onie details.Open the ONIE in rescue mode,(while ONIE has many different installation modes, we recommend the rescue mode for doing a manual (read: via console) because it disables the automatic ONIE server discovery.)
 	      => run onie_rescue
@@ -135,7 +135,7 @@ Note:
 Also, you can use install via scp with two steps,
 
        example: ONIE:/ # scp [username]@buildmachine:/path/to/ONL.installer 
-		(ONL.installer # update for specific file/date/build)
+       		(ONL.installer # update for specific file/date/build)
                 ONIE:/ # sh ONL.installer
 
 ONL NFS Root Directory
