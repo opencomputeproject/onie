@@ -248,6 +248,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_partition_type=$(PARTITION_TYPE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_kernel_version=$(LINUX_RELEASE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_firmware=$(FIRMWARE_TYPE)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_switch_asic=$(SWITCH_ASIC_VENDOR)" >> $(MACHINE_CONF)
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf

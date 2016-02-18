@@ -181,6 +181,9 @@ ifneq ($(filter-out gpt msdos, $(PARTITION_TYPE)),)
   $(error Supported partition types: gpt, msdos)
 endif
 
+# Switch ASIC vendor, should be set in machine.make
+SWITCH_ASIC_VENDOR ?= unknown
+
 TREE_STAMP  = $(STAMPDIR)/tree
 tree-stamp: $(TREE_STAMP)
 $(TREE_STAMP): $(PROJECT_STAMP)

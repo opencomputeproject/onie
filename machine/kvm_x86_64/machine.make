@@ -18,6 +18,12 @@ else
   $(error Unknown VENDOR_REV)
 endif
 
+# The SWITCH_ASIC_VENDOR is used to further differentiate the platform
+# in the ONIE waterfall.  This string should be the stock ticker
+# symbol of the ASIC vendor, in lower case.  The value in this example
+# here is completely fictitious.
+SWITCH_ASIC_VENDOR = qemu
+
 # The VENDOR_VERSION string is appended to the overal ONIE version
 # string.  HW vendors can use this to appended their own versioning
 # information to the base ONIE version string.
