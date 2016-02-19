@@ -406,7 +406,7 @@ DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update
-	$(Q) sudo apt-get install $(DEBIAN_BUILD_HOST_PACKAGES)
+	$(Q) sudo apt-get install -y $(DEBIAN_BUILD_HOST_PACKAGES)
 
 PHONY += test-onie
 SITE_CONFIG ?= $(TESTDIR)/site.conf
