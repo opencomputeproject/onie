@@ -75,7 +75,6 @@ config_ethmgmt_dhcp4()
 config_ethmgmt_fallback()
 {
 
-    local base_ip=10
     local prefix=24
     local default_hn="onie-host"
     local intf_counter=$1
@@ -86,17 +85,7 @@ config_ethmgmt_fallback()
     # Remove any previously configured, IPv4 addresses
     ip -f inet addr flush dev $intf
 
-    # Assign sequential static IP to each detected interface
-    local interface_base_ip=$(( $base_ip + $intf_counter ))
-    local default_ip="192.168.3.$interface_base_ip"
-    log_console_msg "Using default IPv4 addr: ${intf}: ${default_ip}/${prefix}"
-
-    ip addr add ${default_ip}/$prefix dev $intf || {
-        log_failure_msg "Problems setting default IPv4 addr: ${intf}: ${default_ip}/${prefix}"
-        return 1
-    }
-
-    # In addition configure an IPv4 link-local address per RFC-3927.
+    # Configure an IPv4 link-local address per RFC-3927.
     prefix=16
 
     # Maximum number of attempts to find an unused 169.254.x.y/16
