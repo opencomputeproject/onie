@@ -71,69 +71,6 @@ config_ethmgmt_dhcp4()
 
 }
 
-# Fall back ethernet management configuration
-config_ethmgmt_fallback()
-{
-
-    local base_ip=10
-    local prefix=24
-    local default_hn="onie-host"
-    local intf_counter=$1
-    shift
-    local intf=$1
-    shift
-
-    # Remove any previously configured, IPv4 addresses
-    ip -f inet addr flush dev $intf
-
-    # Assign sequential static IP to each detected interface
-    local interface_base_ip=$(( $base_ip + $intf_counter ))
-    local default_ip="192.168.3.$interface_base_ip"
-    log_console_msg "Using default IPv4 addr: ${intf}: ${default_ip}/${prefix}"
-
-    ip addr add ${default_ip}/$prefix dev $intf || {
-        log_failure_msg "Problems setting default IPv4 addr: ${intf}: ${default_ip}/${prefix}"
-        return 1
-    }
-
-    # In addition configure an IPv4 link-local address per RFC-3927.
-    prefix=16
-
-    # Maximum number of attempts to find an unused 169.254.x.y/16
-    # address.
-    local max_retry=20
-    local attempt=1
-    while [ $attempt -lt $max_retry ] ; do
-        local rnd1=$(( ( $RANDOM % 254 ) + 1 ))
-        local rnd2=$(( ( $RANDOM % 254 ) + 1 ))
-        local test_ip="169.254.${rnd1}.${rnd2}"
-
-        # use arping to check if IP is in use
-        arping -qD -c 5 $test_ip && {
-            # Claim this IP
-            ip addr add ${test_ip}/$prefix dev $intf || {
-                log_failure_msg "Problems setting default IPv4 addr: ${intf}: ${test_ip}/$prefix"
-                return 1
-            }
-            arping -c 3 -Uq -s $test_ip $test_ip
-            log_console_msg "Using link-local IPv4 addr: ${intf}: ${test_ip}/$prefix"
-            break
-        }
-        attempt=$(( $attempt + 1 ))
-    done
-
-    if [ $attempt -eq $max_retry ] ; then
-        log_warning_msg "Unable to configure link-local IPv4 address within $max_retry attempts"
-    fi
-
-    hostname $default_hn || {
-        log_failure_msg "Problems setting default hostname: ${intf}: ${default_hn}\n"
-        return 1
-    }
-
-    return 0
-
-}
 
 # Check the operational state of the specified interface before trying
 # DHCP.  From linux/Documentation/networking/operstates.txt, the
@@ -185,7 +122,6 @@ config_ethmgmt()
         config_ethmgmt_static    $params || \
             config_ethmgmt_dhcp6 $params || \
             config_ethmgmt_dhcp4 $params || \
-            config_ethmgmt_fallback $intf_counter $params || \
             eval "result_${intf}=1"
         intf_counter=$(( $intf_counter + 1))
     done
