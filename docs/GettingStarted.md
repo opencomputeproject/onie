@@ -123,16 +123,24 @@ architecture (powerpc or amd64) from the website and run it.
 
 
 Note: 
-	1) If there is different OS(other than ONL) running on the swicth.Then halt the booting process at U-boot mode, Then check for the ONIE deatils in the environment(=> printenv). Open the ONIE in rescue mode, while ONIE has many different installation modes, we recommend the rescue mode for doing a manual (read: via console) because it disables the automatic ONIE server discovery. Then run (=> run onie_rescue) command to take you to the ONIE environment.
 
-       2) To load ONL installer from ONIE directly from the devlopement environment,
-       	
-       	run a http server directly from the location (example:python -m SimpleHTTPServer 8000) and access it as,
-	   example: ONIE:/ # install_url http://buildmachine:/path/to/onl-09b7bba-powerpc-all.2016.02.05.05.17.installer # update for specific file/date/build
+1) If there is different OS(other than ONL) running on the switch. 
+Then halt the booting process at U-boot mode, Then check for the ONIE  
+details in the environment(=> printenv). Open the ONIE in rescue mode, 
+while ONIE has many different installation modes, 
+we recommend the rescue mode for doing a manual (read: via console) 
+because it disables the automatic ONIE server discovery. 
+Then run (=> run onie_rescue) command to take you to the ONIE environment.
+
+2) For development purpose, to load freshly build ONL installer from directly ONIE.
+Run a http server from the build machine (example:python -m SimpleHTTPServer 8000) and access it as,
+
+     
+    example: ONIE:/ # install_url http://buildmachineIPAddress:/path/to/directory/onl-09b7bba-powerpc-all.2016.02.05.05.17.installer # update for specific file/date/build
 
 Also, you can use install via scp with two steps,
 
-       example: ONIE:/ # scp [username]@buildmachine:/path/to/onl-09b7bba-powerpc-all.2016.02.05.05.17.installer  ONL.installer # update for specific file/date/build
+       example: ONIE:/ # scp [username]@buildmachineIPAddress:/path/to/directory/onl-09b7bba-powerpc-all.2016.02.05.05.17.installer  ONL.installer # update for specific file/date/build
                 ONIE:/ # sh ONL.installer
 
 ONL NFS Root Directory
