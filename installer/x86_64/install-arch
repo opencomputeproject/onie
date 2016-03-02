@@ -319,6 +319,13 @@ init_gpt_disk()
     # Create GPT disk label
     [ "$verbose" = "yes" ] && echo "Creating GPT disk label on: $onie_dev"
     local sgdisk_log=$(mktemp)
+
+    sgdisk --zap-all "$onie_dev" > $sgdisk_log 2>&1 || {
+	echo "ERROR: Problems wiping GPT and MBR on: $onie_dev"
+	cat $sgdisk_log && rm -f $sgdisk_log
+	exit 1
+    }
+
     sgdisk --clear --mbrtogpt "$onie_dev" > $sgdisk_log 2>&1 || {
         echo "ERROR: Problems creating GPT disk label on: $onie_dev"
         cat $sgdisk_log && rm -f $sgdisk_log
@@ -377,6 +384,13 @@ init_uefi_disk()
     # Create GPT disk label
     [ "$verbose" = "yes" ] && echo "Initializing UEFI disk partitions on: $onie_dev"
     local sgdisk_log=$(mktemp)
+
+    sgdisk --zap-all "$onie_dev" > $sgdisk_log 2>&1 || {
+        echo "ERROR: Problems wiping GPT and MBR on: $onie_dev"
+        cat $sgdisk_log && rm -f $sgdisk_log
+        exit 1
+    }
+
     sgdisk --clear --mbrtogpt "$onie_dev" > $sgdisk_log 2>&1 || {
         echo "ERROR: Problems creating GPT disk label on: $onie_dev"
         cat $sgdisk_log && rm -f $sgdisk_log
