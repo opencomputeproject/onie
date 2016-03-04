@@ -50,7 +50,7 @@ IPMITOOL_ENABLE = yes
 # build-config/arch/x86_64.make).
 # For example,
 # 
-CONSOLE_SPEED = 115200
+CONSOLE_SPEED = 57600
 CONSOLE_DEV = 1
 CONSOLE_FLAG = 1
 
