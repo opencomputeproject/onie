@@ -1,6 +1,7 @@
 # Makefile fragment for Alpha Networks SNQ6070-320F
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 

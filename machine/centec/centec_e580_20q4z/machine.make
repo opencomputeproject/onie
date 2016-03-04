@@ -2,6 +2,7 @@
 
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = centec
 
 VENDOR_REV ?= 0
 

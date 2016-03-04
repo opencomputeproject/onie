@@ -1,6 +1,7 @@
 # Makefile fragment for DELL S4810-ON P2020
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
