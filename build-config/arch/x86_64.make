@@ -143,6 +143,9 @@ KEXEC_ENABLE = yes
 # Include flashrom
 FLASHROM_ENABLE = yes
 
+# Include ipmitool
+IPMITOOL_ENABLE ?= no
+
 # Enable serial console support
 SERIAL_CONSOLE_ENABLE ?= yes
 
