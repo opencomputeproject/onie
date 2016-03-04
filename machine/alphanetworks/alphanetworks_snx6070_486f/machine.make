@@ -1,6 +1,7 @@
 # Makefile fragment for Alpha Networks SNX6070-486F
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 

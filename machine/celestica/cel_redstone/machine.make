@@ -11,6 +11,7 @@ else
 endif
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
 VENDOR_ID = 12244

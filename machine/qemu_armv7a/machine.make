@@ -7,6 +7,7 @@
 # This machine configuration is based on the VEXPRESS ARM.
 
 ONIE_ARCH ?= armv7a
+SWITCH_ASIC_VENDOR = qemu
 
 VENDOR_REV ?= 0
 

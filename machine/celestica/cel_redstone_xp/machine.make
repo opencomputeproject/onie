@@ -1,6 +1,7 @@
 # KVM x86_64 Virtual Machin
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 

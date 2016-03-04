@@ -8,6 +8,7 @@
 
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= r01a
 

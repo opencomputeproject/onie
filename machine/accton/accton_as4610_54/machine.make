@@ -7,6 +7,7 @@
 # UBOOT_IDENT_STRING = 1.4.0.1
 
 ONIE_ARCH ?= armv7a
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 

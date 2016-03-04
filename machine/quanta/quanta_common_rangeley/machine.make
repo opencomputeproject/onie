@@ -1,6 +1,7 @@
 # Quanta Common Rangeley CPU board
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 

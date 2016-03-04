@@ -2,6 +2,7 @@
 # CPU Module: Intel Atom Rangeley (C2538)
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 

@@ -2,6 +2,7 @@
 # MSX1400: CPU Module: Intel Core i7-3612QE
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = mlnx
 
 VENDOR_REV ?= 0
 

@@ -1,6 +1,7 @@
 # Makefile fragment for Celestica D2030 
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
