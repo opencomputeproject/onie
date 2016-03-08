@@ -109,9 +109,8 @@ Now press RETURN here to jump into ONIE''s manual installer mode.  You should se
 Then simply download the latest ONL installer for the appropriate
 architecture (powerpc or amd64) from the website and run it.
 
-        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-amd64.installer
+        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-$ARCH.installer
 
-        ONIE:/ # install_url http://opennetlinux.org/binaries/latest-powerpc.installer
         Connecting to opennetlinux.org (107.170.237.53:80)
         Open Network Installer running under ONIE.
         Installer Version: Open Network Linux e148b7a (powerpc.all,2014.05.21.18.57,e148b7a90131c07eb8d49f74316baf8f2aae92c6)
@@ -123,7 +122,26 @@ architecture (powerpc or amd64) from the website and run it.
         ...
 
 
+Note: 
 
+1) If there is different OS(other than ONL) running on the switch. 
+Then halt the booting process at U-boot mode, Then check for the ONIE  
+details in the environment(=> printenv). Open the ONIE in rescue mode, 
+while ONIE has many different installation modes, 
+we recommend the rescue mode for doing a manual (read: via console) 
+because it disables the automatic ONIE server discovery. 
+Then run (=> run onie_rescue) command to take you to the ONIE environment.
+
+2) For development purpose, to load freshly build ONL installer from directly ONIE.
+Run a http server from the build machine (example:python -m SimpleHTTPServer 8000) and access it as,
+
+     
+    example: ONIE:/ # install_url http://buildmachineIPAddress:/path/to/directory/onl-09b7bba-powerpc-all.2016.02.05.05.17.installer # update for specific file/date/build
+
+Also, you can use install via scp with two steps,
+
+       example: ONIE:/ # scp [username]@buildmachineIPAddress:/path/to/directory/onl-09b7bba-powerpc-all.2016.02.05.05.17.installer  ONL.installer # update for specific file/date/build
+                ONIE:/ # sh ONL.installer
 
 ONL NFS Root Directory
 ------------------------------------------------
