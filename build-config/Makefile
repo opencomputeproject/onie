@@ -341,6 +341,9 @@ ifeq ($(FLASHROM_ENABLE),yes)
   include make/pciutils.make
   include make/flashrom.make
 endif
+ifeq ($(IPMITOOL_ENABLE),yes)
+  include make/ipmitool.make
+endif
 include make/images.make
 include make/demo.make
 
