@@ -9,6 +9,7 @@ import sys
 OPTIONS = {'onie_installer': str,
            'onie_updater': str,
            'onie_arch': str,
+           'onie_switch_asic': str,
            'onie_vendor': str,
            'onie_machine': str,
            'onie_machine_rev': str,
@@ -205,6 +206,11 @@ def list_tests():
 
 
 def test_case_file_name(test_args):
+    '''
+    This function is highly coupled to the ONIE spec and test document
+    DO NOT EDIT this function without referencing the spec.
+    This function ensures all necessary onie_* options are present
+    '''
     # we need to get the name template and return the new name
     # return None if not required
     s_name = map(lambda x: x.strip(), test_args['test']['name'].split('-'))
@@ -263,6 +269,17 @@ def test_case_file_name(test_args):
             else:
                 keywords['machine'] = test_args['onie_machine']
         elif s_name[-1] == 'Name 4':
+            if 'onie_arch' not in test_args:
+                logger.critical('missing option onie_arch')
+                sys.exit(-3)
+            else:
+                keywords['arch'] = test_args['onie_arch']
+            if 'onie_switch_asic' not in test_args:
+                logger.critical('missing option onie_switch_asic')
+                sys.exit(-3)
+            else:
+                keywords['switch_asic'] = test_args['onie_switch_asic']
+        elif s_name[-1] == 'Name 5':
             if 'onie_arch' not in test_args:
                 logger.critical('missing option onie_arch')
                 sys.exit(-3)
@@ -334,16 +351,17 @@ def prepare_test_case(test_args):
     This function ensures all dhcp and dns options are present
     '''
 
-    vivso_cases = [8, 44]
-    default_url_cases = [9, 45]
-    tftp_filename_cases = [10, 11, 12, 46, 47, 48]
-    tftp_server_ip_cases = [10, 18, 19, 20, 21, 22, 33, 34, 35, 36, 37,
-                            46, 54, 55, 56, 57, 58, 69, 70, 71, 72, 73]
-    tftp_server_name_cases = [11, 47]
-    www_server_cases = [13, 14, 15, 16, 17, 49, 50, 51, 52, 53]
-    dhcp_server_cases = [23, 24, 25, 26, 27, 59, 60, 61, 62, 63]
-    dns_server_cases = [80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
-                        95, 96, 97, 98, 99, 100, 101, 102, 103, 104]
+    vivso_cases = [9, 69]
+    default_url_cases = [10, 70]
+    tftp_filename_cases = [11, 12, 13, 71, 72, 73]
+    tftp_server_ip_cases = [11, 20, 21, 22, 23, 24, 25, 56, 57, 58, 59, 60, 61,
+                            71, 80, 81, 82, 83, 84, 85, 116, 117, 118, 119,
+                            120, 121]
+    tftp_server_name_cases = [12, 72]
+    www_server_cases = [14, 15, 16, 17, 18, 19, 74, 75, 76, 77, 78, 79]
+    dhcp_server_cases = [26, 27, 28, 29, 30, 31, 86, 87, 88, 89, 90, 91]
+    dns_server_cases = [32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
+                        92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103]
 
     # handle onie_action
     action = test_args['test']['action']
