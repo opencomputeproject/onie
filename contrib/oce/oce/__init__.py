@@ -23,6 +23,13 @@ OPTIONS = {'onie_installer': str,
            'dhcp_domain_name': str,
            'dhcp_dns_server': str,
            'dhcp_gateway': str,
-           'dhcp_next_server': str}
+           'dhcp_next_server': str,
+           'eyes_interface': str,
+           'eyes_port': int,
+           'eyes_dut_console_speed': int,
+           'eyes_dut_password': str,
+           'eyes_dut_port': int,
+           'eyes_dut_user': str,
+           'eyes_dut_url': str}
 PRETTY_OPTIONS = sorted(OPTIONS.keys())
 MAC_REGEX = re.compile('([a-fA-F0-9]{2}[:]?){6}')

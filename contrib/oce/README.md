@@ -252,6 +252,48 @@ When you are done, you can exit the virtualenv by
 #
 ```
 
+### eyes.py
+
+```eyes.py``` allows for a DUT's output to be captured/logged using a serial 
+connection, SSH, or Telnet along with providing a REST interface to perform
+various actions like executing commands on a DUT via the hands module.
+
+It takes the following arguments:
+* Interface to bind against
+* DUT config (same DUT configuration file test-onie.py uses)
+
+Prior to running ```eyes.py```, please ensure that the python virtual
+environment is activated.
+
+```
+usage: eyes.py [-h] [-d CONFIG] [-I INTERFACE] [-p PORT] [-v] [-O DIR]
+
+OCE-EYES
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -d CONFIG, --dut-config CONFIG
+                        DUT configuration file
+  -I INTERFACE, --interface INTERFACE
+                        Interface to bind against
+  -p PORT, --port PORT  port to use
+  -v, --verbose         increase the verbosity level
+  -O DIR, --output-dir DIR
+                        output director (default: output)
+```
+
+The following options are added to the dut-config:
+* ```eyes_interface``` - the interface ```eyes.py``` will bind its REST port.  This can be the actual name of the interface (e.g. ```eth0```) or ```all``` to bind to all interfaces.
+* ```eyes_port``` - the port the REST interface will bind to.
+* ```eyes_dut_console_speed``` - when using the serial console connector, the baud speed to use (e.g. 115200).
+* ```eyes_dut_password``` - the password to use when connecting to the DUT. Can be blank if no password is needed but option must be present.
+* ```eyes_dut_port`` - the port to use when connecting to the DUT over ssh or telnet. Can be blank if the default service port is acceptable (22 and 23 respectively).
+* ```eyes_dut_user``` - the user to use when connecting to the DUT over ssh or telnet. Can be blank if no user is needed but option must be present.
+* ```eyes_dut_url``` - the URL to use when connecting to the DUT. The following forms are allowed:
+   * ```console://PORT``` - ```console:///dev/ttyUSB0```
+   * ```ssh://HOST``` - ```ssh://192.168.1.1```
+   * ```telnet://HOST``` - ```telnet://192.168.1.1```
+
 ## Testing a NOS
 
 To test a given NOS would typically end up having the user take a NOS and
