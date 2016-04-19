@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2013 Doron Tsur <doront@mellanox.com>
 #
@@ -196,14 +196,18 @@ if [ "$1" = "start" ] ; then
     # Set MAC addr for all interfaces, but leave the interfaces down.
     base_mac=$(onie-sysinfo -e)
     for intf in $intf_list ; do
-        new_mac="$(mac_add $base_mac $intf_counter)"
-        if [ $? -eq 0 ] ; then
-            log_info_msg "Using $intf MAC address: $new_mac"
-            cmd_run ifconfig $intf down
-            cmd_run ifconfig $intf hw ether $new_mac down
+        if [ "$onie_skip_ethmgmt_macs" = "no" ] ; then
+            mac="$(mac_add $base_mac $intf_counter)"
+            if [ $? -eq 0 ] ; then
+                cmd_run ifconfig $intf down
+                cmd_run ifconfig $intf hw ether $mac down
+            else
+                log_failure_msg "Unable to configure MAC address for $intf"
+            fi
         else
-            log_failure_msg "Unable to configure MAC address for $intf"
+            mac="$(cat /sys/class/net/${intf}/address)"
         fi
+        log_info_msg "Using $intf MAC address: $mac"
         intf_counter=$(( $intf_counter + 1))
     done
 fi

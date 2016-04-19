@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -65,19 +65,23 @@ get_part_num()
 
 get_ethaddr()
 {
-    
+
    if [ -n "$onie_eth_addr" ] ; then
        eth_addr="$onie_eth_addr"
-   fi
-   if [ -z "$eth_addr" ] ; then
-        if type get_ethaddr_platform | grep -q 'shell function' > /dev/null 2>&1 ; then
-            eth_addr=$(get_ethaddr_platform)
-        elif type get_ethaddr_arch | grep -q 'shell function' > /dev/null 2>&1 ; then
-            eth_addr=$(get_ethaddr_arch)
-        elif [ -r /sys/class/net/eth0/address ] ; then
-            # Print Ethernet address from eth0 interface
-            eth_addr=$(cat /sys/class/net/eth0/address)
-        fi
+   else
+       if [ "$onie_skip_ethmgmt_macs" = "no" ] ; then
+           if type get_ethaddr_platform | grep -q 'shell function' > /dev/null 2>&1 ; then
+               eth_addr=$(get_ethaddr_platform)
+           elif type get_ethaddr_arch | grep -q 'shell function' > /dev/null 2>&1 ; then
+               eth_addr=$(get_ethaddr_arch)
+           fi
+       fi
+       if [ -z "$eth_addr" ] ; then
+           if [ -r /sys/class/net/eth0/address ] ; then
+               # Print Ethernet address from eth0 interface
+               eth_addr=$(cat /sys/class/net/eth0/address)
+           fi
+       fi
     fi
 
     if [ -n "$eth_addr" ] ; then
