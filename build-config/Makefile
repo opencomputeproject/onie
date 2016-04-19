@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #>
 #
-#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
@@ -183,6 +183,10 @@ endif
 
 # Switch ASIC vendor, should be set in machine.make
 SWITCH_ASIC_VENDOR ?= unknown
+
+# Should ONIE skip programming the Ethernet management interface MAC
+# addresses?  Can be set to "yes" in machine.make.
+SKIP_ETHMGMT_MACS ?= no
 
 TREE_STAMP  = $(STAMPDIR)/tree
 tree-stamp: $(TREE_STAMP)
