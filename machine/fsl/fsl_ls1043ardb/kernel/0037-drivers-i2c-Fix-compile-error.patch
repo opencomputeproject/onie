@@ -1,0 +1,39 @@
+From 596c971d0927722df5ca786d8a17e3567dafb79c Mon Sep 17 00:00:00 2001
+From: Ying Zhang <b40530@freescale.com>
+Date: Fri, 29 Jan 2016 16:44:58 +0800
+Subject: [PATCH 037/146] drivers:i2c: Fix compile error
+
+Signed-off-by: Ying Zhang <b40530@freescale.com>
+---
+ drivers/i2c/busses/i2c-imx.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/i2c/busses/i2c-imx.c b/drivers/i2c/busses/i2c-imx.c
+index 1fe84d5..acfad25 100644
+--- a/drivers/i2c/busses/i2c-imx.c
++++ b/drivers/i2c/busses/i2c-imx.c
+@@ -417,10 +417,10 @@ static void i2c_imx_dma_free(struct imx_i2c_struct *i2c_imx)
+  * is coming out of reset and will stay low indefinitely.
+  * The I2C master has to generate 9 clock pulses to get the bus free or idle.
+  */
+-static void imx_i2c_fixup(struct imx_i2c_struct *i2c)
++static void imx_i2c_fixup(struct imx_i2c_struct *i2c_imx)
+ {
+ 	int k;
+-	u32 delay_val = 1000000 / i2c->real_clk + 1;
++	u32 delay_val = 1000000 / i2c_imx->cur_clk + 1;
+ 
+ 	if (delay_val < 2)
+ 		delay_val = 2;
+@@ -467,7 +467,7 @@ static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy)
+ 			if ((status & (I2SR_ICF | I2SR_IBB | I2CR_TXAK)) != 0) {
+ 				imx_i2c_write_reg(status & ~I2SR_IAL, i2c_imx,
+ 						  IMX_I2C_I2CR);
+-				imx_i2c_fixup();
++				imx_i2c_fixup(i2c_imx);
+ 			}
+ 			return -ETIMEDOUT;
+ 		}
+-- 
+2.1.0.27.g96db324
+

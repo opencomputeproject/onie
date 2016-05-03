@@ -1,0 +1,113 @@
+From 8d94c851889d04b11cc5b050c4bccf4c5ab11cd9 Mon Sep 17 00:00:00 2001
+From: Shaohui Xie <Shaohui.Xie@freescale.com>
+Date: Fri, 21 Aug 2015 15:29:29 +0800
+Subject: [PATCH 136/146] net: phy: add interrupt support for aquantia phy
+
+By implementing config_intr & ack_interrupt, now the phy can support
+link connect/disconnect interrupt.
+
+Signed-off-by: Shaohui Xie <Shaohui.Xie@freescale.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+ drivers/net/phy/aquantia.c | 49 ++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 49 insertions(+)
+
+diff --git a/drivers/net/phy/aquantia.c b/drivers/net/phy/aquantia.c
+index 73d347d..d6111af 100644
+--- a/drivers/net/phy/aquantia.c
++++ b/drivers/net/phy/aquantia.c
+@@ -44,6 +44,43 @@ static int aquantia_aneg_done(struct phy_device *phydev)
+ 	return (reg < 0) ? reg : (reg & BMSR_ANEGCOMPLETE);
+ }
+ 
++static int aquantia_config_intr(struct phy_device *phydev)
++{
++	int err;
++
++	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
++		err = phy_write_mmd(phydev, MDIO_MMD_AN, 0xd401, 1);
++		if (err < 0)
++			return err;
++
++		err = phy_write_mmd(phydev, MDIO_MMD_VEND1, 0xff00, 1);
++		if (err < 0)
++			return err;
++
++		err = phy_write_mmd(phydev, MDIO_MMD_VEND1, 0xff01, 0x1001);
++	} else {
++		err = phy_write_mmd(phydev, MDIO_MMD_AN, 0xd401, 0);
++		if (err < 0)
++			return err;
++
++		err = phy_write_mmd(phydev, MDIO_MMD_VEND1, 0xff00, 0);
++		if (err < 0)
++			return err;
++
++		err = phy_write_mmd(phydev, MDIO_MMD_VEND1, 0xff01, 0);
++	}
++
++	return err;
++}
++
++static int aquantia_ack_interrupt(struct phy_device *phydev)
++{
++	int reg;
++
++	reg = phy_read_mmd(phydev, MDIO_MMD_AN, 0xcc01);
++	return (reg < 0) ? reg : 0;
++}
++
+ static int aquantia_read_status(struct phy_device *phydev)
+ {
+ 	int reg;
+@@ -85,8 +122,11 @@ static struct phy_driver aquantia_driver[] = {
+ 	.phy_id_mask	= 0xfffffff0,
+ 	.name		= "Aquantia AQ1202",
+ 	.features	= PHY_AQUANTIA_FEATURES,
++	.flags		= PHY_HAS_INTERRUPT,
+ 	.aneg_done	= aquantia_aneg_done,
+ 	.config_aneg    = aquantia_config_aneg,
++	.config_intr	= aquantia_config_intr,
++	.ack_interrupt	= aquantia_ack_interrupt,
+ 	.read_status	= aquantia_read_status,
+ 	.driver		= { .owner = THIS_MODULE,},
+ },
+@@ -95,8 +135,11 @@ static struct phy_driver aquantia_driver[] = {
+ 	.phy_id_mask	= 0xfffffff0,
+ 	.name		= "Aquantia AQ2104",
+ 	.features	= PHY_AQUANTIA_FEATURES,
++	.flags		= PHY_HAS_INTERRUPT,
+ 	.aneg_done	= aquantia_aneg_done,
+ 	.config_aneg    = aquantia_config_aneg,
++	.config_intr	= aquantia_config_intr,
++	.ack_interrupt	= aquantia_ack_interrupt,
+ 	.read_status	= aquantia_read_status,
+ 	.driver		= { .owner = THIS_MODULE,},
+ },
+@@ -105,8 +148,11 @@ static struct phy_driver aquantia_driver[] = {
+ 	.phy_id_mask	= 0xfffffff0,
+ 	.name		= "Aquantia AQR105",
+ 	.features	= PHY_AQUANTIA_FEATURES,
++	.flags		= PHY_HAS_INTERRUPT,
+ 	.aneg_done	= aquantia_aneg_done,
+ 	.config_aneg    = aquantia_config_aneg,
++	.config_intr	= aquantia_config_intr,
++	.ack_interrupt	= aquantia_ack_interrupt,
+ 	.read_status	= aquantia_read_status,
+ 	.driver		= { .owner = THIS_MODULE,},
+ },
+@@ -115,8 +161,11 @@ static struct phy_driver aquantia_driver[] = {
+ 	.phy_id_mask	= 0xfffffff0,
+ 	.name		= "Aquantia AQR405",
+ 	.features	= PHY_AQUANTIA_FEATURES,
++	.flags		= PHY_HAS_INTERRUPT,
+ 	.aneg_done	= aquantia_aneg_done,
+ 	.config_aneg    = aquantia_config_aneg,
++	.config_intr	= aquantia_config_intr,
++	.ack_interrupt	= aquantia_ack_interrupt,
+ 	.read_status	= aquantia_read_status,
+ 	.driver		= { .owner = THIS_MODULE,},
+ },
+-- 
+2.1.0.27.g96db324
+

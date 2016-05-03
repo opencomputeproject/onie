@@ -1,0 +1,65 @@
+From b8454899b448da827d3b47f014ce31476f808112 Mon Sep 17 00:00:00 2001
+From: Madalin Bucur <madalin.bucur@freescale.com>
+Date: Tue, 22 Mar 2016 16:41:23 +0200
+Subject: [PATCH 123/146] fmd: adapt to the new clocking model
+
+Signed-off-by: Madalin Bucur <madalin.bucur@freescale.com>
+---
+ .../freescale/sdk_fman/src/wrapper/lnxwrp_fm.c     | 24 +++++++++++++++-------
+ 1 file changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c b/drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c
+index f21d2fd..caf8659 100755
+--- a/drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c
++++ b/drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c
+@@ -56,6 +56,7 @@
+ #include <linux/of_platform.h>
+ #include <linux/of_address.h>
+ #include <linux/of_irq.h>
++#include <linux/clk.h>
+ #include <asm/uaccess.h>
+ #include <asm/errno.h>
+ #include <linux/fsl/qe.h>        /* For struct qe_firmware */
+@@ -504,6 +505,8 @@ static t_LnxWrpFmDev * ReadFmDevTreeNode (struct platform_device *of_dev)
+     struct device_node  *fm_node, *dev_node;
+     struct of_device_id name;
+     struct resource     res;
++    struct clk *clk;
++    u32 clk_rate;
+     const uint32_t      *uint32_prop;
+     int                 _errno=0, lenp;
+     uint32_t            tmp_prop;
+@@ -559,16 +562,23 @@ static t_LnxWrpFmDev * ReadFmDevTreeNode (struct platform_device *of_dev)
+     p_LnxWrpFmDev->fmPhysBaseAddr = res.start;
+     p_LnxWrpFmDev->fmMemSize = res.end + 1 - res.start;
+ 
+-    uint32_prop = (uint32_t *)of_get_property(fm_node, "clock-frequency", &lenp);
+-    if (unlikely(uint32_prop == NULL)) {
+-        REPORT_ERROR(MAJOR, E_INVALID_VALUE, ("of_get_property(%s, clock-frequency) failed", fm_node->full_name));
+-        return NULL;
++    clk = of_clk_get(fm_node, 0);
++    if (IS_ERR(clk)) {
++        dev_err(&of_dev->dev, "%s: Failed to get FM clock structure\n",
++                __func__);
++        of_node_put(fm_node);
++	return NULL;
+     }
+-    tmp_prop = be32_to_cpu(*uint32_prop);
+ 
+-    if (WARN_ON(lenp != sizeof(uint32_t)))
++    clk_rate = clk_get_rate(clk);
++    if (!clk_rate) {
++        dev_err(&of_dev->dev, "%s: Failed to determine FM clock rate\n",
++                __func__);
++        of_node_put(fm_node);
+         return NULL;
+-    p_LnxWrpFmDev->fmDevSettings.param.fmClkFreq = (tmp_prop + 500000)/1000000; /* In MHz, rounded */
++    }
++
++    p_LnxWrpFmDev->fmDevSettings.param.fmClkFreq = DIV_ROUND_UP(clk_rate, 1000000); /* In MHz, rounded */
+     /* Get the MURAM base address and size */
+     memset(&name, 0, sizeof(struct of_device_id));
+     if (WARN_ON(strlen("muram") >= sizeof(name.name)))
+-- 
+2.1.0.27.g96db324
+
