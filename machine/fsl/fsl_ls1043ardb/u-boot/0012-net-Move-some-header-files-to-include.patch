@@ -1,0 +1,2140 @@
+From 7a6ec47fdb1b312adb5d60dfaccfb7799b5341b5 Mon Sep 17 00:00:00 2001
+From: Shaohui Xie <Shaohui.Xie@freescale.com>
+Date: Mon, 26 Oct 2015 19:47:47 +0800
+Subject: [PATCH 12/21] net: Move some header files to include/
+
+The fsl_dtsec.h & fsl_tgec.h & fsl_fman.h can be shared on both ARM
+and PPC, move it out of ppc to include/, and change the path in
+drivers accordingly.
+
+Signed-off-by: Shaohui Xie <Shaohui.Xie@freescale.com>
+Signed-off-by: Gong Qianyu <Qianyu.Gong@freescale.com>
+Reviewed-by: York Sun <yorksun@freescale.com>
+---
+ arch/powerpc/include/asm/fsl_dtsec.h        | 231 --------------
+ arch/powerpc/include/asm/fsl_fman.h         | 463 ----------------------------
+ arch/powerpc/include/asm/fsl_tgec.h         | 202 ------------
+ arch/powerpc/include/asm/immap_85xx.h       |   2 +-
+ board/freescale/b4860qds/eth_b4860qds.c     |   2 +-
+ board/freescale/corenet_ds/eth_hydra.c      |   2 +-
+ board/freescale/corenet_ds/eth_p4080.c      |   2 +-
+ board/freescale/corenet_ds/eth_superhydra.c |   2 +-
+ board/freescale/p1023rdb/p1023rdb.c         |   2 +-
+ board/freescale/p2041rdb/eth.c              |   2 +-
+ board/freescale/t102xqds/eth_t102xqds.c     |   2 +-
+ board/freescale/t102xrdb/eth_t102xrdb.c     |   2 +-
+ board/freescale/t1040qds/eth.c              |   2 +-
+ board/freescale/t104xrdb/eth.c              |   2 +-
+ board/freescale/t208xqds/eth_t208xqds.c     |   2 +-
+ board/freescale/t208xrdb/eth_t208xrdb.c     |   2 +-
+ board/freescale/t4qds/eth.c                 |   2 +-
+ board/freescale/t4rdb/eth.c                 |   2 +-
+ drivers/net/fm/dtsec.c                      |   2 +-
+ drivers/net/fm/eth.c                        |   4 +-
+ drivers/net/fm/fm.h                         |   2 +-
+ drivers/net/fm/tgec.c                       |   2 +-
+ drivers/net/fm/tgec_phy.c                   |   2 +-
+ include/fsl_dtsec.h                         | 231 ++++++++++++++
+ include/fsl_fman.h                          | 463 ++++++++++++++++++++++++++++
+ include/fsl_tgec.h                          | 202 ++++++++++++
+ 26 files changed, 917 insertions(+), 917 deletions(-)
+ delete mode 100644 arch/powerpc/include/asm/fsl_dtsec.h
+ delete mode 100644 arch/powerpc/include/asm/fsl_fman.h
+ delete mode 100644 arch/powerpc/include/asm/fsl_tgec.h
+ create mode 100644 include/fsl_dtsec.h
+ create mode 100644 include/fsl_fman.h
+ create mode 100644 include/fsl_tgec.h
+
+diff --git a/arch/powerpc/include/asm/fsl_dtsec.h b/arch/powerpc/include/asm/fsl_dtsec.h
+deleted file mode 100644
+index 41b8398..0000000
+--- a/arch/powerpc/include/asm/fsl_dtsec.h
++++ /dev/null
+@@ -1,231 +0,0 @@
+-/*
+- * Copyright 2009-2011 Freescale Semiconductor, Inc.
+- *
+- * SPDX-License-Identifier:	GPL-2.0+
+- */
+-
+-#ifndef __DTSEC_H__
+-#define __DTSEC_H__
+-
+-#include <asm/types.h>
+-
+-struct dtsec {
+-	u32	tsec_id;	/* controller ID and version */
+-	u32	tsec_id2;	/* controller ID and configuration */
+-	u32	ievent;		/* interrupt event */
+-	u32	imask;		/* interrupt mask */
+-	u32	res0;
+-	u32	ecntrl;		/* ethernet control and configuration */
+-	u32	ptv;		/* pause time value */
+-	u32	tbipa;		/* TBI PHY address */
+-	u32	res1[8];
+-	u32	tctrl;		/* Transmit control register */
+-	u32	res2[3];
+-	u32	rctrl;		/* Receive control register */
+-	u32	res3[11];
+-	u32	igaddr[8];	/* Individual group address */
+-	u32	gaddr[8];	/* group address */
+-	u32	res4[16];
+-	u32	maccfg1;	/* MAC configuration register 1 */
+-	u32	maccfg2;	/* MAC configuration register 2 */
+-	u32	ipgifg;		/* inter-packet/inter-frame gap */
+-	u32	hafdup;		/* half-duplex control */
+-	u32	maxfrm;		/* Maximum frame size */
+-	u32	res5[3];
+-	u32	miimcfg;	/* MII management configuration */
+-	u32	miimcom;	/* MII management command */
+-	u32	miimadd;	/* MII management address */
+-	u32	miimcon;	/* MII management control */
+-	u32	miimstat;	/* MII management status */
+-	u32	miimind;	/* MII management indicator */
+-	u32	res6;
+-	u32	ifstat;		/* Interface status */
+-	u32	macstnaddr1;	/* MAC station address 1 */
+-	u32	macstnaddr2;	/* MAC station address 2 */
+-	u32	res7[46];
+-	/* transmit and receive counter */
+-	u32	tr64;		/* Tx and Rx 64 bytes frame */
+-	u32	tr127;		/* Tx and Rx 65 to 127 bytes frame */
+-	u32	tr255;		/* Tx and Rx 128 to 255 bytes frame */
+-	u32	tr511;		/* Tx and Rx 256 to 511 bytes frame */
+-	u32	tr1k;		/* Tx and Rx 512 to 1023 bytes frame */
+-	u32	trmax;		/* Tx and Rx 1024 to 1518 bytes frame */
+-	u32	trmgv;		/* Tx and Rx 1519 to 1522 good VLAN frame */
+-	/* receive counters */
+-	u32	rbyt;		/* Receive byte counter */
+-	u32	rpkt;		/* Receive packet counter */
+-	u32	rfcs;		/* Receive FCS error */
+-	u32	rmca;		/* Receive multicast packet */
+-	u32	rbca;		/* Receive broadcast packet */
+-	u32	rxcf;		/* Receive control frame */
+-	u32	rxpf;		/* Receive pause frame */
+-	u32	rxuo;		/* Receive unknown OP code */
+-	u32	raln;		/* Receive alignment error */
+-	u32	rflr;		/* Receive frame length error */
+-	u32	rcde;		/* Receive code error */
+-	u32	rcse;		/* Receive carrier sense error */
+-	u32	rund;		/* Receive undersize packet */
+-	u32	rovr;		/* Receive oversize packet */
+-	u32	rfrg;		/* Receive fragments counter */
+-	u32	rjbr;		/* Receive jabber counter */
+-	u32	rdrp;		/* Receive drop counter */
+-	/* transmit counters */
+-	u32	tbyt;		/* Transmit byte counter */
+-	u32	tpkt;		/* Transmit packet */
+-	u32	tmca;		/* Transmit multicast packet */
+-	u32	tbca;		/* Transmit broadcast packet */
+-	u32	txpf;		/* Transmit pause control frame */
+-	u32	tdfr;		/* Transmit deferral packet */
+-	u32	tedf;		/* Transmit excessive deferral pkt */
+-	u32	tscl;		/* Transmit single collision pkt */
+-	u32	tmcl;		/* Transmit multiple collision pkt */
+-	u32	tlcl;		/* Transmit late collision pkt */
+-	u32	txcl;		/* Transmit excessive collision */
+-	u32	tncl;		/* Transmit total collision */
+-	u32	res8;
+-	u32	tdrp;		/* Transmit drop frame */
+-	u32	tjbr;		/* Transmit jabber frame */
+-	u32	tfcs;		/* Transmit FCS error */
+-	u32	txcf;		/* Transmit control frame */
+-	u32	tovr;		/* Transmit oversize frame */
+-	u32	tund;		/* Transmit undersize frame */
+-	u32	tfrg;		/* Transmit fragments frame */
+-	/* counter controls */
+-	u32	car1;		/* carry register 1 */
+-	u32	car2;		/* carry register 2 */
+-	u32	cam1;		/* carry register 1 mask */
+-	u32	cam2;		/* carry register 2 mask */
+-	u32	res9[80];
+-};
+-
+-
+-/* TBI register addresses */
+-#define TBI_CR			0x00
+-#define TBI_SR			0x01
+-#define TBI_ANA			0x04
+-#define TBI_ANLPBPA		0x05
+-#define TBI_ANEX		0x06
+-#define TBI_TBICON		0x11
+-
+-/* TBI MDIO register bit fields*/
+-#define TBICON_CLK_SELECT	0x0020
+-#define TBIANA_ASYMMETRIC_PAUSE 0x0100
+-#define TBIANA_SYMMETRIC_PAUSE  0x0080
+-#define TBIANA_HALF_DUPLEX	0x0040
+-#define TBIANA_FULL_DUPLEX	0x0020
+-#define TBICR_PHY_RESET		0x8000
+-#define TBICR_ANEG_ENABLE	0x1000
+-#define TBICR_RESTART_ANEG	0x0200
+-#define TBICR_FULL_DUPLEX	0x0100
+-#define TBICR_SPEED1_SET	0x0040
+-
+-/* IEVENT - interrupt events register */
+-#define IEVENT_BABR	0x80000000 /* Babbling receive error */
+-#define IEVENT_RXC	0x40000000 /* pause control frame received */
+-#define IEVENT_MSRO	0x04000000 /* MIB counter overflow */
+-#define IEVENT_GTSC	0x02000000 /* Graceful transmit stop complete */
+-#define IEVENT_BABT	0x01000000 /* Babbling transmit error */
+-#define IEVENT_TXC	0x00800000 /* control frame transmitted */
+-#define IEVENT_TXE	0x00400000 /* Transmit channel error */
+-#define IEVENT_LC	0x00040000 /* Late collision occurred */
+-#define IEVENT_CRL	0x00020000 /* Collision retry exceed limit */
+-#define IEVENT_XFUN	0x00010000 /* Transmit FIFO underrun */
+-#define IEVENT_ABRT	0x00008000 /* Transmit packet abort */
+-#define IEVENT_MMRD	0x00000400 /* MII management read complete */
+-#define IEVENT_MMWR	0x00000200 /* MII management write complete */
+-#define IEVENT_GRSC	0x00000100 /* Graceful stop complete */
+-#define IEVENT_TDPE	0x00000002 /* Internal data parity error on Tx */
+-#define IEVENT_RDPE	0x00000001 /* Internal data parity error on Rx */
+-
+-#define IEVENT_CLEAR_ALL	0xffffffff
+-
+-/* IMASK - interrupt mask register */
+-#define IMASK_BREN	0x80000000 /* Babbling receive enable */
+-#define IMASK_RXCEN	0x40000000 /* receive control enable */
+-#define IMASK_MSROEN	0x04000000 /* MIB counter overflow enable */
+-#define IMASK_GTSCEN	0x02000000 /* Graceful Tx stop complete enable */
+-#define IMASK_BTEN	0x01000000 /* Babbling transmit error enable */
+-#define IMASK_TXCEN	0x00800000 /* control frame transmitted enable */
+-#define IMASK_TXEEN	0x00400000 /* Transmit channel error enable */
+-#define IMASK_LCEN	0x00040000 /* Late collision interrupt enable */
+-#define IMASK_CRLEN	0x00020000 /* Collision retry exceed limit */
+-#define IMASK_XFUNEN	0x00010000 /* Transmit FIFO underrun enable */
+-#define IMASK_ABRTEN	0x00008000 /* Transmit packet abort enable */
+-#define IMASK_MMRDEN	0x00000400 /* MII management read complete enable */
+-#define IMASK_MMWREN	0x00000200 /* MII management write complete enable */
+-#define IMASK_GRSCEN	0x00000100 /* Graceful stop complete interrupt enable */
+-#define IMASK_TDPEEN	0x00000002 /* Internal data parity error on Tx enable */
+-#define IMASK_RDPEEN	0x00000001 /* Internal data parity error on Rx enable */
+-
+-#define IMASK_MASK_ALL	0x00000000
+-
+-/* ECNTRL - ethernet control register */
+-#define ECNTRL_CFG_RO	0x80000000 /* GMIIM, RPM, R100M, SGMIIM bits are RO */
+-#define ECNTRL_CLRCNT	0x00004000 /* clear all statistics */
+-#define ECNTRL_AUTOZ	0x00002000 /* auto zero MIB counter */
+-#define ECNTRL_STEN	0x00001000 /* enable internal counters to update */
+-#define ECNTRL_GMIIM	0x00000040 /* 1- GMII or RGMII interface mode */
+-#define ECNTRL_TBIM	0x00000020 /* 1- Ten-bit interface mode */
+-#define ECNTRL_RPM	0x00000010 /* 1- RGMII reduced-pin mode */
+-#define ECNTRL_R100M	0x00000008 /* 1- RGMII 100 Mbps, SGMII 100 Mbps
+-				      0- RGMII 10 Mbps, SGMII 10 Mbps */
+-#define ECNTRL_SGMIIM	0x00000002 /* 1- SGMII interface mode */
+-#define ECNTRL_TBIM	0x00000020 /* 1- TBI Interface mode (for SGMII) */
+-
+-#define ECNTRL_DEFAULT	(ECNTRL_TBIM | ECNTRL_R100M | ECNTRL_SGMIIM)
+-
+-/* TCTRL - Transmit control register */
+-#define TCTRL_THDF	0x00000800 /* Transmit half-duplex flow control */
+-#define TCTRL_TTSE	0x00000040 /* Transmit time-stamp enable */
+-#define TCTRL_GTS	0x00000020 /* Graceful transmit stop */
+-#define TCTRL_RFC_PAUSE	0x00000010 /* Receive flow control pause frame */
+-
+-/* RCTRL - Receive control register */
+-#define RCTRL_PAL_MASK	0x001f0000 /* packet alignment padding length */
+-#define RCTRL_PAL_SHIFT	16
+-#define RCTRL_CFA	0x00008000 /* control frame accept enable */
+-#define RCTRL_GHTX	0x00000800 /* group address hash table extend */
+-#define RCTRL_RTSE	0x00000040 /* receive 1588 time-stamp enable */
+-#define RCTRL_GRS	0x00000020 /* graceful receive stop */
+-#define RCTRL_BC_REJ	0x00000010 /* broadcast frame reject */
+-#define RCTRL_BC_MPROM	0x00000008 /* all multicast/broadcast frames received */
+-#define RCTRL_RSF	0x00000004 /* receive short frame(17~63 bytes) enable */
+-#define RCTRL_EMEN	0x00000002 /* Exact match MAC address enable */
+-#define RCTRL_UPROM	0x00000001 /* all unicast frame received */
+-
+-/* MACCFG1 - MAC configuration 1 register */
+-#define MACCFG1_SOFT_RST	0x80000000 /* place the MAC in reset */
+-#define MACCFG1_RST_RXMAC	0x00080000 /* reset receive MAC control block */
+-#define MACCFG1_RST_TXMAC	0x00040000 /* reet transmit MAC control block */
+-#define MACCFG1_RST_RXFUN	0x00020000 /* reset receive function block */
+-#define MACCFG1_RST_TXFUN	0x00010000 /* reset transmit function block */
+-#define MACCFG1_LOOPBACK	0x00000100 /* MAC loopback */
+-#define MACCFG1_RX_FLOW		0x00000020 /* Receive flow */
+-#define MACCFG1_TX_FLOW		0x00000010 /* Transmit flow */
+-#define MACCFG1_SYNC_RXEN	0x00000008 /* Frame reception enabled */
+-#define MACCFG1_RX_EN		0x00000004 /* Rx enable */
+-#define MACCFG1_SYNC_TXEN	0x00000002 /* Frame transmission is enabled */
+-#define MACCFG1_TX_EN		0x00000001 /* Tx enable */
+-#define MACCFG1_RXTX_EN		(MACCFG1_RX_EN | MACCFG1_TX_EN)
+-
+-/* MACCFG2 - MAC configuration 2 register */
+-#define MACCFG2_PRE_LEN_MASK	0x0000f000 /* preamble length */
+-#define MACCFG2_PRE_LEN(x)	((x << 12) & MACCFG2_PRE_LEN_MASK)
+-#define MACCFG2_IF_MODE_MASK	0x00000300
+-#define MACCFG2_IF_MODE_NIBBLE	0x00000100 /* MII, 10/100 Mbps MII/RMII */
+-#define MACCFG2_IF_MODE_BYTE	0x00000200 /* GMII/TBI, 1000 GMII/TBI */
+-#define MACCFG2_PRE_RX_EN	0x00000080 /* receive preamble enable */
+-#define MACCFG2_PRE_TX_EN	0x00000040 /* tx preable enable */
+-#define MACCFG2_HUGE_FRAME	0x00000020 /* >= max frame len enable */
+-#define MACCFG2_LEN_CHECK	0x00000010 /* MAC check frame's length Rx */
+-#define MACCFG2_MAG_EN		0x00000008 /* magic packet enable */
+-#define MACCFG2_PAD_CRC		0x00000004 /* pad and append CRC */
+-#define MACCFG2_CRC_EN		0x00000002 /* MAC appends a CRC on all frames */
+-#define MACCFG2_FULL_DUPLEX	0x00000001 /* Full deplex mode */
+-
+-struct fsl_enet_mac;
+-
+-void init_dtsec(struct fsl_enet_mac *mac, void *base, void *phyregs,
+-		int max_rx_len);
+-
+-#endif
+diff --git a/arch/powerpc/include/asm/fsl_fman.h b/arch/powerpc/include/asm/fsl_fman.h
+deleted file mode 100644
+index 4d04415..0000000
+--- a/arch/powerpc/include/asm/fsl_fman.h
++++ /dev/null
+@@ -1,463 +0,0 @@
+-/*
+- * MPC85xx Internal Memory Map
+- *
+- * Copyright 2010-2011 Freescale Semiconductor, Inc.
+- *
+- * SPDX-License-Identifier:	GPL-2.0+
+- */
+-
+-#ifndef __FSL_FMAN_H__
+-#define __FSL_FMAN_H__
+-
+-#include <asm/types.h>
+-
+-typedef struct fm_bmi_common {
+-	u32	fmbm_init;	/* BMI initialization */
+-	u32	fmbm_cfg1;	/* BMI configuration1 */
+-	u32	fmbm_cfg2;	/* BMI configuration2 */
+-	u32	res0[0x5];
+-	u32	fmbm_ievr;	/* interrupt event register */
+-	u32	fmbm_ier;	/* interrupt enable register */
+-	u32	fmbm_ifr;	/* interrupt force register */
+-	u32	res1[0x5];
+-	u32	fmbm_arb[0x8];	/* BMI arbitration */
+-	u32	res2[0x28];
+-	u32	fmbm_gde;	/* global debug enable */
+-	u32	fmbm_pp[0x3f];	/* BMI port parameters */
+-	u32	res3;
+-	u32	fmbm_pfs[0x3f];	/* BMI port FIFO size */
+-	u32	res4;
+-	u32	fmbm_ppid[0x3f];/* port partition ID */
+-} fm_bmi_common_t;
+-
+-typedef struct fm_qmi_common {
+-	u32	fmqm_gc;	/* general configuration register */
+-	u32	res0;
+-	u32	fmqm_eie;	/* error interrupt event register */
+-	u32	fmqm_eien;	/* error interrupt enable register */
+-	u32	fmqm_eif;	/* error interrupt force register */
+-	u32	fmqm_ie;	/* interrupt event register */
+-	u32	fmqm_ien;	/* interrupt enable register */
+-	u32	fmqm_if;	/* interrupt force register */
+-	u32	fmqm_gs;	/* global status register */
+-	u32	fmqm_ts;	/* task status register */
+-	u32	fmqm_etfc;	/* enqueue total frame counter */
+-	u32	fmqm_dtfc;	/* dequeue total frame counter */
+-	u32	fmqm_dc0;	/* dequeue counter 0 */
+-	u32	fmqm_dc1;	/* dequeue counter 1 */
+-	u32	fmqm_dc2;	/* dequeue counter 2 */
+-	u32	fmqm_dc3;	/* dequeue counter 3 */
+-	u32	fmqm_dfnoc;	/* dequeue FQID not override counter */
+-	u32	fmqm_dfcc;	/* dequeue FQID from context counter */
+-	u32	fmqm_dffc;	/* dequeue FQID from FD counter */
+-	u32	fmqm_dcc;	/* dequeue confirm counter */
+-	u32	res1[0xc];
+-	u32	fmqm_dtrc;	/* debug trap configuration register */
+-	u32	fmqm_efddd;	/* enqueue frame descriptor dynamic debug */
+-	u32	res3[0x2];
+-	u32	res4[0xdc];	/* missing debug regs */
+-} fm_qmi_common_t;
+-
+-typedef struct fm_bmi {
+-	u8	res[1024];
+-} fm_bmi_t;
+-
+-typedef struct fm_qmi {
+-	u8	res[1024];
+-} fm_qmi_t;
+-
+-struct fm_bmi_rx_port {
+-	u32 fmbm_rcfg;	/* Rx configuration */
+-	u32 fmbm_rst;	/* Rx status */
+-	u32 fmbm_rda;	/* Rx DMA attributes */
+-	u32 fmbm_rfp;	/* Rx FIFO parameters */
+-	u32 fmbm_rfed;	/* Rx frame end data */
+-	u32 fmbm_ricp;	/* Rx internal context parameters */
+-	u32 fmbm_rim;	/* Rx internal margins */
+-	u32 fmbm_rebm;	/* Rx external buffer margins */
+-	u32 fmbm_rfne;	/* Rx frame next engine */
+-	u32 fmbm_rfca;	/* Rx frame command attributes */
+-	u32 fmbm_rfpne;	/* Rx frame parser next engine */
+-	u32 fmbm_rpso;	/* Rx parse start offset */
+-	u32 fmbm_rpp;	/* Rx policer profile */
+-	u32 fmbm_rccb;	/* Rx coarse classification base */
+-	u32 res1[0x2];
+-	u32 fmbm_rprai[0x8];	/* Rx parse results array Initialization */
+-	u32 fmbm_rfqid;		/* Rx frame queue ID */
+-	u32 fmbm_refqid;	/* Rx error frame queue ID */
+-	u32 fmbm_rfsdm;		/* Rx frame status discard mask */
+-	u32 fmbm_rfsem;		/* Rx frame status error mask */
+-	u32 fmbm_rfene;		/* Rx frame enqueue next engine */
+-	u32 res2[0x23];
+-	u32 fmbm_ebmpi[0x8];	/* buffer manager pool information */
+-	u32 fmbm_acnt[0x8];	/* allocate counter */
+-	u32 res3[0x8];
+-	u32 fmbm_cgm[0x8];	/* congestion group map */
+-	u32 fmbm_mpd;		/* BMan pool depletion */
+-	u32 res4[0x1F];
+-	u32 fmbm_rstc;		/* Rx statistics counters */
+-	u32 fmbm_rfrc;		/* Rx frame counters */
+-	u32 fmbm_rfbc;		/* Rx bad frames counter */
+-	u32 fmbm_rlfc;		/* Rx large frames counter */
+-	u32 fmbm_rffc;		/* Rx filter frames counter */
+-	u32 fmbm_rfdc;		/* Rx frame discard counter */
+-	u32 fmbm_rfldec;	/* Rx frames list DMA error counter */
+-	u32 fmbm_rodc;		/* Rx out of buffers discard counter */
+-	u32 fmbm_rbdc;		/* Rx buffers deallocate counter */
+-	u32 res5[0x17];
+-	u32 fmbm_rpc;		/* Rx performance counters */
+-	u32 fmbm_rpcp;		/* Rx performance count parameters */
+-	u32 fmbm_rccn;		/* Rx cycle counter */
+-	u32 fmbm_rtuc;		/* Rx tasks utilization counter */
+-	u32 fmbm_rrquc;		/* Rx receive queue utilization counter */
+-	u32 fmbm_rduc;		/* Rx DMA utilization counter */
+-	u32 fmbm_rfuc;		/* Rx FIFO utilization counter */
+-	u32 fmbm_rpac;		/* Rx pause activation counter */
+-	u32 res6[0x18];
+-	u32 fmbm_rdbg;		/* Rx debug configuration */
+-};
+-
+-/* FMBM_RCFG - Rx configuration */
+-#define FMBM_RCFG_EN		0x80000000 /* port is enabled to receive data */
+-#define FMBM_RCFG_FDOVR		0x02000000 /* frame discard override */
+-#define FMBM_RCFG_IM		0x01000000 /* independent mode */
+-
+-/* FMBM_RST - Rx status */
+-#define FMBM_RST_BSY		0x80000000 /* Rx port is busy */
+-
+-/* FMBM_RFCA - Rx frame command attributes */
+-#define FMBM_RFCA_ORDER		0x80000000
+-#define FMBM_RFCA_MR_MASK	0x003f0000
+-#define FMBM_RFCA_MR(x)		((x << 16) & FMBM_RFCA_MR_MASK)
+-
+-/* FMBM_RSTC - Rx statistics */
+-#define FMBM_RSTC_EN		0x80000000 /* statistics counters enable */
+-
+-struct fm_bmi_tx_port {
+-	u32 fmbm_tcfg;	/* Tx configuration */
+-	u32 fmbm_tst;	/* Tx status */
+-	u32 fmbm_tda;	/* Tx DMA attributes */
+-	u32 fmbm_tfp;	/* Tx FIFO parameters */
+-	u32 fmbm_tfed;	/* Tx frame end data */
+-	u32 fmbm_ticp;	/* Tx internal context parameters */
+-	u32 fmbm_tfne;	/* Tx frame next engine */
+-	u32 fmbm_tfca;	/* Tx frame command attributes */
+-	u32 fmbm_tcfqid;/* Tx confirmation frame queue ID */
+-	u32 fmbm_tfeqid;/* Tx error frame queue ID */
+-	u32 fmbm_tfene;	/* Tx frame enqueue next engine */
+-	u32 fmbm_trlmts;/* Tx rate limiter scale */
+-	u32 fmbm_trlmt;	/* Tx rate limiter */
+-	u32 res0[0x73];
+-	u32 fmbm_tstc;	/* Tx statistics counters */
+-	u32 fmbm_tfrc;	/* Tx frame counter */
+-	u32 fmbm_tfdc;	/* Tx frames discard counter */
+-	u32 fmbm_tfledc;/* Tx frame length error discard counter */
+-	u32 fmbm_tfufdc;/* Tx frame unsupported format discard counter */
+-	u32 fmbm_tbdc;	/* Tx buffers deallocate counter */
+-	u32 res1[0x1a];
+-	u32 fmbm_tpc;	/* Tx performance counters */
+-	u32 fmbm_tpcp;	/* Tx performance count parameters */
+-	u32 fmbm_tccn;	/* Tx cycle counter */
+-	u32 fmbm_ttuc;	/* Tx tasks utilization counter */
+-	u32 fmbm_ttcquc;/* Tx transmit confirm queue utilization counter */
+-	u32 fmbm_tduc;	/* Tx DMA utilization counter */
+-	u32 fmbm_tfuc;	/* Tx FIFO utilization counter */
+-	u32 res2[0x19];
+-	u32 fmbm_tdcfg;	/* Tx debug configuration */
+-};
+-
+-/* FMBM_TCFG - Tx configuration */
+-#define FMBM_TCFG_EN	0x80000000 /* port is enabled to transmit data */
+-#define FMBM_TCFG_IM	0x01000000 /* independent mode enable */
+-
+-/* FMBM_TST - Tx status */
+-#define FMBM_TST_BSY		0x80000000 /* Tx port is busy */
+-
+-/* FMBM_TFCA - Tx frame command attributes */
+-#define FMBM_TFCA_ORDER		0x80000000
+-#define FMBM_TFCA_MR_MASK	0x003f0000
+-#define FMBM_TFCA_MR(x)		((x << 16) & FMBM_TFCA_MR_MASK)
+-
+-/* FMBM_TSTC - Tx statistics counters */
+-#define FMBM_TSTC_EN		0x80000000
+-
+-/* FMBM_INIT - BMI initialization register */
+-#define FMBM_INIT_START		0x80000000 /* init internal buffers */
+-
+-/* FMBM_CFG1 - BMI configuration 1 */
+-#define FMBM_CFG1_FBPS_MASK	0x03ff0000 /* Free buffer pool size */
+-#define FMBM_CFG1_FBPS_SHIFT	16
+-#define FMBM_CFG1_FBPO_MASK	0x000003ff /* Free buffer pool offset */
+-
+-/* FMBM_IEVR - interrupt event */
+-#define FMBM_IEVR_PEC		0x80000000 /* pipeline table ECC err detected */
+-#define FMBM_IEVR_LEC		0x40000000 /* linked list RAM ECC error */
+-#define FMBM_IEVR_SEC		0x20000000 /* statistics count RAM ECC error */
+-#define FMBM_IEVR_CLEAR_ALL	(FMBM_IEVR_PEC | FMBM_IEVR_LEC | FMBM_IEVR_SEC)
+-
+-/* FMBM_IER - interrupt enable */
+-#define FMBM_IER_PECE		0x80000000 /* PEC interrupt enable */
+-#define FMBM_IER_LECE		0x40000000 /* LEC interrupt enable */
+-#define FMBM_IER_SECE		0x20000000 /* SEC interrupt enable */
+-
+-#define FMBM_IER_DISABLE_ALL	0x00000000
+-
+-/* FMBM_PP - BMI Port Parameters */
+-#define FMBM_PP_MXT_MASK	0x3f000000 /* Max # tasks */
+-#define FMBM_PP_MXT(x)		(((x-1) << 24) & FMBM_PP_MXT_MASK)
+-#define FMBM_PP_MXD_MASK	0x00000f00 /* Max DMA */
+-#define FMBM_PP_MXD(x)		(((x-1) << 8) & FMBM_PP_MXD_MASK)
+-
+-/* FMBM_PFS - BMI Port FIFO Size */
+-#define FMBM_PFS_IFSZ_MASK	0x000003ff /* Internal Fifo Size */
+-#define FMBM_PFS_IFSZ(x)	(x & FMBM_PFS_IFSZ_MASK)
+-
+-/* FMQM_GC - global configuration */
+-#define FMQM_GC_ENQ_EN		0x80000000 /* enqueue enable */
+-#define FMQM_GC_DEQ_EN		0x40000000 /* dequeue enable */
+-#define FMQM_GC_STEN		0x10000000 /* enable global stat counters */
+-#define FMQM_GC_ENQ_THR_MASK	0x00003f00 /* max number of enqueue Tnum */
+-#define FMQM_GC_ENQ(x)		((x << 8) &  FMQM_GC_ENQ_THR_MAS)
+-#define FMQM_GC_DEQ_THR_MASK	0x0000003f /* max number of dequeue Tnum */
+-#define FMQM_GC_DEQ(x)		(x & FMQM_GC_DEQ_THR_MASK)
+-
+-/* FMQM_EIE - error interrupt event register */
+-#define FMQM_EIE_DEE		0x80000000 /* double-bit ECC error */
+-#define FMQM_EIE_DFUPE		0x40000000 /* dequeue from unknown PortID */
+-#define FMQM_EIE_CLEAR_ALL	(FMQM_EIE_DEE | FMQM_EIE_DFUPE)
+-
+-/* FMQM_EIEN - error interrupt enable register */
+-#define FMQM_EIEN_DEEN		0x80000000 /* double-bit ECC error */
+-#define FMQM_EIEN_DFUPEN	0x40000000 /* dequeue from unknown PortID */
+-#define FMQM_EIEN_DISABLE_ALL	0x00000000
+-
+-/* FMQM_IE - interrupt event register */
+-#define FMQM_IE_SEE		0x80000000 /* single-bit ECC error detected */
+-#define FMQM_IE_CLEAR_ALL	FMQM_IE_SEE
+-
+-/* FMQM_IEN - interrupt enable register */
+-#define FMQM_IEN_SEE		0x80000000 /* single-bit ECC err IRQ enable */
+-#define FMQM_IEN_DISABLE_ALL	0x00000000
+-
+-/* NIA - next invoked action */
+-#define NIA_ENG_RISC		0x00000000
+-#define NIA_ENG_MASK		0x007c0000
+-
+-/* action code */
+-#define NIA_RISC_AC_CC		0x00000006
+-#define NIA_RISC_AC_IM_TX	0x00000008 /* independent mode Tx */
+-#define NIA_RISC_AC_IM_RX	0x0000000a /* independent mode Rx */
+-#define NIA_RISC_AC_HC		0x0000000c
+-
+-typedef struct fm_parser {
+-	u8	res[1024];
+-} fm_parser_t;
+-
+-typedef struct fm_policer {
+-	u8	res[4*1024];
+-} fm_policer_t;
+-
+-typedef struct fm_keygen {
+-	u8	res[4*1024];
+-} fm_keygen_t;
+-
+-typedef struct fm_dma {
+-	u32	fmdmsr;		/* status register */
+-	u32	fmdmmr;		/* mode register */
+-	u32	fmdmtr;		/* bus threshold register */
+-	u32	fmdmhy;		/* bus hysteresis register */
+-	u32	fmdmsetr;	/* SOS emergency threshold register */
+-	u32	fmdmtah;	/* transfer bus address high register */
+-	u32	fmdmtal;	/* transfer bus address low register */
+-	u32	fmdmtcid;	/* transfer bus communication ID register */
+-	u32	fmdmra;		/* DMA bus internal ram address register */
+-	u32	fmdmrd;		/* DMA bus internal ram data register */
+-	u32	res0[0xb];
+-	u32	fmdmdcr;	/* debug counter */
+-	u32	fmdmemsr;	/* emrgency smoother register */
+-	u32	res1;
+-	u32	fmdmplr[32];	/* FM DMA PID-LIODN # register */
+-	u32	res[0x3c8];
+-} fm_dma_t;
+-
+-/* FMDMSR - Fman DMA status register */
+-#define FMDMSR_CMDQNE		0x10000000 /* command queue not empty */
+-#define FMDMSR_BER		0x08000000 /* bus err event occurred on bus */
+-#define FMDMSR_RDB_ECC		0x04000000 /* read buffer ECC error */
+-#define FMDMSR_WRB_SECC		0x02000000 /* write buf ECC err sys side */
+-#define FMDMSR_WRB_FECC		0x01000000 /* write buf ECC err Fman side */
+-#define FMDMSR_DPEXT_SECC	0x00800000 /* DP external ECC err sys side */
+-#define FMDMSR_DPEXT_FECC	0x00400000 /* DP external ECC err Fman side */
+-#define FMDMSR_DPDAT_SECC	0x00200000 /* DP data ECC err on sys side */
+-#define FMDMSR_DPDAT_FECC	0x00100000 /* DP data ECC err on Fman side */
+-#define FMDMSR_SPDAT_FECC	0x00080000 /* SP data ECC error Fman side */
+-
+-#define FMDMSR_CLEAR_ALL	(FMDMSR_BER | FMDMSR_RDB_ECC \
+-				| FMDMSR_WRB_SECC | FMDMSR_WRB_FECC \
+-				| FMDMSR_DPEXT_SECC | FMDMSR_DPEXT_FECC \
+-				| FMDMSR_DPDAT_SECC | FMDMSR_DPDAT_FECC \
+-				| FMDMSR_SPDAT_FECC)
+-
+-/* FMDMMR - FMan DMA mode register */
+-#define FMDMMR_SBER		0x10000000 /* stop the DMA if a bus error */
+-
+-typedef struct fm_fpm {
+-	u32	fpmtnc;		/* TNUM control */
+-	u32	fpmprc;		/* Port_ID control */
+-	u32	res0;
+-	u32	fpmflc;		/* flush control */
+-	u32	fpmdis1;	/* dispatch thresholds1 */
+-	u32	fpmdis2;	/* dispatch thresholds2 */
+-	u32	fmepi;		/* error pending interrupts */
+-	u32	fmrie;		/* rams interrupt enable */
+-	u32	fpmfcevent[0x4];/* FMan controller event 0-3 */
+-	u32	res1[0x4];
+-	u32	fpmfcmask[0x4];	/* FMan controller mask 0-3 */
+-	u32	res2[0x4];
+-	u32	fpmtsc1;	/* timestamp control1 */
+-	u32	fpmtsc2;	/* timestamp control2 */
+-	u32	fpmtsp;		/* time stamp */
+-	u32	fpmtsf;		/* time stamp fraction */
+-	u32	fpmrcr;		/* rams control and event */
+-	u32	res3[0x3];
+-	u32	fpmdrd[0x4];	/* data_ram data 0-3 */
+-	u32	res4[0xc];
+-	u32	fpmdra;		/* data ram access */
+-	u32	fm_ip_rev_1;	/* IP block revision 1 */
+-	u32	fm_ip_rev_2;	/* IP block revision 2 */
+-	u32	fmrstc;		/* reset command */
+-	u32	fmcld;		/* classifier debug control */
+-	u32	fmnpi;		/* normal pending interrupts */
+-	u32	res5;
+-	u32	fmfpee;		/* event and enable */
+-	u32	fpmcev[0x4];	/* CPU event 0-3 */
+-	u32	res6[0x4];
+-	u32	fmfp_ps[0x40];	/* port status */
+-	u32	res7[0x260];
+-	u32	fpmts[0x80];	/* task status */
+-	u32	res8[0xa0];
+-} fm_fpm_t;
+-
+-/* FMFP_PRC - FPM Port_ID Control Register */
+-#define FMFPPRC_PORTID_MASK	0x3f000000
+-#define FMFPPRC_PORTID_SHIFT	24
+-#define FMFPPRC_ORA_SHIFT	16
+-#define FMFPPRC_RISC1		0x00000001
+-#define FMFPPRC_RISC2		0x00000002
+-#define FMFPPRC_RISC_ALL	(FMFPPRC_RISC1 | FMFPPRC_RSIC2)
+-
+-/* FPM Flush Control Register */
+-#define FMFP_FLC_DISP_LIM_NONE	0x00000000 /* no dispatch limitation */
+-
+-/* FMFP_EE - FPM event and enable register */
+-#define FMFPEE_DECC		0x80000000 /* double ECC err on FPM ram */
+-#define FMFPEE_STL		0x40000000 /* stall of task ... */
+-#define FMFPEE_SECC		0x20000000 /* single ECC error */
+-#define FMFPEE_RFM		0x00010000 /* release FMan */
+-#define FMFPEE_DECC_EN		0x00008000 /* double ECC interrupt enable */
+-#define FMFPEE_STL_EN		0x00004000 /* stall of task interrupt enable */
+-#define FMFPEE_SECC_EN		0x00002000 /* single ECC err interrupt enable */
+-#define FMFPEE_EHM		0x00000008 /* external halt enable */
+-#define FMFPEE_UEC		0x00000004 /* FMan is not halted */
+-#define FMFPEE_CER		0x00000002 /* only errornous task stalled */
+-#define FMFPEE_DER		0x00000001 /* DMA error is just reported */
+-
+-#define FMFPEE_CLEAR_EVENT	(FMFPEE_DECC | FMFPEE_STL | FMFPEE_SECC | \
+-				 FMFPEE_EHM | FMFPEE_UEC | FMFPEE_CER | \
+-				 FMFPEE_DER | FMFPEE_RFM)
+-
+-/* FMFP_RCR - FMan Rams Control and Event */
+-#define FMFP_RCR_MDEC		0x00008000 /* double ECC error in muram */
+-#define FMFP_RCR_IDEC		0x00004000 /* double ECC error in iram */
+-
+-typedef struct fm_imem {
+-	u32	iadd;		/* instruction address register */
+-	u32	idata;		/* instruction data register */
+-	u32	itcfg;		/* timing config register */
+-	u32	iready;		/* ready register */
+-	u8	res[0xff0];
+-} fm_imem_t;
+-#define IRAM_IADD_AIE		0x80000000 /* address auto increase enable */
+-#define IRAM_READY		0x80000000 /* ready to use */
+-
+-typedef struct fm_soft_parser {
+-	u8	res[4*1024];
+-} fm_soft_parser_t;
+-
+-typedef struct fm_dtesc {
+-	u8	res[4*1024];
+-} fm_dtsec_t;
+-
+-typedef struct fm_mdio {
+-	u8	res0[0x120];
+-	u32	miimcfg;	/* MII management configuration reg */
+-	u32	miimcom;	/* MII management command reg */
+-	u32	miimadd;	/* MII management address reg */
+-	u32	miimcon;	/* MII management control reg */
+-	u32	miimstat;	/* MII management status reg  */
+-	u32	miimind;	/* MII management indication reg */
+-	u8	res1[0x1000 - 0x138];
+-} fm_mdio_t;
+-
+-typedef struct fm_10gec {
+-	u8	res[4*1024];
+-} fm_10gec_t;
+-
+-typedef struct fm_10gec_mdio {
+-	u8	res[4*1024];
+-} fm_10gec_mdio_t;
+-
+-typedef struct fm_memac {
+-	u8	res[4*1024];
+-} fm_memac_t;
+-
+-typedef struct fm_memac_mdio {
+-	u8	res[4*1024];
+-} fm_memac_mdio_t;
+-
+-typedef struct fm_1588 {
+-	u8	res[4*1024];
+-} fm_1588_t;
+-
+-typedef struct ccsr_fman {
+-	u8			muram[0x80000];
+-	fm_bmi_common_t		fm_bmi_common;
+-	fm_qmi_common_t		fm_qmi_common;
+-	u8			res0[2048];
+-	struct {
+-		fm_bmi_t	fm_bmi;
+-		fm_qmi_t	fm_qmi;
+-		fm_parser_t	fm_parser;
+-		u8		res[1024];
+-	} port[63];
+-	fm_policer_t		fm_policer;
+-	fm_keygen_t		fm_keygen;
+-	fm_dma_t		fm_dma;
+-	fm_fpm_t		fm_fpm;
+-	fm_imem_t		fm_imem;
+-	u8			res1[8*1024];
+-	fm_soft_parser_t	fm_soft_parser;
+-	u8			res2[96*1024];
+-#ifdef CONFIG_SYS_FMAN_V3
+-	struct {
+-		fm_memac_t		fm_memac;
+-		fm_memac_mdio_t		fm_memac_mdio;
+-	} memac[10];
+-	u8			res4[32*1024];
+-	fm_memac_mdio_t		fm_dedicated_mdio[2];
+-#else
+-	struct {
+-		fm_dtsec_t	fm_dtesc;
+-		fm_mdio_t	fm_mdio;
+-	} mac_1g[8];		/* support up to 8 1g controllers */
+-	struct {
+-		fm_10gec_t		fm_10gec;
+-		fm_10gec_mdio_t		fm_10gec_mdio;
+-	} mac_10g[1];
+-	u8			res4[48*1024];
+-#endif
+-	fm_1588_t		fm_1588;
+-	u8			res5[4*1024];
+-} ccsr_fman_t;
+-
+-#endif /*__FSL_FMAN_H__*/
+diff --git a/arch/powerpc/include/asm/fsl_tgec.h b/arch/powerpc/include/asm/fsl_tgec.h
+deleted file mode 100644
+index 92fb777..0000000
+--- a/arch/powerpc/include/asm/fsl_tgec.h
++++ /dev/null
+@@ -1,202 +0,0 @@
+-/*
+- * Copyright 2009-2011 Freescale Semiconductor, Inc.
+- *	Dave Liu <daveliu@freescale.com>
+- *
+- * SPDX-License-Identifier:	GPL-2.0+
+- */
+-
+-#ifndef __TGEC_H__
+-#define __TGEC_H__
+-
+-#include <phy.h>
+-
+-struct tgec {
+-	/* 10GEC general control and status registers */
+-	u32	tgec_id;	/* Controller ID register */
+-	u32	res0;
+-	u32	command_config;	/* Control and configuration register */
+-	u32	mac_addr_0;	/* Lower 32 bits of 48-bit MAC address */
+-	u32	mac_addr_1;	/* Upper 16 bits of 48-bit MAC address */
+-	u32	maxfrm;		/* Maximum frame length register */
+-	u32	pause_quant;	/* Pause quanta register */
+-	u32	res1[4];
+-	u32	hashtable_ctrl;	/* Hash table control register */
+-	u32	res2[4];
+-	u32	status;		/* MAC status register */
+-	u32	tx_ipg_length;	/* Transmitter inter-packet-gap register */
+-	u32	mac_addr_2;	/* Lower 32 bits of the 2nd 48-bit MAC addr */
+-	u32	mac_addr_3;	/* Upper 16 bits of the 2nd 48-bit MAC addr */
+-	u32	res3[4];
+-	u32	imask;		/* Interrupt mask register */
+-	u32	ievent;		/* Interrupt event register */
+-	u32	res4[6];
+-	/* 10GEC statistics counter registers */
+-	u32	tx_frame_u;	/* Tx frame counter upper */
+-	u32	tx_frame_l;	/* Tx frame counter lower */
+-	u32	rx_frame_u;	/* Rx frame counter upper */
+-	u32	rx_frame_l;	/* Rx frame counter lower */
+-	u32	rx_frame_crc_err_u; /* Rx frame check sequence error upper */
+-	u32	rx_frame_crc_err_l; /* Rx frame check sequence error lower */
+-	u32	rx_align_err_u;	/* Rx alignment error upper */
+-	u32	rx_align_err_l;	/* Rx alignment error lower */
+-	u32	tx_pause_frame_u; /* Tx valid pause frame upper */
+-	u32	tx_pause_frame_l; /* Tx valid pause frame lower */
+-	u32	rx_pause_frame_u; /* Rx valid pause frame upper */
+-	u32	rx_pause_frame_l; /* Rx valid pause frame upper */
+-	u32	rx_long_err_u;	/* Rx too long frame error upper */
+-	u32	rx_long_err_l;	/* Rx too long frame error lower */
+-	u32	rx_frame_err_u;	/* Rx frame length error upper */
+-	u32	rx_frame_err_l;	/* Rx frame length error lower */
+-	u32	tx_vlan_u;	/* Tx VLAN frame upper */
+-	u32	tx_vlan_l;	/* Tx VLAN frame lower */
+-	u32	rx_vlan_u;	/* Rx VLAN frame upper */
+-	u32	rx_vlan_l;	/* Rx VLAN frame lower */
+-	u32	tx_oct_u;	/* Tx octets upper */
+-	u32	tx_oct_l;	/* Tx octets lower */
+-	u32	rx_oct_u;	/* Rx octets upper */
+-	u32	rx_oct_l;	/* Rx octets lower */
+-	u32	rx_uni_u;	/* Rx unicast frame upper */
+-	u32	rx_uni_l;	/* Rx unicast frame lower */
+-	u32	rx_multi_u;	/* Rx multicast frame upper */
+-	u32	rx_multi_l;	/* Rx multicast frame lower */
+-	u32	rx_brd_u;	/* Rx broadcast frame upper */
+-	u32	rx_brd_l;	/* Rx broadcast frame lower */
+-	u32	tx_frame_err_u;	/* Tx frame error upper */
+-	u32	tx_frame_err_l;	/* Tx frame error lower */
+-	u32	tx_uni_u;	/* Tx unicast frame upper */
+-	u32	tx_uni_l;	/* Tx unicast frame lower */
+-	u32	tx_multi_u;	/* Tx multicast frame upper */
+-	u32	tx_multi_l;	/* Tx multicast frame lower */
+-	u32	tx_brd_u;	/* Tx broadcast frame upper */
+-	u32	tx_brd_l;	/* Tx broadcast frame lower */
+-	u32	rx_drop_u;	/* Rx dropped packets upper */
+-	u32	rx_drop_l;	/* Rx dropped packets lower */
+-	u32	rx_eoct_u;	/* Rx ethernet octets upper */
+-	u32	rx_eoct_l;	/* Rx ethernet octets lower */
+-	u32	rx_pkt_u;	/* Rx packets upper */
+-	u32	rx_pkt_l;	/* Rx packets lower */
+-	u32	tx_undsz_u;	/* Undersized packet upper */
+-	u32	tx_undsz_l;	/* Undersized packet lower */
+-	u32	rx_64_u;	/* Rx 64 oct packet upper */
+-	u32	rx_64_l;	/* Rx 64 oct packet lower */
+-	u32	rx_127_u;	/* Rx 65 to 127 oct packet upper */
+-	u32	rx_127_l;	/* Rx 65 to 127 oct packet lower */
+-	u32	rx_255_u;	/* Rx 128 to 255 oct packet upper */
+-	u32	rx_255_l;	/* Rx 128 to 255 oct packet lower */
+-	u32	rx_511_u;	/* Rx 256 to 511 oct packet upper */
+-	u32	rx_511_l;	/* Rx 256 to 511 oct packet lower */
+-	u32	rx_1023_u;	/* Rx 512 to 1023 oct packet upper */
+-	u32	rx_1023_l;	/* Rx 512 to 1023 oct packet lower */
+-	u32	rx_1518_u;	/* Rx 1024 to 1518 oct packet upper */
+-	u32	rx_1518_l;	/* Rx 1024 to 1518 oct packet lower */
+-	u32	rx_1519_u;	/* Rx 1519 to max oct packet upper */
+-	u32	rx_1519_l;	/* Rx 1519 to max oct packet lower */
+-	u32	tx_oversz_u;	/* oversized packet upper */
+-	u32	tx_oversz_l;	/* oversized packet lower */
+-	u32	tx_jabber_u;	/* Jabber packet upper */
+-	u32	tx_jabber_l;	/* Jabber packet lower */
+-	u32	tx_frag_u;	/* Fragment packet upper */
+-	u32	tx_frag_l;	/* Fragment packet lower */
+-	u32	rx_err_u;	/* Rx frame error upper */
+-	u32	rx_err_l;	/* Rx frame error lower */
+-	u32	res5[0x39a];
+-};
+-
+-/* EC10G_ID - 10-gigabit ethernet MAC controller ID */
+-#define EC10G_ID_VER_MASK	0x0000ff00
+-#define EC10G_ID_VER_SHIFT	8
+-#define EC10G_ID_REV_MASK	0x000000ff
+-
+-/* COMMAND_CONFIG - command and configuration register */
+-#define TGEC_CMD_CFG_EN_TIMESTAMP	0x00100000 /* enable IEEE1588 */
+-#define TGEC_CMD_CFG_TX_ADDR_INS_SEL	0x00080000 /* Tx mac addr w/ second */
+-#define TGEC_CMD_CFG_NO_LEN_CHK		0x00020000 /* payload len chk disable */
+-#define TGEC_CMD_CFG_SEND_IDLE		0x00010000 /* send XGMII idle seqs */
+-#define TGEC_CMD_CFG_RX_ER_DISC		0x00004000 /* Rx err frm discard enb */
+-#define TGEC_CMD_CFG_CMD_FRM_EN		0x00002000 /* CMD frame RX enable */
+-#define TGEC_CMD_CFG_STAT_CLR		0x00001000 /* clear stats */
+-#define TGEC_CMD_CFG_TX_ADDR_INS	0x00000200 /* overwrite src MAC addr */
+-#define TGEC_CMD_CFG_PAUSE_IGNORE	0x00000100 /* ignore pause frames */
+-#define TGEC_CMD_CFG_PAUSE_FWD		0x00000080 /* fwd pause frames */
+-#define TGEC_CMD_CFG_CRC_FWD		0x00000040 /* fwd Rx CRC frames */
+-#define TGEC_CMD_CFG_PAD_EN		0x00000020 /* MAC remove Rx padding */
+-#define TGEC_CMD_CFG_PROM_EN		0x00000010 /* promiscuous mode enable */
+-#define TGEC_CMD_CFG_WAN_MODE		0x00000008 /* WAN mode enable */
+-#define TGEC_CMD_CFG_RX_EN		0x00000002 /* MAC Rx path enable */
+-#define TGEC_CMD_CFG_TX_EN		0x00000001 /* MAC Tx path enable */
+-#define TGEC_CMD_CFG_RXTX_EN	(TGEC_CMD_CFG_RX_EN | TGEC_CMD_CFG_TX_EN)
+-
+-/* HASHTABLE_CTRL - Hashtable control register */
+-#define HASHTABLE_CTRL_MCAST_EN	0x00000200 /* enable mulitcast Rx hash */
+-#define HASHTABLE_CTRL_ADDR_MASK	0x000001ff
+-
+-/* TX_IPG_LENGTH - Transmit inter-packet gap length register */
+-#define TX_IPG_LENGTH_IPG_LEN_MASK	0x000003ff
+-
+-/* IMASK - interrupt mask register */
+-#define IMASK_MDIO_SCAN_EVENT	0x00010000 /* MDIO scan event mask */
+-#define IMASK_MDIO_CMD_CMPL	0x00008000 /* MDIO cmd completion mask */
+-#define IMASK_REM_FAULT		0x00004000 /* remote fault mask */
+-#define IMASK_LOC_FAULT		0x00002000 /* local fault mask */
+-#define IMASK_TX_ECC_ER		0x00001000 /* Tx frame ECC error mask */
+-#define IMASK_TX_FIFO_UNFL	0x00000800 /* Tx FIFO underflow mask */
+-#define IMASK_TX_ER		0x00000200 /* Tx frame error mask */
+-#define IMASK_RX_FIFO_OVFL	0x00000100 /* Rx FIFO overflow mask */
+-#define IMASK_RX_ECC_ER		0x00000080 /* Rx frame ECC error mask */
+-#define IMASK_RX_JAB_FRM	0x00000040 /* Rx jabber frame mask */
+-#define IMASK_RX_OVRSZ_FRM	0x00000020 /* Rx oversized frame mask */
+-#define IMASK_RX_RUNT_FRM	0x00000010 /* Rx runt frame mask */
+-#define IMASK_RX_FRAG_FRM	0x00000008 /* Rx fragment frame mask */
+-#define IMASK_RX_LEN_ER		0x00000004 /* Rx payload length error mask */
+-#define IMASK_RX_CRC_ER		0x00000002 /* Rx CRC error mask */
+-#define IMASK_RX_ALIGN_ER	0x00000001 /* Rx alignment error mask */
+-
+-#define IMASK_MASK_ALL		0x00000000
+-
+-/* IEVENT - interrupt event register */
+-#define IEVENT_MDIO_SCAN_EVENT	0x00010000 /* MDIO scan event */
+-#define IEVENT_MDIO_CMD_CMPL	0x00008000 /* MDIO cmd completion */
+-#define IEVENT_REM_FAULT	0x00004000 /* remote fault */
+-#define IEVENT_LOC_FAULT	0x00002000 /* local fault */
+-#define IEVENT_TX_ECC_ER	0x00001000 /* Tx frame ECC error */
+-#define IEVENT_TX_FIFO_UNFL	0x00000800 /* Tx FIFO underflow */
+-#define IEVENT_TX_ER		0x00000200 /* Tx frame error */
+-#define IEVENT_RX_FIFO_OVFL	0x00000100 /* Rx FIFO overflow */
+-#define IEVENT_RX_ECC_ER	0x00000080 /* Rx frame ECC error */
+-#define IEVENT_RX_JAB_FRM	0x00000040 /* Rx jabber frame */
+-#define IEVENT_RX_OVRSZ_FRM	0x00000020 /* Rx oversized frame */
+-#define IEVENT_RX_RUNT_FRM	0x00000010 /* Rx runt frame */
+-#define IEVENT_RX_FRAG_FRM	0x00000008 /* Rx fragment frame */
+-#define IEVENT_RX_LEN_ER	0x00000004 /* Rx payload length error */
+-#define IEVENT_RX_CRC_ER	0x00000002 /* Rx CRC error */
+-#define IEVENT_RX_ALIGN_ER	0x00000001 /* Rx alignment error */
+-
+-#define IEVENT_CLEAR_ALL	0xffffffff
+-
+-struct tgec_mdio_controller {
+-	u32	res0[0xc];
+-	u32	mdio_stat;	/* MDIO configuration and status */
+-	u32	mdio_ctl;	/* MDIO control */
+-	u32	mdio_data;	/* MDIO data */
+-	u32	mdio_addr;	/* MDIO address */
+-};
+-
+-#define MDIO_STAT_CLKDIV(x)	(((x>>1) & 0xff) << 8)
+-#define MDIO_STAT_BSY		(1 << 0)
+-#define MDIO_STAT_RD_ER		(1 << 1)
+-#define MDIO_CTL_DEV_ADDR(x)	(x & 0x1f)
+-#define MDIO_CTL_PORT_ADDR(x)	((x & 0x1f) << 5)
+-#define MDIO_CTL_PRE_DIS	(1 << 10)
+-#define MDIO_CTL_SCAN_EN	(1 << 11)
+-#define MDIO_CTL_POST_INC	(1 << 14)
+-#define MDIO_CTL_READ		(1 << 15)
+-
+-#define MDIO_DATA(x)		(x & 0xffff)
+-#define MDIO_DATA_BSY		(1 << 31)
+-
+-struct fsl_enet_mac;
+-
+-void init_tgec(struct fsl_enet_mac *mac, void *base, void *phyregs,
+-		int max_rx_len);
+-
+-#endif
+diff --git a/arch/powerpc/include/asm/immap_85xx.h b/arch/powerpc/include/asm/immap_85xx.h
+index 0c9d85e..101b8db 100644
+--- a/arch/powerpc/include/asm/immap_85xx.h
++++ b/arch/powerpc/include/asm/immap_85xx.h
+@@ -19,7 +19,7 @@
+ #include <fsl_sec.h>
+ #include <fsl_sfp.h>
+ #include <asm/fsl_lbc.h>
+-#include <asm/fsl_fman.h>
++#include <fsl_fman.h>
+ #include <fsl_immap.h>
+ 
+ typedef struct ccsr_local {
+diff --git a/board/freescale/b4860qds/eth_b4860qds.c b/board/freescale/b4860qds/eth_b4860qds.c
+index 501d4b3..df90476 100644
+--- a/board/freescale/b4860qds/eth_b4860qds.c
++++ b/board/freescale/b4860qds/eth_b4860qds.c
+@@ -26,7 +26,7 @@
+ #include <fsl_mdio.h>
+ #include <malloc.h>
+ #include <fdt_support.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ 
+ #include "../common/ngpixis.h"
+ #include "../common/fman.h"
+diff --git a/board/freescale/corenet_ds/eth_hydra.c b/board/freescale/corenet_ds/eth_hydra.c
+index 396103f..172a55b 100644
+--- a/board/freescale/corenet_ds/eth_hydra.c
++++ b/board/freescale/corenet_ds/eth_hydra.c
+@@ -55,7 +55,7 @@
+ #include <fsl_mdio.h>
+ #include <malloc.h>
+ #include <fdt_support.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ 
+ #include "../common/ngpixis.h"
+ #include "../common/fman.h"
+diff --git a/board/freescale/corenet_ds/eth_p4080.c b/board/freescale/corenet_ds/eth_p4080.c
+index 5cbec7f..c68dc2c 100644
+--- a/board/freescale/corenet_ds/eth_p4080.c
++++ b/board/freescale/corenet_ds/eth_p4080.c
+@@ -24,7 +24,7 @@
+ 
+ #include "../common/ngpixis.h"
+ #include "../common/fman.h"
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ 
+ #define EMI_NONE	0xffffffff
+ #define EMI_MASK	0xf0000000
+diff --git a/board/freescale/corenet_ds/eth_superhydra.c b/board/freescale/corenet_ds/eth_superhydra.c
+index ad1bffd..62b1635 100644
+--- a/board/freescale/corenet_ds/eth_superhydra.c
++++ b/board/freescale/corenet_ds/eth_superhydra.c
+@@ -55,7 +55,7 @@
+ #include <fsl_mdio.h>
+ #include <malloc.h>
+ #include <fdt_support.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ 
+ #include "../common/ngpixis.h"
+ #include "../common/fman.h"
+diff --git a/board/freescale/p1023rdb/p1023rdb.c b/board/freescale/p1023rdb/p1023rdb.c
+index 56f561a..074b713 100644
+--- a/board/freescale/p1023rdb/p1023rdb.c
++++ b/board/freescale/p1023rdb/p1023rdb.c
+@@ -26,7 +26,7 @@
+ #include <fsl_mdio.h>
+ #include <miiphy.h>
+ #include <phy.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+diff --git a/board/freescale/p2041rdb/eth.c b/board/freescale/p2041rdb/eth.c
+index 532eeac..95fe85b 100644
+--- a/board/freescale/p2041rdb/eth.c
++++ b/board/freescale/p2041rdb/eth.c
+@@ -19,7 +19,7 @@
+ #include <fm_eth.h>
+ #include <fsl_mdio.h>
+ #include <malloc.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ 
+ #include "cpld.h"
+ #include "../common/fman.h"
+diff --git a/board/freescale/t102xqds/eth_t102xqds.c b/board/freescale/t102xqds/eth_t102xqds.c
+index 441d6a3..99c23f7 100644
+--- a/board/freescale/t102xqds/eth_t102xqds.c
++++ b/board/freescale/t102xqds/eth_t102xqds.c
+@@ -21,7 +21,7 @@
+ #include <fsl_mdio.h>
+ #include <miiphy.h>
+ #include <phy.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <asm/fsl_serdes.h>
+ #include "../common/qixis.h"
+ #include "../common/fman.h"
+diff --git a/board/freescale/t102xrdb/eth_t102xrdb.c b/board/freescale/t102xrdb/eth_t102xrdb.c
+index 856ec6e..02b283d 100644
+--- a/board/freescale/t102xrdb/eth_t102xrdb.c
++++ b/board/freescale/t102xrdb/eth_t102xrdb.c
+@@ -21,7 +21,7 @@
+ #include <fsl_mdio.h>
+ #include <miiphy.h>
+ #include <phy.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <asm/fsl_serdes.h>
+ #include "../common/fman.h"
+ 
+diff --git a/board/freescale/t1040qds/eth.c b/board/freescale/t1040qds/eth.c
+index 8c82934..8bf34fa 100644
+--- a/board/freescale/t1040qds/eth.c
++++ b/board/freescale/t1040qds/eth.c
+@@ -17,7 +17,7 @@
+ #include <fm_eth.h>
+ #include <fsl_mdio.h>
+ #include <malloc.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <vsc9953.h>
+ 
+ #include "../common/fman.h"
+diff --git a/board/freescale/t104xrdb/eth.c b/board/freescale/t104xrdb/eth.c
+index 71d0457..52cd112 100644
+--- a/board/freescale/t104xrdb/eth.c
++++ b/board/freescale/t104xrdb/eth.c
+@@ -11,7 +11,7 @@
+ #include <fm_eth.h>
+ #include <fsl_mdio.h>
+ #include <malloc.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <vsc9953.h>
+ 
+ #include "../common/fman.h"
+diff --git a/board/freescale/t208xqds/eth_t208xqds.c b/board/freescale/t208xqds/eth_t208xqds.c
+index b82e9e7..1c0ce24 100644
+--- a/board/freescale/t208xqds/eth_t208xqds.c
++++ b/board/freescale/t208xqds/eth_t208xqds.c
+@@ -21,7 +21,7 @@
+ #include <fsl_mdio.h>
+ #include <miiphy.h>
+ #include <phy.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <asm/fsl_serdes.h>
+ #include <hwconfig.h>
+ #include "../common/qixis.h"
+diff --git a/board/freescale/t208xrdb/eth_t208xrdb.c b/board/freescale/t208xrdb/eth_t208xrdb.c
+index cbbc625..ea51195 100644
+--- a/board/freescale/t208xrdb/eth_t208xrdb.c
++++ b/board/freescale/t208xrdb/eth_t208xrdb.c
+@@ -21,7 +21,7 @@
+ #include <fsl_mdio.h>
+ #include <miiphy.h>
+ #include <phy.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <asm/fsl_serdes.h>
+ 
+ int board_eth_init(bd_t *bis)
+diff --git a/board/freescale/t4qds/eth.c b/board/freescale/t4qds/eth.c
+index 9b416b1..2dfdcbb 100644
+--- a/board/freescale/t4qds/eth.c
++++ b/board/freescale/t4qds/eth.c
+@@ -21,7 +21,7 @@
+ #include <fsl_mdio.h>
+ #include <miiphy.h>
+ #include <phy.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <asm/fsl_serdes.h>
+ #include <hwconfig.h>
+ #include "../common/qixis.h"
+diff --git a/board/freescale/t4rdb/eth.c b/board/freescale/t4rdb/eth.c
+index 879bd1a..e563a61 100644
+--- a/board/freescale/t4rdb/eth.c
++++ b/board/freescale/t4rdb/eth.c
+@@ -23,7 +23,7 @@
+ #include <fsl_mdio.h>
+ #include <miiphy.h>
+ #include <phy.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <asm/fsl_serdes.h>
+ #include <hwconfig.h>
+ 
+diff --git a/drivers/net/fm/dtsec.c b/drivers/net/fm/dtsec.c
+index 8d3dc0e..b339a84 100644
+--- a/drivers/net/fm/dtsec.c
++++ b/drivers/net/fm/dtsec.c
+@@ -7,7 +7,7 @@
+ #include <common.h>
+ #include <asm/types.h>
+ #include <asm/io.h>
+-#include <asm/fsl_dtsec.h>
++#include <fsl_dtsec.h>
+ #include <fsl_mdio.h>
+ #include <phy.h>
+ 
+diff --git a/drivers/net/fm/eth.c b/drivers/net/fm/eth.c
+index 2111a11..ec0a3cb 100644
+--- a/drivers/net/fm/eth.c
++++ b/drivers/net/fm/eth.c
+@@ -13,8 +13,8 @@
+ #include <fsl_mdio.h>
+ #include <miiphy.h>
+ #include <phy.h>
+-#include <asm/fsl_dtsec.h>
+-#include <asm/fsl_tgec.h>
++#include <fsl_dtsec.h>
++#include <fsl_tgec.h>
+ #include <fsl_memac.h>
+ 
+ #include "fm.h"
+diff --git a/drivers/net/fm/fm.h b/drivers/net/fm/fm.h
+index 73c525e..fa9bc9f 100644
+--- a/drivers/net/fm/fm.h
++++ b/drivers/net/fm/fm.h
+@@ -10,7 +10,7 @@
+ #include <common.h>
+ #include <phy.h>
+ #include <fm_eth.h>
+-#include <asm/fsl_fman.h>
++#include <fsl_fman.h>
+ 
+ /* Port ID */
+ #define OH_PORT_ID_BASE		0x01
+diff --git a/drivers/net/fm/tgec.c b/drivers/net/fm/tgec.c
+index 5017123..8d4622f 100644
+--- a/drivers/net/fm/tgec.c
++++ b/drivers/net/fm/tgec.c
+@@ -12,7 +12,7 @@
+ #include <phy.h>
+ #include <asm/types.h>
+ #include <asm/io.h>
+-#include <asm/fsl_tgec.h>
++#include <fsl_tgec.h>
+ 
+ #include "fm.h"
+ 
+diff --git a/drivers/net/fm/tgec_phy.c b/drivers/net/fm/tgec_phy.c
+index 095f00c..24cb17b 100644
+--- a/drivers/net/fm/tgec_phy.c
++++ b/drivers/net/fm/tgec_phy.c
+@@ -9,7 +9,7 @@
+ #include <miiphy.h>
+ #include <phy.h>
+ #include <asm/io.h>
+-#include <asm/fsl_tgec.h>
++#include <fsl_tgec.h>
+ #include <fm_eth.h>
+ 
+ /*
+diff --git a/include/fsl_dtsec.h b/include/fsl_dtsec.h
+new file mode 100644
+index 0000000..41b8398
+--- /dev/null
++++ b/include/fsl_dtsec.h
+@@ -0,0 +1,231 @@
++/*
++ * Copyright 2009-2011 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __DTSEC_H__
++#define __DTSEC_H__
++
++#include <asm/types.h>
++
++struct dtsec {
++	u32	tsec_id;	/* controller ID and version */
++	u32	tsec_id2;	/* controller ID and configuration */
++	u32	ievent;		/* interrupt event */
++	u32	imask;		/* interrupt mask */
++	u32	res0;
++	u32	ecntrl;		/* ethernet control and configuration */
++	u32	ptv;		/* pause time value */
++	u32	tbipa;		/* TBI PHY address */
++	u32	res1[8];
++	u32	tctrl;		/* Transmit control register */
++	u32	res2[3];
++	u32	rctrl;		/* Receive control register */
++	u32	res3[11];
++	u32	igaddr[8];	/* Individual group address */
++	u32	gaddr[8];	/* group address */
++	u32	res4[16];
++	u32	maccfg1;	/* MAC configuration register 1 */
++	u32	maccfg2;	/* MAC configuration register 2 */
++	u32	ipgifg;		/* inter-packet/inter-frame gap */
++	u32	hafdup;		/* half-duplex control */
++	u32	maxfrm;		/* Maximum frame size */
++	u32	res5[3];
++	u32	miimcfg;	/* MII management configuration */
++	u32	miimcom;	/* MII management command */
++	u32	miimadd;	/* MII management address */
++	u32	miimcon;	/* MII management control */
++	u32	miimstat;	/* MII management status */
++	u32	miimind;	/* MII management indicator */
++	u32	res6;
++	u32	ifstat;		/* Interface status */
++	u32	macstnaddr1;	/* MAC station address 1 */
++	u32	macstnaddr2;	/* MAC station address 2 */
++	u32	res7[46];
++	/* transmit and receive counter */
++	u32	tr64;		/* Tx and Rx 64 bytes frame */
++	u32	tr127;		/* Tx and Rx 65 to 127 bytes frame */
++	u32	tr255;		/* Tx and Rx 128 to 255 bytes frame */
++	u32	tr511;		/* Tx and Rx 256 to 511 bytes frame */
++	u32	tr1k;		/* Tx and Rx 512 to 1023 bytes frame */
++	u32	trmax;		/* Tx and Rx 1024 to 1518 bytes frame */
++	u32	trmgv;		/* Tx and Rx 1519 to 1522 good VLAN frame */
++	/* receive counters */
++	u32	rbyt;		/* Receive byte counter */
++	u32	rpkt;		/* Receive packet counter */
++	u32	rfcs;		/* Receive FCS error */
++	u32	rmca;		/* Receive multicast packet */
++	u32	rbca;		/* Receive broadcast packet */
++	u32	rxcf;		/* Receive control frame */
++	u32	rxpf;		/* Receive pause frame */
++	u32	rxuo;		/* Receive unknown OP code */
++	u32	raln;		/* Receive alignment error */
++	u32	rflr;		/* Receive frame length error */
++	u32	rcde;		/* Receive code error */
++	u32	rcse;		/* Receive carrier sense error */
++	u32	rund;		/* Receive undersize packet */
++	u32	rovr;		/* Receive oversize packet */
++	u32	rfrg;		/* Receive fragments counter */
++	u32	rjbr;		/* Receive jabber counter */
++	u32	rdrp;		/* Receive drop counter */
++	/* transmit counters */
++	u32	tbyt;		/* Transmit byte counter */
++	u32	tpkt;		/* Transmit packet */
++	u32	tmca;		/* Transmit multicast packet */
++	u32	tbca;		/* Transmit broadcast packet */
++	u32	txpf;		/* Transmit pause control frame */
++	u32	tdfr;		/* Transmit deferral packet */
++	u32	tedf;		/* Transmit excessive deferral pkt */
++	u32	tscl;		/* Transmit single collision pkt */
++	u32	tmcl;		/* Transmit multiple collision pkt */
++	u32	tlcl;		/* Transmit late collision pkt */
++	u32	txcl;		/* Transmit excessive collision */
++	u32	tncl;		/* Transmit total collision */
++	u32	res8;
++	u32	tdrp;		/* Transmit drop frame */
++	u32	tjbr;		/* Transmit jabber frame */
++	u32	tfcs;		/* Transmit FCS error */
++	u32	txcf;		/* Transmit control frame */
++	u32	tovr;		/* Transmit oversize frame */
++	u32	tund;		/* Transmit undersize frame */
++	u32	tfrg;		/* Transmit fragments frame */
++	/* counter controls */
++	u32	car1;		/* carry register 1 */
++	u32	car2;		/* carry register 2 */
++	u32	cam1;		/* carry register 1 mask */
++	u32	cam2;		/* carry register 2 mask */
++	u32	res9[80];
++};
++
++
++/* TBI register addresses */
++#define TBI_CR			0x00
++#define TBI_SR			0x01
++#define TBI_ANA			0x04
++#define TBI_ANLPBPA		0x05
++#define TBI_ANEX		0x06
++#define TBI_TBICON		0x11
++
++/* TBI MDIO register bit fields*/
++#define TBICON_CLK_SELECT	0x0020
++#define TBIANA_ASYMMETRIC_PAUSE 0x0100
++#define TBIANA_SYMMETRIC_PAUSE  0x0080
++#define TBIANA_HALF_DUPLEX	0x0040
++#define TBIANA_FULL_DUPLEX	0x0020
++#define TBICR_PHY_RESET		0x8000
++#define TBICR_ANEG_ENABLE	0x1000
++#define TBICR_RESTART_ANEG	0x0200
++#define TBICR_FULL_DUPLEX	0x0100
++#define TBICR_SPEED1_SET	0x0040
++
++/* IEVENT - interrupt events register */
++#define IEVENT_BABR	0x80000000 /* Babbling receive error */
++#define IEVENT_RXC	0x40000000 /* pause control frame received */
++#define IEVENT_MSRO	0x04000000 /* MIB counter overflow */
++#define IEVENT_GTSC	0x02000000 /* Graceful transmit stop complete */
++#define IEVENT_BABT	0x01000000 /* Babbling transmit error */
++#define IEVENT_TXC	0x00800000 /* control frame transmitted */
++#define IEVENT_TXE	0x00400000 /* Transmit channel error */
++#define IEVENT_LC	0x00040000 /* Late collision occurred */
++#define IEVENT_CRL	0x00020000 /* Collision retry exceed limit */
++#define IEVENT_XFUN	0x00010000 /* Transmit FIFO underrun */
++#define IEVENT_ABRT	0x00008000 /* Transmit packet abort */
++#define IEVENT_MMRD	0x00000400 /* MII management read complete */
++#define IEVENT_MMWR	0x00000200 /* MII management write complete */
++#define IEVENT_GRSC	0x00000100 /* Graceful stop complete */
++#define IEVENT_TDPE	0x00000002 /* Internal data parity error on Tx */
++#define IEVENT_RDPE	0x00000001 /* Internal data parity error on Rx */
++
++#define IEVENT_CLEAR_ALL	0xffffffff
++
++/* IMASK - interrupt mask register */
++#define IMASK_BREN	0x80000000 /* Babbling receive enable */
++#define IMASK_RXCEN	0x40000000 /* receive control enable */
++#define IMASK_MSROEN	0x04000000 /* MIB counter overflow enable */
++#define IMASK_GTSCEN	0x02000000 /* Graceful Tx stop complete enable */
++#define IMASK_BTEN	0x01000000 /* Babbling transmit error enable */
++#define IMASK_TXCEN	0x00800000 /* control frame transmitted enable */
++#define IMASK_TXEEN	0x00400000 /* Transmit channel error enable */
++#define IMASK_LCEN	0x00040000 /* Late collision interrupt enable */
++#define IMASK_CRLEN	0x00020000 /* Collision retry exceed limit */
++#define IMASK_XFUNEN	0x00010000 /* Transmit FIFO underrun enable */
++#define IMASK_ABRTEN	0x00008000 /* Transmit packet abort enable */
++#define IMASK_MMRDEN	0x00000400 /* MII management read complete enable */
++#define IMASK_MMWREN	0x00000200 /* MII management write complete enable */
++#define IMASK_GRSCEN	0x00000100 /* Graceful stop complete interrupt enable */
++#define IMASK_TDPEEN	0x00000002 /* Internal data parity error on Tx enable */
++#define IMASK_RDPEEN	0x00000001 /* Internal data parity error on Rx enable */
++
++#define IMASK_MASK_ALL	0x00000000
++
++/* ECNTRL - ethernet control register */
++#define ECNTRL_CFG_RO	0x80000000 /* GMIIM, RPM, R100M, SGMIIM bits are RO */
++#define ECNTRL_CLRCNT	0x00004000 /* clear all statistics */
++#define ECNTRL_AUTOZ	0x00002000 /* auto zero MIB counter */
++#define ECNTRL_STEN	0x00001000 /* enable internal counters to update */
++#define ECNTRL_GMIIM	0x00000040 /* 1- GMII or RGMII interface mode */
++#define ECNTRL_TBIM	0x00000020 /* 1- Ten-bit interface mode */
++#define ECNTRL_RPM	0x00000010 /* 1- RGMII reduced-pin mode */
++#define ECNTRL_R100M	0x00000008 /* 1- RGMII 100 Mbps, SGMII 100 Mbps
++				      0- RGMII 10 Mbps, SGMII 10 Mbps */
++#define ECNTRL_SGMIIM	0x00000002 /* 1- SGMII interface mode */
++#define ECNTRL_TBIM	0x00000020 /* 1- TBI Interface mode (for SGMII) */
++
++#define ECNTRL_DEFAULT	(ECNTRL_TBIM | ECNTRL_R100M | ECNTRL_SGMIIM)
++
++/* TCTRL - Transmit control register */
++#define TCTRL_THDF	0x00000800 /* Transmit half-duplex flow control */
++#define TCTRL_TTSE	0x00000040 /* Transmit time-stamp enable */
++#define TCTRL_GTS	0x00000020 /* Graceful transmit stop */
++#define TCTRL_RFC_PAUSE	0x00000010 /* Receive flow control pause frame */
++
++/* RCTRL - Receive control register */
++#define RCTRL_PAL_MASK	0x001f0000 /* packet alignment padding length */
++#define RCTRL_PAL_SHIFT	16
++#define RCTRL_CFA	0x00008000 /* control frame accept enable */
++#define RCTRL_GHTX	0x00000800 /* group address hash table extend */
++#define RCTRL_RTSE	0x00000040 /* receive 1588 time-stamp enable */
++#define RCTRL_GRS	0x00000020 /* graceful receive stop */
++#define RCTRL_BC_REJ	0x00000010 /* broadcast frame reject */
++#define RCTRL_BC_MPROM	0x00000008 /* all multicast/broadcast frames received */
++#define RCTRL_RSF	0x00000004 /* receive short frame(17~63 bytes) enable */
++#define RCTRL_EMEN	0x00000002 /* Exact match MAC address enable */
++#define RCTRL_UPROM	0x00000001 /* all unicast frame received */
++
++/* MACCFG1 - MAC configuration 1 register */
++#define MACCFG1_SOFT_RST	0x80000000 /* place the MAC in reset */
++#define MACCFG1_RST_RXMAC	0x00080000 /* reset receive MAC control block */
++#define MACCFG1_RST_TXMAC	0x00040000 /* reet transmit MAC control block */
++#define MACCFG1_RST_RXFUN	0x00020000 /* reset receive function block */
++#define MACCFG1_RST_TXFUN	0x00010000 /* reset transmit function block */
++#define MACCFG1_LOOPBACK	0x00000100 /* MAC loopback */
++#define MACCFG1_RX_FLOW		0x00000020 /* Receive flow */
++#define MACCFG1_TX_FLOW		0x00000010 /* Transmit flow */
++#define MACCFG1_SYNC_RXEN	0x00000008 /* Frame reception enabled */
++#define MACCFG1_RX_EN		0x00000004 /* Rx enable */
++#define MACCFG1_SYNC_TXEN	0x00000002 /* Frame transmission is enabled */
++#define MACCFG1_TX_EN		0x00000001 /* Tx enable */
++#define MACCFG1_RXTX_EN		(MACCFG1_RX_EN | MACCFG1_TX_EN)
++
++/* MACCFG2 - MAC configuration 2 register */
++#define MACCFG2_PRE_LEN_MASK	0x0000f000 /* preamble length */
++#define MACCFG2_PRE_LEN(x)	((x << 12) & MACCFG2_PRE_LEN_MASK)
++#define MACCFG2_IF_MODE_MASK	0x00000300
++#define MACCFG2_IF_MODE_NIBBLE	0x00000100 /* MII, 10/100 Mbps MII/RMII */
++#define MACCFG2_IF_MODE_BYTE	0x00000200 /* GMII/TBI, 1000 GMII/TBI */
++#define MACCFG2_PRE_RX_EN	0x00000080 /* receive preamble enable */
++#define MACCFG2_PRE_TX_EN	0x00000040 /* tx preable enable */
++#define MACCFG2_HUGE_FRAME	0x00000020 /* >= max frame len enable */
++#define MACCFG2_LEN_CHECK	0x00000010 /* MAC check frame's length Rx */
++#define MACCFG2_MAG_EN		0x00000008 /* magic packet enable */
++#define MACCFG2_PAD_CRC		0x00000004 /* pad and append CRC */
++#define MACCFG2_CRC_EN		0x00000002 /* MAC appends a CRC on all frames */
++#define MACCFG2_FULL_DUPLEX	0x00000001 /* Full deplex mode */
++
++struct fsl_enet_mac;
++
++void init_dtsec(struct fsl_enet_mac *mac, void *base, void *phyregs,
++		int max_rx_len);
++
++#endif
+diff --git a/include/fsl_fman.h b/include/fsl_fman.h
+new file mode 100644
+index 0000000..4d04415
+--- /dev/null
++++ b/include/fsl_fman.h
+@@ -0,0 +1,463 @@
++/*
++ * MPC85xx Internal Memory Map
++ *
++ * Copyright 2010-2011 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __FSL_FMAN_H__
++#define __FSL_FMAN_H__
++
++#include <asm/types.h>
++
++typedef struct fm_bmi_common {
++	u32	fmbm_init;	/* BMI initialization */
++	u32	fmbm_cfg1;	/* BMI configuration1 */
++	u32	fmbm_cfg2;	/* BMI configuration2 */
++	u32	res0[0x5];
++	u32	fmbm_ievr;	/* interrupt event register */
++	u32	fmbm_ier;	/* interrupt enable register */
++	u32	fmbm_ifr;	/* interrupt force register */
++	u32	res1[0x5];
++	u32	fmbm_arb[0x8];	/* BMI arbitration */
++	u32	res2[0x28];
++	u32	fmbm_gde;	/* global debug enable */
++	u32	fmbm_pp[0x3f];	/* BMI port parameters */
++	u32	res3;
++	u32	fmbm_pfs[0x3f];	/* BMI port FIFO size */
++	u32	res4;
++	u32	fmbm_ppid[0x3f];/* port partition ID */
++} fm_bmi_common_t;
++
++typedef struct fm_qmi_common {
++	u32	fmqm_gc;	/* general configuration register */
++	u32	res0;
++	u32	fmqm_eie;	/* error interrupt event register */
++	u32	fmqm_eien;	/* error interrupt enable register */
++	u32	fmqm_eif;	/* error interrupt force register */
++	u32	fmqm_ie;	/* interrupt event register */
++	u32	fmqm_ien;	/* interrupt enable register */
++	u32	fmqm_if;	/* interrupt force register */
++	u32	fmqm_gs;	/* global status register */
++	u32	fmqm_ts;	/* task status register */
++	u32	fmqm_etfc;	/* enqueue total frame counter */
++	u32	fmqm_dtfc;	/* dequeue total frame counter */
++	u32	fmqm_dc0;	/* dequeue counter 0 */
++	u32	fmqm_dc1;	/* dequeue counter 1 */
++	u32	fmqm_dc2;	/* dequeue counter 2 */
++	u32	fmqm_dc3;	/* dequeue counter 3 */
++	u32	fmqm_dfnoc;	/* dequeue FQID not override counter */
++	u32	fmqm_dfcc;	/* dequeue FQID from context counter */
++	u32	fmqm_dffc;	/* dequeue FQID from FD counter */
++	u32	fmqm_dcc;	/* dequeue confirm counter */
++	u32	res1[0xc];
++	u32	fmqm_dtrc;	/* debug trap configuration register */
++	u32	fmqm_efddd;	/* enqueue frame descriptor dynamic debug */
++	u32	res3[0x2];
++	u32	res4[0xdc];	/* missing debug regs */
++} fm_qmi_common_t;
++
++typedef struct fm_bmi {
++	u8	res[1024];
++} fm_bmi_t;
++
++typedef struct fm_qmi {
++	u8	res[1024];
++} fm_qmi_t;
++
++struct fm_bmi_rx_port {
++	u32 fmbm_rcfg;	/* Rx configuration */
++	u32 fmbm_rst;	/* Rx status */
++	u32 fmbm_rda;	/* Rx DMA attributes */
++	u32 fmbm_rfp;	/* Rx FIFO parameters */
++	u32 fmbm_rfed;	/* Rx frame end data */
++	u32 fmbm_ricp;	/* Rx internal context parameters */
++	u32 fmbm_rim;	/* Rx internal margins */
++	u32 fmbm_rebm;	/* Rx external buffer margins */
++	u32 fmbm_rfne;	/* Rx frame next engine */
++	u32 fmbm_rfca;	/* Rx frame command attributes */
++	u32 fmbm_rfpne;	/* Rx frame parser next engine */
++	u32 fmbm_rpso;	/* Rx parse start offset */
++	u32 fmbm_rpp;	/* Rx policer profile */
++	u32 fmbm_rccb;	/* Rx coarse classification base */
++	u32 res1[0x2];
++	u32 fmbm_rprai[0x8];	/* Rx parse results array Initialization */
++	u32 fmbm_rfqid;		/* Rx frame queue ID */
++	u32 fmbm_refqid;	/* Rx error frame queue ID */
++	u32 fmbm_rfsdm;		/* Rx frame status discard mask */
++	u32 fmbm_rfsem;		/* Rx frame status error mask */
++	u32 fmbm_rfene;		/* Rx frame enqueue next engine */
++	u32 res2[0x23];
++	u32 fmbm_ebmpi[0x8];	/* buffer manager pool information */
++	u32 fmbm_acnt[0x8];	/* allocate counter */
++	u32 res3[0x8];
++	u32 fmbm_cgm[0x8];	/* congestion group map */
++	u32 fmbm_mpd;		/* BMan pool depletion */
++	u32 res4[0x1F];
++	u32 fmbm_rstc;		/* Rx statistics counters */
++	u32 fmbm_rfrc;		/* Rx frame counters */
++	u32 fmbm_rfbc;		/* Rx bad frames counter */
++	u32 fmbm_rlfc;		/* Rx large frames counter */
++	u32 fmbm_rffc;		/* Rx filter frames counter */
++	u32 fmbm_rfdc;		/* Rx frame discard counter */
++	u32 fmbm_rfldec;	/* Rx frames list DMA error counter */
++	u32 fmbm_rodc;		/* Rx out of buffers discard counter */
++	u32 fmbm_rbdc;		/* Rx buffers deallocate counter */
++	u32 res5[0x17];
++	u32 fmbm_rpc;		/* Rx performance counters */
++	u32 fmbm_rpcp;		/* Rx performance count parameters */
++	u32 fmbm_rccn;		/* Rx cycle counter */
++	u32 fmbm_rtuc;		/* Rx tasks utilization counter */
++	u32 fmbm_rrquc;		/* Rx receive queue utilization counter */
++	u32 fmbm_rduc;		/* Rx DMA utilization counter */
++	u32 fmbm_rfuc;		/* Rx FIFO utilization counter */
++	u32 fmbm_rpac;		/* Rx pause activation counter */
++	u32 res6[0x18];
++	u32 fmbm_rdbg;		/* Rx debug configuration */
++};
++
++/* FMBM_RCFG - Rx configuration */
++#define FMBM_RCFG_EN		0x80000000 /* port is enabled to receive data */
++#define FMBM_RCFG_FDOVR		0x02000000 /* frame discard override */
++#define FMBM_RCFG_IM		0x01000000 /* independent mode */
++
++/* FMBM_RST - Rx status */
++#define FMBM_RST_BSY		0x80000000 /* Rx port is busy */
++
++/* FMBM_RFCA - Rx frame command attributes */
++#define FMBM_RFCA_ORDER		0x80000000
++#define FMBM_RFCA_MR_MASK	0x003f0000
++#define FMBM_RFCA_MR(x)		((x << 16) & FMBM_RFCA_MR_MASK)
++
++/* FMBM_RSTC - Rx statistics */
++#define FMBM_RSTC_EN		0x80000000 /* statistics counters enable */
++
++struct fm_bmi_tx_port {
++	u32 fmbm_tcfg;	/* Tx configuration */
++	u32 fmbm_tst;	/* Tx status */
++	u32 fmbm_tda;	/* Tx DMA attributes */
++	u32 fmbm_tfp;	/* Tx FIFO parameters */
++	u32 fmbm_tfed;	/* Tx frame end data */
++	u32 fmbm_ticp;	/* Tx internal context parameters */
++	u32 fmbm_tfne;	/* Tx frame next engine */
++	u32 fmbm_tfca;	/* Tx frame command attributes */
++	u32 fmbm_tcfqid;/* Tx confirmation frame queue ID */
++	u32 fmbm_tfeqid;/* Tx error frame queue ID */
++	u32 fmbm_tfene;	/* Tx frame enqueue next engine */
++	u32 fmbm_trlmts;/* Tx rate limiter scale */
++	u32 fmbm_trlmt;	/* Tx rate limiter */
++	u32 res0[0x73];
++	u32 fmbm_tstc;	/* Tx statistics counters */
++	u32 fmbm_tfrc;	/* Tx frame counter */
++	u32 fmbm_tfdc;	/* Tx frames discard counter */
++	u32 fmbm_tfledc;/* Tx frame length error discard counter */
++	u32 fmbm_tfufdc;/* Tx frame unsupported format discard counter */
++	u32 fmbm_tbdc;	/* Tx buffers deallocate counter */
++	u32 res1[0x1a];
++	u32 fmbm_tpc;	/* Tx performance counters */
++	u32 fmbm_tpcp;	/* Tx performance count parameters */
++	u32 fmbm_tccn;	/* Tx cycle counter */
++	u32 fmbm_ttuc;	/* Tx tasks utilization counter */
++	u32 fmbm_ttcquc;/* Tx transmit confirm queue utilization counter */
++	u32 fmbm_tduc;	/* Tx DMA utilization counter */
++	u32 fmbm_tfuc;	/* Tx FIFO utilization counter */
++	u32 res2[0x19];
++	u32 fmbm_tdcfg;	/* Tx debug configuration */
++};
++
++/* FMBM_TCFG - Tx configuration */
++#define FMBM_TCFG_EN	0x80000000 /* port is enabled to transmit data */
++#define FMBM_TCFG_IM	0x01000000 /* independent mode enable */
++
++/* FMBM_TST - Tx status */
++#define FMBM_TST_BSY		0x80000000 /* Tx port is busy */
++
++/* FMBM_TFCA - Tx frame command attributes */
++#define FMBM_TFCA_ORDER		0x80000000
++#define FMBM_TFCA_MR_MASK	0x003f0000
++#define FMBM_TFCA_MR(x)		((x << 16) & FMBM_TFCA_MR_MASK)
++
++/* FMBM_TSTC - Tx statistics counters */
++#define FMBM_TSTC_EN		0x80000000
++
++/* FMBM_INIT - BMI initialization register */
++#define FMBM_INIT_START		0x80000000 /* init internal buffers */
++
++/* FMBM_CFG1 - BMI configuration 1 */
++#define FMBM_CFG1_FBPS_MASK	0x03ff0000 /* Free buffer pool size */
++#define FMBM_CFG1_FBPS_SHIFT	16
++#define FMBM_CFG1_FBPO_MASK	0x000003ff /* Free buffer pool offset */
++
++/* FMBM_IEVR - interrupt event */
++#define FMBM_IEVR_PEC		0x80000000 /* pipeline table ECC err detected */
++#define FMBM_IEVR_LEC		0x40000000 /* linked list RAM ECC error */
++#define FMBM_IEVR_SEC		0x20000000 /* statistics count RAM ECC error */
++#define FMBM_IEVR_CLEAR_ALL	(FMBM_IEVR_PEC | FMBM_IEVR_LEC | FMBM_IEVR_SEC)
++
++/* FMBM_IER - interrupt enable */
++#define FMBM_IER_PECE		0x80000000 /* PEC interrupt enable */
++#define FMBM_IER_LECE		0x40000000 /* LEC interrupt enable */
++#define FMBM_IER_SECE		0x20000000 /* SEC interrupt enable */
++
++#define FMBM_IER_DISABLE_ALL	0x00000000
++
++/* FMBM_PP - BMI Port Parameters */
++#define FMBM_PP_MXT_MASK	0x3f000000 /* Max # tasks */
++#define FMBM_PP_MXT(x)		(((x-1) << 24) & FMBM_PP_MXT_MASK)
++#define FMBM_PP_MXD_MASK	0x00000f00 /* Max DMA */
++#define FMBM_PP_MXD(x)		(((x-1) << 8) & FMBM_PP_MXD_MASK)
++
++/* FMBM_PFS - BMI Port FIFO Size */
++#define FMBM_PFS_IFSZ_MASK	0x000003ff /* Internal Fifo Size */
++#define FMBM_PFS_IFSZ(x)	(x & FMBM_PFS_IFSZ_MASK)
++
++/* FMQM_GC - global configuration */
++#define FMQM_GC_ENQ_EN		0x80000000 /* enqueue enable */
++#define FMQM_GC_DEQ_EN		0x40000000 /* dequeue enable */
++#define FMQM_GC_STEN		0x10000000 /* enable global stat counters */
++#define FMQM_GC_ENQ_THR_MASK	0x00003f00 /* max number of enqueue Tnum */
++#define FMQM_GC_ENQ(x)		((x << 8) &  FMQM_GC_ENQ_THR_MAS)
++#define FMQM_GC_DEQ_THR_MASK	0x0000003f /* max number of dequeue Tnum */
++#define FMQM_GC_DEQ(x)		(x & FMQM_GC_DEQ_THR_MASK)
++
++/* FMQM_EIE - error interrupt event register */
++#define FMQM_EIE_DEE		0x80000000 /* double-bit ECC error */
++#define FMQM_EIE_DFUPE		0x40000000 /* dequeue from unknown PortID */
++#define FMQM_EIE_CLEAR_ALL	(FMQM_EIE_DEE | FMQM_EIE_DFUPE)
++
++/* FMQM_EIEN - error interrupt enable register */
++#define FMQM_EIEN_DEEN		0x80000000 /* double-bit ECC error */
++#define FMQM_EIEN_DFUPEN	0x40000000 /* dequeue from unknown PortID */
++#define FMQM_EIEN_DISABLE_ALL	0x00000000
++
++/* FMQM_IE - interrupt event register */
++#define FMQM_IE_SEE		0x80000000 /* single-bit ECC error detected */
++#define FMQM_IE_CLEAR_ALL	FMQM_IE_SEE
++
++/* FMQM_IEN - interrupt enable register */
++#define FMQM_IEN_SEE		0x80000000 /* single-bit ECC err IRQ enable */
++#define FMQM_IEN_DISABLE_ALL	0x00000000
++
++/* NIA - next invoked action */
++#define NIA_ENG_RISC		0x00000000
++#define NIA_ENG_MASK		0x007c0000
++
++/* action code */
++#define NIA_RISC_AC_CC		0x00000006
++#define NIA_RISC_AC_IM_TX	0x00000008 /* independent mode Tx */
++#define NIA_RISC_AC_IM_RX	0x0000000a /* independent mode Rx */
++#define NIA_RISC_AC_HC		0x0000000c
++
++typedef struct fm_parser {
++	u8	res[1024];
++} fm_parser_t;
++
++typedef struct fm_policer {
++	u8	res[4*1024];
++} fm_policer_t;
++
++typedef struct fm_keygen {
++	u8	res[4*1024];
++} fm_keygen_t;
++
++typedef struct fm_dma {
++	u32	fmdmsr;		/* status register */
++	u32	fmdmmr;		/* mode register */
++	u32	fmdmtr;		/* bus threshold register */
++	u32	fmdmhy;		/* bus hysteresis register */
++	u32	fmdmsetr;	/* SOS emergency threshold register */
++	u32	fmdmtah;	/* transfer bus address high register */
++	u32	fmdmtal;	/* transfer bus address low register */
++	u32	fmdmtcid;	/* transfer bus communication ID register */
++	u32	fmdmra;		/* DMA bus internal ram address register */
++	u32	fmdmrd;		/* DMA bus internal ram data register */
++	u32	res0[0xb];
++	u32	fmdmdcr;	/* debug counter */
++	u32	fmdmemsr;	/* emrgency smoother register */
++	u32	res1;
++	u32	fmdmplr[32];	/* FM DMA PID-LIODN # register */
++	u32	res[0x3c8];
++} fm_dma_t;
++
++/* FMDMSR - Fman DMA status register */
++#define FMDMSR_CMDQNE		0x10000000 /* command queue not empty */
++#define FMDMSR_BER		0x08000000 /* bus err event occurred on bus */
++#define FMDMSR_RDB_ECC		0x04000000 /* read buffer ECC error */
++#define FMDMSR_WRB_SECC		0x02000000 /* write buf ECC err sys side */
++#define FMDMSR_WRB_FECC		0x01000000 /* write buf ECC err Fman side */
++#define FMDMSR_DPEXT_SECC	0x00800000 /* DP external ECC err sys side */
++#define FMDMSR_DPEXT_FECC	0x00400000 /* DP external ECC err Fman side */
++#define FMDMSR_DPDAT_SECC	0x00200000 /* DP data ECC err on sys side */
++#define FMDMSR_DPDAT_FECC	0x00100000 /* DP data ECC err on Fman side */
++#define FMDMSR_SPDAT_FECC	0x00080000 /* SP data ECC error Fman side */
++
++#define FMDMSR_CLEAR_ALL	(FMDMSR_BER | FMDMSR_RDB_ECC \
++				| FMDMSR_WRB_SECC | FMDMSR_WRB_FECC \
++				| FMDMSR_DPEXT_SECC | FMDMSR_DPEXT_FECC \
++				| FMDMSR_DPDAT_SECC | FMDMSR_DPDAT_FECC \
++				| FMDMSR_SPDAT_FECC)
++
++/* FMDMMR - FMan DMA mode register */
++#define FMDMMR_SBER		0x10000000 /* stop the DMA if a bus error */
++
++typedef struct fm_fpm {
++	u32	fpmtnc;		/* TNUM control */
++	u32	fpmprc;		/* Port_ID control */
++	u32	res0;
++	u32	fpmflc;		/* flush control */
++	u32	fpmdis1;	/* dispatch thresholds1 */
++	u32	fpmdis2;	/* dispatch thresholds2 */
++	u32	fmepi;		/* error pending interrupts */
++	u32	fmrie;		/* rams interrupt enable */
++	u32	fpmfcevent[0x4];/* FMan controller event 0-3 */
++	u32	res1[0x4];
++	u32	fpmfcmask[0x4];	/* FMan controller mask 0-3 */
++	u32	res2[0x4];
++	u32	fpmtsc1;	/* timestamp control1 */
++	u32	fpmtsc2;	/* timestamp control2 */
++	u32	fpmtsp;		/* time stamp */
++	u32	fpmtsf;		/* time stamp fraction */
++	u32	fpmrcr;		/* rams control and event */
++	u32	res3[0x3];
++	u32	fpmdrd[0x4];	/* data_ram data 0-3 */
++	u32	res4[0xc];
++	u32	fpmdra;		/* data ram access */
++	u32	fm_ip_rev_1;	/* IP block revision 1 */
++	u32	fm_ip_rev_2;	/* IP block revision 2 */
++	u32	fmrstc;		/* reset command */
++	u32	fmcld;		/* classifier debug control */
++	u32	fmnpi;		/* normal pending interrupts */
++	u32	res5;
++	u32	fmfpee;		/* event and enable */
++	u32	fpmcev[0x4];	/* CPU event 0-3 */
++	u32	res6[0x4];
++	u32	fmfp_ps[0x40];	/* port status */
++	u32	res7[0x260];
++	u32	fpmts[0x80];	/* task status */
++	u32	res8[0xa0];
++} fm_fpm_t;
++
++/* FMFP_PRC - FPM Port_ID Control Register */
++#define FMFPPRC_PORTID_MASK	0x3f000000
++#define FMFPPRC_PORTID_SHIFT	24
++#define FMFPPRC_ORA_SHIFT	16
++#define FMFPPRC_RISC1		0x00000001
++#define FMFPPRC_RISC2		0x00000002
++#define FMFPPRC_RISC_ALL	(FMFPPRC_RISC1 | FMFPPRC_RSIC2)
++
++/* FPM Flush Control Register */
++#define FMFP_FLC_DISP_LIM_NONE	0x00000000 /* no dispatch limitation */
++
++/* FMFP_EE - FPM event and enable register */
++#define FMFPEE_DECC		0x80000000 /* double ECC err on FPM ram */
++#define FMFPEE_STL		0x40000000 /* stall of task ... */
++#define FMFPEE_SECC		0x20000000 /* single ECC error */
++#define FMFPEE_RFM		0x00010000 /* release FMan */
++#define FMFPEE_DECC_EN		0x00008000 /* double ECC interrupt enable */
++#define FMFPEE_STL_EN		0x00004000 /* stall of task interrupt enable */
++#define FMFPEE_SECC_EN		0x00002000 /* single ECC err interrupt enable */
++#define FMFPEE_EHM		0x00000008 /* external halt enable */
++#define FMFPEE_UEC		0x00000004 /* FMan is not halted */
++#define FMFPEE_CER		0x00000002 /* only errornous task stalled */
++#define FMFPEE_DER		0x00000001 /* DMA error is just reported */
++
++#define FMFPEE_CLEAR_EVENT	(FMFPEE_DECC | FMFPEE_STL | FMFPEE_SECC | \
++				 FMFPEE_EHM | FMFPEE_UEC | FMFPEE_CER | \
++				 FMFPEE_DER | FMFPEE_RFM)
++
++/* FMFP_RCR - FMan Rams Control and Event */
++#define FMFP_RCR_MDEC		0x00008000 /* double ECC error in muram */
++#define FMFP_RCR_IDEC		0x00004000 /* double ECC error in iram */
++
++typedef struct fm_imem {
++	u32	iadd;		/* instruction address register */
++	u32	idata;		/* instruction data register */
++	u32	itcfg;		/* timing config register */
++	u32	iready;		/* ready register */
++	u8	res[0xff0];
++} fm_imem_t;
++#define IRAM_IADD_AIE		0x80000000 /* address auto increase enable */
++#define IRAM_READY		0x80000000 /* ready to use */
++
++typedef struct fm_soft_parser {
++	u8	res[4*1024];
++} fm_soft_parser_t;
++
++typedef struct fm_dtesc {
++	u8	res[4*1024];
++} fm_dtsec_t;
++
++typedef struct fm_mdio {
++	u8	res0[0x120];
++	u32	miimcfg;	/* MII management configuration reg */
++	u32	miimcom;	/* MII management command reg */
++	u32	miimadd;	/* MII management address reg */
++	u32	miimcon;	/* MII management control reg */
++	u32	miimstat;	/* MII management status reg  */
++	u32	miimind;	/* MII management indication reg */
++	u8	res1[0x1000 - 0x138];
++} fm_mdio_t;
++
++typedef struct fm_10gec {
++	u8	res[4*1024];
++} fm_10gec_t;
++
++typedef struct fm_10gec_mdio {
++	u8	res[4*1024];
++} fm_10gec_mdio_t;
++
++typedef struct fm_memac {
++	u8	res[4*1024];
++} fm_memac_t;
++
++typedef struct fm_memac_mdio {
++	u8	res[4*1024];
++} fm_memac_mdio_t;
++
++typedef struct fm_1588 {
++	u8	res[4*1024];
++} fm_1588_t;
++
++typedef struct ccsr_fman {
++	u8			muram[0x80000];
++	fm_bmi_common_t		fm_bmi_common;
++	fm_qmi_common_t		fm_qmi_common;
++	u8			res0[2048];
++	struct {
++		fm_bmi_t	fm_bmi;
++		fm_qmi_t	fm_qmi;
++		fm_parser_t	fm_parser;
++		u8		res[1024];
++	} port[63];
++	fm_policer_t		fm_policer;
++	fm_keygen_t		fm_keygen;
++	fm_dma_t		fm_dma;
++	fm_fpm_t		fm_fpm;
++	fm_imem_t		fm_imem;
++	u8			res1[8*1024];
++	fm_soft_parser_t	fm_soft_parser;
++	u8			res2[96*1024];
++#ifdef CONFIG_SYS_FMAN_V3
++	struct {
++		fm_memac_t		fm_memac;
++		fm_memac_mdio_t		fm_memac_mdio;
++	} memac[10];
++	u8			res4[32*1024];
++	fm_memac_mdio_t		fm_dedicated_mdio[2];
++#else
++	struct {
++		fm_dtsec_t	fm_dtesc;
++		fm_mdio_t	fm_mdio;
++	} mac_1g[8];		/* support up to 8 1g controllers */
++	struct {
++		fm_10gec_t		fm_10gec;
++		fm_10gec_mdio_t		fm_10gec_mdio;
++	} mac_10g[1];
++	u8			res4[48*1024];
++#endif
++	fm_1588_t		fm_1588;
++	u8			res5[4*1024];
++} ccsr_fman_t;
++
++#endif /*__FSL_FMAN_H__*/
+diff --git a/include/fsl_tgec.h b/include/fsl_tgec.h
+new file mode 100644
+index 0000000..92fb777
+--- /dev/null
++++ b/include/fsl_tgec.h
+@@ -0,0 +1,202 @@
++/*
++ * Copyright 2009-2011 Freescale Semiconductor, Inc.
++ *	Dave Liu <daveliu@freescale.com>
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __TGEC_H__
++#define __TGEC_H__
++
++#include <phy.h>
++
++struct tgec {
++	/* 10GEC general control and status registers */
++	u32	tgec_id;	/* Controller ID register */
++	u32	res0;
++	u32	command_config;	/* Control and configuration register */
++	u32	mac_addr_0;	/* Lower 32 bits of 48-bit MAC address */
++	u32	mac_addr_1;	/* Upper 16 bits of 48-bit MAC address */
++	u32	maxfrm;		/* Maximum frame length register */
++	u32	pause_quant;	/* Pause quanta register */
++	u32	res1[4];
++	u32	hashtable_ctrl;	/* Hash table control register */
++	u32	res2[4];
++	u32	status;		/* MAC status register */
++	u32	tx_ipg_length;	/* Transmitter inter-packet-gap register */
++	u32	mac_addr_2;	/* Lower 32 bits of the 2nd 48-bit MAC addr */
++	u32	mac_addr_3;	/* Upper 16 bits of the 2nd 48-bit MAC addr */
++	u32	res3[4];
++	u32	imask;		/* Interrupt mask register */
++	u32	ievent;		/* Interrupt event register */
++	u32	res4[6];
++	/* 10GEC statistics counter registers */
++	u32	tx_frame_u;	/* Tx frame counter upper */
++	u32	tx_frame_l;	/* Tx frame counter lower */
++	u32	rx_frame_u;	/* Rx frame counter upper */
++	u32	rx_frame_l;	/* Rx frame counter lower */
++	u32	rx_frame_crc_err_u; /* Rx frame check sequence error upper */
++	u32	rx_frame_crc_err_l; /* Rx frame check sequence error lower */
++	u32	rx_align_err_u;	/* Rx alignment error upper */
++	u32	rx_align_err_l;	/* Rx alignment error lower */
++	u32	tx_pause_frame_u; /* Tx valid pause frame upper */
++	u32	tx_pause_frame_l; /* Tx valid pause frame lower */
++	u32	rx_pause_frame_u; /* Rx valid pause frame upper */
++	u32	rx_pause_frame_l; /* Rx valid pause frame upper */
++	u32	rx_long_err_u;	/* Rx too long frame error upper */
++	u32	rx_long_err_l;	/* Rx too long frame error lower */
++	u32	rx_frame_err_u;	/* Rx frame length error upper */
++	u32	rx_frame_err_l;	/* Rx frame length error lower */
++	u32	tx_vlan_u;	/* Tx VLAN frame upper */
++	u32	tx_vlan_l;	/* Tx VLAN frame lower */
++	u32	rx_vlan_u;	/* Rx VLAN frame upper */
++	u32	rx_vlan_l;	/* Rx VLAN frame lower */
++	u32	tx_oct_u;	/* Tx octets upper */
++	u32	tx_oct_l;	/* Tx octets lower */
++	u32	rx_oct_u;	/* Rx octets upper */
++	u32	rx_oct_l;	/* Rx octets lower */
++	u32	rx_uni_u;	/* Rx unicast frame upper */
++	u32	rx_uni_l;	/* Rx unicast frame lower */
++	u32	rx_multi_u;	/* Rx multicast frame upper */
++	u32	rx_multi_l;	/* Rx multicast frame lower */
++	u32	rx_brd_u;	/* Rx broadcast frame upper */
++	u32	rx_brd_l;	/* Rx broadcast frame lower */
++	u32	tx_frame_err_u;	/* Tx frame error upper */
++	u32	tx_frame_err_l;	/* Tx frame error lower */
++	u32	tx_uni_u;	/* Tx unicast frame upper */
++	u32	tx_uni_l;	/* Tx unicast frame lower */
++	u32	tx_multi_u;	/* Tx multicast frame upper */
++	u32	tx_multi_l;	/* Tx multicast frame lower */
++	u32	tx_brd_u;	/* Tx broadcast frame upper */
++	u32	tx_brd_l;	/* Tx broadcast frame lower */
++	u32	rx_drop_u;	/* Rx dropped packets upper */
++	u32	rx_drop_l;	/* Rx dropped packets lower */
++	u32	rx_eoct_u;	/* Rx ethernet octets upper */
++	u32	rx_eoct_l;	/* Rx ethernet octets lower */
++	u32	rx_pkt_u;	/* Rx packets upper */
++	u32	rx_pkt_l;	/* Rx packets lower */
++	u32	tx_undsz_u;	/* Undersized packet upper */
++	u32	tx_undsz_l;	/* Undersized packet lower */
++	u32	rx_64_u;	/* Rx 64 oct packet upper */
++	u32	rx_64_l;	/* Rx 64 oct packet lower */
++	u32	rx_127_u;	/* Rx 65 to 127 oct packet upper */
++	u32	rx_127_l;	/* Rx 65 to 127 oct packet lower */
++	u32	rx_255_u;	/* Rx 128 to 255 oct packet upper */
++	u32	rx_255_l;	/* Rx 128 to 255 oct packet lower */
++	u32	rx_511_u;	/* Rx 256 to 511 oct packet upper */
++	u32	rx_511_l;	/* Rx 256 to 511 oct packet lower */
++	u32	rx_1023_u;	/* Rx 512 to 1023 oct packet upper */
++	u32	rx_1023_l;	/* Rx 512 to 1023 oct packet lower */
++	u32	rx_1518_u;	/* Rx 1024 to 1518 oct packet upper */
++	u32	rx_1518_l;	/* Rx 1024 to 1518 oct packet lower */
++	u32	rx_1519_u;	/* Rx 1519 to max oct packet upper */
++	u32	rx_1519_l;	/* Rx 1519 to max oct packet lower */
++	u32	tx_oversz_u;	/* oversized packet upper */
++	u32	tx_oversz_l;	/* oversized packet lower */
++	u32	tx_jabber_u;	/* Jabber packet upper */
++	u32	tx_jabber_l;	/* Jabber packet lower */
++	u32	tx_frag_u;	/* Fragment packet upper */
++	u32	tx_frag_l;	/* Fragment packet lower */
++	u32	rx_err_u;	/* Rx frame error upper */
++	u32	rx_err_l;	/* Rx frame error lower */
++	u32	res5[0x39a];
++};
++
++/* EC10G_ID - 10-gigabit ethernet MAC controller ID */
++#define EC10G_ID_VER_MASK	0x0000ff00
++#define EC10G_ID_VER_SHIFT	8
++#define EC10G_ID_REV_MASK	0x000000ff
++
++/* COMMAND_CONFIG - command and configuration register */
++#define TGEC_CMD_CFG_EN_TIMESTAMP	0x00100000 /* enable IEEE1588 */
++#define TGEC_CMD_CFG_TX_ADDR_INS_SEL	0x00080000 /* Tx mac addr w/ second */
++#define TGEC_CMD_CFG_NO_LEN_CHK		0x00020000 /* payload len chk disable */
++#define TGEC_CMD_CFG_SEND_IDLE		0x00010000 /* send XGMII idle seqs */
++#define TGEC_CMD_CFG_RX_ER_DISC		0x00004000 /* Rx err frm discard enb */
++#define TGEC_CMD_CFG_CMD_FRM_EN		0x00002000 /* CMD frame RX enable */
++#define TGEC_CMD_CFG_STAT_CLR		0x00001000 /* clear stats */
++#define TGEC_CMD_CFG_TX_ADDR_INS	0x00000200 /* overwrite src MAC addr */
++#define TGEC_CMD_CFG_PAUSE_IGNORE	0x00000100 /* ignore pause frames */
++#define TGEC_CMD_CFG_PAUSE_FWD		0x00000080 /* fwd pause frames */
++#define TGEC_CMD_CFG_CRC_FWD		0x00000040 /* fwd Rx CRC frames */
++#define TGEC_CMD_CFG_PAD_EN		0x00000020 /* MAC remove Rx padding */
++#define TGEC_CMD_CFG_PROM_EN		0x00000010 /* promiscuous mode enable */
++#define TGEC_CMD_CFG_WAN_MODE		0x00000008 /* WAN mode enable */
++#define TGEC_CMD_CFG_RX_EN		0x00000002 /* MAC Rx path enable */
++#define TGEC_CMD_CFG_TX_EN		0x00000001 /* MAC Tx path enable */
++#define TGEC_CMD_CFG_RXTX_EN	(TGEC_CMD_CFG_RX_EN | TGEC_CMD_CFG_TX_EN)
++
++/* HASHTABLE_CTRL - Hashtable control register */
++#define HASHTABLE_CTRL_MCAST_EN	0x00000200 /* enable mulitcast Rx hash */
++#define HASHTABLE_CTRL_ADDR_MASK	0x000001ff
++
++/* TX_IPG_LENGTH - Transmit inter-packet gap length register */
++#define TX_IPG_LENGTH_IPG_LEN_MASK	0x000003ff
++
++/* IMASK - interrupt mask register */
++#define IMASK_MDIO_SCAN_EVENT	0x00010000 /* MDIO scan event mask */
++#define IMASK_MDIO_CMD_CMPL	0x00008000 /* MDIO cmd completion mask */
++#define IMASK_REM_FAULT		0x00004000 /* remote fault mask */
++#define IMASK_LOC_FAULT		0x00002000 /* local fault mask */
++#define IMASK_TX_ECC_ER		0x00001000 /* Tx frame ECC error mask */
++#define IMASK_TX_FIFO_UNFL	0x00000800 /* Tx FIFO underflow mask */
++#define IMASK_TX_ER		0x00000200 /* Tx frame error mask */
++#define IMASK_RX_FIFO_OVFL	0x00000100 /* Rx FIFO overflow mask */
++#define IMASK_RX_ECC_ER		0x00000080 /* Rx frame ECC error mask */
++#define IMASK_RX_JAB_FRM	0x00000040 /* Rx jabber frame mask */
++#define IMASK_RX_OVRSZ_FRM	0x00000020 /* Rx oversized frame mask */
++#define IMASK_RX_RUNT_FRM	0x00000010 /* Rx runt frame mask */
++#define IMASK_RX_FRAG_FRM	0x00000008 /* Rx fragment frame mask */
++#define IMASK_RX_LEN_ER		0x00000004 /* Rx payload length error mask */
++#define IMASK_RX_CRC_ER		0x00000002 /* Rx CRC error mask */
++#define IMASK_RX_ALIGN_ER	0x00000001 /* Rx alignment error mask */
++
++#define IMASK_MASK_ALL		0x00000000
++
++/* IEVENT - interrupt event register */
++#define IEVENT_MDIO_SCAN_EVENT	0x00010000 /* MDIO scan event */
++#define IEVENT_MDIO_CMD_CMPL	0x00008000 /* MDIO cmd completion */
++#define IEVENT_REM_FAULT	0x00004000 /* remote fault */
++#define IEVENT_LOC_FAULT	0x00002000 /* local fault */
++#define IEVENT_TX_ECC_ER	0x00001000 /* Tx frame ECC error */
++#define IEVENT_TX_FIFO_UNFL	0x00000800 /* Tx FIFO underflow */
++#define IEVENT_TX_ER		0x00000200 /* Tx frame error */
++#define IEVENT_RX_FIFO_OVFL	0x00000100 /* Rx FIFO overflow */
++#define IEVENT_RX_ECC_ER	0x00000080 /* Rx frame ECC error */
++#define IEVENT_RX_JAB_FRM	0x00000040 /* Rx jabber frame */
++#define IEVENT_RX_OVRSZ_FRM	0x00000020 /* Rx oversized frame */
++#define IEVENT_RX_RUNT_FRM	0x00000010 /* Rx runt frame */
++#define IEVENT_RX_FRAG_FRM	0x00000008 /* Rx fragment frame */
++#define IEVENT_RX_LEN_ER	0x00000004 /* Rx payload length error */
++#define IEVENT_RX_CRC_ER	0x00000002 /* Rx CRC error */
++#define IEVENT_RX_ALIGN_ER	0x00000001 /* Rx alignment error */
++
++#define IEVENT_CLEAR_ALL	0xffffffff
++
++struct tgec_mdio_controller {
++	u32	res0[0xc];
++	u32	mdio_stat;	/* MDIO configuration and status */
++	u32	mdio_ctl;	/* MDIO control */
++	u32	mdio_data;	/* MDIO data */
++	u32	mdio_addr;	/* MDIO address */
++};
++
++#define MDIO_STAT_CLKDIV(x)	(((x>>1) & 0xff) << 8)
++#define MDIO_STAT_BSY		(1 << 0)
++#define MDIO_STAT_RD_ER		(1 << 1)
++#define MDIO_CTL_DEV_ADDR(x)	(x & 0x1f)
++#define MDIO_CTL_PORT_ADDR(x)	((x & 0x1f) << 5)
++#define MDIO_CTL_PRE_DIS	(1 << 10)
++#define MDIO_CTL_SCAN_EN	(1 << 11)
++#define MDIO_CTL_POST_INC	(1 << 14)
++#define MDIO_CTL_READ		(1 << 15)
++
++#define MDIO_DATA(x)		(x & 0xffff)
++#define MDIO_DATA_BSY		(1 << 31)
++
++struct fsl_enet_mac;
++
++void init_tgec(struct fsl_enet_mac *mac, void *base, void *phyregs,
++		int max_rx_len);
++
++#endif
+-- 
+2.1.0.27.g96db324
+

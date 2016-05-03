@@ -1,0 +1,77 @@
+From d5a27271d3319db20366a7aa27f5999db87500c7 Mon Sep 17 00:00:00 2001
+From: Claudiu Manoil <claudiu.manoil@freescale.com>
+Date: Thu, 25 Feb 2016 17:34:44 +0200
+Subject: [PATCH 141/146] fmd: remove misuse of IRQF_NO_SUSPEND flag
+
+Use proper wakeup API instead of IRQF_NO_SUSPEND to set
+the interrupt as wakeup source.
+
+Fixes:
+WARNING: CPU: 0 PID: 1 at kernel/irq/pm.c:51
+irq_pm_install_action+0xd4/0xfc()
+Modules linked in:
+CPU: 0 PID: 1 Comm: swapper/0 Not tainted 4.1.8-gc3db090 #1
+Hardware name: LS1043A RDB Board (DT)
+Call trace:
+[<ffff80000008996c>] dump_backtrace+0x0/0x11c
+[<ffff800000089a98>] show_stack+0x10/0x1c
+[<ffff8000007329f8>] dump_stack+0x88/0xc8
+[<ffff8000000b38d8>] warn_slowpath_common+0x94/0xd0
+[<ffff8000000b39d4>] warn_slowpath_null+0x14/0x20
+[<ffff8000000f7378>] irq_pm_install_action+0xd0/0xfc
+[<ffff8000000f22ac>] __setup_irq+0x208/0x48c
+[<ffff8000000f2698>] request_threaded_irq+0xc4/0x178
+[<ffff8000000f47fc>] devm_request_threaded_irq+0x68/0xd0
+[<ffff8000004dd14c>] fm_probe+0x144/0x15c0
+[<ffff8000003ea184>] platform_drv_probe+0x48/0xb8
+[<ffff8000003e8788>] driver_probe_device+0x168/0x2a4
+[<ffff8000003e89b0>] __driver_attach+0x98/0xa0
+[<ffff8000003e6a28>] bus_for_each_dev+0x54/0x98
+[<ffff8000003e81d8>] driver_attach+0x1c/0x28
+[<ffff8000003e7e54>] bus_add_driver+0x14c/0x204
+[<ffff8000003e9030>] driver_register+0x5c/0x11c
+[<ffff8000003ea0b8>] __platform_driver_register+0x5c/0x68
+[<ffff8000004de69c>] LNXWRP_FM_Init+0x40/0x54
+[<ffff800000a415c4>] fm_load+0x8/0x50
+[<ffff800000082808>] do_one_initcall+0x88/0x1a0
+[<ffff800000a1fabc>] kernel_init_freeable+0x148/0x1ec
+[<ffff8000007301ec>] kernel_init+0xc/0xd8
+
+Signed-off-by: Claudiu Manoil <claudiu.manoil@freescale.com>
+---
+ drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c b/drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c
+index caf8659..3b415d1 100755
+--- a/drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c
++++ b/drivers/net/ethernet/freescale/sdk_fman/src/wrapper/lnxwrp_fm.c
+@@ -843,19 +843,23 @@ static t_Error ConfigureFmDev(t_LnxWrpFmDev  *p_LnxWrpFmDev)
+     if (unlikely(_errno < 0))
+         RETURN_ERROR(MAJOR, E_INVALID_STATE, ("can_request_irq() = %d", _errno));
+ #endif
+-    _errno = devm_request_irq(p_LnxWrpFmDev->dev, p_LnxWrpFmDev->irq, fm_irq, IRQF_NO_SUSPEND, "fman", p_LnxWrpFmDev);
++    _errno = devm_request_irq(p_LnxWrpFmDev->dev, p_LnxWrpFmDev->irq, fm_irq, 0, "fman", p_LnxWrpFmDev);
+     if (unlikely(_errno < 0))
+         RETURN_ERROR(MAJOR, E_INVALID_STATE, ("request_irq(%d) = %d", p_LnxWrpFmDev->irq, _errno));
+ 
++    enable_irq_wake(p_LnxWrpFmDev->irq);
++
+     if (p_LnxWrpFmDev->err_irq != 0) {
+ #ifndef MODULE
+         _errno = can_request_irq(p_LnxWrpFmDev->err_irq, 0);
+         if (unlikely(_errno < 0))
+             RETURN_ERROR(MAJOR, E_INVALID_STATE, ("can_request_irq() = %d", _errno));
+ #endif
+-        _errno = devm_request_irq(p_LnxWrpFmDev->dev, p_LnxWrpFmDev->err_irq, fm_err_irq, IRQF_SHARED | IRQF_NO_SUSPEND, "fman-err", p_LnxWrpFmDev);
++        _errno = devm_request_irq(p_LnxWrpFmDev->dev, p_LnxWrpFmDev->err_irq, fm_err_irq, IRQF_SHARED, "fman-err", p_LnxWrpFmDev);
+         if (unlikely(_errno < 0))
+             RETURN_ERROR(MAJOR, E_INVALID_STATE, ("request_irq(%d) = %d", p_LnxWrpFmDev->err_irq, _errno));
++
++	enable_irq_wake(p_LnxWrpFmDev->err_irq);
+     }
+ 
+     p_LnxWrpFmDev->res = devm_request_mem_region(p_LnxWrpFmDev->dev, p_LnxWrpFmDev->fmPhysBaseAddr, p_LnxWrpFmDev->fmMemSize, "fman");
+-- 
+2.1.0.27.g96db324
+

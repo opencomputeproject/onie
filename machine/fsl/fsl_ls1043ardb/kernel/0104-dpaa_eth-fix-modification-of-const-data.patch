@@ -1,0 +1,226 @@
+From fc37fc2e4149044826bf2d7958cc839e3638c1c6 Mon Sep 17 00:00:00 2001
+From: Madalin Bucur <madalin.bucur@freescale.com>
+Date: Wed, 21 Oct 2015 17:36:53 +0300
+Subject: [PATCH 104/146] dpaa_eth: fix modification of const data
+
+Address issue introduced in a previous commit:
+
+	commit 85d2d3926aedfa06e510f24c2589d6323d6e3a09
+	Author: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+	Date:   Wed Sep 9 18:55:11 2015 +0300
+
+	    dpaa_eth: fix fq dts parser for macless
+
+	    This patch converts the BE fq dts entries to the CPU endianness.
+
+Signed-off-by: Madalin Bucur <madalin.bucur@freescale.com>
+---
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_common.c  | 29 +++++++++++++---------
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_common.h  |  7 +++---
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c | 13 ++++++----
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_macless.c | 11 +++-----
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c  | 13 +++++-----
+ 5 files changed, 40 insertions(+), 33 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.c
+index 66e7b11..d072623 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.c
+@@ -886,30 +886,31 @@ EXPORT_SYMBOL(dpa_select_queue);
+ #endif
+ 
+ struct dpa_fq *dpa_fq_alloc(struct device *dev,
+-				   const struct fqid_cell *fqids,
+-				   struct list_head *list,
+-				   enum dpa_fq_type fq_type)
++			    u32 fq_start,
++			    u32 fq_count,
++			    struct list_head *list,
++			    enum dpa_fq_type fq_type)
+ {
+ 	int i;
+ 	struct dpa_fq *dpa_fq;
+ 
+-	dpa_fq = devm_kzalloc(dev, sizeof(*dpa_fq) * fqids->count, GFP_KERNEL);
++	dpa_fq = devm_kzalloc(dev, sizeof(*dpa_fq) * fq_count, GFP_KERNEL);
+ 	if (dpa_fq == NULL)
+ 		return NULL;
+ 
+-	for (i = 0; i < fqids->count; i++) {
++	for (i = 0; i < fq_count; i++) {
+ 		dpa_fq[i].fq_type = fq_type;
+-		dpa_fq[i].fqid = fqids->start ? fqids->start + i : 0;
++		dpa_fq[i].fqid = fq_start ? fq_start + i : 0;
+ 		list_add_tail(&dpa_fq[i].list, list);
+ 	}
+ 
+ #ifdef CONFIG_FMAN_PFC
+ 	if (fq_type == FQ_TYPE_TX)
+-		for (i = 0; i < fqids->count; i++)
++		for (i = 0; i < fq_count; i++)
+ 			dpa_fq[i].wq = i / dpa_num_cpus;
+ 	else
+ #endif
+-		for (i = 0; i < fqids->count; i++)
++		for (i = 0; i < fq_count; i++)
+ 			_dpa_assign_wq(dpa_fq + i);
+ 
+ 	return dpa_fq;
+@@ -930,7 +931,8 @@ int dpa_fq_probe_mac(struct device *dev, struct list_head *list,
+ 	int i, lenp;
+ 
+ 	if (ptype == TX && alloc_tx_conf_fqs) {
+-		if (!dpa_fq_alloc(dev, tx_confirm_fqids, list,
++		if (!dpa_fq_alloc(dev, tx_confirm_fqids->start,
++				  tx_confirm_fqids->count, list,
+ 				  FQ_TYPE_TX_CONF_MQ))
+ 			goto fq_alloc_failed;
+ 	}
+@@ -964,7 +966,8 @@ int dpa_fq_probe_mac(struct device *dev, struct list_head *list,
+ 			if (fqids[i].count != 1)
+ 				goto invalid_error_queue;
+ 
+-			dpa_fq = dpa_fq_alloc(dev, &fqids[i], list,
++			dpa_fq = dpa_fq_alloc(dev, fqids[i].start,
++					      fqids[i].count, list,
+ 					      ptype == RX ?
+ 						FQ_TYPE_RX_ERROR :
+ 						FQ_TYPE_TX_ERROR);
+@@ -981,7 +984,8 @@ int dpa_fq_probe_mac(struct device *dev, struct list_head *list,
+ 			if (fqids[i].count != 1)
+ 				goto invalid_default_queue;
+ 
+-			dpa_fq = dpa_fq_alloc(dev, &fqids[i], list,
++			dpa_fq = dpa_fq_alloc(dev, fqids[i].start,
++					      fqids[i].count, list,
+ 					      ptype == RX ?
+ 						FQ_TYPE_RX_DEFAULT :
+ 						FQ_TYPE_TX_CONFIRM);
+@@ -995,7 +999,8 @@ int dpa_fq_probe_mac(struct device *dev, struct list_head *list,
+ 			break;
+ 		default:
+ 			/* all subsequent queues are either RX PCD or Tx */
+-			if (!dpa_fq_alloc(dev, &fqids[i], list, ptype == RX ?
++			if (!dpa_fq_alloc(dev, fqids[i].start,
++					  fqids[i].count, list, ptype == RX ?
+ 					   FQ_TYPE_RX_PCD : FQ_TYPE_TX))
+ 				goto fq_alloc_failed;
+ 			break;
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h
+index 6ffae91..08fddf9 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h
+@@ -170,9 +170,10 @@ u16 dpa_select_queue(struct net_device *net_dev, struct sk_buff *skb,
+ 		     void *accel_priv, select_queue_fallback_t fallback);
+ #endif
+ struct dpa_fq *dpa_fq_alloc(struct device *dev,
+-				   const struct fqid_cell *fqids,
+-				   struct list_head *list,
+-				   enum dpa_fq_type fq_type);
++			    u32 fq_start,
++			    u32 fq_count,
++			    struct list_head *list,
++			    enum dpa_fq_type fq_type);
+ int dpa_fq_probe_mac(struct device *dev, struct list_head *list,
+ 		     struct fm_port_fqs *port_fqs,
+ 		     bool tx_conf_fqs_per_core,
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
+index 2ea3bac..e8d5c15 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
+@@ -983,9 +983,10 @@ static struct list_head *dpa_generic_fq_probe(struct platform_device *_of_dev,
+ 	}
+ 
+ 	fqids = __fq_alloc(dev, num_ranges, fqids_off);
+-	if (!dpa_fq_alloc(dev, &fqids[0], list, FQ_TYPE_RX_ERROR) ||
+-			!dpa_fq_alloc(dev, &fqids[1], list,
+-				FQ_TYPE_RX_DEFAULT)) {
++	if (!dpa_fq_alloc(dev, fqids[0].start, fqids[0].count, list,
++			  FQ_TYPE_RX_ERROR) ||
++			!dpa_fq_alloc(dev, fqids[1].start, fqids[1].count,
++				      list, FQ_TYPE_RX_DEFAULT)) {
+ 		dev_err(dev, "Cannot allocate space for default frame queues\n");
+ 		return ERR_PTR(-ENOMEM);
+ 	}
+@@ -1002,7 +1003,8 @@ static struct list_head *dpa_generic_fq_probe(struct platform_device *_of_dev,
+ 	num_ranges = lenp / sizeof(*fqids);
+ 	fqids = __fq_alloc(dev, num_ranges, fqids_off);
+ 	for (i = 0; i < num_ranges; i++) {
+-		if (!dpa_fq_alloc(dev, &fqids[i], list, FQ_TYPE_TX)) {
++		if (!dpa_fq_alloc(dev, fqids[i].start, fqids[i].count, list,
++				  FQ_TYPE_TX)) {
+ 			dev_err(dev, "_dpa_fq_alloc() failed\n");
+ 			return ERR_PTR(-ENOMEM);
+ 		}
+@@ -1016,7 +1018,8 @@ static struct list_head *dpa_generic_fq_probe(struct platform_device *_of_dev,
+ 	num_ranges = lenp / sizeof(*fqids);
+ 	fqids = __fq_alloc(dev, num_ranges, fqids_off);
+ 	for (i = 0; i < num_ranges; i++) {
+-		if (!dpa_fq_alloc(dev, &fqids[i], list, FQ_TYPE_RX_PCD)) {
++		if (!dpa_fq_alloc(dev, fqids[i].start, fqids[i].count, list,
++				  FQ_TYPE_RX_PCD)) {
+ 			dev_err(dev, "_dpa_fq_alloc() failed\n");
+ 			return ERR_PTR(-ENOMEM);
+ 		}
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macless.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macless.c
+index 21a3b84..393de9b 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macless.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macless.c
+@@ -239,7 +239,7 @@ static int dpa_fq_probe_macless(struct device *dev, struct list_head *list,
+ 				enum port_type ptype)
+ {
+ 	struct device_node *np = dev->of_node;
+-	struct fqid_cell *fqids;
++	const struct fqid_cell *fqids;
+ 	int num_ranges;
+ 	int i, lenp;
+ 
+@@ -253,12 +253,9 @@ static int dpa_fq_probe_macless(struct device *dev, struct list_head *list,
+ 
+ 	/* All ranges defined in the device tree are used as Rx/Tx queues */
+ 	for (i = 0; i < num_ranges; i++) {
+-		/* convert to CPU endianess */
+-		fqids[i].start = be32_to_cpup(&fqids[i].start);
+-		fqids[i].count = be32_to_cpup(&fqids[i].count);
+-
+-		if (!dpa_fq_alloc(dev, &fqids[i], list, ptype == RX ?
+-				  FQ_TYPE_RX_PCD : FQ_TYPE_TX)) {
++		if (!dpa_fq_alloc(dev, be32_to_cpu(fqids[i].start),
++				  be32_to_cpu(fqids[i].count), list,
++				  ptype == RX ? FQ_TYPE_RX_PCD : FQ_TYPE_TX)) {
+ 			dev_err(dev, "_dpa_fq_alloc() failed\n");
+ 			return -ENOMEM;
+ 		}
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c
+index 0a9da8f..e3ecf29 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c
+@@ -1471,18 +1471,19 @@ static int macsec_setup(void)
+ 			INIT_LIST_HEAD(&macsec_priv[macsec_id]->dpa_fq_list);
+ 
+ 			dpa_fq = dpa_fq_alloc(dev,
+-					tx_fqids,
+-					&macsec_priv[macsec_id]->dpa_fq_list,
+-					FQ_TYPE_TX);
++					      tx_fqids->start, tx_fqids->count,
++					      &macsec_priv[macsec_id]->dpa_fq_list,
++					      FQ_TYPE_TX);
+ 			if (unlikely(dpa_fq == NULL)) {
+ 				dev_err(dev, "dpa_fq_alloc() failed\n");
+ 				return -ENOMEM;
+ 			}
+ 
+ 			dpa_fq = dpa_fq_alloc(dev,
+-					tx_confirm_fqids,
+-					&macsec_priv[macsec_id]->dpa_fq_list,
+-					FQ_TYPE_TX_CONF_MQ);
++					      tx_confirm_fqids->start,
++					      tx_confirm_fqids->count,
++					      &macsec_priv[macsec_id]->dpa_fq_list,
++					      FQ_TYPE_TX_CONF_MQ);
+ 			if (unlikely(dpa_fq == NULL)) {
+ 				dev_err(dev, "dpa_fq_alloc() failed\n");
+ 				return -ENOMEM;
+-- 
+2.1.0.27.g96db324
+
