@@ -354,6 +354,12 @@ endif
 include make/images.make
 include make/demo.make
 
+# By default do not enable building firmware updates
+FIRMWARE_UPDATE_ENABLE ?= no
+ifeq ($(FIRMWARE_UPDATE_ENABLE),yes)
+  include make/firmware-update.make
+endif
+
 #-------------------------------------------------------------------------------
 #
 # top level targets
