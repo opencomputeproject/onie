@@ -46,6 +46,8 @@ else
   UBOOT_IMAGE		= $(UBOOT_BIN)
 endif
 
+UBOOT_IMAGE_LS		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot-dtb.bin
+
 UBOOT_IDENT_STRING	?= ONIE $(LSB_RELEASE_TAG)
 
 PHONY += u-boot u-boot-download u-boot-source u-boot-patch u-boot-build \
@@ -113,7 +115,7 @@ UBOOT_NEW = $(shell test -d $(UBOOT_DIR) && test -f $(UBOOT_BUILD_STAMP) && \
 	       find -L $(UBOOT_DIR) -newer $(UBOOT_BUILD_STAMP) -print -quit)
 endif
 
-$(UBOOT_BUILD_DIR)/%/u-boot.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
+$(UBOOT_BUILD_DIR)/%/u-boot.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW)
 	$(Q) echo "==== Building u-boot ($*) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
 		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
@@ -139,7 +141,7 @@ $(UBOOT_BUILD_STAMP): $(UBOOT_IMAGE)
 u-boot-install: $(UBOOT_INSTALL_STAMP)
 $(UBOOT_INSTALL_STAMP): $(UBOOT_BUILD_STAMP)
 	$(Q) echo "==== Installing u-boot ($(MACHINE_PREFIX)) ===="
-	$(Q) cp -v $(UBOOT_IMAGE) $(UBOOT_INSTALL_IMAGE)
+	$(Q) cp -v $(UBOOT_IMAGE_LS) $(UBOOT_INSTALL_IMAGE)
 	$(Q) chmod a-x $(UBOOT_INSTALL_IMAGE)
 	$(Q) ln -sf $(UBOOT_BIN) $(MBUILDDIR)/u-boot.bin
 ifeq ($(UBOOT_PBL_ENABLE),yes)

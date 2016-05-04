@@ -96,7 +96,7 @@ LINUX_NEW_FILES	= \
 endif
 
 kernel-build: $(KERNEL_BUILD_STAMP)
-$(KERNEL_BUILD_STAMP): $(KERNEL_SOURCE_STAMP) $(LINUX_NEW_FILES) $(LINUXDIR)/.config | $(XTOOLS_BUILD_STAMP)
+$(KERNEL_BUILD_STAMP): $(KERNEL_SOURCE_STAMP) $(LINUX_NEW_FILES) $(LINUXDIR)/.config
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Building cross linux ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'		\
