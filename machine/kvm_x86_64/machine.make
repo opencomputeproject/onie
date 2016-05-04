@@ -1,6 +1,6 @@
 # KVM x86_64 Virtual Machin
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
@@ -49,6 +49,9 @@ I2CTOOLS_ENABLE = no
 
 # Enable UEFI support
 UEFI_ENABLE = yes
+
+# Enable building firmware updates
+FIRMWARE_UPDATE_ENABLE = yes
 
 #
 # Console parameters can be defined here (default values are in
