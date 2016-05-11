@@ -1,0 +1,38 @@
+From 4f526dc4b60872a5be008fae24c8db6e11539806 Mon Sep 17 00:00:00 2001
+From: Ying Zhang <b40530@freescale.com>
+Date: Wed, 27 Jan 2016 14:06:37 +0800
+Subject: [PATCH 241/245] drivers:i2c: allow i2c devices share an interrupt
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+I2C device on bus 1 can’t claim irq on LS2085
+===================================
+imx-i2c 2010000.i2c: can’t claim irq 14
+imx-i2c: probe of 2010000.i2c failed with error -16
+====================================
+
+Because I2C1&2, 3&4 share interrupts but the flag is not set
+when requesting IRQ.
+
+Signed-off-by: Ying Zhang <b40530@freescale.com>
+---
+ drivers/i2c/busses/i2c-imx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/i2c/busses/i2c-imx.c b/drivers/i2c/busses/i2c-imx.c
+index acfad25..f442593 100644
+--- a/drivers/i2c/busses/i2c-imx.c
++++ b/drivers/i2c/busses/i2c-imx.c
+@@ -1064,7 +1064,7 @@ static int i2c_imx_probe(struct platform_device *pdev)
+ 		return ret;
+ 	}
+ 	/* Request IRQ */
+-	ret = devm_request_irq(&pdev->dev, irq, i2c_imx_isr, 0,
++	ret = devm_request_irq(&pdev->dev, irq, i2c_imx_isr, IRQF_SHARED,
+ 				pdev->name, i2c_imx);
+ 	if (ret) {
+ 		dev_err(&pdev->dev, "can't claim irq %d\n", irq);
+-- 
+2.1.0.27.g96db324
+

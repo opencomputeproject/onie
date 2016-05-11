@@ -1,0 +1,87 @@
+From b8d9fb51340d2cbc31d1ca9478bd934e18a5dc46 Mon Sep 17 00:00:00 2001
+From: Priyanka Jain <Priyanka.Jain@freescale.com>
+Date: Fri, 3 Jul 2015 16:09:45 +0530
+Subject: [PATCH 193/245] fsl/ls2085a: Add workaround for LS2080A timer errata
+ ERR009971
+
+This enables support for workaround for Freescale LS2080A SOC
+errata ERR009971. This issue is related to CNTP_TVAL register
+not getting properly set leading to delay in timer interrupt
+being generated. As a workaround software clears the CNTP_TVAL
+register and then write again in case it finds mismatch between
+value written and read.
+
+Signed-off-by: Priyanka Jain <Priyanka.Jain@freescale.com>
+(Stuart: resolved merge conflict and changed TKT # to actual errata #)
+Signed-off-by: Stuart Yoder <stuart.yoder@nxp.com>
+---
+ arch/arm64/Kconfig                   | 11 +++++++++++
+ drivers/clocksource/arm_arch_timer.c | 12 ++++++++++++
+ 2 files changed, 23 insertions(+)
+
+diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
+index 592c3ab..37d0b25 100644
+--- a/arch/arm64/Kconfig
++++ b/arch/arm64/Kconfig
+@@ -180,10 +180,21 @@ config ARCH_EXYNOS7
+ 	help
+ 	  This enables support for Samsung Exynos7 SoC family
+ 
++config LS2080A_ERRATA_ERR009971
++	bool "Freescale LS2085A SOC issue ERR009971"
++	help
++	  This enables support for workaround for Freescale LS2085A SOC
++	  errata ERR009971. This issue is related to CNTP_TVAL register
++	  not getting properly set leading to delay in timer interrupt
++	  being generated. As a workaround software clears the CNTP_TVAL
++	  register and then write again in case it finds mismatch between
++	  value written and read.
++
+ config ARCH_LAYERSCAPE
+ 	bool "Freescale Layerscape SoC family"
+ 	select PCI_LAYERSCAPE if PCI
+ 	select LS1_MSI if PCI_MSI
++	select LS2080A_ERRATA_ERR009971
+ 	help
+ 	  This enables support for Freescale Layerscape SoC family
+ 
+diff --git a/drivers/clocksource/arm_arch_timer.c b/drivers/clocksource/arm_arch_timer.c
+index 0aa135d..08f3d11 100644
+--- a/drivers/clocksource/arm_arch_timer.c
++++ b/drivers/clocksource/arm_arch_timer.c
+@@ -70,6 +70,8 @@ static struct clock_event_device __percpu *arch_timer_evt;
+ static bool arch_timer_use_virtual = true;
+ static bool arch_timer_c3stop;
+ static bool arch_timer_mem_use_virtual;
++static __always_inline u32 arch_timer_reg_read(int access,
++		enum arch_timer_reg reg, struct clock_event_device *clk);
+ 
+ /*
+  * Architected system timer support.
+@@ -79,6 +81,9 @@ static __always_inline
+ void arch_timer_reg_write(int access, enum arch_timer_reg reg, u32 val,
+ 			  struct clock_event_device *clk)
+ {
++#ifdef CONFIG_LS2080A_ERRATA_ERR009971
++	u32 val_read;
++#endif
+ 	if (access == ARCH_TIMER_MEM_PHYS_ACCESS) {
+ 		struct arch_timer *timer = to_arch_timer(clk);
+ 		switch (reg) {
+@@ -101,6 +106,13 @@ void arch_timer_reg_write(int access, enum arch_timer_reg reg, u32 val,
+ 		}
+ 	} else {
+ 		arch_timer_reg_write_cp15(access, reg, val);
++#ifdef CONFIG_LS2080A_ERRATA_ERR009971
++		val_read = arch_timer_reg_read_cp15(access, reg);
++		if ((val & 0xffffff00) != (val_read & 0xffffff00)) {
++			arch_timer_reg_write_cp15(access, reg, 0x00000000);
++			arch_timer_reg_write_cp15(access, reg, val);
++		}
++#endif
+ 	}
+ }
+ 
+-- 
+2.1.0.27.g96db324
+
