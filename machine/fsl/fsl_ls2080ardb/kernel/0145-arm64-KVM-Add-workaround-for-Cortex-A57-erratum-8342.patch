@@ -1,0 +1,128 @@
+From 5077c599ea79aa10176a29035e75e6201c2036fe Mon Sep 17 00:00:00 2001
+From: Marc Zyngier <marc.zyngier@arm.com>
+Date: Mon, 16 Nov 2015 10:28:18 +0000
+Subject: [PATCH 145/245] arm64: KVM: Add workaround for Cortex-A57 erratum
+ 834220
+
+Cortex-A57 parts up to r1p2 can misreport Stage 2 translation faults
+when a Stage 1 permission fault or device alignment fault should
+have been reported.
+
+This patch implements the workaround (which is to validate that the
+Stage-1 translation actually succeeds) by using code patching.
+
+Cc: stable@vger.kernel.org
+Reviewed-by: Will Deacon <will.deacon@arm.com>
+Signed-off-by: Marc Zyngier <marc.zyngier@arm.com>
+Signed-off-by: Christoffer Dall <christoffer.dall@linaro.org>
+(cherry picked from commit 498cd5c32be6e32bc0f8efcad48ab094bb2bfdf3)
+[Stuart: resolved minor merge conflict, added needed includes]
+Signed-off-by: Stuart Yoder <stuart.yoder@nxp.com>
+---
+ arch/arm64/Kconfig                  | 21 +++++++++++++++++++++
+ arch/arm64/include/asm/cpufeature.h |  3 ++-
+ arch/arm64/kernel/cpu_errata.c      |  9 +++++++++
+ arch/arm64/kvm/hyp.S                |  8 ++++++++
+ 4 files changed, 40 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
+index c7314c2..38b52a0 100644
+--- a/arch/arm64/Kconfig
++++ b/arch/arm64/Kconfig
+@@ -397,6 +397,27 @@ config ARM64_ERRATUM_832075
+ 
+ 	  If unsure, say Y.
+ 
++config ARM64_ERRATUM_834220
++	bool "Cortex-A57: 834220: Stage 2 translation fault might be incorrectly reported in presence of a Stage 1 fault"
++	depends on KVM
++	default y
++	help
++	  This option adds an alternative code sequence to work around ARM
++	  erratum 834220 on Cortex-A57 parts up to r1p2.
++
++	  Affected Cortex-A57 parts might report a Stage 2 translation
++	  fault as the result of a Stage 1 fault for load crossing a
++	  page boundary when there is a permission or device memory
++	  alignment fault at Stage 1 and a translation fault at Stage 2.
++
++	  The workaround is to verify that the Stage 1 translation
++	  doesn't generate a fault before handling the Stage 2 fault.
++	  Please note that this does not necessarily enable the workaround,
++	  as it depends on the alternative framework, which will only patch
++	  the kernel if an affected CPU is detected.
++
++	  If unsure, say Y.
++
+ config ARM64_ERRATUM_845719
+ 	bool "Cortex-A53: 845719: a load might read incorrect data"
+ 	depends on COMPAT
+diff --git a/arch/arm64/include/asm/cpufeature.h b/arch/arm64/include/asm/cpufeature.h
+index 82cb9f9..f9e225d 100644
+--- a/arch/arm64/include/asm/cpufeature.h
++++ b/arch/arm64/include/asm/cpufeature.h
+@@ -24,8 +24,9 @@
+ #define ARM64_WORKAROUND_CLEAN_CACHE		0
+ #define ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE	1
+ #define ARM64_WORKAROUND_845719			2
++#define ARM64_WORKAROUND_834220			3
+ 
+-#define ARM64_NCAPS				3
++#define ARM64_NCAPS				4
+ 
+ #ifndef __ASSEMBLY__
+ 
+diff --git a/arch/arm64/kernel/cpu_errata.c b/arch/arm64/kernel/cpu_errata.c
+index 6ffd914..dc0df82 100644
+--- a/arch/arm64/kernel/cpu_errata.c
++++ b/arch/arm64/kernel/cpu_errata.c
+@@ -74,6 +74,15 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
+ 			   (1 << MIDR_VARIANT_SHIFT) | 2),
+ 	},
+ #endif
++#ifdef CONFIG_ARM64_ERRATUM_834220
++	{
++	/* Cortex-A57 r0p0 - r1p2 */
++		.desc = "ARM erratum 834220",
++		.capability = ARM64_WORKAROUND_834220,
++		MIDR_RANGE(MIDR_CORTEX_A57, 0x00,
++			   (1 << MIDR_VARIANT_SHIFT) | 2),
++	},
++#endif
+ #ifdef CONFIG_ARM64_ERRATUM_845719
+ 	{
+ 	/* Cortex-A53 r0p[01234] */
+diff --git a/arch/arm64/kvm/hyp.S b/arch/arm64/kvm/hyp.S
+index 64f9e60..0a4fbcb 100644
+--- a/arch/arm64/kvm/hyp.S
++++ b/arch/arm64/kvm/hyp.S
+@@ -17,8 +17,10 @@
+ 
+ #include <linux/linkage.h>
+ 
++#include <asm/alternative.h>
+ #include <asm/asm-offsets.h>
+ #include <asm/assembler.h>
++#include <asm/cpufeature.h>
+ #include <asm/debug-monitors.h>
+ #include <asm/esr.h>
+ #include <asm/fpsimdmacros.h>
+@@ -1210,9 +1212,15 @@ el1_trap:
+ 	b.ne	1f		// Not an abort we care about
+ 
+ 	/* This is an abort. Check for permission fault */
++alternative_if_not ARM64_WORKAROUND_834220
+ 	and	x2, x1, #ESR_ELx_FSC_TYPE
+ 	cmp	x2, #FSC_PERM
+ 	b.ne	1f		// Not a permission fault
++alternative_else
++	nop			// Use the permission fault path to
++	nop			// check for a valid S1 translation,
++	nop			// regardless of the ESR value.
++alternative_endif
+ 
+ 	/*
+ 	 * Check for Stage-1 page table walk, which is guaranteed
+-- 
+2.1.0.27.g96db324
+
