@@ -1,0 +1,114 @@
+
+
+diff --git a/sys_eeprom/24cXX.c b/sys_eeprom/24cXX.c
+index be194ad..5246c4c 100644
+--- a/sys_eeprom/24cXX.c
++++ b/sys_eeprom/24cXX.c
+@@ -141,40 +141,28 @@ int eeprom_24c32_read_byte(struct eeprom* e, __u16 mem_addr)
+ 
+ int eeprom_read_current_byte(struct eeprom* e)
+ {
+-	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
+ 	return i2c_smbus_read_byte(e->fd);
+ }
+ 
+ int eeprom_read_byte(struct eeprom* e, __u16 mem_addr)
+ {
+ 	int r;
+-	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
+ 	if(e->type == EEPROM_TYPE_8BIT_ADDR)
+ 	{
+ 		__u8 buf =  mem_addr & 0x0ff;
+-		r = i2c_write_1b(e, buf);
+-	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
+-		__u8 buf[2] = { (mem_addr >> 8) & 0x0ff, mem_addr & 0x0ff };
+-		r = i2c_write_2b(e, buf);
++                r = i2c_smbus_read_byte_data(e->fd, buf);
+ 	} else {
+ 		fprintf(stderr, "ERR: unknown eeprom type\n");
+ 		return -1;
+ 	}
+-	if (r < 0)
+-		return r;
+-	r = i2c_smbus_read_byte(e->fd);
+ 	return r;
+ }
+ 
+ int eeprom_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data)
+ {
+ 	if(e->type == EEPROM_TYPE_8BIT_ADDR) {
+-		__u8 buf[2] = { mem_addr & 0x00ff, data };
+-		return i2c_write_2b(e, buf);
+-	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
+-		__u8 buf[3] = 
+-			{ (mem_addr >> 8) & 0x00ff, mem_addr & 0x00ff, data };
+-		return i2c_write_3b(e, buf);
++            __u8 buf = (__u8)(mem_addr & 0xff);
++                return i2c_smbus_write_byte_data(e->fd, buf, data);
+ 	} else {
+ 		fprintf(stderr, "ERR: unknown eeprom type\n");
+ 		return -1;
+diff --git a/sys_eeprom/onie_tlvinfo.c b/sys_eeprom/onie_tlvinfo.c
+index cf88f70..4308f2a 100644
+--- a/sys_eeprom/onie_tlvinfo.c
++++ b/sys_eeprom/onie_tlvinfo.c
+@@ -1,6 +1,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <unistd.h>
+ #include "24cXX.h"
+ #include "onie_tlvinfo.h"
+ 
+@@ -443,6 +444,7 @@ void show_eeprom(u_int8_t *eeprom)
+ 
+ #ifdef DEBUG
+     printf("EEPROM dump: (0x%x bytes)", SYS_EEPROM_SIZE);
++    int i;
+     for (i = 0; i < SYS_EEPROM_SIZE; i++) {
+ 	if ((i % 16) == 0)
+ 	    printf("\n%02X: ", i);
+@@ -757,16 +759,21 @@ int write_sys_eeprom(void *eeprom_data, int len)
+     u_int16_t  addr = SYS_EEPROM_OFFSET;
+ 
+     c = eeprom_data;
++    if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++                    EEPROM_TYPE_8BIT_ADDR, &e)) {
++        printf("ERROR: Cannot open I2C device\n");
++        return -1;
++    }
+     for (i = 0; i < len; i++) {
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-			EEPROM_TYPE_8BIT_ADDR, &e)) {
+-	    printf("ERROR: Cannot open I2C device\n");
+-	    return -1;
+-	}
+-	eeprom_write_byte(&e, addr, *c);
+-	eeprom_close(&e);
++	if (eeprom_write_byte(&e, addr, *c)) {
++            printf("ERROR: writing EEPROM data\n");
++            ret = -1;
++            break;
++        }
+ 	c++; addr++;
++        usleep(5000);
+     }
++    eeprom_close(&e);
+ 
+     return ret;
+ }
+diff --git a/sys_eeprom/sys_eeprom_platform.h b/sys_eeprom/sys_eeprom_platform.h
+index 529f774..c0fe683 100644
+--- a/sys_eeprom/sys_eeprom_platform.h
++++ b/sys_eeprom/sys_eeprom_platform.h
+@@ -1,4 +1,10 @@
+ #ifndef __SYS_EEPROM_PLATFORM_H_
+ #define __SYS_EEPROM_PLATFORM_H_
+ 
++#define SYS_EEPROM_MAX_SIZE     256
++#define SYS_EEPROM_OFFSET         0
++#define SYS_EEPROM_SIZE         256
++#define SYS_EEPROM_I2C_DEVICE  "/dev/i2c-0"
++#define SYS_EEPROM_I2C_ADDR    0x54
++
+ #endif /* __SYS_EEPROM_PLATFORM_H_ */
