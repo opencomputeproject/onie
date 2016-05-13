@@ -1,38 +1,68 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 Matt Peterson <matt-github@peterson.org>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
 . /lib/onie/functions
 syslog_tag=onie-exec
 
+install_result="/var/run/install.rc"
+
+# If the NOS install returns success then reboot.
+finish_nos_install()
+{
+    local result="$1"
+    local URL="$2"
+    local update_image="$3"
+
+    if [ $result -eq 0 ] ; then
+        log_console_msg "NOS install successful: $URL"
+        log_console_msg "Rebooting..."
+        reboot && return 0
+    fi
+    return 1
+}
+
+finish_update_install()
+{
+    local result="$1"
+    local URL="$2"
+    local update_image="$3"
+
+    if [ $result -eq 0 ] ; then
+        log_console_msg "Firmware update install successful: $URL"
+        log_console_msg "Rebooting..."
+        reboot && return 0
+    fi
+    return 1
+}
+
+# Allow architectures to override finish_nos_install() and
+# finish_update_install().
+[ -r /lib/onie/exec-installer-arch ] && . /lib/onie/exec-installer-arch
+
 check_installer()
 {
-    [ -r $onie_installer ] || {
-        log_failure_msg "Unable to find installer: $onie_installer"
-        return 1
-    }
-
-    # Check whether image passed by 'install_url', 'update_url', or 'discover'
-    # whose format matches to boot reason or not.
-    is_updater=$(if grep -q ONIE-UPDATER-COOKIE $onie_installer ; then \
-        echo "yes" ; else echo "no" ; fi)
+    # Check whether the image type passed by 'onie-nos-install',
+    # 'onie-self-update' or 'discover' is compatible with the current
+    # boot reason.
+    local image_type="$1"
 
     case $onie_boot_reason in
         update | embed)
-            [ "$is_updater" = "yes" ] && return 0
-            log_failure_msg "ONIE Updater: Invalid ONIE update image format."
+            [ "$image_type" = "$onie_image_type_update" ] && return 0
+            log_failure_msg "ONIE Update: Invalid ONIE update image format."
             ;;
         rescue)
             # Allow to run either NOS installer or ONIE updater at the situation
             return 0
             ;;
         install)
-            [ "$is_updater" = "no" ] && return 0
-            log_failure_msg "NOS Installer: Expecting install image, but found ONIE updater image format."
+            [ "$image_type" = "$onie_image_type_nos" ] && return 0
+            log_failure_msg "NOS Installer: Expecting install image, but found ONIE update image format."
             ;;
         *)
             log_failure_msg "Unknown boot reason: ${onie_boot_reason}"
@@ -48,7 +78,14 @@ run_installer()
     # escape any % characters for printing with printf
     print_exec_url=$(echo -n $onie_exec_url | sed -e 's/%/%%/g')
     log_console_msg "Executing installer: $print_exec_url"
-    check_installer || return 1
+
+    [ -r $onie_installer ] || {
+        log_failure_msg "Unable to find installer: $onie_installer"
+        return 1
+    }
+
+    image_type=$(get_image_type $onie_installer)
+    check_installer $image_type || return 1
 
     chmod +x $onie_installer
     # Send installer execution output to stdout or /dev/console
@@ -56,10 +93,22 @@ run_installer()
     if [ "$tee_path" = "/dev/null" ] || [ -z "$tee_path" ] ; then
         tee_path=/dev/console
     fi
-    { $onie_installer; echo "$?" > /var/run/install.rc; } 2>&1 | tee $tee_path | logger $log_stderr -t os-install -p ${syslog_onie}.info
-    [ "$(cat /var/run/install.rc)" = "0" ] && reboot && return 0
+    { $onie_installer; echo "$?" > $install_result; } 2>&1 | tee $tee_path | logger $log_stderr -t os-install -p ${syslog_onie}.info
+
+    case $image_type in
+        "$onie_image_type_nos")
+            finish_nos_install "$(cat $install_result)" "$onie_exec_url" "$onie_installer" && return 0
+            ;;
+        "$onie_image_type_update")
+            finish_update_install "$(cat $install_result)" "$onie_exec_url" "$onie_installer" && return 0
+            ;;
+        *)
+            log_failure_msg "Unexpected image type: $image_type"
+            ;;
+    esac
 
     # installer should not return
+    log_failure_msg "Unable to install image: $print_exec_url"
     return 1
 }
 
@@ -94,8 +143,10 @@ wget_run()
     header_operation="ONIE-OPERATION: $onie_operation"
     header_version="ONIE-VERSION: $onie_version"
 
-    log_debug_msg "Running wget with: $user_agent $wget_args $URL\n"
-    log_info_msg "Fetching $URL ..."
+    # escape any % characters for printing with printf
+    print_exec_url=$(echo -n $URL | sed -e 's/%/%%/g')
+    log_debug_msg "Running wget with: $user_agent $wget_args $print_exec_url\n"
+    log_info_msg "Fetching $print_exec_url ..."
     wget -U "$user_agent" $wget_args       \
         --header "$header_serial_num"   \
         --header "$header_eth_addr"     \
@@ -190,6 +241,7 @@ url_run()
             ;;
     esac
 
+    rm -f $onie_installer
     return 1
 }
 
@@ -197,7 +249,7 @@ url_run()
 http_download()
 {
     # Build list of HTTP servers to try
-    http_servers=
+    http_servers="$onie_server_name"
 
     # HTTP server IP only
     if [ -n "$onie_disco_wwwsrv" ] ; then
@@ -298,7 +350,7 @@ waterfall()
     wf_paths="$wf_paths $onie_default_filenames"
 
     # TFTP waterfall
-    tftp_servers="$onie_disco_siaddr $onie_disco_tftp $onie_disco_tftpsiaddr"
+    tftp_servers="$onie_server_name $onie_disco_siaddr $onie_disco_tftp $onie_disco_tftpsiaddr"
     for s in $tftp_servers ; do
         for p in $wf_paths ; do
             url_run "tftp://$s/$p" && return 0
@@ -350,6 +402,27 @@ local_fs_run()
     return 1
 }
 
+firmware_update_run()
+{
+    local fw_rc=1
+    for image in $(ls $onie_update_pending_dir) ; do
+        if url_run "$onie_update_pending_dir/$image" ; then
+            fw_rc=0
+        else
+            fw_rc=1
+            break
+        fi
+    done
+
+    if [ $fw_rc -eq 0 ] ; then
+        # Firmware update(s) found and processed.
+        log_console_msg "Rebooting..."
+        reboot && return 0
+    fi
+    
+    return 1
+}
+
 ##
 ## Script starts here
 ##
@@ -390,9 +463,14 @@ if [ -n "$onie_cli_static_update_url" ] ; then
     exit 1
 fi
 
-# Next try static URL from u-boot
+# Next try static URL from kernel command line
 if [ -n "$onie_static_url" ] ; then
     url_run "$onie_static_url" && exit 0
+fi
+
+# Next look for pending firmware updates
+if [ -d "$onie_update_pending_dir" ] ; then
+    firmware_update_run && exit 0
 fi
 
 # Next try locally attached filesystems

@@ -1,10 +1,14 @@
 #!/bin/sh
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015-2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
 # This file provides a GRUB menu entry for ONIE.
+#
+## DO NOT remove the following line:
+##   ONIE_SUPPORT_BOOTCMD_FEEDING
 #
 # Place this file in /etc/grub.d and grub-mkconfig will use this file
 # when generating a grub configuration file.
@@ -19,17 +23,77 @@
 # partition.
 
 # Step 1
-cat <<EOF
+# Depends on UEFI GRUB or Legacy BIOS GRUB
+default_chainloader="+1"
+[ "${onie_firmware}" = "coreboot" ] && default_chainloader=/grub/i386-coreboot/core.elf
+uefi_root=/boot/efi
+onie_uefi_grub=EFI/onie/grubx64.efi
+if [ -d "/sys/firmware/efi/efivars" ] && [ -r "${uefi_root}/$onie_uefi_grub" ] ; then
+    uefi_uuid=$(grub-probe --target=fs_uuid "${uefi_root}/$onie_uefi_grub") || {
+        echo "ERROR: grub-probe failed" > /dev/stderr
+        echo "ERROR: failing cmd: grub-probe --target=fs_uuid ${uefi_root}/$onie_uefi_grub" > /dev/stderr
+        exit 1
+    }
+    cat <<EOF
+# Menu entry to chainload ONIE UEFI
+menuentry ONIE {
+	set root='(hd0,gpt1)'
+	search --no-floppy --fs-uuid --set=root $uefi_uuid
+	echo	'Loading ONIE ...'
+	chainloader /$onie_uefi_grub
+}
+EOF
+else
+    cat <<EOF
 # Menu entry to chainload ONIE
 menuentry ONIE {
 	search --no-floppy --label --set=root ONIE-BOOT
 	echo	'Loading ONIE ...'
-	chainloader +1
+	chainloader ${default_chainloader}
 }
 EOF
+fi
 
 # Step 2 -- Update ONIE's GRUB configuration in the ONIE-BOOT
 # partition.
+
+diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
+add_diag_bootcmd()
+{
+    if [ -r "$onie_root_dir/grub/diag-bootcmd.cfg" ] ; then
+        cat $onie_root_dir/grub/diag-bootcmd.cfg >> $grub_cfg
+        return 0
+    fi
+
+    cat <<EOF >> $grub_cfg
+diag_menu="$diag_label"
+EOF
+    if [ -d "/sys/firmware/efi/efivars" ] && [ -f "${uefi_root}/$onie_uefi_grub" ] ; then
+        # UEFI firmware
+        diag_uefi_grub=$(efibootmgr -v | grep $diag_label | sed -e 's/.*)\/File(//' -e 's/)//' -e 's/\\/\//g')
+        if [ -f "$uefi_root/$diag_uefi_grub" ] ; then
+            cat <<EOF >> $grub_cfg
+function diag_bootcmd {
+  set root='(hd0,gpt1)'
+  search --no-floppy --fs-uuid --set=root $uefi_uuid
+  echo    "Loading $diag_label \$onie_platform ..."
+  chainloader /$diag_uefi_grub
+  boot
+}
+EOF
+        fi
+    else
+        # legacy BIOS firmware
+        cat <<EOF >> $grub_cfg
+function diag_bootcmd {
+  search --no-floppy --label --set=root $diag_label
+  echo    "Loading $diag_label \$onie_platform ..."
+  chainloader ${default_chainloader}
+  boot
+}
+EOF
+    fi
+}
 
 tmp_mnt=
 onie_umount_partition()
@@ -59,17 +123,19 @@ onie_root_dir="${tmp_mnt}/onie"
     exit 1
 }
 
-# Serial console configuration.  Presumably the host OS has already
-# setup the following GRUB configuration variables, as is standard
-# practice when configuring GRUB for a serial console:
-#
-#  GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"
-#  GRUB_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
+# - backward compatible with present NOS/DIAG installers
+# - If NOS/DIAG installer does not export GRUB_SERIAL_COMMAND and
+#   GRUB_CMDLINE_LINUX, ONIE will use the default/correct ones.
+if [ -z "$GRUB_ONIE_SERIAL_COMMAND" ] ||
+    [ -z "$GRUB_CMDLINE_LINUX" ] ; then
+. $onie_root_dir/grub/grub-variables
+fi
 
-DEFAULT_SERIAL_COMMAND="serial --port=0x3f8 --speed=115200 --word=8 --parity=no --stop=1"
-GRUB_ONIE_SERIAL_COMMAND=${GRUB_SERIAL_COMMAND:-"$DEFAULT_SERIAL_COMMAND"}
+rm -f $grub_cfg
+touch $grub_cfg
 
-(cat <<EOF
+if echo -n "$GRUB_CMDLINE_LINUX" | grep -q ttyS ; then
+    cat <<EOF >> $grub_cfg
 # begin: serial console config
 
 $GRUB_ONIE_SERIAL_COMMAND
@@ -78,46 +144,38 @@ terminal_output serial
 
 # end: serial console config
 EOF
-) > $grub_cfg
+fi
+
+# Look for an ONIE compatible DIAG image and add a boot entry for it.
+cat <<EOF >> $grub_cfg
+# begin: diag boot command
+
+EOF
+if [ -n "$diag_label" ]  ; then
+    add_diag_bootcmd
+fi
+cat <<EOF >> $grub_cfg
+
+# end: diag boot command
+EOF
 
 # add the ONIE machine configuration data
 cat $onie_root_dir/grub/grub-machine.cfg >> $grub_cfg
 
+# add extra platform specific kernel command line options
+cat $onie_root_dir/grub/grub-extra.cfg >> $grub_cfg
+
+cat <<EOF >> $grub_cfg
+# begin: ONIE bootargs
+
+onie_initargs="$GRUB_CMDLINE_LINUX"
+onie_initargs_default="$GRUB_CMDLINE_LINUX_DEFAULT"
+onie_platformargs="$GRUB_ONIE_PLATFORM_ARGS"
+onie_debugargs="$GRUB_ONIE_DEBUG_ARGS"
+GRUB_ONIE_CMDLINE_LINUX="$GRUB_ONIE_CMDLINE_LINUX"
+
+# end: ONIE bootargs
+EOF
+
 # add ONIE configuration common to all ONIE boot modes
 cat $onie_root_dir/grub/grub-common.cfg >> $grub_cfg
-
-DEFAULT_CMDLINE="$GRUB_CMDLINE_LINUX $GRUB_CMDLINE_LINUX_DEFAULT $GRUB_ONIE_PLATFORM_ARGS $GRUB_ONIE_DEBUG_ARGS"
-GRUB_ONIE_CMDLINE_LINUX=${GRUB_ONIE_CMDLINE_LINUX:-"$DEFAULT_CMDLINE"}
-
-ONIE_CMDLINE="quiet $GRUB_ONIE_CMDLINE_LINUX"
-for mode in install rescue uninstall update embed ; do
-    case "$mode" in
-        install)
-            boot_message="ONIE: OS Install Mode ..."
-            ;;
-        rescue)
-            boot_message="ONIE: Rescue Mode ..."
-            ;;
-        uninstall)
-            boot_message="ONIE: OS Uninstall Mode ..."
-            ;;
-        update)
-            boot_message="ONIE: ONIE Update Mode ..."
-            ;;
-        embed)
-            boot_message="ONIE: ONIE Embed Mode ..."
-            ;;
-        *)
-            ;;
-    esac
-    (cat <<EOF
-menuentry "\$onie_menu_$mode" {
-        onie_entry_start
-        echo    "$boot_message"
-        linux   /onie/vmlinuz-\${onie_kernel_version}-onie $ONIE_CMDLINE boot_reason=$mode
-        initrd  /onie/initrd.img-\${onie_kernel_version}-onie
-        onie_entry_end
-}
-EOF
-    ) >> $grub_cfg
-done

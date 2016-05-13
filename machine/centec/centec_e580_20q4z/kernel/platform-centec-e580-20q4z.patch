@@ -1,0 +1,686 @@
+Support CENTEC E580-20Q4Z platform
+
+diff --git a/arch/powerpc/boot/dts/centec_e580_20q4z.dts b/arch/powerpc/boot/dts/centec_e580_20q4z.dts
+new file mode 100644
+index 0000000..dfb0f00
+--- /dev/null
++++ b/arch/powerpc/boot/dts/centec_e580_20q4z.dts
+@@ -0,0 +1,66 @@
++/*
++ * CTC Platform P1010 Board Device Tree Source
++ *
++ * Copyright (C) 2005 Centec Networks Inc.  All rights reserved.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++/include/ "fsl/p1010si-pre.dtsi"
++
++/ {
++	model = "fsl,P1010";
++	compatible = "centec,centec_e580_24q4z";
++	
++	memory {
++		device_type = "memory";
++	};
++
++	board_ifc: ifc: ifc@ffe1e000 {
++		/* NAND Flashes and CPLD on board */
++		ranges = <0x0 0x0 0x0 0xeff80000 0x00080000
++                          0x1 0x0 0x0 0xff800000 0x00010000
++			  0x3 0x0 0x0 0xffb00000 0x00010000>;
++		reg = <0x0 0xffe1e000 0 0x2000>;
++	};
++
++	board_soc: soc: soc@ffe00000 {
++		ranges = <0x0  0x0 0xffe00000 0x100000>;
++	};
++
++        pci0: pcie@ffe09000 {
++		reg = <0 0xffe09000 0 0x1000>;
++		ranges = <0x2000000 0x0 0xa0000000 0 0xa0000000 0x0 0x20000000
++				0x1000000 0x0 0x00000000 0 0xffc10000 0x0 0x10000>;
++		pcie@0 {
++			ranges = <0x2000000 0x0 0xa0000000
++				0x2000000 0x0 0xa0000000
++				0x0 0x20000000
++
++				0x1000000 0x0 0x0
++				0x1000000 0x0 0x0
++				0x0 0x100000>;
++		};
++	};
++
++	pci1: pcie@ffe0a000 {
++		reg = <0 0xffe0a000 0 0x1000>;
++		ranges = <0x2000000 0x0 0x80000000 0 0x80000000 0x0 0x20000000
++			  0x1000000 0x0 0x00000000 0 0xffc00000 0x0 0x10000>;
++		pcie@0 {
++			ranges = <0x2000000 0x0 0x80000000
++				  0x2000000 0x0 0x80000000
++				  0x0 0x20000000
++
++				  0x1000000 0x0 0x0
++				  0x1000000 0x0 0x0
++				  0x0 0x100000>;
++		};
++	};
++};
++
++/include/ "centec_e580_20q4z.dtsi"
++/include/ "fsl/p1010si-post.dtsi"
+diff --git a/arch/powerpc/boot/dts/centec_e580_20q4z.dtsi b/arch/powerpc/boot/dts/centec_e580_20q4z.dtsi
+new file mode 100644
+index 0000000..c69189f
+--- /dev/null
++++ b/arch/powerpc/boot/dts/centec_e580_20q4z.dtsi
+@@ -0,0 +1,175 @@
++/*
++ * CTC Platform P1010 Board Device Tree Source stub (no addresses or top-level ranges)
++ *
++ * Copyright (C) 2005 Centec Networks Inc.  All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++&board_ifc {
++        nor@0,0 {
++                #address-cells = <1>;
++                #size-cells = <1>;
++                compatible = "jedec-flash";
++                reg = <0x0 0x0 0x80000>;
++                bank-width = <1>;
++                device-width = <1>;
++
++                        partition@0 {
++                                /* 512KB for u-boot Bootloader Image */
++                                reg = <0x00000000 0x80000>;
++                                label = "uboot";
++                        };
++                };
++
++	nand@1,0 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "fsl,ifc-nand";
++		reg = <0x1 0x0 0x10000>;
++
++			partition@0 {
++				/* uboot env*/
++				reg = <0x0 0x200000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++
++			partition@100000 {
++                                /* ONIE */
++                                reg = <0x200000 0x3e00000>;
++                                label = "onie";
++
++                        };
++
++			partition@4000000 {
++                                /* diag */
++                                reg = <0x4000000 0x4000000>;
++                                label = "diag";
++
++                        };
++
++			partition@8000000 {
++                                /* boot area */
++                                reg = <0x8000000 0x38000000>;
++                                label = "Boot Area ";
++
++                        };
++
++			partition@40000000 {
++                                /* system area */
++                                reg = <0x40000000 0x40000000>;
++                                label = "System Area ";
++
++                        };
++
++		};
++
++		cpld@3,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,p1010rdb-cpld";
++			reg = <0x3 0x0 0x00010000>;
++			bank-width = <1>;
++			device-width = <1>;
++		};
++	};
++
++
++&board_soc {
++	i2c@3000 {
++		rtc@32 {
++			compatible = "XingWeiFan,sd2405";
++			reg = <0x32>;
++			};
++		};
++
++
++		spi@7000 {
++			spidev@0{
++				#address-cells = <1>;
++				#size-cells = <1>;
++				compatible = "spidev";
++				reg = <0>;
++				spi-max-frequency = <5000000>;
++			};
++		};
++
++
++	usb@22000 {
++                #address-cells = <1>;
++                #size-cells = <0>;
++                compatible = "fsl-usb2-dr";
++                reg = <0x22000 0x1000>;
++                interrupt-parent = <&mpic>;
++                interrupts = <28 0x2>;
++                dr_mode = "host";
++                phy_type = "utmi";
++	};
++
++	mdio@24000 {
++                phy0: ethernet-phy@0 {
++                        reg = <0x10>;
++                };
++        };
++
++	mdio@25000 {
++		tbi0: tbi-phy@11 {
++			reg = <0x11>;
++			device_type = "tbi-phy";
++		};
++	};
++
++	mdio@26000 {
++		status = "disabled";
++		tbi1: tbi-phy@11 {
++			reg = <0x11>;
++			device_type = "tbi-phy";
++		};
++	};
++
++	enet0: ethernet@b0000 {
++		status = "disabled";
++		phy-handle = <&phy0>;
++		phy-connection-type = "rgmii-id";
++	};
++	enet1: ethernet@b1000 {
++		phy-handle = <&phy0>;
++		tbi-handle = <&tbi0>;
++		phy-connection-type = "sgmii";
++	};
++
++	enet2: ethernet@b2000 {
++		status = "disabled";
++		phy-handle = <&phy0>;
++		tbi-handle = <&tbi1>;
++		phy-connection-type = "sgmii";
++	};
++
++};
+diff --git a/arch/powerpc/platforms/85xx/Kconfig b/arch/powerpc/platforms/85xx/Kconfig
+index 48a56fd..14524d2 100644
+--- a/arch/powerpc/platforms/85xx/Kconfig
++++ b/arch/powerpc/platforms/85xx/Kconfig
+@@ -110,6 +110,12 @@ config P1010_RDB
+ 	  P1010RDB contains P1010Si, which provides CPU performance up to 800
+ 	  MHz and 1600 DMIPS, additional functionality and faster interfaces
+ 	  (DDR3/3L, SATA II, and PCI  Express).
++config CENTEC_E580_20Q4Z
++        bool "Centec Networks E580-20Q4Z"
++        select DEFAULT_UIMAGE
++        help
++          This option enables support for Centec Networks E580-20Q4Z platform
++
+ 
+ config P1022_DS
+ 	bool "Freescale P1022 DS"
+diff --git a/arch/powerpc/platforms/85xx/Makefile b/arch/powerpc/platforms/85xx/Makefile
+index e018200..dd51225 100644
+--- a/arch/powerpc/platforms/85xx/Makefile
++++ b/arch/powerpc/platforms/85xx/Makefile
+@@ -39,3 +39,4 @@ obj-$(CONFIG_KSI8560)	  += ksi8560.o
+ obj-$(CONFIG_XES_MPC85xx) += xes_mpc85xx.o
+ obj-$(CONFIG_GE_IMP3A)	  += ge_imp3a.o
+ obj-$(CONFIG_PPC_QEMU_E500) += qemu_e500.o
++obj-$(CONFIG_CENTEC_E580_20Q4Z)   += centec_e580_20q4z.o
+diff --git a/arch/powerpc/platforms/85xx/centec_e580_20q4z.c b/arch/powerpc/platforms/85xx/centec_e580_20q4z.c
+new file mode 100644
+index 0000000..b2bc8c5
+--- /dev/null
++++ b/arch/powerpc/platforms/85xx/centec_e580_20q4z.c
+@@ -0,0 +1,102 @@
++/*
++ * Centec E580-20Q4Z Setup
++ *
++ * Copyright (C) 2005 Centec Networks Inc.  All rights reserved.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#include <linux/stddef.h>
++#include <linux/kernel.h>
++#include <linux/pci.h>
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++#include <linux/of_platform.h>
++
++#include <asm/time.h>
++#include <asm/machdep.h>
++#include <asm/pci-bridge.h>
++#include <mm/mmu_decl.h>
++#include <asm/prom.h>
++#include <asm/udbg.h>
++#include <asm/mpic.h>
++
++#include <sysdev/fsl_soc.h>
++#include <sysdev/fsl_pci.h>
++#include "mpc85xx.h"
++
++void __iomem *gpio_logic_addr;
++void __init p1010_ctc_pic_init(void)
++{
++	struct mpic *mpic = mpic_alloc(NULL, 0, MPIC_BIG_ENDIAN |
++	  MPIC_SINGLE_DEST_CPU,
++	  0, 256, " OpenPIC  ");
++
++	BUG_ON(mpic == NULL);
++
++	mpic_init(mpic);
++}
++
++
++/*
++ * Setup the architecture
++ */
++static void __init p1010_ctc_setup_arch(void)
++{
++	if (ppc_md.progress)
++		ppc_md.progress("p1010_ctc_setup_arch()", 0);
++	fsl_pci_assign_primary();
++
++	gpio_logic_addr = ioremap(0xffe0f000, 0x1000) ;
++	if (gpio_logic_addr == NULL)
++	{
++           printk(KERN_ERR "#########Can't map reboot gpio space!##########\n");
++	}
++	printk(KERN_INFO "E580-20Q4Z from Centec Networks\n");
++}
++
++machine_arch_initcall(p1010_ctc, mpc85xx_common_publish_devices);
++machine_arch_initcall(p1010_ctc, swiotlb_setup_bus_notifier);
++
++/*
++ * Called very early, device-tree isn't unflattened
++ */
++static int __init p1010_ctc_probe(void)
++{
++	unsigned long root = of_get_flat_dt_root();
++
++	if (of_flat_dt_is_compatible(root, "centec,centec_e580_24q4z"))
++		return 1;
++	return 0;
++}
++
++static void p1010_ctc_restart(char *cmd)
++{
++       printk (KERN_EMERG "Reboot via the watchdog \n");
++
++       local_irq_disable();
++       /*
++          * GPIO11 enable watchdog
++          * GPIO10 feed watchdog
++          */
++
++        /* enable watchdog but not feed */
++        out_be32(gpio_logic_addr , 0x00100000);
++       while (1);
++}
++
++define_machine(p1010_ctc) {
++	.name			= "Centec Networks, E580-20Q4Z",
++	.probe			= p1010_ctc_probe,
++	.setup_arch		= p1010_ctc_setup_arch,
++	.init_IRQ		= p1010_ctc_pic_init,
++#ifdef CONFIG_PCI
++	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
++#endif
++	.get_irq		= mpic_get_irq,
++	.restart		= p1010_ctc_restart,
++	.calibrate_decr		= generic_calibrate_decr,
++};
+diff --git a/arch/powerpc/sysdev/fsl_85xx_l2ctlr.c b/arch/powerpc/sysdev/fsl_85xx_l2ctlr.c
+index 5d7384c..68cac72 100644
+--- a/arch/powerpc/sysdev/fsl_85xx_l2ctlr.c
++++ b/arch/powerpc/sysdev/fsl_85xx_l2ctlr.c
+@@ -35,6 +35,11 @@ static int get_cache_sram_params(struct sram_parameters *sram_params)
+ 	unsigned long long addr;
+ 	unsigned int size;
+ 	char *str;
++	
++	sram_params->sram_addr = 0xfff00000;
++        sram_params->sram_size = 0x10000;
++
++        return 0;
+ 
+ 	if (!cache_sram)
+ 		return -EINVAL;
+diff --git a/drivers/rtc/Kconfig b/drivers/rtc/Kconfig
+index 923a9da..4f7f8d4 100644
+--- a/drivers/rtc/Kconfig
++++ b/drivers/rtc/Kconfig
+@@ -436,6 +436,15 @@ config RTC_DRV_RV3029C2
+ 	  This driver can also be built as a module. If so, the module
+ 	  will be called rtc-rv3029c2.
+ 
++config RTC_DRV_SD2405
++	tristate "XingWeiFan Technology Inc. SD2405 RTC"
++	help
++	  If you say yes here you get support for the XINGWeiFan Technology
++	  Inc. SD2405 RTC chip.
++
++	  This driver can also be built as a module. If so, the module
++	  will be called rtc-sd2405.
++
+ endif # I2C
+ 
+ comment "SPI RTC drivers"
+diff --git a/drivers/rtc/Makefile b/drivers/rtc/Makefile
+index 4418ef3..5d32229 100644
+--- a/drivers/rtc/Makefile
++++ b/drivers/rtc/Makefile
+@@ -120,3 +120,4 @@ obj-$(CONFIG_RTC_DRV_VT8500)	+= rtc-vt8500.o
+ obj-$(CONFIG_RTC_DRV_WM831X)	+= rtc-wm831x.o
+ obj-$(CONFIG_RTC_DRV_WM8350)	+= rtc-wm8350.o
+ obj-$(CONFIG_RTC_DRV_X1205)	+= rtc-x1205.o
++obj-$(CONFIG_RTC_DRV_SD2405) += rtc-sd2405.o
+diff --git a/drivers/rtc/rtc-sd2405.c b/drivers/rtc/rtc-sd2405.c
+new file mode 100644
+index 0000000..4a2bba9
+--- /dev/null
++++ b/drivers/rtc/rtc-sd2405.c
+@@ -0,0 +1,246 @@
++/*
++ * rtc class driver for the SD2405 chip
++ *
++ * Author: Dale Farnsworth <dale@farnsworth.org>
++ *
++ * based on previously existing rtc class drivers
++ *
++ * 2007 (c) MontaVista, Software, Inc.  This file is licensed under
++ * the terms of the GNU General Public License version 2.  This program
++ * is licensed "as is" without any warranty of any kind, whether express
++ * or implied.
++ */
++
++#include <linux/module.h>
++#include <linux/i2c.h>
++#include <linux/bcd.h>
++#include <linux/rtc.h>
++#include <linux/delay.h>
++
++#define DRV_VERSION "0.1"
++
++/*
++ * register indices
++ */
++#define SD2405_REG_SC			0x0	    /* seconds      00-59 */
++#define SD2405_REG_MN			0x1	    /* minutes      00-59 */
++#define SD2405_REG_HR			0x2	    /* hours        00-23 */
++#define SD2405_REG_DW			0x3	    /* day of week   1-7  */
++#define SD2405_REG_DT			0x4	    /* day of month 00-31 */
++#define SD2405_REG_MO			0x5	    /* month        01-12 */
++#define SD2405_REG_YR			0x6	    /* year         00-99 */
++
++#define SD2405_REG_CTRL1		0xf	    /* control 1 */
++#define SD2405_REG_CTRL2		0x10	/* control 2 */
++#define SD2405_REG_CTRL3		0x11	/* control 3 ARST*/
++
++#define SD2405_REG_LEN			7
++
++/*
++ * register write protect
++ */
++#define SD2405_REG_CONTROL1_WRITE	0x80
++#define SD2405_REG_CONTROL2_WRITE	0x84
++
++
++#define SD2405_IDLE_TIME_AFTER_WRITE	3	/* specification says 2.5 mS */
++
++static struct i2c_driver sd2405_driver;
++
++static int sd2405_i2c_read_regs(struct i2c_client *client, u8 *buf)
++{
++	struct i2c_msg msgs[1] = {
++		{
++		 .addr = client->addr,
++		 .flags = I2C_M_RD,	/* read */
++		 .len = SD2405_REG_LEN,
++		 .buf = buf}
++	};
++	int rc;
++
++	rc = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
++	if (rc != ARRAY_SIZE(msgs)) {
++		dev_err(&client->dev, "%s: register read failed\n", __func__);
++		return -EIO;
++	}
++	return 0;
++}
++
++static int sd2405_i2c_write_regs(struct i2c_client *client, u8 const *buf)
++{
++	int rc;
++   
++    u8 temp_reg[SD2405_REG_LEN+1] = {0};
++    memcpy(&temp_reg[1], buf, SD2405_REG_LEN);
++    
++	struct i2c_msg msgs[1] = {
++		{
++		 .addr = client->addr,
++		 .flags = 0,	/* write */
++		 .len = SD2405_REG_LEN+1,
++		 .buf = temp_reg}
++	};
++   
++	rc = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
++	if (rc != ARRAY_SIZE(msgs))
++		goto write_failed;
++	msleep(SD2405_IDLE_TIME_AFTER_WRITE);
++
++	return 0;
++
++ write_failed:
++	dev_err(&client->dev, "%s: register write failed\n", __func__);
++	return -EIO;
++}
++
++static int sd2405_i2c_read_time(struct i2c_client *client, struct rtc_time *tm)
++{
++	int rc;
++	u8 regs[SD2405_REG_LEN];
++
++	rc = sd2405_i2c_read_regs(client, regs);
++	if (rc < 0)
++		return rc;
++
++	tm->tm_sec = bcd2bin(regs[SD2405_REG_SC]);
++	tm->tm_min = bcd2bin(regs[SD2405_REG_MN]);
++	tm->tm_hour = bcd2bin(regs[SD2405_REG_HR] & 0x3f);
++	tm->tm_wday = bcd2bin(regs[SD2405_REG_DW]);
++	tm->tm_mday = bcd2bin(regs[SD2405_REG_DT]);
++	tm->tm_mon = bcd2bin(regs[SD2405_REG_MO]) - 1;
++	tm->tm_year = bcd2bin(regs[SD2405_REG_YR]) + 100;
++
++	return 0;
++}
++
++static int sd2405_i2c_set_write_protect(struct i2c_client *client)
++{
++	int rc;
++	rc = i2c_smbus_write_byte_data(client, SD2405_REG_CTRL1, 0);
++	rc += i2c_smbus_write_byte_data(client, SD2405_REG_CTRL2, 0);    
++	if (rc < 0) {
++		dev_err(&client->dev, "%s: control register write failed\n",
++			__func__);
++		return -EIO;
++	}
++	return 0;
++}
++
++static int sd2405_i2c_clear_write_protect(struct i2c_client *client)
++{
++	int rc;
++	rc = i2c_smbus_write_byte_data(client, SD2405_REG_CTRL2, SD2405_REG_CONTROL1_WRITE);    
++	rc += i2c_smbus_write_byte_data(client, SD2405_REG_CTRL1, SD2405_REG_CONTROL2_WRITE);
++	if (rc < 0) {
++		dev_err(&client->dev, "%s: control register write failed\n",
++			__func__);
++		return -EIO;
++	}
++	return 0;
++}
++
++static int
++sd2405_i2c_set_time(struct i2c_client *client, struct rtc_time const *tm)
++{
++	u8 regs[SD2405_REG_LEN];
++	int rc;
++
++	rc = sd2405_i2c_clear_write_protect(client);
++	if (rc < 0)
++		return rc;
++
++	regs[SD2405_REG_SC] = bin2bcd(tm->tm_sec);
++	regs[SD2405_REG_MN] = bin2bcd(tm->tm_min);
++	regs[SD2405_REG_HR] = bin2bcd(tm->tm_hour)|0x80;
++	regs[SD2405_REG_DW] = bin2bcd(tm->tm_wday);
++	regs[SD2405_REG_DT] = bin2bcd(tm->tm_mday);
++	regs[SD2405_REG_MO] = bin2bcd(tm->tm_mon + 1);
++	regs[SD2405_REG_YR] = bin2bcd(tm->tm_year - 100);
++
++	rc = sd2405_i2c_write_regs(client, regs);
++	if (rc < 0)
++		return rc;
++    
++    rc = sd2405_i2c_set_write_protect(client);
++	if (rc < 0)
++		return rc;
++    
++	return 0;
++}
++
++static int sd2405_rtc_read_time(struct device *dev, struct rtc_time *tm)
++{
++	return sd2405_i2c_read_time(to_i2c_client(dev), tm);
++}
++
++static int sd2405_rtc_set_time(struct device *dev, struct rtc_time *tm)
++{
++	return sd2405_i2c_set_time(to_i2c_client(dev), tm);
++}
++
++static int sd2405_remove(struct i2c_client *client)
++{
++	struct rtc_device *rtc = i2c_get_clientdata(client);
++
++	if (rtc)
++		rtc_device_unregister(rtc);
++
++	return 0;
++}
++
++static const struct rtc_class_ops sd2405_rtc_ops = {
++	.read_time = sd2405_rtc_read_time,
++	.set_time = sd2405_rtc_set_time,
++};
++
++static int
++sd2405_probe(struct i2c_client *client, const struct i2c_device_id *id)
++{
++	struct rtc_device *rtc;
++
++	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
++		return -ENODEV;
++
++	dev_info(&client->dev, "chip found, driver version " DRV_VERSION "\n");
++
++	rtc = rtc_device_register(sd2405_driver.driver.name,
++				  &client->dev, &sd2405_rtc_ops, THIS_MODULE);
++	if (IS_ERR(rtc))
++		return PTR_ERR(rtc);
++
++	i2c_set_clientdata(client, rtc);
++
++	return 0;
++}
++
++static struct i2c_device_id sd2405_id[] = {
++	{ "sd2405", 0 },
++	{ }
++};
++
++static struct i2c_driver sd2405_driver = {
++	.driver = {
++		   .name = "rtc-sd2405",
++		   },
++	.probe = sd2405_probe,
++	.remove = sd2405_remove,
++	.id_table = sd2405_id,
++};
++
++static int __init sd2405_init(void)
++{
++	return i2c_add_driver(&sd2405_driver);
++}
++
++static void __exit sd2405_exit(void)
++{
++	i2c_del_driver(&sd2405_driver);
++}
++
++MODULE_DESCRIPTION("Maxim SD2405 RTC driver");
++MODULE_AUTHOR("Dale Farnsworth <dale@farnsworth.org>");
++MODULE_LICENSE("GPL");
++MODULE_VERSION(DRV_VERSION);
++
++module_init(sd2405_init);
++module_exit(sd2405_exit);

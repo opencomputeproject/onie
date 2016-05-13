@@ -1,0 +1,45 @@
+#!/bin/sh
+
+#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# U-Boot systems boot time initializations
+
+init_arch()
+{
+    # Look for the NOR flash node in the device tree with property
+    # "env_size".
+    env_file=$(find /proc/device-tree/ -name env_size)
+    [ -n "$env_file" ] || {
+        log_failure_msg "Unable to find u-boot environment device-tree node"
+        return 1
+    }
+    env_sz="0x$(hd $env_file | awk 'FNR==1 {print $2 $3 $4 $5}')"
+    [ -n "$env_sz" ] || {
+        log_failure_msg "Unable to find u-boot environment size"
+        return 1
+    }
+    mtd=$(grep uboot-env /proc/mtd | sed -e 's/:.*$//')
+    [ -c "/dev/$mtd" ] || {
+        log_failure_msg "Unable to find u-boot environment mtd device: /dev/$mtd"
+        return 1
+    }
+    sect_sz="0x$(grep uboot-env /proc/mtd | awk '{print $3}')"
+    [ -n "$sect_sz" ] || {
+        log_failure_msg "Unable to find u-boot environment mtd erase size"
+        return 1
+    }
+
+    (cat <<EOF
+# MTD device name       Device offset   Env. size       Flash sector size
+/dev/$mtd               0x00000000      $env_sz         $sect_sz
+EOF
+) > /etc/fw_env.config
+    
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

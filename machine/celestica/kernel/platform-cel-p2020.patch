@@ -1,0 +1,1406 @@
+
+
+diff --git a/arch/powerpc/boot/dts/cel_d2030.dts b/arch/powerpc/boot/dts/cel_d2030.dts
+new file mode 100644
+index 0000000..91332eb
+--- /dev/null
++++ b/arch/powerpc/boot/dts/cel_d2030.dts
+@@ -0,0 +1,294 @@
++/*
++ * Celestica D2030 Device Tree Source
++ *
++ * Copyright 2013 Cumulus Networks, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++/include/ "p2020si.dtsi"
++
++/ {
++	model = "cel,d2030";
++	compatible = "cel,d2030";
++
++	aliases {
++		ethernet0 = &enet1;
++		serial0 = &serial0;
++		serial1 = &serial1;
++		pci2 = &pci2;
++	};
++
++	cpus {
++		#address-cells = <0x1>;
++		#size-cells = <0x0>;
++		PowerPC,P2020@0 {
++			device_type = "cpu";
++			reg = <0x0>;
++			next-level-cache = <0x1>;
++		};
++		PowerPC,P2020@1 {
++			device_type = "cpu";
++			reg = <0x1>;
++			next-level-cache = <0x1>;
++		};
++	};
++
++	memory {
++		device_type = "memory";
++	};
++
++	localbus@ffe05000 {
++		/* NOR and NAND Flashes, CPLD */
++		ranges = <0x0 0x0 0x0 0xec000000 0x04000000
++			  0x1 0x0 0x0 0xffa00000 0x00100000
++			  0x2 0x0 0x0 0xffb80000 0x00020000
++			  0x3 0x0 0x0 0xffb00000 0x00000400
++			  0x4 0x0 0x0 0xffb40000 0x00000400>;
++
++		nor@0,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x04000000>;
++			bank-width = <2>;
++			device-width = <1>;
++
++			partition@0 {
++				/* Entire flash minus (u-boot + onie) */
++				reg = <0x00000000 0x03b60000>;
++				label = "open";
++			};
++			partition@1 {
++				/* 4MB onie */
++				reg = <0x03b60000 0x00400000>;
++				label = "onie";
++			};
++			partition@2 {
++				/* 128KB, 1 sector */
++				reg = <0x03f60000 0x00020000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++			partition@3 {
++				/* 512KB u-boot */
++				reg = <0x03f80000 0x00080000>;
++				label = "uboot";
++			};
++		};
++
++		nand@1,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,p2020-fcm-nand",
++				     "fsl,elbc-fcm-nand";
++			reg = <0x1 0x0 0x40000>;
++
++			partition@0 {
++				reg = <0x0 0x40000000>;
++				label = "open2";
++			};
++
++
++		};
++		lpsram@2,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "redstone_lspram";
++			reg = <0x2 0x0 0x20000>;
++
++			partition@0 {
++				reg = <0x0 0x20000>;
++				label = "open3";
++			};
++		};
++		CPLD1@3,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "redstone_cpld";
++			reg = <0x3 0x0 0x400>;
++		};
++		CPLD234@4,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "redstone_cpld";
++			reg = <0x4 0x0 0x400>;
++		};
++	};
++
++	soc@ffe00000 {
++		i2c@3000 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl-i2c";
++			fsl,preserve-clocking;
++
++			rtc@68 {
++				compatible = "dallas,ds1337";
++				reg = <0x68>;
++				interrupt-parent = <&mpic>;
++				interrupts = <4 3>;
++			};
++			board_eeprom@50 {
++				compatible = "at,24c64";
++				reg = <0x50>;
++				label = "board_eeprom";
++			};
++			temp_ambient2@4b {
++				compatible = "nxp,lm75a";
++				reg = <0x4b>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			temp_bcm@4e {
++				compatible = "nxp,lm75a";
++				reg = <0x4e>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			psu_eeprom@51 {
++				compatible = "at,24c02";
++				reg = <0x51>;
++				label = "psu2_eeprom";
++				read-only;
++			};
++		};
++
++		i2c@3100 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl-i2c";
++			fsl,preserve-clocking;
++
++			temp_p2020@48 {
++				compatible = "nxp,lm75a";
++				reg = <0x48>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			temp_rearoutput@49 {
++				compatible = "nxp,lm75a";
++				reg = <0x49>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			pwm@4d {
++				compatible = "smsc,emc2305";
++				reg = <0x4d>;
++				interrupt-parent = <&mpic>;
++				interrupts = <6 3>;
++			};
++			temp_ambient1@4f {
++				compatible = "nxp,lm75a";
++				reg = <0x4f>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			psu_eeprom@50 {
++				compatible = "at,24c02";
++				reg = <0x50>;
++				label = "psu1_eeprom";
++				read-only;
++			};
++			power@60 {
++				compatible = "ons,ncp4200";
++				reg = <0x60>;
++			};
++		};
++
++		usb@22000 {
++			phy_type = "ulpi";
++		};
++
++		enet0: ethernet@24000 {
++			status = "disabled";
++		};
++
++		mdio0: mdio@24520 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x24520 0x20>;
++			phy0: ethernet-phy@3 {
++				reg = <0x3>;
++				device_type = "ethernet-phy";
++			};
++		};
++
++		enet1: ethernet@25000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			cell-index = <0x1>;
++			device_type = "network";
++			model = "eTSEC";
++			compatible = "gianfar";
++			reg = <0x25000 0x1000>;
++			ranges = <0x0 0x25000 0x1000>;
++			interrupts = <
++			             0x23 0x2
++			             0x24 0x2
++			             0x28 0x2>;
++			interrupt-parent = <&mpic>;
++			tbi-handle = <&tbi0>;
++			phy-handle = <&phy0>;
++			phy-connection-type = "sgmii";
++		};
++
++		mdio1: mdio@25520 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			compatible = "fsl,gianfar-tbi";
++			reg = <0x25520 0x20>;
++			tbi0: tbi-phy@11 {
++				reg = <0x11>;
++				device_type = "tbi-phy";
++			};
++		};
++
++		enet2: ethernet@26000 {
++			status = "disabled";
++		};
++
++		sdhci@2e000 {
++			status = "disabled";
++		};
++	};
++
++	pci0: pcie@ffe08000 {
++		status = "disabled";
++	};
++
++	pci1: pcie@ffe09000 {
++		status = "disabled";
++	};
++
++	pci2: pcie@ffe0a000 {
++		ranges = <0x2000000 0x0 0xa0000000 0 0xa0000000 0x0 0x20000000
++			  0x1000000 0x0 0x00000000 0 0xffc30000 0x0 0x10000>;
++		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++		interrupt-map = <
++			/* IDSEL 0x0 */
++			0000 0x0 0x0 0x1 &mpic 0x0 0x1
++			0000 0x0 0x0 0x2 &mpic 0x1 0x1
++			0000 0x0 0x0 0x3 &mpic 0x2 0x1
++			0000 0x0 0x0 0x4 &mpic 0x3 0x1
++			>;
++
++		pcie@0 {
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#size-cells = <2>;
++			#address-cells = <3>;
++			device_type = "pci";
++			ranges = <0x2000000 0x0 0xa0000000
++				  0x2000000 0x0 0xa0000000
++				  0x0 0x20000000
++
++				  0x1000000 0x0 0x0
++				  0x1000000 0x0 0x0
++				  0x0 0x10000>;
++		};
++	};
++};
+diff --git a/arch/powerpc/boot/dts/cel_kennisis.dts b/arch/powerpc/boot/dts/cel_kennisis.dts
+new file mode 100644
+index 0000000..4e75d17
+--- /dev/null
++++ b/arch/powerpc/boot/dts/cel_kennisis.dts
+@@ -0,0 +1,251 @@
++/*
++ * Celestica Kennesis Device Tree Source
++ *
++ * Copyright 2013 Cumulus Networks, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++/include/ "p2020si.dtsi"
++
++/ {
++	model = "cel,kennisis";
++	compatible = "cel,kennisis";
++
++	aliases {
++		ethernet0 = &enet1;
++		serial0 = &serial0;
++		pci2 = &pci2;
++	};
++
++	memory {
++		device_type = "memory";
++	};
++
++	localbus@ffe05000 {
++		/* NOR and NAND Flashes, CPLD */
++		ranges = <0x0 0x0 0x0 0xec000000 0x04000000
++			  0x1 0x0 0x0 0xffa00000 0x00100000
++			  0x2 0x0 0x0 0xffb00000 0x00100000>;
++
++		nor@0,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x04000000>;
++			bank-width = <2>;
++			device-width = <1>;
++
++			partition@0 {
++				/* Entire flash minus (u-boot + onie) */
++				reg = <0x00000000 0x03b60000>;
++				label = "open";
++			};
++			partition@1 {
++				/* 4MB onie */
++				reg = <0x03b60000 0x00400000>;
++				label = "onie";
++			};
++			partition@2 {
++				/* 128KB, 1 sector */
++				reg = <0x03f60000 0x00020000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++			partition@3 {
++				/* 512KB u-boot */
++				reg = <0x03f80000 0x00080000>;
++				label = "uboot";
++			};
++		};
++
++		nand@1,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,p2020-fcm-nand",
++				     "fsl,elbc-fcm-nand";
++			reg = <0x1 0x0 0x40000>;
++
++			partition@0 {
++				reg = <0x0 0x40000000>;
++				label = "open2";
++			};
++
++		};
++
++		CPLD@2,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "kennisis_cpld";
++			reg = <0x2 0x0 0x40000>;
++		};
++	};
++
++	soc@ffe00000 {
++		i2c@3000 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			fsl,preserve-clocking;
++
++			rtc@68 {
++				compatible = "dallas,ds1337";
++				reg = <0x68>;
++				interrupt-parent = <&mpic>;
++				interrupts = <4 3>;
++			};
++			board_eeprom@50 {
++				compatible = "at,24c64";
++				reg = <0x50>;
++				label = "board_eeprom";
++			};
++			temp_ambient2@4b {
++				compatible = "nxp,lm75a";
++				reg = <0x4b>;
++				interrupt-parent = <&mpic>;
++				interrupts = <3 3>;
++			};
++			temp_bcm@4d {
++				compatible = "nxp,lm75a";
++				reg = <0x4d>;
++				interrupt-parent = <&mpic>;
++				interrupts = <3 3>;
++			};
++			psu_eeprom@51 {
++				compatible = "at,24c02";
++				reg = <0x51>;
++				label = "psu2_eeprom";
++				read-only;
++			};
++		};
++
++		i2c@3100 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			fsl,preserve-clocking;
++
++			pwm@4d {
++				compatible = "smsc,emc2305";
++				reg = <0x4d>;
++				interrupt-parent = <&mpic>;
++				interrupts = <2 3>;
++			};
++			temp_ambient1@4f {
++				compatible = "nxp,lm75a";
++				reg = <0x4f>;
++				interrupt-parent = <&mpic>;
++				interrupts = <3 3>;
++			};
++			temp_systemoutlet@4e {
++				compatible = "nxp,lm75a";
++				reg = <0x4e>;
++				interrupt-parent = <&mpic>;
++				interrupts = <3 3>;
++			};
++			temp_p2020@48 {
++				compatible = "nxp,lm75a";
++				reg = <0x48>;
++				interrupt-parent = <&mpic>;
++				interrupts = <3 3>;
++			};
++			power@60 {
++				compatible = "ons,ncp4200";
++				reg = <0x60>;
++			};
++			psu_eeprom@50 {
++				compatible = "at,24c02";
++				reg = <0x50>;
++				label = "psu1_eeprom";
++				read-only;
++			};
++		};
++
++		serial1: serial@4600 {
++			status = "disabled";
++		};
++
++		usb@22000 {
++			phy_type = "ulpi";
++		};
++
++/*		mdio@24520 {
++			phy0: ethernet-phy@3 {
++				reg = <0x3>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 1>;
++			};
++		};
++*/
++		mdio@24520 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x24520 0x20>;
++			phy0: ethernet-phy@3 {
++				reg = <0x3>;
++				device_type = "ethernet-phy";
++			};
++		};
++		mdio@25520 {
++			tbi0: tbi-phy@11 {
++				reg = <0x10>;
++				device_type = "tbi-phy";
++			};
++		};
++
++		enet0: ethernet@24000 {
++			status = "disabled";
++		};
++
++		enet1: ethernet@25000 {
++			tbi-handle = <&tbi0>;
++			phy-handle = <&phy0>;
++			phy-connection-type = "sgmii";
++		};
++
++		enet2: ethernet@26000 {
++			status = "disabled";
++		};
++
++		sdhci@2e000 {
++			status = "disabled";
++		};
++	};
++
++	pci0: pcie@ffe08000 {
++		status = "disabled";
++	};
++
++	pci1: pcie@ffe09000 {
++		status = "disabled";
++	};
++
++	pci2: pcie@ffe0a000 {
++		ranges = <0x2000000 0x0 0xa0000000 0 0xa0000000 0x0 0x20000000
++			  0x1000000 0x0 0x00000000 0 0xffc20000 0x0 0x10000>;
++		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++		interrupt-map = <
++			/* IDSEL 0x0 */
++			0000 0x0 0x0 0x1 &mpic 0x0 0x1
++			0000 0x0 0x0 0x2 &mpic 0x1 0x1
++			0000 0x0 0x0 0x3 &mpic 0x2 0x1
++			0000 0x0 0x0 0x4 &mpic 0x3 0x1
++			>;
++
++		pcie@0 {
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#size-cells = <2>;
++			#address-cells = <3>;
++			device_type = "pci";
++			ranges = <0x2000000 0x0 0xa0000000
++				  0x2000000 0x0 0xa0000000
++				  0x0 0x20000000
++
++				  0x1000000 0x0 0x0
++				  0x1000000 0x0 0x0
++				  0x0 0x10000>;
++		};
++	};
++};
+diff --git a/arch/powerpc/boot/dts/cel_redstone.dts b/arch/powerpc/boot/dts/cel_redstone.dts
+new file mode 100644
+index 0000000..e5d775a
+--- /dev/null
++++ b/arch/powerpc/boot/dts/cel_redstone.dts
+@@ -0,0 +1,292 @@
++/*
++ * Celestica Redstone Device Tree Source
++ *
++ * Copyright 2013 Cumulus Networks, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++/include/ "p2020si.dtsi"
++
++/ {
++	model = "cel,redstone";
++	compatible = "cel,redstone";
++
++	aliases {
++		ethernet0 = &enet1;
++		serial0 = &serial0;
++		serial1 = &serial1;
++		pci2 = &pci2;
++	};
++
++	cpus {
++		#address-cells = <0x1>;
++		#size-cells = <0x0>;
++		PowerPC,P2020@0 {
++			device_type = "cpu";
++			reg = <0x0>;
++			next-level-cache = <0x1>;
++		};
++		PowerPC,P2020@1 {
++			device_type = "cpu";
++			reg = <0x1>;
++			next-level-cache = <0x1>;
++		};
++	};
++
++	memory {
++		device_type = "memory";
++	};
++
++	localbus@ffe05000 {
++		/* NOR and NAND Flashes, CPLD */
++		ranges = <0x0 0x0 0x0 0xec000000 0x04000000
++			  0x1 0x0 0x0 0xffa00000 0x00100000
++			  0x2 0x0 0x0 0xffb80000 0x00020000
++			  0x3 0x0 0x0 0xffb00000 0x00000400
++			  0x4 0x0 0x0 0xffb40000 0x00000400>;
++
++		nor@0,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x04000000>;
++			bank-width = <2>;
++			device-width = <1>;
++
++			partition@0 {
++				/* Entire flash minus (u-boot + onie) */
++				reg = <0x00000000 0x03b60000>;
++				label = "open";
++			};
++			partition@1 {
++				/* 4MB onie */
++				reg = <0x03b60000 0x00400000>;
++				label = "onie";
++			};
++			partition@2 {
++				/* 128KB, 1 sector */
++				reg = <0x03f60000 0x00020000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++			partition@3 {
++				/* 512KB u-boot */
++				reg = <0x03f80000 0x00080000>;
++				label = "uboot";
++			};
++		};
++
++		nand@1,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,p2020-fcm-nand",
++				     "fsl,elbc-fcm-nand";
++			reg = <0x1 0x0 0x40000>;
++
++			partition@0 {
++				reg = <0x0 0x40000000>;
++				label = "open2";
++			};
++		};
++		lpsram@2,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "redstone_lspram";
++			reg = <0x2 0x0 0x20000>;
++
++			partition@0 {
++				reg = <0x0 0x20000>;
++				label = "open3";
++			};
++		};
++		CPLD1@3,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "redstone_cpld";
++			reg = <0x3 0x0 0x400>;
++		};
++		CPLD234@4,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "redstone_cpld";
++			reg = <0x4 0x0 0x400>;
++		};
++	};
++
++	soc@ffe00000 {
++		i2c@3000 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl-i2c";
++			fsl,preserve-clocking;
++
++			rtc@68 {
++				compatible = "dallas,ds1337";
++				reg = <0x68>;
++				interrupt-parent = <&mpic>;
++				interrupts = <4 3>;
++			};
++			board_eeprom@50 {
++				compatible = "at,24c64";
++				reg = <0x50>;
++				label = "board_eeprom";
++			};
++			temp_ambient2@4b {
++				compatible = "nxp,lm75a";
++				reg = <0x4b>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			temp_bcm@4e {
++				compatible = "nxp,lm75a";
++				reg = <0x4e>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			psu_eeprom@51 {
++				compatible = "at,24c02";
++				reg = <0x51>;
++				label = "psu2_eeprom";
++				read-only;
++			};
++		};
++
++		i2c@3100 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl-i2c";
++			fsl,preserve-clocking;
++
++			temp_p2020@48 {
++				compatible = "nxp,lm75a";
++				reg = <0x48>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			temp_rearoutput@49 {
++				compatible = "nxp,lm75a";
++				reg = <0x49>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			pwm@4d {
++				compatible = "smsc,emc2305";
++				reg = <0x4d>;
++				interrupt-parent = <&mpic>;
++				interrupts = <6 3>;
++			};
++			temp_ambient1@4f {
++				compatible = "nxp,lm75a";
++				reg = <0x4f>;
++				interrupt-parent = <&mpic>;
++				interrupts = <5 3>;
++			};
++			psu_eeprom@50 {
++				compatible = "at,24c02";
++				reg = <0x50>;
++				label = "psu1_eeprom";
++				read-only;
++			};
++			power@60 {
++				compatible = "ons,ncp4200";
++				reg = <0x60>;
++			};
++		};
++
++		usb@22000 {
++			phy_type = "ulpi";
++		};
++
++		enet0: ethernet@24000 {
++			status = "disabled";
++		};
++
++		mdio0: mdio@24520 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x24520 0x20>;
++			phy0: ethernet-phy@3 {
++				reg = <0x3>;
++				device_type = "ethernet-phy";
++			};
++		};
++
++		enet1: ethernet@25000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			cell-index = <0x1>;
++			device_type = "network";
++			model = "eTSEC";
++			compatible = "gianfar";
++			reg = <0x25000 0x1000>;
++			ranges = <0x0 0x25000 0x1000>;
++			interrupts = <
++			             0x23 0x2
++			             0x24 0x2
++			             0x28 0x2>;
++			interrupt-parent = <&mpic>;
++			tbi-handle = <&tbi0>;
++			phy-handle = <&phy0>;
++			phy-connection-type = "sgmii";
++		};
++
++		mdio1: mdio@25520 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			compatible = "fsl,gianfar-tbi";
++			reg = <0x25520 0x20>;
++			tbi0: tbi-phy@11 {
++				reg = <0x11>;
++				device_type = "tbi-phy";
++			};
++		};
++
++		enet2: ethernet@26000 {
++			status = "disabled";
++		};
++
++		sdhci@2e000 {
++			status = "disabled";
++		};
++	};
++
++	pci0: pcie@ffe08000 {
++		status = "disabled";
++	};
++
++	pci1: pcie@ffe09000 {
++		status = "disabled";
++	};
++
++	pci2: pcie@ffe0a000 {
++		ranges = <0x2000000 0x0 0xa0000000 0 0xa0000000 0x0 0x20000000
++			  0x1000000 0x0 0x00000000 0 0xffc30000 0x0 0x10000>;
++		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++		interrupt-map = <
++			/* IDSEL 0x0 */
++			0000 0x0 0x0 0x1 &mpic 0x0 0x1
++			0000 0x0 0x0 0x2 &mpic 0x1 0x1
++			0000 0x0 0x0 0x3 &mpic 0x2 0x1
++			0000 0x0 0x0 0x4 &mpic 0x3 0x1
++			>;
++
++		pcie@0 {
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#size-cells = <2>;
++			#address-cells = <3>;
++			device_type = "pci";
++			ranges = <0x2000000 0x0 0xa0000000
++				  0x2000000 0x0 0xa0000000
++				  0x0 0x20000000
++
++				  0x1000000 0x0 0x0
++				  0x1000000 0x0 0x0
++				  0x0 0x10000>;
++		};
++	};
++};
+diff --git a/arch/powerpc/boot/dts/cel_smallstone.dts b/arch/powerpc/boot/dts/cel_smallstone.dts
+new file mode 100644
+index 0000000..415db24
+--- /dev/null
++++ b/arch/powerpc/boot/dts/cel_smallstone.dts
+@@ -0,0 +1,278 @@
++/*
++ * Celestica Smallstone Device Tree Source
++ *
++ * Copyright 2013 Cumulus Networks, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++/include/ "p2020si.dtsi"
++
++/ {
++	model = "cel,smallstone";
++	compatible = "cel,smallstone";
++
++	aliases {
++		ethernet0 = &enet1;
++		serial0 = &serial0;
++		serial1 = &serial1;
++		pci2 = &pci2;
++	};
++
++	cpus {
++		#address-cells = <0x1>;
++		#size-cells = <0x0>;
++		PowerPC,P2020@0 {
++			device_type = "cpu";
++			reg = <0x0>;
++			next-level-cache = <0x1>;
++		};
++		PowerPC,P2020@1 {
++			device_type = "cpu";
++			reg = <0x1>;
++			next-level-cache = <0x1>;
++		};
++	};
++
++	memory {
++		device_type = "memory";
++	};
++
++	localbus@ffe05000 {
++		/* NOR and NAND Flashes, CPLD */
++		ranges = <0x0 0x0 0x0 0xec000000 0x04000000
++			  0x1 0x0 0x0 0xffa00000 0x00100000
++			  0x2 0x0 0x0 0xffb80000 0x00020000
++			  0x3 0x0 0x0 0xffb00000 0x00000400
++			  0x4 0x0 0x0 0xffb40000 0x00000400>;
++
++		nor@0,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x04000000>;
++			bank-width = <2>;
++			device-width = <1>;
++
++			partition@0 {
++				/* Entire flash minus (u-boot + onie) */
++				reg = <0x00000000 0x03b60000>;
++				label = "open";
++			};
++			partition@1 {
++				/* 4MB onie */
++				reg = <0x03b60000 0x00400000>;
++				label = "onie";
++			};
++			partition@2 {
++				/* 128KB, 1 sector */
++				reg = <0x03f60000 0x00020000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++			partition@3 {
++				/* 512KB u-boot */
++				reg = <0x03f80000 0x00080000>;
++				label = "uboot";
++			};
++		};
++
++		nand@1,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,p2020-fcm-nand",
++				     "fsl,elbc-fcm-nand";
++			reg = <0x1 0x0 0x40000>;
++
++			partition@0 {
++				reg = <0x0 0x40000000>;
++				label = "open2";
++			};
++		};
++		lpsram@2,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "smallstone_lspram";
++			reg = <0x2 0x0 0x20000>;
++
++			partition@0 {
++				reg = <0x0 0x20000>;
++				label = "open3";
++			};
++		};
++		CPLD1@3,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "smallstone_cpld";
++			reg = <0x3 0x0 0x400>;
++		};
++		CPLD234@4,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "smallstone_cpld";
++			reg = <0x4 0x0 0x400>;
++		};
++	};
++
++	soc@ffe00000 {
++		i2c@3000 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl-i2c";
++			fsl,preserve-clocking;
++
++			rtc@68 {
++				compatible = "dallas,ds1337";
++				reg = <0x68>;
++			};
++			board_eeprom@50 {
++				compatible = "at,24c64";
++				reg = <0x50>;
++				label = "board_eeprom";
++			};
++			temp_ambient2@4b {
++				compatible = "nxp,lm75a";
++				reg = <0x4b>;
++			};
++			psu_eeprom@51 {
++				compatible = "at,24c02";
++				reg = <0x51>;
++				label = "psu2_eeprom";
++				read-only;
++			};
++		};
++
++		i2c@3100 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl-i2c";
++			fsl,preserve-clocking;
++
++			temp_p2020@48 {
++				compatible = "nxp,lm75a";
++				reg = <0x48>;
++			};
++			temp_rearoutput@49 {
++				compatible = "nxp,lm75a";
++				reg = <0x49>;
++			};
++			pwm@4d {
++				compatible = "smsc,emc2305";
++				reg = <0x4d>;
++			};
++			temp_bcm@4e {
++				compatible = "nxp,lm75a";
++				reg = <0x4e>;
++			};
++			temp_ambient1@4f {
++				compatible = "nxp,lm75a";
++				reg = <0x4f>;
++			};
++			psu_eeprom@50 {
++				compatible = "at,24c02";
++				reg = <0x50>;
++				label = "psu1_eeprom";
++				read-only;
++			};
++			power@60 {
++				compatible = "ons,ncp4200";
++				reg = <0x60>;
++			};
++		};
++
++		usb@22000 {
++			phy_type = "ulpi";
++		};
++
++		enet0: ethernet@24000 {
++			status = "disabled";
++		};
++
++		mdio0: mdio@24520 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x24520 0x20>;
++			phy0: ethernet-phy@3 {
++				reg = <0x3>;
++				device_type = "ethernet-phy";
++			};
++		};
++
++		enet1: ethernet@25000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
++			cell-index = <0x1>;
++			device_type = "network";
++			model = "eTSEC";
++			compatible = "gianfar";
++			reg = <0x25000 0x1000>;
++			ranges = <0x0 0x25000 0x1000>;
++			interrupts = <
++			             0x23 0x2
++			             0x24 0x2
++			             0x28 0x2>;
++			interrupt-parent = <&mpic>;
++			tbi-handle = <&tbi0>;
++			phy-handle = <&phy0>;
++			phy-connection-type = "sgmii";
++		};
++
++		mdio1: mdio@25520 {
++			#address-cells = <0x1>;
++			#size-cells = <0x0>;
++			compatible = "fsl,gianfar-tbi";
++			reg = <0x25520 0x20>;
++			tbi0: tbi-phy@11 {
++				reg = <0x11>;
++				device_type = "tbi-phy";
++			};
++		};
++
++		enet2: ethernet@26000 {
++			status = "disabled";
++		};
++
++		sdhci@2e000 {
++			status = "disabled";
++		};
++	};
++
++	pci0: pcie@ffe08000 {
++		status = "disabled";
++	};
++
++	pci1: pcie@ffe09000 {
++		status = "disabled";
++	};
++
++	pci2: pcie@ffe0a000 {
++		ranges = <0x2000000 0x0 0xa0000000 0 0xa0000000 0x0 0x20000000
++			  0x1000000 0x0 0x00000000 0 0xffc30000 0x0 0x10000>;
++		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++		interrupt-map = <
++			/* IDSEL 0x0 */
++			0000 0x0 0x0 0x1 &mpic 0x0 0x1
++			0000 0x0 0x0 0x2 &mpic 0x1 0x1
++			0000 0x0 0x0 0x3 &mpic 0x2 0x1
++			0000 0x0 0x0 0x4 &mpic 0x3 0x1
++			>;
++
++		pcie@0 {
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#size-cells = <2>;
++			#address-cells = <3>;
++			device_type = "pci";
++			ranges = <0x2000000 0x0 0xa0000000
++				  0x2000000 0x0 0xa0000000
++				  0x0 0x20000000
++
++				  0x1000000 0x0 0x0
++				  0x1000000 0x0 0x0
++				  0x0 0x10000>;
++		};
++	};
++};
+diff --git a/arch/powerpc/platforms/85xx/Kconfig b/arch/powerpc/platforms/85xx/Kconfig
+index d7946be..adffa81 100644
+--- a/arch/powerpc/platforms/85xx/Kconfig
++++ b/arch/powerpc/platforms/85xx/Kconfig
+@@ -222,6 +222,46 @@ config P4080_DS
+ 	help
+ 	  This option enables support for the P4080 DS board
+ 
++config CEL_P2020
++	bool "Celestica P2020"
++	select DEFAULT_UIMAGE
++	help
++	  This option enables support for Celestica P2020 based
++	  networking platforms
++
++config CEL_REDSTONE
++	bool "Celestica Redstone"
++	select DEFAULT_UIMAGE
++	select CEL_P2020
++    	help
++	  This option enables support for the Celestica Redstone 48x10G
++	  4x40G networking platform
++	  
++config CEL_D2030
++	bool "Celestica D2030"
++	select DEFAULT_UIMAGE
++	select CEL_P2020
++    help
++	  This option enables support for the Celestica D2030 48x10G Base-T
++	  4x40G networking platform
++
++
++config CEL_KENNISIS
++	bool "Celestica Kennisis"
++	select DEFAULT_UIMAGE
++	select CEL_P2020
++	help
++	  This option enables support for the Celestica Kennisis 48x1G
++	  4x10G networking platform
++
++config CEL_SMALLSTONE
++	bool "Celestica Smallstone"
++	select DEFAULT_UIMAGE
++	select CEL_P2020
++	help
++	  This option enables support for the Celestica Smallstone
++	  32x40G networking platform
++
+ endif # PPC32
+ 
+ config P5020_DS
+diff --git a/arch/powerpc/platforms/85xx/Makefile b/arch/powerpc/platforms/85xx/Makefile
+index bc5acb9..7831546 100644
+--- a/arch/powerpc/platforms/85xx/Makefile
++++ b/arch/powerpc/platforms/85xx/Makefile
+@@ -25,3 +25,4 @@ obj-$(CONFIG_SBC8548)     += sbc8548.o
+ obj-$(CONFIG_SOCRATES)    += socrates.o socrates_fpga_pic.o
+ obj-$(CONFIG_KSI8560)	  += ksi8560.o
+ obj-$(CONFIG_XES_MPC85xx) += xes_mpc85xx.o
++obj-$(CONFIG_CEL_P2020)   += cel_p2020.o
+diff --git a/arch/powerpc/platforms/85xx/cel_p2020.c b/arch/powerpc/platforms/85xx/cel_p2020.c
+new file mode 100644
+index 0000000..87366e1
+--- /dev/null
++++ b/arch/powerpc/platforms/85xx/cel_p2020.c
+@@ -0,0 +1,199 @@
++/*
++ * Celestica P2020 setup and early boot code plus other random bits.
++ *
++ * Copyright 2013 Cumulus Networks, Inc.
++ *
++ * SPDX-License-Identifier:		GPL-2.0+
++ */
++
++#include <linux/stddef.h>
++#include <linux/kernel.h>
++#include <linux/pci.h>
++#include <linux/kdev_t.h>
++#include <linux/delay.h>
++#include <linux/seq_file.h>
++#include <linux/interrupt.h>
++#include <linux/of_platform.h>
++
++#include <asm/system.h>
++#include <asm/time.h>
++#include <asm/machdep.h>
++#include <asm/pci-bridge.h>
++#include <mm/mmu_decl.h>
++#include <asm/prom.h>
++#include <asm/udbg.h>
++#include <asm/mpic.h>
++
++#include <sysdev/fsl_soc.h>
++#include <sysdev/fsl_pci.h>
++
++#undef DEBUG
++
++#ifdef DEBUG
++#define DBG(fmt, args...) printk(KERN_ERR "%s: " fmt, __func__, ## args)
++#else
++#define DBG(fmt, args...)
++#endif
++
++/*******************************************************************************
++ *
++ * Platform initialization functions
++ *
++ *******************************************************************************
++*/
++
++/*
++ * Initialize the interrupt controller
++ */
++static void __init celestica_p2020_pic_init(void)
++{
++	struct mpic *mpic;
++	struct resource r;
++	struct device_node *np;
++
++	np = of_find_node_by_type(NULL, "open-pic");
++	if (np == NULL) {
++		printk(KERN_ERR "Could not find open-pic node\n");
++		return;
++	}
++
++	if (of_address_to_resource(np, 0, &r)) {
++		printk(KERN_ERR "Failed to map mpic register space\n");
++		of_node_put(np);
++		return;
++	}
++
++	mpic = mpic_alloc(np, r.start,
++		  MPIC_PRIMARY | MPIC_WANTS_RESET |
++		  MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS |
++		  MPIC_SINGLE_DEST_CPU,
++		  0, 256, " OpenPIC  ");
++
++	BUG_ON(mpic == NULL);
++	of_node_put(np);
++
++	mpic_init(mpic);
++}
++
++/*
++ * Setup the architecture
++ */
++#ifdef CONFIG_SMP
++extern void __init mpc85xx_smp_init(void);
++#endif
++
++static void __init celestica_p2020_setup_arch(void)
++{
++	struct device_node *cpu;
++	const unsigned int *fp;
++#ifdef CONFIG_PCI
++	struct device_node *np;
++#endif
++
++	if (ppc_md.progress)
++		ppc_md.progress("celestica_p2020_setup_arch()", 0);
++
++	cpu = of_find_node_by_type(NULL, "cpu");
++	if (cpu != 0) {
++		fp = of_get_property(cpu, "clock-frequency", NULL);
++		if (fp != 0)
++			loops_per_jiffy = *fp / HZ;
++		else
++			loops_per_jiffy = 500000000 / HZ;
++		of_node_put(cpu);
++	}
++
++#ifdef CONFIG_PCI
++	for_each_node_by_type(np, "pci") {
++		if (of_device_is_compatible(np, "fsl,mpc8548-pcie"))
++			fsl_add_bridge(np, 0);
++	}
++#endif
++
++	powersave_nap = 0;
++
++#ifdef CONFIG_SMP
++	mpc85xx_smp_init();
++#endif
++
++#ifdef CONFIG_EARLY_DMA_ALLOC
++	eda_init();
++#endif
++}
++
++static struct of_device_id __initdata celestica_p2020_ids[] = {
++	{ .type = "soc", },
++	{ .compatible = "soc", },
++	{ .compatible = "simple-bus", },
++	{ .compatible = "gianfar", },
++	{},
++};
++
++static int __init celestica_p2020_publish_devices(void)
++{
++	return of_platform_bus_probe(NULL, celestica_p2020_ids, NULL);
++}
++
++machine_device_initcall(cel_p2020, celestica_p2020_publish_devices);
++
++static void celestica_p2020_show_cpuinfo(struct seq_file *m)
++{
++	uint pvid, svid, phid1;
++	uint memsize = total_memory;
++
++	pvid = mfspr(SPRN_PVR);
++	svid = mfspr(SPRN_SVR);
++
++	seq_printf(m, "Vendor\t\t: Freescale Semiconductor\n");
++	seq_printf(m, "PVR\t\t: 0x%x\n", pvid);
++	seq_printf(m, "SVR\t\t: 0x%x\n", svid);
++
++	/* Display cpu Pll setting */
++	phid1 = mfspr(SPRN_HID1);
++	seq_printf(m, "PLL setting\t: 0x%x\n", ((phid1 >> 24) & 0x3f));
++
++	/* Display the amount of memory */
++	seq_printf(m, "Memory\t\t: %d MB\n", memsize / (1024 * 1024));
++}
++
++static const char *board[] __initdata = {
++	"cel,kennisis",
++	"cel,redstone",
++	"cel,d2030",
++	"cel,smallstone",
++	NULL
++};
++
++/*
++ * Called very early, device-tree isn't unflattened
++ */
++static int __init celestica_p2020_probe(void)
++{
++	return of_flat_dt_match(of_get_flat_dt_root(), board);
++}
++
++define_machine(cel_p2020) {
++#ifdef CONFIG_CEL_REDSTONE
++	.name		= "Celestica, Inc. Redstone",
++#elif defined(CONFIG_CEL_D2030)
++	.name		= "Celestica, Inc. D2030",
++#elif defined(CONFIG_CEL_KENNISIS)
++	.name		= "Celestica, Inc. Kennisis",
++#elif defined(CONFIG_CEL_SMALLSTONE)
++	.name		= "Celestica, Inc. Smallstone",
++#else
++#error "Unknown Celestica Platform"
++#endif
++	.probe		= celestica_p2020_probe,
++	.setup_arch	= celestica_p2020_setup_arch,
++	.init_IRQ	= celestica_p2020_pic_init,
++	.show_cpuinfo	= celestica_p2020_show_cpuinfo,
++#ifdef CONFIG_PCI
++	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
++#endif
++	.get_irq	= mpic_get_irq,
++	.power_save	= e500_idle,
++	.restart	= fsl_rstcr_restart,
++	.calibrate_decr = generic_calibrate_decr,
++	.progress	= udbg_progress,
++};

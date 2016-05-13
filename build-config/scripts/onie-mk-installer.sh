@@ -1,7 +1,7 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -39,6 +39,19 @@ fi
 
 [ -d "$installer_dir" ] || {
     echo "ERROR: installer directory does not exist: $installer_dir"
+    exit 1
+}
+
+if [ "$arch" = "powerpc-softfloat" -o "$arch" = "armv7a" ] ; then
+    # Both of these architectures share common installer code as they
+    # are both based on u-boot.
+    arch_dir="u-boot-arch"
+else
+    arch_dir="$arch"
+fi
+
+[ -d "$installer_dir/$arch_dir" ] || {
+    echo "ERROR: arch specific installer directory does not exist: $installer_dir/$arch"
     exit 1
 }
 
@@ -84,39 +97,73 @@ echo -n "."
 
 cp $installer_dir/install.sh $tmp_installdir || exit 1
 echo -n "."
-cp -r $installer_dir/$arch/* $tmp_installdir
+cp -r $installer_dir/$arch_dir/* $tmp_installdir
 
 [ -r $machine_dir/installer/install-platform ] && {
     cp $machine_dir/installer/install-platform $tmp_installdir
 }
 
-# Escape special chars in the user provide kernel cmdline string for use in
-# sed. Special chars are: \ / &
-EXTRA_CMDLINE_LINUX=`echo $EXTRA_CMDLINE_LINUX | sed -e 's/[\/&]/\\\&/g'`
-
 # Massage install-arch
-if [ "$arch" = "x86_64" ] ; then
-    sed -e "s/%%CONSOLE_SPEED%%/$CONSOLE_SPEED/" \
-        -e "s/%%CONSOLE_DEV%%/$CONSOLE_DEV/" \
-        -e "s/%%CONSOLE_FLAG%%/$CONSOLE_FLAG/" \
-        -e "s/%%CONSOLE_PORT%%/$CONSOLE_PORT/" \
-        -e "s/%%EXTRA_CMDLINE_LINUX%%/$EXTRA_CMDLINE_LINUX/" \
-	-i $tmp_installdir/install-arch
-elif [ "$arch" = "powerpc-softfloat" ] ; then
+if [ "$arch_dir" = "u-boot-arch" ] ; then
     sed -e "s/%%UPDATER_UBOOT_NAME%%/$UPDATER_UBOOT_NAME/" \
 	-i $tmp_installdir/install-arch
 fi
 echo -n "."
 
-# Add optional installer configuration file
+# Add optional installer configuration files
 if [ "$arch" = "x86_64" ] ; then
     cp "$installer_conf" $tmp_installdir || exit 1
     echo -n "."
+
+    if [ "$SERIAL_CONSOLE_ENABLE" = "yes" ] ; then
+        DEFAULT_GRUB_SERIAL_COMMAND="serial --port=$CONSOLE_PORT --speed=$CONSOLE_SPEED --word=8 --parity=no --stop=1"
+        DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS${CONSOLE_DEV},${CONSOLE_SPEED}n8"
+        DEFAULT_GRUB_TERMINAL_INPUT="serial"
+        DEFAULT_GRUB_TERMINAL_OUTPUT="serial"
+    else
+        DEFAULT_GRUB_SERIAL_COMMAND=""
+        DEFAULT_GRUB_CMDLINE_LINUX=""
+        DEFAULT_GRUB_TERMINAL_INPUT="console"
+        DEFAULT_GRUB_TERMINAL_OUTPUT="console"
+    fi
+    GRUB_DEFAULT_CONF="$tmp_installdir/grub/grub-variables"
+    cat <<EOF >> $GRUB_DEFAULT_CONF
+## Begin grub-variables
+
+# default variables
+DEFAULT_GRUB_SERIAL_COMMAND="$DEFAULT_GRUB_SERIAL_COMMAND"
+DEFAULT_GRUB_CMDLINE_LINUX="$DEFAULT_GRUB_CMDLINE_LINUX"
+DEFAULT_GRUB_TERMINAL_INPUT="$DEFAULT_GRUB_TERMINAL_INPUT"
+DEFAULT_GRUB_TERMINAL_OUTPUT="$DEFAULT_GRUB_TERMINAL_OUTPUT"
+# overridden if they have been defined in the environment
+GRUB_SERIAL_COMMAND=\${GRUB_SERIAL_COMMAND:-"\$DEFAULT_GRUB_SERIAL_COMMAND"}
+GRUB_TERMINAL_INPUT=\${GRUB_TERMINAL_INPUT:-"\$DEFAULT_GRUB_TERMINAL_INPUT"}
+GRUB_TERMINAL_OUTPUT=\${GRUB_TERMINAL_OUTPUT:-"\$DEFAULT_GRUB_TERMINAL_OUTPUT"}
+GRUB_CMDLINE_LINUX=\${GRUB_CMDLINE_LINUX:-"\$DEFAULT_GRUB_CMDLINE_LINUX"}
+export GRUB_SERIAL_COMMAND
+export GRUB_TERMINAL_INPUT
+export GRUB_TERMINAL_OUTPUT
+export GRUB_CMDLINE_LINUX
+
+# variables for ONIE itself
+GRUB_ONIE_SERIAL_COMMAND=\$GRUB_SERIAL_COMMAND
+export GRUB_ONIE_SERIAL_COMMAND
+
+## End grub-variables
+EOF
+    echo -n "."
+
     GRUB_MACHINE_CONF="$tmp_installdir/grub/grub-machine.cfg"
     echo "## Begin grub-machine.cfg" > $GRUB_MACHINE_CONF
     # make sure each var is 'exported' for GRUB shell
     sed -e 's/\(.*\)=\(.*$\)/\1=\2\nexport \1/' $machine_conf >> $GRUB_MACHINE_CONF
     echo "## End grub-machine.cfg" >> $GRUB_MACHINE_CONF
+    echo -n "."
+    GRUB_EXTRA_CMDLINE_CONF="$tmp_installdir/grub/grub-extra.cfg"
+    echo "## Begin grub-extra.cfg" > $GRUB_EXTRA_CMDLINE_CONF
+    echo "ONIE_EXTRA_CMDLINE_LINUX=\"$EXTRA_CMDLINE_LINUX\"" >> $GRUB_EXTRA_CMDLINE_CONF
+    echo "export ONIE_EXTRA_CMDLINE_LINUX" >> $GRUB_EXTRA_CMDLINE_CONF
+    echo "## End grub-extra.cfg" >> $GRUB_EXTRA_CMDLINE_CONF
     echo -n "."
 fi
 sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine.conf || exit 1

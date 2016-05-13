@@ -1,0 +1,85 @@
+Device tree framework for Broadcom IPROC helix4 based platform
+
+diff --git a/arch/arm/boot/dts/helix4.dtsi b/arch/arm/boot/dts/helix4.dtsi
+new file mode 100644
+index 0000000..1a7ce9e
+--- /dev/null
++++ b/arch/arm/boot/dts/helix4.dtsi
+@@ -0,0 +1,59 @@
++/include/ "skeleton.dtsi"
++
++/ {
++    interrupt-parent = <&gic>;
++
++    chipcommonA {
++        compatible = "simple-bus";
++        ranges = <0x00000000 0x18000000 0x00001000>;
++        #address-cells = <1>;
++        #size-cells = <1>;
++
++        uart0: serial@0300 {
++            compatible = "ns16550";
++            reg = <0x0300 0x100>;
++            interrupts = <123>;
++            clock-frequency = <100000000>;
++            status = "enabled";
++        };
++    };
++
++    mpcore {
++        compatible = "simple-bus";
++        ranges = <0x00000000 0x19020000 0x00003000>;
++        #address-cells = <1>;
++        #size-cells = <1>;
++
++        scu@0000 {
++            compatible = "arm,cortex-a9-scu";
++            reg = <0x0000 0x100>;
++        };
++
++        gic: interrupt-controller@1000 {
++            compatible = "arm,cortex-a9-gic";
++            #interrupt-cells = <3>;
++            #address-cells = <0>;
++            interrupt-controller;
++            reg = <0x1000 0x1000>,
++                  <0x0100 0x100>;
++        };
++
++        L2: cache-controller@2000 {
++            compatible = "arm,pl310-cache";
++            reg = <0x2000 0x1000>;
++            cache-unified;
++            cache-level = <2>;
++        };
++    };
++
++    clocks {
++        #address-cells = <1>;
++        #size-cells = <0>;
++
++        clk_periph: periph {
++            compatible = "fixed-clock";
++            #clock-cells = <0>;
++            clock-frequency = <400000000>;
++        };
++    };
++};
+diff --git a/arch/arm/mach-iproc/board_bu.c b/arch/arm/mach-iproc/board_bu.c
+index bf991b4..b45588d 100644
+--- a/arch/arm/mach-iproc/board_bu.c
++++ b/arch/arm/mach-iproc/board_bu.c
+@@ -1055,3 +1055,13 @@ MACHINE_START(IPROC, "Broadcom iProc")
+ 	.timer  = &board_timer,
+ 	.init_machine = board_init,
+ MACHINE_END
++
++DT_MACHINE_START(HELIX4_DT, "Broadcom Helix4 (Flattened Device Tree)")
++	.map_io     = board_map_io,
++	.init_early = iproc_init_early,
++	.init_irq   = iproc_init_irq,
++	.handle_irq     = gic_handle_irq,
++	.timer      = &board_timer,
++	.init_machine   = board_init,
++	.dt_compat  = helix4_dt_board_compat,
++MACHINE_END

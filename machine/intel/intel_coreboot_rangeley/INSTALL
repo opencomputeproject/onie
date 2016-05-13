@@ -1,0 +1,91 @@
+====================================
+Installing ONIE on common Rangeley (Intel c2000 family) platform with Coreboot (BIOS/UEFI replacement)
+====================================
+
+Prerequisites 
+====================
+
+1. Rangeley (Intel c2000 family) platform
+2. Coreboot as primary bootloader (BIOS/UEFI replacement)
+3. Grub2 as Coreboot payload
+4. console connection with the same baud rate as your coreboot settings are
+
+
+Cross-Compiling ONIE
+====================
+
+Because we are builing grub with coreboot support we have to install additional packages first prior of compiling ONIE.
+Those packages are: `libfreetype6-dev` and `unifont`
+for Debian based system you can:
+
+# sudo apt-get install libfreetype6-dev unifont
+
+To compile ONIE change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/intel MACHINE=intel_coreboot_rangeley all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/intel MACHINE=intel_coreboot_rangeley all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-r--r--  1 user group  8885348 Oct  9 15:38 intel_c2000-r0.initrd
+-rw-r--r--  1 user group  3279056 Oct  9 15:38 intel_c2000-r0.vmlinuz
+-rw-r--r--  1 user group 27000832 Oct  9 15:38 onie-recovery-x86_64-intel_c2000-r0.iso
+-rw-r--r--  1 user group 12207991 Oct  9 15:38 onie-updater-x86_64-intel_c2000-r0
+
+
+intel_c2000-r0.vmlinuz                  -- This is the ONIE kernel image
+
+intel_c2000-r0.initrd                   -- This is the ONIE initramfs (filesystem)
+
+onie-updater-x86_64-intel_c2000-r0      -- This is the ONIE self-update image.
+                                           This image is a self-extracting archive used for installing ONIE.
+
+onie-recovery-x86_64-intel_c2000-r0.iso -- This is iso image containing ONIE kernel + ONIE initramfs with ONIE self-update image already included inside.
+                                           This might be very useful as it can be easily placed on USB/CD and one can boot from this to install/reinstall/repair ONIE
+										   
+Installation steps
+====================
+
+1. Put your onie-recovery-x86_64-intel_c2000-r0.iso onto USB
+   # dd if=onie-recovery-x86_64-intel_c2000-r0.iso of=/dev/sdX bs=1M
+
+2. Shutdown you platform and place you usb stick onto the platform
+
+3. Boot to your coreboot's grub2
+
+4. Press 'c' and type:
+   grub> insmod ehci
+   grub> search -n --set root -l ONIE-RECOVERY
+   grub> echo $root
+   
+You should see something like:
+
+  usb0,msdos1
+  
+Now load new grub configuration file:
+
+  grub> configfile ($root)/boot/grub/grub.cfg
+  
+After that you should see:
+
+
+                     GNU GRUB  version 2.02~beta2+e4a1fe391
+
+ +----------------------------------------------------------------------------+
+ |*ONIE: Install OS                                                           |
+ | ONIE: Rescue                                                               |
+ | ONIE: Uninstall OS                                                         |
+ | ONIE: Update ONIE                                                          |
+ | ONIE: Embed ONIE                                                           |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ +----------------------------------------------------------------------------+
+

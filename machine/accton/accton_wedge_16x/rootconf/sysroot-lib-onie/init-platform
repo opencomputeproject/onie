@@ -1,0 +1,28 @@
+# -*- shell-script -*-
+
+# Demonstration of the init-platform functionality
+
+# This script fragment is sourced by /etc/init.d/init-arch.sh, which
+# in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+# A machine can use this feature to run any early boot scripts needed
+# by the machine.  A typical usage would be to initialize specific
+# hardware devices.
+
+# Use this function to perform any initializations required by the
+# architecture specific initialization.  This function executes before
+# the architecture initializations.
+init_platform_pre_arch()
+{
+    # create ttyACM serial devices
+    MAJOR=$(grep ttyACM /proc/devices | awk '{ print $1 }')
+    [ -n "$MAJOR" -a $MAJOR -gt 0 ] || {
+        echo "Error: problems locating ttyACM serial device..."
+        return 1
+    }
+    for i in $(seq 0 3) ; do
+        mknod "/dev/ttyACM${i}" c $MAJOR $i
+    done
+
+}

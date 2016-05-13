@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -10,15 +10,16 @@
 # makefile fragment that defines the build of the onie cross-compiled U-Boot
 #
 
-UBOOT_VERSION		= 2013.01.01
+UBOOT_VERSION		?= 2013.01.01
 UBOOT_TARBALL		= u-boot-$(UBOOT_VERSION).tar.bz2
 UBOOT_TARBALL_URLS	+= $(ONIE_MIRROR) ftp://ftp.denx.de/pub/u-boot
 UBOOT_BUILD_DIR		= $(MBUILDDIR)/u-boot
 UBOOT_DIR		= $(UBOOT_BUILD_DIR)/u-boot-$(UBOOT_VERSION)
 
-UBOOT_SRCPATCHDIR	= $(PATCHDIR)/u-boot
+UBOOT_SRCPATCHDIR	= $(PATCHDIR)/u-boot/$(UBOOT_VERSION)
+UBOOT_CMNPATCHDIR	= $(PATCHDIR)/u-boot/common
 UBOOT_PATCHDIR		= $(UBOOT_BUILD_DIR)/patch
-UBOOT_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/u-boot-download
+UBOOT_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/u-boot-download-$(UBOOT_VERSION)
 UBOOT_SOURCE_STAMP	= $(STAMPDIR)/u-boot-source
 UBOOT_PATCH_STAMP	= $(STAMPDIR)/u-boot-patch
 UBOOT_BUILD_STAMP	= $(STAMPDIR)/u-boot-build
@@ -77,14 +78,16 @@ $(UBOOT_SOURCE_STAMP): $(TREE_STAMP) | $(UBOOT_DOWNLOAD_STAMP)
 # top.
 #
 u-boot-patch: $(UBOOT_PATCH_STAMP)
-$(UBOOT_PATCH_STAMP): $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOURCE_STAMP)
+$(UBOOT_PATCH_STAMP): $(UBOOT_CMNPATCHDIR)/* $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR)/u-boot/* $(UBOOT_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Patching u-boot ===="
 	$(Q) [ -r $(MACHINEDIR)/u-boot/series ] || \
 		(echo "Unable to find machine dependent u-boot patch series: $(MACHINEDIR)/u-boot/series" && \
 		exit 1)
 	$(Q) mkdir -p $(UBOOT_PATCHDIR)
-	$(Q) cp $(UBOOT_SRCPATCHDIR)/* $(UBOOT_PATCHDIR)
+	$(Q) cp $(UBOOT_SRCPATCHDIR)/series $(UBOOT_PATCHDIR)
+	$(Q) $(SCRIPTDIR)/cp-machine-patches $(UBOOT_PATCHDIR) $(UBOOT_SRCPATCHDIR)/series	\
+		$(UBOOT_SRCPATCHDIR) $(UBOOT_CMNPATCHDIR)
 	$(Q) cat $(MACHINEDIR)/u-boot/series >> $(UBOOT_PATCHDIR)/series
 	$(Q) $(SCRIPTDIR)/cp-machine-patches $(UBOOT_PATCHDIR) $(MACHINEDIR)/u-boot/series	\
 		$(MACHINEDIR)/u-boot $(MACHINEROOT)/u-boot

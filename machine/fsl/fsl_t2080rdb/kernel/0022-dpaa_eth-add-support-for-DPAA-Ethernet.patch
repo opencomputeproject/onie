@@ -1,0 +1,3191 @@
+From 4f38e426c5d18a32496517f4a4a7b5d6d3bea63d Mon Sep 17 00:00:00 2001
+From: Madalin Bucur <madalin.bucur@freescale.com>
+Date: Mon, 31 Aug 2015 10:39:48 +0800
+Subject: [PATCH 22/53] dpaa_eth: add support for DPAA Ethernet
+
+commit 80651553c1268bcf1fb7e51869d26edaf438a2bc
+[context adjustment]
+Conflicts:
+    drivers/net/ethernet/freescale/Kconfig
+
+This introduces the Freescale Data Path Acceleration Architecture
+(DPAA) Ethernet driver (dpaa_eth) that builds upon the DPAA QMan,
+BMan, PAMU and FMan drivers to deliver Ethernet connectivity on
+the Freescale DPAA QorIQ platforms.
+
+Signed-off-by: Madalin Bucur <madalin.bucur@freescale.com>
+Integrated-by: Li Jingyu <b41874@freescale.com>
+---
+ drivers/net/ethernet/freescale/Kconfig             |    2 +
+ drivers/net/ethernet/freescale/Makefile            |    1 +
+ drivers/net/ethernet/freescale/dpaa/Kconfig        |   46 +
+ drivers/net/ethernet/freescale/dpaa/Makefile       |   13 +
+ drivers/net/ethernet/freescale/dpaa/dpaa_eth.c     |  814 +++++++++++++
+ drivers/net/ethernet/freescale/dpaa/dpaa_eth.h     |  442 +++++++
+ .../net/ethernet/freescale/dpaa/dpaa_eth_common.c  | 1248 ++++++++++++++++++++
+ .../net/ethernet/freescale/dpaa/dpaa_eth_common.h  |  118 ++
+ drivers/net/ethernet/freescale/dpaa/dpaa_eth_sg.c  |  406 +++++++
+ 9 files changed, 3090 insertions(+)
+ create mode 100644 drivers/net/ethernet/freescale/dpaa/Kconfig
+ create mode 100644 drivers/net/ethernet/freescale/dpaa/Makefile
+ create mode 100644 drivers/net/ethernet/freescale/dpaa/dpaa_eth.c
+ create mode 100644 drivers/net/ethernet/freescale/dpaa/dpaa_eth.h
+ create mode 100644 drivers/net/ethernet/freescale/dpaa/dpaa_eth_common.c
+ create mode 100644 drivers/net/ethernet/freescale/dpaa/dpaa_eth_common.h
+ create mode 100644 drivers/net/ethernet/freescale/dpaa/dpaa_eth_sg.c
+
+diff --git a/drivers/net/ethernet/freescale/Kconfig b/drivers/net/ethernet/freescale/Kconfig
+index 24e938d..36830a1 100644
+--- a/drivers/net/ethernet/freescale/Kconfig
++++ b/drivers/net/ethernet/freescale/Kconfig
+@@ -94,4 +94,6 @@ config GIANFAR
+ 	  This driver supports the Gigabit TSEC on the MPC83xx, MPC85xx,
+ 	  and MPC86xx family of chips, and the FEC on the 8540.
+ 
++source "drivers/net/ethernet/freescale/dpaa/Kconfig"
++
+ endif # NET_VENDOR_FREESCALE
+diff --git a/drivers/net/ethernet/freescale/Makefile b/drivers/net/ethernet/freescale/Makefile
+index 4097c58..ae13dc5 100644
+--- a/drivers/net/ethernet/freescale/Makefile
++++ b/drivers/net/ethernet/freescale/Makefile
+@@ -12,6 +12,7 @@ obj-$(CONFIG_FS_ENET) += fs_enet/
+ obj-$(CONFIG_FSL_PQ_MDIO) += fsl_pq_mdio.o
+ obj-$(CONFIG_FSL_XGMAC_MDIO) += xgmac_mdio.o
+ obj-$(CONFIG_GIANFAR) += gianfar_driver.o
++obj-$(CONFIG_FSL_DPAA_ETH) += dpaa/
+ obj-$(CONFIG_PTP_1588_CLOCK_GIANFAR) += gianfar_ptp.o
+ gianfar_driver-objs := gianfar.o \
+ 		gianfar_ethtool.o
+diff --git a/drivers/net/ethernet/freescale/dpaa/Kconfig b/drivers/net/ethernet/freescale/dpaa/Kconfig
+new file mode 100644
+index 0000000..1f3a203
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/dpaa/Kconfig
+@@ -0,0 +1,46 @@
++menuconfig FSL_DPAA_ETH
++	tristate "DPAA Ethernet"
++	depends on FSL_SOC && FSL_BMAN && FSL_QMAN && FSL_FMAN
++	select PHYLIB
++	select FSL_FMAN_MAC
++	---help---
++	  Data Path Acceleration Architecture Ethernet driver,
++	  supporting the Freescale QorIQ chips.
++	  Depends on Freescale Buffer Manager and Queue Manager
++	  driver and Frame Manager Driver.
++
++if FSL_DPAA_ETH
++
++config FSL_DPAA_CS_THRESHOLD_1G
++	hex "Egress congestion threshold on 1G ports"
++	range 0x1000 0x10000000
++	default "0x06000000"
++	---help---
++	  The size in bytes of the egress Congestion State notification threshold on 1G ports.
++	  The 1G dTSECs can quite easily be flooded by cores doing Tx in a tight loop
++	  (e.g. by sending UDP datagrams at "while(1) speed"),
++	  and the larger the frame size, the more acute the problem.
++	  So we have to find a balance between these factors:
++	       - avoiding the device staying congested for a prolonged time (risking
++                 the netdev watchdog to fire - see also the tx_timeout module param);
++               - affecting performance of protocols such as TCP, which otherwise
++	         behave well under the congestion notification mechanism;
++	       - preventing the Tx cores from tightly-looping (as if the congestion
++	         threshold was too low to be effective);
++	       - running out of memory if the CS threshold is set too high.
++
++config FSL_DPAA_CS_THRESHOLD_10G
++	hex "Egress congestion threshold on 10G ports"
++	range 0x1000 0x20000000
++	default "0x10000000"
++	---help ---
++	  The size in bytes of the egress Congestion State notification threshold on 10G ports.
++
++config FSL_DPAA_INGRESS_CS_THRESHOLD
++	hex "Ingress congestion threshold on FMan ports"
++	default "0x10000000"
++	---help---
++	  The size in bytes of the ingress tail-drop threshold on FMan ports.
++	  Traffic piling up above this value will be rejected by QMan and discarded by FMan.
++
++endif # FSL_DPAA_ETH
+diff --git a/drivers/net/ethernet/freescale/dpaa/Makefile b/drivers/net/ethernet/freescale/dpaa/Makefile
+new file mode 100644
+index 0000000..cf126dd
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/dpaa/Makefile
+@@ -0,0 +1,13 @@
++#
++# Makefile for the Freescale DPAA Ethernet controllers
++#
++
++# Include FMan headers
++FMAN        = $(srctree)/drivers/net/ethernet/freescale/fman
++ccflags-y += -I$(FMAN)
++ccflags-y += -I$(FMAN)/inc
++ccflags-y += -I$(FMAN)/flib
++
++obj-$(CONFIG_FSL_DPAA_ETH) += fsl_dpa.o
++
++fsl_dpa-objs += dpaa_eth.o dpaa_eth_sg.o dpaa_eth_common.o
+diff --git a/drivers/net/ethernet/freescale/dpaa/dpaa_eth.c b/drivers/net/ethernet/freescale/dpaa/dpaa_eth.c
+new file mode 100644
+index 0000000..9e83bd1
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/dpaa/dpaa_eth.c
+@@ -0,0 +1,814 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/of_mdio.h>
++#include <linux/of_net.h>
++#include <linux/kthread.h>
++#include <linux/io.h>
++#include <linux/if_arp.h>
++#include <linux/if_vlan.h>
++#include <linux/icmp.h>
++#include <linux/ip.h>
++#include <linux/ipv6.h>
++#include <linux/udp.h>
++#include <linux/tcp.h>
++#include <linux/net.h>
++#include <linux/if_ether.h>
++#include <linux/highmem.h>
++#include <linux/percpu.h>
++#include <linux/dma-mapping.h>
++#include <soc/fsl/bman.h>
++
++#include "fsl_fman.h"
++#include "fm_ext.h"
++#include "fm_port_ext.h"
++
++#include "mac.h"
++#include "dpaa_eth.h"
++#include "dpaa_eth_common.h"
++
++#define DPA_NAPI_WEIGHT		64
++
++/* Valid checksum indication */
++#define DPA_CSUM_VALID		0xFFFF
++
++#define DPA_DESCRIPTION "FSL DPAA Ethernet driver"
++
++static u8 debug = -1;
++module_param(debug, byte, S_IRUGO);
++MODULE_PARM_DESC(debug, "Module/Driver verbosity level");
++
++/* This has to work in tandem with the DPA_CS_THRESHOLD_xxx values. */
++static u16 tx_timeout = 1000;
++module_param(tx_timeout, ushort, S_IRUGO);
++MODULE_PARM_DESC(tx_timeout, "The Tx timeout in ms");
++
++/* BM */
++
++#define DPAA_ETH_MAX_PAD (L1_CACHE_BYTES * 8)
++
++static u8 dpa_priv_common_bpid;
++
++static void _dpa_rx_error(struct net_device *net_dev,
++			  const struct dpa_priv_s *priv,
++			  struct dpa_percpu_priv_s *percpu_priv,
++			  const struct qm_fd *fd,
++			  u32 fqid)
++{
++	/* limit common, possibly innocuous Rx FIFO Overflow errors'
++	 * interference with zero-loss convergence benchmark results.
++	 */
++	if (likely(fd->status & FM_FD_STAT_ERR_PHYSICAL))
++		pr_warn_once("non-zero error counters in fman statistics (sysfs)\n");
++	else
++		if (net_ratelimit())
++			netif_err(priv, hw, net_dev, "Err FD status = 0x%08x\n",
++				  fd->status & FM_FD_STAT_RX_ERRORS);
++
++	percpu_priv->stats.rx_errors++;
++
++	dpa_fd_release(net_dev, fd);
++}
++
++static void _dpa_tx_error(struct net_device *net_dev,
++			  const struct dpa_priv_s *priv,
++			  struct dpa_percpu_priv_s *percpu_priv,
++			  const struct qm_fd *fd,
++			  u32 fqid)
++{
++	struct sk_buff *skb;
++
++	if (net_ratelimit())
++		netif_warn(priv, hw, net_dev, "FD status = 0x%08x\n",
++			   fd->status & FM_FD_STAT_TX_ERRORS);
++
++	percpu_priv->stats.tx_errors++;
++
++	/* If we intended the buffers from this frame to go into the bpools
++	 * when the FMan transmit was done, we need to put it in manually.
++	 */
++	if (fd->bpid != 0xff) {
++		dpa_fd_release(net_dev, fd);
++		return;
++	}
++
++	skb = _dpa_cleanup_tx_fd(priv, fd);
++	dev_kfree_skb(skb);
++}
++
++static int dpaa_eth_poll(struct napi_struct *napi, int budget)
++{
++	struct dpa_napi_portal *np =
++			container_of(napi, struct dpa_napi_portal, napi);
++
++	int cleaned = qman_p_poll_dqrr(np->p, budget);
++
++	if (cleaned < budget) {
++		int tmp;
++
++		napi_complete(napi);
++		tmp = qman_p_irqsource_add(np->p, QM_PIRQ_DQRI);
++		DPA_ERR_ON(tmp);
++	}
++
++	return cleaned;
++}
++
++static void _dpa_tx_conf(struct net_device *net_dev,
++			 const struct dpa_priv_s *priv,
++			 struct dpa_percpu_priv_s *percpu_priv,
++			 const struct qm_fd *fd,
++			 u32 fqid)
++{
++	struct sk_buff	*skb;
++
++	if (unlikely(fd->status & FM_FD_STAT_TX_ERRORS) != 0) {
++		if (net_ratelimit())
++			netif_warn(priv, hw, net_dev, "FD status = 0x%08x\n",
++				   fd->status & FM_FD_STAT_TX_ERRORS);
++
++		percpu_priv->stats.tx_errors++;
++	}
++
++	skb = _dpa_cleanup_tx_fd(priv, fd);
++
++	dev_kfree_skb(skb);
++}
++
++static enum qman_cb_dqrr_result
++priv_rx_error_dqrr(struct qman_portal *portal,
++		   struct qman_fq *fq,
++		   const struct qm_dqrr_entry *dq)
++{
++	struct net_device *net_dev;
++	struct dpa_priv_s *priv;
++	struct dpa_percpu_priv_s *percpu_priv;
++	int *count_ptr;
++
++	net_dev = ((struct dpa_fq *)fq)->net_dev;
++	priv = netdev_priv(net_dev);
++
++	percpu_priv = raw_cpu_ptr(priv->percpu_priv);
++	count_ptr = raw_cpu_ptr(priv->dpa_bp->percpu_count);
++
++	if (dpaa_eth_napi_schedule(percpu_priv, portal))
++		return qman_cb_dqrr_stop;
++
++	if (unlikely(dpaa_eth_refill_bpools(priv->dpa_bp, count_ptr)))
++		/* Unable to refill the buffer pool due to insufficient
++		 * system memory. Just release the frame back into the pool,
++		 * otherwise we'll soon end up with an empty buffer pool.
++		 */
++		dpa_fd_release(net_dev, &dq->fd);
++	else
++		_dpa_rx_error(net_dev, priv, percpu_priv, &dq->fd, fq->fqid);
++
++	return qman_cb_dqrr_consume;
++}
++
++static enum qman_cb_dqrr_result
++priv_rx_default_dqrr(struct qman_portal *portal,
++		     struct qman_fq *fq,
++		     const struct qm_dqrr_entry *dq)
++{
++	struct net_device *net_dev;
++	struct dpa_priv_s *priv;
++	struct dpa_percpu_priv_s *percpu_priv;
++	int *count_ptr;
++	struct dpa_bp *dpa_bp;
++
++	net_dev = ((struct dpa_fq *)fq)->net_dev;
++	priv = netdev_priv(net_dev);
++	dpa_bp = priv->dpa_bp;
++
++	/* IRQ handler, non-migratable; safe to use raw_cpu_ptr here */
++	percpu_priv = raw_cpu_ptr(priv->percpu_priv);
++	count_ptr = raw_cpu_ptr(dpa_bp->percpu_count);
++
++	if (unlikely(dpaa_eth_napi_schedule(percpu_priv, portal)))
++		return qman_cb_dqrr_stop;
++
++	/* Vale of plenty: make sure we didn't run out of buffers */
++
++	if (unlikely(dpaa_eth_refill_bpools(dpa_bp, count_ptr)))
++		/* Unable to refill the buffer pool due to insufficient
++		 * system memory. Just release the frame back into the pool,
++		 * otherwise we'll soon end up with an empty buffer pool.
++		 */
++		dpa_fd_release(net_dev, &dq->fd);
++	else
++		_dpa_rx(net_dev, portal, priv, percpu_priv, &dq->fd, fq->fqid,
++			count_ptr);
++
++	return qman_cb_dqrr_consume;
++}
++
++static enum qman_cb_dqrr_result
++priv_tx_conf_error_dqrr(struct qman_portal *portal,
++			struct qman_fq *fq,
++			const struct qm_dqrr_entry *dq)
++{
++	struct net_device *net_dev;
++	struct dpa_priv_s *priv;
++	struct dpa_percpu_priv_s *percpu_priv;
++
++	net_dev = ((struct dpa_fq *)fq)->net_dev;
++	priv = netdev_priv(net_dev);
++
++	percpu_priv = raw_cpu_ptr(priv->percpu_priv);
++
++	if (dpaa_eth_napi_schedule(percpu_priv, portal))
++		return qman_cb_dqrr_stop;
++
++	_dpa_tx_error(net_dev, priv, percpu_priv, &dq->fd, fq->fqid);
++
++	return qman_cb_dqrr_consume;
++}
++
++static enum qman_cb_dqrr_result
++priv_tx_conf_default_dqrr(struct qman_portal *portal,
++			  struct qman_fq *fq,
++			  const struct qm_dqrr_entry *dq)
++{
++	struct net_device *net_dev;
++	struct dpa_priv_s *priv;
++	struct dpa_percpu_priv_s *percpu_priv;
++
++	net_dev = ((struct dpa_fq *)fq)->net_dev;
++	priv = netdev_priv(net_dev);
++
++	/* Non-migratable context, safe to use raw_cpu_ptr */
++	percpu_priv = raw_cpu_ptr(priv->percpu_priv);
++
++	if (dpaa_eth_napi_schedule(percpu_priv, portal))
++		return qman_cb_dqrr_stop;
++
++	_dpa_tx_conf(net_dev, priv, percpu_priv, &dq->fd, fq->fqid);
++
++	return qman_cb_dqrr_consume;
++}
++
++static void priv_ern(struct qman_portal *portal,
++		     struct qman_fq *fq,
++		     const struct qm_mr_entry *msg)
++{
++	struct net_device *net_dev;
++	const struct dpa_priv_s *priv;
++	struct sk_buff *skb;
++	struct dpa_percpu_priv_s *percpu_priv;
++	const struct qm_fd *fd = &msg->ern.fd;
++
++	net_dev = ((struct dpa_fq *)fq)->net_dev;
++	priv = netdev_priv(net_dev);
++	/* Non-migratable context, safe to use raw_cpu_ptr */
++	percpu_priv = raw_cpu_ptr(priv->percpu_priv);
++
++	percpu_priv->stats.tx_dropped++;
++	percpu_priv->stats.tx_fifo_errors++;
++
++	/* If we intended this buffer to go into the pool
++	 * when the FM was done, we need to put it in
++	 * manually.
++	 */
++	if (msg->ern.fd.bpid != 0xff) {
++		dpa_fd_release(net_dev, fd);
++		return;
++	}
++
++	skb = _dpa_cleanup_tx_fd(priv, fd);
++	dev_kfree_skb_any(skb);
++}
++
++static const struct dpa_fq_cbs_t private_fq_cbs = {
++	.rx_defq = { .cb = { .dqrr = priv_rx_default_dqrr } },
++	.tx_defq = { .cb = { .dqrr = priv_tx_conf_default_dqrr } },
++	.rx_errq = { .cb = { .dqrr = priv_rx_error_dqrr } },
++	.tx_errq = { .cb = { .dqrr = priv_tx_conf_error_dqrr } },
++	.egress_ern = { .cb = { .ern = priv_ern } }
++};
++
++static void dpaa_eth_napi_enable(struct dpa_priv_s *priv)
++{
++	struct dpa_percpu_priv_s *percpu_priv;
++	int i, j;
++
++	for_each_possible_cpu(i) {
++		percpu_priv = per_cpu_ptr(priv->percpu_priv, i);
++
++		for (j = 0; j < qman_portal_max; j++)
++			napi_enable(&percpu_priv->np[j].napi);
++	}
++}
++
++static void dpaa_eth_napi_disable(struct dpa_priv_s *priv)
++{
++	struct dpa_percpu_priv_s *percpu_priv;
++	int i, j;
++
++	for_each_possible_cpu(i) {
++		percpu_priv = per_cpu_ptr(priv->percpu_priv, i);
++
++		for (j = 0; j < qman_portal_max; j++)
++			napi_disable(&percpu_priv->np[j].napi);
++	}
++}
++
++static int dpa_eth_priv_start(struct net_device *net_dev)
++{
++	int err;
++	struct dpa_priv_s *priv;
++
++	priv = netdev_priv(net_dev);
++
++	dpaa_eth_napi_enable(priv);
++
++	err = dpa_start(net_dev);
++	if (err < 0)
++		dpaa_eth_napi_disable(priv);
++
++	return err;
++}
++
++static int dpa_eth_priv_stop(struct net_device *net_dev)
++{
++	int err;
++	struct dpa_priv_s *priv;
++
++	err = dpa_stop(net_dev);
++	/* Allow NAPI to consume any frame still in the Rx/TxConfirm
++	 * ingress queues. This is to avoid a race between the current
++	 * context and ksoftirqd which could leave NAPI disabled while
++	 * in fact there's still Rx traffic to be processed.
++	 */
++	usleep_range(5000, 10000);
++
++	priv = netdev_priv(net_dev);
++	dpaa_eth_napi_disable(priv);
++
++	return err;
++}
++
++static const struct net_device_ops dpa_private_ops = {
++	.ndo_open = dpa_eth_priv_start,
++	.ndo_start_xmit = dpa_tx,
++	.ndo_stop = dpa_eth_priv_stop,
++	.ndo_tx_timeout = dpa_timeout,
++	.ndo_get_stats64 = dpa_get_stats64,
++	.ndo_set_mac_address = dpa_set_mac_address,
++	.ndo_validate_addr = eth_validate_addr,
++	.ndo_change_mtu = dpa_change_mtu,
++	.ndo_set_rx_mode = dpa_set_rx_mode,
++	.ndo_init = dpa_ndo_init,
++	.ndo_set_features = dpa_set_features,
++	.ndo_fix_features = dpa_fix_features,
++};
++
++static int dpa_private_napi_add(struct net_device *net_dev)
++{
++	struct dpa_priv_s *priv = netdev_priv(net_dev);
++	struct dpa_percpu_priv_s *percpu_priv;
++	int i, cpu;
++
++	for_each_possible_cpu(cpu) {
++		percpu_priv = per_cpu_ptr(priv->percpu_priv, cpu);
++
++		percpu_priv->np = devm_kzalloc(net_dev->dev.parent,
++			qman_portal_max * sizeof(struct dpa_napi_portal),
++			GFP_KERNEL);
++
++		if (!percpu_priv->np)
++			return -ENOMEM;
++
++		for (i = 0; i < qman_portal_max; i++)
++			netif_napi_add(net_dev, &percpu_priv->np[i].napi,
++				       dpaa_eth_poll, DPA_NAPI_WEIGHT);
++	}
++
++	return 0;
++}
++
++void dpa_private_napi_del(struct net_device *net_dev)
++{
++	struct dpa_priv_s *priv = netdev_priv(net_dev);
++	struct dpa_percpu_priv_s *percpu_priv;
++	int i, cpu;
++
++	for_each_possible_cpu(cpu) {
++		percpu_priv = per_cpu_ptr(priv->percpu_priv, cpu);
++
++		if (percpu_priv->np) {
++			for (i = 0; i < qman_portal_max; i++)
++				netif_napi_del(&percpu_priv->np[i].napi);
++
++			devm_kfree(net_dev->dev.parent, percpu_priv->np);
++		}
++	}
++}
++
++static int dpa_private_netdev_init(struct net_device *net_dev)
++{
++	int i;
++	struct dpa_priv_s *priv = netdev_priv(net_dev);
++	struct dpa_percpu_priv_s *percpu_priv;
++	const u8 *mac_addr;
++
++	/* Although we access another CPU's private data here
++	 * we do it at initialization so it is safe
++	 */
++	for_each_possible_cpu(i) {
++		percpu_priv = per_cpu_ptr(priv->percpu_priv, i);
++		percpu_priv->net_dev = net_dev;
++	}
++
++	net_dev->netdev_ops = &dpa_private_ops;
++	mac_addr = priv->mac_dev->addr;
++
++	net_dev->mem_start = priv->mac_dev->res->start;
++	net_dev->mem_end = priv->mac_dev->res->end;
++
++	net_dev->hw_features |= (NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM |
++		NETIF_F_LLTX);
++
++	net_dev->features |= NETIF_F_GSO;
++
++	return dpa_netdev_init(net_dev, mac_addr, tx_timeout);
++}
++
++static struct dpa_bp *dpa_priv_bp_probe(struct device *dev)
++{
++	struct dpa_bp *dpa_bp;
++
++	dpa_bp = devm_kzalloc(dev, sizeof(*dpa_bp), GFP_KERNEL);
++	if (!dpa_bp)
++		return ERR_PTR(-ENOMEM);
++
++	dpa_bp->percpu_count = devm_alloc_percpu(dev, *dpa_bp->percpu_count);
++	dpa_bp->config_count = FSL_DPAA_ETH_MAX_BUF_COUNT;
++
++	dpa_bp->seed_cb = dpa_bp_priv_seed;
++	dpa_bp->free_buf_cb = _dpa_bp_free_pf;
++
++	return dpa_bp;
++}
++
++/* Place all ingress FQs (Rx Default, Rx Error) in a dedicated CGR.
++ * We won't be sending congestion notifications to FMan; for now, we just use
++ * this CGR to generate enqueue rejections to FMan in order to drop the frames
++ * before they reach our ingress queues and eat up memory.
++ */
++static int dpaa_eth_priv_ingress_cgr_init(struct dpa_priv_s *priv)
++{
++	struct qm_mcc_initcgr initcgr;
++	u32 cs_th;
++	int err;
++
++	err = qman_alloc_cgrid(&priv->ingress_cgr.cgrid);
++	if (err < 0) {
++		pr_err("Error %d allocating CGR ID\n", err);
++		goto out_error;
++	}
++
++	/* Enable CS TD, but disable Congestion State Change Notifications. */
++	initcgr.we_mask = QM_CGR_WE_CS_THRES;
++	initcgr.cgr.cscn_en = QM_CGR_EN;
++	cs_th = CONFIG_FSL_DPAA_INGRESS_CS_THRESHOLD;
++	qm_cgr_cs_thres_set64(&initcgr.cgr.cs_thres, cs_th, 1);
++
++	initcgr.we_mask |= QM_CGR_WE_CSTD_EN;
++	initcgr.cgr.cstd_en = QM_CGR_EN;
++
++	/* This is actually a hack, because this CGR will be associated with
++	 * our affine SWP. However, we'll place our ingress FQs in it.
++	 */
++	err = qman_create_cgr(&priv->ingress_cgr, QMAN_CGR_FLAG_USE_INIT,
++			      &initcgr);
++	if (err < 0) {
++		pr_err("Error %d creating ingress CGR with ID %d\n", err,
++		       priv->ingress_cgr.cgrid);
++		qman_release_cgrid(priv->ingress_cgr.cgrid);
++		goto out_error;
++	}
++	pr_debug("Created ingress CGR %d for netdev with hwaddr %pM\n",
++		 priv->ingress_cgr.cgrid, priv->mac_dev->addr);
++
++	/* struct qman_cgr allows special cgrid values (i.e. outside the 0..255
++	 * range), but we have no common initialization path between the
++	 * different variants of the DPAA Eth driver, so we do it here rather
++	 * than modifying every other variant than "private Eth".
++	 */
++	priv->use_ingress_cgr = true;
++
++out_error:
++	return err;
++}
++
++static int dpa_priv_bp_create(struct net_device *net_dev, struct dpa_bp *dpa_bp,
++			      size_t count)
++{
++	struct dpa_priv_s *priv = netdev_priv(net_dev);
++	int i;
++
++	netif_dbg(priv, probe, net_dev,
++		  "Using private BM buffer pools\n");
++
++	priv->bp_count = count;
++
++	for (i = 0; i < count; i++) {
++		int err;
++
++		err = dpa_bp_alloc(&dpa_bp[i]);
++		if (err < 0) {
++			dpa_bp_free(priv);
++			priv->dpa_bp = NULL;
++			return err;
++		}
++
++		priv->dpa_bp = &dpa_bp[i];
++	}
++
++	dpa_priv_common_bpid = priv->dpa_bp->bpid;
++	return 0;
++}
++
++static const struct of_device_id dpa_match[];
++
++static int
++dpaa_eth_priv_probe(struct platform_device *pdev)
++{
++	int err = 0, i, channel;
++	struct device *dev;
++	struct dpa_bp *dpa_bp;
++	struct dpa_fq *dpa_fq, *tmp;
++	size_t count = 1;
++	struct net_device *net_dev = NULL;
++	struct dpa_priv_s *priv = NULL;
++	struct dpa_percpu_priv_s *percpu_priv;
++	struct fm_port_fqs port_fqs;
++	struct dpa_buffer_layout_s *buf_layout = NULL;
++	struct mac_device *mac_dev;
++	struct task_struct *kth;
++
++	dev = &pdev->dev;
++
++	/* Get the buffer pool assigned to this interface;
++	 * run only once the default pool probing code
++	 */
++	dpa_bp = (dpa_bpid2pool(dpa_priv_common_bpid)) ? :
++			dpa_priv_bp_probe(dev);
++	if (IS_ERR(dpa_bp))
++		return PTR_ERR(dpa_bp);
++
++	/* Allocate this early, so we can store relevant information in
++	 * the private area
++	 */
++	net_dev = alloc_etherdev_mq(sizeof(*priv), DPAA_ETH_TX_QUEUES);
++	if (!net_dev) {
++		dev_err(dev, "alloc_etherdev_mq() failed\n");
++		goto alloc_etherdev_mq_failed;
++	}
++
++	snprintf(net_dev->name, IFNAMSIZ, "fm%d-mac%d",
++		 dpa_mac_fman_index_get(pdev),
++		 dpa_mac_hw_index_get(pdev));
++
++	/* Do this here, so we can be verbose early */
++	SET_NETDEV_DEV(net_dev, dev);
++	dev_set_drvdata(dev, net_dev);
++
++	priv = netdev_priv(net_dev);
++	priv->net_dev = net_dev;
++
++	priv->msg_enable = netif_msg_init(debug, -1);
++
++	mac_dev = dpa_mac_dev_get(pdev);
++	if (IS_ERR(mac_dev) || !mac_dev) {
++		err = PTR_ERR(mac_dev);
++		goto mac_probe_failed;
++	}
++
++	/* We have physical ports, so we need to establish
++	 * the buffer layout.
++	 */
++	buf_layout = devm_kzalloc(dev, 2 * sizeof(*buf_layout),
++				  GFP_KERNEL);
++	if (!buf_layout)
++		goto alloc_failed;
++
++	dpa_set_buffers_layout(mac_dev, buf_layout);
++
++	/* For private ports, need to compute the size of the default
++	 * buffer pool, based on FMan port buffer layout;also update
++	 * the maximum buffer size for private ports if necessary
++	 */
++	dpa_bp->size = dpa_bp_size(&buf_layout[RX]);
++
++	INIT_LIST_HEAD(&priv->dpa_fq_list);
++
++	memset(&port_fqs, 0, sizeof(port_fqs));
++
++	err = dpa_fq_probe_mac(dev, &priv->dpa_fq_list, &port_fqs, true, RX);
++	if (!err)
++		err = dpa_fq_probe_mac(dev, &priv->dpa_fq_list,
++				       &port_fqs, true, TX);
++
++	if (err < 0)
++		goto fq_probe_failed;
++
++	/* bp init */
++
++	err = dpa_priv_bp_create(net_dev, dpa_bp, count);
++
++	if (err < 0)
++		goto bp_create_failed;
++
++	priv->mac_dev = mac_dev;
++
++	channel = dpa_get_channel();
++
++	if (channel < 0) {
++		err = channel;
++		goto get_channel_failed;
++	}
++
++	priv->channel = (u16)channel;
++
++	/* Start a thread that will walk the cpus with affine portals
++	 * and add this pool channel to each's dequeue mask.
++	 */
++	kth = kthread_run(dpaa_eth_add_channel,
++			  (void *)(unsigned long)priv->channel,
++			  "dpaa_%p:%d", net_dev, priv->channel);
++	if (!kth) {
++		err = -ENOMEM;
++		goto add_channel_failed;
++	}
++
++	dpa_fq_setup(priv, &private_fq_cbs, priv->mac_dev->port_dev[TX]);
++
++	/* Create a congestion group for this netdev, with
++	 * dynamically-allocated CGR ID.
++	 * Must be executed after probing the MAC, but before
++	 * assigning the egress FQs to the CGRs.
++	 */
++	err = dpaa_eth_cgr_init(priv);
++	if (err < 0) {
++		dev_err(dev, "Error initializing CGR\n");
++		goto tx_cgr_init_failed;
++	}
++	err = dpaa_eth_priv_ingress_cgr_init(priv);
++	if (err < 0) {
++		dev_err(dev, "Error initializing ingress CGR\n");
++		goto rx_cgr_init_failed;
++	}
++
++	/* Add the FQs to the interface, and make them active */
++	list_for_each_entry_safe(dpa_fq, tmp, &priv->dpa_fq_list, list) {
++		err = dpa_fq_init(dpa_fq, false);
++		if (err < 0)
++			goto fq_alloc_failed;
++	}
++
++	priv->buf_layout = buf_layout;
++	priv->tx_headroom = dpa_get_headroom(&priv->buf_layout[TX]);
++	priv->rx_headroom = dpa_get_headroom(&priv->buf_layout[RX]);
++
++	/* All real interfaces need their ports initialized */
++	dpaa_eth_init_ports(mac_dev, dpa_bp, count, &port_fqs,
++			    buf_layout, dev);
++
++	priv->percpu_priv = devm_alloc_percpu(dev, *priv->percpu_priv);
++
++	if (!priv->percpu_priv) {
++		dev_err(dev, "devm_alloc_percpu() failed\n");
++		err = -ENOMEM;
++		goto alloc_percpu_failed;
++	}
++	for_each_possible_cpu(i) {
++		percpu_priv = per_cpu_ptr(priv->percpu_priv, i);
++		memset(percpu_priv, 0, sizeof(*percpu_priv));
++	}
++
++	/* Initialize NAPI */
++	err = dpa_private_napi_add(net_dev);
++
++	if (err < 0)
++		goto napi_add_failed;
++
++	err = dpa_private_netdev_init(net_dev);
++
++	if (err < 0)
++		goto netdev_init_failed;
++
++	pr_info("Probed interface %s\n", net_dev->name);
++
++	return 0;
++
++netdev_init_failed:
++napi_add_failed:
++	dpa_private_napi_del(net_dev);
++alloc_percpu_failed:
++	dpa_fq_free(dev, &priv->dpa_fq_list);
++fq_alloc_failed:
++	qman_delete_cgr_safe(&priv->ingress_cgr);
++	qman_release_cgrid(priv->ingress_cgr.cgrid);
++rx_cgr_init_failed:
++	qman_delete_cgr_safe(&priv->cgr_data.cgr);
++	qman_release_cgrid(priv->cgr_data.cgr.cgrid);
++tx_cgr_init_failed:
++add_channel_failed:
++get_channel_failed:
++	dpa_bp_free(priv);
++bp_create_failed:
++fq_probe_failed:
++alloc_failed:
++mac_probe_failed:
++	dev_set_drvdata(dev, NULL);
++	free_netdev(net_dev);
++alloc_etherdev_mq_failed:
++	if (atomic_read(&dpa_bp->refs) == 0)
++		devm_kfree(dev, dpa_bp);
++
++	return err;
++}
++
++static struct platform_device_id dpa_devtype[] = {
++	{
++		.name = "dpaa-ethernet",
++		.driver_data = 0,
++	}, {
++	}
++};
++MODULE_DEVICE_TABLE(platform, dpa_devtype);
++
++static struct platform_driver dpa_driver = {
++	.driver = {
++		.name = KBUILD_MODNAME,
++	},
++	.id_table = dpa_devtype,
++	.probe = dpaa_eth_priv_probe,
++	.remove = dpa_remove
++};
++
++static int __init dpa_load(void)
++{
++	int err;
++
++	pr_info(DPA_DESCRIPTION "\n");
++
++	/* initialise dpaa_eth mirror values */
++	dpa_rx_extra_headroom = fm_get_rx_extra_headroom();
++	dpa_max_frm = fm_get_max_frm();
++
++	err = platform_driver_register(&dpa_driver);
++	if (err < 0)
++		pr_err("Error, platform_driver_register() = %d\n", err);
++
++	return err;
++}
++module_init(dpa_load);
++
++static void __exit dpa_unload(void)
++{
++	platform_driver_unregister(&dpa_driver);
++
++	/* Only one channel is used and needs to be relased after all
++	 * interfaces are removed
++	 */
++	dpa_release_channel();
++}
++module_exit(dpa_unload);
++
++MODULE_LICENSE("Dual BSD/GPL");
++MODULE_AUTHOR("Andy Fleming <afleming@freescale.com>");
++MODULE_DESCRIPTION(DPA_DESCRIPTION);
+diff --git a/drivers/net/ethernet/freescale/dpaa/dpaa_eth.h b/drivers/net/ethernet/freescale/dpaa/dpaa_eth.h
+new file mode 100644
+index 0000000..d337dcc
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/dpaa/dpaa_eth.h
+@@ -0,0 +1,442 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef __DPA_H
++#define __DPA_H
++
++#include <linux/netdevice.h>
++#include <soc/fsl/qman.h>
++
++#include "fm_ext.h"
++#include "mac.h"
++
++extern int dpa_rx_extra_headroom;
++extern int dpa_max_frm;
++
++#define dpa_get_rx_extra_headroom() dpa_rx_extra_headroom
++#define dpa_get_max_frm() dpa_max_frm
++
++#define dpa_get_max_mtu()	\
++	(dpa_get_max_frm() - (VLAN_ETH_HLEN + ETH_FCS_LEN))
++
++/* Simple enum of FQ types - used for array indexing */
++enum port_type {RX, TX};
++
++struct dpa_buffer_layout_s {
++	u16 priv_data_size;
++	bool parse_results;
++	bool time_stamp;
++	bool hash_results;
++	u16 data_align;
++};
++
++#define DPA_ERR_ON(cond)
++
++#define DPA_TX_PRIV_DATA_SIZE	16
++#define DPA_PARSE_RESULTS_SIZE sizeof(struct fm_prs_result_t)
++#define DPA_TIME_STAMP_SIZE 8
++#define DPA_HASH_RESULTS_SIZE 8
++#define DPA_RX_PRIV_DATA_SIZE	(DPA_TX_PRIV_DATA_SIZE + \
++					dpa_get_rx_extra_headroom())
++
++#define FM_FD_STAT_RX_ERRORS						\
++	(FM_PORT_FRM_ERR_DMA | FM_PORT_FRM_ERR_PHYSICAL	| \
++	 FM_PORT_FRM_ERR_SIZE | FM_PORT_FRM_ERR_CLS_DISCARD | \
++	 FM_PORT_FRM_ERR_EXTRACTION | FM_PORT_FRM_ERR_NO_SCHEME	| \
++	 FM_PORT_FRM_ERR_PRS_TIMEOUT | FM_PORT_FRM_ERR_PRS_ILL_INSTRUCT | \
++	 FM_PORT_FRM_ERR_PRS_HDR_ERR)
++
++#define FM_FD_STAT_TX_ERRORS \
++	(FM_PORT_FRM_ERR_UNSUPPORTED_FORMAT | \
++	 FM_PORT_FRM_ERR_LENGTH | FM_PORT_FRM_ERR_DMA)
++
++/* The raw buffer size must be cacheline aligned.
++ * Normally we use 2K buffers.
++ */
++#define DPA_BP_RAW_SIZE		2048
++
++/* This is what FMan is ever allowed to use.
++ * FMan-DMA requires 16-byte alignment for Rx buffers, but SKB_DATA_ALIGN is
++ * even stronger (SMP_CACHE_BYTES-aligned), so we just get away with that,
++ * via SKB_WITH_OVERHEAD(). We can't rely on netdev_alloc_frag() giving us
++ * half-page-aligned buffers (can we?), so we reserve some more space
++ * for start-of-buffer alignment.
++ */
++#define dpa_bp_size(buffer_layout)	(SKB_WITH_OVERHEAD(DPA_BP_RAW_SIZE) - \
++						SMP_CACHE_BYTES)
++/* We must ensure that skb_shinfo is always cacheline-aligned. */
++#define DPA_SKB_SIZE(size)	((size) & ~(SMP_CACHE_BYTES - 1))
++
++/* Largest value that the FQD's OAL field can hold.
++ * This is DPAA-1.x specific.
++ */
++#define FSL_QMAN_MAX_OAL	127
++
++/* Default alignment for start of data in an Rx FD */
++#define DPA_FD_DATA_ALIGNMENT  16
++
++/* Values for the L3R field of the FM Parse Results
++ */
++/* L3 Type field: First IP Present IPv4 */
++#define FM_L3_PARSE_RESULT_IPV4	0x8000
++/* L3 Type field: First IP Present IPv6 */
++#define FM_L3_PARSE_RESULT_IPV6	0x4000
++
++/* Values for the L4R field of the FM Parse Results
++ * See $8.8.4.7.20 - L4 HXS - L4 Results from DPAA-Rev2 Reference Manual.
++ */
++/* L4 Type field: UDP */
++#define FM_L4_PARSE_RESULT_UDP	0x40
++/* L4 Type field: TCP */
++#define FM_L4_PARSE_RESULT_TCP	0x20
++
++#define FM_FD_STAT_ERR_PHYSICAL	FM_PORT_FRM_ERR_PHYSICAL
++
++/* number of Tx queues to FMan */
++#define DPAA_ETH_TX_QUEUES	NR_CPUS
++
++#define DPAA_ETH_RX_QUEUES	128
++
++#define FSL_DPAA_ETH_MAX_BUF_COUNT	128
++#define FSL_DPAA_ETH_REFILL_THRESHOLD	80
++
++/* More detailed FQ types - used for fine-grained WQ assignments */
++enum dpa_fq_type {
++	FQ_TYPE_RX_DEFAULT = 1, /* Rx Default FQs */
++	FQ_TYPE_RX_ERROR,	/* Rx Error FQs */
++	FQ_TYPE_RX_PCD,		/* User-defined PCDs */
++	FQ_TYPE_TX,		/* "Real" Tx FQs */
++	FQ_TYPE_TX_CONFIRM,	/* Tx default Conf FQ (actually an Rx FQ) */
++	FQ_TYPE_TX_CONF_MQ,	/* Tx conf FQs (one for each Tx FQ) */
++	FQ_TYPE_TX_ERROR,	/* Tx Error FQs (these are actually Rx FQs) */
++};
++
++struct dpa_fq {
++	struct qman_fq fq_base;
++	struct list_head list;
++	struct net_device *net_dev;
++	bool init;
++	u32 fqid;
++	u32 flags;
++	u16 channel;
++	u8 wq;
++	enum dpa_fq_type fq_type;
++};
++
++struct dpa_fq_cbs_t {
++	struct qman_fq rx_defq;
++	struct qman_fq tx_defq;
++	struct qman_fq rx_errq;
++	struct qman_fq tx_errq;
++	struct qman_fq egress_ern;
++};
++
++struct fqid_cell {
++	u32 start;
++	u32 count;
++};
++
++struct dpa_bp {
++	struct bman_pool *pool;
++	u8 bpid;
++	struct device *dev;
++	/* the buffer pools used for the private ports are initialized
++	 * with config_count buffers for each CPU; at runtime the
++	 * number of buffers per CPU is constantly brought back to this
++	 * level
++	 */
++	int config_count;
++	size_t size;
++	bool seed_pool;
++	/* physical address of the contiguous memory used by the pool to store
++	 * the buffers
++	 */
++	dma_addr_t paddr;
++	/* virtual address of the contiguous memory used by the pool to store
++	 * the buffers
++	 */
++	void __iomem *vaddr;
++	/* current number of buffers in the bpool alloted to this CPU */
++	int __percpu *percpu_count;
++	atomic_t refs;
++	/* some bpools need to be seeded before use by this cb */
++	int (*seed_cb)(struct dpa_bp *);
++	/* some bpools need to be emptied before freeing; this cb is used
++	 * for freeing of individual buffers taken from the pool
++	 */
++	void (*free_buf_cb)(void *addr);
++};
++
++struct dpa_napi_portal {
++	struct napi_struct napi;
++	struct qman_portal *p;
++};
++
++struct dpa_percpu_priv_s {
++	struct net_device *net_dev;
++	struct dpa_napi_portal *np;
++	struct rtnl_link_stats64 stats;
++};
++
++struct dpa_priv_s {
++	struct dpa_percpu_priv_s __percpu *percpu_priv;
++	struct dpa_bp *dpa_bp;
++	/* Store here the needed Tx headroom for convenience and speed
++	 * (even though it can be computed based on the fields of buf_layout)
++	 */
++	u16 tx_headroom;
++	struct net_device *net_dev;
++	struct mac_device *mac_dev;
++	struct qman_fq *egress_fqs[DPAA_ETH_TX_QUEUES];
++	struct qman_fq *conf_fqs[DPAA_ETH_TX_QUEUES];
++
++	size_t bp_count;
++
++	u16 channel;	/* "fsl,qman-channel-id" */
++	struct list_head dpa_fq_list;
++
++#ifdef CONFIG_FSL_DPAA_ETH_DEBUGFS
++	struct dentry *debugfs_file;
++#endif /* CONFIG_FSL_DPAA_ETH_DEBUGFS */
++
++	u32 msg_enable;	/* net_device message level */
++
++	struct {
++		/* All egress queues to a given net device belong to one
++		 * (and the same) congestion group.
++		 */
++		struct qman_cgr cgr;
++	} cgr_data;
++	/* Use a per-port CGR for ingress traffic. */
++	bool use_ingress_cgr;
++	struct qman_cgr ingress_cgr;
++
++	struct dpa_buffer_layout_s *buf_layout;
++	u16 rx_headroom;
++};
++
++struct fm_port_fqs {
++	struct dpa_fq *tx_defq;
++	struct dpa_fq *tx_errq;
++	struct dpa_fq *rx_defq;
++	struct dpa_fq *rx_errq;
++};
++
++int dpa_bp_priv_seed(struct dpa_bp *dpa_bp);
++int dpaa_eth_refill_bpools(struct dpa_bp *dpa_bp, int *count_ptr);
++void _dpa_rx(struct net_device *net_dev,
++	     struct qman_portal *portal,
++	     const struct dpa_priv_s *priv,
++	     struct dpa_percpu_priv_s *percpu_priv,
++	     const struct qm_fd *fd,
++	     u32 fqid,
++	     int *count_ptr);
++int dpa_tx(struct sk_buff *skb, struct net_device *net_dev);
++struct sk_buff *_dpa_cleanup_tx_fd(const struct dpa_priv_s *priv,
++				   const struct qm_fd *fd);
++
++/* Turn on HW checksum computation for this outgoing frame.
++ * If the current protocol is not something we support in this regard
++ * (or if the stack has already computed the SW checksum), we do nothing.
++ *
++ * Returns 0 if all goes well (or HW csum doesn't apply), and a negative value
++ * otherwise.
++ *
++ * Note that this function may modify the fd->cmd field and the skb data buffer
++ * (the Parse Results area).
++ */
++int dpa_enable_tx_csum(struct dpa_priv_s *priv, struct sk_buff *skb,
++		       struct qm_fd *fd, char *parse_results);
++
++static inline int dpaa_eth_napi_schedule(struct dpa_percpu_priv_s *percpu_priv,
++					 struct qman_portal *portal)
++{
++	/* In case of threaded ISR for RT enable kernel,
++	 * in_irq() does not return appropriate value, so use
++	 * in_serving_softirq to distinguish softirq or irq context.
++	 */
++	if (unlikely(in_irq() || !in_serving_softirq())) {
++		/* Disable QMan IRQ and invoke NAPI */
++		int ret = qman_p_irqsource_remove(portal, QM_PIRQ_DQRI);
++
++		if (likely(!ret)) {
++			const struct qman_portal_config *pc =
++					qman_p_get_portal_config(portal);
++			struct dpa_napi_portal *np =
++					&percpu_priv->np[pc->channel];
++
++			np->p = portal;
++			napi_schedule(&np->napi);
++			return 1;
++		}
++	}
++	return 0;
++}
++
++static inline ssize_t __const __attribute__((nonnull))
++dpa_fd_length(const struct qm_fd *fd)
++{
++	return fd->length20;
++}
++
++static inline ssize_t __const __attribute__((nonnull))
++dpa_fd_offset(const struct qm_fd *fd)
++{
++	return fd->offset;
++}
++
++/* Verifies if the skb length is below the interface MTU */
++static inline int dpa_check_rx_mtu(struct sk_buff *skb, int mtu)
++{
++	if (unlikely(skb->len > mtu))
++		if ((skb->protocol != htons(ETH_P_8021Q)) ||
++		    (skb->len > mtu + 4))
++			return -1;
++
++	return 0;
++}
++
++static inline u16 dpa_get_headroom(struct dpa_buffer_layout_s *bl)
++{
++	u16 headroom;
++	/* The frame headroom must accommodate:
++	 * - the driver private data area
++	 * - parse results, hash results, timestamp if selected
++	 * If either hash results or time stamp are selected, both will
++	 * be copied to/from the frame headroom, as TS is located between PR and
++	 * HR in the IC and IC copy size has a granularity of 16bytes
++	 * (see description of FMBM_RICP and FMBM_TICP registers in DPAARM)
++	 *
++	 * Also make sure the headroom is a multiple of data_align bytes
++	 */
++	headroom = (u16)(bl->priv_data_size +
++		   (bl->parse_results ? DPA_PARSE_RESULTS_SIZE : 0) +
++		   (bl->hash_results || bl->time_stamp ?
++		    DPA_TIME_STAMP_SIZE + DPA_HASH_RESULTS_SIZE : 0));
++
++	return bl->data_align ? ALIGN(headroom, bl->data_align) : headroom;
++}
++
++void dpa_private_napi_del(struct net_device *net_dev);
++
++static inline void clear_fd(struct qm_fd *fd)
++{
++	fd->opaque_addr = 0;
++	fd->opaque = 0;
++	fd->cmd = 0;
++}
++
++static inline struct qman_fq *_dpa_get_tx_conf_queue(
++		const struct dpa_priv_s *priv,
++		struct qman_fq *tx_fq)
++{
++	int i;
++
++	for (i = 0; i < DPAA_ETH_TX_QUEUES; i++)
++		if (priv->egress_fqs[i] == tx_fq)
++			return priv->conf_fqs[i];
++
++	return NULL;
++}
++
++static inline int dpa_xmit(struct dpa_priv_s *priv,
++			   struct rtnl_link_stats64 *percpu_stats,
++			   int queue,
++			   struct qm_fd *fd)
++{
++	int err, i;
++	struct qman_fq *egress_fq;
++
++	egress_fq = priv->egress_fqs[queue];
++	if (fd->bpid == 0xff)
++		fd->cmd |= qman_fq_fqid(
++				_dpa_get_tx_conf_queue(priv, egress_fq)
++				);
++
++	for (i = 0; i < 100000; i++) {
++		err = qman_enqueue(egress_fq, fd, 0);
++		if (err != -EBUSY)
++			break;
++	}
++
++	if (unlikely(err < 0)) {
++		percpu_stats->tx_errors++;
++		percpu_stats->tx_fifo_errors++;
++		return err;
++	}
++
++	percpu_stats->tx_packets++;
++	percpu_stats->tx_bytes += dpa_fd_length(fd);
++
++	return 0;
++}
++
++/* Use multiple WQs for FQ assignment:
++ *	- Tx Confirmation queues go to WQ1.
++ *	- Rx Default and Tx queues go to WQ3 (no differentiation between
++ *	  Rx and Tx traffic).
++ *	- Rx Error and Tx Error queues go to WQ2 (giving them a better chance
++ *	  to be scheduled, in case there are many more FQs in WQ3).
++ * This ensures that Tx-confirmed buffers are timely released. In particular,
++ * it avoids congestion on the Tx Confirm FQs, which can pile up PFDRs if they
++ * are greatly outnumbered by other FQs in the system, while
++ * dequeue scheduling is round-robin.
++ */
++static inline void _dpa_assign_wq(struct dpa_fq *fq)
++{
++	switch (fq->fq_type) {
++	case FQ_TYPE_TX_CONFIRM:
++	case FQ_TYPE_TX_CONF_MQ:
++		fq->wq = 1;
++		break;
++	case FQ_TYPE_RX_DEFAULT:
++	case FQ_TYPE_TX:
++		fq->wq = 3;
++		break;
++	case FQ_TYPE_RX_ERROR:
++	case FQ_TYPE_TX_ERROR:
++		fq->wq = 2;
++		break;
++	default:
++		WARN(1, "Invalid FQ type %d for FQID %d!\n",
++		     fq->fq_type, fq->fqid);
++	}
++}
++
++/* Use the queue selected by XPS */
++#define dpa_get_queue_mapping(skb) \
++	skb_get_queue_mapping(skb)
++
++static inline void _dpa_bp_free_pf(void *addr)
++{
++	put_page(virt_to_head_page(addr));
++}
++
++#endif	/* __DPA_H */
+diff --git a/drivers/net/ethernet/freescale/dpaa/dpaa_eth_common.c b/drivers/net/ethernet/freescale/dpaa/dpaa_eth_common.c
+new file mode 100644
+index 0000000..10f08f7
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/dpaa/dpaa_eth_common.c
+@@ -0,0 +1,1248 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/of_platform.h>
++#include <linux/of_net.h>
++#include <linux/etherdevice.h>
++#include <linux/kthread.h>
++#include <linux/percpu.h>
++#include <linux/highmem.h>
++#include <linux/sort.h>
++#include <soc/fsl/qman.h>
++#include <linux/ip.h>
++#include <linux/ipv6.h>
++#include <linux/if_vlan.h>
++#include "dpaa_eth.h"
++#include "dpaa_eth_common.h"
++#include "mac.h"
++
++/* Size in bytes of the FQ taildrop threshold */
++#define DPA_FQ_TD 0x200000
++
++static struct dpa_bp *dpa_bp_array[64];
++
++int dpa_max_frm;
++
++int dpa_rx_extra_headroom;
++
++static const struct fqid_cell tx_confirm_fqids[] = {
++	{0, DPAA_ETH_TX_QUEUES}
++};
++
++static const struct fqid_cell default_fqids[][3] = {
++	[RX] = { {0, 1}, {0, 1}, {0, DPAA_ETH_RX_QUEUES} },
++	[TX] = { {0, 1}, {0, 1}, {0, DPAA_ETH_TX_QUEUES} }
++};
++
++int dpa_netdev_init(struct net_device *net_dev,
++		    const u8 *mac_addr,
++		    u16 tx_timeout)
++{
++	int err;
++	struct dpa_priv_s *priv = netdev_priv(net_dev);
++	struct device *dev = net_dev->dev.parent;
++
++	net_dev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
++	/* we do not want shared skbs on TX */
++	net_dev->priv_flags &= ~IFF_TX_SKB_SHARING;
++
++	net_dev->features |= net_dev->hw_features;
++	net_dev->vlan_features = net_dev->features;
++
++	memcpy(net_dev->perm_addr, mac_addr, net_dev->addr_len);
++	memcpy(net_dev->dev_addr, mac_addr, net_dev->addr_len);
++
++	net_dev->needed_headroom = priv->tx_headroom;
++	net_dev->watchdog_timeo = msecs_to_jiffies(tx_timeout);
++
++	/* start without the RUNNING flag, phylib controlls it later */
++	netif_carrier_off(net_dev);
++
++	err = register_netdev(net_dev);
++	if (err < 0) {
++		dev_err(dev, "register_netdev() = %d\n", err);
++		return err;
++	}
++
++	return 0;
++}
++
++int dpa_start(struct net_device *net_dev)
++{
++	int err, i;
++	struct dpa_priv_s *priv;
++	struct mac_device *mac_dev;
++
++	priv = netdev_priv(net_dev);
++	mac_dev = priv->mac_dev;
++
++	err = mac_dev->init_phy(net_dev, priv->mac_dev);
++	if (err < 0) {
++		netif_err(priv, ifup, net_dev, "init_phy() = %d\n", err);
++		return err;
++	}
++
++	for_each_port_device(i, mac_dev->port_dev) {
++		err = fm_port_enable(fm_port_drv_handle(mac_dev->port_dev[i]));
++		if (err)
++			goto mac_start_failed;
++	}
++
++	err = priv->mac_dev->start(mac_dev);
++	if (err < 0) {
++		netif_err(priv, ifup, net_dev, "mac_dev->start() = %d\n", err);
++		goto mac_start_failed;
++	}
++
++	netif_tx_start_all_queues(net_dev);
++
++	return 0;
++
++mac_start_failed:
++	for_each_port_device(i, mac_dev->port_dev)
++		fm_port_disable(fm_port_drv_handle(mac_dev->port_dev[i]));
++
++	return err;
++}
++
++int dpa_stop(struct net_device *net_dev)
++{
++	int i, err, error;
++	struct dpa_priv_s *priv;
++	struct mac_device *mac_dev;
++
++	priv = netdev_priv(net_dev);
++	mac_dev = priv->mac_dev;
++
++	netif_tx_stop_all_queues(net_dev);
++	/* Allow the Fman (Tx) port to process in-flight frames before we
++	 * try switching it off.
++	 */
++	usleep_range(5000, 10000);
++
++	err = mac_dev->stop(mac_dev);
++	if (err < 0)
++		netif_err(priv, ifdown, net_dev, "mac_dev->stop() = %d\n",
++			  err);
++
++	for_each_port_device(i, mac_dev->port_dev) {
++		error = fm_port_disable(
++				fm_port_drv_handle(mac_dev->port_dev[i]));
++		if (error)
++			err = error;
++	}
++
++	if (mac_dev->phy_dev)
++		phy_disconnect(mac_dev->phy_dev);
++	mac_dev->phy_dev = NULL;
++
++	return err;
++}
++
++void dpa_timeout(struct net_device *net_dev)
++{
++	const struct dpa_priv_s	*priv;
++	struct dpa_percpu_priv_s *percpu_priv;
++
++	priv = netdev_priv(net_dev);
++	percpu_priv = raw_cpu_ptr(priv->percpu_priv);
++
++	netif_crit(priv, timer, net_dev, "Transmit timeout latency: %u ms\n",
++		   jiffies_to_msecs(jiffies - net_dev->trans_start));
++
++	percpu_priv->stats.tx_errors++;
++}
++
++/* Calculates the statistics for the given device by adding the statistics
++ * collected by each CPU.
++ */
++struct rtnl_link_stats64 *dpa_get_stats64(struct net_device *net_dev,
++					  struct rtnl_link_stats64 *stats)
++{
++	struct dpa_priv_s *priv = netdev_priv(net_dev);
++	u64 *cpustats;
++	u64 *netstats = (u64 *)stats;
++	int i, j;
++	struct dpa_percpu_priv_s *percpu_priv;
++	int numstats = sizeof(struct rtnl_link_stats64) / sizeof(u64);
++
++	for_each_possible_cpu(i) {
++		percpu_priv = per_cpu_ptr(priv->percpu_priv, i);
++
++		cpustats = (u64 *)&percpu_priv->stats;
++
++		for (j = 0; j < numstats; j++)
++			netstats[j] += cpustats[j];
++	}
++
++	return stats;
++}
++
++int dpa_change_mtu(struct net_device *net_dev, int new_mtu)
++{
++	const int max_mtu = dpa_get_max_mtu();
++
++	/* Make sure we don't exceed the Ethernet controller's MAXFRM */
++	if (new_mtu < 68 || new_mtu > max_mtu) {
++		netdev_err(net_dev, "Invalid L3 mtu %d (must be between %d and %d).\n",
++			   new_mtu, 68, max_mtu);
++		return -EINVAL;
++	}
++	net_dev->mtu = new_mtu;
++
++	return 0;
++}
++
++/* .ndo_init callback */
++int dpa_ndo_init(struct net_device *net_dev)
++{
++	/* If fsl_fm_max_frm is set to a higher value than the all-common 1500,
++	 * we choose conservatively and let the user explicitly set a higher
++	 * MTU via ifconfig. Otherwise, the user may end up with different MTUs
++	 * in the same LAN.
++	 * If on the other hand fsl_fm_max_frm has been chosen below 1500,
++	 * start with the maximum allowed.
++	 */
++	int init_mtu = min(dpa_get_max_mtu(), ETH_DATA_LEN);
++
++	netdev_dbg(net_dev, "Setting initial MTU on net device: %d\n",
++		   init_mtu);
++	net_dev->mtu = init_mtu;
++
++	return 0;
++}
++
++int dpa_set_features(struct net_device *dev, netdev_features_t features)
++{
++	/* Not much to do here for now */
++	dev->features = features;
++	return 0;
++}
++
++netdev_features_t dpa_fix_features(struct net_device *dev,
++				   netdev_features_t features)
++{
++	netdev_features_t unsupported_features = 0;
++
++	/* In theory we should never be requested to enable features that
++	 * we didn't set in netdev->features and netdev->hw_features at probe
++	 * time, but double check just to be on the safe side.
++	 * We don't support enabling Rx csum through ethtool yet
++	 */
++	unsupported_features |= NETIF_F_RXCSUM;
++
++	features &= ~unsupported_features;
++
++	return features;
++}
++
++int dpa_remove(struct platform_device *pdev)
++{
++	int err;
++	struct device *dev;
++	struct net_device *net_dev;
++	struct dpa_priv_s *priv;
++
++	dev = &pdev->dev;
++	net_dev = dev_get_drvdata(dev);
++
++	priv = netdev_priv(net_dev);
++
++	dev_set_drvdata(dev, NULL);
++	unregister_netdev(net_dev);
++
++	err = dpa_fq_free(dev, &priv->dpa_fq_list);
++
++	qman_delete_cgr_safe(&priv->ingress_cgr);
++	qman_release_cgrid(priv->ingress_cgr.cgrid);
++	qman_delete_cgr_safe(&priv->cgr_data.cgr);
++	qman_release_cgrid(priv->cgr_data.cgr.cgrid);
++
++	dpa_private_napi_del(net_dev);
++
++	dpa_bp_free(priv);
++
++	if (priv->buf_layout)
++		devm_kfree(dev, priv->buf_layout);
++
++	free_netdev(net_dev);
++
++	return err;
++}
++
++struct mac_device * __attribute__((nonnull))
++dpa_mac_dev_get(struct platform_device *pdev)
++{
++	struct device *dpa_dev, *dev;
++	struct device_node *mac_node;
++	struct platform_device *of_dev;
++	struct mac_device *mac_dev;
++	struct dpaa_eth_data *eth_data;
++
++	dpa_dev = &pdev->dev;
++	eth_data = dpa_dev->platform_data;
++	if (!eth_data)
++		return ERR_PTR(-ENODEV);
++
++	mac_node = eth_data->mac_node;
++
++	of_dev = of_find_device_by_node(mac_node);
++	if (!of_dev) {
++		dev_err(dpa_dev, "of_find_device_by_node(%s) failed\n",
++			mac_node->full_name);
++		of_node_put(mac_node);
++		return ERR_PTR(-EINVAL);
++	}
++	of_node_put(mac_node);
++
++	dev = &of_dev->dev;
++
++	mac_dev = dev_get_drvdata(dev);
++	if (!mac_dev) {
++		dev_err(dpa_dev, "dev_get_drvdata(%s) failed\n",
++			dev_name(dev));
++		return ERR_PTR(-EINVAL);
++	}
++
++	return mac_dev;
++}
++
++int dpa_mac_hw_index_get(struct platform_device *pdev)
++{
++	struct device *dpa_dev;
++	struct dpaa_eth_data *eth_data;
++
++	dpa_dev = &pdev->dev;
++	eth_data = dpa_dev->platform_data;
++
++	return eth_data->mac_hw_id;
++}
++
++int dpa_mac_fman_index_get(struct platform_device *pdev)
++{
++	struct device *dpa_dev;
++	struct dpaa_eth_data *eth_data;
++
++	dpa_dev = &pdev->dev;
++	eth_data = dpa_dev->platform_data;
++
++	return eth_data->fman_hw_id;
++}
++
++int dpa_set_mac_address(struct net_device *net_dev, void *addr)
++{
++	const struct dpa_priv_s	*priv;
++	int err;
++	struct mac_device *mac_dev;
++
++	priv = netdev_priv(net_dev);
++
++	err = eth_mac_addr(net_dev, addr);
++	if (err < 0) {
++		netif_err(priv, drv, net_dev, "eth_mac_addr() = %d\n", err);
++		return err;
++	}
++
++	mac_dev = priv->mac_dev;
++
++	err = mac_dev->change_addr(get_mac_handle(mac_dev),
++				   (enet_addr_t *)net_dev->dev_addr);
++	if (err < 0) {
++		netif_err(priv, drv, net_dev, "mac_dev->change_addr() = %d\n",
++			  err);
++		return err;
++	}
++
++	return 0;
++}
++
++void dpa_set_rx_mode(struct net_device *net_dev)
++{
++	int err;
++	const struct dpa_priv_s	*priv;
++
++	priv = netdev_priv(net_dev);
++
++	if (!!(net_dev->flags & IFF_PROMISC) != priv->mac_dev->promisc) {
++		priv->mac_dev->promisc = !priv->mac_dev->promisc;
++		err = priv->mac_dev->set_promisc(get_mac_handle(priv->mac_dev),
++						 priv->mac_dev->promisc);
++		if (err < 0)
++			netif_err(priv, drv, net_dev,
++				  "mac_dev->set_promisc() = %d\n",
++				  err);
++	}
++
++	err = priv->mac_dev->set_multi(net_dev, priv->mac_dev);
++	if (err < 0)
++		netif_err(priv, drv, net_dev, "mac_dev->set_multi() = %d\n",
++			  err);
++}
++
++void dpa_set_buffers_layout(struct mac_device *mac_dev,
++			    struct dpa_buffer_layout_s *layout)
++{
++	struct fm_port_params params;
++
++	/* Rx */
++	layout[RX].priv_data_size = (u16)DPA_RX_PRIV_DATA_SIZE;
++	layout[RX].parse_results = true;
++	layout[RX].hash_results = true;
++
++	fm_port_get_buff_layout_ext_params(mac_dev->port_dev[RX], &params);
++	/* a value of zero for data alignment means "don't care", so align to
++	 * a non-zero value to prevent FMD from using its own default
++	 */
++	layout[RX].data_align = params.data_align ? : DPA_FD_DATA_ALIGNMENT;
++
++	/* Tx */
++	layout[TX].priv_data_size = DPA_TX_PRIV_DATA_SIZE;
++	layout[TX].parse_results = true;
++	layout[TX].hash_results = true;
++
++	fm_port_get_buff_layout_ext_params(mac_dev->port_dev[TX], &params);
++	layout[TX].data_align = params.data_align ? : DPA_FD_DATA_ALIGNMENT;
++}
++
++int __attribute__((nonnull))
++dpa_bp_alloc(struct dpa_bp *dpa_bp)
++{
++	int err;
++	struct bman_pool_params bp_params;
++	struct platform_device *pdev;
++
++	if (dpa_bp->size == 0 || dpa_bp->config_count == 0) {
++		pr_err("Buffer pool is not properly initialized! Missing size or initial number of buffers");
++		return -EINVAL;
++	}
++
++	memset(&bp_params, 0, sizeof(struct bman_pool_params));
++
++	/* If the pool is already specified, we only create one per bpid */
++	if (dpa_bpid2pool_use(dpa_bp->bpid))
++		return 0;
++
++	if (dpa_bp->bpid == 0)
++		bp_params.flags |= BMAN_POOL_FLAG_DYNAMIC_BPID;
++	else
++		bp_params.bpid = dpa_bp->bpid;
++
++	dpa_bp->pool = bman_new_pool(&bp_params);
++	if (!dpa_bp->pool) {
++		pr_err("bman_new_pool() failed\n");
++		return -ENODEV;
++	}
++
++	dpa_bp->bpid = (u8)bman_get_params(dpa_bp->pool)->bpid;
++
++	pdev = platform_device_register_simple("DPAA_bpool",
++					       dpa_bp->bpid, NULL, 0);
++	if (IS_ERR(pdev)) {
++		err = PTR_ERR(pdev);
++		goto pdev_register_failed;
++	}
++
++	err = dma_set_mask(&pdev->dev, DMA_BIT_MASK(40));
++	if (err)
++		goto pdev_mask_failed;
++
++	dpa_bp->dev = &pdev->dev;
++
++	if (dpa_bp->seed_cb) {
++		err = dpa_bp->seed_cb(dpa_bp);
++		if (err)
++			goto pool_seed_failed;
++	}
++
++	dpa_bpid2pool_map(dpa_bp->bpid, dpa_bp);
++
++	return 0;
++
++pool_seed_failed:
++pdev_mask_failed:
++	platform_device_unregister(pdev);
++pdev_register_failed:
++	bman_free_pool(dpa_bp->pool);
++
++	return err;
++}
++
++void dpa_bp_drain(struct dpa_bp *bp)
++{
++	int ret;
++	u8 num = 8;
++
++	do {
++		struct bm_buffer bmb[8];
++		int i;
++
++		ret = bman_acquire(bp->pool, bmb, num, 0);
++		if (ret < 0) {
++			if (num == 8) {
++				/* we have less than 8 buffers left;
++				 * drain them one by one
++				 */
++				num = 1;
++				ret = 1;
++				continue;
++			} else {
++				/* Pool is fully drained */
++				break;
++			}
++		}
++
++		for (i = 0; i < num; i++) {
++			dma_addr_t addr = bm_buf_addr(&bmb[i]);
++
++			dma_unmap_single(bp->dev, addr, bp->size,
++					 DMA_BIDIRECTIONAL);
++
++			bp->free_buf_cb(phys_to_virt(addr));
++		}
++	} while (ret > 0);
++}
++
++static void __attribute__((nonnull))
++_dpa_bp_free(struct dpa_bp *dpa_bp)
++{
++	struct dpa_bp *bp = dpa_bpid2pool(dpa_bp->bpid);
++
++	/* the mapping between bpid and dpa_bp is done very late in the
++	 * allocation procedure; if something failed before the mapping, the bp
++	 * was not configured, therefore we don't need the below instructions
++	 */
++	if (!bp)
++		return;
++
++	if (!atomic_dec_and_test(&bp->refs))
++		return;
++
++	if (bp->free_buf_cb)
++		dpa_bp_drain(bp);
++
++	dpa_bp_array[bp->bpid] = NULL;
++	bman_free_pool(bp->pool);
++
++	if (bp->dev)
++		platform_device_unregister(to_platform_device(bp->dev));
++}
++
++void __attribute__((nonnull))
++dpa_bp_free(struct dpa_priv_s *priv)
++{
++	int i;
++
++	for (i = 0; i < priv->bp_count; i++)
++		_dpa_bp_free(&priv->dpa_bp[i]);
++}
++
++struct dpa_bp *dpa_bpid2pool(int bpid)
++{
++	return dpa_bp_array[bpid];
++}
++
++void dpa_bpid2pool_map(int bpid, struct dpa_bp *dpa_bp)
++{
++	dpa_bp_array[bpid] = dpa_bp;
++	atomic_set(&dpa_bp->refs, 1);
++}
++
++bool dpa_bpid2pool_use(int bpid)
++{
++	if (dpa_bpid2pool(bpid)) {
++		atomic_inc(&dpa_bp_array[bpid]->refs);
++		return true;
++	}
++
++	return false;
++}
++
++struct dpa_fq *dpa_fq_alloc(struct device *dev,
++			    const struct fqid_cell *fqids,
++			    struct list_head *list,
++			    enum dpa_fq_type fq_type)
++{
++	int i;
++	struct dpa_fq *dpa_fq;
++
++	dpa_fq = devm_kzalloc(dev, sizeof(*dpa_fq) * fqids->count, GFP_KERNEL);
++	if (!dpa_fq)
++		return NULL;
++
++	for (i = 0; i < fqids->count; i++) {
++		dpa_fq[i].fq_type = fq_type;
++		dpa_fq[i].fqid = fqids->start ? fqids->start + i : 0;
++		list_add_tail(&dpa_fq[i].list, list);
++	}
++
++	for (i = 0; i < fqids->count; i++)
++		_dpa_assign_wq(dpa_fq + i);
++
++	return dpa_fq;
++}
++
++int dpa_fq_probe_mac(struct device *dev, struct list_head *list,
++		     struct fm_port_fqs *port_fqs,
++		     bool alloc_tx_conf_fqs,
++		     enum port_type ptype)
++{
++	const struct fqid_cell *fqids;
++	struct dpa_fq *dpa_fq;
++	int num_ranges;
++	int i;
++
++	if (ptype == TX && alloc_tx_conf_fqs) {
++		if (!dpa_fq_alloc(dev, tx_confirm_fqids, list,
++				  FQ_TYPE_TX_CONF_MQ))
++			goto fq_alloc_failed;
++	}
++
++	fqids = default_fqids[ptype];
++	num_ranges = 3;
++
++	for (i = 0; i < num_ranges; i++) {
++		switch (i) {
++		case 0:
++			/* The first queue is the error queue */
++			if (fqids[i].count != 1)
++				goto invalid_error_queue;
++
++			dpa_fq = dpa_fq_alloc(dev, &fqids[i], list,
++					      ptype == RX ?
++						FQ_TYPE_RX_ERROR :
++						FQ_TYPE_TX_ERROR);
++			if (!dpa_fq)
++				goto fq_alloc_failed;
++
++			if (ptype == RX)
++				port_fqs->rx_errq = &dpa_fq[0];
++			else
++				port_fqs->tx_errq = &dpa_fq[0];
++			break;
++		case 1:
++			/* the second queue is the default queue */
++			if (fqids[i].count != 1)
++				goto invalid_default_queue;
++
++			dpa_fq = dpa_fq_alloc(dev, &fqids[i], list,
++					      ptype == RX ?
++						FQ_TYPE_RX_DEFAULT :
++						FQ_TYPE_TX_CONFIRM);
++			if (!dpa_fq)
++				goto fq_alloc_failed;
++
++			if (ptype == RX)
++				port_fqs->rx_defq = &dpa_fq[0];
++			else
++				port_fqs->tx_defq = &dpa_fq[0];
++			break;
++		default:
++			/* all subsequent queues are Tx */
++			if (!dpa_fq_alloc(dev, &fqids[i], list, FQ_TYPE_TX))
++				goto fq_alloc_failed;
++			break;
++		}
++	}
++
++	return 0;
++
++fq_alloc_failed:
++	dev_err(dev, "dpa_fq_alloc() failed\n");
++	return -ENOMEM;
++
++invalid_default_queue:
++invalid_error_queue:
++	dev_err(dev, "Too many default or error queues\n");
++	return -EINVAL;
++}
++
++static u32 rx_pool_channel;
++static DEFINE_SPINLOCK(rx_pool_channel_init);
++
++int dpa_get_channel(void)
++{
++	spin_lock(&rx_pool_channel_init);
++	if (!rx_pool_channel) {
++		u32 pool;
++		int ret = qman_alloc_pool(&pool);
++
++		if (!ret)
++			rx_pool_channel = pool;
++	}
++	spin_unlock(&rx_pool_channel_init);
++	if (!rx_pool_channel)
++		return -ENOMEM;
++	return rx_pool_channel;
++}
++
++void dpa_release_channel(void)
++{
++	qman_release_pool(rx_pool_channel);
++}
++
++int dpaa_eth_add_channel(void *__arg)
++{
++	const cpumask_t *cpus = qman_affine_cpus();
++	u32 pool = QM_SDQCR_CHANNELS_POOL_CONV((u16)(unsigned long)__arg);
++	int cpu;
++	struct qman_portal *portal;
++
++	for_each_cpu(cpu, cpus) {
++		portal = (struct qman_portal *)qman_get_affine_portal(cpu);
++		qman_p_static_dequeue_add(portal, pool);
++	}
++	return 0;
++}
++
++/* Congestion group state change notification callback.
++ * Stops the device's egress queues while they are congested and
++ * wakes them upon exiting congested state.
++ * Also updates some CGR-related stats.
++ */
++static void dpaa_eth_cgscn(struct qman_portal *qm, struct qman_cgr *cgr,
++			   int congested)
++{
++	struct dpa_priv_s *priv = (struct dpa_priv_s *)container_of(cgr,
++		struct dpa_priv_s, cgr_data.cgr);
++
++	if (congested)
++		netif_tx_stop_all_queues(priv->net_dev);
++	else
++		netif_tx_wake_all_queues(priv->net_dev);
++}
++
++int dpaa_eth_cgr_init(struct dpa_priv_s *priv)
++{
++	struct qm_mcc_initcgr initcgr;
++	u32 cs_th;
++	int err;
++
++	err = qman_alloc_cgrid(&priv->cgr_data.cgr.cgrid);
++	if (err < 0) {
++		pr_err("Error %d allocating CGR ID\n", err);
++		goto out_error;
++	}
++	priv->cgr_data.cgr.cb = dpaa_eth_cgscn;
++
++	/* Enable Congestion State Change Notifications and CS taildrop */
++	initcgr.we_mask = QM_CGR_WE_CSCN_EN | QM_CGR_WE_CS_THRES;
++	initcgr.cgr.cscn_en = QM_CGR_EN;
++
++	/* Set different thresholds based on the MAC speed.
++	 * This may turn suboptimal if the MAC is reconfigured at a speed
++	 * lower than its max, e.g. if a dTSEC later negotiates a 100Mbps link.
++	 * In such cases, we ought to reconfigure the threshold, too.
++	 */
++	if (priv->mac_dev->if_support & SUPPORTED_10000baseT_Full)
++		cs_th = CONFIG_FSL_DPAA_CS_THRESHOLD_10G;
++	else
++		cs_th = CONFIG_FSL_DPAA_CS_THRESHOLD_1G;
++	qm_cgr_cs_thres_set64(&initcgr.cgr.cs_thres, cs_th, 1);
++
++	initcgr.we_mask |= QM_CGR_WE_CSTD_EN;
++	initcgr.cgr.cstd_en = QM_CGR_EN;
++
++	err = qman_create_cgr(&priv->cgr_data.cgr, QMAN_CGR_FLAG_USE_INIT,
++			      &initcgr);
++	if (err < 0) {
++		pr_err("Error %d creating CGR with ID %d\n", err,
++		       priv->cgr_data.cgr.cgrid);
++		qman_release_cgrid(priv->cgr_data.cgr.cgrid);
++		goto out_error;
++	}
++	pr_debug("Created CGR %d for netdev with hwaddr %pM on QMan channel %d\n",
++		 priv->cgr_data.cgr.cgrid, priv->mac_dev->addr,
++		 priv->cgr_data.cgr.chan);
++
++out_error:
++	return err;
++}
++
++static inline void dpa_setup_ingress(const struct dpa_priv_s *priv,
++				     struct dpa_fq *fq,
++				     const struct qman_fq *template)
++{
++	fq->fq_base = *template;
++	fq->net_dev = priv->net_dev;
++
++	fq->flags = QMAN_FQ_FLAG_NO_ENQUEUE;
++	fq->channel = priv->channel;
++}
++
++static inline void dpa_setup_egress(const struct dpa_priv_s *priv,
++				    struct dpa_fq *fq,
++				    struct fm_port_drv_t *port,
++				    const struct qman_fq *template)
++{
++	fq->fq_base = *template;
++	fq->net_dev = priv->net_dev;
++
++	if (port) {
++		fq->flags = QMAN_FQ_FLAG_TO_DCPORTAL;
++		fq->channel = (u16)fm_get_tx_port_channel(port);
++	} else {
++		fq->flags = QMAN_FQ_FLAG_NO_MODIFY;
++	}
++}
++
++void dpa_fq_setup(struct dpa_priv_s *priv, const struct dpa_fq_cbs_t *fq_cbs,
++		  struct fm_port_drv_t *tx_port)
++{
++	struct dpa_fq *fq;
++	u16 portals[NR_CPUS];
++	int cpu, num_portals = 0;
++	const cpumask_t *affine_cpus = qman_affine_cpus();
++	int egress_cnt = 0, conf_cnt = 0;
++
++	for_each_cpu(cpu, affine_cpus)
++		portals[num_portals++] = qman_affine_channel(cpu);
++	if (num_portals == 0)
++		dev_err(priv->net_dev->dev.parent,
++			"No Qman software (affine) channels found");
++
++	/* Initialize each FQ in the list */
++	list_for_each_entry(fq, &priv->dpa_fq_list, list) {
++		switch (fq->fq_type) {
++		case FQ_TYPE_RX_DEFAULT:
++			DPA_ERR_ON(!priv->mac_dev);
++			dpa_setup_ingress(priv, fq, &fq_cbs->rx_defq);
++			break;
++		case FQ_TYPE_RX_ERROR:
++			DPA_ERR_ON(!priv->mac_dev);
++			dpa_setup_ingress(priv, fq, &fq_cbs->rx_errq);
++			break;
++		case FQ_TYPE_TX:
++			dpa_setup_egress(priv, fq, tx_port,
++					 &fq_cbs->egress_ern);
++			/* If we have more Tx queues than the number of cores,
++			 * just ignore the extra ones.
++			 */
++			if (egress_cnt < DPAA_ETH_TX_QUEUES)
++				priv->egress_fqs[egress_cnt++] = &fq->fq_base;
++			break;
++		case FQ_TYPE_TX_CONFIRM:
++			DPA_ERR_ON(!priv->mac_dev);
++			dpa_setup_ingress(priv, fq, &fq_cbs->tx_defq);
++			break;
++		case FQ_TYPE_TX_CONF_MQ:
++			DPA_ERR_ON(!priv->mac_dev);
++			dpa_setup_ingress(priv, fq, &fq_cbs->tx_defq);
++			priv->conf_fqs[conf_cnt++] = &fq->fq_base;
++			break;
++		case FQ_TYPE_TX_ERROR:
++			DPA_ERR_ON(!priv->mac_dev);
++			dpa_setup_ingress(priv, fq, &fq_cbs->tx_errq);
++			break;
++		default:
++			dev_warn(priv->net_dev->dev.parent,
++				 "Unknown FQ type detected!\n");
++			break;
++		}
++	}
++
++	/* The number of Tx queues may be smaller than the number of cores, if
++	 * the Tx queue range is specified in the device tree instead of being
++	 * dynamically allocated.
++	 * Make sure all CPUs receive a corresponding Tx queue.
++	 */
++	while (egress_cnt < DPAA_ETH_TX_QUEUES) {
++		list_for_each_entry(fq, &priv->dpa_fq_list, list) {
++			if (fq->fq_type != FQ_TYPE_TX)
++				continue;
++			priv->egress_fqs[egress_cnt++] = &fq->fq_base;
++			if (egress_cnt == DPAA_ETH_TX_QUEUES)
++				break;
++		}
++	}
++}
++
++int dpa_fq_init(struct dpa_fq *dpa_fq, bool td_enable)
++{
++	int err;
++	const struct dpa_priv_s	*priv;
++	struct device *dev;
++	struct qman_fq *fq;
++	struct qm_mcc_initfq initfq;
++	struct qman_fq *confq;
++
++	priv = netdev_priv(dpa_fq->net_dev);
++	dev = dpa_fq->net_dev->dev.parent;
++
++	if (dpa_fq->fqid == 0)
++		dpa_fq->flags |= QMAN_FQ_FLAG_DYNAMIC_FQID;
++
++	dpa_fq->init = !(dpa_fq->flags & QMAN_FQ_FLAG_NO_MODIFY);
++
++	err = qman_create_fq(dpa_fq->fqid, dpa_fq->flags, &dpa_fq->fq_base);
++	if (err) {
++		dev_err(dev, "qman_create_fq() failed\n");
++		return err;
++	}
++	fq = &dpa_fq->fq_base;
++
++	if (dpa_fq->init) {
++		initfq.we_mask = QM_INITFQ_WE_FQCTRL;
++		/* FIXME: why would we want to keep an empty FQ in cache? */
++		initfq.fqd.fq_ctrl = QM_FQCTRL_PREFERINCACHE;
++
++		/* Try to reduce the number of portal interrupts for
++		 * Tx Confirmation FQs.
++		 */
++		if (dpa_fq->fq_type == FQ_TYPE_TX_CONFIRM)
++			initfq.fqd.fq_ctrl |= QM_FQCTRL_HOLDACTIVE;
++
++		/* FQ placement */
++		initfq.we_mask |= QM_INITFQ_WE_DESTWQ;
++
++		initfq.fqd.dest.channel	= dpa_fq->channel;
++		initfq.fqd.dest.wq = dpa_fq->wq;
++
++		/* Put all egress queues in a congestion group of their own.
++		 * Sensu stricto, the Tx confirmation queues are Rx FQs,
++		 * rather than Tx - but they nonetheless account for the
++		 * memory footprint on behalf of egress traffic. We therefore
++		 * place them in the netdev's CGR, along with the Tx FQs.
++		 */
++		if (dpa_fq->fq_type == FQ_TYPE_TX ||
++		    dpa_fq->fq_type == FQ_TYPE_TX_CONFIRM ||
++		    dpa_fq->fq_type == FQ_TYPE_TX_CONF_MQ) {
++			initfq.we_mask |= QM_INITFQ_WE_CGID;
++			initfq.fqd.fq_ctrl |= QM_FQCTRL_CGE;
++			initfq.fqd.cgid = (u8)priv->cgr_data.cgr.cgrid;
++			/* Set a fixed overhead accounting, in an attempt to
++			 * reduce the impact of fixed-size skb shells and the
++			 * driver's needed headroom on system memory. This is
++			 * especially the case when the egress traffic is
++			 * composed of small datagrams.
++			 * Unfortunately, QMan's OAL value is capped to an
++			 * insufficient value, but even that is better than
++			 * no overhead accounting at all.
++			 */
++			initfq.we_mask |= QM_INITFQ_WE_OAC;
++			initfq.fqd.oac_init.oac = QM_OAC_CG;
++			initfq.fqd.oac_init.oal =
++				(signed char)(min(sizeof(struct sk_buff) +
++						  priv->tx_headroom,
++						  (size_t)FSL_QMAN_MAX_OAL));
++		}
++
++		if (td_enable) {
++			initfq.we_mask |= QM_INITFQ_WE_TDTHRESH;
++			qm_fqd_taildrop_set(&initfq.fqd.td,
++					    DPA_FQ_TD, 1);
++			initfq.fqd.fq_ctrl = QM_FQCTRL_TDE;
++		}
++
++		/* Configure the Tx confirmation queue, now that we know
++		 * which Tx queue it pairs with.
++		 */
++		if (dpa_fq->fq_type == FQ_TYPE_TX) {
++			confq = _dpa_get_tx_conf_queue(priv, &dpa_fq->fq_base);
++			if (confq) {
++				initfq.we_mask |= QM_INITFQ_WE_CONTEXTA;
++			/* ContextA: OVOM=1 (use contextA2 bits instead of ICAD)
++			 *	     A2V=1 (contextA A2 field is valid)
++			 *	     A0V=1 (contextA A0 field is valid)
++			 * ContextA A2: EBD=1 (deallocate buffers inside FMan)
++			 */
++				initfq.fqd.context_a.hi = 0x1a000000;
++				initfq.fqd.context_a.lo = 0x80000000;
++			}
++		}
++
++		/* Put all *private* ingress queues in our "ingress CGR". */
++		if (priv->use_ingress_cgr &&
++		    (dpa_fq->fq_type == FQ_TYPE_RX_DEFAULT ||
++		     dpa_fq->fq_type == FQ_TYPE_RX_ERROR)) {
++			initfq.we_mask |= QM_INITFQ_WE_CGID;
++			initfq.fqd.fq_ctrl |= QM_FQCTRL_CGE;
++			initfq.fqd.cgid = (u8)priv->ingress_cgr.cgrid;
++			/* Set a fixed overhead accounting, just like for the
++			 * egress CGR.
++			 */
++			initfq.we_mask |= QM_INITFQ_WE_OAC;
++			initfq.fqd.oac_init.oac = QM_OAC_CG;
++			initfq.fqd.oac_init.oal =
++				(signed char)(min(sizeof(struct sk_buff) +
++				priv->tx_headroom, (size_t)FSL_QMAN_MAX_OAL));
++		}
++
++		/* Initialization common to all ingress queues */
++		if (dpa_fq->flags & QMAN_FQ_FLAG_NO_ENQUEUE) {
++			initfq.we_mask |= QM_INITFQ_WE_CONTEXTA;
++			initfq.fqd.fq_ctrl |=
++				QM_FQCTRL_CTXASTASHING | QM_FQCTRL_AVOIDBLOCK;
++			initfq.fqd.context_a.stashing.exclusive =
++				QM_STASHING_EXCL_DATA | QM_STASHING_EXCL_CTX |
++				QM_STASHING_EXCL_ANNOTATION;
++			initfq.fqd.context_a.stashing.data_cl = 2;
++			initfq.fqd.context_a.stashing.annotation_cl = 1;
++			initfq.fqd.context_a.stashing.context_cl =
++				DIV_ROUND_UP(sizeof(struct qman_fq), 64);
++		}
++
++		err = qman_init_fq(fq, QMAN_INITFQ_FLAG_SCHED, &initfq);
++		if (err < 0) {
++			dev_err(dev, "qman_init_fq(%u) = %d\n",
++				qman_fq_fqid(fq), err);
++			qman_destroy_fq(fq, 0);
++			return err;
++		}
++	}
++
++	dpa_fq->fqid = qman_fq_fqid(fq);
++
++	return 0;
++}
++
++static int __attribute__((nonnull))
++_dpa_fq_free(struct device *dev, struct qman_fq *fq)
++{
++	int err, error;
++	struct dpa_fq *dpa_fq;
++	const struct dpa_priv_s	*priv;
++
++	err = 0;
++
++	dpa_fq = container_of(fq, struct dpa_fq, fq_base);
++	priv = netdev_priv(dpa_fq->net_dev);
++
++	if (dpa_fq->init) {
++		err = qman_retire_fq(fq, NULL);
++		if (err < 0 && netif_msg_drv(priv))
++			dev_err(dev, "qman_retire_fq(%u) = %d\n",
++				qman_fq_fqid(fq), err);
++
++		error = qman_oos_fq(fq);
++		if (error < 0 && netif_msg_drv(priv)) {
++			dev_err(dev, "qman_oos_fq(%u) = %d\n",
++				qman_fq_fqid(fq), error);
++			if (err >= 0)
++				err = error;
++		}
++	}
++
++	qman_destroy_fq(fq, 0);
++	list_del(&dpa_fq->list);
++
++	return err;
++}
++
++int __attribute__((nonnull))
++dpa_fq_free(struct device *dev, struct list_head *list)
++{
++	int err, error;
++	struct dpa_fq *dpa_fq, *tmp;
++
++	err = 0;
++	list_for_each_entry_safe(dpa_fq, tmp, list, list) {
++		error = _dpa_fq_free(dev, (struct qman_fq *)dpa_fq);
++		if (error < 0 && err >= 0)
++			err = error;
++	}
++
++	return err;
++}
++
++static void
++dpaa_eth_init_tx_port(struct fm_port_drv_t *port, struct dpa_fq *errq,
++		      struct dpa_fq *defq,
++		      struct dpa_buffer_layout_s *buf_layout)
++{
++	struct fm_port_params tx_port_param;
++
++	memset(&tx_port_param, 0, sizeof(tx_port_param));
++	dpaa_eth_init_port(tx, port, tx_port_param, errq->fqid, defq->fqid,
++			   buf_layout, false);
++}
++
++static void
++dpaa_eth_init_rx_port(struct fm_port_drv_t *port, struct dpa_bp *bp,
++		      size_t count, struct dpa_fq *errq, struct dpa_fq *defq,
++		      struct dpa_buffer_layout_s *buf_layout)
++{
++	struct fm_port_params rx_port_param;
++	int i;
++
++	memset(&rx_port_param, 0, sizeof(rx_port_param));
++	count = min(ARRAY_SIZE(rx_port_param.pool_param), count);
++	rx_port_param.num_pools = (u8)count;
++	for (i = 0; i < count; i++) {
++		if (i >= rx_port_param.num_pools)
++			break;
++		rx_port_param.pool_param[i].id = bp[i].bpid;
++		rx_port_param.pool_param[i].size = (u16)bp[i].size;
++	}
++
++	dpaa_eth_init_port(rx, port, rx_port_param, errq->fqid, defq->fqid,
++			   buf_layout, false);
++}
++
++void dpaa_eth_init_ports(struct mac_device *mac_dev,
++			 struct dpa_bp *bp, size_t count,
++			 struct fm_port_fqs *port_fqs,
++			 struct dpa_buffer_layout_s *buf_layout,
++			 struct device *dev)
++{
++	struct fm_port_drv_t *rxport = mac_dev->port_dev[RX];
++	struct fm_port_drv_t *txport = mac_dev->port_dev[TX];
++
++	dpaa_eth_init_tx_port(txport, port_fqs->tx_errq,
++			      port_fqs->tx_defq, &buf_layout[TX]);
++	dpaa_eth_init_rx_port(rxport, bp, count, port_fqs->rx_errq,
++			      port_fqs->rx_defq, &buf_layout[RX]);
++}
++
++void __attribute__((nonnull))
++dpa_fd_release(const struct net_device *net_dev, const struct qm_fd *fd)
++{
++	struct qm_sg_entry *sgt;
++	struct dpa_bp *dpa_bp;
++	struct bm_buffer bmb;
++	dma_addr_t addr;
++	void *vaddr;
++
++	memset(&bmb, 0, sizeof(bmb));
++	bm_buffer_set64(&bmb, fd->addr);
++
++	dpa_bp = dpa_bpid2pool(fd->bpid);
++	DPA_ERR_ON(!dpa_bp);
++
++	DPA_ERR_ON(fd->format == qm_fd_sg);
++
++	while (bman_release(dpa_bp->pool, &bmb, 1, 0))
++		cpu_relax();
++}
++
++/* Turn on HW checksum computation for this outgoing frame.
++ * If the current protocol is not something we support in this regard
++ * (or if the stack has already computed the SW checksum), we do nothing.
++ *
++ * Returns 0 if all goes well (or HW csum doesn't apply), and a negative value
++ * otherwise.
++ *
++ * Note that this function may modify the fd->cmd field and the skb data buffer
++ * (the Parse Results area).
++ */
++int dpa_enable_tx_csum(struct dpa_priv_s *priv,
++		       struct sk_buff *skb,
++		       struct qm_fd *fd,
++		       char *parse_results)
++{
++	struct fm_prs_result_t *parse_result;
++	struct iphdr *iph;
++	struct ipv6hdr *ipv6h = NULL;
++	int l4_proto;
++	int ethertype = ntohs(skb->protocol);
++	int retval = 0;
++
++	if (skb->ip_summed != CHECKSUM_PARTIAL)
++		return 0;
++
++	/* Note: L3 csum seems to be already computed in sw, but we can't choose
++	 * L4 alone from the FM configuration anyway.
++	 */
++
++	/* Fill in some fields of the Parse Results array, so the FMan
++	 * can find them as if they came from the FMan Parser.
++	 */
++	parse_result = (struct fm_prs_result_t *)parse_results;
++
++	/* If we're dealing with VLAN, get the real Ethernet type */
++	if (ethertype == ETH_P_8021Q) {
++		/* We can't always assume the MAC header is set correctly
++		 * by the stack, so reset to beginning of skb->data
++		 */
++		skb_reset_mac_header(skb);
++		ethertype = ntohs(vlan_eth_hdr(skb)->h_vlan_encapsulated_proto);
++	}
++
++	/* Fill in the relevant L3 parse result fields
++	 * and read the L4 protocol type
++	 */
++	switch (ethertype) {
++	case ETH_P_IP:
++		parse_result->l3r = cpu_to_be16(FM_L3_PARSE_RESULT_IPV4);
++		iph = ip_hdr(skb);
++		DPA_ERR_ON(!iph);
++		l4_proto = ntohs(iph->protocol);
++		break;
++	case ETH_P_IPV6:
++		parse_result->l3r = cpu_to_be16(FM_L3_PARSE_RESULT_IPV6);
++		ipv6h = ipv6_hdr(skb);
++		DPA_ERR_ON(!ipv6h);
++		l4_proto = ipv6h->nexthdr;
++		break;
++	default:
++		/* We shouldn't even be here */
++		if (net_ratelimit())
++			netif_alert(priv, tx_err, priv->net_dev,
++				    "Can't compute HW csum for L3 proto 0x%x\n",
++				    ntohs(skb->protocol));
++		retval = -EIO;
++		goto return_error;
++	}
++
++	/* Fill in the relevant L4 parse result fields */
++	switch (l4_proto) {
++	case IPPROTO_UDP:
++		parse_result->l4r = FM_L4_PARSE_RESULT_UDP;
++		break;
++	case IPPROTO_TCP:
++		parse_result->l4r = FM_L4_PARSE_RESULT_TCP;
++		break;
++	default:
++		/* This can as well be a BUG() */
++		if (net_ratelimit())
++			netif_alert(priv, tx_err, priv->net_dev,
++				    "Can't compute HW csum for L4 proto 0x%x\n",
++				    l4_proto);
++		retval = -EIO;
++		goto return_error;
++	}
++
++	/* At index 0 is IPOffset_1 as defined in the Parse Results */
++	parse_result->ip_off[0] = (u8)skb_network_offset(skb);
++	parse_result->l4_off = (u8)skb_transport_offset(skb);
++
++	/* Enable L3 (and L4, if TCP or UDP) HW checksum. */
++	fd->cmd |= FM_FD_CMD_RPD | FM_FD_CMD_DTC;
++
++	/* On P1023 and similar platforms fd->cmd interpretation could
++	 * be disabled by setting CONTEXT_A bit ICMD; currently this bit
++	 * is not set so we do not need to check; in the future, if/when
++	 * using context_a we need to check this bit
++	 */
++
++return_error:
++	return retval;
++}
+diff --git a/drivers/net/ethernet/freescale/dpaa/dpaa_eth_common.h b/drivers/net/ethernet/freescale/dpaa/dpaa_eth_common.h
+new file mode 100644
+index 0000000..93fcf82
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/dpaa/dpaa_eth_common.h
+@@ -0,0 +1,118 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef __DPAA_ETH_COMMON_H
++#define __DPAA_ETH_COMMON_H
++
++#include <linux/etherdevice.h>
++#include <soc/fsl/bman.h>
++#include <linux/of_platform.h>
++#include <linux/net_tstamp.h>
++
++#include "dpaa_eth.h"
++#include "fsl_fman_drv.h"
++
++#define dpaa_eth_init_port(type, port, param, errq_id, defq_id, buf_layout,\
++			   frag_enabled) \
++{ \
++	param.errq = errq_id; \
++	param.defq = defq_id; \
++	param.priv_data_size = buf_layout->priv_data_size; \
++	param.parse_results = buf_layout->parse_results; \
++	param.hash_results = buf_layout->hash_results; \
++	param.time_stamp = buf_layout->time_stamp; \
++	param.data_align = buf_layout->data_align; \
++	fm_set_##type##_port_params(port, &param); \
++}
++
++#define DPA_BUFF_RELEASE_MAX 8 /* maximum number of buffers released at once */
++
++/* used in napi related functions */
++extern u16 qman_portal_max;
++
++int dpa_netdev_init(struct net_device *net_dev,
++		    const u8 *mac_addr,
++		    u16 tx_timeout);
++int dpa_start(struct net_device *net_dev);
++int dpa_stop(struct net_device *net_dev);
++void dpa_timeout(struct net_device *net_dev);
++struct rtnl_link_stats64 *dpa_get_stats64(struct net_device *net_dev,
++					  struct rtnl_link_stats64 *stats);
++int dpa_change_mtu(struct net_device *net_dev, int new_mtu);
++int dpa_ndo_init(struct net_device *net_dev);
++int dpa_set_features(struct net_device *dev, netdev_features_t features);
++netdev_features_t dpa_fix_features(struct net_device *dev,
++				   netdev_features_t features);
++int dpa_remove(struct platform_device *pdev);
++struct mac_device * __attribute__((nonnull))
++dpa_mac_dev_get(struct platform_device *pdev);
++int dpa_mac_hw_index_get(struct platform_device *pdev);
++int dpa_mac_fman_index_get(struct platform_device *pdev);
++int dpa_set_mac_address(struct net_device *net_dev, void *addr);
++void dpa_set_rx_mode(struct net_device *net_dev);
++void dpa_set_buffers_layout(struct mac_device *mac_dev,
++			    struct dpa_buffer_layout_s *layout);
++int __attribute__((nonnull))
++dpa_bp_alloc(struct dpa_bp *dpa_bp);
++void __attribute__((nonnull))
++dpa_bp_free(struct dpa_priv_s *priv);
++struct dpa_bp *dpa_bpid2pool(int bpid);
++void dpa_bpid2pool_map(int bpid, struct dpa_bp *dpa_bp);
++bool dpa_bpid2pool_use(int bpid);
++void dpa_bp_drain(struct dpa_bp *bp);
++struct dpa_fq *dpa_fq_alloc(struct device *dev,
++			    const struct fqid_cell *fqids,
++			    struct list_head *list,
++			    enum dpa_fq_type fq_type);
++int dpa_fq_probe_mac(struct device *dev, struct list_head *list,
++		     struct fm_port_fqs *port_fqs,
++		     bool tx_conf_fqs_per_core,
++		     enum port_type ptype);
++int dpa_get_channel(void);
++void dpa_release_channel(void);
++int dpaa_eth_add_channel(void *__arg);
++int dpaa_eth_cgr_init(struct dpa_priv_s *priv);
++void dpa_fq_setup(struct dpa_priv_s *priv, const struct dpa_fq_cbs_t *fq_cbs,
++		  struct fm_port_drv_t *tx_port);
++int dpa_fq_init(struct dpa_fq *dpa_fq, bool td_enable);
++int __attribute__((nonnull))
++dpa_fq_free(struct device *dev, struct list_head *list);
++void dpaa_eth_init_ports(struct mac_device *mac_dev,
++			 struct dpa_bp *bp, size_t count,
++			 struct fm_port_fqs *port_fqs,
++			 struct dpa_buffer_layout_s *buf_layout,
++			 struct device *dev);
++void __attribute__((nonnull))
++dpa_fd_release(const struct net_device *net_dev, const struct qm_fd *fd);
++int dpa_enable_tx_csum(struct dpa_priv_s *priv,
++		       struct sk_buff *skb,
++		       struct qm_fd *fd,
++		       char *parse_results);
++#endif	/* __DPAA_ETH_COMMON_H */
+diff --git a/drivers/net/ethernet/freescale/dpaa/dpaa_eth_sg.c b/drivers/net/ethernet/freescale/dpaa/dpaa_eth_sg.c
+new file mode 100644
+index 0000000..15713a6
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/dpaa/dpaa_eth_sg.c
+@@ -0,0 +1,406 @@
++/* Copyright 2012 - 2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/init.h>
++#include <linux/skbuff.h>
++#include <linux/highmem.h>
++#include <soc/fsl/bman.h>
++
++#include "dpaa_eth.h"
++#include "dpaa_eth_common.h"
++
++/* Convenience macros for storing/retrieving the skb back-pointers.
++ *
++ * NB: @off is an offset from a (struct sk_buff **) pointer!
++ */
++#define DPA_WRITE_SKB_PTR(skb, skbh, addr, off) \
++	{ \
++		skbh = (struct sk_buff **)addr; \
++		*(skbh + (off)) = skb; \
++	}
++#define DPA_READ_SKB_PTR(skb, skbh, addr, off) \
++	{ \
++		skbh = (struct sk_buff **)addr; \
++		skb = *(skbh + (off)); \
++	}
++
++static int _dpa_bp_add_8_bufs(const struct dpa_bp *dpa_bp)
++{
++	struct bm_buffer bmb[8];
++	void *new_buf;
++	dma_addr_t addr;
++	u8 i;
++	struct device *dev = dpa_bp->dev;
++	struct sk_buff *skb, **skbh;
++
++	for (i = 0; i < 8; i++) {
++		/* We'll prepend the skb back-pointer; can't use the DPA
++		 * priv space, because FMan will overwrite it (from offset 0)
++		 * if it ends up being the second, third, etc. fragment
++		 * in a S/G frame.
++		 *
++		 * We only need enough space to store a pointer, but allocate
++		 * an entire cacheline for performance reasons.
++		 */
++		new_buf = netdev_alloc_frag(SMP_CACHE_BYTES + DPA_BP_RAW_SIZE);
++		if (unlikely(!new_buf))
++			goto netdev_alloc_failed;
++		new_buf = PTR_ALIGN(new_buf + SMP_CACHE_BYTES, SMP_CACHE_BYTES);
++
++		skb = build_skb(new_buf, DPA_SKB_SIZE(dpa_bp->size) +
++			SKB_DATA_ALIGN(sizeof(struct skb_shared_info)));
++		if (unlikely(!skb)) {
++			put_page(virt_to_head_page(new_buf));
++			goto build_skb_failed;
++		}
++		DPA_WRITE_SKB_PTR(skb, skbh, new_buf, -1);
++
++		addr = dma_map_single(dev, new_buf,
++				      dpa_bp->size, DMA_BIDIRECTIONAL);
++		if (unlikely(dma_mapping_error(dev, addr)))
++			goto dma_map_failed;
++
++		bm_buffer_set64(&bmb[i], addr);
++	}
++
++release_bufs:
++	/* Release the buffers. In case bman is busy, keep trying
++	 * until successful. bman_release() is guaranteed to succeed
++	 * in a reasonable amount of time
++	 */
++	while (unlikely(bman_release(dpa_bp->pool, bmb, i, 0)))
++		cpu_relax();
++	return i;
++
++dma_map_failed:
++	kfree_skb(skb);
++
++build_skb_failed:
++netdev_alloc_failed:
++	net_err_ratelimited("dpa_bp_add_8_bufs() failed\n");
++	WARN_ONCE(1, "Memory allocation failure on Rx\n");
++
++	bm_buffer_set64(&bmb[i], 0);
++	/* Avoid releasing a completely null buffer; bman_release() requires
++	 * at least one buffer.
++	 */
++	if (likely(i))
++		goto release_bufs;
++
++	return 0;
++}
++
++/* Cold path wrapper over _dpa_bp_add_8_bufs(). */
++static void dpa_bp_add_8_bufs(const struct dpa_bp *dpa_bp, int cpu)
++{
++	int *count_ptr = per_cpu_ptr(dpa_bp->percpu_count, cpu);
++	*count_ptr += _dpa_bp_add_8_bufs(dpa_bp);
++}
++
++int dpa_bp_priv_seed(struct dpa_bp *dpa_bp)
++{
++	int i;
++
++	/* Give each CPU an allotment of "config_count" buffers */
++	for_each_possible_cpu(i) {
++		int j;
++
++		/* Although we access another CPU's counters here
++		 * we do it at boot time so it is safe
++		 */
++		for (j = 0; j < dpa_bp->config_count; j += 8)
++			dpa_bp_add_8_bufs(dpa_bp, i);
++	}
++	return 0;
++}
++
++/* Add buffers/(pages) for Rx processing whenever bpool count falls below
++ * REFILL_THRESHOLD.
++ */
++int dpaa_eth_refill_bpools(struct dpa_bp *dpa_bp, int *countptr)
++{
++	int count = *countptr;
++	int new_bufs;
++
++	if (unlikely(count < FSL_DPAA_ETH_REFILL_THRESHOLD)) {
++		do {
++			new_bufs = _dpa_bp_add_8_bufs(dpa_bp);
++			if (unlikely(!new_bufs)) {
++				/* Avoid looping forever if we've temporarily
++				 * run out of memory. We'll try again at the
++				 * next NAPI cycle.
++				 */
++				break;
++			}
++			count += new_bufs;
++		} while (count < FSL_DPAA_ETH_MAX_BUF_COUNT);
++
++		*countptr = count;
++		if (unlikely(count < FSL_DPAA_ETH_MAX_BUF_COUNT))
++			return -ENOMEM;
++	}
++
++	return 0;
++}
++
++/* Cleanup function for outgoing frame descriptors that were built on Tx path,
++ * either contiguous frames or scatter/gather ones.
++ * Skb freeing is not handled here.
++ *
++ * This function may be called on error paths in the Tx function, so guard
++ * against cases when not all fd relevant fields were filled in.
++ *
++ * Return the skb backpointer, since for S/G frames the buffer containing it
++ * gets freed here.
++ */
++struct sk_buff *_dpa_cleanup_tx_fd(const struct dpa_priv_s *priv,
++				   const struct qm_fd *fd)
++{
++	struct dpa_bp *dpa_bp = priv->dpa_bp;
++	dma_addr_t addr = qm_fd_addr(fd);
++	struct sk_buff **skbh;
++	struct sk_buff *skb = NULL;
++	const enum dma_data_direction dma_dir = DMA_TO_DEVICE;
++
++	/* retrieve skb back pointer */
++	DPA_READ_SKB_PTR(skb, skbh, phys_to_virt(addr), 0);
++	dma_unmap_single(dpa_bp->dev, addr,
++			 skb_tail_pointer(skb) - (u8 *)skbh, dma_dir);
++	return skb;
++}
++
++/* Build a linear skb around the received buffer.
++ * We are guaranteed there is enough room at the end of the data buffer to
++ * accommodate the shared info area of the skb.
++ */
++static struct sk_buff *contig_fd_to_skb(const struct dpa_priv_s *priv,
++					const struct qm_fd *fd)
++{
++	struct sk_buff *skb = NULL, **skbh;
++	ssize_t fd_off = dpa_fd_offset(fd);
++	dma_addr_t addr = qm_fd_addr(fd);
++	void *vaddr;
++
++	vaddr = phys_to_virt(addr);
++	DPA_ERR_ON(!IS_ALIGNED((unsigned long)vaddr, SMP_CACHE_BYTES));
++
++	/* Retrieve the skb and adjust data and tail pointers, to make sure
++	 * forwarded skbs will have enough space on Tx if extra headers
++	 * are added.
++	 */
++	DPA_READ_SKB_PTR(skb, skbh, vaddr, -1);
++
++	DPA_ERR_ON(fd_off != priv->rx_headroom);
++	skb_reserve(skb, fd_off);
++	skb_put(skb, dpa_fd_length(fd));
++
++	skb->ip_summed = CHECKSUM_NONE;
++
++	return skb;
++}
++
++void _dpa_rx(struct net_device *net_dev,
++	     struct qman_portal *portal,
++	     const struct dpa_priv_s *priv,
++	     struct dpa_percpu_priv_s *percpu_priv,
++	     const struct qm_fd *fd,
++	     u32 fqid,
++	     int *count_ptr)
++{
++	struct dpa_bp *dpa_bp;
++	struct sk_buff *skb;
++	dma_addr_t addr = qm_fd_addr(fd);
++	u32 fd_status = fd->status;
++	unsigned int skb_len;
++	struct rtnl_link_stats64 *percpu_stats = &percpu_priv->stats;
++
++	if (unlikely(fd_status & FM_FD_STAT_RX_ERRORS) != 0) {
++		if (net_ratelimit())
++			netif_warn(priv, hw, net_dev, "FD status = 0x%08x\n",
++				   fd_status & FM_FD_STAT_RX_ERRORS);
++
++		percpu_stats->rx_errors++;
++		goto _release_frame;
++	}
++
++	dpa_bp = priv->dpa_bp;
++	DPA_ERR_ON(dpa_bp != dpa_bpid2pool(fd->bpid));
++
++	/* prefetch the first 64 bytes of the frame */
++	dma_unmap_single(dpa_bp->dev, addr, dpa_bp->size, DMA_BIDIRECTIONAL);
++	prefetch(phys_to_virt(addr) + dpa_fd_offset(fd));
++
++	/* The only FD type that we may receive is contig */
++	DPA_ERR_ON((fd->format != qm_fd_contig));
++
++	skb = contig_fd_to_skb(priv, fd);
++
++	/* Account for the contig buffer
++	 * having been removed from the pool.
++	 */
++	(*count_ptr)--;
++	skb->protocol = eth_type_trans(skb, net_dev);
++
++	/* IP Reassembled frames are allowed to be larger than MTU */
++	if (unlikely(dpa_check_rx_mtu(skb, net_dev->mtu) &&
++		     !(fd_status & FM_FD_IPR))) {
++		percpu_stats->rx_dropped++;
++		goto drop_bad_frame;
++	}
++
++	skb_len = skb->len;
++
++	if (unlikely(netif_receive_skb(skb) == NET_RX_DROP))
++		goto packet_dropped;
++
++	percpu_stats->rx_packets++;
++	percpu_stats->rx_bytes += skb_len;
++
++packet_dropped:
++	return;
++
++drop_bad_frame:
++	dev_kfree_skb(skb);
++	return;
++
++_release_frame:
++	dpa_fd_release(net_dev, fd);
++}
++
++static int skb_to_contig_fd(struct dpa_priv_s *priv,
++			    struct sk_buff *skb, struct qm_fd *fd,
++			    int *count_ptr, int *offset)
++{
++	struct sk_buff **skbh;
++	dma_addr_t addr;
++	struct dpa_bp *dpa_bp = priv->dpa_bp;
++	struct net_device *net_dev = priv->net_dev;
++	int err;
++	enum dma_data_direction dma_dir;
++	unsigned char *buffer_start;
++
++	{
++		/* We are guaranteed to have at least tx_headroom bytes
++		 * available, so just use that for offset.
++		 */
++		fd->bpid = 0xff;
++		buffer_start = skb->data - priv->tx_headroom;
++		fd->offset = priv->tx_headroom;
++		dma_dir = DMA_TO_DEVICE;
++
++		DPA_WRITE_SKB_PTR(skb, skbh, buffer_start, 0);
++	}
++
++	/* Enable L3/L4 hardware checksum computation.
++	 *
++	 * We must do this before dma_map_single(DMA_TO_DEVICE), because we may
++	 * need to write into the skb.
++	 */
++	err = dpa_enable_tx_csum(priv, skb, fd,
++				 ((char *)skbh) + DPA_TX_PRIV_DATA_SIZE);
++	if (unlikely(err < 0)) {
++		if (net_ratelimit())
++			netif_err(priv, tx_err, net_dev, "HW csum error: %d\n",
++				  err);
++		return err;
++	}
++
++	/* Fill in the rest of the FD fields */
++	fd->format = qm_fd_contig;
++	fd->length20 = skb->len;
++	fd->cmd |= FM_FD_CMD_FCO;
++
++	/* Map the entire buffer size that may be seen by FMan, but no more */
++	addr = dma_map_single(dpa_bp->dev, skbh,
++			      skb_tail_pointer(skb) - buffer_start, dma_dir);
++	if (unlikely(dma_mapping_error(dpa_bp->dev, addr))) {
++		if (net_ratelimit())
++			netif_err(priv, tx_err, net_dev, "dma_map_single() failed\n");
++		return -EINVAL;
++	}
++	fd->addr_hi = (u8)upper_32_bits(addr);
++	fd->addr_lo = lower_32_bits(addr);
++
++	return 0;
++}
++
++int dpa_tx(struct sk_buff *skb, struct net_device *net_dev)
++{
++	struct dpa_priv_s *priv;
++	struct qm_fd fd;
++	struct dpa_percpu_priv_s *percpu_priv;
++	struct rtnl_link_stats64 *percpu_stats;
++	int err = 0;
++	const int queue_mapping = dpa_get_queue_mapping(skb);
++	int *countptr, offset = 0;
++
++	priv = netdev_priv(net_dev);
++	/* Non-migratable context, safe to use raw_cpu_ptr */
++	percpu_priv = raw_cpu_ptr(priv->percpu_priv);
++	percpu_stats = &percpu_priv->stats;
++	countptr = raw_cpu_ptr(priv->dpa_bp->percpu_count);
++
++	clear_fd(&fd);
++
++	/* We're going to store the skb backpointer at the beginning
++	 * of the data buffer, so we need a privately owned skb
++	 *
++	 * We've made sure skb is not shared in dev->priv_flags,
++	 * we need to verify the skb head is not cloned
++	 */
++	if (skb_cow_head(skb, priv->tx_headroom))
++		goto enomem;
++
++	DPA_ERR_ON(skb_is_nonlinear(skb));
++
++	/* Finally, create a contig FD from this skb */
++	err = skb_to_contig_fd(priv, skb, &fd, countptr, &offset);
++	if (unlikely(err < 0))
++		goto skb_to_fd_failed;
++
++	if (likely(dpa_xmit(priv, percpu_stats, queue_mapping, &fd) == 0))
++		return NETDEV_TX_OK;
++
++	/* dpa_xmit failed */
++	if (fd.bpid != 0xff) {
++		(*countptr)--;
++		dpa_fd_release(net_dev, &fd);
++		percpu_stats->tx_errors++;
++		return NETDEV_TX_OK;
++	}
++	_dpa_cleanup_tx_fd(priv, &fd);
++skb_to_fd_failed:
++enomem:
++	percpu_stats->tx_errors++;
++	dev_kfree_skb(skb);
++	return NETDEV_TX_OK;
++}
+-- 
+2.1.0.27.g96db324
+

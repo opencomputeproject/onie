@@ -1,0 +1,101 @@
+From f2d526ea65ff06f851ed063e429778ef754b60c8 Mon Sep 17 00:00:00 2001
+From: Nikhil Badola <nikhil.badola@freescale.com>
+Date: Wed, 9 Sep 2015 14:25:52 +0800
+Subject: [PATCH 52/53] drivers:usb:fsl: Replace macros with enumerated type
+
+commit 38aa420096e565fe9c98f9d9475fd168114501a9 upstream
+[context adjustment]
+Conflicts:
+	include/linux/fsl_devices.h
+
+This driver enables the Freescale DPAA 1.0 Buffer Manager block. BMan
+is a hardware buffer pool manager that allows accelerators
+connected to the SoC datapath to acquire and release buffers during
+data processing.
+
+Signed-off-by: Geoff Thorpe <Geoff.Thorpe@freescale.com>
+Signed-off-by: Emil Medve <Emilian.Medve@Freescale.com>
+Signed-off-by: Roy Pledge <Roy.Pledge@freescale.com>
+Integrated-by: Li Jingyu <b41874@freescale.com>
+---
+ drivers/usb/host/fsl-mph-dr-of.c |  8 ++++----
+ include/linux/fsl_devices.h      | 15 ++++++++++-----
+ 2 files changed, 14 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/usb/host/fsl-mph-dr-of.c b/drivers/usb/host/fsl-mph-dr-of.c
+index ed39081..459b009 100644
+--- a/drivers/usb/host/fsl-mph-dr-of.c
++++ b/drivers/usb/host/fsl-mph-dr-of.c
+@@ -121,9 +121,9 @@ error:
+ 
+ static const struct of_device_id fsl_usb2_mph_dr_of_match[];
+ 
+-static int usb_get_ver_info(struct device_node *np)
++static enum fsl_usb2_controller_ver usb_get_ver_info(struct device_node *np)
+ {
+-	int ver = -1;
++	enum fsl_usb2_controller_ver ver = FSL_USB_VER_NONE;
+ 
+ 	/*
+ 	 * returns 1 for usb controller version 1.6
+@@ -140,7 +140,7 @@ static int usb_get_ver_info(struct device_node *np)
+ 		else /* for previous controller versions */
+ 			ver = FSL_USB_VER_OLD;
+ 
+-		if (ver > -1)
++		if (ver > FSL_USB_VER_NONE)
+ 			return ver;
+ 	}
+ 
+@@ -209,7 +209,7 @@ static int fsl_usb2_mph_dr_of_probe(struct platform_device *ofdev)
+ 	pdata->controller_ver = usb_get_ver_info(np);
+ 
+ 	if (pdata->have_sysif_regs) {
+-		if (pdata->controller_ver < 0) {
++		if (pdata->controller_ver == FSL_USB_VER_NONE) {
+ 			dev_warn(&ofdev->dev, "Could not get controller version\n");
+ 			return -ENODEV;
+ 		}
+diff --git a/include/linux/fsl_devices.h b/include/linux/fsl_devices.h
+index dd73fad..08dcaff 100644
+--- a/include/linux/fsl_devices.h
++++ b/include/linux/fsl_devices.h
+@@ -20,10 +20,6 @@
+ #define FSL_UTMI_PHY_DLY	10	/*As per P1010RM, delay for UTMI
+ 				PHY CLK to become stable - 10ms*/
+ #define FSL_USB_PHY_CLK_TIMEOUT	10000	/* uSec */
+-#define FSL_USB_VER_OLD		0
+-#define FSL_USB_VER_1_6		1
+-#define FSL_USB_VER_2_2		2
+-#define FSL_USB_VER_2_4		3
+ 
+ #include <linux/types.h>
+ 
+@@ -51,6 +47,15 @@
+  *
+  */
+ 
++enum fsl_usb2_controller_ver {
++	FSL_USB_VER_NONE = -1,
++	FSL_USB_VER_OLD = 0,
++	FSL_USB_VER_1_6 = 1,
++	FSL_USB_VER_2_2 = 2,
++	FSL_USB_VER_2_4 = 3,
++	FSL_USB_VER_2_5 = 4,
++};
++
+ enum fsl_usb2_operating_modes {
+ 	FSL_USB2_MPH_HOST,
+ 	FSL_USB2_DR_HOST,
+@@ -72,7 +77,7 @@ struct platform_device;
+ 
+ struct fsl_usb2_platform_data {
+ 	/* board specific information */
+-	int				controller_ver;
++	enum fsl_usb2_controller_ver	controller_ver;
+ 	enum fsl_usb2_operating_modes	operating_mode;
+ 	enum fsl_usb2_phy_modes		phy_mode;
+ 	unsigned int			port_enables;
+-- 
+2.1.0.27.g96db324
+

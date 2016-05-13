@@ -8,6 +8,7 @@
 
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= r01a
 
@@ -32,6 +33,13 @@ KERNEL_DTB = as5600_52x.dtb
 # http://www.iana.org/assignments/enterprise-numbers
 # Accton Technology Corporation IANA number
 VENDOR_ID = 259
+
+# Set Linux kernel version
+LINUX_VERSION		= 3.2
+LINUX_MINOR_VERSION	= 69
+
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
 
 #-------------------------------------------------------------------------------
 #

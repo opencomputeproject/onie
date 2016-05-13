@@ -1,0 +1,34 @@
+# -*- shell-script -*-
+
+#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Demonstration of the init-platform functionality
+
+# This script fragment is sourced by /etc/init.d/init-arch.sh, which
+# in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+# A machine can use this feature to run any early boot scripts needed
+# by the machine.  A typical usage would be to initialize specific
+# hardware devices.
+
+# Use this function to perform any initializations required by the
+# architecture specific initialization.  This function executes before
+# the architecture initializations.
+init_platform_pre_arch()
+{
+    echo "Running platform init pre_arch routines..."
+
+    # create AMA serial console devices
+    MAJOR=$(grep AMA /proc/devices | awk '{ print $1 }')
+    [ -n "$MAJOR" -a $MAJOR -gt 0 ] || {
+        echo "Error: problems locating AMA serial device..."
+        return 1
+    }
+    for i in $(seq 0 3) ; do
+        mknod "/dev/ttyAMA${i}" c $MAJOR $(( 64 + $i ))
+    done
+
+}

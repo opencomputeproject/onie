@@ -1,0 +1,88 @@
+Patch to support Intel Avoton Ethernet driver with (or without) Broadcom PHY
+
+Copyright (C) 2014 david_yang <david_yang@accton.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+index 7881fb9..833f86f 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c
+@@ -146,6 +146,9 @@ static s32 igb_get_invariants_82575(struct e1000_hw *hw)
+ 	case E1000_DEV_ID_I350_FIBER:
+ 	case E1000_DEV_ID_I350_SERDES:
+ 	case E1000_DEV_ID_I350_SGMII:
++	case E1000_DEV_ID_I354_BACKPLANE_1GBPS:
++	case E1000_DEV_ID_I354_SGMII:
++	case E1000_DEV_ID_I354_BACKPLANE_2_5GBPS:
+ 		mac->type = e1000_i350;
+ 		break;
+ 	default:
+@@ -359,6 +362,9 @@ static s32 igb_get_invariants_82575(struct e1000_hw *hw)
+ 		phy->ops.get_cable_length   = igb_get_cable_length_82580;
+ 		phy->ops.get_phy_info       = igb_get_phy_info_82580;
+ 		break;
++        case BCM54616_E_PHY_ID:
++		phy->type                   = e1000_phy_bcm54616;
++                break;
+ 	default:
+ 		return -E1000_ERR_PHY;
+ 	}
+@@ -1129,6 +1135,9 @@ static s32 igb_setup_copper_link_82575(struct e1000_hw *hw)
+ 	case e1000_phy_82580:
+ 		ret_val = igb_copper_link_setup_82580(hw);
+ 		break;
++	case e1000_phy_bcm54616:
++		ret_val = E1000_SUCCESS;
++		break;
+ 	default:
+ 		ret_val = -E1000_ERR_PHY;
+ 		break;
+diff --git a/drivers/net/ethernet/intel/igb/e1000_defines.h b/drivers/net/ethernet/intel/igb/e1000_defines.h
+index f5fc572..88be58d 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_defines.h
++++ b/drivers/net/ethernet/intel/igb/e1000_defines.h
+@@ -694,6 +694,7 @@
+ #define I82580_I_PHY_ID      0x015403A0
+ #define I350_I_PHY_ID        0x015403B0
+ #define M88_VENDOR           0x0141
++#define BCM54616_E_PHY_ID    0x03625D10
+ 
+ /* M88E1000 Specific Registers */
+ #define M88E1000_PHY_SPEC_CTRL     0x10  /* PHY Specific Control Register */
+diff --git a/drivers/net/ethernet/intel/igb/e1000_hw.h b/drivers/net/ethernet/intel/igb/e1000_hw.h
+index 4519a13..ab7c843 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_hw.h
++++ b/drivers/net/ethernet/intel/igb/e1000_hw.h
+@@ -63,6 +63,9 @@ struct e1000_hw;
+ #define E1000_DEV_ID_I350_FIBER               0x1522
+ #define E1000_DEV_ID_I350_SERDES              0x1523
+ #define E1000_DEV_ID_I350_SGMII               0x1524
++#define E1000_DEV_ID_I354_BACKPLANE_1GBPS     0x1F40
++#define E1000_DEV_ID_I354_SGMII               0x1F41
++#define E1000_DEV_ID_I354_BACKPLANE_2_5GBPS   0x1F45
+ 
+ #define E1000_REVISION_2 2
+ #define E1000_REVISION_4 4
+@@ -117,6 +120,7 @@ enum e1000_phy_type {
+ 	e1000_phy_igp_3,
+ 	e1000_phy_ife,
+ 	e1000_phy_82580,
++	e1000_phy_bcm54616,
+ };
+ 
+ enum e1000_bus_type {
+diff --git a/drivers/net/ethernet/intel/igb/igb_main.c b/drivers/net/ethernet/intel/igb/igb_main.c
+index b555be0..6704fff 100644
+--- a/drivers/net/ethernet/intel/igb/igb_main.c
++++ b/drivers/net/ethernet/intel/igb/igb_main.c
+@@ -72,6 +72,9 @@ static const struct e1000_info *igb_info_tbl[] = {
+ };
+ 
+ static DEFINE_PCI_DEVICE_TABLE(igb_pci_tbl) = {
++	{ PCI_VDEVICE(INTEL, E1000_DEV_ID_I354_BACKPLANE_1GBPS), board_82575 },
++	{ PCI_VDEVICE(INTEL, E1000_DEV_ID_I354_SGMII), board_82575 },
++	{ PCI_VDEVICE(INTEL, E1000_DEV_ID_I354_BACKPLANE_2_5GBPS), board_82575 },
+ 	{ PCI_VDEVICE(INTEL, E1000_DEV_ID_I350_COPPER), board_82575 },
+ 	{ PCI_VDEVICE(INTEL, E1000_DEV_ID_I350_FIBER), board_82575 },
+ 	{ PCI_VDEVICE(INTEL, E1000_DEV_ID_I350_SERDES), board_82575 },

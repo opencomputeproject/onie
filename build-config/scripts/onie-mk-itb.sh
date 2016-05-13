@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -20,17 +20,55 @@ MACHINE_PREFIX="$2"
     exit 1
 }
 
-SYSROOT="$3"
-[ -r "$SYSROOT" ] || {
-    echo "Error: SYSROOT file is not readable: $(realpath $SYSROOT)"
+ARCH="$3"
+case $ARCH in
+    ppc)
+        KERNEL_COMPRESSION="gzip"
+        KERNEL_LOAD="0x00000000"
+        KERNEL_ENTRY="0x00000000"
+        INITRD_LOAD="0x00000000"
+        FTD="fdt = \"dtb\";"
+        ;;
+    arm)
+        KERNEL_COMPRESSION="gzip"
+        KERNEL_LOAD="0x61008000"
+        KERNEL_ENTRY="0x61008000"
+        INITRD_LOAD="0x00000000"
+        FTD="fdt = \"dtb\";"
+        ;;
+    *)
+        echo "Error: Unsupported architecture: $ARCH"
+        exit 1
+esac
+
+KERNEL="$4"
+[ -r "$KERNEL" ] || {
+    echo "Error: KERNEL file is not readable: $KERNEL"
     exit 1
 }
 
-OUTFILE="$4"
+DTB="$5"
+[ -r "$DTB" ] || {
+    echo "Error: DTB file is not readable: $DTB"
+    exit 1
+}
+
+SYSROOT="$6"
+[ -r "$SYSROOT" ] || {
+    echo "Error: SYSROOT file is not readable: $SYSROOT"
+    exit 1
+}
+
+OUTFILE="$7"
 [ -n "$OUTFILE" ] || {
     echo "Error: output .itb file not specified"
     exit 1
 }
+touch $OUTFILE || {
+    echo "Error: unable to write to output file: $OUTFILE"
+    exit 1
+}
+rm -f $OUTFILE
 
 clean_tmp() {
     rm "$1"
@@ -40,9 +78,9 @@ its_file="$(mktemp)"
 trap "clean_tmp $its_file" EXIT
 
 set -e
-KERNEL="$(realpath ../${MACHINE_PREFIX}/kernel/linux/vmlinux.bin.gz)"
+KERNEL="$(realpath $KERNEL)"
 SYSROOT="$(realpath $SYSROOT)"
-DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
+DTB="$(realpath $DTB)"
 
 # Create a .its file for this machine type on the fly
 (cat <<EOF
@@ -59,19 +97,19 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 /dts-v1/;
 
 / {
-	description = "PowerPC kernel, initramfs and FDT blob";
+	description = "$ARCH kernel, initramfs and FDT blob";
 	#address-cells = <1>;
 
 	images {
 		kernel {
-			description = "${MACHINE_PREFIX} PowerPC Kernel";
+			description = "${MACHINE_PREFIX} $ARCH Kernel";
 			data = /incbin/("$KERNEL");
 			type = "kernel";
-			arch = "ppc";
+			arch = "$ARCH";
 			os = "linux";
-			compression = "gzip";
-			load = <00000000>;
-			entry = <00000000>;
+			compression = "$KERNEL_COMPRESSION";
+			load = <$KERNEL_LOAD>;
+			entry = <$KERNEL_ENTRY>;
 			hash@1 {
 				algo = "crc32";
 			};
@@ -81,10 +119,11 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 			description = "initramfs";
 			data = /incbin/("$SYSROOT");
 			type = "ramdisk";
-			arch = "ppc";
+			arch = "$ARCH";
 			os = "linux";
 			compression = "none";
-			load = <00000000>;
+			load = <$INITRD_LOAD>;
+			entry = <$INITRD_LOAD>;
 			hash@1 {
 				algo = "crc32";
 			};
@@ -94,7 +133,7 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 			description = "${MACHINE_PREFIX}.dtb";
 			data = /incbin/("$DTB");
 			type = "flat_dt";
-			arch = "ppc";
+			arch = "$ARCH";
 			os = "linux";
 			compression = "none";
 			hash@1 {
@@ -110,12 +149,19 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 			description = "${MACHINE_PREFIX}";
 			kernel = "kernel";
 			ramdisk = "initramfs";
-			fdt = "dtb";
+			$FTD
 		};
 	};
 };
 
 EOF
 ) > $its_file
+
+if [ "$V" != "0" ] ; then
+    echo "=========================================="
+    echo "DEBUG: Dumping FIT image its file contents"
+    echo "=========================================="
+    cat $its_file
+fi
 
 mkimage -f $its_file "$OUTFILE"

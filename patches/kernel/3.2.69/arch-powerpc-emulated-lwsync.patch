@@ -1,0 +1,47 @@
+Emulate the 603 lwsync instruction
+
+Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+Issue a memory barrier (mbar) instead of lwsync on e500 processors.  This, along with SW emuluation of the FPU allow us to run PPC603 code from the Debian repositories directly on the e500 cores.
+
+diff --git a/arch/powerpc/include/asm/emulated_ops.h b/arch/powerpc/include/asm/emulated_ops.h
+index 63f2a22..093359a 100644
+--- a/arch/powerpc/include/asm/emulated_ops.h
++++ b/arch/powerpc/include/asm/emulated_ops.h
+@@ -44,6 +44,7 @@ extern struct ppc_emulated {
+ 	struct ppc_emulated_entry spe;
+ 	struct ppc_emulated_entry string;
+ 	struct ppc_emulated_entry unaligned;
++	struct ppc_emulated_entry lwsync;
+ #ifdef CONFIG_MATH_EMULATION
+ 	struct ppc_emulated_entry math;
+ #elif defined(CONFIG_8XX_MINIMAL_FPEMU)
+diff --git a/arch/powerpc/kernel/traps.c b/arch/powerpc/kernel/traps.c
+index 9844662..a689b66 100644
+--- a/arch/powerpc/kernel/traps.c
++++ b/arch/powerpc/kernel/traps.c
+@@ -928,6 +928,14 @@ static int emulate_instruction(struct pt_regs *regs)
+ 		return emulate_isel(regs, instword);
+ 	}
+ 
++	/* Emulate lwsync (Lightweight Sync) instruction */
++	if (instword == PPC_INST_LWSYNC) {
++		PPC_WARN_EMULATED(lwsync, regs);
++		/* This is probably more pessimistic than required */
++		mb();
++		return 0;
++	}
++
+ #ifdef CONFIG_PPC64
+ 	/* Emulate the mfspr rD, DSCR. */
+ 	if (((instword & PPC_INST_MFSPR_DSCR_MASK) == PPC_INST_MFSPR_DSCR) &&
+@@ -1542,6 +1550,7 @@ struct ppc_emulated ppc_emulated = {
+ 	WARN_EMULATED_SETUP(spe),
+ 	WARN_EMULATED_SETUP(string),
+ 	WARN_EMULATED_SETUP(unaligned),
++	WARN_EMULATED_SETUP(lwsync),
+ #ifdef CONFIG_MATH_EMULATION
+ 	WARN_EMULATED_SETUP(math),
+ #elif defined(CONFIG_8XX_MINIMAL_FPEMU)

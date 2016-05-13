@@ -1,0 +1,1548 @@
+Quanta LY2R Support
+
+diff --git a/board/quanta/quanta_ly2r/Makefile b/board/quanta/quanta_ly2r/Makefile
+new file mode 100644
+index 0000000..d2cad0e
+--- /dev/null
++++ b/board/quanta/quanta_ly2r/Makefile
+@@ -0,0 +1,49 @@
++#
++# Copyright 2007-2009 Freescale Semiconductor, Inc.
++# (C) Copyright 2001-2006
++# Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++#
++# See file CREDITS for list of people who contributed to this
++# project.
++#
++# This program is free software; you can redistribute it and/or
++# modify it under the terms of the GNU General Public License as
++# published by the Free Software Foundation; either version 2 of
++# the License, or (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++# MA 02111-1307 USA
++#
++
++include $(TOPDIR)/config.mk
++
++LIB	= $(obj)lib$(BOARD).o
++
++COBJS-y	+= $(BOARD).o
++COBJS-y	+= sys_eeprom.o
++COBJS-y	+= law.o
++COBJS-y	+= tlb.o
++COBJS-y	+= ddr.o
++
++SRCS	:= $(SOBJS:.o=.S) $(COBJS-y:.o=.c)
++OBJS	:= $(addprefix $(obj),$(COBJS-y))
++SOBJS	:= $(addprefix $(obj),$(SOBJS))
++
++$(LIB):	$(obj).depend $(OBJS) $(SOBJS)
++	$(call cmd_link_o_target, $(OBJS))
++
++#########################################################################
++
++# defines $(obj).depend target
++include $(SRCTREE)/rules.mk
++
++sinclude $(obj).depend
++
++#########################################################################
+diff --git a/board/quanta/quanta_ly2r/ddr.c b/board/quanta/quanta_ly2r/ddr.c
+new file mode 100644
+index 0000000..33dcab7
+--- /dev/null
++++ b/board/quanta/quanta_ly2r/ddr.c
+@@ -0,0 +1,90 @@
++/*
++ * Copyright 2008 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * Version 2 as published by the Free Software Foundation.
++ */
++
++#include <common.h>
++
++#include <asm/fsl_ddr_sdram.h>
++#include <asm/fsl_ddr_dimm_params.h>
++
++typedef struct {
++        u32 datarate_mhz_low;
++        u32 datarate_mhz_high;
++        u32 n_ranks;
++        u32 clk_adjust;
++        u32 cpo;
++        u32 write_data_delay;
++        u32 force_2T;
++} board_specific_parameters_t;
++
++const board_specific_parameters_t board_specific_parameters[][20] = {
++        {
++        /*      memory controller 0                     */
++        /*        lo|  hi|  num|  clk| cpo|wrdata|2T    */
++        /*       mhz| mhz|ranks|adjst|    | delay|      */
++                {  0, 850,    2,    6,   0x1f,    4,  0},
++                /* Quanta SE Team Suggest Value for DDR3 timing */
++                {  0, 850,    1,    4,   0x1f,    3,  0},
++        },
++};
++
++void fsl_ddr_board_options(memctl_options_t *popts,
++			   dimm_params_t    *pdimm,
++			   unsigned int      ctrl_num)
++{
++        const board_specific_parameters_t *pbsp =
++                                &(board_specific_parameters[ctrl_num][0]);
++        u32 num_params = sizeof(board_specific_parameters[ctrl_num]) /
++                                sizeof(board_specific_parameters[0][0]);
++        u32 i;
++        ulong ddr_freq;
++
++        /* set odt_rd_cfg and odt_wr_cfg. If the there is only one dimm in
++         * that controller, set odt_wr_cfg to 4 for CS0, and 0 to CS1. If
++         * there are two dimms in the controller, set odt_rd_cfg to 3 and
++         * odt_wr_cfg to 3 for the even CS, 0 for the odd CS.
++         */
++        for (i = 0; i < CONFIG_CHIP_SELECTS_PER_CTRL; i++) {
++                        popts->cs_local_opts[i].odt_rd_cfg = 0;
++                        popts->cs_local_opts[i].odt_wr_cfg = 1;
++        }
++
++        /* Get clk_adjust, cpo, write_data_delay,2T, according to the board ddr
++         * freqency and n_banks specified in board_specific_parameters table.
++         */
++        ddr_freq = get_ddr_freq(0) / 1000000;
++        for (i = 0; i < num_params; i++) {
++                if (ddr_freq >= pbsp->datarate_mhz_low &&
++                    ddr_freq <= pbsp->datarate_mhz_high &&
++                    pdimm->n_ranks == pbsp->n_ranks) {
++                        popts->clk_adjust = pbsp->clk_adjust;
++                        popts->cpo_override = pbsp->cpo;
++                        popts->write_data_delay = pbsp->write_data_delay;
++                        popts->twoT_en = pbsp->force_2T;
++                }
++                pbsp++;
++        }
++
++        /*
++         * Factors to consider for half-strength driver enable:
++         *      - number of DIMMs installed
++         */
++        /*
++         * Change to Half mode for 800. Suggested by Freescale Edison, Quentin,
++         * 20110914
++         */
++        popts->half_strength_driver_enable = 1;
++        popts->wrlvl_en = 1;
++        /* Write leveling override */
++        popts->wrlvl_override = 1;
++        popts->wrlvl_sample = 0xa;
++        popts->wrlvl_start = 0x8;
++        /* Rtt and Rtt_WR override */
++        popts->rtt_override = 1;
++        popts->rtt_override_value = DDR3_RTT_120_OHM;
++        popts->rtt_wr_override_value = 0; /* Rtt_WR= dynamic ODT off */
++}
+diff --git a/board/quanta/quanta_ly2r/eeprom.h b/board/quanta/quanta_ly2r/eeprom.h
+new file mode 100644
+index 0000000..7910268
+--- /dev/null
++++ b/board/quanta/quanta_ly2r/eeprom.h
+@@ -0,0 +1,32 @@
++/*
++ * Copyright 2004 Freescale Semiconductor.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#ifndef __EEPROM_H_
++#define __EEPROM_H_
++
++
++/*
++ * system EEPROM interface
++ */
++extern void show_eeprom(void);
++
++#endif	/* __EEPROM_H_ */
+diff --git a/board/quanta/quanta_ly2r/law.c b/board/quanta/quanta_ly2r/law.c
+new file mode 100644
+index 0000000..4d7edca
+--- /dev/null
++++ b/board/quanta/quanta_ly2r/law.c
+@@ -0,0 +1,32 @@
++/*
++ * Copyright 2010-2011 Freescale Semiconductor, Inc.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <asm/fsl_law.h>
++#include <asm/mmu.h>
++
++struct law_entry law_table[] = {
++	SET_LAW(CONFIG_SYS_FLASH_BASE_PHYS, LAW_SIZE_64M, LAW_TRGT_IF_LBC),
++	SET_LAW(CONFIG_SYS_FLASH_BASE_PHYS1, LAW_SIZE_64M, LAW_TRGT_IF_LBC),
++};
++
++int num_law_entries = ARRAY_SIZE(law_table);
+diff --git a/board/quanta/quanta_ly2r/quanta_ly2r.c b/board/quanta/quanta_ly2r/quanta_ly2r.c
+new file mode 100644
+index 0000000..7cc4850
+--- /dev/null
++++ b/board/quanta/quanta_ly2r/quanta_ly2r.c
+@@ -0,0 +1,172 @@
++/*
++ * Copyright 2007-2009 Freescale Semiconductor, Inc.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++#include <common.h>
++#include <command.h>
++#include <pci.h>
++#include <asm/processor.h>
++#include <asm/mmu.h>
++#include <asm/cache.h>
++#include <asm/immap_85xx.h>
++#include <asm/fsl_pci.h>
++#include <asm/io.h>
++#include <miiphy.h>
++#include <libfdt.h>
++#include <fdt_support.h>
++#include <fsl_mdio.h>
++#include <tsec.h>
++#include <asm/fsl_law.h>
++#include <asm/mp.h>
++#include <netdev.h>
++#include <i2c.h>
++#include <broadcom_phy.h>
++
++#define ARRAYSIZE(a) (sizeof(a) / sizeof(*(a)))
++
++DECLARE_GLOBAL_DATA_PTR;
++
++int checkboard(void)
++{
++	puts("Board: Quanta LY2R\n");
++
++	// XXX print something cool about what revision this board is
++
++	return 0;
++}
++
++#ifdef CONFIG_PCI
++void pci_init_board(void)
++{
++	fsl_pcie_init_board(0);
++}
++#endif
++
++int board_early_init_f(void)
++{
++        // switch i2c mux so p2020 is master
++        out_be32((void *)0xffe0f000, 0x00040000);
++	return 0;
++}
++
++int board_early_init_r(void)
++{
++	const unsigned int flashbase = CONFIG_SYS_FLASH_BASE;
++	const u8 flash_esel = find_tlb_idx((void *)flashbase, 1);
++
++	const unsigned int flashbase1 = CONFIG_SYS_FLASH_BASE1;
++	const u8 flash_esel_1 = find_tlb_idx((void *)flashbase1, 1);
++
++	/*
++	 * Remap Boot flash region to caching-inhibited
++	 * so that flash can be erased properly.
++	 */
++
++	/* Flush d-cache and invalidate i-cache of any FLASH data */
++	flush_dcache();
++	invalidate_icache();
++
++	/* invalidate existing TLB entry for flash */
++	disable_tlb(flash_esel);
++
++	set_tlb(1, flashbase, CONFIG_SYS_FLASH_BASE_PHYS,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++			0, flash_esel, BOOKE_PAGESZ_64M, 1);
++
++	flush_dcache();
++	invalidate_icache();
++	disable_tlb(flash_esel_1);
++	set_tlb(1, flashbase1, CONFIG_SYS_FLASH_BASE_PHYS1,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++			0, flash_esel_1, BOOKE_PAGESZ_64M, 1);
++	return 0;
++}
++
++#ifdef CONFIG_TSEC_ENET
++int board_eth_init(bd_t *bis)
++{
++	struct fsl_pq_mdio_info mdio_info;
++	struct tsec_info_struct tsec_info[4];
++	int num = 0;
++
++#ifdef CONFIG_TSEC1
++	SET_STD_TSEC_INFO(tsec_info[num], 1);
++	num++;
++#endif
++#ifdef CONFIG_TSEC2
++	SET_STD_TSEC_INFO(tsec_info[num], 2);
++	if (is_serdes_configured(SGMII_TSEC2)) {
++		puts("eTSEC2 is in sgmii mode.\n");
++		tsec_info[num].flags |= TSEC_SGMII;
++	}
++	num++;
++#endif
++#ifdef CONFIG_TSEC3
++	SET_STD_TSEC_INFO(tsec_info[num], 3);
++	if (is_serdes_configured(SGMII_TSEC3)) {
++        puts("eTSEC3 is in sgmii mode.\n");
++		tsec_info[num].flags |= TSEC_SGMII;
++	}
++	num++;
++#endif
++
++	if (!num) {
++		printf("No TSECs initialized\n");
++		return 0;
++	}
++
++	mdio_info.regs = (struct tsec_mii_mng *)CONFIG_SYS_MDIO_BASE_ADDR;
++	mdio_info.name = DEFAULT_MII_NAME;
++
++	fsl_pq_mdio_init(bis, &mdio_info);
++
++	tsec_eth_init(bis, tsec_info, num);
++
++	return pci_eth_init(bis);
++}
++#endif
++
++#if defined(CONFIG_OF_BOARD_SETUP)
++void ft_board_setup(void *blob, bd_t *bd)
++{
++	phys_addr_t base;
++	phys_size_t size;
++
++	ft_cpu_setup(blob, bd);
++
++	base = getenv_bootm_low();
++	size = getenv_bootm_size();
++
++	fdt_fixup_memory(blob, (u64)base, (u64)size);
++
++	FT_FSL_PCI_SETUP;
++
++#ifdef CONFIG_FSL_SGMII_RISER
++	fsl_sgmii_riser_fdt_fixup(blob);
++#endif
++}
++#endif
++
++#ifdef CONFIG_MP
++void board_lmb_reserve(struct lmb *lmb)
++{
++	cpu_mp_lmb_reserve(lmb);
++}
++#endif
+diff --git a/board/quanta/quanta_ly2r/sys_eeprom.c b/board/quanta/quanta_ly2r/sys_eeprom.c
+new file mode 100644
+index 0000000..4290766
+--- /dev/null
++++ b/board/quanta/quanta_ly2r/sys_eeprom.c
+@@ -0,0 +1,576 @@
++#include <common.h>
++#include <command.h>
++#include <i2c.h>
++#include <asm/io.h>
++#include <linux/ctype.h>
++
++#include "sys_eeprom.h"
++
++/* Convert hex digit to hex character and vice-versa */
++static int i2xdigit(int digit)
++{
++    digit &= 0xf;
++    return (digit > 9) ? digit-10+'a' : digit+'0';
++}
++
++/*
++ * format_macaddr requires a buffer of 18 bytes minimum.
++ * It does not use sprintf so it can be called from an interrupt context.
++ */
++static void format_macaddr(char buf[18], char macaddr[6])
++{
++    int i;
++
++    for (i = 0;i <= 5;i++)
++    {
++        *buf++ = i2xdigit(macaddr[i]>>4);
++        *buf++ = i2xdigit(macaddr[i]);
++        *buf++ = ':';
++    }
++
++    *--buf = 0;
++}
++
++#define	MAX_DATE_STRING		21
++/*=======================================================================================*/
++u8 * versionToString(u32  version)
++{
++    static u8 verString[MAX_DATE_STRING] ;
++    u32 major, minor/*, build */;
++
++    major = (version & 0xff000000) >> 24 ;
++    minor = (version & 0x00ff0000) >> 16 ;
++/*    build = (version & 0x0000ffff) ;*/
++
++/*    sprintf(verString, "%02d.%02d.%04d", major, minor, build) ;*/
++    sprintf(verString, "%d.%d", major, minor) ;
++
++    return verString ;
++}
++u8 * SoftwareversionToString(u32  version)
++{
++    static u8 verString[MAX_DATE_STRING] ;
++    u32 major, minor ,v1, v2;/*, build */;
++
++    major = (version & 0xf0000000) >> 28 ;
++    minor = (version & 0x0f000000) >> 24 ;
++    v1 = (version & 0x00f00000) >> 20 ;
++    v2 = (version & 0x000f0000) >> 16 ;
++
++/*    build = (version & 0x0000ffff) ;*/
++
++/*    sprintf(verString, "%02d.%02d.%04d", major, minor, build) ;*/
++    sprintf(verString, "%d.%d.%d.%d", major, minor,v1,v2) ;
++
++    return verString ;
++}
++/*=======================================================================================*/
++u8 * dateToString(u32 date)
++{
++    static u8 dateString[MAX_DATE_STRING] ;
++    u32        year, month, day ;
++
++    year = (date & 0xffff0000) >> 16 ;
++    month = (date & 0x0000ff00) >> 8 ;
++    day = (date & 0x000000ff) ;
++
++    sprintf(dateString, "%04d/%d/%d", year, month, day) ;
++
++    return dateString ;
++}
++/*=======================================================================================*/
++static int Write_Boardinfo_EEPROM(struct SysBoardInfo *pbdinfo)
++{
++    u8 writebuffer[EEPROM_24C02_SIZE];
++    int i , ret=0;
++
++  memset(writebuffer, 0, EEPROM_24C02_SIZE);
++  memcpy(writebuffer, (u8 *)pbdinfo , SYS_BOARD_INFO_SIZE);
++
++  for (i=0;i<EEPROM_24C02_SIZE;i++)
++  {
++#if defined(CONFIG_SB1A_P1010) || defined(CONFIG_SB1B_P1010)
++	ret = i2c_write(I2C_AT24C02_EEPROM_MB, i , 2, &writebuffer[i] , 1);
++#else
++	ret = i2c_write(I2C_AT24C02_EEPROM_MB, i , 1, &writebuffer[i] , 1);
++#endif
++	udelay(12000);
++	if (ret != 0 ) break;
++
++  }
++
++  return ret;
++
++}
++/*=======================================================================================*/
++void ShowBoardInfo(struct SysBoardInfo *pbdinfo)
++{
++    char buf[128], macString[18];
++    printf("\n"MODEL_NAME" U-Boot\r\n");
++#if defined(CONFIG_SB1A_P1010) || defined(CONFIG_SB1B_P1010)
++    printf("  Manufacturer Name     : %s\r\n", pbdinfo->productName);
++#else
++    printf("  Product Name          : %s\r\n", pbdinfo->productName);
++#endif
++    printf("  Model Name            : %s\r\n", pbdinfo->modelName);
++    printf("  Serial Number         : %s\r\n", pbdinfo->serialNumber);
++    printf("  Part Number           : %s\r\n", pbdinfo->partNumber);
++    printf("  Label Revision Number : %s\r\n", pbdinfo->label_revisionNumber);
++    printf("  Hardware Version      : %s\r\n", versionToString(pbdinfo->hardwareVersion));
++#if 1 /* Only show platform number */
++    printf("  Platform Version      : 0x%04x\r\n", pbdinfo->softwareVersion & 0xffff);
++#else
++    printf("  Platform Version      : %s (0x%08x)\r\n", SoftwareversionToString(pbdinfo->softwareVersion) , pbdinfo->softwareVersion);
++#endif
++    printf("  Release Date          : %s\r\n", dateToString(pbdinfo->releaseDate));
++    format_macaddr(macString, pbdinfo->macAddr);
++    printf("  MAC Address           : %s\r\n", macString);
++}
++/*=======================================================================================*/
++
++void BuildBoardInfoDefault (struct SysBoardInfo *boardInfo)
++{
++    u8 macAddr[6];
++    u32 a, b, c;
++
++    memset(boardInfo, 0, sizeof(boardInfo));
++
++    strncpy((u8 *)boardInfo->productName, MODEL_NAME, SYS_PRODUCT_NAME_SIZE) ;
++    strncpy((u8 *)boardInfo->partNumber, "123456789", SYS_PART_NUMBER_SIZE) ;
++    strncpy((u8 *)boardInfo->serialNumber, "123456789", SYS_SERIAL_NUMBER_SIZE) ;
++
++    a = 0;      b = 1;          c = 0;
++    boardInfo->hardwareVersion = (((a & 0x000000FF) << 24) | ((b & 0x000000FF) << 16) | (c & 0x000000FF)) ;
++
++    macAddr[0] = 0x00;         macAddr[1] = 0xc0;         macAddr[2] = 0x9f;
++    macAddr[3] = 0x01;         macAddr[4] = 0x02;         macAddr[5] = 0x03;
++    memcpy(boardInfo->macAddr, macAddr, 6) ;
++
++    boardInfo->softwareVersion = CONFIG_QUANTA_SOFT_VERSION;
++
++    strncpy((u8 *)boardInfo->label_revisionNumber, "1", SYS_LABEL_REVISION_NUMBER_SIZE) ;
++    a = 2012;       b = 1;          c = 1;
++    boardInfo->releaseDate = (((a & 0x0000FFFF) << 16) | ((b & 0x000000FF) << 8) | (c & 0x000000FF)) ;
++    strncpy((u8 *)boardInfo->modelName, "QUANTA "MODEL_NAME, SYS_MODEL_NAME_SIZE) ;
++
++    boardInfo->checksum = crc32(0,boardInfo, SYS_BOARD_INFO_SIZE - sizeof(unsigned int)) ;
++
++    printf("\nUpdating board information by default, please wait ... ");
++#if 0
++    if (Write_Boardinfo_EEPROM(boardInfo)==0)
++	    printf(" Done.\n");
++    else
++	    printf(" FAIL.\n");
++#else
++	    printf(" NOT!\n");
++#endif
++}
++/*=======================================================================================*/
++
++void  BuildEEPROMData(struct SysBoardInfo *pbdinfo)
++{
++    unsigned short total_zize, str_length;
++    unsigned int  CradTypeNum;
++    unsigned short computed_crc;
++    unsigned char writebuffer[EEPROM_24C02_SIZE];
++    u32 a, b, c;
++    char macAddr[6];
++
++    memset(pbdinfo, 0, SYS_BOARD_INFO_SIZE);
++
++    strncpy((u8 *)pbdinfo->productName, MODEL_NAME, SYS_PRODUCT_NAME_SIZE) ;
++
++    strncpy((char *)pbdinfo->partNumber, "123456789", SYS_PART_NUMBER_SIZE) ;
++    strncpy((char *)pbdinfo->serialNumber, "123456789", SYS_SERIAL_NUMBER_SIZE) ;
++    a = 0;      b = 1;          c = 0;
++    pbdinfo->hardwareVersion = (((a & 0x000000FF) << 24) | ((b & 0x000000FF) << 16) | (c & 0x000000FF)) ;
++    macAddr[0] = 0x00;         macAddr[1] = 0xc0;         macAddr[2] = 0x9f;
++    macAddr[3] = 0x01;         macAddr[4] = 0x02;         macAddr[5] = 0x03;
++    memcpy(pbdinfo->macAddr, macAddr, 6) ;
++
++    pbdinfo->softwareVersion = CONFIG_QUANTA_SOFT_VERSION;
++
++    strncpy((char *)pbdinfo->label_revisionNumber, "1", SYS_LABEL_REVISION_NUMBER_SIZE) ;
++    a = 2012;       b = 1;          c = 1;
++    pbdinfo->releaseDate = (((a & 0x0000FFFF) << 16) | ((b & 0x000000FF) << 8) | (c & 0x000000FF)) ;
++
++    strncpy((u8 *)pbdinfo->modelName, "QUANTA "MODEL_NAME, SYS_MODEL_NAME_SIZE) ;
++
++ /*   pbdinfo->checksum = crc32(0,pbdinfo, SYS_BOARD_INFO_SIZE - sizeof(unsigned int)) ;*/
++
++    memset(writebuffer, 0, EEPROM_24C02_SIZE);
++    total_zize = 0;
++
++    /* Magic Number */
++    writebuffer[total_zize++] = EEPROM_Type_Magic_Num;
++    writebuffer[total_zize++] = EEPROM_Magic_Num_Length;
++    writebuffer[total_zize++] = EEPROM_Magic_Num;
++
++    /* Product Name */
++    str_length = strlen((char *)pbdinfo->productName);
++    if ((str_length>0)&&(str_length<=EEPROM_Max_Product_Name_Length))
++    {
++        writebuffer[total_zize++] = EEPROM_Type_Product_Name;
++        writebuffer[total_zize++] = str_length;
++        memcpy(&writebuffer[total_zize], pbdinfo->productName, str_length);
++        total_zize += str_length;
++    }
++
++    /* Part Number */
++    str_length = strlen((char *)pbdinfo->partNumber);
++    if ((str_length>0)&&(str_length<=EEPROM_Max_Part_Length))
++    {
++        writebuffer[total_zize++] = EEPROM_Type_Part;
++        writebuffer[total_zize++] = str_length;
++        memcpy(&writebuffer[total_zize], pbdinfo->partNumber, str_length);
++        total_zize += str_length;
++    }
++
++    /* Serial Number */
++    str_length = strlen((char *)pbdinfo->serialNumber);
++    if ((str_length>0)&&(str_length<=EEPROM_Max_Serial_Length))
++    {
++        writebuffer[total_zize++] = EEPROM_Type_Serial;
++        writebuffer[total_zize++] = str_length;
++        memcpy(&writebuffer[total_zize], pbdinfo->serialNumber, str_length);
++        total_zize += str_length;
++    }
++
++    /* MAC Address */
++    writebuffer[total_zize++] = EEPROM_Type_MAC;
++    writebuffer[total_zize++] = EEPROM_MAC_Length;
++    memcpy(&writebuffer[total_zize], pbdinfo->macAddr, EEPROM_MAC_Length);
++    total_zize += EEPROM_MAC_Length;
++
++    /* Date of Manufacture */
++    writebuffer[total_zize++] = EEPROM_Type_Date;
++    writebuffer[total_zize++] = EEPROM_Date_Length;
++    memcpy(&writebuffer[total_zize], (unsigned char *)&pbdinfo->releaseDate, EEPROM_Date_Length);
++    total_zize += EEPROM_Date_Length;
++
++    /* Card Type */
++    CradTypeNum = EEPROM_Card_Type;
++    writebuffer[total_zize++] = EEPROM_Type_Card_Type;
++    writebuffer[total_zize++] = EEPROM_Card_Type_Length;
++    memcpy(&writebuffer[total_zize], (unsigned char *)&CradTypeNum, EEPROM_Card_Type_Length);
++    total_zize += EEPROM_Card_Type_Length;
++
++    /* Hardware Revision */
++    writebuffer[total_zize++] = EEPROM_Type_Hardware_Version;
++    writebuffer[total_zize++] = EEPROM_Hardware_Version_Length;
++    memcpy(&writebuffer[total_zize], (unsigned char *)&pbdinfo->hardwareVersion, EEPROM_Hardware_Version_Length);
++    total_zize += EEPROM_Hardware_Version_Length;
++
++    /* Label Revision Number */
++    str_length = strlen((char *)pbdinfo->label_revisionNumber);
++    if ((str_length>0)&&(str_length<=EEPROM_Max_Label_Revision_Length))
++    {
++        writebuffer[total_zize++] = EEPROM_Type_Label_Revision;
++        writebuffer[total_zize++] = str_length;
++        memcpy(&writebuffer[total_zize], pbdinfo->label_revisionNumber, str_length);
++        total_zize += str_length;
++    }
++
++    /* Model Name */
++    str_length = strlen((char *)pbdinfo->modelName);
++    if ((str_length>0)&&(str_length<=EEPROM_Max_Model_Name_Length))
++    {
++        writebuffer[total_zize++] = EEPROM_Type_Model_Name;
++        writebuffer[total_zize++] = str_length;
++        memcpy(&writebuffer[total_zize], pbdinfo->modelName, str_length);
++        total_zize += str_length;
++    }
++
++    /* Software Revision */
++    writebuffer[total_zize++] = EEPROM_Type_Software_Version;
++    writebuffer[total_zize++] = EEPROM_Software_Version_Length;
++    memcpy(&writebuffer[total_zize], (unsigned char *)&pbdinfo->softwareVersion, EEPROM_Software_Version_Length);
++    total_zize += EEPROM_Software_Version_Length;
++
++    /* CRC16-CCITT */
++    writebuffer[total_zize++] = EEPROM_Type_CRC16;
++    writebuffer[total_zize++] = EEPROM_CRC16_Length;
++
++#if 0
++    CRC_Init();
++    computed_crc = (UI16)crcbitbybit(writebuffer, total_zize);
++#else
++    computed_crc = 0;
++    computed_crc = crc32(computed_crc, writebuffer, total_zize);
++#endif
++    writebuffer[total_zize++] = (computed_crc&0xff);
++    writebuffer[total_zize++] = (computed_crc>>8)&0xff;
++
++    printf("\nUpdating board information by default, please wait ... ");
++#if 0
++    if (Write_Boardinfo_EEPROM(writebuffer)==0)
++	    printf(" Done.\n");
++    else
++	    printf(" FAIL.\n");
++#else
++	    printf(" NOT!\n");
++#endif
++
++    return;
++}
++
++int ReadEEPROMData(struct SysBoardInfo *pbdinfo, unsigned char *Readbuffer)
++{
++    unsigned short	 idx, str_length, type;
++    unsigned short	 computed_crc, read_crc;
++    char magic_number_flag, crc_number_flag;
++
++    magic_number_flag = crc_number_flag = 0;
++    idx = 0;
++    while (1)
++    {
++        type = Readbuffer[idx++];
++        str_length = Readbuffer[idx++];
++        if (str_length>0)
++        {
++            switch(type)
++            {
++                /* Check Magic Number */
++                case EEPROM_Type_Magic_Num:
++                    if (Readbuffer[idx] == EEPROM_Magic_Num)
++                        magic_number_flag = 1;
++                break;
++
++                /* Read Product Name */
++                case EEPROM_Type_Product_Name:
++                    memcpy(pbdinfo->productName, &Readbuffer[idx], str_length);
++                break;
++
++                /* Read Model Name */
++                case EEPROM_Type_Model_Name:
++                    memcpy(pbdinfo->modelName, &Readbuffer[idx], str_length);
++                break;
++
++                /* Read Part Number */
++                case EEPROM_Type_Part:
++                    memcpy(pbdinfo->partNumber, &Readbuffer[idx],  str_length);
++                break;
++
++                /* Read Serial Number */
++                case EEPROM_Type_Serial:
++                    memcpy(pbdinfo->serialNumber, &Readbuffer[idx],  str_length);
++                break;
++
++                /* Read Label Revision Number */
++                case EEPROM_Type_Label_Revision:
++                    memcpy(pbdinfo->label_revisionNumber, &Readbuffer[idx],  str_length);
++                break;
++
++                /* Read MAC Address */
++                case EEPROM_Type_MAC:
++                    memcpy(pbdinfo->macAddr, &Readbuffer[idx],  str_length);
++                break;
++
++                /* Read Hardware Revision */
++                case EEPROM_Type_Hardware_Version:
++                   memcpy(&pbdinfo->hardwareVersion, &Readbuffer[idx],  str_length);
++                break;
++
++                /* Read Software Revision */
++                case EEPROM_Type_Software_Version:
++                   memcpy(&pbdinfo->softwareVersion, &Readbuffer[idx],  str_length);
++                break;
++
++                /* Read Release Date*/
++                case EEPROM_Type_Date:
++                   memcpy(&pbdinfo->releaseDate, &Readbuffer[idx],  str_length);
++                break;
++
++                /* Check CRC16-CCITT */
++                case EEPROM_Type_CRC16:
++                    computed_crc = read_crc = 0;
++                    read_crc = Readbuffer[idx] + (Readbuffer[idx+1]<<8);
++                    computed_crc = crc32(computed_crc, Readbuffer, idx);
++                    if (read_crc==computed_crc)
++                        crc_number_flag = 1;
++                break;
++            }
++            idx += str_length;
++        }
++        if (idx>(EEPROM_24C02_SIZE-5)) break;
++    }
++
++    if ((magic_number_flag)&&(crc_number_flag))
++        return 1;
++
++     printf("EEPROM data error (computed_crc(%#08x) != read_crc(%#08x)) , \r\nCan't read MAC address from EEPROM!!\r\n" ,computed_crc , read_crc);
++     return 0;
++}
++
++static struct SysBoardInfo g_pbdinfo;
++static int info_read = 0;
++
++static int PopulateBoardData(void)
++{
++    char dataBuffer[EEPROM_24C02_SIZE];
++    int i;
++    unsigned int chksum = 0;
++    int rc = 0;
++
++    if (info_read)
++	return 0;
++
++    memset(dataBuffer, 0, sizeof(dataBuffer));
++
++#if defined(CONFIG_LY2_P2020) || defined(CONFIG_LY3_P2020) /* Add By Arius ---- 09/13/2011 */
++    char data = 0x01;
++    /* Do Channel Select */
++    if (i2c_write(I2C_PCA9546_FAN_I2C_SWITCH, 0x00, 1, &data, 1 ) != 0)
++    {
++        puts("I2C error ! Can't select Channel for PCA9546A!!\r\n");
++	return 1;
++    }
++#endif
++
++#if 1 /*using Type/Length/Data  format*/
++    memset(dataBuffer, 0, sizeof(dataBuffer));
++    memset(&g_pbdinfo, 0, SYS_BOARD_INFO_SIZE);
++
++    i2c_set_bus_num(0);
++
++#if defined(CONFIG_SB1A_P1010) || defined(CONFIG_SB1B_P1010)
++    if (i2c_read(I2C_AT24C02_EEPROM_MB, 0x00, 2, dataBuffer, EEPROM_24C02_SIZE) == 0)
++#else
++    if (i2c_read(I2C_AT24C02_EEPROM_MB, 0x00, 1, dataBuffer, EEPROM_24C02_SIZE) == 0)
++#endif
++    {
++        if (ReadEEPROMData(&g_pbdinfo, dataBuffer))
++        {
++            ShowBoardInfo(&g_pbdinfo);
++        }
++        else
++        {
++            puts("Error parsing TLV EEPROM data :");
++	    rc = 1;
++            for(i = 0; i < EEPROM_24C02_SIZE; i++)
++            {
++                if ((i % 16) == 0) printf("\r\n");
++                printf(" %02x", dataBuffer[i]);
++            }
++            BuildEEPROMData(&g_pbdinfo);
++            ShowBoardInfo(&g_pbdinfo);
++        }
++    }
++    else
++    {
++        puts("I2C error ! Can't read EEPROM data!!\r\n");
++	rc = 1;
++        BuildEEPROMData(&g_pbdinfo);
++        ShowBoardInfo(&g_pbdinfo);
++    }
++#else
++    if (i2c_read(I2C_AT24C02_EEPROM_MB, 0x00, 1, dataBuffer, EEPROM_24C02_SIZE ) == 0)
++    {
++        memcpy(&g_pbdinfo, dataBuffer, sizeof(struct SysBoardInfo));
++        chksum = crc32(0, (unsigned char *)&g_pbdinfo, SYS_BOARD_INFO_SIZE - sizeof(unsigned int)) ;
++
++        if (g_pbdinfo.checksum == chksum)
++        {
++            ShowBoardInfo(&g_pbdinfo);
++        }
++        else
++        {
++            printf("EEPROM data error (checksum(%#08x) != pbdinfo.checksum(%#08x)) , \r\n"
++                   "Can't read MAC address from EEPROM!!\r\n" , chksum , g_pbdinfo.checksum);
++	    rc = 1;
++            puts("EEPROM data :");
++            for(i = 0; i < EEPROM_24C02_SIZE; i++)
++            {
++                if ((i % 16) == 0) printf("\r\n");
++                printf(" %02x", dataBuffer[i]);
++            }
++            BuildBoardInfoDefault(&g_pbdinfo);
++            ShowBoardInfo(&g_pbdinfo);
++        }
++    }
++    else
++    {
++        puts("I2C error ! Can't read EEPROM data!!\r\n");
++	rc = 1;
++        BuildBoardInfoDefault(&g_pbdinfo);
++        ShowBoardInfo(&g_pbdinfo);
++    }
++#endif
++
++    softwareVersion = g_pbdinfo.softwareVersion;
++
++#if defined(CONFIG_LY2_P2020) || defined(CONFIG_LY3_P2020) /* Add By Arius ---- 09/13/2011 */
++    /* Do Channel Release */
++    data = 0x00;
++    if (i2c_write(I2C_PCA9546_FAN_I2C_SWITCH, 0x00, 1, &data, 1 ) != 0)
++    {
++        puts("I2C error ! Can't Release Channel for PCA9546A!!\r\n");
++	rc = 1;
++    }
++#endif
++
++    info_read = 1;
++    return rc;
++}
++
++/**
++ *  mac_read_from_eeprom
++ *
++ *  Read the MAC addresses from EEPROM
++ *
++ *  This function reads the MAC addresses from EEPROM and sets the
++ *  appropriate environment variables for each one read.
++ *
++ *  The environment variables are only set if they haven't been set already.
++ *  This ensures that any user-saved variables are never overwritten.
++ *
++ *  This function must be called after relocation.
++ */
++int mac_read_from_eeprom(void)
++{
++    char macString[18];
++
++    if (PopulateBoardData() == 0) {
++	    if (getenv("ethaddr"))
++		    return 0;
++
++	    format_macaddr(macString, (char *)g_pbdinfo.macAddr);
++	    setenv ("ethaddr", macString);
++    } else {
++	    printf("Reading EEPROM failed.\n");
++	    return -1;
++    }
++
++    return 0;
++}
++
++#ifdef CONFIG_POPULATE_SERIAL_NUMBER
++/**
++ *  populate_serial_number - read the serial number from EEPROM
++ *
++ *  This function reads the serial number from the EEPROM and sets the
++ *  appropriate environment variable.
++ *
++ *  The environment variable is only set if it has not been set
++ *  already.  This ensures that any user-saved variables are never
++ *  overwritten.
++ *
++ *  This function must be called after relocation.
++ */
++int populate_serial_number(void)
++{
++
++    if (PopulateBoardData() == 0) {
++	    if (getenv("serial#"))
++		    return 0;
++
++	    g_pbdinfo.serialNumber[SYS_SERIAL_NUMBER_SIZE - 1] = '\0';
++	    setenv ("serial#", (char *)g_pbdinfo.serialNumber);
++    } else {
++	    printf("Reading EEPROM failed.\n");
++	    return 1;
++    }
++
++    return 0;
++}
++#endif /* CONFIG_POPULATE_SERIAL_NUMBER */
+diff --git a/board/quanta/quanta_ly2r/sys_eeprom.h b/board/quanta/quanta_ly2r/sys_eeprom.h
+new file mode 100644
+index 0000000..f738bc1
+--- /dev/null
++++ b/board/quanta/quanta_ly2r/sys_eeprom.h
+@@ -0,0 +1,77 @@
++#ifndef __SYS_EEPROM_H_
++#define __SYS_EEPROM_H_
++
++/*
++ * Board information definitions
++ */
++#define SYS_BOARD_INFO_SIZE		160		/* board info size */
++#define SYS_PRODUCT_NAME_SIZE		32		/* max. product name size */
++#define SYS_MODEL_NAME_SIZE		20		/* max. model name size */
++#define SYS_PART_NUMBER_SIZE		20		/* max. part number size */
++#define SYS_SERIAL_NUMBER_SIZE		20		/* max. serial number size */
++#define SYS_LABEL_REVISION_NUMBER_SIZE	20		/* max. label reversion number size */
++#define SYS_MAC_ADDR_SIZE		6		/* mac address size */
++
++#define XMK_STR(x)	#x
++#define MK_STR(x)	XMK_STR(x)
++
++struct SysBoardInfo {
++   u8 productName[SYS_PRODUCT_NAME_SIZE];			/* product name */
++   u8 modelName[SYS_MODEL_NAME_SIZE];				/* model name */
++   u8 partNumber[SYS_PART_NUMBER_SIZE];			/* part number */
++   u8 serialNumber[SYS_SERIAL_NUMBER_SIZE];			/* serial number */
++   u8 label_revisionNumber[SYS_LABEL_REVISION_NUMBER_SIZE];	/* label revision serial number */
++   u32 hardwareVersion ;	/* hardware version of this board
++				* B1: major version, B2: minor version,
++				* B3: test stage, eg. A, B, C..., R for release,
++				* B4: test minor version
++				* eg. 1.03B1 for version 1.03 B Test 1
++				*/
++   u32 softwareVersion ;	/* software version of this board
++				* B1: major version, B2: minor version,
++				* B3: test stage, eg. A, B, C..., R for release,
++				* B4: test minor version
++				* eg. 1.03B1 for version 1.03 B Test 1
++				*/
++   u32 releaseDate ;				/* release date */
++   u8 macAddr[SYS_MAC_ADDR_SIZE] ;		/* mac address */
++   u8 Manufacture_Mode ;           /* 0 : Normal       1 : Auto in Diagnostic Test Mode    2 : Auto in Burn-In test Mode */
++   u8 reserved[25] ;				/* reserved, should be all zero! */
++   u32 checksum ;				/* checksum of BoardInfo except this field */
++} ;
++
++
++unsigned long softwareVersion ; /* software version of this board*/
++
++
++#define String_Type_Length 20
++#define EEPROM_Type_Magic_Num 0xFF
++#define EEPROM_Type_Product_Name 0x01
++#define EEPROM_Type_Part 0x02
++#define EEPROM_Type_Serial 0x03
++#define EEPROM_Type_MAC 0x04
++#define EEPROM_Type_Date 0x05
++#define EEPROM_Type_Card_Type 0x06
++#define EEPROM_Type_Hardware_Version 0x07
++#define EEPROM_Type_Label_Revision 0x08
++#define EEPROM_Type_Model_Name 0x09
++#define EEPROM_Type_Software_Version 0x0A
++#define EEPROM_Type_CRC16 0x00
++
++#define EEPROM_Magic_Num_Length 1
++#define EEPROM_Max_Product_Name_Length SYS_PRODUCT_NAME_SIZE
++#define EEPROM_Max_Part_Length SYS_PART_NUMBER_SIZE
++#define EEPROM_Max_Serial_Length SYS_SERIAL_NUMBER_SIZE
++#define EEPROM_MAC_Length SYS_MAC_ADDR_SIZE
++#define EEPROM_Max_Label_Revision_Length  SYS_LABEL_REVISION_NUMBER_SIZE
++#define EEPROM_Max_Model_Name_Length SYS_MODEL_NAME_SIZE
++#define EEPROM_Date_Length 4
++#define EEPROM_Card_Type_Length 4
++#define EEPROM_Hardware_Version_Length 4
++#define EEPROM_Software_Version_Length 4
++#define EEPROM_CRC16_Length 2
++
++#define EEPROM_Magic_Num 0xE0
++#define EEPROM_Card_Type 0x00000001
++
++#endif
+diff --git a/board/quanta/quanta_ly2r/tlb.c b/board/quanta/quanta_ly2r/tlb.c
+new file mode 100644
+index 0000000..3e41539
+--- /dev/null
++++ b/board/quanta/quanta_ly2r/tlb.c
+@@ -0,0 +1,85 @@
++/*
++ * Copyright 2008-2009 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <common.h>
++#include <asm/mmu.h>
++
++struct fsl_e_tlb_entry tlb_table[] = {
++	/* TLB 0 - for temp stack in cache */
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR, CONFIG_SYS_INIT_RAM_ADDR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 4 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 4 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 8 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 8 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 12 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 12 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++
++	/* TLB 1 */
++	/* *I*** - Covers boot page */
++	SET_TLB_ENTRY(1, 0xfffff000, 0xfffff000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 0, BOOKE_PAGESZ_4K, 1),
++
++	/* *I*G* - CCSRBAR */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CCSRBAR, CONFIG_SYS_CCSRBAR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 1, BOOKE_PAGESZ_1M, 1),
++
++	/* W**G* - Flash, localbus (one TLB entry for both chips) */
++	/* This will be changed to *I*G* after relocation to RAM. */
++	SET_TLB_ENTRY(1, CONFIG_SYS_FLASH_BASE, CONFIG_SYS_FLASH_BASE_PHYS,
++		      MAS3_SX|MAS3_SR, MAS2_W|MAS2_G,
++		      0, 2, BOOKE_PAGESZ_64M, 1),
++
++	/* *I*G* - PCI 1 (first half) */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_MEM_VIRT, CONFIG_SYS_PCIE1_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 3, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCI 1 (second half) */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_MEM_VIRT + 0x10000000,
++                      CONFIG_SYS_PCIE1_MEM_PHYS + 0x10000000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 4, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCI I/O */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_IO_VIRT, CONFIG_SYS_PCIE1_IO_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 5, BOOKE_PAGESZ_64K, 1),
++
++	SET_TLB_ENTRY(1, CONFIG_SYS_FLASH_BASE1, CONFIG_SYS_FLASH_BASE_PHYS1,
++		      MAS3_SX|MAS3_SR, MAS2_W|MAS2_G,
++		      0, 6, BOOKE_PAGESZ_64M, 1),
++};
++
++int num_tlb_entries = ARRAY_SIZE(tlb_table);
+diff --git a/boards.cfg b/boards.cfg
+index e4b0d44..73cac11 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -816,6 +816,8 @@ P2020DS_36BIT                powerpc     mpc85xx     p2020ds             freesca
+ P2020DS_DDR2                 powerpc     mpc85xx     p2020ds             freescale      -           P2020DS:DDR2
+ P2020DS_SDCARD               powerpc     mpc85xx     p2020ds             freescale      -           P2020DS:SDCARD
+ P2020DS_SPIFLASH             powerpc     mpc85xx     p2020ds             freescale      -           P2020DS:SPIFLASH
++QUANTA_LY2R                  powerpc     mpc85xx     quanta_ly2r          quanta
++QUANTA_LY2R-R0               powerpc     mpc85xx     quanta_ly2r          quanta         -           QUANTA_LY2R:ONIE_PLATFORM_REV=0
+ P2020RDB                     powerpc     mpc85xx     p1_p2_rdb           freescale      -           P1_P2_RDB:P2020RDB
+ P2020RDB_36BIT               powerpc     mpc85xx     p1_p2_rdb           freescale      -           P1_P2_RDB:P2020RDB,36BIT
+ P2020RDB_36BIT_SDCARD        powerpc     mpc85xx     p1_p2_rdb           freescale      -           P1_P2_RDB:P2020RDB,36BIT,SDCARD
+diff --git a/include/configs/QUANTA_LY2R.h b/include/configs/QUANTA_LY2R.h
+new file mode 100644
+index 0000000..3a8201a
+--- /dev/null
++++ b/include/configs/QUANTA_LY2R.h
+@@ -0,0 +1,366 @@
++/*
++ * Portions Copyright 2007-2009 Freescale Semiconductor, Inc.
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++/*
++ * Quanta LY2R board configuration file
++ *
++ */
++#ifndef __CONFIG_H
++#define __CONFIG_H
++
++#include "configs/common_config.h"
++
++/* High Level Configuration Options */
++#define CONFIG_BOOKE		1	/* BOOKE */
++#define CONFIG_E500		1	/* BOOKE e500 family */
++#define CONFIG_MPC85xx		1	/* MPC8540/60/55/41/48 */
++#define CONFIG_P2020		1
++#define CONFIG_QUANTA_LY2R	1
++#define CONFIG_BOARDNAME        "Quanta LY2R"
++#define CONFIG_MP		1	/* support multiple processors */
++
++#define CONFIG_FSL_ELBC		1	/* Has Enhanced localbus controller */
++#define CONFIG_PCI		1	/* Enable PCI/PCIE */
++#define CONFIG_PCIE1		1	/* PCIE controler 1 */
++#undef CONFIG_PCIE2			/* PCIE controler 2, not connected */
++#undef CONFIG_PCIE3			/* PCIE controler 3, not connected */
++#define CONFIG_FSL_PCI_INIT	1	/* Use common FSL init code */
++#define CONFIG_FSL_PCIE_RESET	1	/* need PCIe reset errata */
++#define CONFIG_SYS_PCI_64BIT	1	/* enable 64-bit PCI resources */
++
++#define CONFIG_FSL_LAW		1	/* Use common FSL init code */
++
++#define CONFIG_TSEC_ENET	1	/* tsec ethernet support */
++
++#define CONFIG_SYS_CLK_FREQ	100000000
++#define CONFIG_DDR_CLK_FREQ	100000000
++
++/*
++ * These can be toggled for performance analysis, otherwise use default.
++ */
++#define CONFIG_L2_CACHE			/* toggle L2 cache */
++#define CONFIG_BTB			/* toggle branch predition */
++
++#define CONFIG_ENABLE_36BIT_PHYS	1
++
++#define CONFIG_SYS_MEMTEST_START	0x00000000	/* memtest works on */
++#define CONFIG_SYS_MEMTEST_END		0x7fffffff
++#define CONFIG_PANIC_HANG	        1		/* do not reset board on panic */
++
++/*
++ * Base addresses -- Note these are effective addresses where the
++ * actual resources get mapped (not physical addresses)
++ */
++#define CONFIG_SYS_CCSRBAR		0xffe00000		/* relocated CCSRBAR */
++#define CONFIG_SYS_CCSRBAR_PHYS_LOW	CONFIG_SYS_CCSRBAR	/* physical addr of CCSRBAR */
++
++/* DDR Setup */
++#define CONFIG_VERY_BIG_RAM
++#define CONFIG_FSL_DDR3			1
++#define CONFIG_SPD_EEPROM
++#undef CONFIG_FSL_DDR_INTERACTIVE
++#define CONFIG_DDR_SPD
++#define CONFIG_DDR_DLL
++
++/* XXX hardware is ECC capable, but the vendor u-boot has it disabled */
++#undef	CONFIG_DDR_ECC
++#define CONFIG_ECC_INIT_VIA_DDRCONTROLLER
++#define CONFIG_MEM_INIT_VALUE		0xdeadbeef
++
++#define CONFIG_SYS_DDR_SDRAM_BASE	0x00000000
++#define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
++
++#define CONFIG_NUM_DDR_CONTROLLERS	1
++#define CONFIG_DIMM_SLOTS_PER_CTLR	1
++#define CONFIG_CHIP_SELECTS_PER_CTRL	2
++
++/* I2C addresses of SPD EEPROMs */
++#define CONFIG_SYS_SPD_BUS_NUM          0       /* SPD EEPROM located on I2C bus 0 */
++#define SPD_EEPROM_ADDRESS              0x51    /* CTLR 0 DIMM 0 */
++
++#define CONFIG_SYS_SDRAM_SIZE		2048		/* DDR is 2GB */
++
++#undef CONFIG_CLOCKS_IN_MHZ
++
++/*
++ * Memory map
++ *
++ * 0x0000_0000	0x7fff_ffff	DDR			2G Cacheable
++ * 0xc000_0000	0xcfff_ffff	PCI Express Mem 1	512M non-cacheable
++ * 0xffc2_0000	0xffc2_ffff	PCI Express IO		64K
++ *
++ * Localbus non-cacheable
++ * 0xec00_0000  0xedff_ffff	FLASH                   32M non-cacheable
++ * 0xee00_0000  0xefff_ffff	FLASH (boot)            32M non-cacheable
++ * 0xffd0_0000	0xffd0_3fff	L1 for stack		16K Cacheable TLB0
++ * 0xffe0_0000	0xffef_ffff	CCSR			1M non-cacheable
++ */
++
++/*
++ * Local Bus Definitions
++ */
++
++/*
++ * FLASH on the Local Bus - CS0/CS1
++ */
++
++#define CONFIG_SYS_FLASH_BASE		0xec000000
++#define	CONFIG_SYS_FLASH_BASE_PHYS	CONFIG_SYS_FLASH_BASE
++#define CONFIG_SYS_FLASH_BASE1		0xe8000000
++#define	CONFIG_SYS_FLASH_BASE_PHYS1	CONFIG_SYS_FLASH_BASE1
++
++#define CONFIG_FLASH_BR_PRELIM \
++	(BR_PHYS_ADDR(CONFIG_SYS_FLASH_BASE_PHYS) | BR_PS_16 | BR_V)
++#define CONFIG_FLASH_OR_PRELIM		0xfc001e65
++#define CONFIG_FLASH_BR_PRELIM1 \
++	(BR_PHYS_ADDR(CONFIG_SYS_FLASH_BASE_PHYS1) | BR_PS_16 | BR_V)
++#define CONFIG_FLASH_OR_PRELIM1		0xfc001e65
++
++#define CONFIG_SYS_FLASH_BANKS_LIST	{CONFIG_SYS_FLASH_BASE1, CONFIG_SYS_FLASH_BASE}
++
++#define CONFIG_SYS_MAX_FLASH_BANKS	2		/* number of banks */
++/* sectors per device  sectors) */
++#define CONFIG_SYS_MAX_FLASH_SECT	1027
++/* Flash Erase Timeout (ms) */
++#define CONFIG_SYS_FLASH_ERASE_TOUT	60000
++/* Flash Write Timeout (ms) */
++#define CONFIG_SYS_FLASH_WRITE_TOUT	500
++/* Flash Full Buffer Write Timeout (ms) */
++#define CONFIG_SYS_FLASH_BUFFER_WRITE_TOUT	500
++
++#ifndef CONFIG_SYS_TEXT_BASE
++#define CONFIG_SYS_TEXT_BASE    0xeff80000
++#endif
++
++#ifndef CONFIG_RESET_VECTOR_ADDRESS
++#define CONFIG_RESET_VECTOR_ADDRESS 0xeffffffc
++#endif
++
++#ifndef CONFIG_SYS_MONITOR_BASE
++#define CONFIG_SYS_MONITOR_BASE CONFIG_SYS_TEXT_BASE    /* start of monitor */
++#endif
++
++#define CONFIG_FLASH_CFI_DRIVER
++#define CONFIG_SYS_FLASH_CFI
++#define CONFIG_SYS_FLASH_EMPTY_INFO
++#define CONFIG_FLASH_SHOW_PROGRESS	45
++#define CONFIG_SYS_FLASH_USE_BUFFER_WRITE
++#undef CONFIG_SYS_FLASH_PROTECTION /* the BDI can't unlock spansion's locking method */
++
++#define	CONFIG_BOARD_EARLY_INIT_R	1	/* Call board_pre_init_r */
++#define	CONFIG_BOARD_EARLY_INIT_F	1	/* Call board_pre_init_f */
++/* FDT fixups before handing to the kernel */
++#define CONFIG_FDT_BOARD_FIXUPS		1
++
++#define CONFIG_SYS_INIT_RAM_LOCK	1
++#define CONFIG_SYS_INIT_RAM_ADDR	0xffd00000	/* Initial L1 address */
++/* End of used area in RAM */
++#define CONFIG_SYS_INIT_RAM_SIZE	0x00004000
++/* Initial L1  address */
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS   CONFIG_SYS_INIT_RAM_ADDR
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH 0
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW CONFIG_SYS_INIT_RAM_ADDR_PHYS
++
++/* num bytes initial data */
++#define CONFIG_SYS_GBL_DATA_SIZE	1024
++#define CONFIG_SYS_GBL_DATA_OFFSET \
++	(CONFIG_SYS_INIT_RAM_SIZE - CONFIG_SYS_GBL_DATA_SIZE)
++#define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
++
++/* Reserve 512 kB for Mon */
++#define CONFIG_SYS_MONITOR_LEN		(512 * 1024)
++/* Reserved for malloc */
++#define CONFIG_SYS_MALLOC_LEN		(256 * 1024)
++
++/* Nor Base Address */
++#define CONFIG_SYS_BR0_PRELIM		CONFIG_FLASH_BR_PRELIM
++#define CONFIG_SYS_BR1_PRELIM		CONFIG_FLASH_BR_PRELIM1
++/* Nor Options */
++#define CONFIG_SYS_OR0_PRELIM		CONFIG_FLASH_OR_PRELIM
++#define CONFIG_SYS_OR1_PRELIM		CONFIG_FLASH_OR_PRELIM1
++
++/* Serial Port */
++#define CONFIG_CONS_INDEX		1
++#define CONFIG_SYS_NS16550
++#define CONFIG_SYS_NS16550_SERIAL
++#define CONFIG_SYS_NS16550_REG_SIZE	1
++#define CONFIG_SYS_NS16550_CLK		get_bus_freq(0)
++
++#define CONFIG_SYS_NS16550_COM1	(CONFIG_SYS_CCSRBAR+0x4500)
++#define CONFIG_SYS_NS16550_COM2	(CONFIG_SYS_CCSRBAR+0x4600)
++
++/* I2C  */
++#define CONFIG_FSL_I2C		/* Use FSL common I2C driver */
++#define CONFIG_HARD_I2C		/* I2C with hardware support*/
++#undef	CONFIG_SOFT_I2C		/* I2C bit-banged */
++
++/*
++ * Set the I2C bus speed to 100kHz.  Anything faster causes bus to hang when
++ * talking to the Cypress SOC.
++ */
++#define CONFIG_SYS_I2C_SPEED		100000
++#define CONFIG_SYS_I2C_OFFSET		0x3000
++#define CONFIG_SYS_I2C2_OFFSET		0x3100
++
++#define CONFIG_I2C_MULTI_BUS
++#define	CONFIG_SYS_MAX_I2C_BUS		2
++#define	CONFIG_I2C_CMD_TREE
++
++/*
++ * General PCI
++ * Memory space is mapped 1-1, but I/O space must start from 0.
++ */
++
++/*
++ * Keep these sizes in sync with the LAWs
++ */
++#ifdef CONFIG_PCIE1
++#define CONFIG_SYS_PCIE1_MEM_VIRT	0xc0000000
++#define CONFIG_SYS_PCIE1_MEM_BUS	0xc0000000
++#define CONFIG_SYS_PCIE1_MEM_PHYS	0xc0000000
++#define CONFIG_SYS_PCIE1_MEM_SIZE	0x20000000	/* 512M */
++#define CONFIG_SYS_PCIE1_IO_VIRT	0xffc20000
++#define CONFIG_SYS_PCIE1_IO_BUS		0x00000000
++#define CONFIG_SYS_PCIE1_IO_PHYS	0xffc20000
++#define CONFIG_SYS_PCIE1_IO_SIZE	0x00010000	/* 64K */
++#endif
++
++#define CONFIG_PCI_SCAN_SHOW        /* show pci devices on startup */
++
++/*
++ * Networking
++ */
++
++#if defined(CONFIG_TSEC_ENET)
++
++#define CONFIG_MII		1	/* MII PHY management */
++#undef	CONFIG_MII_DEFAULT_TSEC		/* Don't allow unregistered phys */
++#define CONFIG_TSEC1
++#define	CONFIG_TSEC1_NAME	"eth0"
++#undef CONFIG_TSEC2
++#undef CONFIG_TSEC3			/* Ethernet  */
++
++#define TSEC1_PHY_ADDR		1
++#define TSEC1_FLAGS		(TSEC_GIGABIT | TSEC_SGMII)
++
++#define CONFIG_ETHPRIME		"eth0"
++
++#define CONFIG_PHY_GIGE		1	/* Include GbE speed/duplex detection */
++#endif	/* CONFIG_TSEC_ENET */
++
++/*
++ * In-band SGMII auto-negotiation between TBI and BCM5461S PHY fails, force
++ * 1000mbps SGMII link
++ */
++#define CONFIG_TSEC_TBICR_SETTINGS (  \
++		TBICR_PHY_RESET	    | \
++		TBICR_FULL_DUPLEX   | \
++		TBICR_SPEED1_SET      \
++		)
++
++/*
++ * Environment
++ */
++#define CONFIG_ENV_IS_IN_FLASH	1
++#define CONFIG_ENV_ADDR		0xeff60000
++#define CONFIG_ENV_SECT_SIZE	0x00020000	/* 128K (one sector) */
++
++/*
++ * eSDHC - Enhanced Secure Digial Host Controller
++ */
++#define CONFIG_MMC
++#define CONFIG_CMD_MMC
++#define CONFIG_FSL_ESDHC
++#define CONFIG_GENERIC_MMC
++#define CONFIG_SYS_FSL_ESDHC_ADDR	CONFIG_SYS_MPC85xx_ESDHC_ADDR
++
++/*
++ * I2C2 EEPROM
++ */
++#define CONFIG_CMD_EEPROM		/* EEPROM read/write support	*/
++/*
++ * bit of hack to enable reading MAC from EEPROM w/o using Freescale's
++ * 'mac' command.  Just having it defined enables the infra to call
++ * our mac_read_from_eeprom() to set $ethaddr.
++ *
++ */
++#define CONFIG_SYS_I2C_MAC_OFFSET
++#define CONFIG_SYS_EEPROM_BUS_NUM		0
++#define CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS	5
++#define CONFIG_SYS_I2C_EEPROM_ADDR		0x54
++#define CONFIG_SYS_I2C_EEPROM_ADDR_LEN		1
++#define CONFIG_SYS_I2C_EEPROM_INFO_ADDR         0x0
++#define CONFIG_SYS_I2C_EEPROM_INFO_LEN          0x0
++
++/*
++ * Quanta Board Info
++ */
++
++#define CONFIG_QUANTA_SOFT_VERSION 0x0000f201
++#define CONFIG_LY2R_P2020
++#define I2C_AT24C02_EEPROM_MB 0x54
++#define EEPROM_24C02_SIZE 256
++#define I2C_PCA9546_FAN_I2C_SWITCH 0x71
++#define MODEL_NAME CONFIG_QUANTA_MODEL_NAME
++#define CONFIG_QUANTA_MODEL_NAME "LY2R"
++
++#undef	CONFIG_WATCHDOG		/* watchdog disabled */
++
++/*
++ * Miscellaneous configurable options
++ */
++#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address */
++#define CONFIG_SYS_PROMPT	"quanta_ly2r-> "	/* Monitor Command Prompt */
++
++#if defined(CONFIG_CMD_KGDB)
++#define CONFIG_KGDB_BAUDRATE	230400	/* speed to run kgdb serial port */
++#define CONFIG_KGDB_SER_INDEX	2	/* which serial port to use */
++#endif
++
++/*
++ * Environment Configuration
++ */
++
++#if defined(CONFIG_TSEC_ENET)
++#define CONFIG_HAS_ETH0
++#endif
++
++#define CONFIG_HOSTNAME		quanta-ly2r-unknown
++
++/*default location for tftp and bootm*/
++#define CONFIG_LOADADDR		0x08000000
++
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS0\0"	\
++	"onie_start=0xefb60000\0"	\
++	"onie_sz.b=0x00400000\0"
++
++#define	CONFIG_EXTRA_ENV_SETTINGS		\
++	CONFIG_PLATFORM_ENV			\
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++#endif	/* __CONFIG_H */
