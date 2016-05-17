@@ -1,0 +1,1128 @@
+From 222b4c6a17b97ac9deef910066c39edb26af634b Mon Sep 17 00:00:00 2001
+From: Minghuan Lian <Minghuan.Lian@freescale.com>
+Date: Tue, 17 Nov 2015 17:07:50 +0800
+Subject: [PATCH 178/245] pci/layerscape: Add PCIe endpoint driver
+
+This driver is for Layerscape PCIe endpoint driver.
+It provides "regs" "test" debug file operations.
+"regs" read operation can dump the controller register;
+writer can change register value.
+"test" includes "init", "dma", "cpy", "free" commands which
+are used to test DMA and memcpy EP performance.
+
+Signed-off-by: Minghuan Lian <Minghuan.Lian@freescale.com>
+---
+ drivers/pci/host/Makefile                    |   2 +-
+ drivers/pci/host/pci-layerscape-ep-debugfs.c | 690 +++++++++++++++++++++++++++
+ drivers/pci/host/pci-layerscape-ep.c         | 274 +++++++++++
+ drivers/pci/host/pci-layerscape-ep.h         | 107 +++++
+ 4 files changed, 1072 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/pci/host/pci-layerscape-ep-debugfs.c
+ create mode 100644 drivers/pci/host/pci-layerscape-ep.c
+ create mode 100644 drivers/pci/host/pci-layerscape-ep.h
+
+diff --git a/drivers/pci/host/Makefile b/drivers/pci/host/Makefile
+index da985e1..d35906a 100644
+--- a/drivers/pci/host/Makefile
++++ b/drivers/pci/host/Makefile
+@@ -12,7 +12,7 @@ obj-$(CONFIG_PCIE_SPEAR13XX) += pcie-spear13xx.o
+ obj-$(CONFIG_PCI_KEYSTONE) += pci-keystone-dw.o pci-keystone.o
+ obj-$(CONFIG_PCIE_XILINX) += pcie-xilinx.o
+ obj-$(CONFIG_PCI_XGENE) += pci-xgene.o
+-obj-$(CONFIG_PCI_LAYERSCAPE) += pci-layerscape.o
++obj-$(CONFIG_PCI_LAYERSCAPE) += pci-layerscape.o pci-layerscape-ep.o pci-layerscape-ep-debugfs.o
+ obj-$(CONFIG_PCI_VERSATILE) += pci-versatile.o
+ obj-$(CONFIG_PCIE_IPROC) += pcie-iproc.o
+ obj-$(CONFIG_PCIE_IPROC_PLATFORM) += pcie-iproc-platform.o
+diff --git a/drivers/pci/host/pci-layerscape-ep-debugfs.c b/drivers/pci/host/pci-layerscape-ep-debugfs.c
+new file mode 100644
+index 0000000..df30da2
+--- /dev/null
++++ b/drivers/pci/host/pci-layerscape-ep-debugfs.c
+@@ -0,0 +1,690 @@
++/*
++ * PCIe Endpoint driver for Freescale Layerscape SoCs
++ *
++ * Copyright (C) 2015 Freescale Semiconductor.
++ *
++  * Author: Minghuan Lian <Minghuan.Lian@freescale.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/debugfs.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++#include <linux/kthread.h>
++#include <linux/slab.h>
++#include <linux/dmaengine.h>
++#include <linux/dma-mapping.h>
++#include <linux/freezer.h>
++
++#include <linux/completion.h>
++
++#include "pci-layerscape-ep.h"
++
++#define PCIE_ATU_INDEX3		(0x3 << 0)
++#define PCIE_ATU_INDEX2		(0x2 << 0)
++#define PCIE_ATU_INDEX1		(0x1 << 0)
++#define PCIE_ATU_INDEX0		(0x0 << 0)
++
++#define PCIE_BAR0_SIZE		(4 * 1024) /* 4K */
++#define PCIE_BAR1_SIZE		(8 * 1024) /* 8K for MSIX */
++#define PCIE_BAR2_SIZE		(4 * 1024) /* 4K */
++#define PCIE_BAR4_SIZE		(1 * 1024 * 1024) /* 1M */
++
++#define PCIE_OB_BAR		0x1400000000ULL
++
++enum test_type {
++	TEST_TYPE_DMA,
++	TEST_TYPE_MEMCPY
++};
++
++enum test_dirt {
++	TEST_DIRT_READ,
++	TEST_DIRT_WRITE
++};
++
++enum test_status {
++	TEST_IDLE,
++	TEST_BUSY
++};
++
++struct ls_ep_test {
++	struct ls_ep_dev	*ep;
++	void __iomem		*cfg;
++	void __iomem		*buf;
++	void __iomem		*out;
++	dma_addr_t		cfg_addr;
++	dma_addr_t		buf_addr;
++	dma_addr_t		out_addr;
++	dma_addr_t		bus_addr;
++	struct task_struct	*thread;
++	spinlock_t		lock;
++	struct completion	done;
++	u32			len;
++	int			loop;
++	enum test_dirt		dirt;
++	enum test_type		type;
++	enum test_status	status;
++	u64			result; /* Mbps */
++	char			cmd[256];
++};
++
++static int ls_pcie_ep_test_try_run(struct ls_ep_test *test)
++{
++	int ret;
++
++	spin_lock(&test->lock);
++	if (test->status == TEST_IDLE) {
++		test->status = TEST_BUSY;
++		ret = 0;
++	} else
++		ret = -EBUSY;
++	spin_unlock(&test->lock);
++
++	return ret;
++}
++
++static void ls_pcie_ep_test_done(struct ls_ep_test *test)
++{
++	spin_lock(&test->lock);
++	test->status = TEST_IDLE;
++	spin_unlock(&test->lock);
++}
++
++static void ls_pcie_ep_test_setup_bars(struct ls_ep_dev *ep)
++{
++	/* BAR0 - 32bit - 4K configuration */
++	ls_pcie_ep_dev_setup_bar(ep, 0, PCIE_BAR0_SIZE);
++	/* BAR1 - 32bit - 8K MSIX*/
++	ls_pcie_ep_dev_setup_bar(ep, 1, PCIE_BAR1_SIZE);
++	/* BAR2 - 64bit - 4K MEM desciptor */
++	ls_pcie_ep_dev_setup_bar(ep, 2, PCIE_BAR2_SIZE);
++	/* BAR4 - 64bit - 1M MEM*/
++	ls_pcie_ep_dev_setup_bar(ep, 4, PCIE_BAR4_SIZE);
++}
++
++static void ls_pcie_ep_test_dma_cb(void *arg)
++{
++	struct ls_ep_test *test = arg;
++
++	complete(&test->done);
++}
++
++static int ls_pcie_ep_test_dma(struct ls_ep_test *test)
++{
++	dma_cap_mask_t mask;
++	struct dma_chan *chan;
++	struct dma_device *dma_dev;
++	dma_addr_t src, dst;
++	enum dma_data_direction direction;
++	enum dma_ctrl_flags dma_flags = DMA_CTRL_ACK | DMA_PREP_INTERRUPT;
++	struct timespec start, end, period;
++	int i = 0;
++
++	dma_cap_zero(mask);
++	dma_cap_set(DMA_MEMCPY, mask);
++
++	chan = dma_request_channel(mask, NULL, test);
++	if (!chan) {
++		pr_err("failed to request dma channel\n");
++		return -EINVAL;
++	}
++
++	memset(test->buf, 0x5a, test->len);
++
++	if (test->dirt == TEST_DIRT_WRITE) {
++		src = test->buf_addr;
++		dst = test->out_addr;
++		direction = DMA_TO_DEVICE;
++	} else {
++		src = test->out_addr;
++		dst = test->buf_addr;
++		direction = DMA_FROM_DEVICE;
++	}
++
++	dma_dev = chan->device;
++	dma_flags = DMA_CTRL_ACK | DMA_PREP_INTERRUPT;
++
++	dma_sync_single_for_device(&test->ep->dev, test->buf_addr,
++				   test->len, direction);
++
++	set_freezable();
++
++	getrawmonotonic(&start);
++	while (!kthread_should_stop() && (i < test->loop)) {
++		struct dma_async_tx_descriptor *dma_desc;
++		dma_cookie_t	dma_cookie = {0};
++		unsigned long tmo;
++		int status;
++
++		init_completion(&test->done);
++
++		dma_desc = dma_dev->device_prep_dma_memcpy(chan,
++							   dst, src,
++							   test->len,
++							   dma_flags);
++		if (!dma_desc) {
++			pr_err("DMA desc constr failed...\n");
++			goto _err;
++		}
++
++		dma_desc->callback = ls_pcie_ep_test_dma_cb;
++		dma_desc->callback_param = test;
++		dma_cookie = dmaengine_submit(dma_desc);
++
++		if (dma_submit_error(dma_cookie)) {
++			pr_err("DMA submit error....\n");
++			goto _err;
++		}
++
++		/* Trigger the transaction */
++		dma_async_issue_pending(chan);
++
++		tmo = wait_for_completion_timeout(&test->done,
++					  msecs_to_jiffies(5 * test->len));
++		if (tmo == 0) {
++			pr_err("Self-test copy timed out, disabling\n");
++			goto _err;
++		}
++
++		status = dma_async_is_tx_complete(chan, dma_cookie,
++						  NULL, NULL);
++		if (status != DMA_COMPLETE) {
++			pr_err("got completion callback, but status is %s\n",
++			       status == DMA_ERROR ? "error" : "in progress");
++			goto _err;
++		}
++
++		i++;
++	}
++
++	getrawmonotonic(&end);
++	period = timespec_sub(end, start);
++	test->result = test->len * 8ULL * i * 1000 /
++		       (period.tv_sec * 1000 * 1000 * 1000 + period.tv_nsec);
++	dma_release_channel(chan);
++
++	return 0;
++
++_err:
++	dma_release_channel(chan);
++	test->result = 0;
++	return -EINVAL;
++}
++
++static int ls_pcie_ep_test_cpy(struct ls_ep_test *test)
++{
++	void *dst, *src;
++	struct timespec start, end, period;
++	int i = 0;
++
++	memset(test->buf, 0xa5, test->len);
++
++	if (test->dirt == TEST_DIRT_WRITE) {
++		dst = test->out;
++		src = test->buf;
++	} else {
++		dst = test->buf;
++		src = test->out;
++	}
++
++	getrawmonotonic(&start);
++	while (!kthread_should_stop() && i < test->loop) {
++		memcpy(dst, src, test->len);
++		i++;
++	}
++	getrawmonotonic(&end);
++
++	period = timespec_sub(end, start);
++
++	test->result = test->len * 8ULL * i * 1000 /
++		(period.tv_sec * 1000 * 1000 * 1000 + period.tv_nsec);
++
++	return 0;
++}
++
++int ls_pcie_ep_test_thread(void *arg)
++{
++	int ret;
++
++	struct ls_ep_test *test = arg;
++
++	if (test->type == TEST_TYPE_DMA)
++		ret = ls_pcie_ep_test_dma(test);
++	else
++		ret = ls_pcie_ep_test_cpy(test);
++
++	if (ret) {
++		pr_err("\n%s \ttest failed\n",
++		       test->cmd);
++		test->result = 0;
++	} else
++		pr_err("\n%s \tthroughput:%lluMbps\n",
++		       test->cmd, test->result);
++
++	ls_pcie_ep_test_done(test);
++	do_exit(0);
++}
++
++static int ls_pcie_ep_free_test(struct ls_ep_dev *ep)
++{
++	struct ls_ep_test *test = ep->driver_data;
++
++	if (!test)
++		return 0;
++
++	if (test->status == TEST_BUSY) {
++		kthread_stop(test->thread);
++		dev_info(&ep->dev,
++			 "test is running please wait and run again\n");
++		return -EBUSY;
++	}
++
++	if (test->buf)
++		free_pages((unsigned long)test->buf,
++			   get_order(PCIE_BAR4_SIZE));
++
++	if (test->cfg)
++		free_pages((unsigned long)test->cfg,
++			   get_order(PCIE_BAR2_SIZE));
++
++	if (test->out)
++		iounmap(test->out);
++
++	kfree(test);
++	ep->driver_data = NULL;
++
++	return 0;
++}
++
++static int ls_pcie_ep_init_test(struct ls_ep_dev *ep, u64 bus_addr)
++{
++	struct ls_pcie *pcie = ep->pcie;
++	struct ls_ep_test *test = ep->driver_data;
++	int err;
++
++	if (test) {
++		dev_info(&ep->dev,
++			 "Please use 'free' to remove the exiting test\n");
++		return -EBUSY;
++	}
++
++	test = kzalloc(sizeof(*test), GFP_KERNEL);
++	if (!test)
++		return -ENOMEM;
++	ep->driver_data = test;
++	test->ep = ep;
++	spin_lock_init(&test->lock);
++	test->status = TEST_IDLE;
++
++	test->buf = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
++					     get_order(PCIE_BAR4_SIZE));
++	if (!test->buf) {
++		dev_info(&ep->dev, "failed to get mem for bar4\n");
++		err = -ENOMEM;
++		goto _err;
++	}
++	test->buf_addr = virt_to_phys(test->buf);
++
++	test->cfg = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
++					     get_order(PCIE_BAR2_SIZE));
++	if (!test->cfg) {
++		dev_info(&ep->dev, "failed to get mem for bar4\n");
++		err = -ENOMEM;
++		goto _err;
++	}
++	test->cfg_addr = virt_to_phys(test->cfg);
++
++	test->out_addr = PCIE_OB_BAR;
++	test->out = ioremap(test->out_addr, PCIE_BAR4_SIZE);
++	if (!test->out) {
++		dev_info(&ep->dev, "failed to map out\n");
++		err = -ENOMEM;
++		goto _err;
++	}
++
++	test->bus_addr = bus_addr;
++
++	ls_pcie_ep_dev_cfg_enable(ep);
++	ls_pcie_ep_test_setup_bars(ep);
++	/* outbound iATU*/
++	ls_pcie_iatu_outbound_set(pcie, 0, PCIE_ATU_TYPE_MEM,
++				  test->out_addr, bus_addr, PCIE_BAR4_SIZE);
++
++	/* ATU 0 : INBOUND : map BAR0 */
++	ls_pcie_iatu_inbound_set(pcie, 0, 0, test->cfg_addr);
++	/* ATU 2 : INBOUND : map BAR2 */
++	ls_pcie_iatu_inbound_set(pcie, 2, 2, test->cfg_addr);
++	/* ATU 3 : INBOUND : map BAR4 */
++	ls_pcie_iatu_inbound_set(pcie, 3, 4, test->buf_addr);
++
++	return 0;
++
++_err:
++	ls_pcie_ep_free_test(ep);
++	return err;
++}
++
++static int ls_pcie_ep_start_test(struct ls_ep_dev *ep, char *cmd)
++{
++	struct ls_ep_test *test = ep->driver_data;
++	enum test_type type;
++	enum test_dirt dirt;
++	u32 cnt, len, loop;
++	char dirt_str[2];
++	int ret;
++
++	if (strncmp(cmd, "dma", 3) == 0)
++		type = TEST_TYPE_DMA;
++	else
++		type = TEST_TYPE_MEMCPY;
++
++	cnt = sscanf(&cmd[3], "%1s %u %u", dirt_str, &len, &loop);
++	if (cnt != 3) {
++		dev_info(&ep->dev, "format error %s", cmd);
++		dev_info(&ep->dev, "dma/cpy <r/w> <packet_size> <loop>\n");
++		return -EINVAL;
++	}
++
++	if (strncmp(dirt_str, "r", 1) == 0)
++		dirt = TEST_DIRT_READ;
++	else
++		dirt = TEST_DIRT_WRITE;
++
++	if (len > PCIE_BAR4_SIZE) {
++		dev_err(&ep->dev, "max len is %d", PCIE_BAR4_SIZE);
++		return -EINVAL;
++	}
++
++	if (!test) {
++		dev_err(&ep->dev, "Please first run init command\n");
++		return -EINVAL;
++	}
++
++	if (ls_pcie_ep_test_try_run(test)) {
++		dev_err(&ep->dev, "There is already a test running\n");
++		return -EINVAL;
++	}
++
++	test->len = len;
++	test->loop = loop;
++	test->type = type;
++	test->dirt = dirt;
++	strcpy(test->cmd, cmd);
++	test->thread = kthread_run(ls_pcie_ep_test_thread, test,
++				   "pcie ep test");
++	if (IS_ERR(test->thread)) {
++		dev_err(&ep->dev, "fork failed for pcie ep test\n");
++		ls_pcie_ep_test_done(test);
++		ret = PTR_ERR(test->thread);
++	}
++
++	return ret;
++}
++
++
++/**
++ * ls_pcie_reg_ops_read - read for regs data
++ * @filp: the opened file
++ * @buffer: where to write the data for the user to read
++ * @count: the size of the user's buffer
++ * @ppos: file position offset
++ **/
++static ssize_t ls_pcie_ep_dbg_regs_read(struct file *filp, char __user *buffer,
++				    size_t count, loff_t *ppos)
++{
++	struct ls_ep_dev *ep = filp->private_data;
++	struct ls_pcie *pcie = ep->pcie;
++	char *buf;
++	int desc = 0, i, len;
++
++	buf = kmalloc(4 * 1024, GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	ls_pcie_ep_dev_cfg_enable(ep);
++
++	desc += sprintf(buf + desc, "%s", "reg info:");
++	for (i = 0; i < 0x200; i += 4) {
++		if (i % 16 == 0)
++			desc += sprintf(buf + desc, "\n%08x:", i);
++		desc += sprintf(buf + desc, " %08x", readl(pcie->dbi + i));
++	}
++
++	desc += sprintf(buf + desc, "\n%s", "outbound iATU info:\n");
++	for (i = 0; i < 6; i++) {
++		writel(PCIE_ATU_REGION_OUTBOUND | i,
++		       pcie->dbi + PCIE_ATU_VIEWPORT);
++		desc += sprintf(buf + desc, "iATU%d", i);
++		desc += sprintf(buf + desc, "\tLOWER PHYS 0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_LOWER_BASE));
++		desc += sprintf(buf + desc, "\tUPPER PHYS 0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_UPPER_BASE));
++		desc += sprintf(buf + desc, "\tLOWER BUS  0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_LOWER_TARGET));
++		desc += sprintf(buf + desc, "\tUPPER BUS  0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_UPPER_TARGET));
++		desc += sprintf(buf + desc, "\tLIMIT      0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_LIMIT));
++		desc += sprintf(buf + desc, "\tCR1        0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_CR1));
++		desc += sprintf(buf + desc, "\tCR2        0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_CR2));
++	}
++
++	desc += sprintf(buf + desc, "\n%s", "inbound iATU info:\n");
++	for (i = 0; i < 6; i++) {
++		writel(PCIE_ATU_REGION_INBOUND | i,
++		       pcie->dbi + PCIE_ATU_VIEWPORT);
++		desc += sprintf(buf + desc, "iATU%d", i);
++		desc += sprintf(buf + desc, "\tLOWER BUS  0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_LOWER_BASE));
++		desc += sprintf(buf + desc, "\tUPPER BUSs 0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_UPPER_BASE));
++		desc += sprintf(buf + desc, "\tLOWER PHYS 0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_LOWER_TARGET));
++		desc += sprintf(buf + desc, "\tUPPER PHYS 0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_UPPER_TARGET));
++		desc += sprintf(buf + desc, "\tLIMIT      0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_LIMIT));
++		desc += sprintf(buf + desc, "\tCR1        0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_CR1));
++		desc += sprintf(buf + desc, "\tCR2        0x%08x\n",
++		      readl(pcie->dbi + PCIE_ATU_CR2));
++	}
++
++	len = simple_read_from_buffer(buffer, count, ppos, buf, desc);
++	kfree(buf);
++
++	return len;
++}
++
++/**
++ * ls_pcie_ep_dbg_regs_write - write into regs datum
++ * @filp: the opened file
++ * @buffer: where to find the user's data
++ * @count: the length of the user's data
++ * @ppos: file position offset
++ **/
++static ssize_t ls_pcie_ep_dbg_regs_write(struct file *filp,
++					 const char __user *buffer,
++					 size_t count, loff_t *ppos)
++{
++	struct ls_ep_dev *ep = filp->private_data;
++	struct ls_pcie *pcie = ep->pcie;
++	char buf[256];
++
++	if (count >= sizeof(buf))
++		return -ENOSPC;
++
++	memset(buf, 0, sizeof(buf));
++
++	if (copy_from_user(buf, buffer, count))
++		return -EFAULT;
++
++	ls_pcie_ep_dev_cfg_enable(ep);
++
++	if (strncmp(buf, "reg", 3) == 0) {
++		u32 reg, value;
++		int cnt;
++
++		cnt = sscanf(&buf[3], "%x %x", &reg, &value);
++		if (cnt == 2) {
++			writel(value, pcie->dbi + reg);
++			value = readl(pcie->dbi + reg);
++			dev_info(&ep->dev, "reg 0x%08x: 0x%08x\n",
++				 reg, value);
++		} else {
++			dev_info(&ep->dev, "reg <reg> <value>\n");
++		}
++	} else if (strncmp(buf, "atu", 3) == 0) {
++		/* to do */
++		dev_info(&ep->dev, " Not support atu command\n");
++	} else {
++		dev_info(&ep->dev, "Unknown command %s\n", buf);
++		dev_info(&ep->dev, "Available commands:\n");
++		dev_info(&ep->dev, "   reg <reg> <value>\n");
++	}
++
++	return count;
++}
++
++static const struct file_operations ls_pcie_ep_dbg_regs_fops = {
++	.owner = THIS_MODULE,
++	.open = simple_open,
++	.read =  ls_pcie_ep_dbg_regs_read,
++	.write = ls_pcie_ep_dbg_regs_write,
++};
++
++static ssize_t ls_pcie_ep_dbg_test_read(struct file *filp,
++				   char __user *buffer,
++				   size_t count, loff_t *ppos)
++{
++	struct ls_ep_dev *ep = filp->private_data;
++	struct ls_ep_test *test = ep->driver_data;
++	char buf[256];
++	int len;
++
++	if (!test) {
++		dev_info(&ep->dev, " there is NO test\n");
++		return 0;
++	}
++
++	if (test->status != TEST_IDLE) {
++		dev_info(&ep->dev, "test %s is running\n", test->cmd);
++		return 0;
++	}
++
++
++	snprintf(buf, sizeof(buf), "%s throughput:%lluMbps\n",
++		 test->cmd, test->result);
++
++	len = simple_read_from_buffer(buffer, count, ppos,
++				      buf, strlen(buf));
++
++	return len;
++}
++
++static ssize_t ls_pcie_ep_dbg_test_write(struct file *filp,
++					const char __user *buffer,
++					size_t count, loff_t *ppos)
++{
++	struct ls_ep_dev *ep = filp->private_data;
++	char buf[256];
++
++	if (count >= sizeof(buf))
++		return -ENOSPC;
++
++	memset(buf, 0, sizeof(buf));
++
++	if (copy_from_user(buf, buffer, count))
++		return -EFAULT;
++
++	if (strncmp(buf, "init", 4) == 0) {
++		int i = 4;
++		u64 bus_addr;
++
++		while (buf[i] == ' ')
++			i++;
++
++		if (kstrtou64(&buf[i], 0, &bus_addr))
++			dev_info(&ep->dev, "command: init <bus_addr>\n");
++		else {
++			if (ls_pcie_ep_init_test(ep, bus_addr))
++				dev_info(&ep->dev, "failed to init test\n");
++		}
++	} else if (strncmp(buf, "free", 4) == 0)
++		ls_pcie_ep_free_test(ep);
++	else if (strncmp(buf, "dma", 3) == 0 ||
++		 strncmp(buf, "cpy", 3) == 0)
++		ls_pcie_ep_start_test(ep, buf);
++	else {
++		dev_info(&ep->dev, "Unknown command: %s\n", buf);
++		dev_info(&ep->dev, "Available commands:\n");
++		dev_info(&ep->dev, "\tinit <bus_addr>\n");
++		dev_info(&ep->dev, "\t<dma/cpy> <r/w> <packet_size> <loop>\n");
++		dev_info(&ep->dev, "\tfree\n");
++	}
++
++	return count;
++}
++
++static const struct file_operations ls_pcie_ep_dbg_test_fops = {
++	.owner = THIS_MODULE,
++	.open = simple_open,
++	.read = ls_pcie_ep_dbg_test_read,
++	.write = ls_pcie_ep_dbg_test_write,
++};
++
++static int ls_pcie_ep_dev_dbgfs_init(struct ls_ep_dev *ep)
++{
++	struct ls_pcie *pcie = ep->pcie;
++	struct dentry *pfile;
++
++	ls_pcie_ep_dev_cfg_enable(ep);
++	ls_pcie_ep_test_setup_bars(ep);
++
++	ep->dir = debugfs_create_dir(dev_name(&ep->dev), pcie->dir);
++	if (!ep->dir)
++		return -ENOMEM;
++
++	pfile = debugfs_create_file("regs", 0600, ep->dir, ep,
++				    &ls_pcie_ep_dbg_regs_fops);
++	if (!pfile)
++		dev_info(&ep->dev, "debugfs regs for failed\n");
++
++	pfile = debugfs_create_file("test", 0600, ep->dir, ep,
++				    &ls_pcie_ep_dbg_test_fops);
++	if (!pfile)
++		dev_info(&ep->dev, "debugfs test for failed\n");
++
++	return 0;
++}
++
++int ls_pcie_ep_dbgfs_init(struct ls_pcie *pcie)
++{
++	struct ls_ep_dev *ep;
++
++	pcie->dir = debugfs_create_dir(dev_name(pcie->dev), NULL);
++	if (!pcie->dir)
++		return -ENOMEM;
++
++	list_for_each_entry(ep, &pcie->ep_list, node)
++		ls_pcie_ep_dev_dbgfs_init(ep);
++
++	return 0;
++}
++
++int ls_pcie_ep_dbgfs_remove(struct ls_pcie *pcie)
++{
++	debugfs_remove_recursive(pcie->dir);
++	return 0;
++}
++
++MODULE_AUTHOR("Minghuan Lian <Minghuan.Lian@freescale.com>");
++MODULE_DESCRIPTION("Freescale Layerscape PCIe EP controller driver");
++MODULE_LICENSE("GPL v2");
+diff --git a/drivers/pci/host/pci-layerscape-ep.c b/drivers/pci/host/pci-layerscape-ep.c
+new file mode 100644
+index 0000000..153379b
+--- /dev/null
++++ b/drivers/pci/host/pci-layerscape-ep.c
+@@ -0,0 +1,274 @@
++/*
++ * PCIe Endpoint driver for Freescale Layerscape SoCs
++ *
++ * Copyright (C) 2015 Freescale Semiconductor.
++ *
++  * Author: Minghuan Lian <Minghuan.Lian@freescale.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include <linux/kernel.h>
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/of_pci.h>
++#include <linux/of_platform.h>
++#include <linux/of_irq.h>
++#include <linux/of_address.h>
++#include <linux/pci.h>
++#include <linux/platform_device.h>
++#include <linux/resource.h>
++#include <linux/debugfs.h>
++#include <linux/time.h>
++#include <linux/uaccess.h>
++
++#include "pci-layerscape-ep.h"
++
++struct ls_ep_dev *
++ls_pci_ep_find(struct ls_pcie *pcie, int dev_id)
++{
++	struct ls_ep_dev *ep;
++
++	list_for_each_entry(ep, &pcie->ep_list, node) {
++		if (ep->dev_id == dev_id)
++			return ep;
++	}
++
++	return NULL;
++}
++
++static void ls_pcie_try_cfg2(struct ls_pcie *pcie, int pf, int vf)
++{
++	if (pcie->sriov)
++		writel(PCIE_LCTRL0_VAL(pf, vf),
++		       pcie->dbi + PCIE_LUT_BASE + PCIE_LUT_LCTRL0);
++}
++
++static bool ls_pcie_is_bridge(struct ls_pcie *pcie)
++{
++	u32 header_type = 0;
++
++	header_type = readl(pcie->dbi + (PCI_HEADER_TYPE & ~0x3));
++	header_type = (header_type >> 16) & 0x7f;
++
++	return header_type == PCI_HEADER_TYPE_BRIDGE;
++}
++
++void ls_pcie_iatu_outbound_set(struct ls_pcie *pcie, int idx, int type,
++			       u64 cpu_addr, u64 pci_addr, u32 size)
++{
++	writel(PCIE_ATU_REGION_OUTBOUND | idx,
++	       pcie->dbi + PCIE_ATU_VIEWPORT);
++	writel(lower_32_bits(cpu_addr),
++	       pcie->dbi +  PCIE_ATU_LOWER_BASE);
++	writel(upper_32_bits(cpu_addr),
++	       pcie->dbi + PCIE_ATU_UPPER_BASE);
++	writel(lower_32_bits(cpu_addr + size - 1),
++	       pcie->dbi + PCIE_ATU_LIMIT);
++	writel(lower_32_bits(pci_addr),
++	       pcie->dbi + PCIE_ATU_LOWER_TARGET);
++	writel(upper_32_bits(pci_addr),
++	       pcie->dbi + PCIE_ATU_UPPER_TARGET);
++	writel(type, pcie->dbi + PCIE_ATU_CR1);
++	writel(PCIE_ATU_ENABLE, pcie->dbi + PCIE_ATU_CR2);
++}
++
++/* Use bar match mode and MEM type as default */
++void ls_pcie_iatu_inbound_set(struct ls_pcie *pcie, int idx,
++				     int bar, u64 phys)
++{
++	writel(PCIE_ATU_REGION_INBOUND | idx, pcie->dbi + PCIE_ATU_VIEWPORT);
++	writel((u32)phys, pcie->dbi + PCIE_ATU_LOWER_TARGET);
++	writel(phys >> 32, pcie->dbi + PCIE_ATU_UPPER_TARGET);
++	writel(PCIE_ATU_TYPE_MEM, pcie->dbi + PCIE_ATU_CR1);
++	writel(PCIE_ATU_ENABLE | PCIE_ATU_BAR_MODE_ENABLE |
++	       PCIE_ATU_BAR_NUM(bar), pcie->dbi + PCIE_ATU_CR2);
++}
++
++void ls_pcie_ep_dev_cfg_enable(struct ls_ep_dev *ep)
++{
++	ls_pcie_try_cfg2(ep->pcie, ep->pf_idx, ep->vf_idx);
++}
++
++void ls_pcie_ep_setup_bar(void *bar_base, int bar, u32 size)
++{
++	if (size < 4 * 1024)
++		return;
++
++	switch (bar) {
++	case 0:
++		writel(size - 1, bar_base + PCI_BASE_ADDRESS_0);
++		break;
++	case 1:
++		writel(size - 1, bar_base + PCI_BASE_ADDRESS_1);
++		break;
++	case 2:
++		writel(size - 1, bar_base + PCI_BASE_ADDRESS_2);
++		writel(0, bar_base + PCI_BASE_ADDRESS_3);
++		break;
++	case 4:
++		writel(size - 1, bar_base + PCI_BASE_ADDRESS_4);
++		writel(0, bar_base + PCI_BASE_ADDRESS_5);
++		break;
++	default:
++		break;
++	}
++}
++
++void ls_pcie_ep_dev_setup_bar(struct ls_ep_dev *ep, int bar, u32 size)
++{
++	struct ls_pcie *pcie = ep->pcie;
++	void *bar_base;
++
++	if (size < 4 * 1024)
++		return;
++
++	if (pcie->sriov)
++		bar_base = pcie->dbi;
++	else
++		bar_base = pcie->dbi + PCIE_NO_SRIOV_BAR_BASE;
++
++	ls_pcie_ep_dev_cfg_enable(ep);
++	ls_pcie_ep_setup_bar(bar_base, bar, size);
++}
++
++static int ls_pcie_ep_dev_init(struct ls_pcie *pcie, int pf_idx, int vf_idx)
++{
++	struct ls_ep_dev *ep;
++
++	ep = devm_kzalloc(pcie->dev, sizeof(*ep), GFP_KERNEL);
++	if (!ep)
++		return -ENOMEM;
++
++	ep->pcie = pcie;
++	ep->pf_idx = pf_idx;
++	ep->vf_idx = vf_idx;
++	if (vf_idx)
++		ep->dev_id = pf_idx + 4 + 4 * (vf_idx - 1);
++	else
++		ep->dev_id = pf_idx;
++
++	if (ep->vf_idx)
++		dev_set_name(&ep->dev, "pf%d-vf%d",
++			     ep->pf_idx,
++			     ep->vf_idx);
++	else
++		dev_set_name(&ep->dev, "pf%d",
++			     ep->pf_idx);
++
++	list_add_tail(&ep->node, &pcie->ep_list);
++
++	return 0;
++}
++
++static int ls_pcie_ep_init(struct ls_pcie *pcie)
++{
++	u32 sriov_header;
++	int pf, vf, i, j;
++
++	sriov_header = readl(pcie->dbi + PCIE_SRIOV_POS);
++
++	if (PCI_EXT_CAP_ID(sriov_header) == PCI_EXT_CAP_ID_SRIOV) {
++		pcie->sriov = PCIE_SRIOV_POS;
++		pf = PCIE_PF_NUM;
++		vf = PCIE_VF_NUM;
++	} else {
++		pcie->sriov = 0;
++		pf = 0;
++		vf = 0;
++	}
++
++	for (i = 0; i < pf; i++) {
++		for (j = 0; j <= vf; j++)
++			ls_pcie_ep_dev_init(pcie, i, j);
++	}
++
++	return 0;
++}
++
++static int __init ls_pcie_ep_probe(struct platform_device *pdev)
++{
++	struct ls_pcie *pcie;
++	struct resource *dbi_base;
++	int ret;
++
++	pcie = devm_kzalloc(&pdev->dev, sizeof(*pcie), GFP_KERNEL);
++	if (!pcie)
++		return -ENOMEM;
++
++	pcie->dev = &pdev->dev;
++	INIT_LIST_HEAD(&pcie->ep_list);
++
++	dbi_base = platform_get_resource_byname(pdev, IORESOURCE_MEM, "regs");
++	pcie->dbi = devm_ioremap_resource(&pdev->dev, dbi_base);
++	if (IS_ERR(pcie->dbi)) {
++		dev_err(&pdev->dev, "missing *regs* space\n");
++		return PTR_ERR(pcie->dbi);
++	}
++
++	pcie->lut = pcie->dbi + PCIE_LUT_BASE;
++
++	if (ls_pcie_is_bridge(pcie))
++		return -ENODEV;
++
++	dev_info(pcie->dev, "in EP mode\n");
++
++	ret = ls_pcie_ep_init(pcie);
++	if (ret)
++		return ret;
++
++	ls_pcie_ep_dbgfs_init(pcie);
++
++	platform_set_drvdata(pdev, pcie);
++
++	return 0;
++}
++
++static int ls_pcie_ep_dev_remove(struct ls_ep_dev *ep)
++{
++	list_del(&ep->node);
++
++	return 0;
++}
++
++static int ls_pcie_ep_remove(struct platform_device *pdev)
++{
++	struct ls_pcie *pcie = platform_get_drvdata(pdev);
++	struct ls_ep_dev *ep, *tmp;
++
++	if (!pcie)
++		return 0;
++
++	ls_pcie_ep_dbgfs_remove(pcie);
++
++	list_for_each_entry_safe(ep, tmp, &pcie->ep_list, node)
++		ls_pcie_ep_dev_remove(ep);
++
++	return 0;
++}
++
++static const struct of_device_id ls_pcie_ep_of_match[] = {
++	{ .compatible = "fsl,ls2085a-pcie" },
++	{ .compatible = "fsl,ls2080a-pcie" },
++	{ },
++};
++MODULE_DEVICE_TABLE(of, ls_pcie_ep_of_match);
++
++static struct platform_driver ls_pcie_ep_driver = {
++	.driver = {
++		.name = "ls-pcie-ep",
++		.owner = THIS_MODULE,
++		.of_match_table = ls_pcie_ep_of_match,
++	},
++	.probe = ls_pcie_ep_probe,
++	.remove = ls_pcie_ep_remove,
++};
++
++module_platform_driver(ls_pcie_ep_driver);
++
++MODULE_AUTHOR("Minghuan Lian <Minghuan.Lian@freescale.com>");
++MODULE_DESCRIPTION("Freescale Layerscape PCIe EP driver");
++MODULE_LICENSE("GPL v2");
+diff --git a/drivers/pci/host/pci-layerscape-ep.h b/drivers/pci/host/pci-layerscape-ep.h
+new file mode 100644
+index 0000000..f8c8199
+--- /dev/null
++++ b/drivers/pci/host/pci-layerscape-ep.h
+@@ -0,0 +1,107 @@
++/*
++ * PCIe Endpoint driver for Freescale Layerscape SoCs
++ *
++ * Copyright (C) 2015 Freescale Semiconductor.
++ *
++  * Author: Minghuan Lian <Minghuan.Lian@freescale.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++
++#ifndef _PCIE_LAYERSCAPE_EP_H
++#define _PCIE_LAYERSCAPE_EP_H
++
++#include <linux/device.h>
++
++/* Synopsis specific PCIE configuration registers */
++#define PCIE_ATU_VIEWPORT		0x900
++#define PCIE_ATU_REGION_INBOUND		(0x1 << 31)
++#define PCIE_ATU_REGION_OUTBOUND	(0x0 << 31)
++#define PCIE_ATU_REGION_INDEX3		(0x3 << 0)
++#define PCIE_ATU_REGION_INDEX2		(0x2 << 0)
++#define PCIE_ATU_REGION_INDEX1		(0x1 << 0)
++#define PCIE_ATU_REGION_INDEX0		(0x0 << 0)
++#define PCIE_ATU_CR1			0x904
++#define PCIE_ATU_TYPE_MEM		(0x0 << 0)
++#define PCIE_ATU_TYPE_IO		(0x2 << 0)
++#define PCIE_ATU_TYPE_CFG0		(0x4 << 0)
++#define PCIE_ATU_TYPE_CFG1		(0x5 << 0)
++#define PCIE_ATU_CR2			0x908
++#define PCIE_ATU_ENABLE			(0x1 << 31)
++#define PCIE_ATU_BAR_MODE_ENABLE	(0x1 << 30)
++#define PCIE_ATU_LOWER_BASE		0x90C
++#define PCIE_ATU_UPPER_BASE		0x910
++#define PCIE_ATU_LIMIT			0x914
++#define PCIE_ATU_LOWER_TARGET		0x918
++#define PCIE_ATU_BUS(x)			(((x) & 0xff) << 24)
++#define PCIE_ATU_DEV(x)			(((x) & 0x1f) << 19)
++#define PCIE_ATU_FUNC(x)		(((x) & 0x7) << 16)
++#define PCIE_ATU_UPPER_TARGET		0x91C
++
++/* PEX internal configuration registers */
++#define PCIE_DBI_RO_WR_EN	0x8bc /* DBI Read-Only Write Enable Register */
++
++/* PEX LUT registers */
++#define PCIE_LUT_BASE		0x80000
++#define PCIE_LUT_DBG		0x7FC /* PEX LUT Debug register */
++
++#define PCIE_LUT_LCTRL0		0x7F8
++
++#define PCIE_ATU_BAR_NUM(bar)	((bar) << 8)
++#define PCIE_LCTRL0_CFG2_ENABLE	(1 << 31)
++#define PCIE_LCTRL0_VF(vf)	((vf) << 22)
++#define PCIE_LCTRL0_PF(pf)	((pf) << 16)
++#define PCIE_LCTRL0_VF_ACTIVE	(1 << 21)
++#define PCIE_LCTRL0_VAL(pf, vf)	(PCIE_LCTRL0_PF(pf) |			   \
++				 PCIE_LCTRL0_VF(vf) |			   \
++				 ((vf) == 0 ? 0 : PCIE_LCTRL0_VF_ACTIVE) | \
++				 PCIE_LCTRL0_CFG2_ENABLE)
++
++#define PCIE_NO_SRIOV_BAR_BASE	0x1000
++
++#define PCIE_SRIOV_POS		0x178
++#define PCIE_PF_NUM		2
++#define PCIE_VF_NUM		64
++
++struct ls_pcie {
++	struct list_head	ep_list;
++	struct device		*dev;
++	struct dentry		*dir;
++	void __iomem		*dbi;
++	void __iomem		*lut;
++	int			sriov;
++	int			index;
++};
++
++struct ls_ep_dev {
++	struct list_head	node;
++	struct ls_pcie		*pcie;
++	struct device		dev;
++	struct dentry		*dir;
++	int			pf_idx;
++	int			vf_idx;
++	int			dev_id;
++	void			*driver_data;
++};
++
++struct ls_ep_dev *ls_pci_ep_find(struct ls_pcie *pcie, int dev_id);
++
++void ls_pcie_iatu_outbound_set(struct ls_pcie *pcie, int idx, int type,
++			      u64 cpu_addr, u64 pci_addr, u32 size);
++
++/* Use bar match mode and MEM type as default */
++void ls_pcie_iatu_inbound_set(struct ls_pcie *pcie, int idx,
++				     int bar, u64 phys);
++
++void ls_pcie_ep_dev_setup_bar(struct ls_ep_dev *ep, int bar, u32 size);
++
++
++void ls_pcie_ep_dev_cfg_enable(struct ls_ep_dev *ep);
++
++int ls_pcie_ep_dbgfs_init(struct ls_pcie *pcie);
++int ls_pcie_ep_dbgfs_remove(struct ls_pcie *pcie);
++
++#endif /* _PCIE_LAYERSCAPE_EP_H */
+-- 
+2.1.0.27.g96db324
+

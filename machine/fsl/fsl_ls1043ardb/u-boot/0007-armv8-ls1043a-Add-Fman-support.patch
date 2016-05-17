@@ -1,0 +1,515 @@
+From d8adcee6b9f67e88c5b1aa1330531983e13443b0 Mon Sep 17 00:00:00 2001
+From: Shaohui Xie <Shaohui.Xie@freescale.com>
+Date: Thu, 14 Apr 2016 14:21:24 +0800
+Subject: [PATCH 07/21] armv8/ls1043a: Add Fman support
+
+commit e82973414da105c1b14c822f12cb296f69ca2001
+[context adjustment]
+
+Signed-off-by: Hou Zhiqiang <B48286@freescale.com>
+Signed-off-by: Shaohui Xie <Shaohui.Xie@freescale.com>
+Signed-off-by: Mingkai Hu <Mingkai.Hu@freescale.com>
+Signed-off-by: Gong Qianyu <Qianyu.Gong@freescale.com>
+Reviewed-by: York Sun <yorksun@freescale.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/cpu.c            |  12 +++
+ arch/arm/cpu/armv8/fsl-layerscape/fdt.c            |   6 ++
+ .../arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c |  23 ++++
+ board/freescale/common/fman.c                      |   6 +-
+ board/freescale/ls1043ardb/Makefile                |   1 +
+ board/freescale/ls1043ardb/eth.c                   |  77 +++++++++++++
+ board/freescale/ls1043ardb/ls1043ardb.c            |   4 +
+ doc/README.fsl-dpaa                                |   4 +-
+ drivers/net/fm/Makefile                            |   1 +
+ drivers/net/fm/init.c                              |  10 +-
+ drivers/net/fm/ls1043.c                            | 119 +++++++++++++++++++++
+ include/configs/ls1043a_common.h                   |  12 +++
+ include/configs/ls1043ardb.h                       |  25 +++++
+ 13 files changed, 295 insertions(+), 5 deletions(-)
+ create mode 100644 board/freescale/ls1043ardb/eth.c
+ create mode 100644 drivers/net/fm/ls1043.c
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/cpu.c b/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
+index fe9d982..0cb0afa 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
+@@ -274,6 +274,9 @@ static inline void final_mmu_setup(void)
+ 	flush_dcache_range(gd->arch.tlb_addr,
+ 			   gd->arch.tlb_addr + gd->arch.tlb_size);
+ 
++#ifdef CONFIG_SYS_DPAA_FMAN
++	flush_dcache_all();
++#endif
+ 	/* point TTBR to the new table */
+ 	el = current_el();
+ 
+@@ -432,6 +435,9 @@ int print_cpuinfo(void)
+ 	printf("\n       Bus:      %-4s MHz  ",
+ 	       strmhz(buf, sysinfo.freq_systembus));
+ 	printf("DDR:      %-4s MT/s", strmhz(buf, sysinfo.freq_ddrbus));
++#ifdef CONFIG_SYS_DPAA_FMAN
++	printf("  FMAN:     %-4s MHz", strmhz(buf, sysinfo.freq_fman[0]));
++#endif
+ #ifdef CONFIG_FSL_LSCH3
+ 	printf("     DP-DDR:   %-4s MT/s", strmhz(buf, sysinfo.freq_ddrbus2));
+ #endif
+@@ -468,6 +474,9 @@ int cpu_eth_init(bd_t *bis)
+ #ifdef CONFIG_FSL_MC_ENET
+ 	error = fsl_mc_ldpaa_init(bis);
+ #endif
++#ifdef CONFIG_FMAN_ENET
++	fm_standard_init(bis);
++#endif
+ 	return error;
+ }
+ 
+@@ -484,6 +493,9 @@ int arch_early_init_r(void)
+ #ifdef CONFIG_SYS_HAS_SERDES
+ 	fsl_serdes_init();
+ #endif
++#ifdef CONFIG_FMAN_ENET
++	fman_enet_init();
++#endif
+ 	return 0;
+ }
+ 
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/fdt.c b/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
+index aa88d34..9c841c2 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
+@@ -18,6 +18,12 @@
+ #include <asm/arch/mp.h>
+ #endif
+ 
++int fdt_fixup_phy_connection(void *blob, int offset, phy_interface_t phyc)
++{
++	return fdt_setprop_string(blob, offset, "phy-connection-type",
++					 phy_string_for_interface(phyc));
++}
++
+ #ifdef CONFIG_MP
+ void ft_fixup_cpu(void *blob)
+ {
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c b/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
+index ea3723f..9d5bbe7 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
+@@ -25,6 +25,9 @@ void get_sys_info(struct sys_info *sys_info)
+ 	struct fsl_ifc ifc_regs = {(void *)CONFIG_SYS_IFC_ADDR, (void *)NULL};
+ 	u32 ccr;
+ #endif
++#ifdef CONFIG_SYS_DPAA_FMAN
++	u32 rcw_tmp;
++#endif
+ 	struct ccsr_clk *clk = (void *)(CONFIG_SYS_FSL_CLK_ADDR);
+ 	unsigned int cpu;
+ 	const u8 core_cplx_pll[8] = {
+@@ -79,6 +82,26 @@ void get_sys_info(struct sys_info *sys_info)
+ 
+ #define HWA_CGA_M1_CLK_SEL	0xe0000000
+ #define HWA_CGA_M1_CLK_SHIFT	29
++#ifdef CONFIG_SYS_DPAA_FMAN
++	rcw_tmp = in_be32(&gur->rcwsr[7]);
++	switch ((rcw_tmp & HWA_CGA_M1_CLK_SEL) >> HWA_CGA_M1_CLK_SHIFT) {
++	case 2:
++		sys_info->freq_fman[0] = freq_c_pll[0] / 2;
++		break;
++	case 3:
++		sys_info->freq_fman[0] = freq_c_pll[0] / 3;
++		break;
++	case 6:
++		sys_info->freq_fman[0] = freq_c_pll[1] / 2;
++		break;
++	case 7:
++		sys_info->freq_fman[0] = freq_c_pll[1] / 3;
++		break;
++	default:
++		printf("Error: Unknown FMan1 clock select!\n");
++		break;
++	}
++#endif
+ 
+ #define HWA_CGA_M2_CLK_SEL	0x00000007
+ #define HWA_CGA_M2_CLK_SHIFT	0
+diff --git a/board/freescale/common/fman.c b/board/freescale/common/fman.c
+index 9dc5402..26cf517 100644
+--- a/board/freescale/common/fman.c
++++ b/board/freescale/common/fman.c
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2011 Freescale Semiconductor, Inc.
++ * Copyright 2011-2015 Freescale Semiconductor, Inc.
+  *
+  * SPDX-License-Identifier:	GPL-2.0+
+  */
+@@ -10,7 +10,11 @@
+ #include <fdt_support.h>
+ 
+ #include <fm_eth.h>
++#ifdef CONFIG_FSL_LAYERSCAPE
++#include <asm/arch/fsl_serdes.h>
++#else
+ #include <asm/fsl_serdes.h>
++#endif
+ 
+ /*
+  * Given the following ...
+diff --git a/board/freescale/ls1043ardb/Makefile b/board/freescale/ls1043ardb/Makefile
+index dd17e2e..5fe1cc9 100644
+--- a/board/freescale/ls1043ardb/Makefile
++++ b/board/freescale/ls1043ardb/Makefile
+@@ -7,3 +7,4 @@
+ obj-y += cpld.o
+ obj-y += ddr.o
+ obj-y += ls1043ardb.o
++obj-$(CONFIG_SYS_DPAA_FMAN) += eth.o
+diff --git a/board/freescale/ls1043ardb/eth.c b/board/freescale/ls1043ardb/eth.c
+new file mode 100644
+index 0000000..61f2b5d
+--- /dev/null
++++ b/board/freescale/ls1043ardb/eth.c
+@@ -0,0 +1,77 @@
++/*
++ * Copyright 2015 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++#include <common.h>
++#include <asm/io.h>
++#include <netdev.h>
++#include <fm_eth.h>
++#include <fsl_dtsec.h>
++#include <fsl_mdio.h>
++#include <malloc.h>
++
++#include "../common/fman.h"
++
++int board_eth_init(bd_t *bis)
++{
++#ifdef CONFIG_FMAN_ENET
++	int i;
++	struct memac_mdio_info dtsec_mdio_info;
++	struct memac_mdio_info tgec_mdio_info;
++	struct mii_dev *dev;
++	u32 srds_s1;
++	struct ccsr_gur *gur = (void *)(CONFIG_SYS_FSL_GUTS_ADDR);
++
++	srds_s1 = in_be32(&gur->rcwsr[4]) &
++			FSL_CHASSIS2_RCWSR4_SRDS1_PRTCL_MASK;
++	srds_s1 >>= FSL_CHASSIS2_RCWSR4_SRDS1_PRTCL_SHIFT;
++
++	dtsec_mdio_info.regs =
++		(struct memac_mdio_controller *)CONFIG_SYS_FM1_DTSEC_MDIO_ADDR;
++
++	dtsec_mdio_info.name = DEFAULT_FM_MDIO_NAME;
++
++	/* Register the 1G MDIO bus */
++	fm_memac_mdio_init(bis, &dtsec_mdio_info);
++
++	tgec_mdio_info.regs =
++		(struct memac_mdio_controller *)CONFIG_SYS_FM1_TGEC_MDIO_ADDR;
++	tgec_mdio_info.name = DEFAULT_FM_TGEC_MDIO_NAME;
++
++	/* Register the 10G MDIO bus */
++	fm_memac_mdio_init(bis, &tgec_mdio_info);
++
++	/* Set the two on-board RGMII PHY address */
++	fm_info_set_phy_address(FM1_DTSEC3, RGMII_PHY1_ADDR);
++	fm_info_set_phy_address(FM1_DTSEC4, RGMII_PHY2_ADDR);
++
++	/* QSGMII on lane B, MAC 1/2/5/6 */
++	fm_info_set_phy_address(FM1_DTSEC1, QSGMII_PORT1_PHY_ADDR);
++	fm_info_set_phy_address(FM1_DTSEC2, QSGMII_PORT2_PHY_ADDR);
++	fm_info_set_phy_address(FM1_DTSEC5, QSGMII_PORT3_PHY_ADDR);
++	fm_info_set_phy_address(FM1_DTSEC6, QSGMII_PORT4_PHY_ADDR);
++
++	switch (srds_s1) {
++	case 0x1455:
++		break;
++	default:
++		printf("Invalid SerDes protocol 0x%x for LS1043ARDB\n",
++		       srds_s1);
++		break;
++	}
++
++	dev = miiphy_get_dev_by_name(DEFAULT_FM_MDIO_NAME);
++	for (i = FM1_DTSEC1; i < FM1_DTSEC1 + CONFIG_SYS_NUM_FM1_DTSEC; i++)
++		fm_info_set_mdio(i, dev);
++
++	/* XFI on lane A, MAC 9 */
++	fm_info_set_phy_address(FM1_10GEC1, FM1_10GEC1_PHY_ADDR);
++	dev = miiphy_get_dev_by_name(DEFAULT_FM_TGEC_MDIO_NAME);
++	fm_info_set_mdio(FM1_10GEC1, dev);
++
++	cpu_eth_init(bis);
++#endif
++
++	return pci_eth_init(bis);
++}
+diff --git a/board/freescale/ls1043ardb/ls1043ardb.c b/board/freescale/ls1043ardb/ls1043ardb.c
+index 5b7f814..6c0dd3f 100644
+--- a/board/freescale/ls1043ardb/ls1043ardb.c
++++ b/board/freescale/ls1043ardb/ls1043ardb.c
+@@ -13,6 +13,7 @@
+ #include <hwconfig.h>
+ #include <ahci.h>
+ #include <scsi.h>
++#include <fm_eth.h>
+ #include <fsl_csu.h>
+ #include <fsl_esdhc.h>
+ #include <fsl_ifc.h>
+@@ -108,6 +109,9 @@ int ft_board_setup(void *blob, bd_t *bd)
+ {
+ 	ft_cpu_setup(blob, bd);
+ 
++#ifdef CONFIG_SYS_DPAA_FMAN
++	fdt_fixup_fman_ethernet(blob);
++#endif
+ 	return 0;
+ }
+ 
+diff --git a/doc/README.fsl-dpaa b/doc/README.fsl-dpaa
+index 0d8d4f6..3ef5eeb 100644
+--- a/doc/README.fsl-dpaa
++++ b/doc/README.fsl-dpaa
+@@ -2,9 +2,9 @@ This file documents Freescale DPAA-specific options.
+ 
+ FMan (Frame Manager)
+   - CONFIG_FSL_FM_10GEC_REGULAR_NOTATION
+-	on SoCs earlier(e.g. T4240, T2080), the notation between 10GEC and MAC as below:
++	on SoCs T4240, T2080, LS1043A, etc, the notation between 10GEC and MAC as below:
+ 		10GEC1->MAC9, 10GEC2->MAC10, 10GEC3->MAC1, 10GEC4->MAC2
+-	on SoCs later(e.g. T1024, etc), the notation between 10GEC and MAC as below:
++	on SoCs T1024, etc, the notation between 10GEC and MAC as below:
+ 		10GEC1->MAC1, 10GEC2->MAC2
+ 	so we introduce CONFIG_FSL_FM_10GEC_REGULAR_NOTATION to identify the new SoCs on
+ 	which 10GEC enumeration is consistent with MAC enumeration.
+diff --git a/drivers/net/fm/Makefile b/drivers/net/fm/Makefile
+index d052fcb..a3c9f99 100644
+--- a/drivers/net/fm/Makefile
++++ b/drivers/net/fm/Makefile
+@@ -37,3 +37,4 @@ obj-$(CONFIG_PPC_T4160) += t4240.o
+ obj-$(CONFIG_PPC_T4080) += t4240.o
+ obj-$(CONFIG_PPC_B4420) += b4860.o
+ obj-$(CONFIG_PPC_B4860) += b4860.o
++obj-$(CONFIG_LS1043A)	+= ls1043.o
+diff --git a/drivers/net/fm/init.c b/drivers/net/fm/init.c
+index b3ff4c5..3a1de59 100644
+--- a/drivers/net/fm/init.c
++++ b/drivers/net/fm/init.c
+@@ -1,13 +1,17 @@
+ /*
+- * Copyright 2011 Freescale Semiconductor, Inc.
++ * Copyright 2011-2015 Freescale Semiconductor, Inc.
+  *
+  * SPDX-License-Identifier:	GPL-2.0+
+  */
+ #include <errno.h>
+ #include <common.h>
+ #include <asm/io.h>
+-#include <asm/fsl_serdes.h>
+ #include <fsl_mdio.h>
++#ifdef CONFIG_FSL_LAYERSCAPE
++#include <asm/arch/fsl_serdes.h>
++#else
++#include <asm/fsl_serdes.h>
++#endif
+ 
+ #include "fm.h"
+ 
+@@ -153,7 +157,9 @@ void fm_disable_port(enum fm_port port)
+ 		return;
+ 
+ 	fm_info[i].enabled = 0;
++#ifndef CONFIG_SYS_FMAN_V3
+ 	fman_disable_port(port);
++#endif
+ }
+ 
+ void fm_enable_port(enum fm_port port)
+diff --git a/drivers/net/fm/ls1043.c b/drivers/net/fm/ls1043.c
+new file mode 100644
+index 0000000..cf2cc95
+--- /dev/null
++++ b/drivers/net/fm/ls1043.c
+@@ -0,0 +1,119 @@
++/*
++ * Copyright 2015 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++#include <common.h>
++#include <phy.h>
++#include <fm_eth.h>
++#include <asm/io.h>
++#include <asm/arch/fsl_serdes.h>
++
++#define FSL_CHASSIS2_RCWSR13_EC1		0xe0000000 /* bits 416..418 */
++#define FSL_CHASSIS2_RCWSR13_EC1_DTSEC3_RGMII	0x00000000
++#define FSL_CHASSIS2_RCWSR13_EC1_GPIO		0x20000000
++#define FSL_CHASSIS2_RCWSR13_EC1_FTM		0xa0000000
++#define FSL_CHASSIS2_RCWSR13_EC2		0x1c000000 /* bits 419..421 */
++#define FSL_CHASSIS2_RCWSR13_EC2_DTSEC4_RGMII	0x00000000
++#define FSL_CHASSIS2_RCWSR13_EC2_GPIO		0x04000000
++#define FSL_CHASSIS2_RCWSR13_EC2_1588		0x08000000
++#define FSL_CHASSIS2_RCWSR13_EC2_FTM		0x14000000
++
++u32 port_to_devdisr[] = {
++	[FM1_DTSEC1] = FSL_CHASSIS2_DEVDISR2_DTSEC1_1,
++	[FM1_DTSEC2] = FSL_CHASSIS2_DEVDISR2_DTSEC1_2,
++	[FM1_DTSEC3] = FSL_CHASSIS2_DEVDISR2_DTSEC1_3,
++	[FM1_DTSEC4] = FSL_CHASSIS2_DEVDISR2_DTSEC1_4,
++	[FM1_DTSEC5] = FSL_CHASSIS2_DEVDISR2_DTSEC1_5,
++	[FM1_DTSEC6] = FSL_CHASSIS2_DEVDISR2_DTSEC1_6,
++	[FM1_DTSEC9] = FSL_CHASSIS2_DEVDISR2_DTSEC1_9,
++	[FM1_DTSEC10] = FSL_CHASSIS2_DEVDISR2_DTSEC1_10,
++	[FM1_10GEC1] = FSL_CHASSIS2_DEVDISR2_10GEC1_1,
++	[FM1_10GEC2] = FSL_CHASSIS2_DEVDISR2_10GEC1_2,
++	[FM1_10GEC3] = FSL_CHASSIS2_DEVDISR2_10GEC1_3,
++	[FM1_10GEC4] = FSL_CHASSIS2_DEVDISR2_10GEC1_4,
++};
++
++static int is_device_disabled(enum fm_port port)
++{
++	struct ccsr_gur *gur = (void *)(CONFIG_SYS_FSL_GUTS_ADDR);
++	u32 devdisr2 = in_be32(&gur->devdisr2);
++
++	return port_to_devdisr[port] & devdisr2;
++}
++
++void fman_disable_port(enum fm_port port)
++{
++	struct ccsr_gur *gur = (void *)(CONFIG_SYS_FSL_GUTS_ADDR);
++
++	setbits_be32(&gur->devdisr2, port_to_devdisr[port]);
++}
++
++phy_interface_t fman_port_enet_if(enum fm_port port)
++{
++	struct ccsr_gur *gur = (void *)(CONFIG_SYS_FSL_GUTS_ADDR);
++	u32 rcwsr13 = in_be32(&gur->rcwsr[13]);
++
++	if (is_device_disabled(port)) {
++		printf("%s:%d: port(%d) is disabled\n", __func__,
++		       __LINE__, port);
++		return PHY_INTERFACE_MODE_NONE;
++	}
++
++	if ((port == FM1_10GEC1) && (is_serdes_configured(XFI_FM1_MAC9)))
++		return PHY_INTERFACE_MODE_XGMII;
++
++	if ((port == FM1_DTSEC9) && (is_serdes_configured(XFI_FM1_MAC9)))
++		return PHY_INTERFACE_MODE_NONE;
++
++	if (port == FM1_DTSEC3)
++		if ((rcwsr13 & FSL_CHASSIS2_RCWSR13_EC1) ==
++				FSL_CHASSIS2_RCWSR13_EC1_DTSEC3_RGMII) {
++			printf("%s:%d: port(FM1_DTSEC3) is OK\n",
++			       __func__, __LINE__);
++			return PHY_INTERFACE_MODE_RGMII;
++		}
++	if (port == FM1_DTSEC4)
++		if ((rcwsr13 & FSL_CHASSIS2_RCWSR13_EC2) ==
++				FSL_CHASSIS2_RCWSR13_EC2_DTSEC4_RGMII) {
++			printf("%s:%d: port(FM1_DTSEC4) is OK\n",
++			       __func__, __LINE__);
++			return PHY_INTERFACE_MODE_RGMII;
++		}
++
++	/* handle SGMII */
++	switch (port) {
++	case FM1_DTSEC1:
++	case FM1_DTSEC2:
++		if ((port == FM1_DTSEC2) &&
++		    is_serdes_configured(SGMII_2500_FM1_DTSEC2))
++			return PHY_INTERFACE_MODE_SGMII_2500;
++	case FM1_DTSEC5:
++	case FM1_DTSEC6:
++	case FM1_DTSEC9:
++		if (is_serdes_configured(SGMII_FM1_DTSEC1 + port - FM1_DTSEC1))
++			return PHY_INTERFACE_MODE_SGMII;
++		else if ((port == FM1_DTSEC9) &&
++			 is_serdes_configured(SGMII_2500_FM1_DTSEC9))
++			return PHY_INTERFACE_MODE_SGMII_2500;
++		break;
++	default:
++		break;
++	}
++
++	/* handle QSGMII */
++	switch (port) {
++	case FM1_DTSEC1:
++	case FM1_DTSEC2:
++	case FM1_DTSEC5:
++	case FM1_DTSEC6:
++		/* only MAC 1,2,5,6 available for QSGMII */
++		if (is_serdes_configured(QSGMII_FM1_A))
++			return PHY_INTERFACE_MODE_QSGMII;
++		break;
++	default:
++		break;
++	}
++
++	return PHY_INTERFACE_MODE_NONE;
++}
+diff --git a/include/configs/ls1043a_common.h b/include/configs/ls1043a_common.h
+index f866bed..2ba9a46 100644
+--- a/include/configs/ls1043a_common.h
++++ b/include/configs/ls1043a_common.h
+@@ -126,6 +126,18 @@
+ #define CONFIG_CMD_ENV
+ #define CONFIG_CMD_PING
+ 
++/* FMan ucode */
++#define CONFIG_SYS_DPAA_FMAN
++#ifdef CONFIG_SYS_DPAA_FMAN
++#define CONFIG_SYS_FM_MURAM_SIZE	0x60000
++
++#define CONFIG_SYS_QE_FMAN_FW_IN_NOR
++/* FMan fireware Pre-load address */
++#define CONFIG_SYS_FMAN_FW_ADDR		0x60300000
++#define CONFIG_SYS_QE_FMAN_FW_LENGTH	0x10000
++#define CONFIG_SYS_FDT_PAD		(0x3000 + CONFIG_SYS_QE_FMAN_FW_LENGTH)
++#endif
++
+ /* Miscellaneous configurable options */
+ #define CONFIG_SYS_LOAD_ADDR	(CONFIG_SYS_DDR_SDRAM_BASE + 0x10000000)
+ #define CONFIG_ARCH_EARLY_INIT_R
+diff --git a/include/configs/ls1043ardb.h b/include/configs/ls1043ardb.h
+index 1f66201..f3c35c7 100644
+--- a/include/configs/ls1043ardb.h
++++ b/include/configs/ls1043ardb.h
+@@ -188,4 +188,29 @@
+ #define CONFIG_ENV_SECT_SIZE		0x20000
+ #define CONFIG_ENV_SIZE			0x20000
+ 
++/* FMan */
++#ifdef CONFIG_SYS_DPAA_FMAN
++#define CONFIG_FMAN_ENET
++#define CONFIG_CMD_MII
++#define CONFIG_PHYLIB
++#define CONFIG_PHYLIB_10G
++#define CONFIG_PHY_GIGE		/* Include GbE speed/duplex detection */
++
++#define CONFIG_PHY_VITESSE
++#define CONFIG_PHY_REALTEK
++#define CONFIG_PHY_AQUANTIA
++
++#define RGMII_PHY1_ADDR			0x1
++#define RGMII_PHY2_ADDR			0x2
++
++#define QSGMII_PORT1_PHY_ADDR		0x4
++#define QSGMII_PORT2_PHY_ADDR		0x5
++#define QSGMII_PORT3_PHY_ADDR		0x6
++#define QSGMII_PORT4_PHY_ADDR		0x7
++
++#define FM1_10GEC1_PHY_ADDR		0x1
++
++#define CONFIG_ETHPRIME			"FM1@DTSEC3"
++#endif
++
+ #endif /* __LS1043ARDB_H__ */
+-- 
+2.1.0.27.g96db324
+

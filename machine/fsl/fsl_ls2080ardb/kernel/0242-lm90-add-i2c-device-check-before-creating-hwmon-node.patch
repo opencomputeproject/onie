@@ -1,0 +1,55 @@
+From f7fdd9b6673421a2bd36947235d6dea4f4ad92a8 Mon Sep 17 00:00:00 2001
+From: Jia Hongtao <hongtao.jia@freescale.com>
+Date: Thu, 21 Jan 2016 16:41:19 +0800
+Subject: [PATCH 242/245] lm90: add i2c device check before creating hwmon node
+
+Signed-off-by: Jia Hongtao <hongtao.jia@freescale.com>
+---
+ drivers/hwmon/lm90.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/hwmon/lm90.c b/drivers/hwmon/lm90.c
+index c9ff08d..729d2df 100644
+--- a/drivers/hwmon/lm90.c
++++ b/drivers/hwmon/lm90.c
+@@ -1413,7 +1413,7 @@ static void lm90_restore_conf(struct i2c_client *client, struct lm90_data *data)
+ 				  data->config_orig);
+ }
+ 
+-static void lm90_init_client(struct i2c_client *client, struct lm90_data *data)
++static int lm90_init_client(struct i2c_client *client, struct lm90_data *data)
+ {
+ 	u8 config, convrate;
+ 
+@@ -1429,7 +1429,7 @@ static void lm90_init_client(struct i2c_client *client, struct lm90_data *data)
+ 	lm90_set_convrate(client, data, 500);	/* 500ms; 2Hz conversion rate */
+ 	if (lm90_read_reg(client, LM90_REG_R_CONFIG1, &config) < 0) {
+ 		dev_warn(&client->dev, "Initialization failed!\n");
+-		return;
++		return -ENODEV;
+ 	}
+ 	data->config_orig = config;
+ 
+@@ -1456,6 +1456,8 @@ static void lm90_init_client(struct i2c_client *client, struct lm90_data *data)
+ 	config &= 0xBF;	/* run */
+ 	if (config != data->config_orig) /* Only write if changed */
+ 		i2c_smbus_write_byte_data(client, LM90_REG_W_CONFIG1, config);
++
++	return 0;
+ }
+ 
+ static bool lm90_is_tripped(struct i2c_client *client, u16 *status)
+@@ -1557,7 +1559,9 @@ static int lm90_probe(struct i2c_client *client,
+ 	data->max_convrate = lm90_params[data->kind].max_convrate;
+ 
+ 	/* Initialize the LM90 chip */
+-	lm90_init_client(client, data);
++	err = lm90_init_client(client, data);
++	if (err < 0)
++		return -ENODEV;
+ 
+ 	/* Register sysfs hooks */
+ 	data->groups[groups++] = &lm90_group;
+-- 
+2.1.0.27.g96db324
+

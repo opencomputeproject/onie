@@ -1,0 +1,174 @@
+From 96abb0afbf19cfa0729a09e104862186fef68f6f Mon Sep 17 00:00:00 2001
+From: Minghuan Lian <Minghuan.Lian@freescale.com>
+Date: Mon, 8 Jun 2015 09:46:58 +0800
+Subject: [PATCH 188/245] ls1043a/msi : add ls1043a MSI support
+
+Signed-off-by: Minghuan Lian <Minghuan.Lian@freescale.com>
+Signed-off-by: Mingkai Hu <Mingkai.Hu@freescale.com>
+---
+ arch/arm64/Kconfig            |  1 +
+ drivers/irqchip/irq-ls1-msi.c | 47 +++++++++++++++----------------------------
+ 2 files changed, 17 insertions(+), 31 deletions(-)
+
+diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
+index c5ad326..592c3ab 100644
+--- a/arch/arm64/Kconfig
++++ b/arch/arm64/Kconfig
+@@ -183,6 +183,7 @@ config ARCH_EXYNOS7
+ config ARCH_LAYERSCAPE
+ 	bool "Freescale Layerscape SoC family"
+ 	select PCI_LAYERSCAPE if PCI
++	select LS1_MSI if PCI_MSI
+ 	help
+ 	  This enables support for Freescale Layerscape SoC family
+ 
+diff --git a/drivers/irqchip/irq-ls1-msi.c b/drivers/irqchip/irq-ls1-msi.c
+index 9b44349..8410d8a 100644
+--- a/drivers/irqchip/irq-ls1-msi.c
++++ b/drivers/irqchip/irq-ls1-msi.c
+@@ -23,8 +23,6 @@
+ 
+ #define MAX_MSI_IRQS	32
+ 
+-static int ls1_msi_idx;
+-
+ struct ls1_msi {
+ 	char			name[32];
+ 	struct device_node	*of_node;
+@@ -47,7 +45,7 @@ static void ls1_msi_compose_msg(struct irq_data *data, struct msi_msg *msg)
+ 
+ 	msg->address_hi = (u32) (addr >> 32);
+ 	msg->address_lo = (u32) (addr);
+-	msg->data = 0xb4; //data->hwirq;
++	msg->data = data->hwirq * 8;
+ }
+ 
+ static int ls1_msi_set_affinity(struct irq_data *irq_data,
+@@ -67,7 +65,7 @@ static int ls1_msi_domain_irq_alloc(struct irq_domain *domain, unsigned int virq
+ {
+ 	struct ls1_msi *msi_data = domain->host_data;
+ 	int i, pos;
+-	printk("\n\nls1_msi_domain_irq_alloc\n");
++
+ 	spin_lock(&msi_data->lock);
+ 	pos = bitmap_find_free_region(msi_data->bm, msi_data->nr_irqs,
+ 				      order_base_2(nr_irqs));
+@@ -93,7 +91,6 @@ static void ls1_msi_domain_irq_free(struct irq_domain *domain,
+ 	struct ls1_msi *msi_data = irq_data_get_irq_chip_data(d);
+ 	int pos;
+ 
+-	printk("\n\n\n\nls1_msi_domain_irq_free\n");
+ 	pos = d->hwirq;
+ 	if (pos < 0 || pos >= msi_data->nr_irqs) {
+ 		pr_err("Failed to teardown msi. Invalid hwirq %d\n", pos);
+@@ -118,15 +115,10 @@ static irqreturn_t ls1_msi_handler(int irq, void *arg)
+ 	irqreturn_t ret = IRQ_NONE;
+ 
+ 	val = ioread32be(msi_data->msir);
+-
+-	{ /* ls1021A */
+-	iowrite32be(cpu_to_be32(0xb4), msi_data->msir);
+-	val = 1;
+ 	pos = 0;
+-	}
+ 
+ 	while ((pos = find_next_bit(&val, 32, pos)) != 32) {
+-		virq = irq_find_mapping(msi_data->parent, pos);
++		virq = irq_find_mapping(msi_data->parent, 31 - pos);
+ 		if (virq != NO_IRQ) {
+ 			generic_handle_irq(virq);
+ 			ret = IRQ_HANDLED;
+@@ -137,26 +129,12 @@ static irqreturn_t ls1_msi_handler(int irq, void *arg)
+ 	return ret;
+ }
+ 
+-static void ls1021a_pcie_msi_fixup(struct ls1_msi *msi_data)
+-{
+-	int i;
+-
+-	/*
+-	 * LS1021A has only one MSI interrupt
+-	 * Set all msi interrupts as used except the first one
+-	 */
+-	for (i = 1; i < msi_data->nr_irqs; i++)
+-		set_bit(i, msi_data->bm);
+-}
+-
+ static irq_hw_number_t ls1_msi_domain_ops_get_hwirq(struct msi_domain_info *info,
+ 						msi_alloc_info_t *arg)
+ {
+ 	struct ls1_msi *msi_data = container_of(info, struct ls1_msi, info);
+ 
+-	printk("%s %d arg->hwirq=%d\n", __func__, __LINE__, arg->hwirq);
+ 	arg->hwirq = find_first_zero_bit(msi_data->bm, msi_data->nr_irqs);
+-	printk("%s %d arg->hwirq=%d\n", __func__, __LINE__, arg->hwirq);
+ 
+ 	return arg->hwirq;
+ }
+@@ -165,7 +143,7 @@ static void ls1_msi_domain_ops_free(struct irq_domain *domain,
+ 				    struct msi_domain_info *info,
+ 				    unsigned int virq)
+ {
+-	printk("ls1_msi_domain_ops_free\n");
++	/* Nothing need to do */
+ }
+ 
+ static struct msi_domain_ops ls1_pci_msi_ops = {
+@@ -211,7 +189,6 @@ static int ls1_msi_chip_init(struct ls1_msi *msi_data)
+ 		goto _err;
+ 	}
+ 
+-
+ 	ret = of_pci_msi_chip_add(&msi_data->mchip);
+ 	if (ret) {
+ 		pr_err("Failed to add msi_chip %s\n", msi_data->name);
+@@ -233,6 +210,7 @@ static int __init ls1_msi_probe(struct platform_device *pdev)
+ {
+ 	struct ls1_msi *msi_data;
+ 	struct resource *res;
++	static int ls1_msi_idx;
+ 	int ret;
+ 
+ 	msi_data = devm_kzalloc(&pdev->dev, sizeof(*msi_data), GFP_KERNEL);
+@@ -248,13 +226,21 @@ static int __init ls1_msi_probe(struct platform_device *pdev)
+ 		dev_err(&pdev->dev, "missing msiir.\n");
+ 		return -ENODEV;
+ 	}
++
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "msiir");
++	if (!res) {
++		dev_err(&pdev->dev, "missing *msiir* space\n");
++		return -ENODEV;
++	}
++
+ 	msi_data->msiir_addr = res->start;
+ 
+-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "msir");
+ 	if (!res) {
+-		dev_err(&pdev->dev, "missing msir.\n");
++		dev_err(&pdev->dev, "missing *msir* space\n");
+ 		return -ENODEV;
+ 	}
++
+ 	msi_data->msir = devm_ioremap_resource(&pdev->dev, res);
+ 	if (IS_ERR(msi_data->msir))
+ 		return PTR_ERR(msi_data->msir);
+@@ -286,13 +272,12 @@ static int __init ls1_msi_probe(struct platform_device *pdev)
+ 		return -ENODEV;
+ 	}
+ 
+-	ls1021a_pcie_msi_fixup(msi_data);
+-
+ 	return ls1_msi_chip_init(msi_data);
+ }
+ 
+ static struct of_device_id ls1_msi_id[] = {
+ 	{ .compatible = "fsl,1s1021a-msi", },
++	{ .compatible = "fsl,1s1043a-msi", },
+ 	{},
+ };
+ 
+-- 
+2.1.0.27.g96db324
+
