@@ -43,7 +43,7 @@ crosstool-ng-download: $(CROSSTOOL_NG_DOWNLOAD_STAMP)
 $(CROSSTOOL_NG_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Getting upstream $(CROSSTOOL_NG_DESC) ===="
-	$(Q) if [ $(awk 'BEGIN{ print "'$(CROSSTOOL_NG_VERSION)'"<="'1.22.0'" }') -eq 1 ]; then \
+	$(Q) if [ $(shell awk 'BEGIN{ print "'$(CROSSTOOL_NG_VERSION)'"<="'1.22.0'" }') -eq 1 ]; then \
 			$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
 			$(CROSSTOOL_NG_TARBALL) $(CROSSTOOL_NG_URLS); \
 		 fi
@@ -54,7 +54,7 @@ crosstool-ng-source: $(CROSSTOOL_NG_SOURCE_STAMP)
 $(CROSSTOOL_NG_SOURCE_STAMP): $(CROSSTOOL_NG_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream $(CROSSTOOL_NG_DESC) ===="
-	$(Q) if [ $(awk 'BEGIN{ print "'$(CROSSTOOL_NG_VERSION)'"<="'1.22.0'" }') -eq 1 ]; then \
+	$(Q) if [ $(shell awk 'BEGIN{ print "'$(CROSSTOOL_NG_VERSION)'"<="'1.22.0'" }') -eq 1 ]; then \
 			$(Q) $(SCRIPTDIR)/extract-package $(CROSSTOOL_NG_BUILD_DIR) \
 			$(DOWNLOADDIR)/$(CROSSTOOL_NG_TARBALL); \
 	     else \
