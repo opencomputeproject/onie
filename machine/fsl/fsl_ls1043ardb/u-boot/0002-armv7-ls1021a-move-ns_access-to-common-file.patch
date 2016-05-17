@@ -1,0 +1,545 @@
+From fa4b7138be728bdd5f21b4ed8a9ff7b4cba62566 Mon Sep 17 00:00:00 2001
+From: Mingkai Hu <Mingkai.Hu@freescale.com>
+Date: Mon, 26 Oct 2015 19:47:41 +0800
+Subject: [PATCH 02/21] armv7/ls1021a: move ns_access to common file
+
+Config Security Level Register is different between different SoCs,
+so put the CSL register definition into the arch specific directory.
+
+Signed-off-by: Mingkai Hu <Mingkai.Hu@freescale.com>
+Signed-off-by: Hou Zhiqiang <B48286@freescale.com>
+Signed-off-by: Gong Qianyu <Qianyu.Gong@freescale.com>
+Reviewed-by: York Sun <yorksun@freescale.com>
+---
+ arch/arm/include/asm/arch-ls102xa/ns_access.h | 103 ++++++++++++++++++++------
+ board/freescale/common/Makefile               |   2 +-
+ board/freescale/common/ns_access.c            |   8 +-
+ board/freescale/ls1021aqds/ls1021aqds.c       | 101 ++-----------------------
+ board/freescale/ls1021atwr/ls1021atwr.c       | 102 ++-----------------------
+ include/configs/ls1021aqds.h                  |   2 +-
+ include/configs/ls1021atwr.h                  |   2 +-
+ include/fsl_csu.h                             |  34 +++++++++
+ 8 files changed, 141 insertions(+), 213 deletions(-)
+ create mode 100644 include/fsl_csu.h
+
+diff --git a/arch/arm/include/asm/arch-ls102xa/ns_access.h b/arch/arm/include/asm/arch-ls102xa/ns_access.h
+index b53f699..a921fb6 100644
+--- a/arch/arm/include/asm/arch-ls102xa/ns_access.h
++++ b/arch/arm/include/asm/arch-ls102xa/ns_access.h
+@@ -7,22 +7,6 @@
+ #ifndef __FSL_NS_ACCESS_H_
+ #define __FSL_NS_ACCESS_H_
+ 
+-enum csu_cslx_access {
+-	CSU_NS_SUP_R = 0x08,
+-	CSU_NS_SUP_W = 0x80,
+-	CSU_NS_SUP_RW = 0x88,
+-	CSU_NS_USER_R = 0x04,
+-	CSU_NS_USER_W = 0x40,
+-	CSU_NS_USER_RW = 0x44,
+-	CSU_S_SUP_R = 0x02,
+-	CSU_S_SUP_W = 0x20,
+-	CSU_S_SUP_RW = 0x22,
+-	CSU_S_USER_R = 0x01,
+-	CSU_S_USER_W = 0x10,
+-	CSU_S_USER_RW = 0x11,
+-	CSU_ALL_RW = 0xff,
+-};
+-
+ enum csu_cslx_ind {
+ 	CSU_CSLX_PCIE2_IO = 0,
+ 	CSU_CSLX_PCIE1_IO,
+@@ -108,11 +92,88 @@ enum csu_cslx_ind {
+ 	CSU_CSLX_MAX,
+ };
+ 
+-struct csu_ns_dev {
+-	unsigned long ind;
+-	uint32_t val;
++static struct csu_ns_dev ns_dev[] = {
++	{ CSU_CSLX_PCIE2_IO, CSU_ALL_RW },
++	{ CSU_CSLX_PCIE1_IO, CSU_ALL_RW },
++	{ CSU_CSLX_MG2TPR_IP, CSU_ALL_RW },
++	{ CSU_CSLX_IFC_MEM, CSU_ALL_RW },
++	{ CSU_CSLX_OCRAM, CSU_ALL_RW },
++	{ CSU_CSLX_GIC, CSU_ALL_RW },
++	{ CSU_CSLX_PCIE1, CSU_ALL_RW },
++	{ CSU_CSLX_OCRAM2, CSU_ALL_RW },
++	{ CSU_CSLX_QSPI_MEM, CSU_ALL_RW },
++	{ CSU_CSLX_PCIE2, CSU_ALL_RW },
++	{ CSU_CSLX_SATA, CSU_ALL_RW },
++	{ CSU_CSLX_USB3, CSU_ALL_RW },
++	{ CSU_CSLX_SERDES, CSU_ALL_RW },
++	{ CSU_CSLX_QDMA, CSU_ALL_RW },
++	{ CSU_CSLX_LPUART2, CSU_ALL_RW },
++	{ CSU_CSLX_LPUART1, CSU_ALL_RW },
++	{ CSU_CSLX_LPUART4, CSU_ALL_RW },
++	{ CSU_CSLX_LPUART3, CSU_ALL_RW },
++	{ CSU_CSLX_LPUART6, CSU_ALL_RW },
++	{ CSU_CSLX_LPUART5, CSU_ALL_RW },
++	{ CSU_CSLX_DSPI2, CSU_ALL_RW },
++	{ CSU_CSLX_DSPI1, CSU_ALL_RW },
++	{ CSU_CSLX_QSPI, CSU_ALL_RW },
++	{ CSU_CSLX_ESDHC, CSU_ALL_RW },
++	{ CSU_CSLX_2D_ACE, CSU_ALL_RW },
++	{ CSU_CSLX_IFC, CSU_ALL_RW },
++	{ CSU_CSLX_I2C1, CSU_ALL_RW },
++	{ CSU_CSLX_USB2, CSU_ALL_RW },
++	{ CSU_CSLX_I2C3, CSU_ALL_RW },
++	{ CSU_CSLX_I2C2, CSU_ALL_RW },
++	{ CSU_CSLX_DUART2, CSU_ALL_RW },
++	{ CSU_CSLX_DUART1, CSU_ALL_RW },
++	{ CSU_CSLX_WDT2, CSU_ALL_RW },
++	{ CSU_CSLX_WDT1, CSU_ALL_RW },
++	{ CSU_CSLX_EDMA, CSU_ALL_RW },
++	{ CSU_CSLX_SYS_CNT, CSU_ALL_RW },
++	{ CSU_CSLX_DMA_MUX2, CSU_ALL_RW },
++	{ CSU_CSLX_DMA_MUX1, CSU_ALL_RW },
++	{ CSU_CSLX_DDR, CSU_ALL_RW },
++	{ CSU_CSLX_QUICC, CSU_ALL_RW },
++	{ CSU_CSLX_DCFG_CCU_RCPM, CSU_ALL_RW },
++	{ CSU_CSLX_SECURE_BOOTROM, CSU_ALL_RW },
++	{ CSU_CSLX_SFP, CSU_ALL_RW },
++	{ CSU_CSLX_TMU, CSU_ALL_RW },
++	{ CSU_CSLX_SECURE_MONITOR, CSU_ALL_RW },
++	{ CSU_CSLX_RESERVED0, CSU_ALL_RW },
++	{ CSU_CSLX_ETSEC1, CSU_ALL_RW },
++	{ CSU_CSLX_SEC5_5, CSU_ALL_RW },
++	{ CSU_CSLX_ETSEC3, CSU_ALL_RW },
++	{ CSU_CSLX_ETSEC2, CSU_ALL_RW },
++	{ CSU_CSLX_GPIO2, CSU_ALL_RW },
++	{ CSU_CSLX_GPIO1, CSU_ALL_RW },
++	{ CSU_CSLX_GPIO4, CSU_ALL_RW },
++	{ CSU_CSLX_GPIO3, CSU_ALL_RW },
++	{ CSU_CSLX_PLATFORM_CONT, CSU_ALL_RW },
++	{ CSU_CSLX_CSU, CSU_ALL_RW },
++	{ CSU_CSLX_ASRC, CSU_ALL_RW },
++	{ CSU_CSLX_SPDIF, CSU_ALL_RW },
++	{ CSU_CSLX_FLEXCAN2, CSU_ALL_RW },
++	{ CSU_CSLX_FLEXCAN1, CSU_ALL_RW },
++	{ CSU_CSLX_FLEXCAN4, CSU_ALL_RW },
++	{ CSU_CSLX_FLEXCAN3, CSU_ALL_RW },
++	{ CSU_CSLX_SAI2, CSU_ALL_RW },
++	{ CSU_CSLX_SAI1, CSU_ALL_RW },
++	{ CSU_CSLX_SAI4, CSU_ALL_RW },
++	{ CSU_CSLX_SAI3, CSU_ALL_RW },
++	{ CSU_CSLX_FTM2, CSU_ALL_RW },
++	{ CSU_CSLX_FTM1, CSU_ALL_RW },
++	{ CSU_CSLX_FTM4, CSU_ALL_RW },
++	{ CSU_CSLX_FTM3, CSU_ALL_RW },
++	{ CSU_CSLX_FTM6, CSU_ALL_RW },
++	{ CSU_CSLX_FTM5, CSU_ALL_RW },
++	{ CSU_CSLX_FTM8, CSU_ALL_RW },
++	{ CSU_CSLX_FTM7, CSU_ALL_RW },
++	{ CSU_CSLX_COP_DCSR, CSU_ALL_RW },
++	{ CSU_CSLX_EPU, CSU_ALL_RW },
++	{ CSU_CSLX_GDI, CSU_ALL_RW },
++	{ CSU_CSLX_DDI, CSU_ALL_RW },
++	{ CSU_CSLX_RESERVED1, CSU_ALL_RW },
++	{ CSU_CSLX_USB3_PHY, CSU_ALL_RW },
++	{ CSU_CSLX_RESERVED2, CSU_ALL_RW },
+ };
+ 
+-void enable_devices_ns_access(struct csu_ns_dev *ns_dev, uint32_t num);
+-
+ #endif
+diff --git a/board/freescale/common/Makefile b/board/freescale/common/Makefile
+index 87d0578..51d2814 100644
+--- a/board/freescale/common/Makefile
++++ b/board/freescale/common/Makefile
+@@ -71,7 +71,7 @@ obj-$(CONFIG_P4080DS)	+= p_corenet/
+ obj-$(CONFIG_P5020DS)	+= p_corenet/
+ obj-$(CONFIG_P5040DS)	+= p_corenet/
+ 
+-obj-$(CONFIG_LS102XA_NS_ACCESS)	+= ns_access.o
++obj-$(CONFIG_LAYERSCAPE_NS_ACCESS)	+= ns_access.o
+ 
+ ifdef CONFIG_SECURE_BOOT
+ obj-$(CONFIG_CMD_ESBC_VALIDATE) += fsl_validate.o cmd_esbc_validate.o
+diff --git a/board/freescale/common/ns_access.c b/board/freescale/common/ns_access.c
+index d7de982..d8d16c5 100644
+--- a/board/freescale/common/ns_access.c
++++ b/board/freescale/common/ns_access.c
+@@ -6,9 +6,10 @@
+ 
+ #include <common.h>
+ #include <asm/io.h>
++#include <fsl_csu.h>
+ #include <asm/arch/ns_access.h>
+ 
+-void enable_devices_ns_access(struct csu_ns_dev *ns_dev, uint32_t num)
++static void enable_devices_ns_access(struct csu_ns_dev *ns_dev, uint32_t num)
+ {
+ 	u32 *base = (u32 *)CONFIG_SYS_FSL_CSU_ADDR;
+ 	u32 *reg;
+@@ -28,3 +29,8 @@ void enable_devices_ns_access(struct csu_ns_dev *ns_dev, uint32_t num)
+ 		out_be32(reg, val);
+ 	}
+ }
++
++void enable_layerscape_ns_access(void)
++{
++	enable_devices_ns_access(ns_dev, ARRAY_SIZE(ns_dev));
++}
+diff --git a/board/freescale/ls1021aqds/ls1021aqds.c b/board/freescale/ls1021aqds/ls1021aqds.c
+index 655fc64..612f17e 100644
+--- a/board/freescale/ls1021aqds/ls1021aqds.c
++++ b/board/freescale/ls1021aqds/ls1021aqds.c
+@@ -8,13 +8,13 @@
+ #include <i2c.h>
+ #include <asm/io.h>
+ #include <asm/arch/immap_ls102xa.h>
+-#include <asm/arch/ns_access.h>
+ #include <asm/arch/clock.h>
+ #include <asm/arch/fsl_serdes.h>
+ #include <asm/arch/ls102xa_stream_id.h>
+ #include <asm/arch/ls102xa_devdis.h>
+ #include <hwconfig.h>
+ #include <mmc.h>
++#include <fsl_csu.h>
+ #include <fsl_esdhc.h>
+ #include <fsl_ifc.h>
+ #include <fsl_sec.h>
+@@ -56,92 +56,6 @@ enum {
+ 	GE1_CLK125,
+ };
+ 
+-#ifdef CONFIG_LS102XA_NS_ACCESS
+-static struct csu_ns_dev ns_dev[] = {
+-	{ CSU_CSLX_PCIE2_IO, CSU_ALL_RW },
+-	{ CSU_CSLX_PCIE1_IO, CSU_ALL_RW },
+-	{ CSU_CSLX_MG2TPR_IP, CSU_ALL_RW },
+-	{ CSU_CSLX_IFC_MEM, CSU_ALL_RW },
+-	{ CSU_CSLX_OCRAM, CSU_ALL_RW },
+-	{ CSU_CSLX_GIC, CSU_ALL_RW },
+-	{ CSU_CSLX_PCIE1, CSU_ALL_RW },
+-	{ CSU_CSLX_OCRAM2, CSU_ALL_RW },
+-	{ CSU_CSLX_QSPI_MEM, CSU_ALL_RW },
+-	{ CSU_CSLX_PCIE2, CSU_ALL_RW },
+-	{ CSU_CSLX_SATA, CSU_ALL_RW },
+-	{ CSU_CSLX_USB3, CSU_ALL_RW },
+-	{ CSU_CSLX_SERDES, CSU_ALL_RW },
+-	{ CSU_CSLX_QDMA, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART2, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART1, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART4, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART3, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART6, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART5, CSU_ALL_RW },
+-	{ CSU_CSLX_DSPI2, CSU_ALL_RW },
+-	{ CSU_CSLX_DSPI1, CSU_ALL_RW },
+-	{ CSU_CSLX_QSPI, CSU_ALL_RW },
+-	{ CSU_CSLX_ESDHC, CSU_ALL_RW },
+-	{ CSU_CSLX_2D_ACE, CSU_ALL_RW },
+-	{ CSU_CSLX_IFC, CSU_ALL_RW },
+-	{ CSU_CSLX_I2C1, CSU_ALL_RW },
+-	{ CSU_CSLX_USB2, CSU_ALL_RW },
+-	{ CSU_CSLX_I2C3, CSU_ALL_RW },
+-	{ CSU_CSLX_I2C2, CSU_ALL_RW },
+-	{ CSU_CSLX_DUART2, CSU_ALL_RW },
+-	{ CSU_CSLX_DUART1, CSU_ALL_RW },
+-	{ CSU_CSLX_WDT2, CSU_ALL_RW },
+-	{ CSU_CSLX_WDT1, CSU_ALL_RW },
+-	{ CSU_CSLX_EDMA, CSU_ALL_RW },
+-	{ CSU_CSLX_SYS_CNT, CSU_ALL_RW },
+-	{ CSU_CSLX_DMA_MUX2, CSU_ALL_RW },
+-	{ CSU_CSLX_DMA_MUX1, CSU_ALL_RW },
+-	{ CSU_CSLX_DDR, CSU_ALL_RW },
+-	{ CSU_CSLX_QUICC, CSU_ALL_RW },
+-	{ CSU_CSLX_DCFG_CCU_RCPM, CSU_ALL_RW },
+-	{ CSU_CSLX_SECURE_BOOTROM, CSU_ALL_RW },
+-	{ CSU_CSLX_SFP, CSU_ALL_RW },
+-	{ CSU_CSLX_TMU, CSU_ALL_RW },
+-	{ CSU_CSLX_SECURE_MONITOR, CSU_ALL_RW },
+-	{ CSU_CSLX_RESERVED0, CSU_ALL_RW },
+-	{ CSU_CSLX_ETSEC1, CSU_ALL_RW },
+-	{ CSU_CSLX_SEC5_5, CSU_ALL_RW },
+-	{ CSU_CSLX_ETSEC3, CSU_ALL_RW },
+-	{ CSU_CSLX_ETSEC2, CSU_ALL_RW },
+-	{ CSU_CSLX_GPIO2, CSU_ALL_RW },
+-	{ CSU_CSLX_GPIO1, CSU_ALL_RW },
+-	{ CSU_CSLX_GPIO4, CSU_ALL_RW },
+-	{ CSU_CSLX_GPIO3, CSU_ALL_RW },
+-	{ CSU_CSLX_PLATFORM_CONT, CSU_ALL_RW },
+-	{ CSU_CSLX_CSU, CSU_ALL_RW },
+-	{ CSU_CSLX_ASRC, CSU_ALL_RW },
+-	{ CSU_CSLX_SPDIF, CSU_ALL_RW },
+-	{ CSU_CSLX_FLEXCAN2, CSU_ALL_RW },
+-	{ CSU_CSLX_FLEXCAN1, CSU_ALL_RW },
+-	{ CSU_CSLX_FLEXCAN4, CSU_ALL_RW },
+-	{ CSU_CSLX_FLEXCAN3, CSU_ALL_RW },
+-	{ CSU_CSLX_SAI2, CSU_ALL_RW },
+-	{ CSU_CSLX_SAI1, CSU_ALL_RW },
+-	{ CSU_CSLX_SAI4, CSU_ALL_RW },
+-	{ CSU_CSLX_SAI3, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM2, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM1, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM4, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM3, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM6, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM5, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM8, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM7, CSU_ALL_RW },
+-	{ CSU_CSLX_COP_DCSR, CSU_ALL_RW },
+-	{ CSU_CSLX_EPU, CSU_ALL_RW },
+-	{ CSU_CSLX_GDI, CSU_ALL_RW },
+-	{ CSU_CSLX_DDI, CSU_ALL_RW },
+-	{ CSU_CSLX_RESERVED1, CSU_ALL_RW },
+-	{ CSU_CSLX_USB3_PHY, CSU_ALL_RW },
+-	{ CSU_CSLX_RESERVED2, CSU_ALL_RW },
+-};
+-#endif
+-
+ int checkboard(void)
+ {
+ #ifndef CONFIG_QSPI_BOOT
+@@ -382,9 +296,8 @@ void board_init_f(ulong dummy)
+ 	dram_init();
+ 
+ 	/* Allow OCRAM access permission as R/W */
+-#ifdef CONFIG_LS102XA_NS_ACCESS
+-	enable_devices_ns_access(&ns_dev[4], 1);
+-	enable_devices_ns_access(&ns_dev[7], 1);
++#ifdef CONFIG_LAYERSCAPE_NS_ACCESS
++	enable_layerscape_ns_access();
+ #endif
+ 
+ 	board_init_r(NULL, 0);
+@@ -602,8 +515,8 @@ int board_init(void)
+ 	ls102xa_config_smmu_stream_id(dev_stream_id,
+ 				      ARRAY_SIZE(dev_stream_id));
+ 
+-#ifdef CONFIG_LS102XA_NS_ACCESS
+-	enable_devices_ns_access(ns_dev, ARRAY_SIZE(ns_dev));
++#ifdef CONFIG_LAYERSCAPE_NS_ACCESS
++	enable_layerscape_ns_access();
+ #endif
+ 
+ #ifdef CONFIG_U_QE
+@@ -627,8 +540,8 @@ void board_sleep_prepare(void)
+ 	}
+ 
+ 
+-#ifdef CONFIG_LS102XA_NS_ACCESS
+-	enable_devices_ns_access(ns_dev, ARRAY_SIZE(ns_dev));
++#ifdef CONFIG_LAYERSCAPE_NS_ACCESS
++	enable_layerscape_ns_access();
+ #endif
+ }
+ #endif
+diff --git a/board/freescale/ls1021atwr/ls1021atwr.c b/board/freescale/ls1021atwr/ls1021atwr.c
+index 228dbf8..236689b 100644
+--- a/board/freescale/ls1021atwr/ls1021atwr.c
++++ b/board/freescale/ls1021atwr/ls1021atwr.c
+@@ -8,13 +8,13 @@
+ #include <i2c.h>
+ #include <asm/io.h>
+ #include <asm/arch/immap_ls102xa.h>
+-#include <asm/arch/ns_access.h>
+ #include <asm/arch/clock.h>
+ #include <asm/arch/fsl_serdes.h>
+ #include <asm/arch/ls102xa_stream_id.h>
+ #include <asm/arch/ls102xa_devdis.h>
+ #include <hwconfig.h>
+ #include <mmc.h>
++#include <fsl_csu.h>
+ #include <fsl_esdhc.h>
+ #include <fsl_ifc.h>
+ #include <fsl_immap.h>
+@@ -69,92 +69,6 @@ DECLARE_GLOBAL_DATA_PTR;
+ #define PIN_QE_LCD_MUX_LCD	0x0
+ #define PIN_QE_LCD_MUX_QE	0x1
+ 
+-#ifdef CONFIG_LS102XA_NS_ACCESS
+-static struct csu_ns_dev ns_dev[] = {
+-	{ CSU_CSLX_PCIE2_IO, CSU_ALL_RW },
+-	{ CSU_CSLX_PCIE1_IO, CSU_ALL_RW },
+-	{ CSU_CSLX_MG2TPR_IP, CSU_ALL_RW },
+-	{ CSU_CSLX_IFC_MEM, CSU_ALL_RW },
+-	{ CSU_CSLX_OCRAM, CSU_ALL_RW },
+-	{ CSU_CSLX_GIC, CSU_ALL_RW },
+-	{ CSU_CSLX_PCIE1, CSU_ALL_RW },
+-	{ CSU_CSLX_OCRAM2, CSU_ALL_RW },
+-	{ CSU_CSLX_QSPI_MEM, CSU_ALL_RW },
+-	{ CSU_CSLX_PCIE2, CSU_ALL_RW },
+-	{ CSU_CSLX_SATA, CSU_ALL_RW },
+-	{ CSU_CSLX_USB3, CSU_ALL_RW },
+-	{ CSU_CSLX_SERDES, CSU_ALL_RW },
+-	{ CSU_CSLX_QDMA, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART2, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART1, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART4, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART3, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART6, CSU_ALL_RW },
+-	{ CSU_CSLX_LPUART5, CSU_ALL_RW },
+-	{ CSU_CSLX_DSPI2, CSU_ALL_RW },
+-	{ CSU_CSLX_DSPI1, CSU_ALL_RW },
+-	{ CSU_CSLX_QSPI, CSU_ALL_RW },
+-	{ CSU_CSLX_ESDHC, CSU_ALL_RW },
+-	{ CSU_CSLX_2D_ACE, CSU_ALL_RW },
+-	{ CSU_CSLX_IFC, CSU_ALL_RW },
+-	{ CSU_CSLX_I2C1, CSU_ALL_RW },
+-	{ CSU_CSLX_USB2, CSU_ALL_RW },
+-	{ CSU_CSLX_I2C3, CSU_ALL_RW },
+-	{ CSU_CSLX_I2C2, CSU_ALL_RW },
+-	{ CSU_CSLX_DUART2, CSU_ALL_RW },
+-	{ CSU_CSLX_DUART1, CSU_ALL_RW },
+-	{ CSU_CSLX_WDT2, CSU_ALL_RW },
+-	{ CSU_CSLX_WDT1, CSU_ALL_RW },
+-	{ CSU_CSLX_EDMA, CSU_ALL_RW },
+-	{ CSU_CSLX_SYS_CNT, CSU_ALL_RW },
+-	{ CSU_CSLX_DMA_MUX2, CSU_ALL_RW },
+-	{ CSU_CSLX_DMA_MUX1, CSU_ALL_RW },
+-	{ CSU_CSLX_DDR, CSU_ALL_RW },
+-	{ CSU_CSLX_QUICC, CSU_ALL_RW },
+-	{ CSU_CSLX_DCFG_CCU_RCPM, CSU_ALL_RW },
+-	{ CSU_CSLX_SECURE_BOOTROM, CSU_ALL_RW },
+-	{ CSU_CSLX_SFP, CSU_ALL_RW },
+-	{ CSU_CSLX_TMU, CSU_ALL_RW },
+-	{ CSU_CSLX_SECURE_MONITOR, CSU_ALL_RW },
+-	{ CSU_CSLX_RESERVED0, CSU_ALL_RW },
+-	{ CSU_CSLX_ETSEC1, CSU_ALL_RW },
+-	{ CSU_CSLX_SEC5_5, CSU_ALL_RW },
+-	{ CSU_CSLX_ETSEC3, CSU_ALL_RW },
+-	{ CSU_CSLX_ETSEC2, CSU_ALL_RW },
+-	{ CSU_CSLX_GPIO2, CSU_ALL_RW },
+-	{ CSU_CSLX_GPIO1, CSU_ALL_RW },
+-	{ CSU_CSLX_GPIO4, CSU_ALL_RW },
+-	{ CSU_CSLX_GPIO3, CSU_ALL_RW },
+-	{ CSU_CSLX_PLATFORM_CONT, CSU_ALL_RW },
+-	{ CSU_CSLX_CSU, CSU_ALL_RW },
+-	{ CSU_CSLX_ASRC, CSU_ALL_RW },
+-	{ CSU_CSLX_SPDIF, CSU_ALL_RW },
+-	{ CSU_CSLX_FLEXCAN2, CSU_ALL_RW },
+-	{ CSU_CSLX_FLEXCAN1, CSU_ALL_RW },
+-	{ CSU_CSLX_FLEXCAN4, CSU_ALL_RW },
+-	{ CSU_CSLX_FLEXCAN3, CSU_ALL_RW },
+-	{ CSU_CSLX_SAI2, CSU_ALL_RW },
+-	{ CSU_CSLX_SAI1, CSU_ALL_RW },
+-	{ CSU_CSLX_SAI4, CSU_ALL_RW },
+-	{ CSU_CSLX_SAI3, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM2, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM1, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM4, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM3, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM6, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM5, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM8, CSU_ALL_RW },
+-	{ CSU_CSLX_FTM7, CSU_ALL_RW },
+-	{ CSU_CSLX_COP_DCSR, CSU_ALL_RW },
+-	{ CSU_CSLX_EPU, CSU_ALL_RW },
+-	{ CSU_CSLX_GDI, CSU_ALL_RW },
+-	{ CSU_CSLX_DDI, CSU_ALL_RW },
+-	{ CSU_CSLX_RESERVED1, CSU_ALL_RW },
+-	{ CSU_CSLX_USB3_PHY, CSU_ALL_RW },
+-	{ CSU_CSLX_RESERVED2, CSU_ALL_RW },
+-};
+-#endif
+-
+ struct cpld_data {
+ 	u8 cpld_ver;		/* cpld revision */
+ 	u8 cpld_ver_sub;	/* cpld sub revision */
+@@ -546,9 +460,9 @@ void board_init_f(ulong dummy)
+ 	dram_init();
+ 
+ 	/* Allow OCRAM access permission as R/W */
+-#ifdef CONFIG_LS102XA_NS_ACCESS
+-	enable_devices_ns_access(&ns_dev[4], 1);
+-	enable_devices_ns_access(&ns_dev[7], 1);
++#ifdef CONFIG_LAYERSCAPE_NS_ACCESS
++	enable_layerscape_ns_access();
++	enable_layerscape_ns_access();
+ #endif
+ 
+ 	board_init_r(NULL, 0);
+@@ -637,8 +551,8 @@ int board_init(void)
+ 	ls102xa_config_smmu_stream_id(dev_stream_id,
+ 				      ARRAY_SIZE(dev_stream_id));
+ 
+-#ifdef CONFIG_LS102XA_NS_ACCESS
+-	enable_devices_ns_access(ns_dev, ARRAY_SIZE(ns_dev));
++#ifdef CONFIG_LAYERSCAPE_NS_ACCESS
++	enable_layerscape_ns_access();
+ #endif
+ 
+ #ifdef CONFIG_U_QE
+@@ -670,8 +584,8 @@ int misc_init_r(void)
+ #if defined(CONFIG_DEEP_SLEEP)
+ void board_sleep_prepare(void)
+ {
+-#ifdef CONFIG_LS102XA_NS_ACCESS
+-	enable_devices_ns_access(ns_dev, ARRAY_SIZE(ns_dev));
++#ifdef CONFIG_LAYERSCAPE_NS_ACCESS
++	enable_layerscape_ns_access();
+ #endif
+ }
+ #endif
+diff --git a/include/configs/ls1021aqds.h b/include/configs/ls1021aqds.h
+index 4f50538..57ef3f3 100644
+--- a/include/configs/ls1021aqds.h
++++ b/include/configs/ls1021aqds.h
+@@ -562,7 +562,7 @@ unsigned long get_board_ddr_clk(void);
+ #define CONFIG_ARMV7_NONSEC
+ #define CONFIG_ARMV7_VIRT
+ #define CONFIG_PEN_ADDR_BIG_ENDIAN
+-#define CONFIG_LS102XA_NS_ACCESS
++#define CONFIG_LAYERSCAPE_NS_ACCESS
+ #define CONFIG_SMP_PEN_ADDR		0x01ee0200
+ #define CONFIG_TIMER_CLK_FREQ		12500000
+ 
+diff --git a/include/configs/ls1021atwr.h b/include/configs/ls1021atwr.h
+index 88e936b..fda61a5 100644
+--- a/include/configs/ls1021atwr.h
++++ b/include/configs/ls1021atwr.h
+@@ -414,7 +414,7 @@
+ #define CONFIG_ARMV7_NONSEC
+ #define CONFIG_ARMV7_VIRT
+ #define CONFIG_PEN_ADDR_BIG_ENDIAN
+-#define CONFIG_LS102XA_NS_ACCESS
++#define CONFIG_LAYERSCAPE_NS_ACCESS
+ #define CONFIG_SMP_PEN_ADDR		0x01ee0200
+ #define CONFIG_TIMER_CLK_FREQ		12500000
+ 
+diff --git a/include/fsl_csu.h b/include/fsl_csu.h
+new file mode 100644
+index 0000000..f4d97fb
+--- /dev/null
++++ b/include/fsl_csu.h
+@@ -0,0 +1,34 @@
++/*
++ * Copyright 2015 Freescale Semiconductor
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ *
++ */
++
++#ifndef __FSL_CSU_H__
++#define __FSL_CSU_H__
++
++enum csu_cslx_access {
++	CSU_NS_SUP_R = 0x08,
++	CSU_NS_SUP_W = 0x80,
++	CSU_NS_SUP_RW = 0x88,
++	CSU_NS_USER_R = 0x04,
++	CSU_NS_USER_W = 0x40,
++	CSU_NS_USER_RW = 0x44,
++	CSU_S_SUP_R = 0x02,
++	CSU_S_SUP_W = 0x20,
++	CSU_S_SUP_RW = 0x22,
++	CSU_S_USER_R = 0x01,
++	CSU_S_USER_W = 0x10,
++	CSU_S_USER_RW = 0x11,
++	CSU_ALL_RW = 0xff,
++};
++
++struct csu_ns_dev {
++	unsigned long ind;
++	uint32_t val;
++};
++
++void enable_layerscape_ns_access(void);
++
++#endif
+-- 
+2.1.0.27.g96db324
+
