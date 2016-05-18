@@ -1,0 +1,69 @@
+From 09d3906b4fb0172bf725ed58257ec2df4fc3ac75 Mon Sep 17 00:00:00 2001
+From: Mingkai Hu <mingkai.hu@nxp.com>
+Date: Wed, 27 Jan 2016 15:16:47 +0800
+Subject: [PATCH 179/245] pci/layerscape: fix compile issue
+
+WARNING: drivers/built-in.o(.data+0x1024): Section mismatch in reference
+from the variable ls_pcie_ep_driver to the function
+.init.text:ls_pcie_ep_probe()
+The variable ls_pcie_ep_driver references
+the function __init ls_pcie_ep_probe()
+If the reference is valid then annotate the
+variable with __init* or __refdata (see linux/init.h) or name the
+variable:
+*_template, *_timer, *_sht, *_ops, *_probe, *_probe_one, *_console
+
+drivers/built-in.o: In function `ls_pcie_ep_test_thread':
+:(.text+0x1528a): undefined reference to `__aeabi_uldivmod'
+:(.text+0x153a4): undefined reference to `__aeabi_uldivmod'
+make: *** [vmlinux] Error 1
+
+Signed-off-by: Mingkai Hu <mingkai.hu@nxp.com>
+---
+ drivers/pci/host/pci-layerscape-ep-debugfs.c | 9 ++++-----
+ drivers/pci/host/pci-layerscape-ep.c         | 2 +-
+ 2 files changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/pci/host/pci-layerscape-ep-debugfs.c b/drivers/pci/host/pci-layerscape-ep-debugfs.c
+index df30da2..45aceb4 100644
+--- a/drivers/pci/host/pci-layerscape-ep-debugfs.c
++++ b/drivers/pci/host/pci-layerscape-ep-debugfs.c
+@@ -204,8 +204,8 @@ static int ls_pcie_ep_test_dma(struct ls_ep_test *test)
+ 
+ 	getrawmonotonic(&end);
+ 	period = timespec_sub(end, start);
+-	test->result = test->len * 8ULL * i * 1000 /
+-		       (period.tv_sec * 1000 * 1000 * 1000 + period.tv_nsec);
++	test->result = test->len * 8ULL * i * 1000;
++	do_div(test->result, period.tv_sec * 1000 * 1000 * 1000 + period.tv_nsec);
+ 	dma_release_channel(chan);
+ 
+ 	return 0;
+@@ -240,9 +240,8 @@ static int ls_pcie_ep_test_cpy(struct ls_ep_test *test)
+ 	getrawmonotonic(&end);
+ 
+ 	period = timespec_sub(end, start);
+-
+-	test->result = test->len * 8ULL * i * 1000 /
+-		(period.tv_sec * 1000 * 1000 * 1000 + period.tv_nsec);
++	test->result = test->len * 8ULL * i * 1000;
++	do_div(test->result, period.tv_sec * 1000 * 1000 * 1000 + period.tv_nsec);
+ 
+ 	return 0;
+ }
+diff --git a/drivers/pci/host/pci-layerscape-ep.c b/drivers/pci/host/pci-layerscape-ep.c
+index 153379b..6997e52 100644
+--- a/drivers/pci/host/pci-layerscape-ep.c
++++ b/drivers/pci/host/pci-layerscape-ep.c
+@@ -189,7 +189,7 @@ static int ls_pcie_ep_init(struct ls_pcie *pcie)
+ 	return 0;
+ }
+ 
+-static int __init ls_pcie_ep_probe(struct platform_device *pdev)
++static int ls_pcie_ep_probe(struct platform_device *pdev)
+ {
+ 	struct ls_pcie *pcie;
+ 	struct resource *dbi_base;
+-- 
+2.1.0.27.g96db324
+

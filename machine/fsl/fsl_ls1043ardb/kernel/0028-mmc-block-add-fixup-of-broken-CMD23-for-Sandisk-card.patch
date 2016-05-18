@@ -1,0 +1,42 @@
+From c882ee0faedcf70cce7b746efc207d2dec295c88 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@freescale.com>
+Date: Fri, 10 Jul 2015 11:44:03 +0800
+Subject: [PATCH 028/146] mmc: block: add fixup of broken CMD23 for Sandisk
+ card
+
+Some Sandisk cards(such as "SDMB-32" and "SDM032" cards)
+can't support CMD23, and would generate CMD timeout. So add
+FIX-UP for these two types Sandisk cards.
+
+Error log:
+mmcblk0: timed out sending SET_BLOCK_COUNT command, card status 0x400900
+mmcblk0: timed out sending SET_BLOCK_COUNT command, card status 0x400900
+mmcblk0: timed out sending SET_BLOCK_COUNT command, card status 0x400900
+end_request: I/O error, dev mmcblk0, sector 0
+Buffer I/O error on device mmcblk0, logical block 0
+mmcblk0: timed out sending SET_BLOCK_COUNT command, card status 0x400900
+
+Signed-off-by: Yangbo Lu <yangbo.lu@freescale.com>
+Signed-off-by: Ulf Hansson <ulf.hansson@linaro.org>
+---
+ drivers/mmc/card/block.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/mmc/card/block.c b/drivers/mmc/card/block.c
+index 31d2627..44e3e6a 100644
+--- a/drivers/mmc/card/block.c
++++ b/drivers/mmc/card/block.c
+@@ -2395,6 +2395,10 @@ static const struct mmc_fixup blk_fixups[] =
+ 	 *
+ 	 * N.B. This doesn't affect SD cards.
+ 	 */
++	MMC_FIXUP("SDMB-32", CID_MANFID_SANDISK, CID_OEMID_ANY, add_quirk_mmc,
++		  MMC_QUIRK_BLK_NO_CMD23),
++	MMC_FIXUP("SDM032", CID_MANFID_SANDISK, CID_OEMID_ANY, add_quirk_mmc,
++		  MMC_QUIRK_BLK_NO_CMD23),
+ 	MMC_FIXUP("MMC08G", CID_MANFID_TOSHIBA, CID_OEMID_ANY, add_quirk_mmc,
+ 		  MMC_QUIRK_BLK_NO_CMD23),
+ 	MMC_FIXUP("MMC16G", CID_MANFID_TOSHIBA, CID_OEMID_ANY, add_quirk_mmc,
+-- 
+2.1.0.27.g96db324
+

@@ -10,14 +10,14 @@
 #
 
 CROSSTOOL_NG_DESC		= crosstool-NG
-CROSSTOOL_NG_VERSION		= 1.21.0
+CROSSTOOL_NG_VERSION		?= 1.21.0
 CROSSTOOL_NG_TARBALL		= crosstool-ng-$(CROSSTOOL_NG_VERSION).tar.xz
-CROSSTOOL_NG_URLS		+= $(ONIE_MIRROR) http://crosstool-ng.org/download/crosstool-ng
+CROSSTOOL_NG_URLS		+= $(ONIE_MIRROR) https://crosstool-ng.org/download/crosstool-ng
 CROSSTOOL_NG_BUILD_DIR		= $(BUILDDIR)/crosstool-ng
 CROSSTOOL_NG_STAMP_DIR		= $(CROSSTOOL_NG_BUILD_DIR)/stamp
 CROSSTOOL_NG_DIR		= $(CROSSTOOL_NG_BUILD_DIR)/crosstool-ng-$(CROSSTOOL_NG_VERSION)
 
-CROSSTOOL_NG_SRCPATCHDIR	= $(PATCHDIR)/crosstool-NG
+CROSSTOOL_NG_SRCPATCHDIR	= $(PATCHDIR)/crosstool-NG/$(CROSSTOOL_NG_VERSION)
 CROSSTOOL_NG_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/crosstool-ng-download
 CROSSTOOL_NG_SOURCE_STAMP	= $(CROSSTOOL_NG_STAMP_DIR)/crosstool-ng-source
 CROSSTOOL_NG_PATCH_STAMP	= $(CROSSTOOL_NG_STAMP_DIR)/crosstool-ng-patch
@@ -43,8 +43,10 @@ crosstool-ng-download: $(CROSSTOOL_NG_DOWNLOAD_STAMP)
 $(CROSSTOOL_NG_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Getting upstream $(CROSSTOOL_NG_DESC) ===="
-	$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
-		$(CROSSTOOL_NG_TARBALL) $(CROSSTOOL_NG_URLS)
+	$(Q) if [ $(awk 'BEGIN{ print "'$(CROSSTOOL_NG_VERSION)'"<="'1.22.0'" }') -eq 1 ]; then \
+			$(Q) $(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
+			$(CROSSTOOL_NG_TARBALL) $(CROSSTOOL_NG_URLS); \
+		 fi
 	$(Q) touch $@
 
 SOURCE += $(CROSSTOOL_NG_SOURCE_STAMP)
@@ -52,15 +54,23 @@ crosstool-ng-source: $(CROSSTOOL_NG_SOURCE_STAMP)
 $(CROSSTOOL_NG_SOURCE_STAMP): $(CROSSTOOL_NG_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream $(CROSSTOOL_NG_DESC) ===="
-	$(Q) $(SCRIPTDIR)/extract-package $(CROSSTOOL_NG_BUILD_DIR) $(DOWNLOADDIR)/$(CROSSTOOL_NG_TARBALL)
+	$(Q) if [ $(awk 'BEGIN{ print "'$(CROSSTOOL_NG_VERSION)'"<="'1.22.0'" }') -eq 1 ]; then \
+			$(Q) $(SCRIPTDIR)/extract-package $(CROSSTOOL_NG_BUILD_DIR) \
+			$(DOWNLOADDIR)/$(CROSSTOOL_NG_TARBALL); \
+	     else \
+			git clone https://github.com/crosstool-ng/crosstool-ng \
+			$(CROSSTOOL_NG_DIR); \
+	     fi	
 	$(Q) mkdir -p $(CROSSTOOL_NG_STAMP_DIR)
 	$(Q) touch $@
 
 crosstool-ng-patch: $(CROSSTOOL_NG_PATCH_STAMP)
-$(CROSSTOOL_NG_PATCH_STAMP): $(CROSSTOOL_NG_SRCPATCHDIR)/* $(CROSSTOOL_NG_SOURCE_STAMP)
+$(CROSSTOOL_NG_PATCH_STAMP): $(CROSSTOOL_NG_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Patching Crosstool_Ng ===="
-	$(Q) $(SCRIPTDIR)/apply-patch-series $(CROSSTOOL_NG_SRCPATCHDIR)/series $(CROSSTOOL_NG_DIR)
+	$(Q) if [ -a $(CROSSTOOL_NG_SRCPATCHDIR)/series]; then \
+			$(Q) $(SCRIPTDIR)/apply-patch-series $(CROSSTOOL_NG_SRCPATCHDIR)/series $(CROSSTOOL_NG_DIR); \
+	     fi
 	$(Q) touch $@
 
 crosstool-ng-configure: $(CROSSTOOL_NG_CONFIGURE_STAMP)

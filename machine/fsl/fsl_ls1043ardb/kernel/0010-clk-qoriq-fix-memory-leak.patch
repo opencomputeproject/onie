@@ -1,0 +1,36 @@
+From 11cf954c6162cb30b579f6f8e7ca537e909a2845 Mon Sep 17 00:00:00 2001
+From: Sudip Mukherjee <sudipm.mukherjee@gmail.com>
+Date: Fri, 15 Jan 2016 07:34:29 +0000
+Subject: [PATCH 010/146] clk: qoriq: fix memory leak
+
+If get_pll_div() fails we exited by returning NULL but we missed
+releasing hwc.
+
+Signed-off-by: Sudip Mukherjee <sudip@vectorindia.org>
+Fixes: 0dfc86b3173f ("clk: qoriq: Move chip-specific knowledge into driver")
+Signed-off-by: Stephen Boyd <sboyd@codeaurora.org>
+(cherry picked from commit 279104e3ade92b38198fdaead9e84bd80057693a)
+Signed-off-by: Scott Wood <scottwood@freescale.com>
+---
+ drivers/clk/clk-qoriq.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/clk/clk-qoriq.c b/drivers/clk/clk-qoriq.c
+index b189688..f8739d0 100644
+--- a/drivers/clk/clk-qoriq.c
++++ b/drivers/clk/clk-qoriq.c
+@@ -778,8 +778,10 @@ static struct clk * __init create_one_cmux(struct clockgen *cg, int idx)
+ 	 */
+ 	clksel = (cg_in(cg, hwc->reg) & CLKSEL_MASK) >> CLKSEL_SHIFT;
+ 	div = get_pll_div(cg, hwc, clksel);
+-	if (!div)
++	if (!div) {
++		kfree(hwc);
+ 		return NULL;
++	}
+ 
+ 	pct80_rate = clk_get_rate(div->clk);
+ 	pct80_rate *= 8;
+-- 
+2.1.0.27.g96db324
+
