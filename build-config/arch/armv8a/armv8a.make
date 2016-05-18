@@ -21,9 +21,9 @@ KERNEL_INSTALL_DEPS	+= $(KERNEL_VMLINUZ_INSTALL_STAMP) $(KERNEL_DTB_INSTALL_STAM
 #Toolchain Options
 CROSSTOOL_NG_VERSION ?= 1.22.1#Dummy version greater than current 1.22.0
 XTOOLS_CONFIG ?= $(ARCHDIR)/crosstool.armv8a.config
-GCC_VERSION ?= $(shell awk 'BEGIN { FS="\"|="; } /CT_CC_GCC_VERSION/ {print $$3;}' $(XTOOLS_CONFIG))
-XTOOLS_LIBC ?= $(shell awk 'BEGIN { FS="\"|="; } /(\W|^)CT_LIBC(\W|^)/ {print $$3;} ' $(XTOOLS_CONFIG))
-XTOOLS_LIBC_VERSION ?= $(shell awk 'BEGIN { FS="\"|="; } /(\W|^)CT_LIBC_VERSION(\W|^)/ {print $$3;} ' $(XTOOLS_CONFIG))
+GCC_VERSION ?= 5.3.0
+XTOOLS_LIBC ?= glibc
+XTOOLS_LIBC_VERSION ?= 2.23
 
 # This architecture requires U-Boot
 UBOOT_ENABLE = yes
