@@ -53,6 +53,9 @@ UEFI_ENABLE = yes
 # Enable building firmware updates
 FIRMWARE_UPDATE_ENABLE = yes
 
+# Do not modify Ethernet management MACs programmed by hypervisor.
+SKIP_ETHMGMT_MACS = yes
+
 #
 # Console parameters can be defined here (default values are in
 # build-config/arch/x86_64.make).
