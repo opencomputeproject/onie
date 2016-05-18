@@ -10,6 +10,9 @@
 # toolchain using crosstool-NG.
 #
 
+# Default GCC version to build for the toolchain
+GCC_VERSION ?= 4.9.2
+
 # Note: To help debug problems with building a toolchain enable these
 # options in $(XTOOLS_CONFIG)
 #
@@ -18,14 +21,9 @@
 #   CT_DEBUG_CT_SAVE_STEPS_GZIP=y
 #
 
-# Default GCC version to build for the toolchain
-GCC_VERSION ?= 4.9.2
-
-XTOOLS_LIBC ?= uClibc
-XTOOLS_LIBC_VERSION ?= 0.9.33.2
-XTOOLS_CONFIG		? = conf/crosstool/gcc-$(GCC_VERSION)/$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)/crosstool.$(ONIE_ARCH).config
+XTOOLS_CONFIG		= conf/crosstool/gcc-$(GCC_VERSION)/uClibc-$(UCLIBC_VERSION)/crosstool.$(ONIE_ARCH).config
 XTOOLS_ROOT		= $(BUILDDIR)/x-tools
-XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(LINUX_RELEASE)-$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)
+XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(LINUX_RELEASE)-u$(UCLIBC_VERSION)
 XTOOLS_DIR		= $(XTOOLS_ROOT)/$(XTOOLS_VERSION)
 XTOOLS_BUILD_DIR	= $(XTOOLS_DIR)/build
 XTOOLS_INSTALL_DIR	= $(XTOOLS_DIR)/install
@@ -46,7 +44,6 @@ PHONY += xtools xtools-prep xtools-download xtools-config \
 	 xtools-build xtools-clean xtools-distclean
 
 # List of common packages needed by crosstool-NG
-ifneq ($(GCC_VERSION),5.3.0)
 CT_NG_COMPONENTS		=	\
 	make-3.81.tar.bz2		\
 	m4-1.4.13.tar.xz		\
@@ -55,8 +52,7 @@ CT_NG_COMPONENTS		=	\
 	libelf-0.8.13.tar.gz		\
 	duma_2_5_15.tar.gz		\
 	libtool-2.2.6b.tar.lzma
-endif
-	
+
 ifeq ($(GCC_VERSION),4.9.2)
 CT_NG_COMPONENTS +=	\
 	cloog-0.18.1.tar.gz		\
@@ -82,8 +78,6 @@ CT_NG_COMPONENTS +=	\
         gdb-7.4.1.tar.bz2               \
         ltrace_0.5.3.orig.tar.gz        \
         strace-4.6.tar.xz
-else ifeq ($(GCC_VERSION),5.3.0)
-CT_NG_COMPONENTS +=
 else
   $(error CT_NG_COMPONENTS download: Unsupported GCC version: $(GCC_VERSION))
 endif

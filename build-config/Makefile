@@ -162,7 +162,7 @@ ifneq (,$(MAKECMDGOALS))
       $(error Unable to find valid machine configuration directory.)
     endif
     include $(MACHINEDIR)/machine.make
-    ARCHDIR ?= $(realpath ./arch/$(ONIE_ARCH))
+    ARCHDIR ?= $(realpath ./arch)
     include $(ARCHDIR)/$(ONIE_ARCH).make
   endif
 endif
