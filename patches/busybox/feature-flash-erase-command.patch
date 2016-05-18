@@ -8,12 +8,21 @@ Add flash_erase command.  Renamed flash_eraseall.c to flash_erase.c
 
 Removed flash_eraseall command as its functionality is covered with
 "flash_erase /dev/mtd2 0 0".
+---
+ include/applets.src.h      |    2 
+ miscutils/Config.src       |    9 +-
+ miscutils/Kbuild.src       |    2 
+ miscutils/flash_erase.c    |  253 ++++++++++++++++++++++++++++++++++++++++++++
+ miscutils/flash_eraseall.c |  207 ------------------------------------
+ 5 files changed, 260 insertions(+), 213 deletions(-)
+ create mode 100644 miscutils/flash_erase.c
+ delete mode 100644 miscutils/flash_eraseall.c
 
 diff --git a/include/applets.src.h b/include/applets.src.h
-index b13a3ec..566a2ce 100644
+index 267a8f3..b9df5a1 100644
 --- a/include/applets.src.h
 +++ b/include/applets.src.h
-@@ -149,7 +149,7 @@ IF_FDISK(APPLET(fdisk, BB_DIR_SBIN, BB_SUID_DROP))
+@@ -135,7 +135,7 @@ IF_FDISK(APPLET(fdisk, BB_DIR_SBIN, BB_SUID_DROP))
  IF_FGCONSOLE(APPLET(fgconsole, BB_DIR_USR_BIN, BB_SUID_DROP))
  /* Benefits from suid root: better access to /dev/BLOCKDEVs: */
  IF_FINDFS(APPLET(findfs, BB_DIR_SBIN, BB_SUID_MAYBE))
@@ -23,10 +32,10 @@ index b13a3ec..566a2ce 100644
  IF_FLASH_UNLOCK(APPLET_ODDNAME(flash_unlock, flash_lock_unlock, BB_DIR_USR_SBIN, BB_SUID_DROP, flash_unlock))
  IF_FLASHCP(APPLET(flashcp, BB_DIR_USR_SBIN, BB_SUID_DROP))
 diff --git a/miscutils/Config.src b/miscutils/Config.src
-index 5a69e2d..614b6cc 100644
+index e5bc701..4d6425f 100644
 --- a/miscutils/Config.src
 +++ b/miscutils/Config.src
-@@ -313,12 +313,13 @@ config FLASH_UNLOCK
+@@ -279,12 +279,13 @@ config FLASH_UNLOCK
  	  The flash_unlock binary from mtd-utils as of git head 5ec0c10d0. This
  	  utility unlocks part or all of the flash device.
  
@@ -45,10 +54,10 @@ index 5a69e2d..614b6cc 100644
  config IONICE
  	bool "ionice"
 diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 129a264..24162e7 100644
+index 25382f5..9177818 100644
 --- a/miscutils/Kbuild.src
 +++ b/miscutils/Kbuild.src
-@@ -20,7 +20,7 @@ lib-$(CONFIG_DEVMEM)      += devmem.o
+@@ -19,7 +19,7 @@ lib-$(CONFIG_DEVMEM)      += devmem.o
  lib-$(CONFIG_EJECT)       += eject.o
  lib-$(CONFIG_FBSPLASH)    += fbsplash.o
  lib-$(CONFIG_FLASHCP)     += flashcp.o
@@ -59,10 +68,10 @@ index 129a264..24162e7 100644
  lib-$(CONFIG_IONICE)      += ionice.o
 diff --git a/miscutils/flash_erase.c b/miscutils/flash_erase.c
 new file mode 100644
-index 0000000..7a83a57
+index 0000000..aec6d3c
 --- /dev/null
 +++ b/miscutils/flash_erase.c
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,253 @@
 +/* vi: set sw=4 ts=4: */
 +/* eraseall.c -- erase the whole of a MTD device
 + *
@@ -81,14 +90,22 @@ index 0000000..7a83a57
 + *
 + */
 +
++//usage:#define flash_eraseall_trivial_usage
++//usage:       "[-jNq] MTD_DEVICE"
++//usage:#define flash_eraseall_full_usage "\n\n"
++//usage:       "Erase an MTD device\n"
++//usage:     "\n	-j	Format the device for jffs2"
++//usage:     "\n	-N	Don't skip bad blocks"
++//usage:     "\n	-q	Don't display progress messages"
++
 +#include "libbb.h"
 +#include <mtd/mtd-user.h>
 +#include <linux/jffs2.h>
 +
 +#define OPTION_J  (1 << 0)
-+#define OPTION_Q  (1 << 1)
-+#define IS_NAND   (1 << 2)
-+#define BBTEST    (1 << 3)
++#define OPTION_N  (1 << 1)
++#define OPTION_Q  (1 << 2)
++#define IS_NAND   (1 << 3)
 +
 +/* mtd/jffs2-user.h used to have this atrocity:
 +extern int target_endian;
@@ -146,7 +163,7 @@ index 0000000..7a83a57
 +	unsigned start, n_blocks;
 +
 +	opt_complementary = "=3";
-+	flags = BBTEST | getopt32(argv, "jq");
++	flags = getopt32(argv, "jNq");
 +
 +	argc -= optind;
 +	argv += optind;
@@ -242,14 +259,14 @@ index 0000000..7a83a57
 +
 +	for (erase.start = start; erase.start < (start + n_erase_bytes);
 +	     erase.start += meminfo.erasesize) {
-+		if (flags & BBTEST) {
++		if (!(flags & OPTION_N)) {
 +			int ret;
 +			loff_t offset = erase.start;
 +
 +			ret = ioctl(fd, MEMGETBADBLOCK, &offset);
 +			if (ret > 0) {
 +				if (!(flags & OPTION_Q))
-+					bb_info_msg("\nSkipping bad block at 0x%08x", erase.start);
++					printf("\nSkipping bad block at 0x%08x\n", erase.start);
 +				continue;
 +			}
 +			if (ret < 0) {
@@ -257,7 +274,7 @@ index 0000000..7a83a57
 +				 * types e.g. NOR
 +				 */
 +				if (errno == EOPNOTSUPP) {
-+					flags &= ~BBTEST;
++					flags |= OPTION_N;
 +					if (flags & IS_NAND)
 +						bb_error_msg_and_die("bad block check not available");
 +				} else {
@@ -310,10 +327,10 @@ index 0000000..7a83a57
 +}
 diff --git a/miscutils/flash_eraseall.c b/miscutils/flash_eraseall.c
 deleted file mode 100644
-index 0598371..0000000
+index d95d214..0000000
 --- a/miscutils/flash_eraseall.c
 +++ /dev/null
-@@ -1,206 +0,0 @@
+@@ -1,207 +0,0 @@
 -/* vi: set sw=4 ts=4: */
 -/* eraseall.c -- erase the whole of a MTD device
 - *
@@ -327,10 +344,11 @@ index 0598371..0000000
 - */
 -
 -//usage:#define flash_eraseall_trivial_usage
--//usage:       "[-jq] MTD_DEVICE"
+-//usage:       "[-jNq] MTD_DEVICE"
 -//usage:#define flash_eraseall_full_usage "\n\n"
 -//usage:       "Erase an MTD device\n"
 -//usage:     "\n	-j	Format the device for jffs2"
+-//usage:     "\n	-N	Don't skip bad blocks"
 -//usage:     "\n	-q	Don't display progress messages"
 -
 -#include "libbb.h"
@@ -338,9 +356,9 @@ index 0598371..0000000
 -#include <linux/jffs2.h>
 -
 -#define OPTION_J  (1 << 0)
--#define OPTION_Q  (1 << 1)
--#define IS_NAND   (1 << 2)
--#define BBTEST    (1 << 3)
+-#define OPTION_N  (1 << 1)
+-#define OPTION_Q  (1 << 2)
+-#define IS_NAND   (1 << 3)
 -
 -/* mtd/jffs2-user.h used to have this atrocity:
 -extern int target_endian;
@@ -387,7 +405,7 @@ index 0598371..0000000
 -	char *mtd_name;
 -
 -	opt_complementary = "=1";
--	flags = BBTEST | getopt32(argv, "jq");
+-	flags = getopt32(argv, "jNq");
 -
 -	mtd_name = argv[optind];
 -	fd = xopen(mtd_name, O_RDWR);
@@ -455,14 +473,14 @@ index 0598371..0000000
 -
 -	for (erase.start = 0; erase.start < meminfo.size;
 -	     erase.start += meminfo.erasesize) {
--		if (flags & BBTEST) {
+-		if (!(flags & OPTION_N)) {
 -			int ret;
 -			loff_t offset = erase.start;
 -
 -			ret = ioctl(fd, MEMGETBADBLOCK, &offset);
 -			if (ret > 0) {
 -				if (!(flags & OPTION_Q))
--					bb_info_msg("\nSkipping bad block at 0x%08x", erase.start);
+-					printf("\nSkipping bad block at 0x%08x\n", erase.start);
 -				continue;
 -			}
 -			if (ret < 0) {
@@ -470,7 +488,7 @@ index 0598371..0000000
 -				 * types e.g. NOR
 -				 */
 -				if (errno == EOPNOTSUPP) {
--					flags &= ~BBTEST;
+-					flags |= OPTION_N;
 -					if (flags & IS_NAND)
 -						bb_error_msg_and_die("bad block check not available");
 -				} else {

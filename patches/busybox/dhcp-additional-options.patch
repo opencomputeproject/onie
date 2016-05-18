@@ -10,9 +10,13 @@ Enable the send/receive of additional DHCP options:
   DHCP_LOG_SERVER
   DHCP_WWW_SERVER
   DHCP_DEFAULT_URL
+---
+ networking/udhcp/common.c |   15 +++++++++++++--
+ networking/udhcp/dhcpc.c  |    4 ++++
+ 2 files changed, 17 insertions(+), 2 deletions(-)
 
 diff --git a/networking/udhcp/common.c b/networking/udhcp/common.c
-index ae0e0d3..552dbe1 100644
+index 0cf4dab..ad4522d 100644
 --- a/networking/udhcp/common.c
 +++ b/networking/udhcp/common.c
 @@ -26,7 +26,7 @@ const struct dhcp_optflag dhcp_optflags[] = {
@@ -32,7 +36,7 @@ index ae0e0d3..552dbe1 100644
  	{ OPTION_IP | OPTION_LIST                 , 0x2c }, /* DHCP_WINS_SERVER   */
  	{ OPTION_U32                              , 0x33 }, /* DHCP_LEASE_TIME    */
  	{ OPTION_IP                               , 0x36 }, /* DHCP_SERVER_ID     */
-@@ -51,18 +52,22 @@ const struct dhcp_optflag dhcp_optflags[] = {
+@@ -51,13 +52,16 @@ const struct dhcp_optflag dhcp_optflags[] = {
  //TODO: must be combined with 'sname' and 'file' handling:
  	{ OPTION_STRING_HOST                      , 0x42 }, /* DHCP_TFTP_SERVER_NAME */
  	{ OPTION_STRING                           , 0x43 }, /* DHCP_BOOT_FILE     */
@@ -49,13 +53,15 @@ index ae0e0d3..552dbe1 100644
  #if ENABLE_FEATURE_UDHCP_8021Q
  	{ OPTION_U16                              , 0x84 }, /* DHCP_VLAN_ID       */
  	{ OPTION_U8                               , 0x85 }, /* DHCP_VLAN_PRIORITY */
- #endif
+@@ -65,6 +69,7 @@ const struct dhcp_optflag dhcp_optflags[] = {
+ 	{ OPTION_STRING                           , 0xd1 }, /* DHCP_PXE_CONF_FILE */
+ 	{ OPTION_STRING                           , 0xd2 }, /* DHCP_PXE_PATH_PREFIX */
  	{ OPTION_6RD                              , 0xd4 }, /* DHCP_6RD           */
 +	{ OPTION_IP                               , 0x96 }, /* DHCP_TFTP_SERVER_IP */
  	{ OPTION_STATIC_ROUTES | OPTION_LIST      , 0xf9 }, /* DHCP_MS_STATIC_ROUTES */
  	{ OPTION_STRING                           , 0xfc }, /* DHCP_WPAD          */
  
-@@ -95,7 +100,7 @@ const char dhcp_option_strings[] ALIGN1 =
+@@ -97,7 +102,7 @@ const char dhcp_option_strings[] ALIGN1 =
  //	"timesrv" "\0"     /* DHCP_TIME_SERVER    */
  //	"namesrv" "\0"     /* DHCP_NAME_SERVER    */
  	"dns" "\0"         /* DHCP_DNS_SERVER     */
@@ -64,7 +70,7 @@ index ae0e0d3..552dbe1 100644
  //	"cookiesrv" "\0"   /* DHCP_COOKIE_SERVER  */
  	"lprsrv" "\0"      /* DHCP_LPR_SERVER     */
  	"hostname" "\0"    /* DHCP_HOST_NAME      */
-@@ -110,13 +115,16 @@ const char dhcp_option_strings[] ALIGN1 =
+@@ -112,13 +117,16 @@ const char dhcp_option_strings[] ALIGN1 =
  	"nisdomain" "\0"   /* DHCP_NIS_DOMAIN     */
  	"nissrv" "\0"      /* DHCP_NIS_SERVER     */
  	"ntpsrv" "\0"      /* DHCP_NTP_SERVER     */
@@ -81,7 +87,7 @@ index ae0e0d3..552dbe1 100644
  #if ENABLE_FEATURE_UDHCP_RFC3397
  	"search" "\0"      /* DHCP_DOMAIN_SEARCH  */
  // doesn't work in udhcpd.conf since OPTION_SIP_SERVERS
-@@ -124,11 +132,13 @@ const char dhcp_option_strings[] ALIGN1 =
+@@ -126,6 +134,7 @@ const char dhcp_option_strings[] ALIGN1 =
  	"sipsrv" "\0"      /* DHCP_SIP_SERVERS    */
  #endif
  	"staticroutes" "\0"/* DHCP_STATIC_ROUTES  */
@@ -89,13 +95,15 @@ index ae0e0d3..552dbe1 100644
  #if ENABLE_FEATURE_UDHCP_8021Q
  	"vlanid" "\0"      /* DHCP_VLAN_ID        */
  	"vlanpriority" "\0"/* DHCP_VLAN_PRIORITY  */
- #endif
+@@ -133,6 +142,7 @@ const char dhcp_option_strings[] ALIGN1 =
+ 	"pxeconffile" "\0" /* DHCP_PXE_CONF_FILE  */
+ 	"pxepathprefix" "\0" /* DHCP_PXE_PATH_PREFIX  */
  	"ip6rd" "\0"       /* DHCP_6RD            */
 +	"tftpsiaddr" "\0"  /* DHCP_TFTP_SERVER_IP */
  	"msstaticroutes""\0"/* DHCP_MS_STATIC_ROUTES */
  	"wpad" "\0"        /* DHCP_WPAD           */
  	;
-@@ -145,6 +155,7 @@ const uint8_t dhcp_option_lengths[] ALIGN1 = {
+@@ -149,6 +159,7 @@ const uint8_t dhcp_option_lengths[] ALIGN1 = {
  	[OPTION_IP] =      4,
  	[OPTION_IP_PAIR] = 8,
  //	[OPTION_BOOLEAN] = 1,
@@ -104,18 +112,18 @@ index ae0e0d3..552dbe1 100644
  	[OPTION_STRING_HOST] = 1,  /* ignored by udhcp_str2optset */
  #if ENABLE_FEATURE_UDHCP_RFC3397
 diff --git a/networking/udhcp/dhcpc.c b/networking/udhcp/dhcpc.c
-index ddb328d..3b3d087 100644
+index fc7b621..838c809 100644
 --- a/networking/udhcp/dhcpc.c
 +++ b/networking/udhcp/dhcpc.c
-@@ -100,6 +100,7 @@ static const uint8_t len_of_option_as_string[] = {
+@@ -114,6 +114,7 @@ static const uint8_t len_of_option_as_string[] ALIGN1 = {
  	[OPTION_IP_PAIR         ] = sizeof("255.255.255.255 ") * 2,
  	[OPTION_STATIC_ROUTES   ] = sizeof("255.255.255.255/32 255.255.255.255 "),
- 	[OPTION_6RD             ] = sizeof("32 128 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 255.255.255.255 "),
+ 	[OPTION_6RD             ] = sizeof("132 128 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 255.255.255.255 "),
 +	[OPTION_BIN             ] = 2,
  	[OPTION_STRING          ] = 1,
  	[OPTION_STRING_HOST     ] = 1,
  #if ENABLE_FEATURE_UDHCP_RFC3397
-@@ -240,6 +241,9 @@ static NOINLINE char *xmalloc_optname_optval(uint8_t *option, const struct dhcp_
+@@ -256,6 +257,9 @@ static NOINLINE char *xmalloc_optname_optval(uint8_t *option, const struct dhcp_
  			dest += sprintf(dest, type == OPTION_U32 ? "%lu" : "%ld", (unsigned long) ntohl(val_u32));
  			break;
  		}
