@@ -4,6 +4,7 @@
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #  Copyright (C) 2014 Nikolay Shopik <shopik@inblock.ru>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -13,17 +14,17 @@
 # This is a makefile fragment that defines the build of busybox
 #
 
-BUSYBOX_VERSION		= 1.20.2
+BUSYBOX_VERSION		= 1.25.1
 BUSYBOX_TARBALL		= busybox-$(BUSYBOX_VERSION).tar.bz2
-BUSYBOX_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.busybox.net/downloads
+BUSYBOX_TARBALL_URLS	+= $(ONIE_MIRROR) https://www.busybox.net/downloads
 BUSYBOX_BUILD_DIR	= $(MBUILDDIR)/busybox
 BUSYBOX_DIR		= $(BUSYBOX_BUILD_DIR)/busybox-$(BUSYBOX_VERSION)
-BUSYBOX_CONFIG		= conf/busybox.config
+BUSYBOX_CONFIG		?= conf/busybox.config
 
 BUSYBOX_SRCPATCHDIR	= $(PATCHDIR)/busybox
 BUSYBOX_PATCHDIR	= $(BUSYBOX_BUILD_DIR)/patch
 MACHINE_BUSYBOX_CONFDIR ?= $(MACHINEDIR)/busybox/conf
-BUSYBOX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/busybox-download
+BUSYBOX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/busybox-$(BUSYBOX_VERSION)-download
 BUSYBOX_SOURCE_STAMP	= $(STAMPDIR)/busybox-source
 BUSYBOX_PATCH_STAMP	= $(STAMPDIR)/busybox-patch
 BUSYBOX_BUILD_STAMP	= $(STAMPDIR)/busybox-build

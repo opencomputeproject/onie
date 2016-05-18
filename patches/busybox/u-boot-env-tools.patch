@@ -3,15 +3,24 @@ Add u-boot env tools, fw_printenv and fw_setenv.
 Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
 
 SPDX-License-Identifier:     GPL-2.0
+---
+ include/applets.src.h |    2 
+ include/fw_env.h      |   52 ++
+ miscutils/Config.src  |    7 
+ miscutils/Kbuild.src  |    1 
+ miscutils/fw_env.c    | 1259 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 1321 insertions(+)
+ create mode 100644 include/fw_env.h
+ create mode 100644 miscutils/fw_env.c
 
 diff --git a/include/applets.src.h b/include/applets.src.h
-index 252a060..b13a3ec 100644
+index 6e1b02f..caf3c82 100644
 --- a/include/applets.src.h
 +++ b/include/applets.src.h
-@@ -379,6 +379,8 @@ IF_TTY(APPLET(tty, BB_DIR_USR_BIN, BB_SUID_DROP))
+@@ -321,6 +321,8 @@ IF_TRUE(APPLET_NOFORK(true, true, BB_DIR_BIN, BB_SUID_DROP, true))
+ IF_TTY(APPLET(tty, BB_DIR_USR_BIN, BB_SUID_DROP))
  IF_TTYSIZE(APPLET(ttysize, BB_DIR_USR_BIN, BB_SUID_DROP))
  IF_TUNCTL(APPLET(tunctl, BB_DIR_SBIN, BB_SUID_DROP))
- IF_TUNE2FS(APPLET(tune2fs, BB_DIR_SBIN, BB_SUID_DROP))
 +IF_UBOOT_ENV(APPLET(fw_setenv, BB_DIR_USR_SBIN, BB_SUID_DROP))
 +IF_UBOOT_ENV(APPLET(fw_printenv, BB_DIR_USR_SBIN, BB_SUID_DROP))
  IF_UDHCPC(APPLET(udhcpc, BB_DIR_SBIN, BB_SUID_DROP))
@@ -76,10 +85,10 @@ index 0000000..ffec527
 +extern char *fw_getenv  (char *name);
 +extern int fw_setenv  (int argc, char *argv[]);
 diff --git a/miscutils/Config.src b/miscutils/Config.src
-index b9fc196..5a69e2d 100644
+index 06f1c52..6821736 100644
 --- a/miscutils/Config.src
 +++ b/miscutils/Config.src
-@@ -585,6 +585,13 @@ config TTYSIZE
+@@ -513,6 +513,13 @@ config TTYSIZE
  	  error, but returns default 80x24.
  	  Usage in shell scripts: width=`ttysize w`.
  
@@ -94,23 +103,22 @@ index b9fc196..5a69e2d 100644
  	bool "volname"
  	default y
 diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 8c49864..129a264 100644
+index 503f549..5d42ede 100644
 --- a/miscutils/Kbuild.src
 +++ b/miscutils/Kbuild.src
-@@ -45,6 +45,7 @@ lib-$(CONFIG_TASKSET)     += taskset.o
+@@ -47,5 +47,6 @@ lib-$(CONFIG_STRINGS)     += strings.o
  lib-$(CONFIG_TIME)        += time.o
  lib-$(CONFIG_TIMEOUT)     += timeout.o
  lib-$(CONFIG_TTYSIZE)     += ttysize.o
 +lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
  lib-$(CONFIG_VOLNAME)     += volname.o
- lib-$(CONFIG_WALL)        += wall.o
  lib-$(CONFIG_WATCHDOG)    += watchdog.o
 diff --git a/miscutils/fw_env.c b/miscutils/fw_env.c
 new file mode 100644
-index 0000000..08230fc
+index 0000000..f6f0d27
 --- /dev/null
 +++ b/miscutils/fw_env.c
-@@ -0,0 +1,1258 @@
+@@ -0,0 +1,1259 @@
 +/*
 + * u-boot flash environment variable get/set commands
 + *
@@ -140,6 +148,7 @@ index 0000000..08230fc
 + */
 +
 +#include "libbb.h"
++#include "common_bufsiz.h"
 +
 +#include <mtd/mtd-user.h>
 +#include "fw_env.h"
@@ -538,7 +547,7 @@ index 0000000..08230fc
 +		return -1;
 +	}
 +
-+	while (fgets(buf, sizeof(bb_common_bufsiz1), f)) {
++	while (fgets(buf, COMMON_BUFSIZE, f)) {
 +		// trim leading whitespace
 +		for (p = buf; *p && isspace(*p); p++);
 +
