@@ -19,7 +19,7 @@ endif
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
 # Open Compute Project IANA number
-# 
+# Wiwynn
 VENDOR_ID = 40092
 
 # Skip the i2ctools and the onie-syseeprom command for this platform
@@ -50,7 +50,7 @@ IPMITOOL_ENABLE = yes
 # build-config/arch/x86_64.make).
 # For example,
 # 
-CONSOLE_SPEED = 57600
+CONSOLE_SPEED = 115200
 CONSOLE_DEV = 1
 CONSOLE_FLAG = 1
 
