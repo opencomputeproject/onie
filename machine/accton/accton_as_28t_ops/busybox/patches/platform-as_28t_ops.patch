@@ -1,0 +1,38 @@
+Patches for Accton AS_28T_OPS
+
+diff --git a/libbb/xfuncs_printf.c b/libbb/xfuncs_printf.c
+index d8a42ba..c52d78d 100644
+--- a/libbb/xfuncs_printf.c
++++ b/libbb/xfuncs_printf.c
+@@ -515,7 +515,13 @@ int FAST_FUNC bb_xioctl(int fd, unsigned request, void *argp, const char *ioctl_
+ 
+ 	ret = ioctl(fd, request, argp);
+ 	if (ret < 0)
+-		bb_simple_perror_msg_and_die(ioctl_name);
++	{
++#include <mtd/mtd-user.h>
++		if (request == MEMERASE)
++			bb_simple_perror_msg(ioctl_name);
++		else
++			bb_simple_perror_msg_and_die(ioctl_name);
++	}
+ 	return ret;
+ }
+ #else
+diff --git a/miscutils/sys_eeprom_mtd.c b/miscutils/sys_eeprom_mtd.c
+index 119d77c..00efd88 100644
+--- a/miscutils/sys_eeprom_mtd.c
++++ b/miscutils/sys_eeprom_mtd.c
+@@ -122,5 +122,12 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 	return -1;
+     }
+ 
++#ifndef DEBUG
++    FILE *fp;
++    fp = fopen(SYS_EEPROM_MTD_DEVICE, "r");
++    fgetc(fp);
++    fclose(fp);
++#endif
++
+     return ret;
+ }
