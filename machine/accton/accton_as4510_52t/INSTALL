@@ -1,0 +1,89 @@
+====================================
+Installing ONIE on Accton AS4510_52T
+====================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/accton MACHINE=accton_as4510_52t all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/accton MACHINE=accton_as4510_52t all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r-- 3604480 May  7 11:38 onie-accton_as4510_52t-r0.bin
+
+Cross-Compiling the DEMO OS
+===========================
+
+To compile the demo OS first change directories to ``build-config``
+and then type ``"make MACHINEROOT=../machine/accton MACHINE=accton_as4510_52t demo"``.
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/accton MACHINE=accton_as4510_52t demo
+
+When complete, the demo OS installer is located in ``build/images``::
+
+  -rw-r--r-- 10486945 Jun 24 13:30 demo-installer-arm-accton_as4510_52t-r0.bin
+
+Installing the ONIE binaries
+============================
+
+Step 1 -- Put the ONIE files on a TFTP server
+---------------------------------------------
+
+The following directions assume the files are on the root of the TFTP
+server.
+
+Step 2 -- Install ONIE kernel (onie-accton_as4510_52t-r0.bin)
+-------------------------------------------------------------
+
+Copying the image down using TFTP and flash to the SPI flash::
+
+  => tftp onie-accton_as4510_52t-r0.bin
+  => sf probe 0
+  => sf erase 0 0x7f0000
+  Replace 0x7dce20 with size of onie-accton_as4510_52t-r0.bin
+  => sf write $fileaddr 0 $filesize
+
+Step 3 -- Configure Serial Console
+----------------------------------
+
+ONIE defaults the serial console baud rate to 115200.  You may need to
+adjust your terminal settings.
+
+Step 4 -- Restart The System
+----------------------------
+
+You can interrupt the boot process by pressing any key during the
+count down::
+
+  => reset
+
+After reboot for the first time, DDR ECC shmoo calculation will
+be performed for couple of minutes.
+
+Step 5 -- Set the ethernet mac address
+--------------------------------------
+
+After reboot, please set the ethaddr for eth0
+
+  => setenv ethaddr 44:38:39:00:98:00
+
+Step 6 -- Optional
+------------------
+
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this::
+
+  => setenv reboot_cmd rescue
+  => boot
