@@ -1,0 +1,248 @@
+Support for Accton AS_28T_OPS platform (ARM Cortex-A9 / Hurricane2) networking platform
+Baseline files sourced from Broadcom LDK 3.4.10
+
+diff --git a/arch/arm/boot/dts/accton_as_28t_ops.dts b/arch/arm/boot/dts/accton_as_28t_ops.dts
+new file mode 100644
+index 0000000..9be5adb
+--- /dev/null
++++ b/arch/arm/boot/dts/accton_as_28t_ops.dts
+@@ -0,0 +1,92 @@
++/*
++ * Accton AS_28T_OPS Device Tree Source
++ *
++ * Copyright 2015, Accton Technology Corporation.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *
++ */
++/dts-v1/;
++/include/ "helix4.dtsi"
++
++/ {
++    model = "accton,as_28t_ops";
++    compatible = "accton,as_28t_ops";
++
++    aliases {
++        serial0 = &uart0;
++    };
++
++    memory {
++        reg = <0x60000000 0x7f000000>;
++    };
++
++    cpus {
++        #address-cells = <1>;
++        #size-cells = <0>;
++
++        cpu@0 {
++            device_type = "cpu";
++            compatible = "arm,cortex-a9";
++            next-level-cache = <&L2>;
++            reg = <0x00>;
++        };
++        cpu@1 {
++            device_type = "cpu";
++            compatible = "arm,cortex-a9";
++            next-level-cache = <&L2>;
++            reg = <0x01>;
++        };
++    };
++
++    localbus@1e000000 {
++        #address-cells = <0x2>;
++        #size-cells = <0x1>;
++        compatible = "simple-bus";
++        ranges = <0x0 0x0 0x1e000000 0x02000000>;
++
++        flash@0,0 {
++            #address-cells = <0x1>;
++            #size-cells = <0x1>;
++            compatible = "cfi-flash";
++            reg = <0x0 0x0 0x00800000>;
++            bank-width = <0x1>;
++            device-width = <0x1>;
++
++            partition@0 {
++                /* uboot - 832KB*/
++                reg = <0x00000000 0x000d0000>;
++                label = "uboot";
++            };
++            partition@1 {
++                /* shmoo - 64KB*/
++                reg = <0x000d0000 0x00010000>;
++                label = "shmoo";
++            };
++            partition@2 {
++                /* uboot-env - 64KB */
++                reg = <0x000e0000 0x00010000>;
++                label = "uboot-env";
++                env_size = <0x02000>;
++            };
++            partition@3 {
++                /* onie - 7MB */
++                reg = <0x000f0000 0x00700000>;
++                label = "onie";
++            };
++            partition@4 {
++                /* board_eeprom - 64KB */
++                reg = <0x007f0000 0x00010000>;
++                label = "board_eeprom";
++            };
++            partition@5 {
++                /* diag - 24MB */
++                reg = <0x00800000 0x01800000>;
++                label = "diag";
++            };
++        };
++    };
++};
+diff --git a/arch/arm/mach-iproc/board_bu.c b/arch/arm/mach-iproc/board_bu.c
+index b45588d..6142fdb 100644
+--- a/arch/arm/mach-iproc/board_bu.c
++++ b/arch/arm/mach-iproc/board_bu.c
+@@ -1056,6 +1056,25 @@ MACHINE_START(IPROC, "Broadcom iProc")
+ 	.init_machine = board_init,
+ MACHINE_END
+ 
++static const char * hurricane2_dt_board_compat[] = {
++    "accton,as_28t_ops",
++    NULL
++};
++
++DT_MACHINE_START(HURRICANE2_DT, "Broadcom Hurricane2 (Flattened Device Tree)")
++	.map_io     = board_map_io,
++	.init_early = iproc_init_early,
++	.init_irq   = iproc_init_irq,
++	.handle_irq     = gic_handle_irq,
++	.timer      = &board_timer,
++	.init_machine   = board_init,
++	.dt_compat  = hurricane2_dt_board_compat,
++MACHINE_END
++
++static const char * helix4_dt_board_compat[] = {
++    NULL
++};
++
+ DT_MACHINE_START(HELIX4_DT, "Broadcom Helix4 (Flattened Device Tree)")
+ 	.map_io     = board_map_io,
+ 	.init_early = iproc_init_early,
+diff --git a/arch/arm/mach-iproc/flash.c b/arch/arm/mach-iproc/flash.c
+index 5eaf3ec..17f38f9 100644
+--- a/arch/arm/mach-iproc/flash.c
++++ b/arch/arm/mach-iproc/flash.c
+@@ -44,22 +44,32 @@
+ #if defined(CONFIG_IPROC_QSPI) || defined(CONFIG_IPROC_QSPI_MODULE)
+ static struct mtd_partition sflash_partition_map[] = {
+     {
+-        .name = "boot",
++        .name = "uboot",
+         .offset = 0x00000000,
+-        .size = 640 * 1024,
++        .size = 832 * 1024,
+     },
+     {
+-        .name = "env",
++        .name = "shmoo",
+         .offset = MTDPART_OFS_APPEND,
+-        .size = 384 * 1024,
++        .size = 64 * 1024,
+     },
+     {
+-        .name = "system",
++        .name = "uboot-env",
+         .offset = MTDPART_OFS_APPEND,
+-        .size = 15 * 1024 * 1024,
++        .size = 64 * 1024,
+     },
+     {
+-        .name = "rootfs",
++        .name = "onie",
++        .offset = MTDPART_OFS_APPEND,
++        .size = 7 * 1024 * 1024,
++    },
++    {
++        .name = "board_eeprom",
++        .offset = MTDPART_OFS_APPEND,
++        .size = 64 * 1024,
++    },
++    {
++        .name = "diag",
+         .offset = MTDPART_OFS_APPEND,
+         .size = MTDPART_SIZ_FULL,
+     },
+@@ -69,28 +79,8 @@ static struct mtd_partition sflash_partition_map[] = {
+ #if defined(CONFIG_IPROC_MTD_NAND) || defined(CONFIG_IPROC_MTD_NAND_MODULE)
+ static struct mtd_partition nand_partition_map[] = {
+     {
+-        .name = "nboot",
++        .name = "open",
+         .offset = 0x00000000,
+-        .size = 2 * 1024 * 1024,
+-    },
+-    {
+-        .name = "nenv",
+-        .offset = MTDPART_OFS_APPEND,
+-        .size = 4 * 1024 * 1024,
+-    },
+-    {
+-        .name = "nsystem",
+-        .offset = MTDPART_OFS_APPEND,
+-        .size = 10 * 1024 * 1024,
+-    },
+-    {
+-        .name = "nrootfs",
+-        .offset = MTDPART_OFS_APPEND,
+-        .size = 48 * 1024 * 1024,
+-    },
+-    {
+-        .name = "ncustfs",
+-        .offset = MTDPART_OFS_APPEND,
+         .size = MTDPART_SIZ_FULL,
+     },
+ };
+diff --git a/drivers/bcmdrivers/gmac/src/et/sys/etcgmac.c b/drivers/bcmdrivers/gmac/src/et/sys/etcgmac.c
+index cf16543..071c991 100755
+--- a/drivers/bcmdrivers/gmac/src/et/sys/etcgmac.c
++++ b/drivers/bcmdrivers/gmac/src/et/sys/etcgmac.c
+@@ -428,6 +428,7 @@ chipattach(etc_info_t *etc, void *osh, void *regsva)
+ 	} else {
+ 		etc->phyaddr = bcm_atoi(var) & EPHY_MASK;
+ 	}
++	etc->phyaddr = 0x18;
+ 	printf("et%d: chipattach: phyaddr(0x%x)\n", etc->unit, etc->phyaddr);
+ 
+ 	/* nvram says no phy is present */
+@@ -2273,7 +2274,7 @@ chipphyrd(ch_t *ch, uint phyaddr, uint reg)
+ 	uint32 addr, bank;
+ 	uint16 tmp16;
+ 
+-	addr = phyaddr&0xf;
++	addr = phyaddr&0x1f;
+ 	bank = (phyaddr&0x1f00)>>8;
+ 
+ 	phy5221_rd_reg(ch->etc->unit, addr, bank, reg, &tmp16);
+@@ -2336,7 +2337,7 @@ chipphywr(ch_t *ch, uint phyaddr, uint reg, uint16 v)
+ #if defined(CONFIG_MACH_HR2)
+ 	uint32 addr, bank;
+ 
+-	addr = phyaddr&0xf;
++	addr = phyaddr&0x1f;
+ 	bank = (phyaddr&0x1f00)>>8;
+ 
+ 	phy5221_wr_reg(ch->etc->unit, addr, bank, reg, &v);
+diff --git a/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c b/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
+index aa8c3bd..83e7c53 100755
+--- a/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
++++ b/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
+@@ -100,6 +100,8 @@ static nvram_t fake_nvram[] = {
+ #define CONFIG_NAND_BASE		0x1c000000
+ #if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
+ #define CONFIG_ENV_OFFSET		0xa0000		/* 30000-b0000 - use last 10000 for env */
++#elif defined(CONFIG_MACH_HR2)
++#define CONFIG_ENV_OFFSET		0xe0000		/* e0000-effff - use 10000 for env */
+ #else
+ #define CONFIG_ENV_OFFSET		0xc0000		/* 30000-b0000 - use last 10000 for env */
+ #endif
