@@ -12,11 +12,28 @@ When this situation is detected the compiled in default environment is
 written to the flash, thus making sure the flash contains an
 environment with a valid CRC.
 
+diff --git a/arch/arm/lib/board.c b/arch/arm/lib/board.c
+old mode 100644
+new mode 100755
+index 109a1ac..c32b692
+--- a/arch/arm/lib/board.c
++++ b/arch/arm/lib/board.c
+@@ -622,6 +622,10 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ #endif
+ #endif
+ 
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++    env_write_default_if_crc_bad();
++#endif
++
+ #ifdef CONFIG_POST
+ 	post_run(NULL, POST_RAM | post_bootmode_get(0));
+ #endif
 diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
-index 6a7bf4b..079c693 100644
+index 07feaf5..7728ab8 100644
 --- a/arch/powerpc/lib/board.c
 +++ b/arch/powerpc/lib/board.c
-@@ -1003,6 +1003,11 @@ void board_init_r(gd_t *id, ulong dest_addr)
+@@ -1010,6 +1010,11 @@ void board_init_r(gd_t *id, ulong dest_addr)
  	last_stage_init();
  #endif
  
@@ -29,10 +46,10 @@ index 6a7bf4b..079c693 100644
  	WATCHDOG_RESET();
  	bedbug_init();
 diff --git a/common/env_common.c b/common/env_common.c
-index 906b41f..df0f1ba 100644
+index 57221ef..d6162a4 100644
 --- a/common/env_common.c
 +++ b/common/env_common.c
-@@ -240,3 +240,24 @@ int env_complete(char *var, int maxv, char *cmdv[], int bufsz, char *buf)
+@@ -314,3 +314,24 @@ int env_complete(char *var, int maxv, char *cmdv[], int bufsz, char *buf)
  	return found;
  }
  #endif
@@ -57,18 +74,3 @@ index 906b41f..df0f1ba 100644
 +	}
 +}
 +#endif
-#diff --git a/include/environment.h b/include/environment.h
-#index e64b43d..82e1c0d 100644
-#--- a/include/environment.h
-#+++ b/include/environment.h
-#@@ -193,6 +193,10 @@ int set_default_vars(int nvars, char * const vars[]);
-# /* Import from binary representation into hash table */
-# int env_import(const char *buf, int check);
-# 
-#+#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
-#+void env_write_default_if_crc_bad(void);
-#+#endif
-#+
-# #endif /* DO_DEPS_ONLY */
-# 
-# #endif /* _ENVIRONMENT_H_ */
