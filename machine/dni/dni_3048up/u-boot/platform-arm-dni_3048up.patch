@@ -788,288 +788,11 @@ index 78e85b7..fefca71 100755
  extern int is_shmoo_data_valid(void);
  extern void save_shmoo_to_flash(void);
  
-diff --git a/arch/arm/lib/board.c b/arch/arm/lib/board.c
-index 33e7098..747d9bf 100755
---- a/arch/arm/lib/board.c
-+++ b/arch/arm/lib/board.c
-@@ -848,6 +848,15 @@ void board_init_r(gd_t *id, ulong dest_addr)
- 	/* initialize environment */
- 	env_relocate();
- 
-+#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET) || \
-+    defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
-+    mac_read_from_eeprom();
-+#endif
-+
-+#ifdef CONFIG_POPULATE_SERIAL_NUMBER
-+    populate_serial_number();
-+#endif
-+
- #if defined(CONFIG_CMD_PCI) || defined(CONFIG_PCI)
- 	arm_pci_init();
- #endif
-@@ -951,6 +960,9 @@ void board_init_r(gd_t *id, ulong dest_addr)
- #endif
- #endif
- 
-+#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
-+    env_write_default_if_crc_bad();
-+#endif
- 
- #if defined(CONFIG_PRAM) || defined(CONFIG_LOGBUFFER)
- 	/*
-@@ -975,8 +987,8 @@ void board_init_r(gd_t *id, ulong dest_addr)
- 	}
- #endif
- 
--    printf("========== relocate address: 0x%lx, offset 0x%lx ==========\n",
--    		id->relocaddr, id->relocaddr - 0x1e000000);
-+/*    printf("========== relocate address: 0x%lx, offset 0x%lx ==========\n",
-+    		id->relocaddr, id->relocaddr - 0x1e000000);*/
- 
- 
- 	/* main_loop() can return to retry autoboot, if so just run it again. */
-diff --git a/arch/arm/lib/bootm.c b/arch/arm/lib/bootm.c
-old mode 100644
-new mode 100755
-index d92e57d..2667db2
---- a/arch/arm/lib/bootm.c
-+++ b/arch/arm/lib/bootm.c
-@@ -262,6 +262,11 @@ static int create_fdt(bootm_headers_t *images)
- 	ft_board_setup(*of_flat_tree, gd->bd);
- #endif
- 
-+#if defined(CONFIG_FDT_ENV_SIZE) && defined(CONFIG_ENV_SIZE)
-+		do_fixup_by_prop_u32(*of_flat_tree, "label", "uboot-env", 10,
-+				     "env_size", CONFIG_ENV_SIZE, 1);
-+#endif
-+
- 	return 0;
- }
- #endif
-diff --git a/board/broadcom/bcm95634x/bcm95634x.c b/board/broadcom/bcm95634x/bcm95634x.c
-index a1d3cc9..6e6c553 100755
---- a/board/broadcom/bcm95634x/bcm95634x.c
-+++ b/board/broadcom/bcm95634x/bcm95634x.c
-@@ -10,12 +10,16 @@
- #include "asm/iproc/reg_utils.h"
- #include "asm/iproc/iproc_common.h"
- 
-+#include "iproc_i2c.h"
-+
- DECLARE_GLOBAL_DATA_PTR;
- 
- extern int bcmiproc_eth_register(u8 dev_num);
- extern void iproc_save_shmoo_values(void);
- extern void bcmiproc_serdes_init_early(void);
- 
-+extern char env_in_flash;
-+
- /* Returns core voltage in milli volts mV */
- /* Applicable only to core voltage ADC on Helix4 SVK */
- int get_core_voltage_adc(uint32_t *coreV) {
-@@ -208,6 +212,97 @@ int misc_init_r (void)
-     return(0);
- }
- 
-+#define  RETRY_COUNT         3
-+/* Refer to SMB211 VOUT_COMMAND */
-+int read_vrm(uchar *voltageReq, int retryCount ) {
-+  int i = 0;
-+  while (i < retryCount) {
-+    *voltageReq = 0x0;
-+    if (i2c_read((0x40>>1), 0x21, 1, voltageReq, 1) == 0) {
-+      break;
-+    }
-+    udelay(500); /* Wait for 0.5 msec */
-+    i++;/* retry */
-+  }
-+  return i;
-+}
-+
-+/* Refer to SMB211 VOUT_COMMAND */
-+int write_vrm(uchar *voltageReq, int retryCount ) {
-+  int i = 0;
-+
-+  while (i < retryCount) {
-+    if (i2c_write((0x40>>1), 0x21, 1, voltageReq, 1) == 0) {
-+      break;
-+    }
-+    udelay(500); /* Wait for 0.5 msec */
-+    i++;/* retry */
-+  }
-+  return i;
-+}
-+
-+void power_down() {
-+}
-+
-+/* Refer to SMB211 VOUT_COMMAND */
-+int set_core_voltage_out(uchar voltageReq) {
-+#define  MAX_STEPS          20   /* Covers a range of 200mV from 800mV to 1000mV in 10mV steps */
-+#define  MAX_VOLTAGE     (0x64)  /* 1000mV */
-+#define  MIN_VOLTAGE     (0x50)  /* 800mV  */
-+#define  DEFAULT_VOLTAGE (0x64)  /* 1000mV as defined by Dauntless HW Spec */
-+   uint32_t steps = 0, retry = 0, fail = 0;
-+   int      stepUnit, rv;
-+   uchar    buffer, startVal, finalVal;
-+
-+   finalVal = voltageReq;
-+   /* Establish access to the I2C attached CPLD */
-+   /* Read current voltage setting - can be different from coldstart value when performing soft reboot */
-+   startVal = 0x0;
-+   rv = read_vrm(&startVal, RETRY_COUNT);
-+   /* If read value is out of range perform protective shutdown */
-+   if (rv < RETRY_COUNT && (startVal < MIN_VOLTAGE || startVal > MAX_VOLTAGE)) {
-+      printf("\nDetected Voltage(0x%x) above ROV. Performing protective power down! \n", startVal);
-+      power_down();
-+      return -1;
-+   } else if (rv == RETRY_COUNT) {
-+      printf("\nFailed to detect Initial Voltage. Performing protective power down! \n");
-+      power_down();
-+      return -1;
-+   }
-+
-+   printf("VOUT Init: 0x%x ", startVal);
-+   if (startVal == finalVal) {
-+     /* No change in voltage required */
-+     printf("VOUT Set: 0x%x \n", finalVal);
-+     return 0;
-+   }
-+   stepUnit = (startVal < finalVal) ? 1 : -1;
-+
-+   /* Step through intermediate voltages to reach intended voltage */
-+   buffer = startVal;
-+   do {
-+        buffer = buffer + stepUnit;
-+        steps++;
-+        if (write_vrm(&buffer, RETRY_COUNT) >= RETRY_COUNT) {
-+           fail++;
-+        }
-+   } while(buffer != finalVal && steps < MAX_STEPS);
-+
-+   /* Read back set voltage for confirmation */
-+   buffer = 0x0;
-+   rv = read_vrm(&buffer, RETRY_COUNT);
-+   if (rv < RETRY_COUNT && buffer == finalVal) {
-+     /* Read voltage success and equals intended final value */
-+     printf("VOUT Set: 0x%x Steps: %d Fail: %d\n", buffer, steps, fail);
-+   } else {
-+     /* Failures encountered during single stepping voltages. Power down */
-+     printf("Failed to set voltage. Steps: %d Fail: %d. Performing protective power down! \n", steps, fail);
-+     power_down();
-+     return -1;
-+   }
-+   return 0;
-+}
-+
- /*****************Helix4 SKUs *************
- Device	Part Number	Frequency
- FireScout	56548	315MHz
-@@ -235,6 +330,15 @@ int dram_init (void)
- 	uint32_t sku_id, avs, coreV_req, coreV;
- 	int status;
- 
-+        uchar outputVoltage[8] = {  0x64,   /* 1.0000v */ /* On Dauntless this is cold start value */
-+                                    0x5f,   /* 0.9500v */
-+                                    0x5a,   /* 0.9000v */
-+                                    0x55,   /* 0.8500v */
-+                                    0x50,   /* 0.8000v */
-+                                    0xff,   /* reserved*/
-+                                    0xff,   /* reserved*/
-+                                    0xff};  /* reserved*/
-+
- 	/* init serdes early */
- 	bcmiproc_serdes_init_early();
- 
-@@ -247,10 +351,16 @@ int dram_init (void)
- 	cmicd_init_soc();
- 	avs = cmicd_schan_read_top(TOP_AVS_SEL_REG) & 0x07;
- 	/* AVS 0 -> 1.00V, 1 -> 0.95V, 2 -> 0.90V, 3 -> 0.85V, 4 -> 0.80V */
--	coreV_req = 1000 - (avs * 50); 
--	if(coreV_req < 900)
--		coreV_req = 900;
- 	printf("AVS: 0x%x\n", avs);
-+
-+	i2c_init(I2C_SPEED_100KHz, 0xff);
-+	i2c_set_bus_num(0);
-+	
-+	if (avs == 0 || avs == 0x01) { /* Only certain values 1.0V and 0.95V are supported by HX4
-+                                          check outputVoltage map */
-+           set_core_voltage_out(outputVoltage[avs]);
-+	}
-+#if 0
- 	status = set_smbus_mux(0);
- 	if(status != 0) {
- 		printf("Error: in set_smbus_mux\n");
-@@ -269,6 +379,7 @@ int dram_init (void)
- 		return(status);
- 	}
- 	printf("Core Voltage set to: %d mV\n", coreV);
-+#endif
- 
- 	ddr_init2();
- #else
-@@ -334,14 +445,53 @@ int board_late_init (void)
- #endif
- 
- 	linux_usbh_init();
-+
-+#ifdef CONFIG_POPULATE_SERIAL_NUMBER
-+	populate_serial_number ();
-+#endif
-+
-+#ifdef CONFIG_SYS_EEPROM_LOAD_ENV_MAC
-+	mac_read_from_eeprom ();
-+#endif
-+ 
-+	{
-+		int need_save = 0;
-+	if (!getenv ("ver")) {
-+		run_command ("env default -f ver", 0);
-+		need_save = 1;
-+	}
-+	if (!getenv ("onie_bootcmd")) {
-+		run_command ("env default -f onie_bootcmd", 0);
-+		need_save = 1;
-+	}
-+	if (!getenv("active")) {
-+		run_command ("setenv active image1", 0);
-+		need_save = 1;
-+	}
-+
-+	if (!env_in_flash) need_save = 1;
-+
-+	if (need_save) {
-+		run_command ("saveenv", 0);
-+	}
-+
-+	if (!getenv("ethaddr")) {
-+		/* Do not save to nenv */
-+		run_command ("setenv bootdelay 1", 0);
-+		run_command ("setenv bootcmd \"echo \"!!!!!No Mac Address, Run MFG Diags! Use sys_eeprom to add it\"", 0);
-+	}
-+
-+	}
-+
- 	return status;
- }
- 
- int board_eth_init(bd_t *bis)
- {
- 	int rc = -1;
-+
- #ifdef CONFIG_BCMIPROC_ETH
--	printf("Registering eth\n");
-+	//printf("Registering eth\n");
- 	rc = bcmiproc_eth_register(0);
- #endif
- 	return rc;
-diff --git a/board/broadcom/dni_34xx/Makefile b/board/broadcom/dni_34xx/Makefile
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/Makefile b/board/broadcom/dni_3048up/Makefile
+new file mode 100644
 index 0000000..ba09d5e
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/Makefile
++++ b/board/broadcom/dni_3048up/Makefile
 @@ -0,0 +1,28 @@
 +include $(TOPDIR)/config.mk
 +
@@ -1099,11 +822,11 @@ index 0000000..ba09d5e
 +sinclude $(obj).depend
 +
 +#########################################################################
-diff --git a/board/broadcom/dni_34xx/config.mk b/board/broadcom/dni_34xx/config.mk
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/config.mk b/board/broadcom/dni_3048up/config.mk
+new file mode 100644
 index 0000000..98845cc
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/config.mk
++++ b/board/broadcom/dni_3048up/config.mk
 @@ -0,0 +1,19 @@
 +ifdef CONFIG_NAND_IPROC_BOOT
 +CONFIG_SYS_TEXT_BASE = 0x1C000000
@@ -1124,11 +847,11 @@ index 0000000..98845cc
 +endif
 +
 +#PLATFORM_RELFLAGS += -DSVN_REVISION=' " $(SVN_REV)"'
-diff --git a/board/broadcom/dni_34xx/ddr1066.txt.array b/board/broadcom/dni_34xx/ddr1066.txt.array
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/ddr1066.txt.array b/board/broadcom/dni_3048up/ddr1066.txt.array
+new file mode 100644
 index 0000000..3f95cc8
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/ddr1066.txt.array
++++ b/board/broadcom/dni_3048up/ddr1066.txt.array
 @@ -0,0 +1,215 @@
 +array1 = { 
 +	14, 00000001,
@@ -1345,11 +1068,11 @@ index 0000000..3f95cc8
 +	216, 00002020,
 +	217, 00000000,
 +	0xffffffff};
-diff --git a/board/broadcom/dni_34xx/ddr1333.txt.array b/board/broadcom/dni_34xx/ddr1333.txt.array
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/ddr1333.txt.array b/board/broadcom/dni_3048up/ddr1333.txt.array
+new file mode 100644
 index 0000000..495cf3d
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/ddr1333.txt.array
++++ b/board/broadcom/dni_3048up/ddr1333.txt.array
 @@ -0,0 +1,218 @@
 +array1 = { 
 +	14, 0x00000001,
@@ -1569,11 +1292,11 @@ index 0000000..495cf3d
 +	217, 0x00000000,
 +	0xffffffff
 +};
-diff --git a/board/broadcom/dni_34xx/ddr1600.txt.array b/board/broadcom/dni_34xx/ddr1600.txt.array
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/ddr1600.txt.array b/board/broadcom/dni_3048up/ddr1600.txt.array
+new file mode 100644
 index 0000000..5042d63
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/ddr1600.txt.array
++++ b/board/broadcom/dni_3048up/ddr1600.txt.array
 @@ -0,0 +1,215 @@
 +array1 = { 
 +	14, 00000001,
@@ -1790,11 +1513,11 @@ index 0000000..5042d63
 +	216, 00002727,
 +	217, 00000000,
 +	0xffffffff};
-diff --git a/board/broadcom/dni_34xx/ddr667.txt.array b/board/broadcom/dni_34xx/ddr667.txt.array
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/ddr667.txt.array b/board/broadcom/dni_3048up/ddr667.txt.array
+new file mode 100644
 index 0000000..7007298
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/ddr667.txt.array
++++ b/board/broadcom/dni_3048up/ddr667.txt.array
 @@ -0,0 +1,215 @@
 +array1 = { 
 +	14, 00000001,
@@ -2011,11 +1734,11 @@ index 0000000..7007298
 +	216, 00001a1a,
 +	217, 00000000,
 +	0xffffffff};
-diff --git a/board/broadcom/dni_34xx/ddr800.txt.array b/board/broadcom/dni_34xx/ddr800.txt.array
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/ddr800.txt.array b/board/broadcom/dni_3048up/ddr800.txt.array
+new file mode 100644
 index 0000000..c4bdeb8
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/ddr800.txt.array
++++ b/board/broadcom/dni_3048up/ddr800.txt.array
 @@ -0,0 +1,215 @@
 +array1 = { 
 +	14, 00000001,
@@ -2232,11 +1955,11 @@ index 0000000..c4bdeb8
 +	216, 00001c1c,
 +	217, 00000000,
 +	0xffffffff};
-diff --git a/board/broadcom/dni_34xx/ddr_init_table.c b/board/broadcom/dni_34xx/ddr_init_table.c
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/ddr_init_table.c b/board/broadcom/dni_3048up/ddr_init_table.c
+new file mode 100644
 index 0000000..5bf66ac
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/ddr_init_table.c
++++ b/board/broadcom/dni_3048up/ddr_init_table.c
 @@ -0,0 +1,1412 @@
 +/*
 + * $Copyright Open Broadcom Corporation$ 
@@ -3651,11 +3374,11 @@ index 0000000..5bf66ac
 +		0xffffffff
 +};
 \ No newline at end of file
-diff --git a/board/broadcom/dni_34xx/ddrsim2hex_hx4.pl b/board/broadcom/dni_34xx/ddrsim2hex_hx4.pl
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/ddrsim2hex_hx4.pl b/board/broadcom/dni_3048up/ddrsim2hex_hx4.pl
+new file mode 100644
 index 0000000..c6672e4
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/ddrsim2hex_hx4.pl
++++ b/board/broadcom/dni_3048up/ddrsim2hex_hx4.pl
 @@ -0,0 +1,41 @@
 +my $in = $ARGV[0];
 +my $speed = $ARGV[1];
@@ -3698,11 +3421,11 @@ index 0000000..c6672e4
 +close($F);
 +
 +close($FF);
-diff --git a/board/broadcom/dni_34xx/dni_34xx.c b/board/broadcom/dni_34xx/dni_34xx.c
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/dni_3048up.c b/board/broadcom/dni_3048up/dni_3048up.c
+new file mode 100644
 index 0000000..33c2e70
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/dni_34xx.c
++++ b/board/broadcom/dni_3048up/dni_3048up.c
 @@ -0,0 +1,379 @@
 +/*
 + * $Copyright Open Broadcom Corporation$ 
@@ -4083,11 +3806,11 @@ index 0000000..33c2e70
 +
 +}
 +#endif
-diff --git a/board/broadcom/dni_34xx/mt47h128m16/ddr_reggen2hex_hx4.pl b/board/broadcom/dni_34xx/mt47h128m16/ddr_reggen2hex_hx4.pl
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/mt47h128m16/ddr_reggen2hex_hx4.pl b/board/broadcom/dni_3048up/mt47h128m16/ddr_reggen2hex_hx4.pl
+new file mode 100644
 index 0000000..c4e8526
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/mt47h128m16/ddr_reggen2hex_hx4.pl
++++ b/board/broadcom/dni_3048up/mt47h128m16/ddr_reggen2hex_hx4.pl
 @@ -0,0 +1,42 @@
 +my $in = $ARGV[0];
 +my $speed = $ARGV[1];
@@ -4131,11 +3854,11 @@ index 0000000..c4e8526
 +close($F);
 +
 +close($FF);
-diff --git a/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_1066 b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_1066
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_1066 b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_1066
+new file mode 100644
 index 0000000..a156755
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_1066
++++ b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_1066
 @@ -0,0 +1,218 @@
 +#define               DENALI_CTL_00_DATA 0x00000400 // VERSION:RD:16:16:=0x0000 DRAM_CLASS:RW:8:4:=0x04 START:RW:0:1:=0x00
 +#define               DENALI_CTL_01_DATA 0x00000000 // MAX_CS_REG:RD:16:3:=0x00 MAX_COL_REG:RD:8:4:=0x00 MAX_ROW_REG:RD:0:5:=0x00
@@ -4355,11 +4078,11 @@ index 0000000..a156755
 +#define              DENALI_CTL_215_DATA 0x00000102 // WRLVL_INTERVAL:RW:16:16:=0x0000 LVL_AREF_EN:RW:8:1:=0x01 R2R_DIFFCS_DLY_F1:RW_D:0:3:=0x02
 +#define              DENALI_CTL_216_DATA 0x00001e1e // RDLVL_INTERVAL:RW:16:16:=0x0000 TDFI_RDLVL_RESPLAT_F1:RW:8:8:=0x1e TDFI_RDLVL_RESPLAT_F0:RW:0:8:=0x1e
 +#define              DENALI_CTL_217_DATA 0x00000000 // RDLVL_GATE_INTERVAL:RW:0:16:=0x0000
-diff --git a/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_1066.array b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_1066.array
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_1066.array b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_1066.array
+new file mode 100644
 index 0000000..72291bf
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_1066.array
++++ b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_1066.array
 @@ -0,0 +1,225 @@
 +unsigned int ddr_init_tab = { 
 +	14, 0x00000001,
@@ -4586,11 +4309,11 @@ index 0000000..72291bf
 +	217, 0x00000000,
 +	0xffffffff
 +};
-diff --git a/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_667 b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_667
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_667 b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_667
+new file mode 100644
 index 0000000..b8afaf4
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_667
++++ b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_667
 @@ -0,0 +1,218 @@
 +#define               DENALI_CTL_00_DATA 0x00000400 // VERSION:RD:16:16:=0x0000 DRAM_CLASS:RW:8:4:=0x04 START:RW:0:1:=0x00
 +#define               DENALI_CTL_01_DATA 0x00000000 // MAX_CS_REG:RD:16:3:=0x00 MAX_COL_REG:RD:8:4:=0x00 MAX_ROW_REG:RD:0:5:=0x00
@@ -4810,11 +4533,11 @@ index 0000000..b8afaf4
 +#define              DENALI_CTL_215_DATA 0x00000102 // WRLVL_INTERVAL:RW:16:16:=0x0000 LVL_AREF_EN:RW:8:1:=0x01 R2R_DIFFCS_DLY_F1:RW_D:0:3:=0x02
 +#define              DENALI_CTL_216_DATA 0x00001a1a // RDLVL_INTERVAL:RW:16:16:=0x0000 TDFI_RDLVL_RESPLAT_F1:RW:8:8:=0x1a TDFI_RDLVL_RESPLAT_F0:RW:0:8:=0x1a
 +#define              DENALI_CTL_217_DATA 0x00000000 // RDLVL_GATE_INTERVAL:RW:0:16:=0x0000
-diff --git a/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_667.array b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_667.array
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_667.array b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_667.array
+new file mode 100644
 index 0000000..d5d2da8
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_667.array
++++ b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_667.array
 @@ -0,0 +1,225 @@
 +unsigned int ddr_init_tab = { 
 +	14, 0x00000001,
@@ -5041,11 +4764,11 @@ index 0000000..d5d2da8
 +	217, 0x00000000,
 +	0xffffffff
 +};
-diff --git a/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_800 b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_800
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_800 b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_800
+new file mode 100644
 index 0000000..35bb82d
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_800
++++ b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_800
 @@ -0,0 +1,218 @@
 +#define               DENALI_CTL_00_DATA 0x00000400 // VERSION:RD:16:16:=0x0000 DRAM_CLASS:RW:8:4:=0x04 START:RW:0:1:=0x00
 +#define               DENALI_CTL_01_DATA 0x00000000 // MAX_CS_REG:RD:16:3:=0x00 MAX_COL_REG:RD:8:4:=0x00 MAX_ROW_REG:RD:0:5:=0x00
@@ -5265,11 +4988,11 @@ index 0000000..35bb82d
 +#define              DENALI_CTL_215_DATA 0x00000102 // WRLVL_INTERVAL:RW:16:16:=0x0000 LVL_AREF_EN:RW:8:1:=0x01 R2R_DIFFCS_DLY_F1:RW_D:0:3:=0x02
 +#define              DENALI_CTL_216_DATA 0x00001c1c // RDLVL_INTERVAL:RW:16:16:=0x0000 TDFI_RDLVL_RESPLAT_F1:RW:8:8:=0x1c TDFI_RDLVL_RESPLAT_F0:RW:0:8:=0x1c
 +#define              DENALI_CTL_217_DATA 0x00000000 // RDLVL_GATE_INTERVAL:RW:0:16:=0x0000
-diff --git a/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_800.array b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_800.array
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_800.array b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_800.array
+new file mode 100644
 index 0000000..c9ba89a
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/mt47h128m16/mt47h128m16_800.array
++++ b/board/broadcom/dni_3048up/mt47h128m16/mt47h128m16_800.array
 @@ -0,0 +1,225 @@
 +unsigned int ddr_init_tab = { 
 +	14, 0x00000001,
@@ -5496,11 +5219,11 @@ index 0000000..c9ba89a
 +	217, 0x00000000,
 +	0xffffffff
 +};
-diff --git a/board/broadcom/dni_34xx/u-boot-nr-be.lds b/board/broadcom/dni_34xx/u-boot-nr-be.lds
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/u-boot-nr-be.lds b/board/broadcom/dni_3048up/u-boot-nr-be.lds
+new file mode 100644
 index 0000000..8171c97
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/u-boot-nr-be.lds
++++ b/board/broadcom/dni_3048up/u-boot-nr-be.lds
 @@ -0,0 +1,99 @@
 +/*
 + * January 2004 - Changed to support H4 device
@@ -5601,11 +5324,11 @@ index 0000000..8171c97
 +	/DISCARD/ : { *(.interp*) }
 +	/DISCARD/ : { *(.gnu*) }
 +}
-diff --git a/board/broadcom/dni_34xx/u-boot-nr.lds b/board/broadcom/dni_34xx/u-boot-nr.lds
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/u-boot-nr.lds b/board/broadcom/dni_3048up/u-boot-nr.lds
+new file mode 100644
 index 0000000..d817bc0
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/u-boot-nr.lds
++++ b/board/broadcom/dni_3048up/u-boot-nr.lds
 @@ -0,0 +1,99 @@
 +/*
 + * January 2004 - Changed to support H4 device
@@ -5706,11 +5429,11 @@ index 0000000..d817bc0
 +	/DISCARD/ : { *(.interp*) }
 +	/DISCARD/ : { *(.gnu*) }
 +}
-diff --git a/board/broadcom/dni_34xx/usb.c b/board/broadcom/dni_34xx/usb.c
-new file mode 100755
+diff --git a/board/broadcom/dni_3048up/usb.c b/board/broadcom/dni_3048up/usb.c
+new file mode 100644
 index 0000000..c1f6d26
 --- /dev/null
-+++ b/board/broadcom/dni_34xx/usb.c
++++ b/board/broadcom/dni_3048up/usb.c
 @@ -0,0 +1,78 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
@@ -5793,30 +5516,31 @@ index 0000000..c1f6d26
 diff --git a/boards.cfg b/boards.cfg
 old mode 100644
 new mode 100755
-index 368f3c4..c041e05
+index 368f3c4..06485d1
 --- a/boards.cfg
 +++ b/boards.cfg
 @@ -294,6 +294,7 @@ bcm95301x_svk_l2cram         arm         armv7       bcm95301x           broadco
  helix4_emul                  arm         armv7       bcm95634x           broadcom       helix4 
  helix4                       arm         armv7       bcm95634x           broadcom       helix4            helix4:RUN_DDR_SHMOO2,IPROC_DDR_ECC 
  helix4_nand                  arm         armv7       bcm95634x           broadcom       helix4            helix4:RUN_DDR_SHMOO2,NAND_IPROC_BOOT,IPROC_SPL
-+dni_34xx_spi                 arm         armv7       dni_34xx            broadcom       helix4            dni_34xx:DDRCLK=800,RUN_DDR_SHMOO2,IPROC_SPL
++DNI_3048UP	                 arm         armv7       dni_3048up          broadcom       helix4            DNI_3048UP:DDRCLK=800,RUN_DDR_SHMOO2,IPROC_SPL
  northstar_plus_emul          arm         armv7       bcm95302x           broadcom       northstar-plus 
  northstar_plus               arm         armv7       bcm95302x           broadcom       northstar-plus    northstar_plus:DDRCLK=800,L2C_AS_RAM,CUSTOM_LINKER_SCRIPT,RUN_DDR_SHMOO2,IPROC_BOARD_DIAGS,NO_SLIC
  northstar_plus_mdk           arm         armv7       bcm95302x           broadcom       northstar-plus    northstar_plus:DDRCLK=800,L2C_AS_RAM,CUSTOM_LINKER_SCRIPT,RUN_DDR_SHMOO2,NO_SLIC
 diff --git a/broadcom_boards.mk b/broadcom_boards.mk
 old mode 100644
 new mode 100755
-index 60b2ecf..f90949f
+index 60b2ecf..4109001
 --- a/broadcom_boards.mk
 +++ b/broadcom_boards.mk
-@@ -95,6 +95,9 @@ helix4_nand_config: $(obj)helix4_nand_config
+@@ -95,6 +95,10 @@ helix4_nand_config: $(obj)helix4_nand_config
  $(obj)helix4_nand_config: $(TOPDIR)/include/configs/helix4.h  
  	@$(MKCONFIG) -A $(@F:_config=); touch $@
  
-+dni_34xx_spi_config: $(obj)dni_34xx_spi_config
-+$(obj)dni_34xx_spi_config: $(TOPDIR)/include/configs/dni_34xx.h
++DNI_3048UP_config: $(obj)DNI_3048UP_config
++$(obj)DNI_3048UP_config: $(TOPDIR)/include/configs/DNI_3048UP.h
 +	@$(MKCONFIG) -A $(@F:_config=); touch $@
++	
  northstar_plus_emul_config: $(obj)northstar_plus_emul_config 
  $(obj)northstar_plus_emul_config: $(TOPDIR)/include/configs/northstar_plus_emul.h 
  	@$(MKCONFIG) -A $(@F:_config=); touch $@
@@ -6427,9 +6151,7 @@ index 2268829..21b87c3 100644
  				id->size, id->mtd_id);
  
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
-old mode 100644
-new mode 100755
-index 3d5dace..98ca98d
+index 3d5dace..98ca98d 100644
 --- a/common/cmd_sys_eeprom.c
 +++ b/common/cmd_sys_eeprom.c
 @@ -9,6 +9,8 @@
@@ -8378,9 +8100,7 @@ index a76e992..caa9532 100755
  	/* unlock lane */
  	data16 = serdes_rd_reg(eth_data, phyaddr, 0x833c);
 diff --git a/drivers/usb/host/ehci-iproc.c b/drivers/usb/host/ehci-iproc.c
-old mode 100644
-new mode 100755
-index a7fd7e3..614a2ce
+index a7fd7e3..614a2ce 100644
 --- a/drivers/usb/host/ehci-iproc.c
 +++ b/drivers/usb/host/ehci-iproc.c
 @@ -18,10 +18,21 @@
@@ -8556,11 +8276,11 @@ index a7fd7e3..614a2ce
  	return 0;
  }
  
-diff --git a/include/configs/dni_34xx.h b/include/configs/dni_34xx.h
+diff --git a/include/configs/DNI_3048UP.h b/include/configs/DNI_3048UP.h
 new file mode 100755
-index 0000000..0c57b15
+index 0000000..920a208
 --- /dev/null
-+++ b/include/configs/dni_34xx.h
++++ b/include/configs/DNI_3048UP.h
 @@ -0,0 +1,347 @@
 +#ifndef __DNI_34XX_H
 +#define __DNI_34XX_H
@@ -8735,7 +8455,7 @@ index 0000000..0c57b15
 +#define CONFIG_ENV_OVERWRITE	/* Allow serial# and ethernet mac address to be overwritten in nv storage */
 +#define CONFIG_ENV_SIZE			0x10000 
 +
-+#define CONFIG_ENV_SECT_SIZE	0x1000     /* 64KB */
++#define CONFIG_ENV_SECT_SIZE	0x10000     /* 64KB */
 +
 +/* NO flash */
 +#define CONFIG_SYS_NO_FLASH		/* Not using NAND/NOR unmanaged flash */
@@ -8909,236 +8629,8 @@ index 0000000..0c57b15
 +
 +
 +#endif /* __DNI_34XX_H */
-diff --git a/include/configs/helix4.h b/include/configs/helix4.h
-index 0926a38..bc27382 100644
---- a/include/configs/helix4.h
-+++ b/include/configs/helix4.h
-@@ -3,22 +3,55 @@
- 
- #include <asm/sizes.h>
- 
-+#define CONFIG_SPL_ETH_SUPPORT
-+
-+#define CONFIG_SYS_PROMPT	"agema_ag6248c-poe->"
-+#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	1
-+
-+#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
-+#define CONFIG_POPULATE_SERIAL_NUMBER
-+
-+/* ONIE common config */
-+#define ONIE_IMAGE_READ_CMD  \
-+	"nand read  $loadaddr $onie_start 0x00c00000"
-+
-+#define CONFIG_CMD_LOADB
-+#define CONFIG_YAFFS2
-+
-+#include "common_config.h"
-+#undef CONFIG_CMD_JFFS2
-+#undef CONFIG_OF_BOARD_SETUP
-+#undef CONFIG_CMD_IRQ
-+#undef CONFIG_CMD_PCI
-+/*#undef CONFIG_OF_LIBFDT */
-+#undef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
-+
-+
-+#define CONFIG_RBTREE
-+#define CONFIG_LZO
-+#define CONFIG_MTD_DEVICE
-+#define CONFIG_MTD_PARTITIONS
-+#define CONFIG_CMD_UBI
-+#define CONFIG_CMD_UBIFS
-+
- #define CONFIG_CMD_USB
- #ifdef CONFIG_CMD_USB
- #define CONFIG_USB_EHCI
- #define CONFIG_USB_EHCI_IPROC
- #define CONFIG_USB_STORAGE
- #define CONFIG_CMD_FAT
--#define CONFIG_DOS_PARTITION
-+/* #define CONFIG_DOS_PARTITION */
- #define CONFIG_LEGACY_USB_INIT_SEQ
- #endif
- 
- /* PCIE */
-+#if 0
- #define CONFIG_CMD_PCI
- #define CONFIG_CMD_PCI_ENUM
- #define CONFIG_PCI
- #define CONFIG_PCI_SCAN_SHOW
- #define CONFIG_IPROC_PCIE
-+#endif
- 
- #define CONFIG_BOARD_LATE_INIT
- #define CONFIG_BOARD_EARLY_INIT_F (1)
-@@ -88,6 +121,10 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- #define DEBUG
- 
- */
-+
-+#define CONFIG_SYS_ICACHE_OFF
-+#define CONFIG_SYS_DCACHE_OFF
-+
- #define CONFIG_IPROC_MMU	(1)
- #define CONFIG_L2_OFF				/* Disable L2 cache */
- #define CONFIG_SYS_ARM_CACHE_WRITETHROUGH (1)
-@@ -95,13 +132,13 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- #define CONFIG_MISC_INIT_R			/* Call board's misc_init_r function */
- 
- /* Interrupt configuration */
--#define CONFIG_USE_IRQ          1	/* we need IRQ stuff for timer	*/
-+/*#define CONFIG_USE_IRQ          1	*//* we need IRQ stuff for timer	*/
- 
- /* Memory Info */
- #if (defined(CONFIG_L2C_AS_RAM ) && defined(CONFIG_NO_CODE_RELOC))
- #define CONFIG_SYS_MALLOC_LEN 			0x8000  	/* see armv7/start.S. */
- #else
--#define CONFIG_SYS_MALLOC_LEN 			0x40000  	/* see armv7/start.S. */
-+#define CONFIG_SYS_MALLOC_LEN 			0x1000000  	/* see armv7/start.S. */
- #endif
- #define CONFIG_STACKSIZE				(0x10000) //64K
- #define CONFIG_STACKSIZE_IRQ			(4096)
-@@ -134,7 +171,10 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- #define IPROC_APB_CLK		(125000000)  /* 125 MHz */
- 
- #define CONFIG_ENV_OVERWRITE	/* Allow serial# and ethernet mac address to be overwritten in nv storage */
--#define CONFIG_ENV_SIZE			0x10000 /* 0xA0000-0xAFFFF */
-+#if defined(CONFIG_ENV_SIZE) && (CONFIG_ENV_SIZE < 0x10000)
-+#undef CONFIG_ENV_SIZE
-+#define CONFIG_ENV_SIZE			0x10000 
-+#endif
- 
- /* NO flash */
- #define CONFIG_SYS_NO_FLASH		/* Not using NAND/NOR unmanaged flash */
-@@ -148,9 +188,18 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- /*#define CONFIG_BCM5301X_DMA */
- 
- /* General U-Boot configuration */
-+#ifndef CONFIG_SYS_CBSIZE
- #define CONFIG_SYS_CBSIZE			1024	/* Console buffer size */
-+#endif
-+
-+#ifndef CONFIG_SYS_PBSIZE
- #define CONFIG_SYS_PBSIZE			(CONFIG_SYS_CBSIZE +	sizeof(CONFIG_SYS_PROMPT) + 16) /* Printbuffer size */
-+#endif
-+
-+#ifndef CONFIG_SYS_MAXARGS
- #define CONFIG_SYS_MAXARGS			64
-+#endif
-+
- #define CONFIG_SYS_BARGSIZE		CONFIG_SYS_CBSIZE
- 
- #define CONFIG_VERSION_VARIABLE	/* Enabled UBOOT build date/time id string */
-@@ -174,15 +223,14 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- #undef CONFIG_GENERIC_MMC
- /*#define CONFIG_CMD_MISC*/
- 
--#define CONFIG_ETHADDR		00:90:4c:06:a5:72
-+
-+/*#define CONFIG_ETHADDR		00:90:4c:06:a5:72 */
- #define CONFIG_NETMASK		255.255.255.0
- #define CONFIG_IPADDR		192.168.0.1
- #define CONFIG_GATEWAYIP	192.168.0.1
- #define CONFIG_SERVERIP		192.168.0.10
- 
--#define CONFIG_GMAC_NUM		0 
--
--#define CONFIG_SYS_HZ       1000*1000
-+#define CONFIG_GMAC_NUM		0
- 
- /* Enable generic u-boot SPI flash drivers and commands */
- #define CONFIG_CMD_SF
-@@ -211,8 +259,8 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- #undef CONFIG_ENV_IS_NOWHERE
- #ifdef CONFIG_NAND_IPROC_BOOT
- #define CONFIG_ENV_IS_IN_NAND                   1
--#define CONFIG_ENV_OFFSET                       0x200000
--#define CONFIG_ENV_RANGE                        0x200000
-+#define CONFIG_ENV_OFFSET                       0x300000
-+#define CONFIG_ENV_RANGE                        0x100000
- #else
- #ifdef CONFIG_SPI_FLASH
- #define CONFIG_ENV_IS_IN_SPI_FLASH              1
-@@ -221,10 +269,18 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- #define CONFIG_ENV_SPI_MODE                     SPI_MODE_3
- #define CONFIG_ENV_SPI_BUS                      CONFIG_IPROC_QSPI_BUS
- #define CONFIG_ENV_SPI_CS                       CONFIG_IPROC_QSPI_CS
--#define CONFIG_ENV_SECT_SIZE                    0x10000     /* 64KB */
-+#define CONFIG_ENV_SECT_SIZE                    0x100000     /* 1MB */
- #endif /* CONFIG_SPI_FLASH */
- #endif /* CONFIG_NAND_BOOT */
- 
-+
-+/* I2C */
-+#define CONFIG_CMD_I2C
-+#define CONFIG_IPROC_I2C
-+#define CONFIG_SYS_I2C_SPEED    0       /* Default on 100KHz */
-+#define CONFIG_SYS_I2C_SLAVE    0xff    /* No slave address */
-+#define CONFIG_I2C_MULTI_BUS
-+
- /* Environment variables for NAND flash */
- #define CONFIG_CMD_NAND 
- #define CONFIG_IPROC_NAND 
-@@ -243,7 +299,7 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- /* Offset of spi flash to save Shmoo values */
- #define CONFIG_SHMOO_REUSE_QSPI_OFFSET          0x000E0000
- /* Offset of NAND flash to save Shmoo values */
--#define CONFIG_SHMOO_REUSE_NAND_OFFSET          0x00400000
-+#define CONFIG_SHMOO_REUSE_NAND_OFFSET          0x00100000
- /* Range for the partition to support NAND bad blocks replacement */
- #define CONFIG_SHMOO_REUSE_NAND_RANGE           0x00200000
- /* Delay to wait for the magic character to force Shmoo; 0 to disable delay */
-@@ -254,4 +310,47 @@ When DEBUG is enabled, need to disable both CACHE to make u-boot running
- #define CONFIG_SHMOO_REUSE_MEMTEST_START        IPROC_DDR_MEM_BASE2
- #endif /* CONFIG_RUN_DDR_SHMOO2 */
- 
-+#ifdef CONFIG_VERSION_VARIABLE
-+       #define VER_VARIABLE "ver=" U_BOOT_VERSION " (" U_BOOT_DATE " - " U_BOOT_TIME ")" CONFIG_IDENT_STRING
-+#else
-+       #define VER_VARIABLE "\0"
-+#endif
-+
-+/*
-+** Platform environment variables needed by the common env
-+** infrastructure.
-+**
-+*/
-+
-+#define CONFIG_CMD_SYS_EEPROM
-+#define CONFIG_SYS_EEPROM_MAX_SIZE	0x100000 /* 1 block size */
-+
-+#define CONFIG_SYS_EEPROM_USE_NAND_FLASH_IO
-+#define CONFIG_SYS_EEPROM_NAND_FLASH_ADDR	0xfb600000
-+#define CONFIG_SYS_EEPROM_NAND_FLASH_SIZE	CONFIG_SYS_EEPROM_MAX_SIZE
-+#define CONFIG_SYS_EEPROM_NAND_FLASH_ID		0
-+
-+#define CONFIG_PLATFORM_ENV    \
-+	"consoledev=ttyS0\0"    \
-+	"initrd_high=0x80000000\0" \
-+	"fpboot=setenv bootargs console=${consoledev},${baudrate} maxcpus=2 mem=1024M root=/dev/ram ${mtdparts} ubi.mtd=4 ethaddr=$ethaddr quiet\0" \
-+	"ubifscfg=ubi part nand0,4 0x0; ubifsmount fs\0" \
-+	"mfg=mfg\0"  \
-+	"onie_start=onie\0"       \
-+	"onie_sz.b=0x00c00000\0" \
-+	"mfgdiags=run fpboot ; nand read ${loadaddr} diags ; bootm ${loadaddr}\0" \
-+	"mfgdiags_recovery=nand read ${loadaddr} diags2 ; nand erase.part diags ; nand write ${loadaddr} diags\0" \
-+	"onie_recovery=nand read ${loadaddr} onie2 ; nand erase.part onie ; nand write ${loadaddr} onie\0" \
-+\
-+	    "mtdparts=mtdparts=nand_iproc.0:1m(uboot),2m(shmoo),1m(nenv),12m(onie),3992m(open),12m(onie2),2m(vpd),6m(sys_eeprom),16m(diags),16m(diags2),32m(diags_fs)\0"  \
-+	    "mtdids=nand0=nand_iproc.0\0"  \
-+	"platformargs=mtdparts=nand_iproc.0:1m(uboot),2m(shmoo),1m(nenv),12m(onie),3992m(open),12m(onie2),2m(vpd),6m(sys_eeprom),16m(diags),16m(diags2),32m(diags_fs)  maxcpus=2 mem=1024M\0"
-+	
-+
-+#define        CONFIG_EXTRA_ENV_SETTINGS       \
-+       CONFIG_PLATFORM_ENV             \
-+       CONFIG_ONIE_COMMON_UBOOT_ENV  \
-+	VER_VARIABLE
-+
-+
- #endif /* __HELIX4_H */
 diff --git a/include/configs/iproc_common_configs.h b/include/configs/iproc_common_configs.h
-old mode 100644
-new mode 100755
-index 1e9dca8..78991ff
+index 1e9dca8..78991ff 100644
 --- a/include/configs/iproc_common_configs.h
 +++ b/include/configs/iproc_common_configs.h
 @@ -5,11 +5,7 @@
@@ -9198,9 +8690,7 @@ index 1e9dca8..78991ff
 -
  #endif /* _IPROC_COMMON_H_ */
 diff --git a/include/configs/onie_common_config.h b/include/configs/onie_common_config.h
-old mode 100644
-new mode 100755
-index c941e2a..0c5da09
+index c941e2a..0c5da09 100644
 --- a/include/configs/onie_common_config.h
 +++ b/include/configs/onie_common_config.h
 @@ -45,7 +45,8 @@
@@ -9491,9 +8981,6 @@ index 0000000..6de0a32
 +} __packed legacy_mbr;
 +
 +#endif	/* _DISK_PART_EFI_H */
-diff --git a/include/version.h b/include/version.h
-old mode 100644
-new mode 100755
 diff --git a/lib/vsprintf.c b/lib/vsprintf.c
 index e38a4b7..b939326 100644
 --- a/lib/vsprintf.c
@@ -9528,30 +9015,11 @@ index e38a4b7..b939326 100644
  unsigned long long simple_strtoull (const char *cp, char **endp, unsigned int base)
  {
  	unsigned long long result = 0, value;
-diff --git a/nand_spl/board/broadcom/bcm95634x/Makefile b/nand_spl/board/broadcom/bcm95634x/Makefile
-index 68e461a..ca6de4b 100644
---- a/nand_spl/board/broadcom/bcm95634x/Makefile
-+++ b/nand_spl/board/broadcom/bcm95634x/Makefile
-@@ -43,7 +43,13 @@ OBJS	:= $(addprefix $(obj),$(SOBJS) $(COBJS))
- __OBJS	:= $(SOBJS) $(COBJS)
- LNDIR	:= $(nandobj)board/$(BOARDDIR)
- 
--PAD_TO  := $(shell expr $$[$(CONFIG_IPROC_NAND_SPL_SYS_TEXT_BASE) + $(CONFIG_IPROC_NAND_SPL_MAX_SIZE)])
-+#PAD_TO  := $(shell expr $$[$(CONFIG_IPROC_NAND_SPL_SYS_TEXT_BASE) + $(CONFIG_IPROC_NAND_SPL_MAX_SIZE)])
-+#PAD_TO  := $(CONFIG_IPROC_NAND_SPL_SYS_TEXT_BASE) + $(CONFIG_IPROC_NAND_SPL_MAX_SIZE)
-+########################
-+# expr do not support hex on our build server.
-+# PAD_TO = CONFIG_IPROC_NAND_SPL_SYS_TEXT_BASE + CONFIG_IPROC_NAND_SPL_MAX_SIZE
-+#    hard code it.
-+PAD_TO  := 0x1c001000
- 
- ALL	= $(nandobj)u-boot-nand_spl $(nandobj)u-boot-nand_spl.bin
- 
-diff --git a/nand_spl/board/broadcom/dni_34xx/Makefile b/nand_spl/board/broadcom/dni_34xx/Makefile
-new file mode 100755
+diff --git a/nand_spl/board/broadcom/dni_3048up/Makefile b/nand_spl/board/broadcom/dni_3048up/Makefile
+new file mode 100644
 index 0000000..68e461a
 --- /dev/null
-+++ b/nand_spl/board/broadcom/dni_34xx/Makefile
++++ b/nand_spl/board/broadcom/dni_3048up/Makefile
 @@ -0,0 +1,79 @@
 +#
 +# (C) Copyright 2006-2007

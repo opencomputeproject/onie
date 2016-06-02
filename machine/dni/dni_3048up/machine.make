@@ -3,9 +3,11 @@
 # Vendor's version number can be defined here.
 # Available variables are 'VENDOR_VERSION' and 'UBOOT_IDENT_STRING'.
 # e.g.,
-VENDOR_VERSION = -DNI_1.0.5
-UBOOT_VERNOR_VERSION = 3048UP V1.0.6
+VENDOR_VERSION = -DNI_1.0.6
+UBOOT_VERNOR_VERSION = 3048UP V1.0.7
 UBOOT_IDENT_STRING = ONIE $(ONIE_RELEASE_TAG) - $(UBOOT_VERNOR_VERSION)
+
+SWITCH_ASIC_VENDOR = bcm
 
 ONIE_ARCH ?= armv7a
 
@@ -19,7 +21,7 @@ else
   $(error Unknown VENDOR_REV)
 endif
 
-UBOOT_MACHINE = dni_34xx_spi
+UBOOT_MACHINE = DNI_3048UP
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers

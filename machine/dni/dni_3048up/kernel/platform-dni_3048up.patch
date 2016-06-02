@@ -1,87 +1,5 @@
-From 8cdecead792e797e8ecaf8f50f18cbec08d56a9e Mon Sep 17 00:00:00 2001
-Subject: [PATCH] Support for Agema AG6248C-POE platform (ARM Cortex-A9 /
- Helix4) networking platform Baseline files sourced from
- Broadcom LDK 3.4.10
 
-diff --git a/arch/arm/boot/dts/agema_ag6248c-poe.dts b/arch/arm/boot/dts/agema_ag6248c-poe.dts
-new file mode 100644
-index 0000000..d229a6e
---- /dev/null
-+++ b/arch/arm/boot/dts/agema_ag6248c-poe.dts
-@@ -0,0 +1,73 @@
-+/*
-+ * Agema AG6248C-POE Device Tree Source
-+ *
-+ * Copyright 2015, Agema, Inc.
-+ *
-+ * This program is free software; you can redistribute  it and/or modify it
-+ * under  the terms of  the GNU General  Public License as published by the
-+ * Free Software Foundation;  either version 2 of the  License, or (at your
-+ * option) any later version.
-+ *
-+ */
-+/dts-v1/;
-+/include/ "helix4.dtsi"
-+
-+/ {
-+    model = "agema,ag6248c-poe";
-+    compatible = "agema,ag6248c-poe";
-+
-+    aliases {
-+        serial0 = &uart0;
-+        i2c-controller0 = &i2c0;
-+        i2c-controller1 = &i2c1;
-+    };
-+
-+    cpus {
-+        #address-cells = <1>;
-+        #size-cells = <0>;
-+
-+        cpu@0 {
-+            device_type = "cpu";
-+            compatible = "arm,cortex-a9";
-+            next-level-cache = <&L2>;
-+            reg = <0x00>;
-+        };
-+        cpu@1 {
-+            device_type = "cpu";
-+            compatible = "arm,cortex-a9";
-+            next-level-cache = <&L2>;
-+            reg = <0x01>;
-+        };
-+    };
-+
-+    localbus@1e000000 {
-+        #address-cells = <0x2>;
-+        #size-cells = <0x1>;
-+        compatible = "simple-bus";
-+        ranges = <0x0 0x0 0x1e000000 0x02000000>;
-+
-+    };
-+
-+    i2c0: i2c@18038000 {
-+            compatible = "iproc-smb";
-+            reg = <0x18038000 0x1000>;
-+            #address-cells = <1>;
-+            #size-cells = <0>;
-+            interrupts = < 127 >;
-+            clock-frequency = <400000>;
-+
-+            rtc@68 {
-+                compatible = "st,m41st85";
-+                reg = <0x68>;
-+            };
-+    };
-+
-+    i2c1: i2c@1803b000 {
-+            compatible = "iproc-smb";
-+            reg = <0x1803b000 0x1000>;
-+            #address-cells = <1>;
-+            #size-cells = <0>;
-+            interrupts = < 128 >;
-+            clock-frequency = <100000>;
-+    };
-+};
+
 diff --git a/arch/arm/boot/dts/dni_3048up.dts b/arch/arm/boot/dts/dni_3048up.dts
 new file mode 100755
 index 0000000..3215058
@@ -347,27 +265,9 @@ index ed24988..65fda7a
 diff --git a/arch/arm/mach-iproc/board_bu.c b/arch/arm/mach-iproc/board_bu.c
 old mode 100644
 new mode 100755
-index b45588d..0365ac6
+index b45588d..1183232
 --- a/arch/arm/mach-iproc/board_bu.c
 +++ b/arch/arm/mach-iproc/board_bu.c
-@@ -51,7 +51,7 @@
- #endif /* HNDCTF */
- 
- #include <linux/amba/pl022.h>
--
-+#if 0
- /* Fast device at 0x6000 offset */
- static AMBA_APB_DEVICE(pl020, "pl020", 0, 0x18028000,
- 	{ 111 }, NULL);
-@@ -175,7 +175,7 @@ void __init iproc_init_devics(void)
- #define SDIO_IDM_IDM_RESET_CONTROL  (0x16800)
- #define IPROC_SDIO_IRQ		(177)
- #endif
--
-+#endif
- #if defined(CONFIG_MACH_NSP)
- #define SATA_M0_IDM_IO_CONTROL_DIRECT_VA   HW_IO_PHYS_TO_VIRT(SATA_M0_IDM_IO_CONTROL_DIRECT)
- #define SATA_M0_IDM_IDM_RESET_CONTROL_VA   HW_IO_PHYS_TO_VIRT(SATA_M0_IDM_IDM_RESET_CONTROL)
 @@ -379,7 +379,7 @@ static struct resource fa2_resources[] = {
  #ifdef CONFIG_IPROC_I2C
  /* SMBus (I2C/BSC) block */
@@ -486,7 +386,9 @@ index b45588d..0365ac6
  	.map_io     = board_map_io,
  	.init_early = iproc_init_early,
 diff --git a/arch/arm/mach-iproc/common.c b/arch/arm/mach-iproc/common.c
-index 132d8fa..a8805e8 100644
+old mode 100644
+new mode 100755
+index 132d8fa..a8805e8
 --- a/arch/arm/mach-iproc/common.c
 +++ b/arch/arm/mach-iproc/common.c
 @@ -45,7 +45,8 @@
@@ -549,7 +451,9 @@ index 5eaf3ec..1866990
  };
  #endif /* CONFIG_IPROC_QSPI || CONFIG_IPROC_QSPI_MODULE */
 diff --git a/arch/arm/mach-iproc/include/mach/iproc_regs.h b/arch/arm/mach-iproc/include/mach/iproc_regs.h
-index 935f579..fb84634 100644
+old mode 100644
+new mode 100755
+index 935f579..fb84634
 --- a/arch/arm/mach-iproc/include/mach/iproc_regs.h
 +++ b/arch/arm/mach-iproc/include/mach/iproc_regs.h
 @@ -23,7 +23,7 @@
@@ -681,7 +585,9 @@ index 935f579..fb84634 100644
  #define IPROC_CCB_WDT_BOOTSTATUS_BIT	DMU_PCU_CRU_RESET_REASON__watchdog_reset
  #elif defined(CONFIG_MACH_NSP)
 diff --git a/arch/arm/mach-iproc/include/mach/socregs_ing_open.h b/arch/arm/mach-iproc/include/mach/socregs_ing_open.h
-index 53c3b98..49cb77a 100644
+old mode 100644
+new mode 100755
+index 53c3b98..49cb77a
 --- a/arch/arm/mach-iproc/include/mach/socregs_ing_open.h
 +++ b/arch/arm/mach-iproc/include/mach/socregs_ing_open.h
 @@ -84,7 +84,7 @@
@@ -757,7 +663,9 @@ index 53c3b98..49cb77a 100644
  #define IPROC_WRAP_MISC_CONTROL__QUAD_SERDES_CTRL_SEL 2
  #define IPROC_WRAP_MISC_CONTROL__IPROC_MDIO_SEL 4
 diff --git a/arch/arm/mach-iproc/northstar.c b/arch/arm/mach-iproc/northstar.c
-index 112144b..3acb309 100644
+old mode 100644
+new mode 100755
+index 112144b..3acb309
 --- a/arch/arm/mach-iproc/northstar.c
 +++ b/arch/arm/mach-iproc/northstar.c
 @@ -88,7 +88,7 @@ static void __init northstar_l2x0_init(void)
@@ -846,7 +754,9 @@ index fde19a9..a750d5c
  
  
 diff --git a/arch/arm/plat-iproc/include/mach/irqs.h b/arch/arm/plat-iproc/include/mach/irqs.h
-index 752ebcf..6f51794 100644
+old mode 100644
+new mode 100755
+index 752ebcf..6f51794
 --- a/arch/arm/plat-iproc/include/mach/irqs.h
 +++ b/arch/arm/plat-iproc/include/mach/irqs.h
 @@ -74,7 +74,7 @@
@@ -877,7 +787,9 @@ index 752ebcf..6f51794 100644
  #define BCM_INT_ID_DMAC_MAX             (17 + BCM_INT_ID_DDR_MAX)
  #elif defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP)
 diff --git a/arch/arm/plat-iproc/platsmp.c b/arch/arm/plat-iproc/platsmp.c
-index 932847d..739aa7b 100644
+old mode 100644
+new mode 100755
+index 932847d..739aa7b
 --- a/arch/arm/plat-iproc/platsmp.c
 +++ b/arch/arm/plat-iproc/platsmp.c
 @@ -34,7 +34,7 @@
@@ -1217,7 +1129,9 @@ index 66283c6..7adc023 100755
  #elif defined(CONFIG_MACH_HR2)
  #define BCMIPROC_CHIP_ID	BCM56150_CHIP_ID
 diff --git a/drivers/bcmdrivers/gmac/src/include/typedefs.h b/drivers/bcmdrivers/gmac/src/include/typedefs.h
-index 4c787aa..1ec3ccd 100644
+old mode 100644
+new mode 100755
+index 4c787aa..1ec3ccd
 --- a/drivers/bcmdrivers/gmac/src/include/typedefs.h
 +++ b/drivers/bcmdrivers/gmac/src/include/typedefs.h
 @@ -219,7 +219,7 @@ typedef unsigned __int64 uint64;
@@ -1261,7 +1175,7 @@ index d53ade3..a9729a9 100755
  #elif defined(CONFIG_MACH_HR2)
  		eromptr = hr2_erom;
 diff --git a/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c b/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
-index aa8c3bd..7707cc2 100755
+index aa8c3bd..57ca2c7 100755
 --- a/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
 +++ b/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
 @@ -18,6 +18,8 @@
@@ -1288,7 +1202,7 @@ index aa8c3bd..7707cc2 100755
  #if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
  #define CONFIG_ENV_OFFSET		0xa0000		/* 30000-b0000 - use last 10000 for env */
 +#elif defined(CONFIG_MACH_DNI_3048UP)
-+#define CONFIG_ENV_OFFSET		0xf0000		/* f0000-fffff - use 10000 for env */
++#define CONFIG_ENV_OFFSET		0x100000		/* f0000-fffff - use 10000 for env */
  #else
  #define CONFIG_ENV_OFFSET		0xc0000		/* 30000-b0000 - use last 10000 for env */
  #endif
@@ -1302,7 +1216,9 @@ index aa8c3bd..7707cc2 100755
  		strcpy(name, "ethaddr");
  		break;
 diff --git a/drivers/bcmdrivers/gpio/gpiolib.c b/drivers/bcmdrivers/gpio/gpiolib.c
-index e7a1a66..1fe561d 100644
+old mode 100644
+new mode 100755
+index e7a1a66..1fe561d
 --- a/drivers/bcmdrivers/gpio/gpiolib.c
 +++ b/drivers/bcmdrivers/gpio/gpiolib.c
 @@ -114,7 +114,7 @@ struct iproc_gpio_chip iproc_gpios_config[] = {
@@ -1314,41 +1230,6 @@ index e7a1a66..1fe561d 100644
  /*
   * Chip level GPIO 0-3 from CMICD,
   * GPIO 4-11 from ChipcommonA gpio pin 0 - 7
-diff --git a/drivers/bcmdrivers/mdio/iproc_mdio.c b/drivers/bcmdrivers/mdio/iproc_mdio.c
-index 5ecb92e..ec6e0bd 100755
---- a/drivers/bcmdrivers/mdio/iproc_mdio.c
-+++ b/drivers/bcmdrivers/mdio/iproc_mdio.c
-@@ -523,6 +523,7 @@ ccb_mii_init(void)
-     }
-     mdio = mdio_devices.mdio;
- 
-+#if 0
-     if (mdio_major) {
-         mdio_dev = MKDEV(mdio_major, 0);
-         ret = register_chrdev_region(mdio_dev,
-@@ -542,11 +543,12 @@ ccb_mii_init(void)
-         printk(KERN_ERR "Fail to add mdio char dev!\n");
-         goto error_region;
-     }
-+#endif
- 
-     return 0;
- 
- error_region:
--    unregister_chrdev_region(mdio_dev, 1);
-+    //unregister_chrdev_region(mdio_dev, 1);
- error:
-     kfree(mdio);
-     return ret;
-@@ -568,7 +570,7 @@ ccb_mii_exit(void)
- 
-     mdio_devices.mdio = NULL;
-     mdio_devices.init = 0;
--    unregister_chrdev_region(MKDEV(mdio_major, 0), 1);
-+    //unregister_chrdev_region(MKDEV(mdio_major, 0), 1);
- 
- }
- 
 diff --git a/drivers/bcmdrivers/pcie/pcie_iproc.c b/drivers/bcmdrivers/pcie/pcie_iproc.c
 index 3e0f520..043a4eb 100755
 --- a/drivers/bcmdrivers/pcie/pcie_iproc.c
@@ -1363,7 +1244,9 @@ index 3e0f520..043a4eb 100755
  #elif defined(CONFIG_MACH_HR2)
  	.irqs = {214, 215, 216, 217, 218, 219},
 diff --git a/drivers/bcmdrivers/smbus/iproc_smbus.c b/drivers/bcmdrivers/smbus/iproc_smbus.c
-index 8ee9bf6..d4bc173 100644
+old mode 100644
+new mode 100755
+index 8ee9bf6..d4bc173
 --- a/drivers/bcmdrivers/smbus/iproc_smbus.c
 +++ b/drivers/bcmdrivers/smbus/iproc_smbus.c
 @@ -1745,6 +1745,15 @@ static int __devinit iproc_smb_probe(struct platform_device *pdev)
@@ -1399,7 +1282,9 @@ index 8ee9bf6..d4bc173 100644
      * I2C device drivers may be active on return from
      * i2c_add_numbered_adapter()
 diff --git a/drivers/bcmdrivers/usb2h/Kconfig b/drivers/bcmdrivers/usb2h/Kconfig
-index 8f5f8bb..0a3b2be 100644
+old mode 100644
+new mode 100755
+index 8f5f8bb..0a3b2be
 --- a/drivers/bcmdrivers/usb2h/Kconfig
 +++ b/drivers/bcmdrivers/usb2h/Kconfig
 @@ -1,7 +1,6 @@
@@ -1623,7 +1508,9 @@ index 3d6beb7..2287c9b
  	}
  
 diff --git a/drivers/rtc/rtc-m41t80.c b/drivers/rtc/rtc-m41t80.c
-index 64aedd8..5d14580 100644
+old mode 100644
+new mode 100755
+index 64aedd8..5d14580
 --- a/drivers/rtc/rtc-m41t80.c
 +++ b/drivers/rtc/rtc-m41t80.c
 @@ -89,26 +89,86 @@ struct m41t80_data {
