@@ -14,10 +14,10 @@ If the node is found then set the "env_size" property to
 CONFIG_ENV_SIZE.
 
 diff --git a/README b/README
-index f2cdb66..e016b91 100644
+index 1dbcb5f..ad0bcac 100644
 --- a/README
 +++ b/README
-@@ -545,6 +545,19 @@ The following options need to be configured:
+@@ -534,6 +534,19 @@ The following options need to be configured:
  		crash. This is needed for buggy hardware (uc101) where
  		no pull down resistor is connected to the signal IDE5V_DD7.
  
@@ -37,11 +37,29 @@ index f2cdb66..e016b91 100644
  		CONFIG_MACH_TYPE	[relevant for ARM only][mandatory]
  
  		This setting is mandatory for all boards that have only one
+diff --git a/arch/arm/lib/bootm.c b/arch/arm/lib/bootm.c
+old mode 100644
+new mode 100755
+index a9070d5..0387a1d
+--- a/arch/arm/lib/bootm.c
++++ b/arch/arm/lib/bootm.c
+@@ -262,6 +262,11 @@ static int create_fdt(bootm_headers_t *images)
+ 	ft_board_setup(*of_flat_tree, gd->bd);
+ #endif
+ 
++#if defined(CONFIG_FDT_ENV_SIZE) && defined(CONFIG_ENV_SIZE)
++		do_fixup_by_prop_u32(*of_flat_tree, "label", "uboot-env", 10,
++				     "env_size", CONFIG_ENV_SIZE, 1);
++#endif
++
+ 	return 0;
+ }
+ #endif
 diff --git a/arch/powerpc/lib/bootm.c b/arch/powerpc/lib/bootm.c
-index 7088293..78ac9e7 100644
+index 53dc4df..a19e2a4 100644
 --- a/arch/powerpc/lib/bootm.c
 +++ b/arch/powerpc/lib/bootm.c
-@@ -293,6 +293,11 @@ static int boot_body_linux(bootm_headers_t *images)
+@@ -299,6 +299,11 @@ static int boot_body_linux(bootm_headers_t *images)
  		ft_board_setup(*of_flat_tree, gd->bd);
  #endif
  

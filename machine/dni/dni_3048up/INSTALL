@@ -1,0 +1,93 @@
+============================================================
+Installing ONIE on DNI 3048UP
+============================================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/dni/ MACHINE=dni_3048up all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/dni/ MACHINE=dni_3048up all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-rw-r-- 4966536 Jun  2 14:23 onie-dni_3048up-r1.bin
+  -rw-rw-r-- 892052 Jun  2 14:23 onie-dni_3048up-r1.bin.uboot+env
+
+Cross-Compiling the DEMO OS
+===========================
+
+To compile the demo OS first change directories to ``build-config``
+and then type ``"make MACHINEROOT=../machine/dni/ MACHINE=dni_3048up demo"``.
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/dni/ MACHINE=dni_3048up demo
+
+When complete, the demo OS installer is located in ``build/images``::
+
+  -rw-r--r-- 10486945 Jun 24 13:30 demo-installer-arm-dni_3048up-r1.bin
+
+Installing the ONIE binaries
+============================
+
+Step 1 -- Put the ONIE files on a TFTP server
+---------------------------------------------
+
+The following directions assume the files are on the root of the TFTP
+server.
+
+Step 2 -- Install ONIE kernel (onie-dni_3048up-r1.bin.uboot+env onie-dni_3048up-r1.bin)
+-----------------------------------------------
+
+Copying the image down using TFTP and flash to the SPI flash::
+
+  =>tftp $loadaddr onie-dni_3048up-r1.bin.uboot+env
+  =>sf probe 0;
+  =>sf erase 0 0x120000;
+  =>sf write $loadaddr 0 0x120000;
+  
+  =>tftp $loadaddr onie-dni_3048up-r1.bin
+  =>sf probe 0;
+  =>sf erase 0x170000 0xe90000;
+  =>sf write $loadaddr 0x170000 $filesize;
+
+Step 3 -- Configure Serial Console
+----------------------------------
+
+ONIE defaults the serial console baud rate to 115200.  You may need to
+adjust your terminal settings.
+
+Step 4 -- Restart The System
+----------------------------
+
+You can interrupt the boot process by pressing any key during the
+count down::
+
+  => reset
+
+After reboot for the first time, DDR ECC shmoo calculation will
+be performed for couple of minutes.
+
+Step 5 -- Set the ethernet mac address (Optional)
+-----------------------------------------
+After reboot, please set the ethaddr for eth0
+
+  => setenv ethaddr 00:30:AB:F2:85:90
+
+Step 6 -- Optional
+------------------
+
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this::
+
+  => run onie_rescue
+
