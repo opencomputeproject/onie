@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -9,13 +10,13 @@
 # This is a makefile fragment that defines the build of lzo
 #
 
-LZO_VERSION		= 2.06
+LZO_VERSION		= 2.09
 LZO_TARBALL		= lzo-$(LZO_VERSION).tar.gz
 LZO_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.oberhumer.com/opensource/lzo/download
 LZO_BUILD_DIR		= $(MBUILDDIR)/lzo
 LZO_DIR			= $(LZO_BUILD_DIR)/lzo-$(LZO_VERSION)
 
-LZO_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/lzo-download
+LZO_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/lzo-$(LZO_VERSION)-download
 LZO_SOURCE_STAMP	= $(STAMPDIR)/lzo-source
 LZO_CONFIGURE_STAMP	= $(STAMPDIR)/lzo-configure
 LZO_BUILD_STAMP		= $(STAMPDIR)/lzo-build
