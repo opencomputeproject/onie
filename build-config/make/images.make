@@ -153,8 +153,8 @@ ifeq ($(REQUIRE_CXX_LIBS),yes)
   endif
 endif
 
-# Add librt if ACPI is enabled
-ifeq ($(ACPI_ENABLE),yes)
+# Add librt if ACPI or LVM2 is enabled
+ifneq ($(filter yes, $(ACPI_ENABLE) $(LVM2_ENABLE)),)
   SYSROOT_LIBS += librt.so.0 librt-$(UCLIBC_VERSION).so
 endif
 
