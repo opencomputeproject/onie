@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -9,14 +10,14 @@
 # This is a makefile fragment that defines the build of mtdutils
 #
 
-MTDUTILS_VERSION	= 1.5.0
-MTDUTILS_COMMIT		= ca39eb1
+MTDUTILS_VERSION	= 1.5.2
+MTDUTILS_COMMIT		= e4c8885bddac201ba0ef88560d6444f39e1ff870
 MTDUTILS_TARBALL	= mtd-utils-$(MTDUTILS_VERSION).tar.gz
 MTDUTILS_TARBALL_URLS	+= $(ONIE_MIRROR) http://git.infradead.org/mtd-utils.git/snapshot
 MTDUTILS_BUILD_DIR	= $(MBUILDDIR)/mtd-utils
-MTDUTILS_DIR		= $(MTDUTILS_BUILD_DIR)/mtd-utils-$(MTDUTILS_COMMIT)
+MTDUTILS_DIR		= $(MTDUTILS_BUILD_DIR)/mtd-utils-e4c8885
 
-MTDUTILS_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/mtdutils-download
+MTDUTILS_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/mtdutils-$(MTDUTILS_VERSION)-download
 MTDUTILS_SOURCE_STAMP	= $(STAMPDIR)/mtdutils-source
 MTDUTILS_BUILD_STAMP	= $(STAMPDIR)/mtdutils-build
 MTDUTILS_INSTALL_STAMP	= $(STAMPDIR)/mtdutils-install
