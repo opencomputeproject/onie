@@ -2,10 +2,11 @@
 
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
-arch=$1
+rootfs_arch=$1
 machine=$2
 platform=$3
 installer_dir=$4
@@ -21,13 +22,7 @@ if  [ ! -d $installer_dir ] || \
     exit 1
 fi
 
-if [ "$arch" = "powerpc-softfloat" -o "$arch" = "armv7a" ] ; then
-    # Both of these architectures share common installer code as they
-    # are both based on u-boot.
-    arch_dir="u-boot-arch"
-else
-    arch_dir="$arch"
-fi
+arch_dir="$rootfs_arch"
 
 if  [ ! -d $installer_dir/$arch_dir ] || \
     [ ! -r $installer_dir/$arch_dir/install.sh ] ; then

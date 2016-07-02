@@ -4,6 +4,7 @@
 #
 #  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -25,21 +26,22 @@ set -e
 [ "$Q" != "@" ] && set -x
 
 # Sanity check the number of arguments
-[ $# -eq 11 ] || {
+[ $# -eq 12 ] || {
     echo "ERROR: $0: Incorrect number of arguments"
     exit 1
 }
-RECOVERY_KERNEL=$1
-RECOVERY_INITRD=$2
-RECOVERY_DIR=$3
-MACHINE_CONF=$4
-RECOVERY_CONF_DIR=$5
-GRUB_HOST_LIB_I386_DIR=$6
-GRUB_HOST_BIN_I386_DIR=$7
-GRUB_HOST_LIB_UEFI_DIR=$8
-GRUB_HOST_BIN_UEFI_DIR=$9
-RECOVERY_XORRISO_OPTIONS=${10}
-RECOVERY_ISO_IMAGE=${11}
+ARCH=$1
+RECOVERY_KERNEL=$2
+RECOVERY_INITRD=$3
+RECOVERY_DIR=$4
+MACHINE_CONF=$5
+RECOVERY_CONF_DIR=$6
+GRUB_HOST_LIB_I386_DIR=$7
+GRUB_HOST_BIN_I386_DIR=$8
+GRUB_TARGET_LIB_UEFI_DIR=$9
+GRUB_HOST_BIN_UEFI_DIR=${10}
+FIRMWARE_TYPE=${11}
+RECOVERY_ISO_IMAGE=${12}
 
 # Sanity check the arguments
 [ -r "$RECOVERY_KERNEL" ] || {
@@ -71,8 +73,8 @@ RECOVERY_ISO_IMAGE=${11}
     exit 1
 }
 if [ "$UEFI_ENABLE" = "yes" ] ; then
-    [ -r "${GRUB_HOST_LIB_UEFI_DIR}/efinet.mod" ] || {
-        echo "ERROR: Does not look like valid GRUB x86_64-efi library directory: $GRUB_HOST_LIB_UEFI_DIR"
+    [ -r "${GRUB_TARGET_LIB_UEFI_DIR}/efinet.mod" ] || {
+        echo "ERROR: Does not look like valid GRUB ${ARCH}-efi library directory: $GRUB_TARGET_LIB_UEFI_DIR"
         exit 1
     }
     [ -x "${GRUB_HOST_BIN_UEFI_DIR}/grub-mkimage" ] || {
@@ -80,8 +82,13 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
         exit 1
     }
 fi
-[ -r "$RECOVERY_XORRISO_OPTIONS" ] || {
-    echo "ERROR: Unable to read xorriso options file: $RECOVERY_XORRISO_OPTIONS"
+[ -r "${RECOVERY_CONF_DIR}/xorriso-options-bios.cfg" ] || {
+    echo "ERROR: Unable to read xorriso options file: ${RECOVERY_CONF_DIR}/xorriso-options-bios.cfg"
+    exit 1
+}
+
+[ -r "${RECOVERY_CONF_DIR}/xorriso-options-uefi.cfg" ] || {
+    echo "ERROR: Unable to read xorriso options file: ${RECOVERY_CONF_DIR}/xorriso-options-uefi.cfg"
     exit 1
 }
 
@@ -107,6 +114,7 @@ RECOVERY_EFI_BOOTX86_IMG="$RECOVERY_EFI_BOOT_DIR/bootx64.efi"
 RECOVERY_ELTORITO_IMG="$RECOVERY_ISO_SYSROOT/boot/eltorito.img"
 RECOVERY_EMBEDDED_IMG="$RECOVERY_DIR/embedded.img"
 RECOVERY_UEFI_IMG="$RECOVERY_ISO_SYSROOT/boot/efi.img"
+RECOVERY_XORRISO_OPTIONS="$RECOVERY_DIR/xorriso-options.cfg"
 
 # Start clean
 rm -rf $RECOVERY_ISO_SYSROOT $RECOVERY_ISO_IMAGE
@@ -131,32 +139,34 @@ sed -e "s/<CONSOLE_SPEED>/$CONSOLE_SPEED/g"           \
     "$MACHINE_CONF" $RECOVERY_CONF_DIR/grub-iso.cfg   \
     > $RECOVERY_ISO_SYSROOT/boot/grub/grub.cfg
 
-# Populate .ISO sysroot with i386-pc GRUB modules
-mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc
-(cd $GRUB_HOST_LIB_I386_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc)
-
-# Generate legacy BIOS eltorito format GRUB image
-$GRUB_HOST_BIN_I386_DIR/grub-mkimage \
-    --format=i386-pc \
-    --directory=$GRUB_HOST_LIB_I386_DIR \
-    --prefix=/boot/grub \
-    --output=$RECOVERY_CORE_IMG \
-    part_msdos part_gpt iso9660 biosdisk
-cat $GRUB_HOST_LIB_I386_DIR/cdboot.img $RECOVERY_CORE_IMG > $RECOVERY_ELTORITO_IMG
-
-# Generate legacy BIOS MBR format GRUB image
-cat $GRUB_HOST_LIB_I386_DIR/boot.img $RECOVERY_CORE_IMG > $RECOVERY_EMBEDDED_IMG
+if [ "$FIRMWARE_TYPE" != "uefi" ] ; then
+	# Populate .ISO sysroot with i386-pc GRUB modules
+	mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc
+	(cd $GRUB_HOST_LIB_I386_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc)
+	
+	# Generate legacy BIOS eltorito format GRUB image
+	$GRUB_HOST_BIN_I386_DIR/grub-mkimage \
+		--format=i386-pc \
+		--directory=$GRUB_HOST_LIB_I386_DIR \
+		--prefix=/boot/grub \
+		--output=$RECOVERY_CORE_IMG \
+		part_msdos part_gpt iso9660 biosdisk
+	cat $GRUB_HOST_LIB_I386_DIR/cdboot.img $RECOVERY_CORE_IMG > $RECOVERY_ELTORITO_IMG
+	
+	# Generate legacy BIOS MBR format GRUB image
+	cat $GRUB_HOST_LIB_I386_DIR/boot.img $RECOVERY_CORE_IMG > $RECOVERY_EMBEDDED_IMG
+fi
 
 if [ "$UEFI_ENABLE" = "yes" ] ; then
-    # Populate .ISO sysroot with x86_64-efi GRUB modules
-    mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/x86_64-efi
-    (cd $GRUB_HOST_LIB_UEFI_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/x86_64-efi)
+    # Populate .ISO sysroot with ${ARCH}-efi GRUB modules
+    mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/${ARCH}-efi
+    (cd $GRUB_TARGET_LIB_UEFI_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/${ARCH}-efi)
 
     # Generate UEFI format GRUB image
     mkdir -p $RECOVERY_EFI_BOOT_DIR
     $GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \
-        --format=x86_64-efi \
-        --directory=$GRUB_HOST_LIB_UEFI_DIR \
+        --format=${ARCH}-efi \
+        --directory=$GRUB_TARGET_LIB_UEFI_DIR \
         --prefix=/boot/grub \
         --config=$RECOVERY_CONF_DIR/grub-uefi.cfg \
         --output=$RECOVERY_EFI_BOOTX86_IMG \
@@ -178,6 +188,18 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
 fi
 
 # Combine the legacy BIOS and UEFI GRUB images images into an ISO.
+if [ "$FIRMWARE_TYPE" = "uefi" ] ; then
+	cp ${RECOVERY_CONF_DIR}/xorriso-options-uefi.cfg ${RECOVERY_XORRISO_OPTIONS}
+elif [ "$FIRMWARE_TYPE" = "auto" ] ; then
+    rm -f ${RECOVERY_XORRISO_OPTIONS} && touch ${RECOVERY_XORRISO_OPTIONS}
+	git merge-file -p --union ${RECOVERY_CONF_DIR}/xorriso-options-bios.cfg \
+							  ${RECOVERY_XORRISO_OPTIONS} \
+							  ${RECOVERY_CONF_DIR}/xorriso-options-uefi.cfg \
+							  > ${RECOVERY_XORRISO_OPTIONS}
+else
+	cp ${RECOVERY_CONF_DIR}/xorriso-options-bios.cfg ${RECOVERY_XORRISO_OPTIONS}
+fi
+
 cd $RECOVERY_DIR && $XORRISO -outdev $RECOVERY_ISO_IMAGE \
     -map $RECOVERY_ISO_SYSROOT / \
     -options_from_file $RECOVERY_XORRISO_OPTIONS

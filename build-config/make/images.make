@@ -5,6 +5,7 @@
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
 #  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -108,9 +109,9 @@ SYSROOT_NEW_FILES = $(shell \
 			find -L $(ROOTCONFDIR)/default -mindepth 1 -cnewer $(SYSROOT_COMPLETE_STAMP) \
 			  -print -quit 2>/dev/null)
 SYSROOT_NEW_FILES += $(shell \
-			test -d $(ROOTCONFDIR)/$(ONIE_ARCH) && \
+			test -d $(ROOTCONFDIR)/$(ROOTFS_ARCH) && \
 			test -f $(SYSROOT_INIT_STAMP) &&  \
-			find -L $(ROOTCONFDIR)/$(ONIE_ARCH) -mindepth 1 -cnewer $(SYSROOT_COMPLETE_STAMP) \
+			find -L $(ROOTCONFDIR)/$(ROOTFS_ARCH) -mindepth 1 -cnewer $(SYSROOT_COMPLETE_STAMP) \
 			  -print -quit 2>/dev/null)
 SYSROOT_NEW_FILES += $(shell \
 			test -d $(MACHINEDIR)/rootconf && \
@@ -205,16 +206,18 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) find $(SYSROOTDIR) -path */lib/grub/* -prune -o \( -type f -print0 \) | xargs -0 file | \
 		grep ELF | awk -F':' '{ print $$1 }' | grep -v "/lib/modules/" | xargs $(CROSSBIN)/$(CROSSPREFIX)strip
 	$(Q) rm -rf $(CHECKROOT)
-	$(Q) mkdir -p $(CHECKROOT) && \
-	     $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
-		-s $(SYSROOTDIR) -d $(CHECKDIR) && \
-		(cd $(SYSROOTDIR) && find . | LC_ALL=C sort > $(SYSFILES)) && \
-		(cd $(CHECKDIR) && find . | LC_ALL=C sort > $(CHECKFILES)) && \
-		diff -q $(SYSFILES) $(CHECKFILES) > /dev/null 2>&1 || { \
-			(echo "ERROR: Missing files in SYSROOTDIR:" && \
-			 diff $(SYSFILES) $(CHECKFILES) ; \
-			 false) \
-		}
+        ifeq ($(XTOOLS_ENABLE),yes)
+	  $(Q) mkdir -p $(CHECKROOT) && \
+	      $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
+		  -s $(SYSROOTDIR) -d $(CHECKDIR) && \
+		  (cd $(SYSROOTDIR) && find . | LC_ALL=C sort > $(SYSFILES)) && \
+		  (cd $(CHECKDIR) && find . | LC_ALL=C sort > $(CHECKFILES)) && \
+		  diff -q $(SYSFILES) $(CHECKFILES) > /dev/null 2>&1 || { \
+			  (echo "ERROR: Missing files in SYSROOTDIR:" && \
+			   diff $(SYSFILES) $(CHECKFILES) ; \
+			   false) \
+		  }
+       endif
 	$(Q) touch $@
 
 # Setting RUNTIME_ONIE_PLATFORM and RUNTIME_ONIE_MACHINE on the
@@ -276,6 +279,9 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_firmware=$(FIRMWARE_TYPE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_switch_asic=$(SWITCH_ASIC_VENDOR)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_skip_ethmgmt_macs=$(SKIP_ETHMGMT_MACS)" >> $(MACHINE_CONF)
+       ifeq ($(GRUB_ENABLE),yes)
+	  $(Q) echo "onie_grub_image_name=$(GRUB_IMAGE_NAME)" >> $(MACHINE_CONF)
+       endif
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
@@ -302,7 +308,7 @@ endif
 
 $(UPDATER_ONIE_TOOLS): $(SYSROOT_COMPLETE_STAMP) $(SCRIPTDIR)/onie-mk-tools.sh
 	$(Q) echo "==== Create ONIE Tools tarball ===="
-	$(Q) $(SCRIPTDIR)/onie-mk-tools.sh $(ONIE_ARCH) $(ONIE_TOOLS_DIR) $@ \
+	$(Q) $(SCRIPTDIR)/onie-mk-tools.sh $(ROOTFS_ARCH) $(ONIE_TOOLS_DIR) $@ \
 		$(SYSROOTDIR) $(ONIE_SYSROOT_TOOLS_LIST)
 
 .SECONDARY: $(ITB_IMAGE)
@@ -345,7 +351,7 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(SCRIPTDIR)/onie-mk-ins
 	     UPDATER_UBOOT_NAME=$(UPDATER_UBOOT_NAME) \
 	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
 	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
-	     $(SCRIPTDIR)/onie-mk-installer.sh onie $(ONIE_ARCH) $(MACHINEDIR) \
+	     $(SCRIPTDIR)/onie-mk-installer.sh onie $(ROOTFS_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS)
 	$(Q) touch $@
@@ -400,15 +406,10 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(RECOVERY_CPIO) > $(RECOVERY_INITRD)
 	$(Q) touch $@
 
-ifeq ($(UEFI_ENABLE),yes)
-  RECOVERY_XORRISO_OPTIONS = $(RECOVERY_CONF_DIR)/xorriso-options-uefi.cfg
-else
-  RECOVERY_XORRISO_OPTIONS = $(RECOVERY_CONF_DIR)/xorriso-options-bios.cfg
-endif
 # Make hybrid .iso image containing the ONIE kernel and recovery intrd
 recovery-iso: $(RECOVERY_ISO_STAMP)
 $(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
-			$(RECOVERY_CONF_DIR)/grub-iso.cfg $(RECOVERY_XORRISO_OPTIONS)
+			$(RECOVERY_CONF_DIR)/grub-iso.cfg
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery Hybrid iso ===="
 	$(Q) Q=$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
 	     CONSOLE_DEV=$(CONSOLE_DEV) \
@@ -417,24 +418,23 @@ $(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
 	     UEFI_ENABLE=$(UEFI_ENABLE) \
 	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
 	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
-	     $(SCRIPTDIR)/onie-mk-iso.sh $(UPDATER_VMLINUZ) $(RECOVERY_INITRD) \
-		$(RECOVERY_DIR) \
+	     $(SCRIPTDIR)/onie-mk-iso.sh $(ARCH) $(UPDATER_VMLINUZ) \
+		$(RECOVERY_INITRD) $(RECOVERY_DIR) \
 		$(MACHINE_CONF) $(RECOVERY_CONF_DIR) \
 		$(GRUB_HOST_LIB_I386_DIR) $(GRUB_HOST_BIN_I386_DIR) \
-		$(GRUB_HOST_LIB_UEFI_DIR) $(GRUB_HOST_BIN_UEFI_DIR) \
-		$(RECOVERY_XORRISO_OPTIONS) \
-		$(RECOVERY_ISO_IMAGE)
+		$(GRUB_TARGET_LIB_UEFI_DIR) $(GRUB_HOST_BIN_UEFI_DIR) \
+		$(FIRMWARE_TYPE) $(RECOVERY_ISO_IMAGE)
 	$(Q) touch $@
 
 # Convert the .iso to a PXE-EFI64 bootable image using GRUB
 pxe-efi64: $(PXE_EFI64_STAMP)
 $(PXE_EFI64_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE PXE EFI64 Recovery Image ===="
-	$(Q) cd $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/lib/grub/x86_64-efi && \
+	$(Q) cd $(GRUB_TARGET_LIB_UEFI_DIR) && \
 		ls *.mod|sed -e 's/\.mod//g'|egrep -v '(ehci|at_keyboard)' > $(PXE_EFI64_GRUB_MODS)
-	$(Q) $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/bin/grub-mkimage --format=x86_64-efi	\
+	$(Q) $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/bin/grub-mkimage --format=$(ARCH)-efi	\
 	    --config=$(RECOVERY_CONF_DIR)/grub-embed.cfg			\
-	    --directory=$(GRUB_HOST_INSTALL_UEFI_DIR)/usr/lib/grub/x86_64-efi	\
+	    --directory=$(GRUB_TARGET_LIB_UEFI_DIR)	\
 	    --output=$(PXE_EFI64_IMAGE) --memdisk=$(RECOVERY_ISO_IMAGE)		\
 	    $$(cat $(PXE_EFI64_GRUB_MODS))
 	$(Q) touch $@
@@ -452,7 +452,7 @@ $(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE) $(MACHINE_IMAGE_COMPLETE_STA
 
 USERSPACE_CLEAN += image-clean
 image-clean:
-	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
+	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP) $(KERNEL_VMLINUZ_INSTALL_STAMP)
 	$(Q) rm -rf $(RECOVERY_DIR) $(MACHINE_IMAGE_COMPLETE_STAMP) $(MACHINE_IMAGE_PRODUCTS)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 

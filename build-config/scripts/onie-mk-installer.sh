@@ -3,6 +3,7 @@
 #  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -14,7 +15,7 @@
 set -e
 
 update_type=$1
-arch=$2
+rootfs_arch=$2
 machine_dir=$3
 machine_conf=$4
 installer_dir=$5
@@ -26,8 +27,8 @@ shift 6
     echo "ERROR: machine directory '$machine_dir' does not exist."
     exit 1
 }
-if [ "$arch" = "x86_64" ] ; then
-    # installer_conf is required for x86_64
+if [ "$rootfs_arch" = "grub-arch" ] ; then
+    # installer_conf is required for grub architecture machines
     installer_conf="${machine_dir}/installer.conf"
     [ -r "$installer_conf" ] || {
         echo "ERROR: unable to read machine installer file: $installer_conf"
@@ -45,13 +46,7 @@ fi
     exit 1
 }
 
-if [ "$arch" = "powerpc-softfloat" -o "$arch" = "armv7a" ] ; then
-    # Both of these architectures share common installer code as they
-    # are both based on u-boot.
-    arch_dir="u-boot-arch"
-else
-    arch_dir="$arch"
-fi
+arch_dir="$rootfs_arch"
 
 [ -d "$installer_dir/$arch_dir" ] || {
     echo "ERROR: arch specific installer directory does not exist: $installer_dir/$arch"
@@ -152,7 +147,7 @@ fi
 echo -n "."
 
 # Add optional installer configuration files
-if [ "$arch" = "x86_64" -a "$update_type" = "onie" ] ; then
+if [ "$rootfs_arch" = "grub-arch" -a "$update_type" = "onie" ] ; then
     cp "$installer_conf" $tmp_installdir || exit 1
     echo -n "."
 
