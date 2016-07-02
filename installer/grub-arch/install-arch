@@ -403,7 +403,7 @@ init_uefi_disk()
     done
 
     # Create file system on UEFI ESP partition
-    local uefi_esp_dev="${onie_dev}$uefi_esp_part"
+    local uefi_esp_dev="${onie_dev}$blk_suffix$uefi_esp_part"
     [ "$verbose" = "yes" ] && echo "Creating $uefi_esp_fs_type file system on: $uefi_esp_dev"
     mkfs.$uefi_esp_fs_type -n "$uefi_esp_label" $uefi_esp_dev > /dev/null 2>&1 || {
         echo "Error: Unable to create $uefi_esp_fs_type file system on: $uefi_esp_dev"
@@ -572,7 +572,7 @@ install_uefi_grub()
 
     grub_install_log=$(mktemp)
     grub-install \
-        --target=x86_64-efi \
+        --target=${onie_arch}-efi \
         --no-nvram \
         --bootloader-id=onie \
         --efi-directory="$uefi_dir" \
@@ -591,7 +591,7 @@ install_uefi_grub()
         efibootmgr --quiet --create \
             --label "ONIE: Open Network Install Environment" \
             --disk $boot_dev --part $uefi_esp_part \
-            --loader /EFI/onie/grubx64.efi || {
+            --loader /EFI/onie/${onie_grub_image_name} || {
             echo "ERROR: efibootmgr failed to create new boot variable on: $boot_dev"
             exit 1
         }

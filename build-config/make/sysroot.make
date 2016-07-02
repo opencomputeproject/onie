@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -42,6 +43,8 @@ $(SYSROOT_INIT_STAMP): $(TREE_STAMP)
 	$(Q) mkdir -p -v -m 0755 $(SYSROOTDIR)/dev
 	$(Q) mkdir -p -v $(SYSROOTDIR)/{sys,proc,tmp,etc,lib,mnt}
 	$(Q) mkdir -p -v $(SYSROOTDIR)/{var/log,usr/lib,usr/bin,usr/sbin,usr/share/locale,lib,mnt}
+	$(Q) cd $(SYSROOTDIR) && ln -s lib lib32 && ln -s lib lib64
+	$(Q) cd $(SYSROOTDIR)/usr && ln -s lib lib32 && ln -s lib lib64
 	$(Q) touch $@
 
 # Development sysroot, used for compiling and linking user space
