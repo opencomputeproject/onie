@@ -2,6 +2,7 @@
 #
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015,2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -105,7 +106,7 @@ DEMO_INSTALLER_FILES = $(shell test -d $(IMAGEDIR) && test -f $(DEMO_SYSROOT_CPI
 endif
 
 define demo_MKIMAGE
-	./scripts/onie-mk-demo.sh $(ONIE_ARCH) $(MACHINE) $(PLATFORM) \
+	./scripts/onie-mk-demo.sh $(ROOTFS_ARCH) $(MACHINE) $(PLATFORM) \
 		$(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf $(1) $(2) $(DEMO_IMAGE_PARTS) 
 endef
 

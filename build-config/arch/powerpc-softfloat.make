@@ -2,6 +2,7 @@
 #
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -9,6 +10,7 @@
 #
 
 ARCH        ?= powerpc
+XTOOLS_ENABLE ?= yes
 TARGET	    ?= $(ARCH)-onie-linux-uclibc
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin

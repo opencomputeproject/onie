@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -9,7 +10,7 @@
 # to the NOS.
 #
 
-arch=$1
+rootfs_arch=$1
 tools_dir=$2
 output_file=$3
 sysroot=$4
@@ -26,8 +27,10 @@ shift 4
 #    located within the ONIE repo $tools_dir.  These tools are *not*
 #    present in the ONIE runtime image.
 
-[ -d "${tools_dir}/${arch}" ] || {
-    echo "ERROR: arch tools directory '${tools_dir}/${arch}' does not exist."
+arch_dir="$rootfs_arch"
+
+[ -d "${tools_dir}/${arch_dir}" ] || {
+    echo "ERROR: arch tools directory '${tools_dir}/${arch_dir}' does not exist."
     exit 1
 }
 
@@ -62,7 +65,7 @@ trap clean_up EXIT
 
 echo -n "Building ONIE tools archive ."
 tmp_dir=$(mktemp --directory)
-cp -a "${tools_dir}/${arch}"/* $tmp_dir
+cp -a "${tools_dir}/${arch_dir}"/* $tmp_dir
 echo -n "."
 for f in $* ; do
     tdir="${tmp_dir}/$(dirname $f)"

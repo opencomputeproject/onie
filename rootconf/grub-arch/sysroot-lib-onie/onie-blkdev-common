@@ -48,8 +48,10 @@ onie_get_boot_dev()
 onie_get_boot_disk()
 {
     local disk=$(onie_get_boot_dev)
-    # Strip off the numbers
-    disk="${disk%%[0-9]*}"
+    # Strip off the partition numbers from end
+    disk="${disk%%[0-9]}"
+    # remove partition suffix p in case of MMC card
+    echo ${disk} | grep -q mmcblk && disk="${disk%%p}"
     [ -n "$disk" ] && echo -n "$disk"
 }
 
@@ -82,8 +84,12 @@ onie_get_uefi_uuid()
     local disk=$(onie_get_boot_disk)
     local uefi_part=$(onie_get_uefi_partition)
 
+    # check if we have an mmcblk device
+    local blk_suffix=
+    echo ${disk} | grep -q mmcblk && blk_suffix="p"
+
     if [ -n "$disk" -a -n "$uefi_part" ] ; then
-        local uefi_uuid=$(blkid "${disk}$uefi_part" | sed -e 's/^.*UUID="//' -e 's/".*$//')
+        local uefi_uuid=$(blkid "${disk}$blk_suffix$uefi_part" | sed -e 's/^.*UUID="//' -e 's/".*$//')
         echo -n $uefi_uuid
     fi
 }

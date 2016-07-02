@@ -85,7 +85,16 @@ UUID=$uefi_uuid	$uefi_esp_mnt	$uefi_esp_fs_type	defaults,rw,errors=remount-ro	0	
 EOF
     ) >> /etc/fstab
 
-    local uefi_dev="$(onie_get_boot_disk)$(onie_get_uefi_partition)"
+    
+    local disk=$(onie_get_boot_disk)
+    local uefi_part=$(onie_get_uefi_partition)
+	
+    # check if we have an mmcblk device
+    local blk_suffix=
+    echo ${disk} | grep -q mmcblk && blk_suffix="p"
+	
+    local uefi_dev="${disk}$blk_suffix$uefi_part"
+
     # Check the filesystem for errors
     run_fsck "$uefi_dev" || {
         echo "ERROR: Problems checking $uefi_esp_label"

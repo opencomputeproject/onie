@@ -3,6 +3,7 @@
 #  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -10,6 +11,7 @@
 #
 
 ARCH        ?= x86_64
+XTOOLS_ENABLE ?= yes
 TARGET      ?= $(ARCH)-onie-linux-uclibc
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
@@ -86,7 +88,7 @@ ifeq ($(PXE_EFI64_ENABLE),yes)
 endif
 
 UPDATER_IMAGE_PARTS = $(UPDATER_VMLINUZ) $(UPDATER_INITRD) $(UPDATER_ONIE_TOOLS) \
-			$(ROOTCONFDIR)/x86_64/sysroot-lib-onie/onie-blkdev-common $(UPDATER_IMAGE_PARTS_PLATFORM)
+			$(ROOTCONFDIR)/grub-arch/sysroot-lib-onie/onie-blkdev-common $(UPDATER_IMAGE_PARTS_PLATFORM)
 
 UPDATER_IMAGE_PARTS_COMPLETE = $(KERNEL_INSTALL_STAMP) $(UPDATER_INITRD) $(UPDATER_ONIE_TOOLS)
 
@@ -118,6 +120,7 @@ BTRFS_PROGS_ENABLE = yes
 
 # Include GRUB tools
 GRUB_ENABLE = yes
+GRUB_IMAGE_NAME = grubx64.efi
 
 # Default to include the i2ctools.  A particular machine.make can
 # override this.
