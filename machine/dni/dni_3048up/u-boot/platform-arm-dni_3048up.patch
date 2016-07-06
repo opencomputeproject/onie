@@ -8278,10 +8278,10 @@ index a7fd7e3..614a2ce 100644
  
 diff --git a/include/configs/DNI_3048UP.h b/include/configs/DNI_3048UP.h
 new file mode 100755
-index 0000000..920a208
+index 0000000..dafd295
 --- /dev/null
 +++ b/include/configs/DNI_3048UP.h
-@@ -0,0 +1,347 @@
+@@ -0,0 +1,354 @@
 +#ifndef __DNI_34XX_H
 +#define __DNI_34XX_H
 +
@@ -8453,7 +8453,10 @@ index 0000000..920a208
 +#define IPROC_APB_CLK		(125000000)  /* 125 MHz */
 +
 +#define CONFIG_ENV_OVERWRITE	/* Allow serial# and ethernet mac address to be overwritten in nv storage */
-+#define CONFIG_ENV_SIZE			0x10000 
++#ifdef CONFIG_ENV_SIZE
++#undef CONFIG_ENV_SIZE
++#endif
++#define CONFIG_ENV_SIZE			0x10000
 +
 +#define CONFIG_ENV_SECT_SIZE	0x10000     /* 64KB */
 +
@@ -8469,8 +8472,9 @@ index 0000000..920a208
 +/*#define CONFIG_BCM5301X_DMA */
 +
 +/* General U-Boot configuration */
-+#define CONFIG_SYS_CBSIZE			1024	/* Console buffer size */
-+#define CONFIG_SYS_PBSIZE			(CONFIG_SYS_CBSIZE +	sizeof(CONFIG_SYS_PROMPT) + 16) /* Printbuffer size */
++#ifdef CONFIG_SYS_MAXARGS
++#undef CONFIG_SYS_MAXARGS
++#endif
 +#define CONFIG_SYS_MAXARGS			64
 +#define CONFIG_SYS_BARGSIZE		CONFIG_SYS_CBSIZE
 +
@@ -8487,6 +8491,9 @@ index 0000000..920a208
 +#define CONFIG_CMDLINE_TAG				/* ATAG_CMDLINE setup */
 +#define CONFIG_SETUP_MEMORY_TAGS		/* ATAG_MEM setup */
 +
++#ifdef CONFIG_BOOTDELAY
++#undef CONFIG_BOOTDELAY
++#endif
 +#define CONFIG_BOOTDELAY			3	/* User can hit a key to abort kernel boot and stay in uboot cmdline */
 +
 +/*#include <config_cmd_default.h>*/
@@ -9017,10 +9024,10 @@ index e38a4b7..b939326 100644
  	unsigned long long result = 0, value;
 diff --git a/nand_spl/board/broadcom/dni_3048up/Makefile b/nand_spl/board/broadcom/dni_3048up/Makefile
 new file mode 100644
-index 0000000..68e461a
+index 0000000..771e827
 --- /dev/null
 +++ b/nand_spl/board/broadcom/dni_3048up/Makefile
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,80 @@
 +#
 +# (C) Copyright 2006-2007
 +# Stefan Roese, DENX Software Engineering, sr@denx.de.
@@ -9066,7 +9073,8 @@ index 0000000..68e461a
 +__OBJS	:= $(SOBJS) $(COBJS)
 +LNDIR	:= $(nandobj)board/$(BOARDDIR)
 +
-+PAD_TO  := $(shell expr $$[$(CONFIG_IPROC_NAND_SPL_SYS_TEXT_BASE) + $(CONFIG_IPROC_NAND_SPL_MAX_SIZE)])
++SYS_TEXT_BASE := $(shell printf "%d" $(CONFIG_IPROC_NAND_SPL_SYS_TEXT_BASE))
++PAD_TO  := $(shell expr $(SYS_TEXT_BASE) + $(CONFIG_IPROC_NAND_SPL_MAX_SIZE))
 +
 +ALL	= $(nandobj)u-boot-nand_spl $(nandobj)u-boot-nand_spl.bin
 +
