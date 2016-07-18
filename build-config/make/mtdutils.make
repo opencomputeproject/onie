@@ -24,7 +24,7 @@ MTDUTILS_STAMP		= $(MTDUTILS_SOURCE_STAMP) \
 			  $(MTDUTILS_BUILD_STAMP) \
 			  $(MTDUTILS_INSTALL_STAMP)
 
-MTDBINS = mkfs.jffs2 mkfs.ubifs ubinize ubiformat ubinfo mtdinfo
+MTDBINS = mkfs.jffs2 mkfs.ubifs ubinize ubiformat ubinfo mtdinfo ubiattach ubimkvol ubidetach ubirmvol
 
 PHONY += mtdutils mtdutils-download mtdutils-source mtdutils-build \
 	 mtdutils-install mtdutils-clean mtdutils-download-clean
