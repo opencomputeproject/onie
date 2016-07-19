@@ -2,15 +2,16 @@ Add to support 'sys_eeprom' command (common part)
 
 Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
 Copyright (C) 2014 Srideep <srideep_devireddy@dell.com>
+Copyright (C) 2014,2016 david_yang <david_yang@accton.com>
 
 SPDX-License-Identifier:     GPL-2.0
 
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..3d5dace
+index 0000000..ab02104
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,1140 @@
+@@ -0,0 +1,1129 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -343,25 +344,19 @@ index 0000000..3d5dace
 +	tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
 +	tlvinfo_tlv_t    * eeprom_crc;
 +	unsigned int       calc_crc;
++	int                eeprom_index;
 +
-+	// Is the eeprom header valid?
-+	if (!is_valid_tlvinfo_header(eeprom_hdr)) {
-+		return;
-+	}
-+
-+	// Is the last TLV a CRC?
-+	eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
-+					       be16_to_cpu(eeprom_hdr->totallen) - (sizeof(tlvinfo_tlv_t) + 4)];
-+	if (eeprom_crc->type != TLV_CODE_CRC_32) {
++	// Discover the CRC TLV
++	if (!tlvinfo_find_tlv(eeprom, TLV_CODE_CRC_32, &eeprom_index)) {
 +		if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) + 4) > TLV_TOTAL_LEN_MAX) {
 +			return;
 +		}
-+		eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
-+						       be16_to_cpu(eeprom_hdr->totallen)];
++		eeprom_index = sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen);
 +		eeprom_hdr->totallen = cpu_to_be16(be16_to_cpu(eeprom_hdr->totallen) +
 +						   sizeof(tlvinfo_tlv_t) + 4);
-+		eeprom_crc->type = TLV_CODE_CRC_32;
 +	}
++	eeprom_crc = (tlvinfo_tlv_t *) &eeprom[eeprom_index];
++	eeprom_crc->type = TLV_CODE_CRC_32;
 +	eeprom_crc->length = 4;
 +
 +	// Calculate the checksum
@@ -543,11 +538,6 @@ index 0000000..3d5dace
 +	tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
 +	tlvinfo_tlv_t    * eeprom_tlv;
 +	int eeprom_end;
-+
-+	// Make sure the EEPROM contents are valid
-+	if (!is_valid_tlvinfo_header(eeprom_hdr) || !is_checksum_valid(eeprom)) {
-+		return(FALSE);
-+	}
 +
 +	// Search through the TLVs, looking for the first one which matches the
 +	// supplied type code.
