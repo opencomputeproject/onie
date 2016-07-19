@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -37,9 +37,9 @@ DEMO_SYSROOT_NEW_FILES = $(shell \
 			find -L $(DEMO_OS_DIR)/default -mindepth 1 -cnewer $(DEMO_SYSROOT_COMPLETE_STAMP) \
 			  -print -quit 2>/dev/null)
 DEMO_SYSROOT_NEW_FILES += $(shell \
-			test -d $(DEMO_OS_DIR)/$(ONIE_ARCH) && \
+			test -d $(DEMO_OS_DIR)/$(ROOTFS_ARCH) && \
 			test -f $(DEMO_SYSROOT_COMPLETE_STAMP) &&  \
-			find -L $(DEMO_OS_DIR)/$(ONIE_ARCH) -mindepth 1 -cnewer $(DEMO_SYSROOT_COMPLETE_STAMP) \
+			find -L $(DEMO_OS_DIR)/$(ROOTFS_ARCH) -mindepth 1 -cnewer $(DEMO_SYSROOT_COMPLETE_STAMP) \
 			  -print -quit 2>/dev/null)
   ifneq ($(strip $(DEMO_SYSROOT_NEW_FILES)),)
     $(shell rm -f $(DEMO_SYSROOT_COMPLETE_STAMP))
@@ -51,7 +51,9 @@ DEMO_TRIM = \
    etc/rc0.d/K25discover.sh	\
    etc/rc3.d/S50discover.sh	\
    etc/rc6.d/K25discover.sh	\
+   etc/rcS.d/S03boot-mode.sh	\
    etc/init.d/discover.sh	\
+   etc/init.d/boot-mode.sh	\
    bin/discover			\
    bin/uninstaller		\
    bin/onie-uninstaller		\
@@ -65,8 +67,8 @@ $(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_CPIO_XZ)
 	$(Q) cp -a $(SYSROOTDIR) $(DEMO_SYSROOTDIR)
 	$(Q) cd $(DEMO_SYSROOTDIR) && rm $(DEMO_TRIM)
 	$(Q) sed -i -e '/onie/d' $(DEMO_SYSROOTDIR)/etc/syslog.conf
-	$(Q) cd $(DEMO_OS_DIR) && ./install default $(DEMO_SYSROOTDIR)
-	$(Q) cd $(DEMO_OS_DIR) && ./install $(ONIE_ARCH) $(DEMO_SYSROOTDIR)
+	$(Q) cd $(DEMO_OS_DIR) && $(SCRIPTDIR)/install-rootfs.sh default $(DEMO_SYSROOTDIR)
+	$(Q) cd $(DEMO_OS_DIR) && $(SCRIPTDIR)/install-rootfs.sh $(ROOTFS_ARCH) $(DEMO_SYSROOTDIR)
 	$(Q) mkdir -p $(DEMO_SYSROOTDIR)/lib/demo
 	$(Q) t=`mktemp`; echo "machine=$(MACHINE)" > $$t ; \
 		echo "platform=$(PLATFORM)" >> $$t ; \
@@ -82,8 +84,9 @@ $(DEMO_SYSROOT_CPIO_XZ) : $(DEMO_SYSROOT_COMPLETE_STAMP)
 
 $(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
 	$(Q) echo "==== Create demo $(MACHINE_PREFIX) u-boot multi-file initramfs itb ===="
-	$(Q) cd $(IMAGEDIR) && $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) \
-				$(MACHINE_PREFIX) $(DEMO_SYSROOT_CPIO_XZ) $(DEMO_UIMAGE)
+	$(Q) cd $(IMAGEDIR) && \
+		V=$(V) $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) $(MACHINE_PREFIX) $(UBOOT_ITB_ARCH) \
+		$(KERNEL_VMLINUZ) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb $(DEMO_SYSROOT_CPIO_XZ) $(DEMO_UIMAGE)
 	$(Q) touch $@
 
 $(DEMO_KERNEL_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP)
@@ -101,10 +104,6 @@ DEMO_INSTALLER_FILES = $(shell test -d $(IMAGEDIR) && test -f $(DEMO_SYSROOT_CPI
 endif
 
 define demo_MKIMAGE
-	CONSOLE_SPEED=$(CONSOLE_SPEED) \
-	CONSOLE_DEV=$(CONSOLE_DEV) \
-	CONSOLE_FLAG=$(CONSOLE_FLAG) \
-	CONSOLE_PORT=$(CONSOLE_PORT) \
 	./scripts/onie-mk-demo.sh $(ONIE_ARCH) $(MACHINE) $(PLATFORM) \
 		$(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf $(1) $(2) $(DEMO_IMAGE_PARTS) 
 endef

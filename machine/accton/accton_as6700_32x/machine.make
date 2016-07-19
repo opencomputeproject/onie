@@ -7,6 +7,7 @@
 # UBOOT_IDENT_STRING = 1.4.0.1
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= r01c
 
@@ -34,6 +35,9 @@ VENDOR_ID = 259
 LINUX_TARBALL_URLS	= http://git.freescale.com/git/cgit.cgi/ppc/sdk/linux.git/snapshot
 LINUX_RELEASE		= fsl-sdk-v1.5
 LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
+
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
 
 #-------------------------------------------------------------------------------
 #

@@ -1,0 +1,71 @@
+=======================================
+Installing ONIE on Celestica Smallstone
+=======================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/celestica MACHINE=cel_smallstone all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/celestica MACHINE=cel_smallstone all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r-- 4849664 May  7 12:06 onie-cel_smallstone-r0.bin
+
+Installing the ONIE binaries
+============================
+
+A single binary image needs to be installed on the NOR flash.
+
+Image 1 -- ONIE kernel and u-boot.
+  name:  onie-cel_smallstone-r0.bin
+
+Step 1 -- Put the ONIE file on a TFTP server
+---------------------------------------------
+
+The following directions assume the files are on the root of the TFTP
+server.
+
+Step 2 -- Install image1 (onie-cel_smallstone-r0.bin)
+-----------------------------------------------
+
+Copying the image down using TFTP and flash to the NOR flash::
+
+  => setenv start 0xefb60000
+  => setenv sz.b 0x4a0000
+  => tftp onie-cel_smallstone-r0.bin
+  => protect off $start +${sz.b} && erase $start +${sz.b}
+  => cp.b $fileaddr $start ${sz.b} && protect on $start +${sz.b}
+
+Step 3 -- Configure Serial Console
+----------------------------------
+
+ONIE defaults the serial console baud rate to 115200.  You may need to
+adjust your terminal settings.
+
+Step 4 -- Restart The System
+----------------------------
+
+You can interrupt the boot process by pressing any key during the
+count down::
+
+  => reset
+
+Step 5 -- Optional
+------------------
+
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this::
+
+  => run onie_rescue
+

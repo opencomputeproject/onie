@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
@@ -16,7 +16,6 @@
 ROOTCONFDIR		= $(CONFDIR)
 SYSROOT_CPIO		= $(MBUILDDIR)/sysroot.cpio
 SYSROOT_CPIO_XZ		= $(IMAGEDIR)/$(MACHINE_PREFIX).initrd
-UIMAGE			= $(IMAGEDIR)/$(MACHINE_PREFIX).uImage
 ITB_IMAGE		= $(IMAGEDIR)/$(MACHINE_PREFIX).itb
 
 UPDATER_ITB		= $(MBUILDDIR)/onie.itb
@@ -25,9 +24,11 @@ UPDATER_ONIE_TOOLS	= $(MBUILDDIR)/onie-tools.tar.xz
 
 UPDATER_IMAGE		= $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
 
-ONIE_TOOLS_LIST = \
+ONIE_TOOLS_DIR	= $(abspath ../tools)
+ONIE_SYSROOT_TOOLS_LIST = \
 	lib/onie \
-	bin/onie-boot-mode
+	bin/onie-boot-mode \
+	bin/onie-fwpkg
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
 IMAGE_UPDATER_STAMP	= $(STAMPDIR)/image-updater
@@ -63,12 +64,32 @@ ifeq ($(GRUB_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(GRUB_INSTALL_STAMP)
 endif
 
-ifeq ($(SYSLINUX_ENABLE),yes)
-  PACKAGES_INSTALL_STAMPS += $(SYSLINUX_SOURCE_STAMP)
-endif
-
 ifeq ($(MTREE_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(MTREE_INSTALL_STAMP)
+endif
+
+ifeq ($(ACPI_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(ACPICA_TOOLS_INSTALL_STAMP)
+endif
+
+ifeq ($(UEFI_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(EFIBOOTMGR_INSTALL_STAMP)
+endif
+
+ifeq ($(DOSFSTOOLS_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(DOSFSTOOLS_INSTALL_STAMP)
+endif
+
+ifeq ($(KEXEC_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(KEXEC_INSTALL_STAMP)
+endif
+
+ifeq ($(FLASHROM_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(FLASHROM_INSTALL_STAMP)
+endif
+
+ifeq ($(IPMITOOL_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(IPMITOOL_INSTALL_STAMP)
 endif
 
 ifndef MAKE_CLEAN
@@ -113,7 +134,19 @@ SYSROOT_LIBS	+= \
 endif
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)
-  SYSROOT_LIBS += libstdc++.so libstdc++.so.6 libstdc++.so.6.0.17
+  SYSROOT_LIBS += libstdc++.so libstdc++.so.6
+  ifeq ($(GCC_VERSION),4.9.2)
+    SYSROOT_LIBS += libstdc++.so.6.0.20
+  else ifeq ($(GCC_VERSION),4.7.3)
+    SYSROOT_LIBS += libstdc++.so.6.0.17
+  else
+    $(error C++ support: Unsupported GCC version: $(GCC_VERSION))
+  endif
+endif
+
+# Add librt if ACPI is enabled
+ifeq ($(ACPI_ENABLE),yes)
+  SYSROOT_LIBS += librt.so.0 librt-$(UCLIBC_VERSION).so
 endif
 
 # Optionally add debug utilities
@@ -128,7 +161,7 @@ endif
 
 # sysroot-check does the following:
 #
-# - strip the ELF binaries (grub moduels and kernel)
+# - strip the ELF binaries (grub modules and kernel)
 #
 # - verifies that we have all the shared libraries required by the
 #   executables in our final sysroot.
@@ -137,6 +170,9 @@ endif
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
+		[ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
+			echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
+			exit 1; } ; \
 		find $(DEV_SYSROOT)/lib -name $$file | xargs -i \
 		cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
 	done
@@ -150,8 +186,8 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) mkdir -p $(CHECKROOT) && \
 	     $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
 		-s $(SYSROOTDIR) -d $(CHECKDIR) && \
-		(cd $(SYSROOTDIR) && find . > $(SYSFILES)) && \
-		(cd $(CHECKDIR) && find . > $(CHECKFILES)) && \
+		(cd $(SYSROOTDIR) && find . | LC_ALL=C sort > $(SYSFILES)) && \
+		(cd $(CHECKDIR) && find . | LC_ALL=C sort > $(CHECKFILES)) && \
 		diff -q $(SYSFILES) $(CHECKFILES) > /dev/null 2>&1 || { \
 			(echo "ERROR: Missing files in SYSROOTDIR:" && \
 			 diff $(SYSFILES) $(CHECKFILES) ; \
@@ -172,12 +208,12 @@ RUNTIME_ONIE_PLATFORM	?= $(ARCH)-$(RUNTIME_ONIE_MACHINE)-r$(MACHINE_REV)
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
 $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) rm -f $(SYSROOTDIR)/linuxrc
-	$(Q) cd $(ROOTCONFDIR) && ./install default $(SYSROOTDIR)
-	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie ] ; then \
-		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
+	$(Q) cd $(ROOTCONFDIR) && $(SCRIPTDIR)/install-rootfs.sh default $(SYSROOTDIR)
+	$(Q) if [ -d $(ROOTCONFDIR)/$(ROOTFS_ARCH)/sysroot-lib-onie ] ; then \
+		cp $(ROOTCONFDIR)/$(ROOTFS_ARCH)/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
 	     fi
-	$(Q) if [ -d $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin ] ; then	\
-		cp $(ROOTCONFDIR)/$(ONIE_ARCH)/sysroot-bin/* $(SYSROOTDIR)/bin ; \
+	$(Q) if [ -d $(ROOTCONFDIR)/$(ROOTFS_ARCH)/sysroot-bin ] ; then	\
+		cp $(ROOTCONFDIR)/$(ROOTFS_ARCH)/sysroot-bin/* $(SYSROOTDIR)/bin ; \
 	     fi
 	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-lib-onie ] ; then \
 		cp $(MACHINEDIR)/rootconf/sysroot-lib-onie/* $(SYSROOTDIR)/lib/onie ; \
@@ -215,6 +251,9 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_build_date=\"$$(date -Imin)\"" >> $(MACHINE_CONF)
 	$(Q) echo "onie_partition_type=$(PARTITION_TYPE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_kernel_version=$(LINUX_RELEASE)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_firmware=$(FIRMWARE_TYPE)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_switch_asic=$(SWITCH_ASIC_VENDOR)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_skip_ethmgmt_macs=$(SKIP_ETHMGMT_MACS)" >> $(MACHINE_CONF)
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
@@ -229,16 +268,28 @@ $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 $(UPDATER_INITRD) : $(SYSROOT_CPIO_XZ)
 	ln -sf $< $@
 
-$(UPDATER_ONIE_TOOLS):  $(SYSROOT_COMPLETE_STAMP)
+ifndef MAKE_CLEAN
+ONIE_TOOLS_FILES = $(shell \
+		test -d $(ONIE_TOOLS_DIR) && test -r $(UPDATER_ONIE_TOOLS) && \
+		find -L $(ONIE_TOOLS_DIR) -mindepth 1 -cnewer $(UPDATER_ONIE_TOOLS) \
+		  -print -quit 2>/dev/null)
+  ifneq ($(strip $(ONIE_TOOLS_FILES)),)
+    $(shell rm -f $(UPDATER_ONIE_TOOLS))
+  endif
+endif
+
+$(UPDATER_ONIE_TOOLS): $(SYSROOT_COMPLETE_STAMP) $(SCRIPTDIR)/onie-mk-tools.sh
 	$(Q) echo "==== Create ONIE Tools tarball ===="
-	$(Q) tar -C $(SYSROOTDIR) -cJf $@ $(ONIE_TOOLS_LIST)
+	$(Q) $(SCRIPTDIR)/onie-mk-tools.sh $(ONIE_ARCH) $(ONIE_TOOLS_DIR) $@ \
+		$(SYSROOTDIR) $(ONIE_SYSROOT_TOOLS_LIST)
 
 .SECONDARY: $(ITB_IMAGE)
 
-$(IMAGEDIR)/%.itb : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ)
+$(IMAGEDIR)/%.itb : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ) $(SCRIPTDIR)/onie-mk-itb.sh
 	$(Q) echo "==== Create $* u-boot multi-file .itb image ===="
-	$(Q) cd $(IMAGEDIR) && $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) \
-				$(MACHINE_PREFIX) $(SYSROOT_CPIO_XZ) $@
+	$(Q) cd $(IMAGEDIR) && \
+		V=$(V) $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) $(MACHINE_PREFIX) $(UBOOT_ITB_ARCH) \
+		$(KERNEL_VMLINUZ) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb $(SYSROOT_CPIO_XZ) $@
 
 $(UPDATER_ITB) : $(ITB_IMAGE)
 	ln -sf $< $@
@@ -267,11 +318,11 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(SCRIPTDIR)/onie-mk-ins
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE updater ===="
 	$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
 	     CONSOLE_DEV=$(CONSOLE_DEV) \
-	     CONSOLE_FLAG=$(CONSOLE_FLAG) \
 	     CONSOLE_PORT=$(CONSOLE_PORT) \
 	     UPDATER_UBOOT_NAME=$(UPDATER_UBOOT_NAME) \
-	     EXTRA_CMDLINE_LINUX=$(EXTRA_CMDLINE_LINUX) \
-	     $(SCRIPTDIR)/onie-mk-installer.sh $(ONIE_ARCH) $(MACHINEDIR) \
+	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
+	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
+	     $(SCRIPTDIR)/onie-mk-installer.sh onie $(ONIE_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS)
 	$(Q) touch $@
@@ -280,20 +331,36 @@ PXE_EFI64_IMAGE		= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).efi64.pxe
 RECOVERY_ISO_IMAGE	= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).iso
 
 RECOVERY_CONF_DIR	= $(PROJECTDIR)/build-config/recovery
-RECOVERY_SYSROOT	= $(MBUILDDIR)/recovery-sysroot
-RECOVERY_CPIO		= $(MBUILDDIR)/recovery.cpio
-RECOVERY_INITRD		= $(IMAGEDIR)/recovery-$(ARCH)-$(MACHINE_PREFIX).initrd
-RECOVERY_ISO_SYSROOT	= $(MBUILDDIR)/recovery-sysroot-iso
-PXE_EFI64_GRUB_MODS	= $(MBUILDDIR)/pxe-efi64-grub-modlist
+RECOVERY_DIR		= $(MBUILDDIR)/recovery
+RECOVERY_SYSROOT	= $(RECOVERY_DIR)/sysroot
+RECOVERY_CPIO		= $(RECOVERY_DIR)/initrd.cpio
+RECOVERY_INITRD		= $(RECOVERY_DIR)/$(ARCH)-$(MACHINE_PREFIX).initrd
+RECOVERY_ISO_SYSROOT	= $(RECOVERY_DIR)/iso-sysroot
+RECOVERY_CORE_IMG	= $(RECOVERY_DIR)/core.img
+RECOVERY_EMBEDDED_IMG	= $(RECOVERY_DIR)/embedded.img
+RECOVERY_EFI_DIR	= $(RECOVERY_DIR)/efi
+RECOVERY_EFI_BOOTX86_IMG= $(RECOVERY_EFI_DIR)/boot/bootx64.efi
+RECOVERY_ELTORITO_IMG	= $(RECOVERY_ISO_SYSROOT)/boot/eltorito.img
+RECOVERY_UEFI_IMG	= $(RECOVERY_ISO_SYSROOT)/boot/efi.img
+PXE_EFI64_GRUB_MODS     = $(RECOVERY_DIR)/pxe-efi64-grub-modlist
 
 RECOVERY_INITRD_STAMP	= $(STAMPDIR)/recovery-initrd
 RECOVERY_ISO_STAMP	= $(STAMPDIR)/recovery-iso
 PXE_EFI64_STAMP		= $(STAMPDIR)/pxe-efi64
 
-RECOVERY_ISO_SYSLINUX_FILES = $(SYSLINUX_DIR)/core/isolinux.bin \
-                              $(SYSLINUX_DIR)/com32/menu/menu.c32
 # Default to rescue mode for Syslinux menu, if none specified in machine.make
-SYSLINUX_DEFAULT_MODE ?=rescue
+RECOVERY_DEFAULT_ENTRY ?= rescue
+
+# Map RECOVERY_DEFAULT_ENTRY to GRUB entry number
+ifeq ($(RECOVERY_DEFAULT_ENTRY),rescue)
+  GRUB_DEFAULT_ENTRY = 0
+else
+  ifeq ($(RECOVERY_DEFAULT_ENTRY),embed)
+    GRUB_DEFAULT_ENTRY = 1
+  else
+    $(error Unknown RECOVERY_DEFAULT_ENTRY requested: $(RECOVERY_DEFAULT_ENTRY))
+  endif
+endif
 
 PHONY += pxe-efi64 recovery-initrd recovery-iso
 
@@ -302,63 +369,68 @@ PHONY += pxe-efi64 recovery-initrd recovery-iso
 recovery-initrd: $(RECOVERY_INITRD_STAMP)
 $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery initrd ===="
-	$(Q) rm -rf $(RECOVERY_SYSROOT)
+	$(Q) rm -rf $(RECOVERY_DIR)
+	$(Q) mkdir -p $(RECOVERY_DIR)
 	$(Q) cp -a $(SYSROOTDIR) $(RECOVERY_SYSROOT)
 	$(Q) cp $(UPDATER_IMAGE) $(RECOVERY_SYSROOT)/lib/onie/onie-updater
 	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(RECOVERY_CPIO) > $(RECOVERY_INITRD)
 	$(Q) touch $@
 
+ifeq ($(UEFI_ENABLE),yes)
+  RECOVERY_XORRISO_OPTIONS = $(RECOVERY_CONF_DIR)/xorriso-options-uefi.cfg
+else
+  RECOVERY_XORRISO_OPTIONS = $(RECOVERY_CONF_DIR)/xorriso-options-bios.cfg
+endif
 # Make hybrid .iso image containing the ONIE kernel and recovery intrd
 recovery-iso: $(RECOVERY_ISO_STAMP)
-$(RECOVERY_ISO_STAMP): $(RECOVERY_INITRD_STAMP) $(RECOVERY_CONF_DIR)/grub-pxe.cfg $(RECOVERY_CONF_DIR)/syslinux.cfg
+$(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
+			$(RECOVERY_CONF_DIR)/grub-iso.cfg $(RECOVERY_XORRISO_OPTIONS)
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery Hybrid iso ===="
-	$(Q) rm -rf $(RECOVERY_ISO_SYSROOT)
-	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)
-	$(Q) cp $(UPDATER_VMLINUZ) $(RECOVERY_ISO_SYSROOT)/vmlinuz
-	$(Q) cp $(RECOVERY_INITRD) $(RECOVERY_ISO_SYSROOT)/initrd.xz
-	$(Q) cp $(RECOVERY_ISO_SYSLINUX_FILES) $(RECOVERY_ISO_SYSROOT)
-	$(Q) sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
-		 -e 's/<CONSOLE_DEV>/$(CONSOLE_DEV)/g' \
-		 -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' \
-		 -e 's/<CONSOLE_PORT>/$(CONSOLE_PORT)/g' \
-		 -e 's/<SYSLINUX_DEFAULT_MODE>/$(SYSLINUX_DEFAULT_MODE)/g' \
-	         $(RECOVERY_CONF_DIR)/syslinux.cfg \
-		 > $(RECOVERY_ISO_SYSROOT)/syslinux.cfg
-	$(Q) mkdir -p $(RECOVERY_ISO_SYSROOT)/boot/grub
-	$(Q) sed -e 's/<CONSOLE_SPEED>/$(CONSOLE_SPEED)/g' \
-		 -e 's/<CONSOLE_DEV>/$(CONSOLE_DEV)/g' \
-		 -e 's/<CONSOLE_FLAG>/$(CONSOLE_FLAG)/g' \
-		 -e 's/<CONSOLE_PORT>/$(CONSOLE_PORT)/g' \
-	         $(MACHINE_CONF) $(RECOVERY_CONF_DIR)/grub-pxe.cfg \
-		 > $(RECOVERY_ISO_SYSROOT)/boot/grub/grub.cfg
-	$(Q) genisoimage -r -V "ONIE-RECOVERY" -cache-inodes -J -l -b isolinux.bin	\
-		-c boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table		\
-		-o $(RECOVERY_ISO_IMAGE) $(RECOVERY_ISO_SYSROOT)
-	$(Q) $(SYSLINUX_DIR)/utils/isohybrid.pl $(RECOVERY_ISO_IMAGE)
+	$(Q) Q=$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
+	     CONSOLE_DEV=$(CONSOLE_DEV) \
+	     CONSOLE_PORT=$(CONSOLE_PORT) \
+	     GRUB_DEFAULT_ENTRY=$(GRUB_DEFAULT_ENTRY) \
+	     UEFI_ENABLE=$(UEFI_ENABLE) \
+	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
+	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
+	     $(SCRIPTDIR)/onie-mk-iso.sh $(UPDATER_VMLINUZ) $(RECOVERY_INITRD) \
+		$(RECOVERY_DIR) \
+		$(MACHINE_CONF) $(RECOVERY_CONF_DIR) \
+		$(GRUB_HOST_LIB_I386_DIR) $(GRUB_HOST_BIN_I386_DIR) \
+		$(GRUB_HOST_LIB_UEFI_DIR) $(GRUB_HOST_BIN_UEFI_DIR) \
+		$(RECOVERY_XORRISO_OPTIONS) \
+		$(RECOVERY_ISO_IMAGE)
 	$(Q) touch $@
 
 # Convert the .iso to a PXE-EFI64 bootable image using GRUB
 pxe-efi64: $(PXE_EFI64_STAMP)
 $(PXE_EFI64_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE PXE EFI64 Recovery Image ===="
-	$(Q) cd $(GRUB_HOST_INSTALL_DIR)/usr/lib/grub/x86_64-efi && \
+	$(Q) cd $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/lib/grub/x86_64-efi && \
 		ls *.mod|sed -e 's/\.mod//g'|egrep -v '(ehci|at_keyboard)' > $(PXE_EFI64_GRUB_MODS)
-	$(Q) $(GRUB_HOST_INSTALL_DIR)/usr/bin/grub-mkimage --format=x86_64-efi	\
+	$(Q) $(GRUB_HOST_INSTALL_UEFI_DIR)/usr/bin/grub-mkimage --format=x86_64-efi	\
 	    --config=$(RECOVERY_CONF_DIR)/grub-embed.cfg			\
-	    --directory=$(GRUB_HOST_INSTALL_DIR)/usr/lib/grub/x86_64-efi	\
+	    --directory=$(GRUB_HOST_INSTALL_UEFI_DIR)/usr/lib/grub/x86_64-efi	\
 	    --output=$(PXE_EFI64_IMAGE) --memdisk=$(RECOVERY_ISO_IMAGE)		\
 	    $$(cat $(PXE_EFI64_GRUB_MODS))
 	$(Q) touch $@
 
+# Allow machines to optionally define image post-processing
+# instructions.  This makefile fragment can define rules for keeping
+# $(MACHINE_IMAGE_COMPLETE_STAMP) up to date, referenced by the final
+# $(IMAGE_COMPLETE_STAMP) target below.
+-include $(MACHINEDIR)/post-process.make
+
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
-$(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE)
+$(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE) $(MACHINE_IMAGE_COMPLETE_STAMP)
 	$(Q) touch $@
 
 USERSPACE_CLEAN += image-clean
 image-clean:
 	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP)
+	$(Q) rm -rf $(RECOVERY_DIR) $(MACHINE_IMAGE_COMPLETE_STAMP) $(MACHINE_IMAGE_PRODUCTS)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
 #

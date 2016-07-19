@@ -1,6 +1,6 @@
 # KVM x86_64 Virtual Machin
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
@@ -17,6 +17,12 @@ else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
 endif
+
+# The SWITCH_ASIC_VENDOR is used to further differentiate the platform
+# in the ONIE waterfall.  This string should be the stock ticker
+# symbol of the ASIC vendor, in lower case.  The value in this example
+# here is completely fictitious.
+SWITCH_ASIC_VENDOR = qemu
 
 # The VENDOR_VERSION string is appended to the overal ONIE version
 # string.  HW vendors can use this to appended their own versioning
@@ -41,12 +47,14 @@ I2CTOOLS_ENABLE = no
 #
 #I2CTOOLS_SYSEEPROM = no
 
-# Set the desired kernel version.
-LINUX_VERSION		= 3.14
-LINUX_MINOR_VERSION	= 27
+# Enable UEFI support
+UEFI_ENABLE = yes
 
-# Set the desired uClibc version
-UCLIBC_VERSION = 0.9.33.2
+# Enable building firmware updates
+FIRMWARE_UPDATE_ENABLE = yes
+
+# Do not modify Ethernet management MACs programmed by hypervisor.
+SKIP_ETHMGMT_MACS = yes
 
 #
 # Console parameters can be defined here (default values are in
@@ -55,7 +63,6 @@ UCLIBC_VERSION = 0.9.33.2
 # 
 # CONSOLE_SPEED = 9600
 # CONSOLE_DEV = 0
-# CONSOLE_FLAG = 0
 
 # Specify any extra parameters that you'd want to pass to the onie linux
 # kernel command line in EXTRA_CMDLINE_LINUX env variable. Eg:
@@ -64,10 +71,10 @@ UCLIBC_VERSION = 0.9.33.2
 #
 # NOTE: You can give multiple space separated parameters
 
-# Specify the default menu option for syslinux when booting a recovery image
-# Valid values are "rescue" or "embed" (without double-quotes). This parameter
-# defaults to "rescue" mode if not specified here.
-#SYSLINUX_DEFAULT_MODE=embed
+# Specify the default menu option when booting a recovery image.  Valid
+# values are "rescue" or "embed" (without double-quotes). This
+# parameter defaults to "rescue" mode if not specified here.
+# RECOVERY_DEFAULT_ENTRY = embed
 
 #-------------------------------------------------------------------------------
 #

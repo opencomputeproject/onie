@@ -8,6 +8,7 @@
 
 
 ONIE_ARCH ?= powerpc-softfloat
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
@@ -25,6 +26,9 @@ EXT3_4_ENABLE = yes
 LINUX_TARBALL_URLS	= http://git.freescale.com/git/cgit.cgi/ppc/sdk/linux.git/snapshot
 LINUX_RELEASE		= fsl-sdk-v1.5
 LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
+
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
 
 UBOOT_MACHINE = AS5700_96X
 KERNEL_DTB = as5700_96x.dtb

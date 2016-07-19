@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#
+# SPDX-License-Identifier:     GPL-2.0
+
+# This script is part of the onie-tools package, intended for use by a
+# NOS to display information about the ONIE environment.  The script
+# leverages the ONIE build information from the grub-machine.cfg file.
+
+grub_dir="$(dirname $(realpath $0))/../../grub"
+
+grub_machine_cfg="${grub_dir}/grub-machine.cfg"
+
+if [ -r "$grub_machine_cfg" ] ; then
+    . "$grub_machine_cfg"
+    grep = $grub_machine_cfg | sed -e 's/onie_//' -e 's/=.*$//' | while read var ; do
+        eval val='$'onie_$var
+        printf "%-20s: %s\n" "ONIE ${var}" "$val"
+    done
+else
+    echo "Warning: ONIE version information not available" > /dev/stderr
+fi

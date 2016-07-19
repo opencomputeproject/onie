@@ -1,7 +1,8 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -13,13 +14,14 @@
 #-------------------------------------------------------------------------------
 # Need the Linux kernel downloaded before building xtools
 
-LINUX_VERSION		?= 3.2
-LINUX_MINOR_VERSION	?= 35
+LINUX_VERSION		?= 4.1
+LINUX_MAJOR_VERSION	= $(firstword $(subst ., ,$(LINUX_VERSION)))
+LINUX_MINOR_VERSION	?= 23
 LINUX_RELEASE		?= $(LINUX_VERSION).$(LINUX_MINOR_VERSION)
 LINUX_TARBALL		?= linux-$(LINUX_RELEASE).tar.xz
 export LINUX_TARBALL
 export LINUX_RELEASE
-LINUX_TARBALL_URLS	+= $(ONIE_MIRROR) https://www.kernel.org/pub/linux/kernel/v3.x
+LINUX_TARBALL_URLS	+= $(ONIE_MIRROR) https://www.kernel.org/pub/linux/kernel/v$(LINUX_MAJOR_VERSION).x
 
 KERNEL_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/kernel-download-$(LINUX_RELEASE)
 

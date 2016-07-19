@@ -1,0 +1,1694 @@
+Broadcom iProc (ARM Cortex-A9) DMA driver
+Sourced from Broadcom LDK 3.4.10
+
+diff --git a/drivers/bcmdrivers/dma/.gitignore b/drivers/bcmdrivers/dma/.gitignore
+new file mode 100644
+index 0000000..d741861
+--- /dev/null
++++ b/drivers/bcmdrivers/dma/.gitignore
+@@ -0,0 +1,4 @@
++/.built-in.o.cmd
++/built-in.o
++/modules.builtin
++/modules.order
+diff --git a/drivers/bcmdrivers/dma/Kconfig b/drivers/bcmdrivers/dma/Kconfig
+new file mode 100644
+index 0000000..652fbb4
+--- /dev/null
++++ b/drivers/bcmdrivers/dma/Kconfig
+@@ -0,0 +1,15 @@
++config IPROC_DMA
++	tristate "DMA support"
++	depends on ARCH_IPROC
++	select DMADEVICES
++	select DMADEVICES_DEBUG
++	select DMADEVICES_VDEBUG
++	select DMA_ENGINE
++	select PL330
++	select DMAC_PL330
++	select DMATEST
++	default n
++	help
++	  DMA support for pl330
++
++	  If unsure, say N.
+diff --git a/drivers/bcmdrivers/dma/Makefile b/drivers/bcmdrivers/dma/Makefile
+new file mode 100644
+index 0000000..aacabb5
+--- /dev/null
++++ b/drivers/bcmdrivers/dma/Makefile
+@@ -0,0 +1,3 @@
++
++obj-$(CONFIG_IPROC_DMA) := iproc_dma.o
++iproc_dma-objs := dma.o
+diff --git a/drivers/bcmdrivers/dma/dma-pl330.h b/drivers/bcmdrivers/dma/dma-pl330.h
+new file mode 100644
+index 0000000..bf45e7b
+--- /dev/null
++++ b/drivers/bcmdrivers/dma/dma-pl330.h
+@@ -0,0 +1,103 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_DMA_H
++#define __PLAT_DMA_H
++
++#include <asm/scatterlist.h>
++
++#define MAX_CHAN_NAME_LENGTH	32
++
++/* DMA direction control */
++enum dma_direction {
++	DMA_DIRECTION_MEM_TO_MEM = 0,
++	DMA_DIRECTION_MEM_TO_DEV_FLOW_CTRL_DMAC = 1,
++	DMA_DIRECTION_MEM_TO_DEV_FLOW_CTRL_PERI = 2,
++	DMA_DIRECTION_DEV_TO_MEM_FLOW_CTRL_DMAC = 3,
++	DMA_DIRECTION_DEV_TO_MEM_FLOW_CTRL_PERI = 4,
++	DMA_DIRECTION_DEV_TO_DEV = 5	/* Invalid, unsupported */
++};
++#define DMA_DIRECTION_MASK	0x7
++
++/* Channel configurations definition */
++#define DMA_CFG_SRC_ADDR_FIXED				(0x0 << 0)
++#define DMA_CFG_SRC_ADDR_INCREMENT			(0x1 << 0)
++#define DMA_CFG_DST_ADDR_FIXED				(0x0 << 14)
++#define DMA_CFG_DST_ADDR_INCREMENT			(0x1 << 14)
++
++#define DMA_CFG_BURST_SIZE_MASK         (0x7 << 1)
++#define DMA_CFG_BURST_SIZE_1            (0x0 << 1)
++#define DMA_CFG_BURST_SIZE_2            (0x1 << 1)
++#define DMA_CFG_BURST_SIZE_4            (0x2 << 1)
++#define DMA_CFG_BURST_SIZE_8            (0x3 << 1)
++#define DMA_CFG_BURST_SIZE_16           (0x4 << 1)
++#define DMA_CFG_BURST_SIZE_32           (0x5 << 1)
++#define DMA_CFG_BURST_SIZE_64           (0x6 << 1)
++#define DMA_CFG_BURST_SIZE_128          (0x7 << 1)
++
++#define DMA_CFG_BURST_LENGTH_MASK       (0xF << 4)
++#define DMA_CFG_BURST_LENGTH_1           (0x0 << 4)
++#define DMA_CFG_BURST_LENGTH_2           (0x1 << 4)
++#define DMA_CFG_BURST_LENGTH_3           (0x2 << 4)
++#define DMA_CFG_BURST_LENGTH_4           (0x3 << 4)
++#define DMA_CFG_BURST_LENGTH_5           (0x4 << 4)
++#define DMA_CFG_BURST_LENGTH_6           (0x5 << 4)
++#define DMA_CFG_BURST_LENGTH_7           (0x6 << 4)
++#define DMA_CFG_BURST_LENGTH_8           (0x7 << 4)
++#define DMA_CFG_BURST_LENGTH_9           (0x8 << 4)
++#define DMA_CFG_BURST_LENGTH_10          (0x9 << 4)
++#define DMA_CFG_BURST_LENGTH_11          (0xA << 4)
++#define DMA_CFG_BURST_LENGTH_12          (0xB << 4)
++#define DMA_CFG_BURST_LENGTH_13          (0xC << 4)
++#define DMA_CFG_BURST_LENGTH_14          (0xD << 4)
++#define DMA_CFG_BURST_LENGTH_15          (0xE << 4)
++#define DMA_CFG_BURST_LENGTH_16          (0xF << 4)
++
++#define DMA_CFG_BURST_LEN(x)			(((x - 1) & 0xF) << 4)
++
++/* src and dest burst size and burst length are assumed to be same */
++
++enum pl330_xfer_status {
++	DMA_PL330_XFER_OK,
++	DMA_PL330_XFER_ERR,
++	DMA_PL330_XFER_ABORT,
++};
++
++struct dma_transfer_list {
++	dma_addr_t srcaddr;	/* src address */
++	dma_addr_t dstaddr;	/* dst address */
++	unsigned int xfer_size;	/* In bytes */
++	struct list_head next;	/* Next item */
++};
++
++typedef void (*pl330_xfer_callback_t) (void *private_data,
++				       enum pl330_xfer_status status);
++
++int dma_request_chan(unsigned int *chan, const char *name);
++int dma_free_chan(unsigned int chan);
++int dma_map_peripheral(unsigned int chan, const char *peri_name);
++int dma_unmap_peripheral(unsigned int chan);
++int dma_setup_transfer(unsigned int chan, dma_addr_t s, dma_addr_t d,
++		       unsigned int xfer_size, int ctrl, int cfg);
++int dma_setup_transfer_list(unsigned int chan, struct list_head *head,
++			    int ctrl, int cfg);
++int dma_start_transfer(unsigned int chan);
++int dma_stop_transfer(unsigned int chan);
++int dma_shutdown_all_chan(void);
++int dma_register_callback(unsigned int chan,
++			  pl330_xfer_callback_t cb, void *pri);
++int dma_free_callback(unsigned int chan);
++
++#endif /* __PLAT_DMA_H */
+diff --git a/drivers/bcmdrivers/dma/dma.c b/drivers/bcmdrivers/dma/dma.c
+new file mode 100755
+index 0000000..2ff23da
+--- /dev/null
++++ b/drivers/bcmdrivers/dma/dma.c
+@@ -0,0 +1,886 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/slab.h>
++#include <linux/platform_device.h>
++#include <linux/clk.h>
++#include <linux/dma-mapping.h>
++
++#include <asm/hardware/pl330.h>
++#include "pl330-pdata.h"
++#include "dma-pl330.h"
++
++#define IPROC_IDM_DMAC_RESET_CONTROL	 (0x18114800)
++#define IPROC_IDM_DMAC_RESET_CONTROL_VA   HW_IO_PHYS_TO_VIRT(IPROC_IDM_DMAC_RESET_CONTROL)
++
++/**
++ * struct pl330_chan_desc - Peripheral channel descriptor.
++ */
++struct pl330_chan_desc {
++	int id;			/* channel ID for the client */
++	struct list_head node;	/* Link to next channel desc */
++	bool is_peri_mapped;	/*Is peripheral mapped?, false if mem to mem */
++	char *name[MAX_CHAN_NAME_LENGTH];	/* Name of the peripheral */
++	int event_id;		/* ID of event/Interrupt line to notify */
++	u8 peri_req_id;		/* mapped peripheral request interface(PRI) ID */
++	void *pl330_chan_id;	/* PL330 channel id alloted */
++	unsigned int options;	/* DMA options */
++	struct pl330_reqcfg rqcfg;	/* DMA req configurations */
++	pl330_xfer_callback_t xfer_callback;	/* DMA callback function */
++	void *client_cookie;	/* client data for callback fn */
++	bool in_use;		/* is DMA channel busy */
++	bool is_setup;		/* Is 'pl330_req' having valid transfer setup */
++	struct pl330_req req;	/* A DMA request item */
++};
++
++/**
++ * struct pl330_dmac_desc - PL330 DMAC Descriptor.
++ */
++struct pl330_dmac_desc {
++	struct pl330_info *pi;	/*  PL330 DMAC info */
++	int irq_start;		/* First PL330 Irq mapped */
++	int irq_end;		/* Last Irq number mapped */
++	struct list_head chan_list;	/* List of channel descriptors */
++	int chan_count;		/* channel descriptors count */
++};
++
++/* PL330 DMAC Descriptor structure */
++static struct pl330_dmac_desc *dmac = NULL;	/* Allocate on platform device probe */
++/* global resources lock */
++static DEFINE_SPINLOCK(lock);
++
++/* always call this function with global spinlock held */
++static struct pl330_chan_desc *chan_id_to_cdesc(int id)
++{
++	struct pl330_chan_desc *cdesc;
++
++	list_for_each_entry(cdesc, &dmac->chan_list, node)
++	    if (cdesc->id == id)
++		return cdesc;
++
++	return NULL;
++}
++
++static void _cleanup_req(struct pl330_req *rq)
++{
++	struct pl330_xfer *x, *nxt;
++
++	if (!rq)
++		return;
++
++	rq->rqtype = DEVTODEV;	/* Invalid type */
++
++	if (rq->cfg) {
++		kfree(rq->cfg);
++		rq->cfg = NULL;
++	}
++
++	if (!rq->x)
++		return;
++
++	/* Free all the xfer items */
++	x = rq->x;
++	do {
++		nxt = x->next;
++		kfree(x);
++		x = nxt;
++	} while (x);
++	rq->x = NULL;
++
++	return;
++}
++
++static void _free_cdesc(struct pl330_chan_desc *cdesc)
++{
++	/* Deallocate all mapped peripherals */
++	if (cdesc->is_peri_mapped) {
++		cdesc->is_peri_mapped = false;
++	}
++
++	/* Release PL330 channel thread */
++	pl330_release_channel(cdesc->pl330_chan_id);
++
++	list_del(&cdesc->node);
++	dmac->chan_count--;
++	kfree(cdesc);
++}
++
++static void pl330_req_callback(void *token, enum pl330_op_err err)
++{
++	struct pl330_req *r = token;
++	enum pl330_xfer_status stat;
++	struct pl330_chan_desc *c =
++	    container_of(r, struct pl330_chan_desc, req);
++
++	printk("\n----> %s ()\n", __func__);
++	if (c && c->xfer_callback) {
++		switch (err) {
++		case PL330_ERR_NONE:
++			stat = DMA_PL330_XFER_OK;
++			break;
++		case PL330_ERR_ABORT:
++			stat = DMA_PL330_XFER_ABORT;
++			break;
++		case PL330_ERR_FAIL:
++			stat = DMA_PL330_XFER_ERR;
++			break;
++		default:
++			stat = DMA_PL330_XFER_OK;
++			break;
++		}
++		/* call client callback function */
++		c->xfer_callback(c->client_cookie, stat);
++	}
++}
++
++int dma_request_chan(unsigned int *chan, const char *name)
++{
++	int ch, err = -1;
++	//enum dma_peri peri;
++	u8 pri_id;
++	void *pl330_chan_id = NULL;
++	struct pl330_chan_desc *cdesc = NULL;
++	unsigned long flags;
++	bool is_peri = false;
++
++	spin_lock_irqsave(&lock, flags);
++
++	/* channel request for a 'named' peripheral, NULL if memory<->memory DMA */
++	/* no peripheral mapping in IPROC */
++
++	/* Allocate PL330 DMA channel thread first */
++	pl330_chan_id = pl330_request_channel(dmac->pi);
++	if (!pl330_chan_id) {
++		dev_info(dmac->pi->dev,
++			 "Failed to allocate PL330 channel thread!!!\n");
++		goto err_1;
++	}
++
++
++	if (dmac->chan_count >= 8)
++	{
++		dev_info(dmac->pi->dev, "MAX DMAC channel exceeded\n");
++		goto err_2;
++	}
++
++	/* No peripheral mapping in IPROC */
++
++	spin_unlock_irqrestore(&lock, flags);
++
++	/* Channel allocation is done, create a 'channel descriptor' for the client */
++	cdesc = (struct pl330_chan_desc *)kzalloc(sizeof(*cdesc), GFP_KERNEL);
++
++	spin_lock_irqsave(&lock, flags);
++	if (!cdesc) {
++		err = -ENOMEM;
++		goto err_4;
++	}
++
++	/* Populate the cdesc and return channel id to client */
++	cdesc->id = dmac->chan_count;
++	cdesc->xfer_callback = NULL;
++	cdesc->client_cookie = NULL;
++	cdesc->is_peri_mapped = is_peri;
++	cdesc->event_id = 0;	/* always use INTR/EVT line 0 */
++	cdesc->peri_req_id = pri_id;
++	cdesc->pl330_chan_id = pl330_chan_id;
++	cdesc->in_use = false;
++	cdesc->req.rqtype = DEVTODEV;	/* set invalid type */
++	if (name)
++		strlcpy(cdesc->name, name, MAX_CHAN_NAME_LENGTH);
++
++	/* Attach cdesc to DMAC channel list */
++	list_add_tail(&cdesc->node, &dmac->chan_list);
++	dmac->chan_count++;
++	spin_unlock_irqrestore(&lock, flags);
++
++	/* Give the channel ID to client */
++	*chan = cdesc->id;
++	return 0;
++
++      err_4:
++      err_3:
++      err_2:
++	pl330_release_channel(pl330_chan_id);
++      err_1:
++      err_ret:
++	spin_unlock_irqrestore(&lock, flags);
++	return err;
++}
++
++int dma_free_chan(unsigned int chan)
++{
++	unsigned long flags;
++	struct pl330_chan_desc *cdesc;
++
++	spin_lock_irqsave(&lock, flags);
++	cdesc = chan_id_to_cdesc(chan);
++	if (!cdesc || cdesc->in_use)	/* can free id channel is active */
++		goto err;
++
++	_cleanup_req(&cdesc->req);
++
++	_free_cdesc(cdesc);
++
++	spin_unlock_irqrestore(&lock, flags);
++
++	return 0;
++      err:
++	spin_unlock_irqrestore(&lock, flags);
++	return -1;
++}
++
++int dma_map_peripheral(unsigned int chan, const char *peri_name)
++{
++	struct pl330_chan_desc *c = NULL;
++	unsigned long flags;
++	//enum dma_peri peri;
++	u8 pri_id;
++
++	if (!peri_name)
++		return -1;
++
++	spin_lock_irqsave(&lock, flags);
++
++	c = chan_id_to_cdesc(chan);
++	if (!c)
++		goto err_ret;
++
++	/*  If a peripheral is already mapped, return failure */
++	if (c->is_peri_mapped) {
++		dev_info(dmac->pi->dev,
++			 "Already peripheral mapped, need to unmap first!!!\n");
++		goto err_ret;
++	}
++
++	/* no peripheral mapping in IPROC */
++
++	/* no peripheral mapping in IPROC */
++
++	c->peri_req_id = pri_id;
++	c->is_peri_mapped = true;
++
++	spin_unlock_irqrestore(&lock, flags);
++	return 0;
++
++      err_ret:
++	spin_unlock_irqrestore(&lock, flags);
++	return -1;
++}
++
++int dma_unmap_peripheral(unsigned int chan)
++{
++	struct pl330_chan_desc *c = NULL;
++	unsigned long flags;
++
++	spin_lock_irqsave(&lock, flags);
++
++	c = chan_id_to_cdesc(chan);
++	if (!c)
++		goto err_ret;
++
++	/* If a peripheral is already mapped or channel in use, return failure */
++	if (!c->is_peri_mapped || c->in_use) {
++		dev_info(dmac->pi->dev, "Peripheral is not mapped\n");
++		goto err_ret;
++	}
++
++	c->is_peri_mapped = false;
++
++	spin_unlock_irqrestore(&lock, flags);
++	return 0;
++
++      err_ret:
++	spin_unlock_irqrestore(&lock, flags);
++	return -1;
++}
++
++int dma_setup_transfer(unsigned int chan,
++		       dma_addr_t src_addr,
++		       dma_addr_t dst_addr,
++		       unsigned int xfer_size, int control, int cfg)
++{
++	unsigned long flags;
++	enum pl330_reqtype rqtype;
++	struct pl330_reqcfg *config;
++	struct pl330_xfer *xfer;
++	struct pl330_chan_desc *c;
++	int err = -1;
++
++	if (!xfer_size)
++		goto err1;
++
++	/* DMA transfer direction */
++	switch (control & DMA_DIRECTION_MASK) {
++		/* Peripheral transfers with DMAC flow control are
++		 * treated as Mem to Mem transfers at PL330 microcode level.
++		 */
++	case DMA_DIRECTION_MEM_TO_MEM:
++	case DMA_DIRECTION_MEM_TO_DEV_FLOW_CTRL_DMAC:
++	case DMA_DIRECTION_DEV_TO_MEM_FLOW_CTRL_DMAC:
++		rqtype = MEMTOMEM;
++		break;
++	case DMA_DIRECTION_MEM_TO_DEV_FLOW_CTRL_PERI:
++		rqtype = MEMTODEV;
++		break;
++	case DMA_DIRECTION_DEV_TO_MEM_FLOW_CTRL_PERI:
++		rqtype = DEVTOMEM;
++		break;
++	case DMA_DIRECTION_DEV_TO_DEV:
++	default:
++		rqtype = DEVTODEV;	/*Unsupported */
++		break;
++	};
++
++	if (rqtype == DEVTODEV)
++		goto err1;
++
++	/* Burst size max is 64 bit(AXI), not supporting >64 bit burst size */
++	if ((cfg & DMA_CFG_BURST_SIZE_MASK) > DMA_CFG_BURST_SIZE_8)
++		goto err1;
++
++	spin_lock_irqsave(&lock, flags);
++
++	c = chan_id_to_cdesc(chan);
++	if (!c) {
++		spin_unlock_irqrestore(&lock, flags);
++		goto err1;
++	}
++
++	if (c->in_use || c->is_setup) {
++		dev_info(dmac->pi->dev,
++			 "Cant setup transfer, already setup/running\n");
++		spin_unlock_irqrestore(&lock, flags);
++		goto err1;
++	};
++
++	if ((rqtype != DMA_DIRECTION_MEM_TO_MEM) && (!c->is_peri_mapped)) {
++		spin_unlock_irqrestore(&lock, flags);
++		goto err1;
++	}
++
++	c->is_setup = true;	/* Mark it now, for setup */
++
++	spin_unlock_irqrestore(&lock, flags);
++
++	/* Allocate */
++	config = (struct pl330_reqcfg *)kzalloc(sizeof(*config), GFP_KERNEL);
++	if (!config) {
++		err = -ENOMEM;
++		goto err1;
++	}
++
++	xfer = (struct pl330_xfer *)kzalloc(sizeof(*xfer), GFP_KERNEL);
++	if (!xfer) {
++		err = -ENOMEM;
++		goto err2;
++	}
++
++	/* configuration options */
++	config->src_inc = (cfg & DMA_CFG_SRC_ADDR_INCREMENT) ? 1 : 0;
++	config->dst_inc = (cfg & DMA_CFG_DST_ADDR_INCREMENT) ? 1 : 0;
++	/* Burst size */
++	config->brst_size = (cfg & DMA_CFG_BURST_SIZE_MASK) >> 1;
++	/* Burst Length */
++	config->brst_len = (((cfg & DMA_CFG_BURST_LENGTH_MASK) >> 4) + 1);
++
++	/* default settings:  Noncacheable, nonbufferable, no swapping */
++	config->scctl = SCCTRL0;
++	config->dcctl = DCCTRL0;
++	config->swap = SWAP_NO;
++
++	/* TrustZone security AXPROT[2:0} = 000 */
++	config->insnaccess = false;	/* tied LOW */
++	config->nonsecure = true;	/* DMAC boots in Non Secure Mode */
++	config->privileged = false;
++
++	xfer->src_addr = src_addr;
++	xfer->dst_addr = dst_addr;
++	xfer->bytes = xfer_size;
++	xfer->next = NULL;
++
++	spin_lock_irqsave(&lock, flags);
++
++	/* Attach the request */
++	c->req.rqtype = rqtype;
++
++	if (rqtype != MEMTOMEM)
++		c->req.peri = c->peri_req_id;
++
++	/* callback function */
++	c->req.xfer_cb = pl330_req_callback;
++	c->req.token = &c->req;	/* callback data */
++	/* attach configuration */
++	c->req.cfg = config;
++	/* attach xfer item */
++	c->req.x = xfer;
++
++	spin_unlock_irqrestore(&lock, flags);
++	return 0;
++
++      err2:
++	kfree(config);
++      err1:
++	return err;
++}
++
++int dma_setup_transfer_list(unsigned int chan, struct list_head *head,
++			    int control, int cfg)
++{
++	unsigned long flags;
++	enum pl330_reqtype rqtype;
++	struct pl330_reqcfg *config;
++	struct pl330_xfer *xfer_front, *nxt, *priv;
++	struct pl330_chan_desc *c;
++	struct dma_transfer_list *lli;
++	int err = -1;
++
++	if (!head)
++		return -1;
++
++	/* DMA transfer direction */
++	switch (control & DMA_DIRECTION_MASK) {
++		/* Peripheral transfers with DMAC flow control are
++		 * treated as Mem to Mem transfers at PL330 microcode level.
++		 */
++	case DMA_DIRECTION_MEM_TO_MEM:
++	case DMA_DIRECTION_MEM_TO_DEV_FLOW_CTRL_DMAC:
++	case DMA_DIRECTION_DEV_TO_MEM_FLOW_CTRL_DMAC:
++		rqtype = MEMTOMEM;
++		break;
++	case DMA_DIRECTION_MEM_TO_DEV_FLOW_CTRL_PERI:
++		rqtype = MEMTODEV;
++		break;
++	case DMA_DIRECTION_DEV_TO_MEM_FLOW_CTRL_PERI:
++		rqtype = DEVTOMEM;
++		break;
++	case DMA_DIRECTION_DEV_TO_DEV:
++	default:
++		rqtype = DEVTODEV;	/*Unsupported */
++		break;
++	};
++
++	if (rqtype == DEVTODEV)
++		goto err1;
++
++	/* Burst size max is 64 bit(AXI), not supporting > 64 bit burst size */
++	if ((cfg & DMA_CFG_BURST_SIZE_MASK) > DMA_CFG_BURST_SIZE_8)
++		goto err1;
++
++	spin_lock_irqsave(&lock, flags);
++
++	c = chan_id_to_cdesc(chan);
++	if (!c) {
++		spin_unlock_irqrestore(&lock, flags);
++		goto err1;
++	}
++
++	if (c->in_use || c->is_setup) {
++		dev_info(dmac->pi->dev,
++			 "Cant setup transfer, already setup/running\n");
++		spin_unlock_irqrestore(&lock, flags);
++		goto err1;
++	};
++
++	if ((rqtype != DMA_DIRECTION_MEM_TO_MEM) && (!c->is_peri_mapped)) {
++		spin_unlock_irqrestore(&lock, flags);
++		goto err1;
++	}
++
++	c->is_setup = true;	/* Mark it now, for setup */
++
++	spin_unlock_irqrestore(&lock, flags);
++
++	/* Allocate  config strcuture */
++	config = (struct pl330_reqcfg *)kzalloc(sizeof(*config), GFP_KERNEL);
++	if (!config) {
++		err = -ENOMEM;
++		goto err1;
++	}
++
++	/* configuration options */
++	config->src_inc = (cfg & DMA_CFG_SRC_ADDR_INCREMENT) ? 1 : 0;
++	config->dst_inc = (cfg & DMA_CFG_DST_ADDR_INCREMENT) ? 1 : 0;
++	/* Burst size */
++	config->brst_size = (cfg & DMA_CFG_BURST_SIZE_MASK) >> 1;
++	/* Burst Length */
++	config->brst_len = (((cfg & DMA_CFG_BURST_LENGTH_MASK) >> 4) + 1);
++
++	/* default settings:  Noncacheable, nonbufferable, no swapping */
++	config->scctl = SCCTRL0;
++	config->dcctl = DCCTRL0;
++	config->swap = SWAP_NO;
++
++	/* TrustZone security AXPROT[2:0} = 000 */
++	config->insnaccess = false;	/* tied LOW */
++	config->nonsecure = true;	/* DMAC boots in non Secure Mode */
++	config->privileged = false;	/* AXPROT[2:0] = 000 */
++
++	/* Generate xfer list based on linked list passed */
++	xfer_front = NULL;
++	list_for_each_entry(lli, head, next) {
++
++		if (!lli->xfer_size)
++			continue;
++
++		nxt = (struct pl330_xfer *)kzalloc(sizeof(*nxt), GFP_KERNEL);
++		if (!nxt) {
++			err = -ENOMEM;
++			goto err2;
++		}
++		nxt->src_addr = lli->srcaddr;
++		nxt->dst_addr = lli->dstaddr;
++		nxt->bytes = lli->xfer_size;
++		nxt->next = NULL;
++
++		if (!xfer_front) {
++			xfer_front = nxt;	/* First Item */
++			priv = nxt;
++		} else {
++			priv->next = nxt;	/* Add to the tail */
++			priv = nxt;
++		}
++	}
++
++	spin_lock_irqsave(&lock, flags);
++
++	/* Attach the request */
++	c->req.rqtype = rqtype;
++
++	if (rqtype != MEMTOMEM)
++		c->req.peri = c->peri_req_id;
++
++	/* callback function */
++	c->req.xfer_cb = pl330_req_callback;
++	c->req.token = &c->req;	/* callback data */
++	/* attach configuration */
++	c->req.cfg = config;
++	/* attach xfer item list */
++	c->req.x = xfer_front;
++	c->is_setup = true;	/* Mark the xfer item as valid */
++
++	spin_unlock_irqrestore(&lock, flags);
++	return 0;
++
++      err2:
++	/* Free all allocated xfer items */
++	if (xfer_front) {
++		nxt = xfer_front;
++		while (nxt->next) {
++			priv = nxt;
++			nxt = nxt->next;
++			kfree(priv);
++		}
++	}
++	kfree(config);
++      err1:
++	return err;
++}
++
++int dma_start_transfer(unsigned int chan)
++{
++	unsigned long flags;
++	struct pl330_chan_desc *c;
++
++	spin_lock_irqsave(&lock, flags);
++
++	c = chan_id_to_cdesc(chan);
++
++	if (!c || !c->is_setup || c->in_use)
++		goto err;
++
++	/* Acquire DMUX semaphore while microcode loading
++	 * This call always success because protect(unprotect) happen
++	 * atomically within global spinlock.
++	 */
++	if (pl330_submit_req(c->pl330_chan_id, &c->req) != 0)
++		goto err2;
++
++	/* Start DMA channel thread */
++	if (pl330_chan_ctrl(c->pl330_chan_id, PL330_OP_START) != 0) {
++		goto err2;
++	}
++
++	c->in_use = true;
++	spin_unlock_irqrestore(&lock, flags);
++
++	return 0;
++      err2:
++      err:
++	spin_unlock_irqrestore(&lock, flags);
++	return -1;
++}
++
++int dma_stop_transfer(unsigned int chan)
++{
++	unsigned long flags;
++	struct pl330_chan_desc *c;
++
++	spin_lock_irqsave(&lock, flags);
++
++	c = chan_id_to_cdesc(chan);
++	if (!c)
++		goto err;
++
++	pl330_chan_ctrl(c->pl330_chan_id, PL330_OP_FLUSH);
++
++	/* Free the completed transfer req */
++	c->in_use = false;
++	c->is_setup = false;
++	/* free memory allocated for this request */
++	_cleanup_req(&c->req);
++
++	spin_unlock_irqrestore(&lock, flags);
++	return 0;
++
++      err:
++	spin_unlock_irqrestore(&lock, flags);
++	return -1;
++}
++
++int dma_register_callback(unsigned int chan,
++			  pl330_xfer_callback_t callback, void *private_data)
++{
++	unsigned long flags;
++	struct pl330_chan_desc *c;
++
++	spin_lock_irqsave(&lock, flags);
++
++	c = chan_id_to_cdesc(chan);
++	if (!c)
++		goto err;
++
++	c->xfer_callback = callback;
++	c->client_cookie = private_data;
++
++	spin_unlock_irqrestore(&lock, flags);
++	return 0;
++
++      err:
++	spin_unlock_irqrestore(&lock, flags);
++	return -1;
++}
++
++int dma_free_callback(unsigned int chan)
++{
++	unsigned long flags;
++	struct pl330_chan_desc *c;
++
++	spin_lock_irqsave(&lock, flags);
++
++	c = chan_id_to_cdesc(chan);
++	if (!c)
++		goto err;
++
++	c->xfer_callback = NULL;
++	c->client_cookie = NULL;
++
++	spin_unlock_irqrestore(&lock, flags);
++	return 0;
++
++      err:
++	spin_unlock_irqrestore(&lock, flags);
++	return -1;
++
++}
++
++static irqreturn_t pl330_irq_handler(int irq, void *data)
++{
++	printk("\n-----> %s(): irq = %d\n", __func__, irq);
++	if (pl330_update(data))
++		return IRQ_HANDLED;
++	else
++		return IRQ_NONE;
++}
++
++static int pl330_probe(struct platform_device *pdev)
++{
++	struct pl330_dmac_desc *pd;
++	struct iproc_pl330_data *pl330_pdata;
++	struct pl330_info *pl330_info;
++	int ret, i, irq_start, irq;
++
++	printk("\niproc-dmac-pl330: Probe ()\n");
++
++	pl330_pdata = pdev->dev.platform_data;
++
++	/* Only One Pl330 device is supported,
++	 * since PL330 is closely bound to DMUX logic
++	 */
++	if (dmac) {
++		dev_err(&pdev->dev, "Multiple devices are not supported!!!\n");
++		ret = -ENODEV;
++		goto probe_err1;
++	}
++
++	/* Platform data is required */
++	if (!pl330_pdata) {
++		dev_err(&pdev->dev, "platform data missing!\n");
++		ret = -ENODEV;
++		goto probe_err1;
++	}
++
++	pl330_info = kzalloc(sizeof(*pl330_info), GFP_KERNEL);
++	if (!pl330_info) {
++		ret = -ENOMEM;
++		goto probe_err1;
++	}
++
++	pl330_info->pl330_data = NULL;
++	pl330_info->client_data = NULL;
++	pl330_info->dev = &pdev->dev;
++
++	/* For NS DMAC is in non-secure mode */
++	pl330_info->base = (void __iomem *)pl330_pdata->dmac_ns_base;
++	/* pl330_info->base = (void __iomem *)pl330_pdata->dmac_s_base; */
++
++	/*  Get the first IRQ line */
++	irq_start = pl330_pdata->irq_base;
++	irq = irq_start;
++
++	for (i = 0; i < pl330_pdata->irq_line_count; i++) {
++		irq = irq_start + i;
++		ret = request_irq(irq, pl330_irq_handler, 0,
++				  dev_name(&pdev->dev), pl330_info);
++		if (ret) {
++			irq--;
++			goto probe_err2;
++		}
++	}
++
++	ret = pl330_add(pl330_info);
++	if (ret)
++		goto probe_err3;
++
++	/* Allocate DMAC descriptor */
++	pd = kmalloc(sizeof(*pd), GFP_KERNEL);
++	if (!pd) {
++		ret = -ENOMEM;
++		goto probe_err4;
++	}
++
++	/* Hook the info */
++	pd->pi = pl330_info;
++	pd->irq_start = irq_start;
++	pd->irq_end = irq;
++	/* init channel desc list, channels are added during dma_request_chan() */
++	pd->chan_list.next = pd->chan_list.prev = &pd->chan_list;
++	pd->chan_count = 0;
++
++	/* Assign the DMAC descriptor */
++	dmac = pd;
++
++	printk(KERN_INFO
++	       "Loaded driver for PL330 DMAC-%d %s\n", pdev->id, pdev->name);
++	printk(KERN_INFO
++	       "\tDBUFF-%ux%ubytes Num_Chans-%u Num_Peri-%u Num_Events-%u\n",
++	       pl330_info->pcfg.data_buf_dep,
++	       pl330_info->pcfg.data_bus_width / 8, pl330_info->pcfg.num_chan,
++	       pl330_info->pcfg.num_peri, pl330_info->pcfg.num_events);
++
++	return 0;
++
++      probe_err4:
++	pl330_del(pl330_info);
++      probe_err3:
++      probe_err2:
++	while (irq >= irq_start) {
++		free_irq(irq, pl330_info);
++		irq--;
++	}
++
++	kfree(pl330_info);
++      probe_err1:
++	return ret;
++}
++
++static int pl330_remove(struct platform_device *pdev)
++{
++	unsigned long flags;
++	struct pl330_chan_desc *cdesc;
++	int irq;
++
++	spin_lock_irqsave(&lock, flags);
++	/* Free all channel descriptors first */
++	list_for_each_entry(cdesc, &dmac->chan_list, node) {
++		/* free requests */
++		_cleanup_req(&cdesc->req);
++		/* Free channel desc */
++		_free_cdesc(cdesc);
++	}
++
++	/* Free interrupt resource */
++	for (irq = dmac->irq_start; irq <= dmac->irq_end; irq++)
++		free_irq(irq, dmac->pi);
++
++	pl330_del(dmac->pi);
++	/* free PL330 info handle */
++	kfree(dmac->pi);
++	/* Free dmac descriptor */
++	kfree(dmac);
++	dmac = NULL;
++	spin_unlock_irqrestore(&lock, flags);
++
++	return 0;
++}
++
++static struct platform_driver pl330_driver = {
++	.driver = {
++		   .owner = THIS_MODULE,
++		   .name = "iproc-dmac-pl330",
++		   },
++	.probe = pl330_probe,
++	.remove = pl330_remove,
++};
++
++static int __init pl330_init(void)
++{
++	int dmac_reset_state;
++
++	dmac_reset_state = readl_relaxed(IPROC_IDM_DMAC_RESET_CONTROL_VA);
++	printk("Initial dmac_reset_state is: %08x\n", dmac_reset_state);
++	if ((dmac_reset_state & 1) == 1)
++	{
++		writel_relaxed(0x0, IPROC_IDM_DMAC_RESET_CONTROL_VA);
++		dmac_reset_state = readl_relaxed(IPROC_IDM_DMAC_RESET_CONTROL_VA);
++		printk("dmac_reset_state is set and now it is: %08x\n", dmac_reset_state);
++	}
++	return platform_driver_register(&pl330_driver);
++}
++
++module_init(pl330_init);
++
++static void __exit pl330_exit(void)
++{
++	platform_driver_unregister(&pl330_driver);
++	return;
++}
++
++module_exit(pl330_exit);
++
++EXPORT_SYMBOL(dma_request_chan);
++EXPORT_SYMBOL(dma_free_chan);
++EXPORT_SYMBOL(dma_map_peripheral);
++EXPORT_SYMBOL(dma_unmap_peripheral);
++EXPORT_SYMBOL(dma_setup_transfer);
++EXPORT_SYMBOL(dma_setup_transfer_list);
++EXPORT_SYMBOL(dma_start_transfer);
++EXPORT_SYMBOL(dma_stop_transfer);
++EXPORT_SYMBOL(dma_register_callback);
++EXPORT_SYMBOL(dma_free_callback);
+diff --git a/drivers/bcmdrivers/dma/dma_drv.h b/drivers/bcmdrivers/dma/dma_drv.h
+new file mode 100644
+index 0000000..ca5a6b5
+--- /dev/null
++++ b/drivers/bcmdrivers/dma/dma_drv.h
+@@ -0,0 +1,602 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++/**
++*
++*   @file   dma_drv.h
++*
++*   @brief  DMA device driver defines and prototypes.
++*
++****************************************************************************/
++/**
++*
++* @defgroup DMAGroup Direct Memory Access
++* @ingroup CSLGroup
++* @brief This group defines the APIs for DMA driver
++
++Click here to navigate back to the Chip Support Library Overview page: \ref CSLOverview. \n
++*****************************************************************************/
++#ifndef _DMA_DRV_H_
++#define _DMA_DRV_H_
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @addtogroup DMAGroup
++ * @{
++ */
++
++/**
++*
++*  DMA driver status definition
++*
++*****************************************************************************/
++#define   DMADRV_STATUS_t              DMADRV_STATUS
++typedef enum
++{
++	DMADRV_STATUS_CLOSED,
++	DMADRV_STATUS_OPEN,
++	DMADRV_STATUS_OK,
++	DMADRV_STATUS_FAIL
++}DMADRV_STATUS_t;
++
++/**
++*
++*  DMA driver callback status definition
++*
++*****************************************************************************/
++#define   DMADRV_CALLBACK_STATUS_t     DMADRV_CALLBACK_STATUS
++typedef enum
++{
++    DMADRV_CALLBACK_OK = 0,
++    DMADRV_CALLBACK_FAIL
++} DMADRV_CALLBACK_STATUS_t;
++
++/**
++*
++*  DMA driver channel descriptor definition
++*
++*****************************************************************************/
++typedef struct
++{
++	UInt32  src;
++	UInt32  dest;
++	UInt32  next;
++	UInt32  control;
++	UInt32  size;
++    UInt32  owner;
++} Dma_Chan_Desc;
++
++/**
++*
++*  DMA driver data buffer feature definition
++*
++*****************************************************************************/
++typedef struct
++{
++    UInt32 srcAddr;
++    UInt32 destAddr;
++    UInt32 length;
++    UInt32 bRepeat;
++    UInt32 interrupt;
++} Dma_Buffer;
++
++/**
++*
++*  DMA driver data buffer definition
++*
++*****************************************************************************/
++typedef struct
++{
++    Dma_Buffer       buffers[1];
++} Dma_Buffer_List;
++
++/**
++*
++*  DMA driver data buffer list definition
++*
++*****************************************************************************/
++typedef struct
++{
++    UInt32           numBuffer;
++    Dma_Buffer_List *pBufList;
++}   Dma_Data;
++
++
++/**
++*
++*  DMA data transfer width definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_DATA_SIZE_8BIT  = 0x00,
++    DMA_DATA_SIZE_16BIT = 0x01,
++    DMA_DATA_SIZE_32BIT = 0x02
++} DMA_DWIDTH;
++
++/**
++*
++*  DMA data transfer type definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_FCTRL_MEM_TO_MEM                         = 0,
++    DMA_FCTRL_MEM_TO_PERI                        = 1,
++    DMA_FCTRL_PERI_TO_MEM                        = 2,
++    DMA_FCTRL_SRCPERI_TO_DESTPERI                = 3,
++    DMA_FCTRL_SRCPERI_TO_DESTPERI_CTRL_DESTPERI  = 4,
++    DMA_FCTRL_MEM_TO_PERI_CTRL_PERI              = 5,
++    DMA_FCTRL_PERI_TO_MEM_CTRL_PERI              = 6,
++    DMA_FCTRL_SRCPERI_TO_DESTPERI_CTRL_SRCPERI   = 7
++} DMA_CHAN_TYPE;
++
++/**
++*
++*  DMA burst length definition
++*
++*****************************************************************************/
++#if (defined(_HERA_) || defined(_RHEA_) || defined(_SAMOA_))
++typedef enum {
++    DMA_BURST_LEN_1  = 0x00,             ///<
++    DMA_BURST_LEN_2  = 0x01,             ///<
++    DMA_BURST_LEN_3  = 0x02,             ///<
++    DMA_BURST_LEN_4  = 0x03,             ///<
++    DMA_BURST_LEN_5  = 0x04,             ///<
++    DMA_BURST_LEN_6  = 0x05,             ///<
++    DMA_BURST_LEN_7  = 0x06,             ///<
++    DMA_BURST_LEN_8  = 0x07,             ///<
++    DMA_BURST_LEN_9  = 0x08,             ///<
++    DMA_BURST_LEN_10 = 0x09,             ///<
++    DMA_BURST_LEN_11 = 0x0A,             ///<
++    DMA_BURST_LEN_12 = 0x0B,             ///<
++    DMA_BURST_LEN_13 = 0x0C,             ///<
++    DMA_BURST_LEN_14 = 0x0D,             ///<
++    DMA_BURST_LEN_15 = 0x0E,             ///<
++    DMA_BURST_LEN_16 = 0x0F              ///<
++} DMADRV_BLENGTH;
++
++typedef enum
++{
++    DMA_BURST_SIZE_1    = 0x00,
++    DMA_BURST_SIZE_2    = 0x01,
++    DMA_BURST_SIZE_4    = 0x02,
++    DMA_BURST_SIZE_8    = 0x03,
++    DMA_BURST_SIZE_16   = 0x04,
++    DMA_BURST_SIZE_32   = 0x05,
++    DMA_BURST_SIZE_64  = 0x06,
++    DMA_BURST_SIZE_128  = 0x07
++} DMA_BSIZE;
++
++#else
++/**
++*
++*  DMA burst size definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_BURST_SIZE_1    = 0x00,
++    DMA_BURST_SIZE_4    = 0x01,
++    DMA_BURST_SIZE_8    = 0x02,
++    DMA_BURST_SIZE_16   = 0x03,
++    DMA_BURST_SIZE_32   = 0x04,
++    DMA_BURST_SIZE_64   = 0x05,
++    DMA_BURST_SIZE_128  = 0x06,
++    DMA_BURST_SIZE_256  = 0x07
++} DMA_BSIZE;
++#endif
++
++/**
++*
++*  DMA alignment definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_ALIGNMENT_8	    = 8,
++    DMA_ALIGNMENT_16	= 16,
++    DMA_ALIGNMENT_32	= 32
++} DMA_ALIGN;
++
++/**
++*
++*  DMA data transfer incremnet definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_INC_MODE_NONE = 0,
++    DMA_INC_MODE_SRC,
++    DMA_INC_MODE_DST,
++    DMA_INC_MODE_BOTH,
++} DMA_INC_MODE;
++
++/**
++*
++*  DMA driver client type definition
++*
++*****************************************************************************/
++#if (defined(_HERA_) || defined(_RHEA_) || defined(_SAMOA_))
++typedef enum {
++    DMA_CLIENT_EP_INVALID      = 0xff,
++    DMA_CLIENT_EP_UARTB_A      = 8,
++    DMA_CLIENT_EP_UARTB_B      = 9,
++    DMA_CLIENT_EP_UARTB2_A     = 10,
++    DMA_CLIENT_EP_UARTB2_B     = 11,
++    DMA_CLIENT_EP_UARTB3_A     = 12,
++    DMA_CLIENT_EP_UARTB3_B     = 13,
++    DMA_CLIENT_EP_SSP_0A_RX0   = 16,
++    DMA_CLIENT_EP_SSP_0B_TX0   = 17,
++    DMA_CLIENT_EP_SSP_0C_RX1   = 18,
++    DMA_CLIENT_EP_SSP_0D_TX1   = 19,
++    DMA_CLIENT_EP_SSP_1A_RX0   = 20,
++    DMA_CLIENT_EP_SSP_1B_TX0   = 21,
++    DMA_CLIENT_EP_SSP_1C_RX1   = 22,
++    DMA_CLIENT_EP_SSP_1D_TX1   = 23,
++    DMA_CLIENT_EP_HSIA         = 32,
++    DMA_CLIENT_EP_HSIB         = 33,
++    DMA_CLIENT_EP_HSIC         = 34,
++    DMA_CLIENT_EP_HSID         = 35,
++    DMA_CLIENT_EP_EANC         = 40,
++    DMA_CLIENT_EP_STEREO       = 41,
++    DMA_CLIENT_EP_NVIN         = 42,
++    DMA_CLIENT_EP_VIN          = 43,
++    DMA_CLIENT_EP_VIBRA        = 44,
++    DMA_CLIENT_EP_IHF_0        = 45,
++    DMA_CLIENT_EP_VOUT         = 46,
++    DMA_CLIENT_EP_SLIMA        = 47,
++    DMA_CLIENT_EP_SLIMB        = 48,
++    DMA_CLIENT_EP_SLIMC        = 49,
++    DMA_CLIENT_EP_SLIMD        = 50,
++    DMA_CLIENT_EP_SIM_A        = 51,
++    DMA_CLIENT_EP_SIM_B        = 52,
++    DMA_CLIENT_EP_SIM2_A       = 53,
++    DMA_CLIENT_EP_SIM2_B       = 54,
++    DMA_CLIENT_EP_IHF_1        = 55,
++#if defined(_RHEA_)
++    DMA_CLIENT_EP_SSP_3A_RX0   = 56,
++    DMA_CLIENT_EP_SSP_3B_TX0   = 57,
++    DMA_CLIENT_EP_SSP_3C_RX1   = 58,
++    DMA_CLIENT_EP_SSP_3D_TX1   = 59,
++#else
++    DMA_CLIENT_EP_SSP_2A_RX0   = 56,
++    DMA_CLIENT_EP_SSP_2B_TX0   = 57,
++    DMA_CLIENT_EP_SSP_2C_RX1   = 58,
++    DMA_CLIENT_EP_SSP_2D_TX1   = 59,
++#endif
++    DMA_CLIENT_EP_SPUM_SecureA = 65,
++    DMA_CLIENT_EP_SPUM_SecureB = 66,
++    DMA_CLIENT_EP_SPUM_OpenA   = 67,
++    DMA_CLIENT_EP_SPUM_OpenB   = 68,
++    DMA_CLIENT_MEMORY          = 69,
++#if defined(_RHEA_)
++    DMA_CLIENT_EP_SSP_4A_RX0   = 76,
++    DMA_CLIENT_EP_SSP_4B_TX0   = 77,
++    DMA_CLIENT_EP_SSP_4C_RX1   = 78,
++    DMA_CLIENT_EP_SSP_4D_TX1   = 79,
++#endif
++    DMA_CLIENT_TOTAL
++} DMA_CLIENT;
++#else
++typedef enum
++{
++    DMA_CLIENT_BULK_CRYPT_OUT             = 0,
++    DMA_CLIENT_CAM                        = 1,
++    DMA_CLIENT_I2S_TX                     = 2,
++    DMA_CLIENT_I2S_RX                     = 3,
++    DMA_CLIENT_SIM_RX                     = 4,
++    DMA_CLIENT_SIM_TX                     = 4,
++    DMA_CLIENT_CRC                        = 5,
++    DMA_CLIENT_SPI_RX                     = 6,
++    DMA_CLIENT_SPI_TX                     = 7,
++    DMA_CLIENT_UARTA_RX                   = 8,
++    DMA_CLIENT_UARTA_TX                   = 9,
++    DMA_CLIENT_UARTB_RX                   = 10,
++    DMA_CLIENT_UARTB_TX                   = 11,
++    DMA_CLIENT_DES_IN                     = 12,
++    DMA_CLIENT_DES_OUT                    = 13,
++    DMA_CLIENT_USB_RX                     = 14,
++    DMA_CLIENT_USB_TX                     = 15,
++    DMA_CLIENT_UARTC_RX                   = 16,
++    DMA_CLIENT_UARTC_TX                   = 17,
++    DMA_CLIENT_BULK_CRYPT_IN              = 18,
++    DMA_CLIENT_LCD                        = 19,
++    DMA_CLIENT_MSPRO                      = 20,
++    DMA_CLIENT_DSI_CM                     = 21,
++    DMA_CLIENT_DSI_VM                     = 22,
++    DMA_CLIENT_TVENC1                     = 23,
++    DMA_CLIENT_TVENC2                     = 24,
++#if defined(_ATHENA_)
++    DMA_CLIENT_AUDIO_IN_FIFO              = 25,
++    DMA_CLIENT_AUDIO_OUT_FIFO             = 26,
++    DMA_CLIENT_POLYRING_OUT_FIFO          = 27,
++    DMA_CLIENT_AUDIO_WB_MIXERTAP          = 28,
++    DMA_CLIENT_MEMORY                     = 29,
++#else
++    DMA_CLIENT_MEMORY                     = 25,
++#endif
++    DMA_CLIENT_TOTAL
++} DMA_CLIENT;
++#endif
++
++/**
++*
++*  DMA driver channel definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_CHANNEL_INVALID = 0xFF,
++    DMA_CHANNEL_0 = 0,
++    DMA_CHANNEL_1 = 1,
++    DMA_CHANNEL_2 = 2,
++    DMA_CHANNEL_3 = 3,
++#if !defined(_SAMOA_)
++    DMA_CHANNEL_4 = 4,
++    DMA_CHANNEL_5 = 5,
++    DMA_CHANNEL_6 = 6,
++    DMA_CHANNEL_7 = 7,
++#if defined(_ATHENA_)
++    DMA_CHANNEL_8 = 8,     //used for DMA_CLIENT_AUDIO_OUT_FIFO
++    DMA_CHANNEL_9 = 9,     //used for DMA_CLIENT_POLYRING_OUT_FIFO
++    DMA_CHANNEL_10 = 10,   //used for DMA_CLIENT_AUDIO_WB_MIXERTAP
++    DMA_CHANNEL_11 = 11,   //used for DMA_CLIENT_AUDIO_IN_FIFO
++#endif
++#endif
++    TOTAL_DMA_CHANNELS
++} DMA_CHANNEL;
++
++/**
++*
++*  DMA driver callback function definition
++*
++*****************************************************************************/
++#define   DMADRV_CALLBACK_t            DmaDrv_Callback
++typedef void (*DMADRV_CALLBACK_t)(DMADRV_CALLBACK_STATUS_t Err);
++
++/**
++*
++*  DMA driver channel info structure definition
++*
++*****************************************************************************/
++typedef struct
++{
++    DMA_CLIENT        srcID;
++    DMA_CLIENT        dstID;
++    DMA_CHAN_TYPE     type;
++    DMA_ALIGN         alignment;
++    DMA_BSIZE         srcBstSize;
++    DMA_BSIZE         dstBstSize;
++    DMA_DWIDTH        srcDataWidth;
++    DMA_DWIDTH        dstDataWidth;
++    UInt32            priority;
++    UInt32            chanNumber;
++    UInt32            dmaCfgReg;
++    UInt32            incMode;
++    DmaDrv_Callback   xferCompleteCb;
++    UInt32            prot;
++    UInt32            dstMaster;
++    UInt32            srcMaster;
++    UInt32            dstIncrement;
++    UInt32            srcIncrement;
++#if (defined(_HERA_) || defined(_RHEA_) || defined(_SAMOA_))
++    DMADRV_BLENGTH    srcBstLength;
++    DMADRV_BLENGTH    dstBstLength;
++#endif
++    Boolean           freeChan;
++    Boolean           bCircular;
++} Dma_Chan_Info,      *pChanInfo;
++
++/**
++*
++*  DMA driver LLI structure definition
++*
++*****************************************************************************/
++typedef void *DMADRV_LLI_T;
++
++/**
++*
++*  This function initialize dma driver
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Init(void);
++
++/**
++*
++*  This function deinitialize dma driver
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_DeInit(void);
++
++/**
++*
++*  This function allocates dma channel
++*
++*  @param		srcID (in) source identification
++*  @param       dstID (in) destination identification
++*  @param       chanID (in) buffer to store channel number
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Obtain_Channel(
++    DMA_CLIENT srcID,
++    DMA_CLIENT dstID,
++    DMA_CHANNEL *chanID
++);
++
++/**
++*
++*  This function release dma channel
++*
++*  @param		chanID (in) channel identification
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Release_Channel(DMA_CHANNEL chanID);
++
++/**
++*
++*  This function configure dma channel
++*
++*  @param       chanID       (in) channel number
++*  @param       pChanInfo    (in) pointer to dma channe info structure
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Config_Channel(
++    DMA_CHANNEL chanID,
++    Dma_Chan_Info *pChanInfo
++);
++
++/**
++*
++*  This function bind data buffer for the DMA channel
++*
++*  @param		chanID    (in) channel to bind data
++*  @param       pData     (in) pointer to dma channel data buffer
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Bind_Data(DMA_CHANNEL chanID, Dma_Data *pData);
++
++/**
++*
++*  This function start dma channel transfer
++*
++*  @param		chanID (in) channel identification
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Start_Transfer(DMA_CHANNEL chanID);
++
++/**
++*
++*  This function bind data buffer for the DMA channel
++*
++*  @param		chanID    (in) channel to bind data
++*  @param       pData     (in) pointer to dma channel data buffer
++*  @param       pLLI      (in) buffer to store returned LLI table
++*                              identification info
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Bind_Data_Ex(
++    DMA_CHANNEL chanID,
++    Dma_Data *pData,
++    DMADRV_LLI_T *pLLI
++);
++
++/**
++*
++*  This function start dma channel transfer
++*
++*  @param		chanID (in) channel identification
++*  @param       pLLI   (in) one of the LLI tables needs to be used for DMA
++*                           transfer
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Start_Transfer_Ex(
++    DMA_CHANNEL chanID,
++    DMADRV_LLI_T pLLI
++);
++
++/**
++*
++*  This function stop dma channel trnasfer
++*
++*  @param		chanID (in) channel identification
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Stop_Transfer(DMA_CHANNEL chanID);
++
++/**
++*
++*  This function stop dma channel trnasfer and lose all data in FIFO
++*
++*  @param		chanID (in) channel identification
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Force_Shutdown_Channel(DMA_CHANNEL chanID);
++
++/**
++*
++*  This function register hisr for client usage
++*
++*  @param		client (in) client identification
++*  @param       hisr   (in) registered hisr
++*
++*  @return	    void
++*
++*****************************************************************************/
++void DMADRV_Register_HISR(DMA_CLIENT client, void *hisr);
++
++/**
++*
++*  This function unregister hisr from client usage
++*
++*  @param		client (in) client identification
++*
++*  @return	    void
++*
++*****************************************************************************/
++void DMADRV_UnRegister_HISR(DMA_CLIENT client);
++
++/**
++*
++*  This function get hisr for client usage
++*
++*  @param		client (in) client identification
++*
++*  @return	    hisr   (out) return registered client's hisr
++*
++*****************************************************************************/
++void *DMADRV_Get_HISR(DMA_CLIENT client);
++
++/**
++*
++*  This function get DMA driver version number
++*
++*  @return	    driver version number
++*
++*****************************************************************************/
++UInt32 DMADRV_Get_Version(void);
++
++/** @} */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _DMA_DRV_H_ */
+diff --git a/drivers/bcmdrivers/dma/pl330-pdata.h b/drivers/bcmdrivers/dma/pl330-pdata.h
+new file mode 100644
+index 0000000..21c74c8
+--- /dev/null
++++ b/drivers/bcmdrivers/dma/pl330-pdata.h
+@@ -0,0 +1,36 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __DMA_PL330_PDATA_H
++#define __DMA_PL330_PDATA_H
++
++/*
++ * The platforms just need to provide this info to the KONA DMA API
++ */
++struct iproc_pl330_data {
++	/* Non Secure DMAC virtual base address */
++	unsigned int dmac_ns_base;
++	/* Secure DMAC virtual base address */
++	unsigned int dmac_s_base;
++	/* # of PL330 dmac channels 'configurable' */
++	unsigned int num_pl330_chans;
++	/* DMAC irq number, connected to GIC */
++	int irq_base;
++	/* # of PL330 Interrupts/events 'configurable' */
++	unsigned int irq_line_count;
++	//int dmac_abort_irq;
++};
++
++#endif /* __DMA_PL330_PDATA_H */

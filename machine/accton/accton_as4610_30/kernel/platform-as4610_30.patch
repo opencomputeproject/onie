@@ -1,0 +1,1428 @@
+Support for Accton AS4610-30 platform (ARM Cortex-A9 / Helix4) networking platform
+Baseline files sourced from Broadcom LDK 3.4.10
+
+diff --git a/arch/arm/boot/dts/accton_as4610_30.dts b/arch/arm/boot/dts/accton_as4610_30.dts
+new file mode 100644
+index 0000000..7dcaa0c
+--- /dev/null
++++ b/arch/arm/boot/dts/accton_as4610_30.dts
+@@ -0,0 +1,228 @@
++/*
++ * Accton AS4610 30 Device Tree Source
++ *
++ * Copyright 2015, Cumulus Networks, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *
++ */
++/dts-v1/;
++/include/ "helix4.dtsi"
++
++/ {
++    model = "accton,as4610_30";
++    compatible = "accton,as4610_30";
++
++    aliases {
++        serial0 = &uart0;
++        i2c-controller0 = &i2c0;
++        i2c-controller1 = &i2c1;
++    };
++
++    memory {
++        reg = <0x61000000 0x7f000000>;
++    };
++
++    cpus {
++        #address-cells = <1>;
++        #size-cells = <0>;
++
++        cpu@0 {
++            device_type = "cpu";
++            compatible = "arm,cortex-a9";
++            next-level-cache = <&L2>;
++            reg = <0x00>;
++        };
++        cpu@1 {
++            device_type = "cpu";
++            compatible = "arm,cortex-a9";
++            next-level-cache = <&L2>;
++            reg = <0x01>;
++        };
++    };
++
++    localbus@1e000000 {
++        #address-cells = <0x2>;
++        #size-cells = <0x1>;
++        compatible = "simple-bus";
++        ranges = <0x0 0x0 0x1e000000 0x02000000>;
++
++        flash@0,0 {
++            #address-cells = <0x1>;
++            #size-cells = <0x1>;
++            compatible = "cfi-flash";
++            reg = <0x0 0x0 0x00800000>;
++            bank-width = <0x1>;
++            device-width = <0x1>;
++
++            partition@0 {
++                /* uboot - 896KB*/
++                reg = <0x00000000 0x000e0000>;
++                label = "uboot";
++            };
++            partition@1 {
++                /* shmoo - 64KB*/
++                reg = <0x000e0000 0x00010000>;
++                label = "shmoo";
++            };
++            partition@2 {
++                /* uboot-env - 64KB */
++                reg = <0x000f0000 0x00010000>;
++                label = "uboot-env";
++                env_size = <0x02000>;
++            };
++            partition@3 {
++                /* onie - 7MB */
++                reg = <0x00100000 0x00700000>;
++                label = "onie";
++            };
++        };
++    };
++
++    i2c0: i2c@18038000 {
++            compatible = "iproc-smb";
++            reg = <0x18038000 0x1000>;
++            #address-cells = <1>;
++            #size-cells = <0>;
++            interrupts = < 127 >;
++            clock-frequency = <400000>;
++            cpld@1,0 {
++                #address-cells = <1>;
++                #size-cells = <1>;
++                compatible = "accton,as4610-30-cpld";
++                label = "cpld";
++                reg = <0x30>;
++            };
++    };
++
++    i2c1: i2c@1803b000 {
++            compatible = "iproc-smb";
++            reg = <0x1803b000 0x1000>;
++            #address-cells = <1>;
++            #size-cells = <0>;
++            interrupts = < 128 >;
++            clock-frequency = <100000>;
++            mux@70 {
++                compatible = "ti,pca9548";
++                reg = <0x70>;
++                #address-cells = <1>;
++                #size-cells = <0>;
++                deselect-on-exit;
++
++                // SFP+ 1
++                i2c@0 {
++                    #address-cells = <1>;
++                    #size-cells = <0>;
++                    reg = <0>;
++                    sfp_eeprom@50 {
++                        compatible = "at,24c04";
++                        reg = <0x50>;
++                        label = "port49";
++                    };
++                };
++
++            // SFP+ 2
++            i2c@1 {
++                #address-cells = <1>;
++                #size-cells = <0>;
++                reg = <1>;
++                sfp_eeprom@50 {
++                    compatible = "at,24c04";
++                    reg = <0x50>;
++                    label = "port50";
++                };
++            };
++
++            // SFP+ 3
++            i2c@2 {
++                #address-cells = <1>;
++                #size-cells = <0>;
++                reg = <2>;
++                sfp_eeprom@50 {
++                    compatible = "at,24c04";
++                    reg = <0x50>;
++                    label = "port51";
++                };
++            };
++
++            // SFP+ 4
++            i2c@3 {
++                #address-cells = <1>;
++                #size-cells = <0>;
++                reg = <3>;
++                sfp_eeprom@50 {
++                    compatible = "at,24c04";
++                    reg = <0x50>;
++                    label = "port52";
++                };
++            };
++
++            // QSFP+ STK1
++            i2c@4 {
++                #address-cells = <1>;
++                #size-cells = <0>;
++                reg = <4>;
++                sfp_eeprom@50 {
++                    compatible = "at,24c04";
++                    reg = <0x50>;
++                };
++            };
++
++            // QSFP+ STK2
++            i2c@5 {
++                #address-cells = <1>;
++                #size-cells = <0>;
++                reg = <5>;
++                sfp_eeprom@50 {
++                    compatible = "at,24c04";
++                    reg = <0x50>;
++                };
++            };
++
++            // PSU EEPROM
++            i2c@6 {
++                #address-cells = <1>;
++                #size-cells = <0>;
++                reg = <6>;
++                psu_eeprom@50 {
++                    compatible = "at,24c02";
++                    reg = <0x50>;
++                    label = "psu1_eeprom";
++                    read-only;
++                };
++                psu_eeprom@51 {
++                    compatible = "at,24c02";
++                    reg = <0x51>;
++                    label = "psu2_eeprom";
++                    read-only;
++                };
++            };
++
++            i2c@7 {
++                #address-cells = <1>;
++                #size-cells = <0>;
++                reg = <7>;
++
++                temp@48 {
++                    compatible = "nxp,lm77";
++                    reg = <0x48>;
++                };
++
++                rtc@68 {
++                    /* Actually M41T11 */
++                    compatible = "dallas,ds1307";
++                    reg = <0x68>;
++                };
++
++                board_eeprom@50 {
++                    compatible = "at,24c04";
++                    reg = <0x50>;
++                    label = "board_eeprom";
++                };
++            };
++        };
++    };
++};
+diff --git a/arch/arm/mach-iproc/Kconfig b/arch/arm/mach-iproc/Kconfig
+index ed24988..991db6e 100644
+--- a/arch/arm/mach-iproc/Kconfig
++++ b/arch/arm/mach-iproc/Kconfig
+@@ -41,6 +41,11 @@ config MACH_GH
+ 	help
+ 	  Support for the Broadcom Greyhound bring-up board.
+ 
++config MACH_ACCTON_AS4610_30
++	bool "Support Accton AS4610-30 POE+ board"
++	help
++	  Support for the Accton AS4610 30 board.
++
+ endchoice
+ 
+ config MACH_IPROC_P7
+diff --git a/arch/arm/mach-iproc/board_bu.c b/arch/arm/mach-iproc/board_bu.c
+index b45588d..6a9b927 100644
+--- a/arch/arm/mach-iproc/board_bu.c
++++ b/arch/arm/mach-iproc/board_bu.c
+@@ -29,6 +29,7 @@
+ #include <linux/irq.h>
+ #include <linux/input.h>
+ #include <linux/i2c/tsc2007.h>
++#include <linux/i2c/pca954x.h>
+ #include <linux/spi/spi.h>
+ #include <mach/hardware.h>
+ #include <asm/mach/arch.h>
+@@ -41,7 +42,7 @@
+ #include <mach/reg_utils.h>
+ #include <linux/pwm.h>
+ #include <linux/amba/bus.h>
+-
++#include <linux/i2c/at24.h>
+ 
+ #include "northstar.h"
+ #include "common.h"
+@@ -379,7 +380,7 @@ static struct resource fa2_resources[] = {
+ #ifdef CONFIG_IPROC_I2C
+ /* SMBus (I2C/BSC) block */
+ 
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT22) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ /* Helix4 */
+ static struct resource smbus_resources[] = {
+     [0] = {
+@@ -447,7 +448,8 @@ static struct platform_device board_smbus_device = {
+     .num_resources = ARRAY_SIZE(smbus_resources),
+     .resource = smbus_resources,
+ };
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || \
++	defined(CONFIG_MACH_ACCTON_AS4610_30)
+ static struct platform_device board_smbus_device1 = {
+     .name= "iproc-smb",
+     .id = 1,
+@@ -516,8 +518,10 @@ static struct resource usbh_ehci_resource[] = {
+ 		.flags = IORESOURCE_MEM,
+ 	},
+ 	[1] = {
+-		.start = BCM_INT_ID_USB2H2CORE_USB2_INT,
+-		.end = BCM_INT_ID_USB2H2CORE_USB2_INT,
++		.start = 117,
++		.end = 117,
++		//.start = BCM_INT_ID_USB2H2CORE_USB2_INT,
++		//.end = BCM_INT_ID_USB2H2CORE_USB2_INT,
+ 		.flags = IORESOURCE_IRQ,
+ 	},
+ };
+@@ -546,8 +550,10 @@ static struct resource usbh_ohci_resource[] = {
+ 		.flags = IORESOURCE_MEM,
+ 	},
+ 	[1] = {
+-		.start = BCM_INT_ID_USB2H2CORE_USB2_INT,
+-		.end = BCM_INT_ID_USB2H2CORE_USB2_INT,
++		.start = 117,
++		.end = 117,
++		//.start = BCM_INT_ID_USB2H2CORE_USB2_INT,
++		//.end = BCM_INT_ID_USB2H2CORE_USB2_INT,
+ 		.flags = IORESOURCE_IRQ,
+ 	},
+ };
+@@ -704,6 +710,160 @@ void configure_SATA_PHY ( void )
+ }
+ #endif
+ 
++#ifdef CONFIG_MACH_ACCTON_AS4610_30
++
++/**
++ * mk_eeprom - Create at24 EEPROM platform data structures with
++ *             associated eeprom_class platform data structures.
++ *
++ * @_label:     EEPROM label -- final label in sysfs has "_eeprom" appended
++ * @_addr:      i2c address
++ * @_size:      size of EEPROM in bytes
++ * @_flags:     Any additional at42 flags from <linux/i2c/at24.h>
++ *
++ * Note: The declarations do not use __initdata as the drivers do not
++ * make deep copies of the data structures.  This is in keeping with
++ * other uses of platform data.
++ */
++#define mk_eeprom(_label, _addr, _size, _flags)             \
++    struct at24_platform_data  _label##_##_addr##_at24 = {      \
++        .byte_len = _size,                  \
++        .flags = _flags,                    \
++        .page_size = 1,                     \
++    };
++
++mk_eeprom(board,  50, 2048,  AT24_FLAG_IRUGO);
++
++/*
++ * The platform has 2 types of i2c SMBUSes, i801 (Intel 82801
++ * (ICH/PCH)) and ISMT (Intel SMBus Message Transport).  ISMT has a
++ * PCA9548 mux.
++ */
++
++/* i2c bus adapter numbers for the 8 down stream PCA9548 i2c busses */
++enum {
++    ACCTON_AS4610_30_I2C_SMBUS_0=0,
++    ACCTON_AS4610_30_I2C_SMBUS_1,
++    ACCTON_AS4610_30_I2C_PCA9548_BUS_0 = 10,
++    ACCTON_AS4610_30_I2C_PCA9548_BUS_1,
++    ACCTON_AS4610_30_I2C_PCA9548_BUS_2,
++    ACCTON_AS4610_30_I2C_PCA9548_BUS_3,
++    ACCTON_AS4610_30_I2C_PCA9548_BUS_4,
++    ACCTON_AS4610_30_I2C_PCA9548_BUS_5,
++    ACCTON_AS4610_30_I2C_PCA9548_BUS_6,
++    ACCTON_AS4610_30_I2C_PCA9548_BUS_7,
++};
++
++/*
++ * Platform data for the PCA9548 MUX
++ */
++static struct pca954x_platform_mode __initdata pca9548_mux_platform_modes [] = {
++    {
++        .adap_id = ACCTON_AS4610_30_I2C_PCA9548_BUS_0, .deselect_on_exit = 1,
++    },
++    {
++        .adap_id = ACCTON_AS4610_30_I2C_PCA9548_BUS_1, .deselect_on_exit = 1,
++    },
++    {
++        .adap_id = ACCTON_AS4610_30_I2C_PCA9548_BUS_2, .deselect_on_exit = 1,
++    },
++    {
++        .adap_id = ACCTON_AS4610_30_I2C_PCA9548_BUS_3, .deselect_on_exit = 1,
++    },
++    {
++        .adap_id = ACCTON_AS4610_30_I2C_PCA9548_BUS_4, .deselect_on_exit = 1,
++    },
++    {
++        .adap_id = ACCTON_AS4610_30_I2C_PCA9548_BUS_5, .deselect_on_exit = 1,
++    },
++    {
++        .adap_id = ACCTON_AS4610_30_I2C_PCA9548_BUS_6, .deselect_on_exit = 1,
++    },
++    {
++        .adap_id = ACCTON_AS4610_30_I2C_PCA9548_BUS_7, .deselect_on_exit = 1,
++    },
++};
++
++static struct pca954x_platform_data __initdata pca9548_mux_platform_data = {
++    .modes = pca9548_mux_platform_modes,
++    .num_modes = ARRAY_SIZE(pca9548_mux_platform_modes),
++};
++
++
++static struct i2c_board_info __initdata accton_as4610_30_i2c_board_info[] = {
++    {
++       /* PCA9548 8 Port I2C Switch */
++        I2C_BOARD_INFO("pca9548", 0x70),
++        .platform_data = &pca9548_mux_platform_data,
++    },
++};
++static struct i2c_board_info __initdata accton_as4610_30_i2c0_board_info[] = {
++    /* Begin PCA9548 BUS 0 */
++    {
++        I2C_BOARD_INFO("24c04", 0x50), /* SFP+ 1 */
++	},
++};
++
++static struct i2c_board_info __initdata accton_as4610_30_i2c1_board_info[] = {
++    /* Begin PCA9548 BUS 1 */
++    {
++        I2C_BOARD_INFO("24c04", 0x50), /* SFP+ 2 */
++    },
++};
++
++static struct i2c_board_info __initdata accton_as4610_30_i2c2_board_info[] = {
++    /* Begin PCA9548 BUS 2 */
++    {
++        I2C_BOARD_INFO("24c04", 0x50), /* SFP+ 3 */
++    },
++};
++
++static struct i2c_board_info __initdata accton_as4610_30_i2c3_board_info[] = {
++    /* Begin PCA9548 BUS 3 */
++    {
++        I2C_BOARD_INFO("24c04", 0x50), /* SFP+ 4 */
++    },
++};
++
++static struct i2c_board_info __initdata accton_as4610_30_i2c4_board_info[] = {
++    /* Begin PCA9548 BUS 4 */
++    {
++        I2C_BOARD_INFO("24c04", 0x50), /* QSFP STK 1 */
++    },
++};
++
++static struct i2c_board_info __initdata accton_as4610_30_i2c5_board_info[] = {
++    /* Begin PCA9548 BUS 5 */
++    {
++        I2C_BOARD_INFO("24c04", 0x50), /* QSFP STK 2 */
++    },
++};
++
++static struct i2c_board_info __initdata accton_as4610_30_i2c6_board_info[] = {
++    /* Begin PCA9548 BUS 6 */
++    {
++        I2C_BOARD_INFO("24c02", 0x50), /* PSU/Fantray 1 */
++    },
++    {
++        I2C_BOARD_INFO("24c02", 0x51), /* PSU/Fantray 2 */
++    },
++};
++static struct i2c_board_info __initdata accton_as4610_30_i2c7_board_info[] = {
++    /* Begin PCA9548 BUS 6 */
++    {
++         I2C_BOARD_INFO("lm77", 0x48), /* Thermal sensor LM77 */
++    },
++    {
++        I2C_BOARD_INFO("ds1307", 0x68), /* RTC ST M41T11  */
++    },
++    {
++        I2C_BOARD_INFO("24c04", 0x50), /* Board EEPROM  */
++        .platform_data = &board_50_at24,
++    },
++};
++#endif
++
++
+ #ifdef CONFIG_MACH_CYGNUS
+ #include "include/mach/iproc_regs.h"
+ #ifdef CONFIG_IPROC_DS1WM
+@@ -886,7 +1046,7 @@ static struct platform_device *board_sata_device[] __initdata = {
+ static struct platform_device *board_devices[] __initdata = {
+ #ifdef CONFIG_IPROC_I2C
+     &board_smbus_device,
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+     &board_smbus_device1,
+ #endif
+ #endif /* CONFIG_IPROC_I2C */
+@@ -1039,6 +1199,26 @@ void __init board_init(void)
+ 	spi_register_board_info(bcm5301x_spi_device,
+ 	ARRAY_SIZE(bcm5301x_spi_device));
+ 
++#if defined(CONFIG_MACH_ACCTON_AS4610_30)
++    i2c_register_board_info(1, accton_as4610_30_i2c_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c_board_info));
++    i2c_register_board_info(ACCTON_AS4610_30_I2C_PCA9548_BUS_0, accton_as4610_30_i2c0_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c0_board_info));
++    i2c_register_board_info(ACCTON_AS4610_30_I2C_PCA9548_BUS_1, accton_as4610_30_i2c1_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c1_board_info));
++    i2c_register_board_info(ACCTON_AS4610_30_I2C_PCA9548_BUS_2, accton_as4610_30_i2c2_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c2_board_info));
++    i2c_register_board_info(ACCTON_AS4610_30_I2C_PCA9548_BUS_3, accton_as4610_30_i2c3_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c3_board_info));
++    i2c_register_board_info(ACCTON_AS4610_30_I2C_PCA9548_BUS_4, accton_as4610_30_i2c4_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c4_board_info));
++    i2c_register_board_info(ACCTON_AS4610_30_I2C_PCA9548_BUS_5, accton_as4610_30_i2c5_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c5_board_info));
++    i2c_register_board_info(ACCTON_AS4610_30_I2C_PCA9548_BUS_6, accton_as4610_30_i2c6_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c6_board_info));
++    i2c_register_board_info(ACCTON_AS4610_30_I2C_PCA9548_BUS_7, accton_as4610_30_i2c7_board_info,
++            ARRAY_SIZE(accton_as4610_30_i2c7_board_info));
++#endif
+ 	printk(KERN_DEBUG "board_init: Leave\n");
+ }
+ 
+@@ -1056,6 +1236,11 @@ MACHINE_START(IPROC, "Broadcom iProc")
+ 	.init_machine = board_init,
+ MACHINE_END
+ 
++static const char * helix4_dt_board_compat[] = {
++    "accton,as4610_30",
++    NULL
++};
++
+ DT_MACHINE_START(HELIX4_DT, "Broadcom Helix4 (Flattened Device Tree)")
+ 	.map_io     = board_map_io,
+ 	.init_early = iproc_init_early,
+diff --git a/arch/arm/mach-iproc/common.c b/arch/arm/mach-iproc/common.c
+index 132d8fa..d40ea72 100644
+--- a/arch/arm/mach-iproc/common.c
++++ b/arch/arm/mach-iproc/common.c
+@@ -45,7 +45,8 @@
+ 
+ #if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
+ #define IRQ_IPROC_UART0  117
+-#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || \
++        defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define IRQ_IPROC_UART0  123
+ #elif defined(CONFIG_MACH_HR2)
+ #define IRQ_IPROC_UART0  123
+@@ -122,6 +123,9 @@ static struct plat_serial8250_port uart_data[] = {
+ #elif defined(CONFIG_MACH_CYGNUS)
+ 	IPROC_8250PORT(UART3),
+ 	IPROC_8250PORT(UART0),
++#elif defined(CONFIG_MACH_ACCTON_AS4610_30)
++	IPROC_8250PORT(UART1), /* Use UART2 as ttys0 */
++	IPROC_8250PORT(UART0),
+ #else
+ 	IPROC_8250PORT(UART0),
+ 	IPROC_8250PORT(UART1),
+diff --git a/arch/arm/mach-iproc/flash.c b/arch/arm/mach-iproc/flash.c
+index 5eaf3ec..07e3e57 100644
+--- a/arch/arm/mach-iproc/flash.c
++++ b/arch/arm/mach-iproc/flash.c
+@@ -42,6 +42,30 @@
+ #define IPROC_NAND_MAX_LUNS         (2)
+ 
+ #if defined(CONFIG_IPROC_QSPI) || defined(CONFIG_IPROC_QSPI_MODULE)
++#if defined(CONFIG_MACH_ACCTON_AS4610_30)
++static struct mtd_partition sflash_partition_map[] = {
++    {
++        .name = "uboot",
++        .offset = 0x00000000,
++        .size = 0x000e0000,
++    },
++    {
++        .name = "shmoo",
++        .offset = MTDPART_OFS_APPEND,
++        .size = 0x0010000,
++    },
++    {
++        .name = "uboot-env",
++        .offset = MTDPART_OFS_APPEND,
++        .size = 0x00010000,
++    },
++    {
++        .name = "onie",
++        .offset = MTDPART_OFS_APPEND,
++        .size = MTDPART_SIZ_FULL,
++    },
++};
++#else
+ static struct mtd_partition sflash_partition_map[] = {
+     {
+         .name = "boot",
+@@ -64,6 +88,7 @@ static struct mtd_partition sflash_partition_map[] = {
+         .size = MTDPART_SIZ_FULL,
+     },
+ };
++#endif
+ #endif /* CONFIG_IPROC_QSPI || CONFIG_IPROC_QSPI_MODULE */
+ 
+ #if defined(CONFIG_IPROC_MTD_NAND) || defined(CONFIG_IPROC_MTD_NAND_MODULE)
+diff --git a/arch/arm/mach-iproc/include/mach/iproc_regs.h b/arch/arm/mach-iproc/include/mach/iproc_regs.h
+index 935f579..d660052 100644
+--- a/arch/arm/mach-iproc/include/mach/iproc_regs.h
++++ b/arch/arm/mach-iproc/include/mach/iproc_regs.h
+@@ -23,7 +23,7 @@
+ #elif defined(CONFIG_MACH_NS)
+ #include "socregs_ns_open.h"
+ #elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || \
+-	defined(CONFIG_MACH_HR2))
++	defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #include "socregs_ing_open.h"
+ #elif defined(CONFIG_MACH_NSP)
+ #include "socregs_nsp_open.h"
+@@ -98,7 +98,8 @@
+ 
+ #endif
+ 
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_NSP) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_NSP) || \
++		defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define CCB_RNG_CTRL    ChipcommonB_rng_CTRL
+ #endif
+ 
+@@ -332,7 +333,8 @@
+ 
+ #if defined(CONFIG_MACH_NS)
+ #define IPROC_USB20_REG_BASE		  (0x18021000)
+-#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_NSP) || defined(CONFIG_MACH_KT2)
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_NSP) || \
++			defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define IPROC_USB20_REG_BASE		  (0x1802A000)
+ #define IPROC_UDC_IRQ				  (238)
+ #endif
+@@ -340,7 +342,7 @@
+ //#define IPROC_USB30_REG_BASE		  (0x18022000)
+ #define IPROC_USB20_PHY_REG_BASE	  (0x18023000) /* ??*/
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define IPROC_USB2D_REG_BASE	USB2D_ENDPNT_IN_CTRL_0
+ #define IPROC_USB2D_REG_SIZE	(0x2000) /* 8KB */
+ #endif
+@@ -355,7 +357,7 @@
+ #define IPROC_GMAC1_INT				180
+ #define IPROC_GMAC2_INT				181
+ #define IPROC_GMAC3_INT				182
+-#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define IPROC_NUM_GMACS				2
+ #define IPROC_GMAC0_REG_BASE		  (GMAC0_DEVCONTROL) //(0x18022000)
+ #define IPROC_GMAC1_REG_BASE		  (GMAC1_DEVCONTROL) //(0x18023000)
+@@ -398,7 +400,7 @@
+ #define IPROC_DMU_REG_BASE				(0x1800c000)
+ #define IPROC_IDM_REG_BASE				(0x18100000)
+ #elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_KT2) \
+-	|| defined(CONFIG_MACH_GH)
++	|| defined(CONFIG_MACH_GH) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define IPROC_CRU_REG_BASE				CRU_control
+ #define IPROC_DMU_REG_BASE				DMU_PCU_IPROC_CONTROL
+ #define IPROC_IDM_REG_BASE				(IHOST_M0_IO_CONTROL_DIRECT - 0x408)
+@@ -422,7 +424,7 @@
+ #define IPROC_STRAP_NAND_TYPE_SHIFT		(12)
+ #define IPROC_STRAP_NAND_PAGE_SHIFT		(10)
+ #elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_KT2) \
+-	|| defined(CONFIG_MACH_GH)
++	|| defined(CONFIG_MACH_GH) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define IPROC_DMU_STRAPS_OFFSET			DMU_PCU_IPROC_STRAPS_CAPTURED_BASE
+ #define IPROC_STRAP_BOOT_DEV_SHIFT		DMU_PCU_IPROC_STRAPS_CAPTURED__strap_boot_dev_R
+ #define IPROC_STRAP_NAND_TYPE_SHIFT		DMU_PCU_IPROC_STRAPS_CAPTURED__strap_nand_type_R
+@@ -445,7 +447,8 @@
+ #define IPROC_IDM_QSPI_REG_BASE		  QSPI_IDM_IDM_IO_CONTROL_DIRECT
+ #define IPROC_QSPI_IRQ_START		  (104)
+ #define IPROC_QSPI_IRQ_END		  (109)
+-#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_KT2)
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || \
++			defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define IPROC_IDM_NAND_REG_BASE		  NAND_IDM_IDM_IO_CONTROL_DIRECT
+ #define IPROC_NAND_IRQ_START		  (106)
+ #define IPROC_IDM_QSPI_REG_BASE		  QSPI_IDM_IDM_IO_CONTROL_DIRECT
+@@ -620,7 +623,7 @@
+ #define IPROC_GPIO_CCA_CTRL0            (0x01c0)
+ 
+ #else
+-/* CONFIG_MACH_HX4, CONFIG_MACH_HR2, CONFIG_MACH_NSP, CONFIG_MACH_KT2 */
++/* CONFIG_MACH_HX4, CONFIG_MACH_HR2, CONFIG_MACH_NSP, CONFIG_MACH_KT2, CONFIG_MACH_ACCTON_AS4610_30 */
+ #define IPROC_CCA_INT_STS               (ChipcommonA_IntStatus_BASE)
+ #define IPROC_CCA_INT_MASK              (ChipcommonA_IntMask_BASE)
+ #define IPROC_GPIO_CCA_BASE             (ChipcommonA_GPIOInput)
+@@ -691,7 +694,7 @@
+ #define IPROC_GPIO_CCB_PRB_EN       (ChipcommonG_GP_PRB_ENABLE_BASE)
+ #define IPROC_GPIO_CCB_PRB_OE       (ChipcommonG_GP_PRB_OE_BASE)
+ #else
+-/* CONFIG_MACH_HX4, CONFIG_MACH_HR2, CONFIG_MACH_NSP, CONFIG_MACH_KT2 */
++/* CONFIG_MACH_HX4, CONFIG_MACH_HR2, CONFIG_MACH_NSP, CONFIG_MACH_KT2, CONFIG_MACH_ACCTON_AS4610_30 */
+ #define IPROC_GPIO_CCB_BASE         (ChipcommonB_GP_DATA_IN)
+ #define IPROC_GPIO_CCB_DIN          (ChipcommonB_GP_DATA_IN_BASE)
+ #define IPROC_GPIO_CCB_DOUT         (ChipcommonB_GP_DATA_OUT_BASE)
+@@ -719,7 +722,7 @@
+ #elif defined(CONFIG_MACH_IPROC_P7)
+ #define IPROC_GPIO_CCG_INT          (116)
+ #else
+-/* CONFIG_MACH_HX4, CONFIG_MACH_HR2, CONFIG_MACH_KT2 */
++/* CONFIG_MACH_HX4, CONFIG_MACH_HR2, CONFIG_MACH_KT2, CONFIG_MACH_ACCTON_AS4610_30 */
+ #define IPROC_GPIO_CCA_INT          (123)
+ #define IPROC_GPIO_CCB_INT          (125)
+ #endif
+@@ -772,7 +775,7 @@
+ #define IPROC_CCB_TIMER3_REGS_VA    (IPROC_CCB_TIM1_REG_VA + 0x20)
+ #define IPROC_CCB_TIMER_INT_START   (122)
+ #define IPROC_CCB_TIMER_INT_COUNT   (4)
+-#else /* CONFIG_MACH_HX4, CONFIG_MACH_HR2, CONFIG_MACH_KT2 */
++#else /* CONFIG_MACH_HX4, CONFIG_MACH_HR2, CONFIG_MACH_KT2, CONFIG_MACH_ACCTON_AS4610_30 */
+ #define IPROC_CCB_TIMER0_REGS_VA    (IPROC_CCB_TIM0_REG_VA + 0x00)
+ #define IPROC_CCB_TIMER1_REGS_VA    (IPROC_CCB_TIM0_REG_VA + 0x20)
+ #define IPROC_CCB_TIMER2_REGS_VA    (IPROC_CCB_TIM1_REG_VA + 0x00)
+@@ -782,10 +785,14 @@
+ #endif
+ 
+ /* ChipCommonB Watchdog */
+-/* CCB WDT could be set only when CONFIG_MACH_HR2, CONFIG_MACH_HX4, or CONFIG_MACH_NSP is set */
++/*
++ * CCB WDT could be set only when CONFIG_MACH_HR2, CONFIG_MACH_HX4,
++ * CONFIG_MACH_ACCTON_AS4610_30 or CONFIG_MACH_NSP is set
++ */
+ #define IPROC_CCB_WDT_WDOGLOAD	ChipcommonB_WDT_WDOGLOAD
+ #define IPROC_CCB_WDT_REG_BASE	IPROC_CCB_WDT_WDOGLOAD
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || \
++			defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define IPROC_CCB_WDT_BOOTSTATUS		DMU_PCU_CRU_RESET_REASON
+ #define IPROC_CCB_WDT_BOOTSTATUS_BIT	DMU_PCU_CRU_RESET_REASON__watchdog_reset
+ #elif defined(CONFIG_MACH_NSP)
+diff --git a/arch/arm/mach-iproc/include/mach/socregs_ing_open.h b/arch/arm/mach-iproc/include/mach/socregs_ing_open.h
+index 53c3b98..1e01892 100644
+--- a/arch/arm/mach-iproc/include/mach/socregs_ing_open.h
++++ b/arch/arm/mach-iproc/include/mach/socregs_ing_open.h
+@@ -84,7 +84,7 @@
+ #define ChipcommonB_PWM_DUTYHI_COUNT3_BASE 0x020
+ #define ChipcommonB_PWMCTL_BASE 0x000
+ #define ChipcommonB_rng_CTRL 0x18033000
+-#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4))
++#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define USB2_IDM_IDM_IO_CONTROL_DIRECT 0x18115408
+ #define USB2D_IDM_IDM_IO_CONTROL_DIRECT 0x18116408
+ #define USB2D_IDM_IDM_IO_CONTROL_DIRECT__clk_enable 0
+@@ -93,7 +93,7 @@
+ #endif
+ #define DMU_CRU_RESET_BASE 0x200
+ #define ChipcommonB_SMBus1_SMBus_Config 0x1803b000
+-#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4))
++#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define USB2D_ENDPNT_IN_CTRL_0 0x18042000
+ #endif
+ #define IHOST_S1_IDM_ERROR_LOG_CONTROL 0x18107900
+@@ -131,7 +131,7 @@
+ #define AXI_PCIE_S0_IDM_IDM_ERROR_LOG_ID 0x1810b914
+ #define AXI_PCIE_S0_IDM_IDM_ERROR_LOG_FLAGS 0x1810b91c
+ #define AXI_PCIE_S0_IDM_IDM_INTERRUPT_STATUS 0x1810ba00
+-#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4))
++#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define AXI_PCIE_S1_IDM_IDM_ERROR_LOG_CONTROL 0x1810c900
+ #define AXI_PCIE_S1_IDM_IDM_ERROR_LOG_COMPLETE 0x1810c904
+ #define AXI_PCIE_S1_IDM_IDM_ERROR_LOG_STATUS 0x1810c908
+@@ -196,7 +196,7 @@
+ #define APBZ_S0_IDM_IDM_ERROR_LOG_ID 0x18121914
+ #define APBZ_S0_IDM_IDM_ERROR_LOG_FLAGS 0x1812191c
+ #define APBZ_S0_IDM_IDM_INTERRUPT_STATUS 0x18121a00
+-#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4))
++#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define APBV_S0_IDM_IDM_ERROR_LOG_CONTROL 0x18122900
+ #define APBV_S0_IDM_IDM_ERROR_LOG_COMPLETE 0x18122904
+ #define APBV_S0_IDM_IDM_ERROR_LOG_STATUS 0x18122908
+@@ -212,7 +212,7 @@
+ #define AXIIC_DS_3_IDM_ERROR_LOG_ID 0x18123914
+ #define AXIIC_DS_3_IDM_ERROR_LOG_FLAGS 0x1812391c
+ #define AXIIC_DS_3_IDM_INTERRUPT_STATUS 0x18123a00
+-#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4))
++#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define AXIIC_DS_4_IDM_ERROR_LOG_CONTROL 0x18124900
+ #define AXIIC_DS_4_IDM_ERROR_LOG_COMPLETE 0x18124904
+ #define AXIIC_DS_4_IDM_ERROR_LOG_STATUS 0x18124908
+@@ -242,7 +242,7 @@
+ #define AXIIC_DS_0_IDM_ERROR_LOG_ID 0x18141914
+ #define AXIIC_DS_0_IDM_ERROR_LOG_FLAGS 0x1814191c
+ #define AXIIC_DS_0_IDM_INTERRUPT_STATUS 0x18141a00
+-#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4))
++#if (defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define AXIIC_DS_1_IDM_ERROR_LOG_CONTROL 0x18142900
+ #define AXIIC_DS_1_IDM_ERROR_LOG_COMPLETE 0x18142904
+ #define AXIIC_DS_1_IDM_ERROR_LOG_STATUS 0x18142908
+@@ -525,7 +525,7 @@
+ #define IPROC_DDR_PLL_STATUS_RDWRMASK 0x00000000
+ #define IPROC_DDR_PLL_STATUS_RESETVALUE 0x0
+ #endif
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define IPROC_WRAP_USBPHY_CTRL 0x1803fc34
+ #define IPROC_WRAP_GEN_PLL_STATUS__GEN_PLL_LOCK 0
+ #define IPROC_WRAP_GEN_PLL_CTRL1__NDIV_INT_R 0
+@@ -756,7 +756,7 @@
+ #define IPROC_WRAP_IPROC_XGPLL_STATUS_DATAMASK 0xffffffff
+ #define IPROC_WRAP_IPROC_XGPLL_STATUS_RDWRMASK 0x00000000
+ #define IPROC_WRAP_IPROC_XGPLL_STATUS_RESETVALUE 0x0
+-#if defined(CONFIG_MACH_HX4)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define IPROC_WRAP_MISC_CONTROL__QUAD_SERDES_MDIO_SEL 3
+ #define IPROC_WRAP_MISC_CONTROL__QUAD_SERDES_CTRL_SEL 2
+ #define IPROC_WRAP_MISC_CONTROL__IPROC_MDIO_SEL 4
+diff --git a/arch/arm/mach-iproc/northstar.c b/arch/arm/mach-iproc/northstar.c
+index 112144b..8b9e859 100644
+--- a/arch/arm/mach-iproc/northstar.c
++++ b/arch/arm/mach-iproc/northstar.c
+@@ -88,7 +88,7 @@ static void __init northstar_l2x0_init(void)
+ 	} else {	/* northstar */
+ 		l2x0_init(l2cache_base, 0x0A130000, ~(0x000F0000));
+ 	}
+-#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 		l2x0_init(l2cache_base, 0x0A150000, ~(0x000F0000));
+ #elif defined(CONFIG_MACH_HR2)
+ 		l2x0_init(l2cache_base, 0x0A120000, ~(0x000F0000));
+diff --git a/arch/arm/mach-iproc/northstar_dmu.c b/arch/arm/mach-iproc/northstar_dmu.c
+index fde19a9..a1ef786 100644
+--- a/arch/arm/mach-iproc/northstar_dmu.c
++++ b/arch/arm/mach-iproc/northstar_dmu.c
+@@ -244,7 +244,8 @@ static int genpll_status(struct clk * clk)
+ 	return 0;
+ }
+ #endif
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_GH)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || \
++	defined(CONFIG_MACH_GH) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ static int genpll_status(struct clk * clk)
+ {
+ 	u32 reg;
+@@ -382,7 +383,8 @@ static int genpll_chan_status(struct clk * clk)
+ }
+ #endif
+ 
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_GH)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || \
++	defined(CONFIG_MACH_GH) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ static int genpll_chan_status(struct clk * clk)
+ {
+ 	void * __iomem base;
+@@ -696,7 +698,8 @@ static void __init northstar_clocks_init(void *__iomem cru_regs_base,
+ #if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
+ 	clk_lcpll.regs_base =	cru_regs_base + 0x00 ;
+ 	clk_genpll.regs_base =	cru_regs_base + 0x40 ;
+-#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_GH)
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || \
++	defined(CONFIG_MACH_GH) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 	clk_lcpll.regs_base =	cru_regs_base + 0x1c ;
+ 	clk_genpll.regs_base =	cru_regs_base + 0x00 ;
+ #endif
+@@ -729,7 +732,8 @@ void __init northstar_dmu_init(struct clk *clk_ref)
+ 	/* Initialize clocks */
+ #if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
+ 	northstar_clocks_init(reg_base + 0x100, clk_ref); /* CRU LCPLL control0 */
+-#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_GH)
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || \
++	defined(CONFIG_MACH_GH) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 	northstar_clocks_init(reg_base + 0xc00, clk_ref); /* IPROC_WRAP_GEN_PLL_CTRL0 */
+ #elif defined(CONFIG_MACH_KT2)
+ 	northstar_clocks_init(NULL, clk_ref); /* IPROC_WRAP_GEN_PLL_CTRL0 */
+@@ -752,7 +756,7 @@ void northstar_restart(char mode, const char *cmd)
+ 	reg &= ~((u32) 1 << 1);
+ 	writel_relaxed(reg, reg_addr);
+ #elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_KT2) \
+-	|| defined(CONFIG_MACH_GH)
++	|| defined(CONFIG_MACH_GH) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 	reg_addr = (void * __iomem) dmu_regs.start + DMU_CRU_RESET_BASE ;
+ 	/* Reset iproc and cmicd/switch */
+ 	writel_relaxed(0, reg_addr);
+diff --git a/arch/arm/plat-iproc/include/mach/irqs.h b/arch/arm/plat-iproc/include/mach/irqs.h
+index 752ebcf..1d1e70f 100644
+--- a/arch/arm/plat-iproc/include/mach/irqs.h
++++ b/arch/arm/plat-iproc/include/mach/irqs.h
+@@ -74,7 +74,7 @@
+ #define BCM_INT_ID_IHOST_CT             42
+ #define BCM_INT_ID_IHOST_DEFFLG_CPU0    44
+ #define BCM_INT_ID_IHOST_DEFFLG_CPU1    45
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define BCM_INT_ID_IHOST_CPU0_PAR		46
+ #define BCM_INT_ID_IHOST_CPU1_PAR	    47
+ #define BCM_INT_ID_IHOST_SCU0_PAR		48
+@@ -116,7 +116,7 @@
+ #define BCM_INT_ID_NAND_S0              (24 + BCM_INT_ID_IHOST_MAX)
+ #define BCM_INT_ID_QPSI_S0              (25 + BCM_INT_ID_IHOST_MAX)
+ #define BCM_INT_ID_A9JTAG_S0            (26 + BCM_INT_ID_IHOST_MAX)
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define BCM_INT_ID_SATA_S0				(27 + BCM_INT_ID_IHOST_MAX)
+ #define BCM_INT_ID_SRAM_S0              (28+ BCM_INT_ID_IHOST_MAX)
+ #define BCM_INT_ID_APBW					(29 + BCM_INT_ID_IHOST_MAX)
+@@ -149,7 +149,7 @@
+ /* DMAC Interrupt IDs                                                  */
+ /*=====================================================================*/
+ #define BCM_INT_ID_DMAC                 (0 + BCM_INT_ID_DDR_MAX)
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define BCM_INT_ID_DMAC_ABORT           (16 + BCM_INT_ID_DDR_MAX)
+ #define BCM_INT_ID_DMAC_MAX             (17 + BCM_INT_ID_DDR_MAX)
+ #elif defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP)
+diff --git a/arch/arm/plat-iproc/platsmp.c b/arch/arm/plat-iproc/platsmp.c
+index 932847d..1589d46 100644
+--- a/arch/arm/plat-iproc/platsmp.c
++++ b/arch/arm/plat-iproc/platsmp.c
+@@ -34,7 +34,7 @@
+ #define SOC_ROM_BASE_PA    0xFFFF0000
+ #ifdef CONFIG_MACH_NS
+ #define SOC_ROM_LUT_OFF    0x400
+-#elif defined(CONFIG_MACH_HX4)
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define SOC_ROM_LUT_OFF    0x42c
+ #elif defined(CONFIG_MACH_HR2)
+ #define SOC_ROM_LUT_OFF    0x400
+diff --git a/drivers/bcmdrivers/gmac/hnd/Makefile b/drivers/bcmdrivers/gmac/hnd/Makefile
+index 44500c7..c2d02c3 100755
+--- a/drivers/bcmdrivers/gmac/hnd/Makefile
++++ b/drivers/bcmdrivers/gmac/hnd/Makefile
+@@ -57,6 +57,12 @@ hnd-objs += $(SHARED)/bcmiproc_serdes.o
+ HND_OBJS += $(src)/$(SHARED)/bcmiproc_phy5461s.o
+ hnd-objs += $(SHARED)/bcmiproc_phy5461s.o
+ endif
++ifeq ($(CONFIG_MACH_ACCTON_AS4610_30),y)
++HND_OBJS += $(src)/$(SHARED)/bcmiproc_serdes.o
++hnd-objs += $(SHARED)/bcmiproc_serdes.o
++HND_OBJS += $(src)/$(SHARED)/bcmiproc_phy5461s.o
++hnd-objs += $(SHARED)/bcmiproc_phy5461s.o
++endif
+ ifeq ($(CONFIG_MACH_KT2),y)
+ HND_OBJS += $(src)/$(SHARED)/bcmiproc_serdes.o
+ hnd-objs += $(SHARED)/bcmiproc_serdes.o
+@@ -103,6 +109,10 @@ ifeq ($(CONFIG_MACH_HX4),y)
+ HND_OBJS += $(src)/$(SHARED)/hx4_erom.o
+ hnd-objs += $(SHARED)/hx4_erom.o
+ endif
++ifeq ($(CONFIG_MACH_ACCTON_AS4610_30),y)
++HND_OBJS += $(src)/$(SHARED)/hx4_erom.o
++hnd-objs += $(SHARED)/hx4_erom.o
++endif
+ ifeq ($(CONFIG_MACH_HR2),y)
+ HND_OBJS += $(src)/$(SHARED)/hr2_erom.o
+ hnd-objs += $(SHARED)/hr2_erom.o
+diff --git a/drivers/bcmdrivers/gmac/src/et/sys/et_linux.c b/drivers/bcmdrivers/gmac/src/et/sys/et_linux.c
+index aa9ad62..cf67788 100755
+--- a/drivers/bcmdrivers/gmac/src/et/sys/et_linux.c
++++ b/drivers/bcmdrivers/gmac/src/et/sys/et_linux.c
+@@ -220,7 +220,7 @@ extern int fa2_modify_header(struct sk_buff *skb);
+ #endif /* defined(CONFIG_IPROC_FA2) */
+ 
+ #if defined(CONFIG_IPROC_SDK_MGT_PORT_HANDOFF)
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ extern int gmac_has_mdio_access(void);
+ #endif /* (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)) */
+ #endif /* defined(CONFIG_IPROC_SDK_MGT_PORT_HANDOFF) */
+@@ -1453,7 +1453,8 @@ et_init(et_info_t *et, uint options)
+ 
+ 	etc_init(et->etc, options);
+ 
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || \
++    defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 	netif_carrier_off(et->dev);
+ #endif /* defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_KT2) */
+ }
+@@ -1488,7 +1489,7 @@ et_up(et_info_t *et)
+ 	etc_up(etc);
+ 
+ #if defined(CONFIG_IPROC_SDK_MGT_PORT_HANDOFF)
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	if (et->set) {
+ 		/* This will happen if running watchdog to monitor mdio bus */
+ 		/* and port not up */
+@@ -1544,7 +1545,7 @@ et_down(et_info_t *et, int reset)
+ 	netif_stop_queue(et->dev);
+ 
+ #if defined(CONFIG_IPROC_SDK_MGT_PORT_HANDOFF)
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	if (gmac_has_mdio_access()) {
+ 		/* we have mdio bus don't stop timer so we can continue to monitor */
+ 		stoptmr = FALSE;
+@@ -1609,7 +1610,7 @@ _et_watchdog(struct net_device *dev)
+ 		add_timer(&et->timer);
+ 	}
+ #if defined(CONFIG_IPROC_SDK_MGT_PORT_HANDOFF)
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	/* this in case port when up then down before we released mdio */
+ 	else if (gmac_has_mdio_access()) {
+ 		/* interface not up but we have mdio bus */
+@@ -1694,7 +1695,7 @@ et_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
+     ecmd->supported = (SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full |
+                        SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full |
+                        SUPPORTED_Autoneg | SUPPORTED_TP);
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+     ecmd->supported |= SUPPORTED_1000baseT_Full | SUPPORTED_Pause;
+ #endif
+ #if defined(CONFIG_MACH_HR2)
+@@ -1716,7 +1717,7 @@ et_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
+ 	        ADVERTISED_1000baseT_Half : 0;
+     ecmd->advertising |= (et->etc->forcespeed == ET_AUTO) ?
+ 	        ADVERTISED_Autoneg : 0;
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HR2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+     ecmd->advertising |= ADVERTISED_Pause;
+ #endif
+     if (et->etc->linkstate) {
+@@ -3119,7 +3120,7 @@ if ((osl_ctfpool_init(unit, osh, CTFPOOLSZ, RXBUFSZ+BCMEXTRAHDROOM) < 0)) {
+ 	et->timer.function = et_watchdog;
+ 
+ #if defined(CONFIG_IPROC_SDK_MGT_PORT_HANDOFF)
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	/* schedule one second watchdog timer */
+ 	et->timer.expires = jiffies + HZ;
+ 	add_timer(&et->timer);
+diff --git a/drivers/bcmdrivers/gmac/src/et/sys/etc.c b/drivers/bcmdrivers/gmac/src/et/sys/etc.c
+index 00fa88b..f76a33e 100755
+--- a/drivers/bcmdrivers/gmac/src/et/sys/etc.c
++++ b/drivers/bcmdrivers/gmac/src/et/sys/etc.c
+@@ -61,7 +61,7 @@ static void etc_loopback(etc_info_t *etc, int on);
+ static void etc_dumpetc(etc_info_t *etc, struct bcmstrbuf *b);
+ int etc_gmac_speed(int gmac);
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ extern void gmac_set_amac_mdio(int en);
+ extern int gmac_has_mdio_access(void);
+ #endif /* (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)) */
+@@ -600,7 +600,7 @@ etc_watchdog(etc_info_t *etc)
+ 		ethup |= 1<<etc->unit;
+ 	}
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #if defined(CONFIG_IPROC_SDK_MGT_PORT_HANDOFF)
+ 	if ( !gmac_has_mdio_access()) {
+         /* we can't monitor link so force link up */
+diff --git a/drivers/bcmdrivers/gmac/src/et/sys/etcgmac.c b/drivers/bcmdrivers/gmac/src/et/sys/etcgmac.c
+index cf16543..2947afc 100755
+--- a/drivers/bcmdrivers/gmac/src/et/sys/etcgmac.c
++++ b/drivers/bcmdrivers/gmac/src/et/sys/etcgmac.c
+@@ -50,13 +50,13 @@
+ #ifdef GMAC3
+ #include <hndfwd.h>	/* GMAC3 */
+ #endif /* GMAC3 */
+-#if defined(CONFIG_MACH_HX4)
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #include "mach/socregs_ing_open.h"
+ #endif
+ #if defined(CONFIG_MACH_KT2)
+ #include "mach/socregs_ing_open.h"
+ #endif
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #include "bcmiproc_serdes.h"
+ #include "bcmiproc_phy5461s.h"
+ #endif
+@@ -144,7 +144,7 @@ static void chipphyenable(ch_t *ch, uint eth_num, uint phyaddr, int enable);
+ static void chipdumpregs(ch_t *ch, gmacregs_t *regs, struct bcmstrbuf *b);
+ static void gmac_mf_cleanup(ch_t *ch);
+ static int gmac_speed(ch_t *ch, uint32 speed);
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ static void gmac_serdes_init(ch_t *ch);
+ #endif
+ static void gmac_miiconfig(ch_t *ch);
+@@ -192,12 +192,12 @@ static uint devices[] = {
+ 	0x0000
+ };
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ static void *wrapaddr = 0;
+ void gmac_set_amac_mdio(int en)
+ {
+ 	u32 tmp;
+-#if defined(CONFIG_MACH_HX4)
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	u32 mdio_sel= IPROC_WRAP_MISC_CONTROL__QUAD_SERDES_MDIO_SEL;
+ 	u32 ctrl_sel= IPROC_WRAP_MISC_CONTROL__QUAD_SERDES_CTRL_SEL;
+ #else
+@@ -244,7 +244,7 @@ int gmac_has_mdio_access(void)
+ 	u32 tmp;
+ 	u32 regmsk = IPROC_WRAP_MISC_CONTROL__IPROC_MDIO_SEL;
+ 
+-#if defined(CONFIG_MACH_HX4)
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	regmsk |= 	IPROC_WRAP_MISC_CONTROL__QUAD_SERDES_MDIO_SEL |
+ 				IPROC_WRAP_MISC_CONTROL__QUAD_SERDES_CTRL_SEL;
+ #else
+@@ -439,7 +439,7 @@ chipattach(etc_info_t *etc, void *osh, void *regsva)
+ 	/* reset the gmac core */
+ 	chipreset(ch);
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	if (wrapaddr == 0) {
+ 		/* flip switch so AMAC can access serdes */
+ 		gmac_set_amac_mdio(1);
+@@ -710,7 +710,7 @@ chipattach(etc_info_t *etc, void *osh, void *regsva)
+ #endif
+ 
+ 	/* reset phy: reset it once now */
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+     if (ch->etc->unit == 0) {
+         serdes_reset_core(ch->etc->unit, etc->phyaddr);
+     }
+@@ -760,7 +760,7 @@ chipattach(etc_info_t *etc, void *osh, void *regsva)
+ 	}
+ #endif /* ETROBO */
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+     if (gmac_last_interface(etc->unit)) {
+         /* must init all serdes lanes, init port 49 (phy 3) */
+         serdes_init(etc->unit, 3);
+@@ -1036,7 +1036,7 @@ gmac_reset(ch_t *ch)
+ 	            CC_CFE | CC_RL | CC_RED | CC_PE | CC_TPI | CC_PAD_EN | CC_PF);
+ 	cmdcfg |= (CC_PROM | CC_NLC | CC_CFE);
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	cmdcfg |= (CC_AE | CC_OT | CC_OR);
+ #endif
+ 
+@@ -1126,7 +1126,7 @@ gmac_speed(ch_t *ch, uint32 speed)
+ 	cmdcfg &= ~(CC_ES_MASK | CC_HD);
+ 	cmdcfg |= ((speed << CC_ES_SHIFT) | hd_ena);
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	cmdcfg |= (CC_AE | CC_OT | CC_OR);
+ #endif
+ 
+@@ -1253,7 +1253,7 @@ gmac_txflowcontrol(ch_t *ch, bool on)
+ 	gmac_clear_reset(ch);
+ }
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ static void
+ gmac_serdes_init(ch_t *ch)
+ {
+@@ -1278,7 +1278,7 @@ gmac_serdes_init(ch_t *ch)
+      */
+ 
+ 	sdctl = 0;
+-#if defined(CONFIG_MACH_HX4)
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+     sdctl |= (SC_TX1G_FIFO_RST_VAL|SC_FORCE_SPD_STRAP_VAL|SC_REFSEL_VAL|SC_REF_TERM_SEL_MASK);
+ #else
+ 	sdctl |= (SC_TX1G_FIFO_RST_VAL|SC_FORCE_SPD_STRAP_VAL|SC_REF_TERM_SEL_MASK);
+@@ -2158,7 +2158,7 @@ chipduplexupd(ch_t *ch)
+ 		cmdcfg |= duplex;
+ 	}
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	cmdcfg |= (CC_AE | CC_OT | CC_OR);
+ #endif
+ 
+@@ -2251,7 +2251,7 @@ chipphyrd(ch_t *ch, uint phyaddr, uint reg)
+ 		tmp = 0xffff;
+ 	}
+ #endif /* (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP)) */
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	uint32 addr, int_bus, bank, flags;
+ 	uint16 tmp16;
+ 
+@@ -2317,7 +2317,7 @@ chipphywr(ch_t *ch, uint phyaddr, uint reg, uint16 v)
+ 		ET_ERROR(("et%d: chipphywr: did not complete\n", ch->etc->unit));
+ 	}
+ #endif /* (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP)) */
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+     uint32 addr, int_bus, bank, flags;
+ 
+     addr = phyaddr&0xf;
+@@ -2371,7 +2371,7 @@ chipphyreset(ch_t *ch, uint phyaddr)
+ 		ET_ERROR(("et%d: chipphyreset: reset not complete\n", ch->etc->unit));
+ 	}
+ #endif /* (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP)) */
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+     chipphywr(ch, phyaddr, 0, CTL_RESET);
+     OSL_DELAY(100);
+     if (chipphyrd(ch, phyaddr, 0) & CTL_RESET) {
+@@ -2397,7 +2397,7 @@ chipphyinit(ch_t *ch, uint phyaddr)
+ 		return;
+ 
+ 	ET_TRACE(("et%d: chipphyinit: phyaddr %d\n", ch->etc->unit, phyaddr));
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	phy5461_init(ch->etc->unit, phyaddr);
+ 	serdes_init(ch->etc->unit, phyaddr);
+ #elif defined(CONFIG_MACH_HR2)
+@@ -2497,7 +2497,7 @@ chipphyadvertise(ch_t *ch, uint phyaddr)
+ static void
+ chipphyenable(ch_t *ch, uint eth_num, uint phyaddr, int enable)
+ {
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	phy5461_enable_set(eth_num, phyaddr, enable);
+ #endif /* (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)) */
+ #if defined(CONFIG_MACH_HR2)
+diff --git a/drivers/bcmdrivers/gmac/src/include/bcmdevs.h b/drivers/bcmdrivers/gmac/src/include/bcmdevs.h
+index 66283c6..f580be5 100755
+--- a/drivers/bcmdrivers/gmac/src/include/bcmdevs.h
++++ b/drivers/bcmdrivers/gmac/src/include/bcmdevs.h
+@@ -285,7 +285,7 @@
+ 
+ #if defined(CONFIG_MACH_NS)
+ #define BCMIPROC_CHIP_ID	BCM53010_CHIP_ID
+-#elif defined(CONFIG_MACH_HX4)
++#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define BCMIPROC_CHIP_ID	BCM56340_CHIP_ID
+ #elif defined(CONFIG_MACH_HR2)
+ #define BCMIPROC_CHIP_ID	BCM56150_CHIP_ID
+diff --git a/drivers/bcmdrivers/gmac/src/include/typedefs.h b/drivers/bcmdrivers/gmac/src/include/typedefs.h
+index 4c787aa..479edd0 100644
+--- a/drivers/bcmdrivers/gmac/src/include/typedefs.h
++++ b/drivers/bcmdrivers/gmac/src/include/typedefs.h
+@@ -219,7 +219,7 @@ typedef unsigned __int64 uint64;
+ 
+ #endif
+ 
+-#if defined(CONFIG_MACH_NSP) || defined(CONFIG_MACH_HX4)    /* JIRA:LINUXDEV- */
++#if defined(CONFIG_MACH_NSP) || defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)    /* JIRA:LINUXDEV- */
+ #ifdef CONFIG_CPU_BIG_ENDIAN
+ #define IL_BIGENDIAN
+ #endif /* CONFIG_CPU_BIG_ENDIAN */
+diff --git a/drivers/bcmdrivers/gmac/src/shared/aiutils.c b/drivers/bcmdrivers/gmac/src/shared/aiutils.c
+index d53ade3..d438717 100755
+--- a/drivers/bcmdrivers/gmac/src/shared/aiutils.c
++++ b/drivers/bcmdrivers/gmac/src/shared/aiutils.c
+@@ -29,7 +29,7 @@
+ #include <pcicfg.h>
+ 
+ #include "siutils_priv.h"
+-#if defined(CONFIG_MACH_HX4)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #include "hx4_erom.h"
+ #elif defined(CONFIG_MACH_HR2)
+ #include "hr2_erom.h"
+@@ -61,7 +61,7 @@ get_erom_ent(si_t *sih, uint32 **eromptr, uint32 mask, uint32 match)
+ 	while (TRUE) {
+ #if defined(CONFIG_MACH_NS)
+ 		ent = R_REG(si_osh(sih), *eromptr);
+-#elif defined(CONFIG_MACH_HX4)
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 		ent = **eromptr;
+ #elif defined(CONFIG_MACH_HR2)
+ 		ent = **eromptr;
+@@ -255,7 +255,7 @@ BCMATTACHFN(ai_scan)(si_t *sih, void *regs, uint devid)
+ 	case SI_BUS:
+ #if defined(CONFIG_MACH_NS)
+ 		eromptr = (uint32 *)REG_MAP(erombase, SI_CORE_SIZE);
+-#elif defined(CONFIG_MACH_HX4)
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 		eromptr = hx4_erom;
+ #elif defined(CONFIG_MACH_HR2)
+ 		eromptr = hr2_erom;
+diff --git a/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c b/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
+index aa8c3bd..eaccb35 100755
+--- a/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
++++ b/drivers/bcmdrivers/gmac/src/shared/nvramstubs.c
+@@ -100,6 +100,8 @@ static nvram_t fake_nvram[] = {
+ #define CONFIG_NAND_BASE		0x1c000000
+ #if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
+ #define CONFIG_ENV_OFFSET		0xa0000		/* 30000-b0000 - use last 10000 for env */
++#elif defined(CONFIG_MACH_ACCTON_AS4610_30)
++#define CONFIG_ENV_OFFSET		0xf0000		/* f0000-fffff - use 10000 for env */
+ #else
+ #define CONFIG_ENV_OFFSET		0xc0000		/* 30000-b0000 - use last 10000 for env */
+ #endif
+@@ -240,7 +242,7 @@ nvram_env_gmac_name(int gmac, char *name)
+ 	case 3:
+ 		sprintf(name, "eth%daddr", gmac);
+ 		break;
+-#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#elif (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	case 0:
+ 		strcpy(name, "ethaddr");
+ 		break;
+diff --git a/drivers/bcmdrivers/gpio/gpiolib.c b/drivers/bcmdrivers/gpio/gpiolib.c
+index e7a1a66..d59b101 100644
+--- a/drivers/bcmdrivers/gpio/gpiolib.c
++++ b/drivers/bcmdrivers/gpio/gpiolib.c
+@@ -114,7 +114,7 @@ struct iproc_gpio_chip iproc_gpios_config[] = {
+     },
+ };
+ /* CONFIG_MACH_NS */
+-#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ /*
+  * Chip level GPIO 0-3 from CMICD,
+  * GPIO 4-11 from ChipcommonA gpio pin 0 - 7
+diff --git a/drivers/bcmdrivers/pcie/pcie_iproc.c b/drivers/bcmdrivers/pcie/pcie_iproc.c
+index 3e0f520..852b409 100755
+--- a/drivers/bcmdrivers/pcie/pcie_iproc.c
++++ b/drivers/bcmdrivers/pcie/pcie_iproc.c
+@@ -221,7 +221,7 @@ static struct soc_pcie_port {
+ 	{
+ 	.regs_res = & soc_pcie_regs[0],
+ 	.owin_res = & soc_pcie_owin[0],
+-#if defined(CONFIG_MACH_HX4)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 	.irqs = {214, 215, 216, 217, 218, 219},
+ #elif defined(CONFIG_MACH_HR2)
+ 	.irqs = {214, 215, 216, 217, 218, 219},
+diff --git a/drivers/bcmdrivers/smbus/iproc_smbus.c b/drivers/bcmdrivers/smbus/iproc_smbus.c
+index 8ee9bf6..16db142 100644
+--- a/drivers/bcmdrivers/smbus/iproc_smbus.c
++++ b/drivers/bcmdrivers/smbus/iproc_smbus.c
+@@ -1533,8 +1533,12 @@ static int iproc_smbus_block_init(struct iproc_smb_drv_int_data *dev)
+     /* Wait a minimum of 50 Usec, as per SMB hw doc. But we wait longer */
+     udelay(100);
+ 
+-
+     /* Set default clock frequency */
++#if defined(CONFIG_MACH_ACCTON_AS4610_30)
++    if (dev->adapter.nr == 0)
++        iproc_smb_set_clk_freq(base_addr, I2C_SPEED_400KHz);
++    else
++#endif
+     iproc_smb_set_clk_freq(base_addr, I2C_SPEED_100KHz);
+ 
+     /* Disable intrs */
+@@ -1745,6 +1749,15 @@ static int __devinit iproc_smb_probe(struct platform_device *pdev)
+ 
+     platform_set_drvdata(pdev, dev);
+ 
++    adap = &dev->adapter;
++    i2c_set_adapdata(adap, dev); /* Verify if this place is OK */
++    adap->owner = THIS_MODULE;
++    adap->class = UINT_MAX; /* Can be used by any I2C device */
++    snprintf(adap->name, sizeof(adap->name), "iproc-smb%d", pdev->id);
++    adap->algo = &iproc_smb_algorithm;
++    adap->dev.parent = &pdev->dev; /* */
++    adap->nr = pdev->id; /* We can hard code this to '0' */
++
+     /* Init internal regs, disable intrs (and then clear intrs), set fifo
+      * thresholds, etc.
+      */
+@@ -1765,15 +1778,6 @@ static int __devinit iproc_smb_probe(struct platform_device *pdev)
+     printk(KERN_DEBUG "\nrequest_irq succeeded\n");
+ #endif /* IPROC_SMB_DBG */
+ 
+-    adap = &dev->adapter;
+-    i2c_set_adapdata(adap, dev); /* Verify if this place is OK */
+-    adap->owner = THIS_MODULE;
+-    adap->class = UINT_MAX; /* Can be used by any I2C device */
+-    snprintf(adap->name, sizeof(adap->name), "iproc-smb%d", pdev->id);
+-    adap->algo = &iproc_smb_algorithm;
+-    adap->dev.parent = &pdev->dev; /* */
+-    adap->nr = pdev->id; /* We can hard code this to '0' */
+-
+     /*
+     * I2C device drivers may be active on return from
+     * i2c_add_numbered_adapter()
+diff --git a/drivers/bcmdrivers/usb2h/Kconfig b/drivers/bcmdrivers/usb2h/Kconfig
+index 8f5f8bb..0a3b2be 100644
+--- a/drivers/bcmdrivers/usb2h/Kconfig
++++ b/drivers/bcmdrivers/usb2h/Kconfig
+@@ -1,7 +1,6 @@
+ config IPROC_USB2H
+ 	tristate "USB 2.0 Host support"
+ 	select USB_EHCI_BCM
+-	select USB_OHCI_BCM
+ ## this is for core/message.c:     err = utf16s_to_utf8s
+ 	depends on ARCH_IPROC
+ 	default n
+diff --git a/drivers/bcmdrivers/usb2h/bcm-iproc.c b/drivers/bcmdrivers/usb2h/bcm-iproc.c
+index d006aad..2a05022 100755
+--- a/drivers/bcmdrivers/usb2h/bcm-iproc.c
++++ b/drivers/bcmdrivers/usb2h/bcm-iproc.c
+@@ -48,11 +48,12 @@
+ #define IPROC_IDM_USB2_RESET_CONTROL	 (0x18115800)
+ #define IPROC_IDM_USB2_RESET_CONTROL_VA   HW_IO_PHYS_TO_VIRT(IPROC_IDM_USB2_RESET_CONTROL)
+ 
+-#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_NSP) || defined(CONFIG_MACH_KT2)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_NSP) || \
++    defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ #define IPROC_IDM_USB2_IO_CONTROL_DIRECT	USB2_IDM_IDM_IO_CONTROL_DIRECT
+ #define IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA	HW_IO_PHYS_TO_VIRT(IPROC_IDM_USB2_IO_CONTROL_DIRECT)
+ #endif
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ #define IPROC_XGPLL							0x1803fc2c
+ #define IPROC_XGPLL_VA						HW_IO_PHYS_TO_VIRT(IPROC_XGPLL)
+ #define IPROC_USB_PHY_CTRL					IPROC_WRAP_USBPHY_CTRL
+@@ -278,18 +279,20 @@ static int __init usbh_init(void)
+ 	int usb2_reset_state;
+ 
+ 
+-#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2))
++#if (defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2) || defined(CONFIG_MACH_ACCTON_AS4610_30))
+ 	int clk_enable, k;
+-#if defined(CONFIG_MACH_HX4)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 	unsigned int iClk;
+ #endif
+ 	unsigned int USBClk, usbdgpiopwr, pllStatus;
+ 
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 	/* turn off power for USB device connected to the host */
+ 	usbdgpiopwr = readl_relaxed(ChipcommonA_GPIOOut_VA);
+ 	usbdgpiopwr |= 0x2;
+ 	writel_relaxed(usbdgpiopwr, ChipcommonA_GPIOOut_VA);
+ 	writel_relaxed(0x2, ChipcommonA_GPIOOutEn_VA);
++#endif
+ 
+ 	/* Do USB PHY reset */
+ 	mdelay(100);
+@@ -317,7 +320,7 @@ static int __init usbh_init(void)
+ 	writel_relaxed(clk_enable, IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA);
+ 	clk_enable = readl_relaxed(IPROC_IDM_USB2_IO_CONTROL_DIRECT_VA);
+ 	printk("Initial usb2h clock now is: %08x\n", clk_enable);
+-#if defined(CONFIG_MACH_HX4)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_ACCTON_AS4610_30)
+ 	iClk = readl_relaxed(IPROC_XGPLL_VA);
+ 	USBClk = readl_relaxed(IPROC_USB_PHY_CTRL_VA);
+ 	printk("iClk = %08x, USBClk = %08x\n", iClk, USBClk);

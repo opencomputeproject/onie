@@ -1,0 +1,67 @@
+Add LED control and some phy initialization
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+index f772df0..97724c1 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c
+@@ -366,7 +366,8 @@ static s32 igb_get_invariants_82575(struct e1000_hw *hw)
+ 	default:
+ 		return -E1000_ERR_PHY;
+ 	}
+-
++	phy->ops.write_reg(hw,0x00,0x1140);
++	phy->ops.write_reg(hw,0x04,0x1e1);
+ 	return 0;
+ }
+ 
+diff --git a/drivers/net/ethernet/intel/igb/igb_main.c b/drivers/net/ethernet/intel/igb/igb_main.c
+index 4ac5f33..569418c 100644
+--- a/drivers/net/ethernet/intel/igb/igb_main.c
++++ b/drivers/net/ethernet/intel/igb/igb_main.c
+@@ -3609,7 +3609,38 @@ static bool igb_thermal_sensor_event(struct e1000_hw *hw, u32 event)
+ 
+ 	return ret;
+ }
++static void ctrl_bcm54616S_led(struct e1000_hw *hw, u32 link, u16 speed)
++{
++   struct e1000_phy_info *phy = &hw->phy;
++   if (link)
++   {
++      switch(speed)
++      {
++      case 100:
++      case 10:
++       /*yellow*/
++       phy->ops.write_reg(hw,0x1c,0xb4fe);/*LED2 on,LED1 off*/
++       phy->ops.write_reg(hw,0x1c,0xb863);/*enable activity*/
++      break;
++
++     case 1000:
++       /*green*/
++       phy->ops.write_reg(hw,0x1c,0xb4ef);/*LED1 on,LED2 off*/
++       phy->ops.write_reg(hw,0x1c,0xb863);/*enable activity*/
++     break;
++
++    default:
++     break;
++
++    }
++  }
++  else
++  {
++      phy->ops.write_reg(hw,0x1c,0xb4ee);
++      phy->ops.write_reg(hw,0x1c,0xb86e);
++  }
+ 
++}
+ /**
+  * igb_watchdog - Timer Call-back
+  * @data: pointer to adapter cast into an unsigned long
+@@ -3708,6 +3739,7 @@ static void igb_watchdog_task(struct work_struct *work)
+ 		}
+ 	}
+ 
++        ctrl_bcm54616S_led(hw, link, adapter->link_speed);
+ 	spin_lock(&adapter->stats64_lock);
+ 	igb_update_stats(adapter, &adapter->stats64);
+ 	spin_unlock(&adapter->stats64_lock);

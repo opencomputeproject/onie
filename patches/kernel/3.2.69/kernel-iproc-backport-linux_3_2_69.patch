@@ -1,0 +1,570 @@
+Changes required to support Broadcom IPROC architecture in linux kernel version 3.2.69
+
+diff --git a/arch/arm/mach-iproc/board_bu.c b/arch/arm/mach-iproc/board_bu.c
+index b291c37..bf991b4 100644
+--- a/arch/arm/mach-iproc/board_bu.c
++++ b/arch/arm/mach-iproc/board_bu.c
+@@ -317,7 +317,7 @@ static struct platform_device board_wdt_device = {
+ };
+ #endif /* CONFIG_IPROC_WDT || CONFIG_IPROC_WDT_MODULE */
+ 
+-#if defined(CONFIG_IPROC_SP805_WDT) || defined(CONFIG_IPROC_SP805_WDT_MODULE)
++#if defined(CONFIG_ARM_SP805_WATCHDOG) || defined(CONFIG_ARM_SP805_WATCHDOG_MODULE)
+ static AMBA_APB_DEVICE(sp805_wdt, "sp805-wdt", 0x00141805,
+ 								IPROC_SP805_WDT_REG_BASE, { }, NULL);
+ #endif
+@@ -929,7 +929,7 @@ static struct platform_device *board_devices[] __initdata = {
+ };
+ 
+ static struct amba_device *amba_devs[] __initdata = {
+-#if defined(CONFIG_IPROC_SP805_WDT) || defined(CONFIG_IPROC_SP805_WDT_MODULE)
++#if defined(CONFIG_ARM_SP805_WATCHDOG) || defined(CONFIG_ARM_SP805_WATCHDOG_MODULE)
+ 	&sp805_wdt_device,
+ #endif
+ };
+diff --git a/arch/arm/mach-iproc/include/mach/iproc_regs.h b/arch/arm/mach-iproc/include/mach/iproc_regs.h
+index b5b4213..935f579 100644
+--- a/arch/arm/mach-iproc/include/mach/iproc_regs.h
++++ b/arch/arm/mach-iproc/include/mach/iproc_regs.h
+@@ -782,7 +782,6 @@
+ #endif
+ 
+ /* ChipCommonB Watchdog */
+-#if defined(CONFIG_IPROC_CCB_WDT) || defined(CONFIG_IPROC_CCB_WDT_MODULE)
+ /* CCB WDT could be set only when CONFIG_MACH_HR2, CONFIG_MACH_HX4, or CONFIG_MACH_NSP is set */
+ #define IPROC_CCB_WDT_WDOGLOAD	ChipcommonB_WDT_WDOGLOAD
+ #define IPROC_CCB_WDT_REG_BASE	IPROC_CCB_WDT_WDOGLOAD
+@@ -793,7 +792,6 @@
+ #define IPROC_CCB_WDT_BOOTSTATUS		CRU_WATCHDOG_PCIE_RESET_STATUS
+ #define IPROC_CCB_WDT_BOOTSTATUS_BIT	CRU_WATCHDOG_PCIE_RESET_STATUS__CCB_WATCHDOG_RESET_EVENT
+ #endif
+-#endif /* CONFIG_IPROC_CCB_WDT || CONFIG_IPROC_CCB_WDT_MODULE */
+ 
+ /* ChipCommonG Watchdog */
+ #if defined(CONFIG_IPROC_CCG_WDT) || defined(CONFIG_IPROC_CCG_WDT_MODULE)
+@@ -802,18 +800,10 @@
+ #define IPROC_CCG_WDT_BOOTSTATUS_BIT	DMU_PCU_CRU_RESET_REASON__watchdog_reset
+ #endif /* CONFIG_IPROC_CCG_WDT || CONFIG_IPROC_CCG_WDT_MODULE */
+ 
+-#if defined(CONFIG_IPROC_SP805_WDT)
+-#if defined(CONFIG_IPROC_CCB_WDT) || defined(CONFIG_IPROC_CCB_WDT_MODULE)
+-#define IPROC_SP805_WDT_REG_BASE	IPROC_CCB_WDT_REG_BASE
+-#define IPROC_SP805_WDT_BOOTSTATUS	IPROC_CCB_WDT_BOOTSTATUS
+-#define IPROC_SP805_WDT_BOOTSTATUS_BIT	IPROC_CCB_WDT_BOOTSTATUS_BIT
+-#elif defined(CONFIG_IPROC_CCG_WDT) || defined(CONFIG_IPROC_CCG_WDT_MODULE)
++#if defined(CONFIG_ARM_SP805_WATCHDOG) || defined(CONFIG_ARM_SP805_WATCHDOG_MODULE)
+ #define IPROC_SP805_WDT_REG_BASE	IPROC_CCG_WDT_REG_BASE
+ #define IPROC_SP805_WDT_BOOTSTATUS	IPROC_CCG_WDT_BOOTSTATUS
+ #define IPROC_SP805_WDT_BOOTSTATUS_BIT	IPROC_CCG_WDT_BOOTSTATUS_BIT
+-#else
+-#warning "Wrong SP805 WDT config"
+-#endif
+ #endif /* CONFIG_IPROC_SP805_WDT */
+ 
+ #endif /*__IPROC_REGS_H */
+diff --git a/arch/arm/mach-iproc/northstar.c b/arch/arm/mach-iproc/northstar.c
+index f309d84..112144b 100644
+--- a/arch/arm/mach-iproc/northstar.c
++++ b/arch/arm/mach-iproc/northstar.c
+@@ -109,9 +109,10 @@ static int __init northstar_init(void)
+ {
+ #ifdef CONFIG_PM
+ 	pm_power_off = northstar_poweroff;
+-	arm_pm_restart = northstar_restart;
+ #endif
+ 
++	arm_pm_restart = northstar_restart;
++
+ #ifdef CONFIG_MACH_CYGNUS
+ #else
+ #ifdef CONFIG_CACHE_L2X0
+diff --git a/arch/arm/mach-iproc/northstar_dmu.c b/arch/arm/mach-iproc/northstar_dmu.c
+index 7e5755c..fde19a9 100644
+--- a/arch/arm/mach-iproc/northstar_dmu.c
++++ b/arch/arm/mach-iproc/northstar_dmu.c
+@@ -673,7 +673,7 @@ static struct clk_lookup ns_clk_lookups[] = {
+ 	.con_id		= "apb_pclk",
+ 	.clk		= &clk_genpll_ch[5],
+ 	}
+-#ifdef CONFIG_IPROC_SP805_WDT
++#if defined (CONFIG_ARM_SP805_WATCHDOG) || defined(CONFIG_ARM_SP805_WATCHDOG_MODULE)
+ 	,{
+ 	.dev_id		= "sp805-wdt",
+ 	.clk		= &clk_genpll_ch[5],
+@@ -747,15 +747,17 @@ void northstar_restart(char mode, const char *cmd)
+ 	/* CRU_RESET register */
+ #if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
+ 	reg_addr = (void * __iomem) dmu_regs.start + 0x184 ;
++	/* set iproc_reset_n to 0, it may come back or not ... TBD */
++	reg = readl_relaxed(reg_addr);
++	reg &= ~((u32) 1 << 1);
++	writel_relaxed(reg, reg_addr);
+ #elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_HR2) || defined(CONFIG_MACH_KT2) \
+ 	|| defined(CONFIG_MACH_GH)
+ 	reg_addr = (void * __iomem) dmu_regs.start + DMU_CRU_RESET_BASE ;
++	/* Reset iproc and cmicd/switch */
++	writel_relaxed(0, reg_addr);
+ #endif
+ 
+-	/* set iproc_reset_n to 0, it may come back or not ... TBD */
+-	reg = readl_relaxed(reg_addr);
+-	reg &= ~((u32) 1 << 1);
+-	writel_relaxed(reg, reg_addr);
+ 
+ }
+ 
+diff --git a/arch/arm/mm/Kconfig b/arch/arm/mm/Kconfig
+index 4e1ef6e..c0bdd50 100644
+--- a/arch/arm/mm/Kconfig
++++ b/arch/arm/mm/Kconfig
+@@ -821,7 +821,8 @@ config CACHE_L2X0
+ 		   REALVIEW_EB_A9MP || ARCH_IMX_V6_V7 || MACH_REALVIEW_PBX || \
+ 		   ARCH_NOMADIK || ARCH_OMAP4 || ARCH_EXYNOS4 || ARCH_TEGRA || \
+ 		   ARCH_U8500 || ARCH_VEXPRESS_CA9X4 || ARCH_SHMOBILE || \
+-		   ARCH_PRIMA2 || ARCH_ZYNQ || ARCH_CNS3XXX || ARCH_HIGHBANK
++		   ARCH_PRIMA2 || ARCH_ZYNQ || ARCH_CNS3XXX || ARCH_HIGHBANK || \
++		   ARCH_IPROC
+ 	default y
+ 	select OUTER_CACHE
+ 	select OUTER_CACHE_SYNC
+diff --git a/arch/arm/plat-iproc/include/mach/io.h b/arch/arm/plat-iproc/include/mach/io.h
+index 3ca692e..b980406 100644
+--- a/arch/arm/plat-iproc/include/mach/io.h
++++ b/arch/arm/plat-iproc/include/mach/io.h
+@@ -16,16 +16,16 @@
+ #ifndef __PLAT_IPROC_IO_H
+ #define __PLAT_IPROC_IO_H
+ 
+-//#define IO_SPACE_LIMIT		(0xffffffff)
++#define IO_SPACE_LIMIT		(0xffffffff)
+ 
+-//#define __io(a)			__typesafe_io(a)
++#define __io(a)			__typesafe_io(a)
+ #define __mem_pci(a)		(a)
+ 
+-//#ifdef __ASSEMBLER__
+-//#define IOMEM(x)		(x)
+-//#else
+-//#define IOMEM(x)		((void __force __iomem *)(x))
+-//#endif
++#ifdef __ASSEMBLER__
++#define IOMEM(x)		(x)
++#else
++#define IOMEM(x)		((void __force __iomem *)(x))
++#endif
+ 
+ #define VC_DIRECT_ACCESS_BASE		0xC0000000UL
+ #define ARM_VC_PHYS_ADDR_BASE		0x40000000UL
+diff --git a/drivers/bcmdrivers/gpio/gpio.c b/drivers/bcmdrivers/gpio/gpio.c
+index 585c9b4..2c8de87 100644
+--- a/drivers/bcmdrivers/gpio/gpio.c
++++ b/drivers/bcmdrivers/gpio/gpio.c
+@@ -471,17 +471,18 @@ struct iproc_gpio_irqcfg ccb_gpio_irqcfg = {
+ 
+ static struct irq_chip iproc_gpio_irq_chip = {
+     .name         = "IPROC-GPIO",
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 5)
++#if 0
++//#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 5)
+     .ack      = (void *) iproc_gpio_irq_ack,
+     .mask     = (void *) iproc_gpio_irq_mask,
+     .unmask   = (void *) iproc_gpio_irq_unmask,
+     .set_type = (void *) iproc_gpio_irq_set_type,
+-#else
++//#else
++#endif
+     .irq_ack      = (void *) iproc_gpio_irq_ack,
+     .irq_mask     = (void *) iproc_gpio_irq_mask,
+     .irq_unmask   = (void *) iproc_gpio_irq_unmask,
+     .irq_set_type = (void *) iproc_gpio_irq_set_type,
+-#endif
+ };
+ 
+ struct iproc_gpio_chip *iproc_gpios[IPROC_GPIO_END];
+diff --git a/drivers/bcmdrivers/smbus/iproc_smbus.c b/drivers/bcmdrivers/smbus/iproc_smbus.c
+index 16ea2eb..8ee9bf6 100644
+--- a/drivers/bcmdrivers/smbus/iproc_smbus.c
++++ b/drivers/bcmdrivers/smbus/iproc_smbus.c
+@@ -652,10 +652,10 @@ static int iproc_smb_data_send(struct i2c_adapter *adapter,
+         if (regval != MSTR_STS_XACT_SUCCESS) {
+ 
+             /* We can flush Tx FIFO here */
+-
++#ifdef IPROC_SMB_DBG
+             printk(KERN_DEBUG "\n\n%s:Send: %s Error in transaction %d to device x%02x, exiting\n",
+ 					 __func__, dev->adapter.name, regval, addr);
+-
++#endif
+            return -EREMOTEIO;
+ 
+         }
+diff --git a/drivers/misc/eeprom/at24.c b/drivers/misc/eeprom/at24.c
+index ab1ad41..56ff468 100644
+--- a/drivers/misc/eeprom/at24.c
++++ b/drivers/misc/eeprom/at24.c
+@@ -192,7 +192,8 @@ static ssize_t at24_eeprom_read(struct at24_data *at24, char *buf,
+ 			count = I2C_SMBUS_BLOCK_MAX;
+ 		break;
+ 	case I2C_SMBUS_WORD_DATA:
+-		count = 2;
++		/* Check for odd length transaction */
++		count = (count == 1) ? 1 : 2;
+ 		break;
+ 	case I2C_SMBUS_BYTE_DATA:
+ 		count = 1;
+@@ -237,12 +238,20 @@ static ssize_t at24_eeprom_read(struct at24_data *at24, char *buf,
+ 			status = i2c_smbus_read_word_data(client, offset);
+ 			if (status >= 0) {
+ 				buf[0] = status & 0xff;
+-				buf[1] = status >> 8;
++				if (count == 2)
++					buf[1] = status >> 8;
+ 				status = count;
+ 			}
+ 			break;
+ 		case I2C_SMBUS_BYTE_DATA:
+-			status = i2c_smbus_read_byte_data(client, offset);
++			if (at24->chip.flags & AT24_FLAG_ADDR16) {
++				status = i2c_smbus_write_byte_data(client, (offset >> 8) & 0xff, offset & 0xff);
++				if (status >= 0) {
++					status = i2c_smbus_read_byte(client);
++				}
++			} else {
++				status = i2c_smbus_read_byte_data(client, offset);
++			}
+ 			if (status >= 0) {
+ 				buf[0] = status;
+ 				status = count;
+@@ -327,6 +336,7 @@ static ssize_t at24_eeprom_write(struct at24_data *at24, const char *buf,
+ 	ssize_t status;
+ 	unsigned long timeout, write_time;
+ 	unsigned next_page;
++	int i = 0;
+ 
+ 	/* Get corresponding I2C address and adjust offset */
+ 	client = at24_translate_offset(at24, &offset);
+@@ -340,10 +350,22 @@ static ssize_t at24_eeprom_write(struct at24_data *at24, const char *buf,
+ 	if (offset + count > next_page)
+ 		count = next_page - offset;
+ 
+-	/* If we'll use I2C calls for I/O, set up the message */
+-	if (!at24->use_smbus) {
+-		int i = 0;
+ 
++	switch (at24->use_smbus) {
++	case I2C_SMBUS_I2C_BLOCK_DATA:
++		/* Smaller eeproms can work given some SMBus extension calls */
++		if (count > I2C_SMBUS_BLOCK_MAX)
++			count = I2C_SMBUS_BLOCK_MAX;
++		break;
++	case I2C_SMBUS_WORD_DATA:
++		/* Check for odd length transaction */
++		count = (count == 1) ? 1 : 2;
++		break;
++	case I2C_SMBUS_BYTE_DATA:
++		count = 1;
++		break;
++	default:
++	/* If we'll use I2C calls for I/O, set up the message */
+ 		msg.addr = client->addr;
+ 		msg.flags = 0;
+ 
+@@ -355,6 +377,7 @@ static ssize_t at24_eeprom_write(struct at24_data *at24, const char *buf,
+ 		msg.buf[i++] = offset;
+ 		memcpy(&msg.buf[i], buf, count);
+ 		msg.len = i + count;
++		break;
+ 	}
+ 
+ 	/*
+@@ -365,15 +388,40 @@ static ssize_t at24_eeprom_write(struct at24_data *at24, const char *buf,
+ 	timeout = jiffies + msecs_to_jiffies(write_timeout);
+ 	do {
+ 		write_time = jiffies;
+-		if (at24->use_smbus) {
++		switch (at24->use_smbus) {
++		case I2C_SMBUS_I2C_BLOCK_DATA:
+ 			status = i2c_smbus_write_i2c_block_data(client,
+ 					offset, count, buf);
+ 			if (status == 0)
+ 				status = count;
+-		} else {
++			break;
++		case I2C_SMBUS_WORD_DATA:
++			if (count == 2) {
++				status = i2c_smbus_write_word_data(
++					client,offset,(u16)((buf[0]) |
++							    (buf[1] << 8)));
++			} else {
++				/* count = 1 */
++				status = i2c_smbus_write_byte_data(
++					client, offset, buf[0]);
++			}
++			if (status == 0)
++				status = count;
++			break;
++		case I2C_SMBUS_BYTE_DATA:
++			if (at24->chip.flags & AT24_FLAG_ADDR16) {
++				status = i2c_smbus_write_word_data(client, (offset >> 8) & 0xff, buf[0] << 8 | (offset & 0xff));
++			} else {
++				status = i2c_smbus_write_byte_data(client, offset,  buf[0]);
++			}
++			if (status == 0)
++				status = count;
++			break;
++		default:
+ 			status = i2c_transfer(client->adapter, &msg, 1);
+ 			if (status == 1)
+ 				status = count;
++			break;
+ 		}
+ 		dev_dbg(&client->dev, "write %zu@%d --> %zd (%ld)\n",
+ 				count, offset, status, jiffies);
+@@ -529,11 +577,10 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
+ 	/* Use I2C operations unless we're stuck with SMBus extensions. */
+ 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+ 		if (chip.flags & AT24_FLAG_ADDR16) {
+-			err = -EPFNOSUPPORT;
+-			goto err_out;
+-		}
+-		if (i2c_check_functionality(client->adapter,
+-				I2C_FUNC_SMBUS_READ_I2C_BLOCK)) {
++			use_smbus = I2C_SMBUS_BYTE_DATA;
++		} else if (!(chip.flags & AT24_FLAG_DISABLE_I2CBLOCK) &&
++			   (i2c_check_functionality(client->adapter,
++						    I2C_FUNC_SMBUS_READ_I2C_BLOCK))) {
+ 			use_smbus = I2C_SMBUS_I2C_BLOCK_DATA;
+ 		} else if (i2c_check_functionality(client->adapter,
+ 				I2C_FUNC_SMBUS_READ_WORD_DATA)) {
+@@ -579,9 +626,14 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
+ 
+ 	writable = !(chip.flags & AT24_FLAG_READONLY);
+ 	if (writable) {
+-		if (!use_smbus || i2c_check_functionality(client->adapter,
+-				I2C_FUNC_SMBUS_WRITE_I2C_BLOCK)) {
+-
++		if (!use_smbus ||
++		    (!(chip.flags & AT24_FLAG_DISABLE_I2CBLOCK) &&
++		    i2c_check_functionality(client->adapter,
++					    I2C_FUNC_SMBUS_WRITE_I2C_BLOCK)) ||
++		    i2c_check_functionality(client->adapter,
++					    I2C_FUNC_SMBUS_WRITE_WORD_DATA) ||
++		    i2c_check_functionality(client->adapter,
++					    I2C_FUNC_SMBUS_WRITE_BYTE_DATA)) {
+ 			unsigned write_max = chip.page_size;
+ 
+ 			at24->macc.write = at24_macc_write;
+diff --git a/drivers/usb/host/ehci-hcd.c b/drivers/usb/host/ehci-hcd.c
+index aec3e79..c3fb297 100644
+--- a/drivers/usb/host/ehci-hcd.c
++++ b/drivers/usb/host/ehci-hcd.c
+@@ -200,11 +200,9 @@ static int handshake (struct ehci_hcd *ehci, void __iomem *ptr,
+ /* check TDI/ARC silicon is in host mode */
+ static int tdi_in_host_mode (struct ehci_hcd *ehci)
+ {
+-	u32 __iomem	*reg_ptr;
+ 	u32		tmp;
+ 
+-	reg_ptr = (u32 __iomem *)(((u8 __iomem *)ehci->regs) + USBMODE);
+-	tmp = ehci_readl(ehci, reg_ptr);
++	tmp = ehci_readl(ehci, &ehci->regs->usbmode);
+ 	return (tmp & 3) == USBMODE_CM_HC;
+ }
+ 
+@@ -249,11 +247,9 @@ static int handshake_on_error_set_halt(struct ehci_hcd *ehci, void __iomem *ptr,
+ /* put TDI/ARC silicon into EHCI mode */
+ static void tdi_reset (struct ehci_hcd *ehci)
+ {
+-	u32 __iomem	*reg_ptr;
+ 	u32		tmp;
+ 
+-	reg_ptr = (u32 __iomem *)(((u8 __iomem *)ehci->regs) + USBMODE);
+-	tmp = ehci_readl(ehci, reg_ptr);
++	tmp = ehci_readl(ehci, &ehci->regs->usbmode);
+ 	tmp |= USBMODE_CM_HC;
+ 	/* The default byte access to MMR space is LE after
+ 	 * controller reset. Set the required endian mode
+@@ -261,7 +257,7 @@ static void tdi_reset (struct ehci_hcd *ehci)
+ 	 */
+ 	if (ehci_big_endian_mmio(ehci))
+ 		tmp |= USBMODE_BE;
+-	ehci_writel(ehci, tmp, reg_ptr);
++	ehci_writel(ehci, tmp, &ehci->regs->usbmode);
+ }
+ 
+ /* reset a non-running (STS_HALT == 1) controller */
+@@ -285,9 +281,8 @@ static int ehci_reset (struct ehci_hcd *ehci)
+ 
+ 	if (ehci->has_hostpc) {
+ 		ehci_writel(ehci, USBMODE_EX_HC | USBMODE_EX_VBPS,
+-			(u32 __iomem *)(((u8 *)ehci->regs) + USBMODE_EX));
+-		ehci_writel(ehci, TXFIFO_DEFAULT,
+-			(u32 __iomem *)(((u8 *)ehci->regs) + TXFILLTUNING));
++				&ehci->regs->usbmode_ex);
++		ehci_writel(ehci, TXFIFO_DEFAULT, &ehci->regs->txfill_tuning);
+ 	}
+ 	if (retval)
+ 		return retval;
+diff --git a/drivers/usb/host/ehci-hub.c b/drivers/usb/host/ehci-hub.c
+index 4527b90..5321abd 100644
+--- a/drivers/usb/host/ehci-hub.c
++++ b/drivers/usb/host/ehci-hub.c
+@@ -149,10 +149,8 @@ static __maybe_unused void ehci_adjust_port_wakeup_flags(struct ehci_hcd *ehci,
+ 	if (ehci->has_hostpc) {
+ 		port = HCS_N_PORTS(ehci->hcs_params);
+ 		while (port--) {
+-			u32 __iomem	*hostpc_reg;
++			u32 __iomem	*hostpc_reg = &ehci->regs->hostpc[port];
+ 
+-			hostpc_reg = (u32 __iomem *)((u8 *) ehci->regs
+-					+ HOSTPC0 + 4 * port);
+ 			temp = ehci_readl(ehci, hostpc_reg);
+ 			ehci_writel(ehci, temp & ~HOSTPC_PHCD, hostpc_reg);
+ 		}
+@@ -185,10 +183,8 @@ static __maybe_unused void ehci_adjust_port_wakeup_flags(struct ehci_hcd *ehci,
+ 	if (ehci->has_hostpc) {
+ 		port = HCS_N_PORTS(ehci->hcs_params);
+ 		while (port--) {
+-			u32 __iomem	*hostpc_reg;
++			u32 __iomem	*hostpc_reg = &ehci->regs->hostpc[port];
+ 
+-			hostpc_reg = (u32 __iomem *)((u8 *) ehci->regs
+-					+ HOSTPC0 + 4 * port);
+ 			temp = ehci_readl(ehci, hostpc_reg);
+ 			ehci_writel(ehci, temp | HOSTPC_PHCD, hostpc_reg);
+ 		}
+@@ -311,11 +307,9 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
+ 		spin_lock_irq(&ehci->lock);
+ 		port = HCS_N_PORTS(ehci->hcs_params);
+ 		while (port--) {
+-			u32 __iomem	*hostpc_reg;
++			u32 __iomem	*hostpc_reg = &ehci->regs->hostpc[port];
+ 			u32		t3;
+ 
+-			hostpc_reg = (u32 __iomem *)((u8 *) ehci->regs
+-					+ HOSTPC0 + 4 * port);
+ 			t3 = ehci_readl(ehci, hostpc_reg);
+ 			ehci_writel(ehci, t3 | HOSTPC_PHCD, hostpc_reg);
+ 			t3 = ehci_readl(ehci, hostpc_reg);
+@@ -413,10 +407,9 @@ static int ehci_bus_resume (struct usb_hcd *hcd)
+ 		i = HCS_N_PORTS(ehci->hcs_params);
+ 		while (i--) {
+ 			if (test_bit(i, &ehci->bus_suspended)) {
+-				u32 __iomem	*hostpc_reg;
++				u32 __iomem	*hostpc_reg =
++							&ehci->regs->hostpc[i];
+ 
+-				hostpc_reg = (u32 __iomem *)((u8 *) ehci->regs
+-						+ HOSTPC0 + 4 * i);
+ 				temp = ehci_readl(ehci, hostpc_reg);
+ 				ehci_writel(ehci, temp & ~HOSTPC_PHCD,
+ 						hostpc_reg);
+@@ -690,7 +683,7 @@ static int ehci_hub_control (
+ 	int		ports = HCS_N_PORTS (ehci->hcs_params);
+ 	u32 __iomem	*status_reg = &ehci->regs->port_status[
+ 				(wIndex & 0xff) - 1];
+-	u32 __iomem	*hostpc_reg = NULL;
++	u32 __iomem	*hostpc_reg = &ehci->regs->hostpc[(wIndex & 0xff) - 1];
+ 	u32		temp, temp1, status;
+ 	unsigned long	flags;
+ 	int		retval = 0;
+@@ -703,9 +696,6 @@ static int ehci_hub_control (
+ 	 * power, "this is the one", etc.  EHCI spec supports this.
+ 	 */
+ 
+-	if (ehci->has_hostpc)
+-		hostpc_reg = (u32 __iomem *)((u8 *)ehci->regs
+-				+ HOSTPC0 + 4 * ((wIndex & 0xff) - 1));
+ 	spin_lock_irqsave (&ehci->lock, flags);
+ 	switch (typeReq) {
+ 	case ClearHubFeature:
+@@ -757,7 +747,7 @@ static int ehci_hub_control (
+ 				goto error;
+ 
+ 			/* clear phy low-power mode before resume */
+-			if (hostpc_reg) {
++			if (ehci->has_hostpc) {
+ 				temp1 = ehci_readl(ehci, hostpc_reg);
+ 				ehci_writel(ehci, temp1 & ~HOSTPC_PHCD,
+ 						hostpc_reg);
+@@ -1005,7 +995,7 @@ static int ehci_hub_control (
+ 			temp &= ~PORT_WKCONN_E;
+ 			temp |= PORT_WKDISC_E | PORT_WKOC_E;
+ 			ehci_writel(ehci, temp | PORT_SUSPEND, status_reg);
+-			if (hostpc_reg) {
++			if (ehci->has_hostpc) {
+ 				spin_unlock_irqrestore(&ehci->lock, flags);
+ 				msleep(5);/* 5ms for HCD enter low pwr mode */
+ 				spin_lock_irqsave(&ehci->lock, flags);
+diff --git a/include/linux/i2c/at24.h b/include/linux/i2c/at24.h
+index 8ace930..3512159 100644
+--- a/include/linux/i2c/at24.h
++++ b/include/linux/i2c/at24.h
+@@ -24,6 +24,7 @@ struct at24_platform_data {
+ #define AT24_FLAG_READONLY	0x40	/* sysfs-entry will be read-only */
+ #define AT24_FLAG_IRUGO		0x20	/* sysfs-entry will be world-readable */
+ #define AT24_FLAG_TAKE8ADDR	0x10	/* take always 8 addresses (24c00) */
++#define AT24_FLAG_DISABLE_I2CBLOCK	0x08	/*disable smbus i2c block access */
+ 
+ 	void		(*setup)(struct memory_accessor *, void *context);
+ 	void		*context;
+diff --git a/include/linux/usb/ehci_def.h b/include/linux/usb/ehci_def.h
+index 7cc95ee..de4b9ed 100644
+--- a/include/linux/usb/ehci_def.h
++++ b/include/linux/usb/ehci_def.h
+@@ -111,7 +111,13 @@ struct ehci_regs {
+ 	/* ASYNCLISTADDR: offset 0x18 */
+ 	u32		async_next;	/* address of next async queue head */
+ 
+-	u32		reserved[9];
++	u32		reserved1[2];
++
++	/* TXFILLTUNING: offset 0x24 */
++	u32		txfill_tuning;	/* TX FIFO Tuning register */
++#define TXFIFO_DEFAULT	(8<<16)		/* FIFO burst threshold 8 */
++
++	u32		reserved2[6];
+ 
+ 	/* CONFIGFLAG: offset 0x40 */
+ 	u32		configured_flag;
+@@ -155,26 +161,34 @@ struct ehci_regs {
+ #define PORT_CSC	(1<<1)		/* connect status change */
+ #define PORT_CONNECT	(1<<0)		/* device connected */
+ #define PORT_RWC_BITS   (PORT_CSC | PORT_PEC | PORT_OCC)
+-};
+ 
+-#define USBMODE		0x68		/* USB Device mode */
++	u32		reserved3[9];
++
++	/* USBMODE: offset 0x68 */
++	u32		usbmode;	/* USB Device mode */
+ #define USBMODE_SDIS	(1<<3)		/* Stream disable */
+ #define USBMODE_BE	(1<<2)		/* BE/LE endianness select */
+ #define USBMODE_CM_HC	(3<<0)		/* host controller mode */
+ #define USBMODE_CM_IDLE	(0<<0)		/* idle state */
+ 
++	u32		reserved4[7];
++
+ /* Moorestown has some non-standard registers, partially due to the fact that
+  * its EHCI controller has both TT and LPM support. HOSTPCx are extensions to
+  * PORTSCx
+  */
+-#define HOSTPC0		0x84		/* HOSTPC extension */
++	/* HOSTPC: offset 0x84 */
++	u32		hostpc[0];	/* HOSTPC extension */
+ #define HOSTPC_PHCD	(1<<22)		/* Phy clock disable */
+ #define HOSTPC_PSPD	(3<<25)		/* Port speed detection */
+-#define USBMODE_EX	0xc8		/* USB Device mode extension */
++
++	u32		reserved5[17];
++
++	/* USBMODE_EX: offset 0xc8 */
++	u32		usbmode_ex;	/* USB Device mode extension */
+ #define USBMODE_EX_VBPS	(1<<5)		/* VBus Power Select On */
+ #define USBMODE_EX_HC	(3<<0)		/* host controller mode */
+-#define TXFILLTUNING	0x24		/* TX FIFO Tuning register */
+-#define TXFIFO_DEFAULT	(8<<16)		/* FIFO burst threshold 8 */
++};
+ 
+ /* Appendix C, Debug port ... intended for use with special "debug devices"
+  * that can help if there's no serial console.  (nonstandard enumeration.)

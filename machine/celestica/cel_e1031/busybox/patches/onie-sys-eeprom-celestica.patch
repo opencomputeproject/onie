@@ -1,0 +1,2574 @@
+Add onie-syseeprom support for Celestica switch
+
+diff --git a/include/24cXX.h b/include/24cXX.h
+index c304273..ee87431 100644
+--- a/include/24cXX.h
++++ b/include/24cXX.h
+@@ -28,30 +28,4 @@ struct eeprom
+ 	int fd;		// file descriptor
+ 	int type; 	// eeprom type
+ };
+-
+-/*
+- * opens the eeprom device at [dev_fqn] (i.e. /dev/i2c-N) whose address is
+- * [addr] and set the eeprom_24c32 [e]
+- */
+-int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom*);
+-/*
+- * closees the eeprom device [e]
+- */
+-int eeprom_close(struct eeprom *e);
+-/*
+- * read and returns the eeprom byte at memory address [mem_addr]
+- * Note: eeprom must have been selected by ioctl(fd,I2C_SLAVE,address)
+- */
+-int eeprom_read_byte(struct eeprom* e, __u16 mem_addr);
+-/*
+- * read the current byte
+- * Note: eeprom must have been selected by ioctl(fd,I2C_SLAVE,address)
+- */
+-int eeprom_read_current_byte(struct eeprom *e);
+-/*
+- * writes [data] at memory address [mem_addr]
+- * Note: eeprom must have been selected by ioctl(fd,I2C_SLAVE,address)
+- */
+-int eeprom_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data);
+-
+ #endif
+diff --git a/include/cpld.h b/include/cpld.h
+new file mode 100755
+index 0000000..12ccb44
+--- /dev/null
++++ b/include/cpld.h
+@@ -0,0 +1,57 @@
++#ifndef CPLD_H
++#define CPLD_H
++
++#define BIT0	0x1
++#define BIT1	0x1 << 1
++#define BIT2	0x1 << 2
++#define BIT3	0x1 << 3
++#define BIT4	0x1 << 4
++#define BIT5	0x1 << 5
++#define BIT6	0x1 << 6
++#define BIT7	0x1 << 7
++
++struct RegData{
++    unsigned short regId;		/*register number*/
++    char val;		    		/*register value*/
++    unsigned char rw;			/*0:read 1:write*/
++};
++typedef struct RegData RegData_t;
++
++struct SfpData{
++	char regId;
++	int portId;
++	char devAddr;
++	char val[256];
++	unsigned char rw;
++	unsigned char len;
++};
++typedef struct SfpData SfpData_t;
++
++
++#define CPLD_TYPE														( 0x89 )
++#define IOCTL_READ_REG                      _IOR(CPLD_TYPE,0x05,RegData_t)
++#define IOCTL_WRITE_REG                     _IOW(CPLD_TYPE,0x08,RegData_t)
++#define IOCTL_SFP_READ                      _IOR(CPLD_TYPE,0x0F,RegData_t)
++#define IOCTL_SFP_WRITE                     _IOW(CPLD_TYPE,0x10,RegData_t)
++
++int cpldRegRead(int regId, unsigned char *data, int size);
++int cpldRegWrite(int regId, unsigned char *data, int size);
++int cpldSfpGet(int port, char *buf, int size, int reg);
++int cpldSfpSet(int port, const char *buf, int size, int reg);
++int cpldVersionGet(int cpld);
++int setSfpEnable(int sfp, int enable);
++int getSfpEnable(int sfp);
++int getSfpRxlos(int sfp);
++int getSfpTxfault(int sfp);
++int getSfpAbs(int sfp);
++int getPsuStatus(int id);
++int getFanStatus(int id);
++int getFanPresent(int id);
++
++
++int read_sfp(int portID, char devAddr, char reg, char *data, int len);
++int write_sfp(int portID, char devAddr, char reg, char *data, int len);
++int read_cpld(int reg, unsigned char *value);
++int write_cpld(int reg, unsigned char value);
++
++#endif
+diff --git a/include/debug_util.h b/include/debug_util.h
+new file mode 100755
+index 0000000..83b2801
+--- /dev/null
++++ b/include/debug_util.h
+@@ -0,0 +1,16 @@
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++
++#define DEBUG  
++#if !defined(DEBUG)
++#include "l7_common.h"
++#include "log_api.h"
++#endif
++#if defined(DEBUG)
++#define sysapiPrintf(fmt, arg...)  printf(fmt, ##arg)
++//#define DEBUG_PRINT(fmt, arg...)  printf(fmt, ##arg)  
++#define DEBUG_PRINT(fmt, arg...)
++#else  
++#define DEBUG_PRINT(fmt, arg...) L7_LOGF(L7_LOG_SEVERITY_INFO, L7_BOX_SERVICES_COMPONENT_ID, fmt, ##arg) 
++#endif  
+diff --git a/include/i2c_chips.h b/include/i2c_chips.h
+new file mode 100755
+index 0000000..baa96cc
+--- /dev/null
++++ b/include/i2c_chips.h
+@@ -0,0 +1,56 @@
++#ifndef I2C_CHIPS_HH
++#define I2C_CHIPS_HH
++
++struct psuInfo
++{
++	unsigned int vin;
++	unsigned int iin;
++	unsigned int vout;
++	unsigned int iout;
++	unsigned int pout;
++	unsigned int pin;
++	unsigned int temp;
++};
++
++struct chips_info
++{
++	char addr;
++	char sw_addr;
++	int channel;
++	char *name;
++};
++
++struct fan_config
++{
++	char emc_addr;
++	char speed_reg;
++	char driver_reg;
++};
++struct fan_cpld_reg
++{
++	unsigned short hight_byte_reg;
++	unsigned short low_byte_reg;
++};
++
++
++struct ts_info
++{
++	char ts_addr;
++	char temp_reg;
++	char os_reg;
++};
++
++int getCtrlOfBus(void);
++int enableChip(char addr); 
++int disableChip(char addr); 
++
++int fanSpeedGet(int id, int *speed);
++int tsTempGet(int id, short *temp);
++int tsOsGet(int id, unsigned short *temp);
++int getTsShutdown(int id);
++int setTsShutdown(int id, int shutdown);
++int getPsuInfo(int id, struct psuInfo * info);
++unsigned char getCpuId();
++
++
++#endif
+diff --git a/include/i2c_dev.h b/include/i2c_dev.h
+new file mode 100755
+index 0000000..6b389a5
+--- /dev/null
++++ b/include/i2c_dev.h
+@@ -0,0 +1,156 @@
++#ifndef I2C_DEV_HH
++#define I2C_DEV_HH
++
++#include <linux/types.h>
++#include <sys/ioctl.h>
++
++
++/* -- i2c.h -- */
++
++
++/*
++ * I2C Message - used for pure i2c transaction, also from /dev interface
++ */
++struct i2c_msg {
++	__u16 addr;	/* slave address			*/
++	unsigned short flags;		
++#define I2C_M_TEN	0x10	/* we have a ten bit chip address	*/
++#define I2C_M_RD	0x01
++#define I2C_M_NOSTART	0x4000
++#define I2C_M_REV_DIR_ADDR	0x2000
++#define I2C_M_IGNORE_NAK	0x1000
++#define I2C_M_NO_RD_ACK		0x0800
++	short len;		/* msg length				*/
++	char *buf;		/* pointer to msg data			*/
++};
++
++/* To determine what functionality is present */
++
++#define I2C_FUNC_I2C			0x00000001
++#define I2C_FUNC_10BIT_ADDR		0x00000002
++#define I2C_FUNC_PROTOCOL_MANGLING	0x00000004 /* I2C_M_{REV_DIR_ADDR,NOSTART,..} */
++#define I2C_FUNC_SMBUS_PEC		0x00000008
++#define I2C_FUNC_SMBUS_BLOCK_PROC_CALL	0x00008000 /* SMBus 2.0 */
++#define I2C_FUNC_SMBUS_QUICK		0x00010000 
++#define I2C_FUNC_SMBUS_READ_BYTE	0x00020000 
++#define I2C_FUNC_SMBUS_WRITE_BYTE	0x00040000 
++#define I2C_FUNC_SMBUS_READ_BYTE_DATA	0x00080000 
++#define I2C_FUNC_SMBUS_WRITE_BYTE_DATA	0x00100000 
++#define I2C_FUNC_SMBUS_READ_WORD_DATA	0x00200000 
++#define I2C_FUNC_SMBUS_WRITE_WORD_DATA	0x00400000 
++#define I2C_FUNC_SMBUS_PROC_CALL	0x00800000 
++#define I2C_FUNC_SMBUS_READ_BLOCK_DATA	0x01000000 
++#define I2C_FUNC_SMBUS_WRITE_BLOCK_DATA 0x02000000 
++#define I2C_FUNC_SMBUS_READ_I2C_BLOCK	0x04000000 /* I2C-like block xfer  */
++#define I2C_FUNC_SMBUS_WRITE_I2C_BLOCK	0x08000000 /* w/ 1-byte reg. addr. */
++
++#define I2C_FUNC_SMBUS_BYTE (I2C_FUNC_SMBUS_READ_BYTE | \
++                             I2C_FUNC_SMBUS_WRITE_BYTE)
++#define I2C_FUNC_SMBUS_BYTE_DATA (I2C_FUNC_SMBUS_READ_BYTE_DATA | \
++                                  I2C_FUNC_SMBUS_WRITE_BYTE_DATA)
++#define I2C_FUNC_SMBUS_WORD_DATA (I2C_FUNC_SMBUS_READ_WORD_DATA | \
++                                  I2C_FUNC_SMBUS_WRITE_WORD_DATA)
++#define I2C_FUNC_SMBUS_BLOCK_DATA (I2C_FUNC_SMBUS_READ_BLOCK_DATA | \
++                                   I2C_FUNC_SMBUS_WRITE_BLOCK_DATA)
++#define I2C_FUNC_SMBUS_I2C_BLOCK (I2C_FUNC_SMBUS_READ_I2C_BLOCK | \
++                                  I2C_FUNC_SMBUS_WRITE_I2C_BLOCK)
++
++/* Old name, for compatibility */
++#define I2C_FUNC_SMBUS_HWPEC_CALC	I2C_FUNC_SMBUS_PEC
++
++/* 
++ * Data for SMBus Messages 
++ */
++#define I2C_SMBUS_BLOCK_MAX	32	/* As specified in SMBus standard */	
++#define I2C_SMBUS_I2C_BLOCK_MAX	32	/* Not specified but we use same structure */
++union i2c_smbus_data {
++	__u8 byte;
++	__u16 word;
++	__u8 block[I2C_SMBUS_BLOCK_MAX + 2]; /* block[0] is used for length */
++	                                            /* and one more for PEC */
++};
++
++/* smbus_access read or write markers */
++#define I2C_SMBUS_READ	1
++#define I2C_SMBUS_WRITE	0
++
++/* SMBus transaction types (size parameter in the above functions) 
++   Note: these no longer correspond to the (arbitrary) PIIX4 internal codes! */
++#define I2C_SMBUS_QUICK		    0
++#define I2C_SMBUS_BYTE		    1
++#define I2C_SMBUS_BYTE_DATA	    2 
++#define I2C_SMBUS_WORD_DATA	    3
++#define I2C_SMBUS_PROC_CALL	    4
++#define I2C_SMBUS_BLOCK_DATA	    5
++#define I2C_SMBUS_I2C_BLOCK_BROKEN  6
++#define I2C_SMBUS_BLOCK_PROC_CALL   7		/* SMBus 2.0 */
++#define I2C_SMBUS_I2C_BLOCK_DATA    8
++
++
++/* ----- commands for the ioctl like i2c_command call:
++ * note that additional calls are defined in the algorithm and hw 
++ *	dependent layers - these can be listed here, or see the 
++ *	corresponding header files.
++ */
++				/* -> bit-adapter specific ioctls	*/
++#define I2C_RETRIES	0x0701	/* number of times a device address      */
++				/* should be polled when not            */
++                                /* acknowledging 			*/
++#define I2C_TIMEOUT	0x0702	/* set timeout - call with int 		*/
++
++
++/* this is for i2c-dev.c	*/
++#define I2C_SLAVE	0x0703	/* Change slave address			*/
++				/* Attn.: Slave address is 7 or 10 bits */
++#define I2C_SLAVE_FORCE	0x0706	/* Change slave address			*/
++				/* Attn.: Slave address is 7 or 10 bits */
++				/* This changes the address, even if it */
++				/* is already taken!			*/
++#define I2C_TENBIT	0x0704	/* 0 for 7 bit addrs, != 0 for 10 bit	*/
++
++#define I2C_FUNCS	0x0705	/* Get the adapter functionality */
++#define I2C_RDWR	0x0707	/* Combined R/W transfer (one stop only)*/
++#define I2C_PEC		0x0708	/* != 0 for SMBus PEC                   */
++
++#define I2C_SMBUS	0x0720	/* SMBus-level access */
++
++
++typedef enum data_len
++{
++	LEN_BYTE,
++	LEN_WORD,
++}dataType;
++/* This is the structure as used in the I2C_SMBUS ioctl call */
++struct i2c_smbus_ioctl_data {
++	__u8 read_write;
++	__u8 command;
++	__u32 size;
++	union i2c_smbus_data *data;
++};
++
++/* This is the structure as used in the I2C_RDWR ioctl call */
++struct i2c_rdwr_ioctl_data {
++	struct i2c_msg *msgs;	/* pointers to i2c_msgs */
++	__u32 nmsgs;			/* number of i2c_msgs */
++};
++
++int i2_smbus_read(int busNum, short addr, __u8 reg, dataType type,
++									int size, __u8 *buf);
++int i2c_smbus_write(int busNum, short addr, __u8 reg, dataType type,
++									int size, __u8 *buf);
++int i2c_smbus_read_16reg(int busNum, short addr, short reg,
++									int size, __u8 *buf);
++int i2c_smbus_write_16reg(int busNum, short addr, short reg,
++									int size, const __u8 *buf);
++int i2c_smbus_write_16reg_8byte(int busNum, short addr, short reg,
++									int size, const __u8 *buf);		
++int chips_read_byte(char addr, __u8 reg, __u8 *data);
++int chips_read_word(char addr, __u8 reg, unsigned short *data);
++int chips_write_byte(char addr, __u8 reg, const __u8 data);
++
++int eeprom_read_byte(char addr, __u16 mem_addr, __u8 *data);
++int eeprom_write_byte(char addr, __u16 mem_addr, __u8 data);
++
++													
++#endif
++
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index 7f88dbc..753f131 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -51,7 +51,7 @@ lib-$(CONFIG_VOLNAME)     += volname.o
+ lib-$(CONFIG_WALL)        += wall.o
+ lib-$(CONFIG_WATCHDOG)    += watchdog.o
+ lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
+-lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
++lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o cpld_ops.o i2c_chips.o i2c_dev.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
+ lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
+diff --git a/miscutils/cpld_ops.c b/miscutils/cpld_ops.c
+new file mode 100755
+index 0000000..bce009b
+--- /dev/null
++++ b/miscutils/cpld_ops.c
+@@ -0,0 +1,816 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <sys/ioctl.h>
++#include <string.h>
++#include "cpld.h"
++#include "debug_util.h"
++#define CPLD1_REVISION	0x100
++#define CPLD2_REVISION	0x200
++#define CPLD3_REVISION	0x280
++#define CPLD4_REVISION	0x300
++#define CPLD5_REVISION	0x380
++#define CPLD_FAN_PRESENT	0x194
++#define CPLD_FAN_STATUS_1	0x195
++#define CPLD_FAN_STATUS_2	0x195
++#define CPLD_PSU_STATUS	0x197
++
++
++int cpldRegRead(int regId, unsigned char *data, int size)
++{
++	int fd;
++	int i;
++	int ret = -1;
++	RegData_t reg;
++	fd = open("/dev/cpld", O_RDWR);
++	if(fd < 0)
++	{
++		DEBUG_PRINT("Open CPLD fail.\n");
++		return ret;
++	}
++	reg.regId = regId;
++//	DEBUG_PRINT("Get reg id is %x, %x\n", reg.regId, regId);
++	reg.rw = 0;
++	for(i=0; i<size; i++)
++	{
++		ret = ioctl(fd, IOCTL_READ_REG, (void *)&reg);
++		if(ret)
++			break;
++		*(data+i) = reg.val;
++		reg.regId += 1;
++	}
++	ret = i;
++	close(fd);
++	return ret;
++}
++int read_cpld(int reg, unsigned char *value)
++{
++	int fd;
++    int ret = -1;
++    RegData_t ls;
++
++	fd = open("/dev/cpld", O_RDWR);
++	if(fd < 0)
++	{
++		DEBUG_PRINT("Open CPLD fail.\n");
++		return ret;
++	}
++
++
++    ls.regId = reg;
++    ls.val = 0;
++    ls.rw = 0;
++
++
++    ret = ioctl(fd, IOCTL_READ_REG, (char *)&ls);
++    if(ret < 0)
++    {
++    	close(fd);
++        return -1;
++    }
++
++    *value = ls.val;
++	close(fd);
++    return 0;
++}
++
++int cpldRegWrite(int regId, unsigned char *data, int size)
++{
++	int fd;
++	int i;
++	int ret = -1;
++	RegData_t reg;
++	fd = open("/dev/cpld", O_RDWR);
++	if(fd < 0)
++	{
++		DEBUG_PRINT("Open CPLD fail.\n");
++		return ret;
++	}
++	reg.regId = regId;
++//	DEBUG_PRINT("Write reg id is %x\n", reg.regId);
++	reg.rw = 1;
++	for(i=0; i<size; i++)
++	{
++		reg.val = *(data+i);
++		ret = ioctl(fd, IOCTL_WRITE_REG, (void *)&reg);
++//		DEBUG_PRINT("Write Data is %x\n", *(data+i));
++		if(ret)
++			break;
++		reg.regId += 1;
++	}
++	ret = i;
++	close(fd);
++	return ret;
++}
++int write_cpld(int reg, unsigned char value)
++{
++	int fd;
++    int ret=-1;
++    RegData_t ls;
++
++	fd = open("/dev/cpld", O_RDWR);
++	if(fd < 0)
++	{
++		DEBUG_PRINT("Open CPLD fail.\n");
++		return ret;
++	}
++
++    ls.regId = reg;
++    ls.val = value;
++    ls.rw = 1;
++
++    ret = ioctl(fd, IOCTL_WRITE_REG, (char *)&ls);
++    if(ret < 0)
++    {
++    	close(fd);
++        return -1;
++    }
++	close(fd);
++    return 0;
++}
++
++int cpldSfpGet(int port, char *buf, int size, int reg)
++{
++	int fd;
++	int ret = -1;
++	SfpData_t sfp;
++	if(size > 256)
++		size = 256;
++	fd = open("/dev/cpld", O_RDWR);
++	if(fd < 0)
++	{
++		DEBUG_PRINT("Open CPLD fail.\n");
++		return ret;
++	}
++	sfp.regId = reg;
++	sfp.portId = port;
++	sfp.rw = 0;
++	DEBUG_PRINT("port id is %d\n", sfp.portId);
++	ret = ioctl(fd, IOCTL_SFP_READ, &reg);
++	if(ret)
++	{
++		DEBUG_PRINT("SFP ioctl fail %d\n", port);
++		close(fd);
++		return ret;
++	}
++	memcpy(buf, sfp.val, size);
++	ret = size;
++	close(fd);
++	return ret;
++}
++
++int cpldSfpSet(int port, const char *buf, int size, int reg)
++{
++	int fd;
++	int ret = -1;
++	SfpData_t sfp;
++	if(size > 256)
++		size = 256;
++	fd = open("/dev/cpld", O_RDWR);
++	if(fd < 0)
++	{
++		DEBUG_PRINT("Open CPLD fail.\n");
++		return ret;
++	}
++	sfp.regId = reg;
++	sfp.portId = port;
++	sfp.rw = 1;
++	memcpy(sfp.val, buf, size);
++	ret = ioctl(fd, IOCTL_SFP_READ, &reg);
++	if(ret)
++	{
++		DEBUG_PRINT("SFP ioctl fail\n");
++		close(fd);
++		return ret;
++	}
++	ret = size;
++	close(fd);
++	return ret;
++}
++
++int cpldVersionGet(int cpld)
++{
++	int ret = -1;
++	unsigned char val;
++	switch(cpld)
++	{
++		case 1:
++			ret = read_cpld(CPLD1_REVISION, &val);
++			if(ret < 0)
++				return ret;
++			ret = (int)val;
++			break;
++		case 2:
++			ret = read_cpld(CPLD2_REVISION, &val);
++			if(ret < 0)
++				return ret;
++			ret = (int)val;
++			break;
++		case 3:
++			ret = read_cpld(CPLD3_REVISION, &val);
++			if(ret < 0)
++				return ret;
++			ret = (int)val;
++			break;
++		case 4:
++			ret = read_cpld(CPLD4_REVISION, &val);
++			if(ret < 0)
++				return ret;
++			ret = (int)val;
++			break;
++		case 5:
++			ret = read_cpld(CPLD5_REVISION, &val);
++			if(ret < 0)
++				return ret;
++			ret = (int)val;
++			break;
++		default:
++			DEBUG_PRINT("No such CPLD %02x\n", cpld);
++			break;
++	}
++	return ret;
++}
++
++int setSfpEnable(int sfp, int enable)
++{
++	unsigned char val;
++	int ret = -1;
++	int reg;
++	if(sfp < 9)
++	{
++		reg = 0x250;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		if(enable)
++			val &= ~(0x1 << (sfp - 1));
++		else
++			val |= 0x1 << (sfp - 1);
++		ret = write_cpld(reg, val);
++	}
++	else if((sfp > 8) && (sfp < 17))
++	{
++		reg = 0x251;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		if(enable)
++			val &= ~(0x1 << ((sfp - 1) % 8));
++		else
++			val |= 0x1 << ((sfp - 1) % 8);
++		ret = write_cpld(reg, val);
++	}
++	else if((sfp > 16) && (sfp < 19))
++	{
++		reg = 0x252;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		if(enable)
++			val &= ~(0x1 << ((sfp - 1) % 8));
++		else
++			val |= 0x1 << ((sfp - 1) % 8);
++		ret = write_cpld(reg, val);
++	}
++	else if((sfp > 18) && (sfp < 27))
++	{
++		reg = 0x2D0;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		if(enable)
++			val &= ~(0x1 << ((sfp - 3) % 8));
++		else
++			val |= 0x1 << ((sfp - 3) % 8);
++		ret = write_cpld(reg, val);
++	}
++	else if((sfp > 28) && (sfp < 35))
++	{
++		reg = 0x2D1;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		if(enable)
++			val &= ~(0x1 << ((sfp - 3) % 8));
++		else
++			val |= 0x1 << ((sfp - 3) % 8);
++		ret = write_cpld(reg, val);
++	}
++	else if((sfp > 34) && (sfp < 37))
++	{
++		reg = 0x2D2;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		if(enable)
++			val &= ~(0x1 << ((sfp - 3) % 8));
++		else
++			val |= 0x1 << ((sfp - 3) % 8);
++		ret = write_cpld(reg, val);
++	}
++	else if((sfp > 36) && (sfp < 45))
++	{
++		reg = 0x3D0;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		if(enable)
++			val &= ~(0x1 << ((sfp - 5) % 8));
++		else
++			val |= 0x1 << ((sfp - 5) % 8);
++		ret = write_cpld(reg, val);
++	}
++	else if((sfp > 44) && (sfp < 49))
++	{
++		reg = 0x3D1;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		if(enable)
++			val &= ~(0x1 << ((sfp - 5) % 8));
++		else
++			val |= 0x1 << ((sfp - 5) % 8);
++		ret = write_cpld(reg, val);
++	}
++	else
++	{
++		DEBUG_PRINT("Invalid sfp number.\n");
++	}
++	return (ret >= 0);
++}
++
++int getSfpEnable(int sfp)
++{
++	unsigned char val;
++	int reg;
++	int ret = -1;
++	if(sfp < 9)
++	{
++		reg = 0x250;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << (sfp - 1);
++	}
++	else if((sfp > 8) && (sfp < 17))
++	{
++		reg = 0x251;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << (sfp - 1);
++	}
++	else if((sfp > 16) && (sfp < 19))
++	{
++		reg = 0x252;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << (sfp - 1);
++	}
++	else if((sfp > 18) && (sfp < 27))
++	{
++		reg = 0x2D0;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 28) && (sfp < 35))
++	{
++		reg = 0x2D1;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 34) && (sfp < 37))
++	{
++		reg = 0x2D2;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 36) && (sfp < 45))
++	{
++		reg = 0x3D0;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 5) % 8);
++	}
++	else if((sfp > 44) && (sfp < 49))
++	{
++		reg = 0x3D1;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 5) % 8);
++	}
++	else
++	{
++		DEBUG_PRINT("Invalid sfp number.\n");
++	}
++	return (ret = (val ? 0 : 1));
++}
++	
++int getSfpRxlos(int sfp)
++{
++	unsigned char val;
++	int reg;
++	int ret = -1;
++	if(sfp < 9)
++	{
++		reg = 0x240;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << (sfp - 1);
++	}
++	else if((sfp > 8) && (sfp < 17))
++	{
++		reg = 0x241;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 1) % 8);
++	}
++	else if((sfp > 16) && (sfp < 19))
++	{
++		reg = 0x242;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 1) % 8);
++	}
++	else if((sfp > 18) && (sfp < 27))
++	{
++		reg = 0x2C0;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 28) && (sfp < 35))
++	{
++		reg = 0x2C1;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 34) && (sfp < 37))
++	{
++		reg = 0x2C2;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 36) && (sfp < 45))
++	{
++		reg = 0x3C0;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 5) % 8);
++	}
++	else if((sfp > 44) && (sfp < 49))
++	{
++		reg = 0x3C1;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 5) % 8);
++	}
++	else
++	{
++		DEBUG_PRINT("Invalid sfp number.\n");
++	}
++	return (ret = (val ? 0 : 1));
++}
++
++int getSfpTxfault(int sfp)
++{
++	unsigned char val;
++	int reg;
++	int ret = -1;
++	if(sfp < 9)
++	{
++		reg = 0x256;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << (sfp - 1);
++	}
++	else if((sfp > 8) && (sfp < 17))
++	{
++		reg = 0x257;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 1) % 8);
++	}
++	else if((sfp > 16) && (sfp < 19))
++	{
++		reg = 0x258;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 1) % 8);
++	}
++	else if((sfp > 18) && (sfp < 27))
++	{
++		reg = 0x2D6;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 28) && (sfp < 35))
++	{
++		reg = 0x2D7;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 34) && (sfp < 37))
++	{
++		reg = 0x2D8;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 36) && (sfp < 45))
++	{
++		reg = 0x3D4;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 5) % 8);
++	}
++	else if((sfp > 44) && (sfp < 49))
++	{
++		reg = 0x3D5;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 5) % 8);
++	}
++	else
++	{
++		DEBUG_PRINT("Invalid sfp number.\n");
++	}
++	return (ret = (val ? 0 : 1));
++}
++
++int getSfpAbs(int sfp)
++{
++	unsigned char val;
++	int reg;
++	int ret = -1;
++	if(sfp < 9)
++	{
++		reg = 0x259;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << (sfp - 1);
++	}
++	else if((sfp > 8) && (sfp < 17))
++	{
++		reg = 0x25A;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 1) % 8);
++	}
++	else if((sfp > 16) && (sfp < 19))
++	{
++		reg = 0x25B;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 1) % 8);
++	}
++	else if((sfp > 18) && (sfp < 29))
++	{
++		reg = 0x2D9;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 28) && (sfp < 35))
++	{
++		reg = 0x2DA;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 34) && (sfp < 37))
++	{
++		reg = 0x2DB;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 3) % 8);
++	}
++	else if((sfp > 36) && (sfp < 45))
++	{
++		reg = 0x3D6;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 5) % 8);
++	}
++	else if((sfp > 44) && (sfp < 49))
++	{
++		reg = 0x3D7;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 5) % 8);
++	}
++	else if((sfp > 48) && (sfp < 55))
++	{
++		reg = 0x3D7;
++		ret = read_cpld(reg, &val);
++		if(ret < 0)
++			return ret;
++		val &= 0x1 << ((sfp - 1) % 8);
++	}
++	else
++	{
++		DEBUG_PRINT("Invalid sfp number.\n");
++	}
++	return (ret = (val ? 0 : 1));
++}
++
++int getPsuStatus(int id)
++{
++	unsigned char data;
++	int ret;
++	ret = read_cpld(0x125, &data);
++	if(ret >= 0)
++		ret = (data >> id) & 0x1;
++	DEBUG_PRINT("getPsuStatus ret = %d\n", ret);
++	return ret;
++}
++
++int getFanStatus(int id)
++{
++	unsigned char data;
++	int ret;
++	int off;
++	switch(id)
++	{
++		case 0:
++		case 1:
++			off = 2;
++			break;
++		case 2:
++		case 3:
++			off = 3;
++			break;
++		case 4:
++		case 5:
++			off = 4;
++			break;
++		case 6:
++		case 7:
++			off = 5;
++			break;
++		case 8:
++		case 9:
++			off = 6;
++			break;
++		default:
++			ret = -1;
++			return ret;
++	}
++	ret = read_cpld(CPLD_FAN_PRESENT, &data);
++	if(ret >= 0)
++		ret = (data >> off) & 0x1;
++	DEBUG_PRINT("getFanStatus ret = %d\n", ret);
++
++	return ret;
++}
++
++int getFanPresent(int id)
++{
++	unsigned char data;
++	int ret;
++	int off;
++	switch(id)
++	{
++		case 0:
++		case 1:
++			off = 0;
++			break;
++		case 2:
++		case 3:
++			off = 1;
++			break;
++		case 4:
++		case 5:
++			off = 2;
++			break;
++		case 6:
++		case 7:
++			off = 3;
++			break;
++		case 8:
++			off = 4;
++			break;			
++		case 9:
++			off = 5;
++			break;
++		default:
++			ret = -1;
++			return ret;
++	}
++	if(id <= 7)
++		ret = read_cpld(CPLD_FAN_PRESENT, &data);
++	else
++		ret = read_cpld(CPLD_PSU_STATUS, &data);
++	if(ret >= 0)
++		ret = (data >> off) & 0x1;
++	DEBUG_PRINT("getFanStatus ret = %d\n", ret);
++
++	return ret;
++}
++
++int read_sfp(int portID, char devAddr, char reg, char *data, int len)
++{
++	int fd;
++    int ret = -1;
++    SfpData_t ls;
++	if(len > 256)
++		len = 256;	
++	fd = open("/dev/cpld", O_RDWR);
++	if(fd < 0)
++	{
++		DEBUG_PRINT("Open CPLD fail.\n");
++		return ret;
++	}	
++    DEBUG_PRINT("read_sfp portID=%d,devAddr=%x,reg=%x\n",portID,devAddr,reg);
++    ls.portId = portID;
++    ls.devAddr = devAddr; // 0xa0, 0xa2
++    ls.regId = reg;
++    ls.rw = 0;
++    ls.len = len;
++    memset(ls.val, 0, sizeof(ls.val));
++
++    ret = ioctl(fd, IOCTL_SFP_READ, (char *)&ls);
++    if(ret < 0)
++    {
++    	close(fd);
++        return -1;
++    }
++
++    memcpy(data, ls.val, len);
++	close(fd);
++    return 0;	
++}
++
++int write_sfp(int portID, char devAddr, char reg, char *data, int len)
++{
++    int fd;
++	int ret = -1;
++	SfpData_t ls;
++	if(len > 256)
++		len = 256;
++
++	fd = open("/dev/cpld", O_RDWR);
++	if(fd < 0)
++	{
++		DEBUG_PRINT("Open CPLD fail.\n");
++		return ret;
++	}
++
++    ls.portId = portID;
++    ls.devAddr = devAddr; // 0xa0, 0xa2
++    ls.regId = reg;
++    ls.rw = 1;
++    ls.len = len;
++    memset(ls.val, 0, sizeof(ls.val));
++
++    memcpy(ls.val, data, len);
++
++    ret = ioctl(fd, IOCTL_SFP_READ, (char *)&ls);
++    if(ret < 0)
++    {
++    	close(fd);
++        return -1;
++    }
++	close(fd);
++    return 0;
++}
++
++
+diff --git a/miscutils/i2c_chips.c b/miscutils/i2c_chips.c
+new file mode 100755
+index 0000000..6d5b682
+--- /dev/null
++++ b/miscutils/i2c_chips.c
+@@ -0,0 +1,655 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include <errno.h>
++#include <sys/io.h>
++
++#include "cpld.h"
++#include "i2c_dev.h"
++#include "i2c_chips.h"
++#include "debug_util.h"
++
++#define CPLD_ACCESS 1
++#define NUM_CHIPS 9
++#define FAN_NUM	8
++
++/* PSU registers */
++// byte
++#define PSU_STATUS_VOUT		(0x7a)
++#define	PSU_STATUS_IOUT		(0x7b)
++#define PSU_STATUS_TEMP		(0x7d)
++
++// word
++#define PSU_READ_VIN		(0x88)
++#define	PSU_READ_IIN		(0x89)
++#define PSU_READ_VOUT		(0x8b)
++#define	PSU_READ_IOUT		(0x8c)
++#define PSU_READ_TEMP_1		(0x8d)
++#define PSU_READ_POUT		(0x96)
++#define PSU_READ_PIN		(0x97)
++
++// string
++#define PSU_MFR_ID			(0x99)	// 7 byte
++#define PSU_MFR_MODEL		(0x9a)	// 14 byte
++#define PSU_MFR_REVISION	(0x9b)	// 5 byte
++#define PSU_MFR_LOCATION	(0x9c)
++#define PSU_MFR_DATE		(0x9d)
++#define PSU_MFR_SERIAL		(0x9e)
++
++unsigned long  g_siIspPins        = 0x00000000;   /*Keeper of JTAG pin state*/
++unsigned short g_usInPort         = 0x588;  /*Address of the TDO pin*/
++unsigned short g_usOutPort	  = 0x588;  /*Address of TDI, TMS, TCK pin*/
++unsigned short g_usCpu_Frequency  = 1200; //1700;   /*Enter your CPU frequency here, unit in MHz.*/
++static int has_been_read = 0;
++static unsigned char cpu_id = 0x00;
++
++
++static const struct chips_info i2c_chips[NUM_CHIPS] = {
++	{0x50, 0x73, 0, "eeprom"},
++	{0x4D, 0x73, 3, "emc2305_1"},
++	{0x2E, 0x73, 3, "emc2305_2"},
++	{0x58, 0x73, 0, "PSU_L"},
++	{0x59, 0x73, 1, "PSU_R"},
++	{0x48, 0x73, 4, "lm75_cpu"},
++	{0x4E, 0x73, 5, "lm75_out"},
++	{0x49, 0x71, 4, "lm75_in"},
++	{0x4A, 0x71, 5, "lm75_sw"},
++};	
++/*********************************************************************************
++*
++* readPort
++*
++* Returns the value of the TDO from the device.
++*
++**********************************************************************************/
++/* GPIO INPUT:	return zero or nonzero */
++unsigned char gpio_get_value(unsigned int gpio)
++{
++	unsigned char ucRet = 0;
++
++	if ( inl_p( 0x588 ) & (1 << gpio) ) {
++		ucRet = 0x01;
++	}
++	else {
++		ucRet = 0x00;
++	}
++
++	return ( ucRet );
++
++}
++void gpio_init(unsigned int gpio)
++{
++	outl_p((inl_p(0x580) | (1 << gpio)), 0x580);//100 0000 0001 0011 0000
++}
++
++typedef enum
++{
++  gpio_in = 0,
++  gpio_out = 1
++} gpio_dir;
++
++/****************************************************************
++ * gpio_set_dir
++ ****************************************************************/
++int gpio_set_dir(unsigned int gpio, unsigned int out_flag)
++{
++ 
++	if (out_flag)
++		outl_p((inl_p(0x584) | (1 << gpio)), 0x584);//out
++	else
++		outl_p((inl_p(0x584) & (~(1 << gpio))), 0x584);//in
++}
++
++#define setbit(x,y) x|=(1<<y)
++#define clrbit(x,y) x&=~(1<<y)
++
++unsigned char getCpuId()
++{
++    if (has_been_read)
++    {
++		DEBUG_PRINT("getCpuId has_been_read\n");
++		DEBUG_PRINT("getCpuId has_been_read 0x%x\n",cpu_id);
++		return cpu_id;
++    }
++
++	if (iopl(3))
++	{
++		perror("iopl");
++		exit(1);/* reminder here: do not use "return", I warned */	
++	}
++	else
++	{
++		gpio_init(19);
++		gpio_set_dir(19,gpio_out);
++	}
++	/*read cpu id*/
++	cpu_id |= gpio_get_value(19) << 0 ;
++	if (iopl(0))
++	{		
++		perror("iopl");
++		exit(1);/* reminder here: do not use "return", I warned */	
++	}
++	has_been_read = 1;
++	DEBUG_PRINT("getCpuId  0x%x\n",cpu_id);
++	return cpu_id;
++}
++int enableChip(char addr)
++{
++	char data;
++	char other;
++	int ret = -1;
++	int i;
++	for(i=0; i< NUM_CHIPS; i++)
++	{
++		if(addr ==  i2c_chips[i].addr)
++		{
++			data = 0x0 | (0x1 << i2c_chips[i].channel) ;
++//			DEBUG_PRINT("channel data is %x\n" ,data);
++			ret = chips_write_byte(i2c_chips[i].sw_addr, 0x0, data);
++			if(ret < 0)
++				return ret;
++		}
++	}
++	return ret;
++}
++
++int disableChip(char addr)
++{
++	char data;
++	char other;
++	int ret = -1;
++	int i;
++	for(i=0; i< NUM_CHIPS; i++)
++	{
++		if(addr ==  i2c_chips[i].addr)
++		{
++			data = 0x0 | (0x1 << i2c_chips[i].channel) ;
++//			DEBUG_PRINT("channel data is %x\n" ,data);
++			ret = chips_write_byte(i2c_chips[i].sw_addr, 0x0, 0x0);
++			if(ret < 0)
++				return ret;
++		}
++	}
++	return ret;
++}
++
++#define OTHER_MAST_LOCK_MASK 0x01
++#define OTHER_MAST_LOCK_MASK 0x01
++#define I2C_MASTER_SELECTOR_DEV_ADDR 0x70
++#define I2C_MASTER_SELECTOR_DEV_SR   0x02
++#define I2C_MASTER_SELECTOR_DEV_CR   0x01
++#define I2C_MASTER_SELECTOR_DEV_ISR  0x04
++#define I2C_MASTER_SELECTOR_DEV_IMR  0x05
++#define ENABLE_LOCK_GRANT   0xFB
++#define CLEARE_LOCK_GRANT   0xFF
++#define REQUEST_DOWNSTREAM  0x01
++#define CONNECT_DOWNSTREAM  0x05
++#define GIVEUP_DOWNSTREAM   0x00
++int getCtrlOfBus_9641(void)
++{
++    int errStatus = -1;
++    char data;
++    errStatus = chips_write_byte(I2C_MASTER_SELECTOR_DEV_ADDR, 
++                                    I2C_MASTER_SELECTOR_DEV_IMR, 
++                                    ENABLE_LOCK_GRANT);
++    
++    if (errStatus < 0)
++        return errStatus;
++    
++    errStatus = chips_write_byte(I2C_MASTER_SELECTOR_DEV_ADDR, 
++                                I2C_MASTER_SELECTOR_DEV_CR, 
++                                REQUEST_DOWNSTREAM);
++    if (errStatus < 0)
++        return errStatus;
++    
++    
++    errStatus = chips_read_byte(I2C_MASTER_SELECTOR_DEV_ADDR, 
++                              I2C_MASTER_SELECTOR_DEV_CR,
++                              &data);
++    if (data == 0x03)
++    {
++        errStatus = chips_write_byte(I2C_MASTER_SELECTOR_DEV_ADDR, 
++                                I2C_MASTER_SELECTOR_DEV_CR, 
++                                CONNECT_DOWNSTREAM);
++    }
++    
++    return errStatus;
++}
++
++static unsigned char Get_Control_Bus_Mask(unsigned char data)
++{
++    unsigned char Mask = 0xff;
++    switch(data & 0x0f)
++    {
++        case 0x09:
++        case 0x0c:
++        case 0x0d:
++            Mask = 0x00;
++            break;
++        
++        case 0x0A:
++        case 0x0E:
++        case 0x0F:
++            Mask = 0x01;
++            break;
++        
++        case 0x00:
++        case 0x01:
++        case 0x05:
++            Mask = 0x04;
++            break;
++        
++        case 0x02:
++        case 0x03:
++        case 0x06:
++            Mask = 0x05;
++            break;
++        default:
++            Mask = 0xff;
++            break;
++    }
++    
++    return Mask;
++}
++
++static int getCtrlOfBus_9541(void)
++{
++    char errStatus = 0;
++    char data;
++	unsigned char mask;
++    
++    errStatus = chips_read_byte(I2C_MASTER_SELECTOR_DEV_ADDR, 
++                              I2C_MASTER_SELECTOR_DEV_CR,
++                              &data);
++    
++    mask = Get_Control_Bus_Mask(data);
++    
++    if (mask == 0xff)
++        return 0;
++    
++    errStatus = chips_write_byte(I2C_MASTER_SELECTOR_DEV_ADDR, 
++                                    I2C_MASTER_SELECTOR_DEV_CR, 
++                                    mask);
++
++    return errStatus;
++}		
++
++int getCtrlOfBus(void)
++{
++	return 1;
++}
++/*
++static const struct fan_config fan[FAN_NUM] = {
++	{0x4D, 0x4E, 0x40},
++	{0x4D, 0x6E, 0x60},
++	{0x4D, 0x5E, 0x50},
++	{0x4D, 0x3E, 0x30},
++	//{0x4D, 0x7E, 0x70},
++	{0x2E, 0x4E, 0x40},
++	{0x2E, 0x3E, 0x30},
++	{0x2E, 0x7E, 0x70},
++	{0x2E, 0x5E, 0x50},
++	//{0x2E, 0x6E, 0x60},
++};
++*/
++static const struct fan_config fan[FAN_NUM] = {
++	{0x4D, 0x4E, 0x40},
++	{0x2E, 0x4E, 0x40},
++	{0x4D, 0x6E, 0x60},
++	{0x2e, 0x3E, 0x30},
++	//{0x4D, 0x7E, 0x70},
++	{0x4D, 0x5E, 0x50},
++	{0x2E, 0x7E, 0x70},
++	{0x4D, 0x3E, 0x30},
++	{0x2E, 0x5E, 0x50},
++	//{0x2E, 0x6E, 0x60},
++};
++static const struct fan_cpld_reg fan_cpld_reg[FAN_NUM] = {
++	{0x180, 0x181},
++	{0x182, 0x183},
++	{0x184, 0x185},
++	{0x186, 0x187},
++	{0x188, 0x189},
++	{0x18A, 0x18B},
++	{0x18C, 0x18D},
++	{0x18E, 0x18F},
++};
++
++static int FAN_PERIOD_TO_RPM(int x)
++{
++	if (x > (0xf5c2 >> 3)) /*<1000rpm, fan fail*/
++		return 0;
++        
++	return 3932160 * 2 / x;
++}
++
++int fanSpeedGet(int id, int *speed)
++{
++	unsigned char data;
++	int ret = -1;
++	int status;
++
++	if(getCpuId() == 0x01)
++	{
++		ret = read_cpld(fan_cpld_reg[id].hight_byte_reg, &data);
++		DEBUG_PRINT("fan hight_byte_reg %x,data = %x\n", fan_cpld_reg[id].hight_byte_reg, data);
++
++		*speed = data << 8;
++
++		ret = read_cpld(fan_cpld_reg[id].low_byte_reg, &data);
++		DEBUG_PRINT("fan low_byte_reg %x, data = %x\n", fan_cpld_reg[id].low_byte_reg, data);
++		if(ret >= 0)
++		{
++			*speed |= data ;
++		}
++		//*speed = FAN_PERIOD_TO_RPM((*speed & 0x0FFFF)>> 3);
++		//*speed = FAN_PERIOD_TO_RPM(*speed >> 3);		
++	}
++	else
++	{
++		if((ret = getCtrlOfBus()) < 0)
++			return ret;
++		if((ret = enableChip(fan[id].emc_addr)) < 0)
++			return ret;
++		//ret = getFanStatus(id);
++		//if(ret < 0)
++		//	return ret;
++		ret = chips_read_byte(fan[id].emc_addr, fan[id].speed_reg, &data);
++		DEBUG_PRINT("fan addr %x, reg is %x, data = %x\n", fan[id].emc_addr, fan[id].speed_reg, data);
++		if(ret < 0)
++		{
++			status = disableChip(fan[id].emc_addr);
++			return ret;
++		}
++		*speed = data << 8;
++		usleep(50000);
++		ret = chips_read_byte(fan[id].emc_addr, (fan[id].speed_reg+1), &data);
++		DEBUG_PRINT("fan addr %x, reg is %x, data = %x\n", fan[id].emc_addr, fan[id].speed_reg + 1, data);
++		if(ret >= 0)
++		{
++			*speed |= data ;
++		}
++		//*speed = FAN_PERIOD_TO_RPM((*speed & 0x0FFFF)>> 3);
++		*speed = FAN_PERIOD_TO_RPM(*speed >> 3);
++		status = disableChip(fan[id].emc_addr);
++	}	
++	return ret;
++}
++
++static struct ts_info ts[] = {
++	{0x48, 0x0, 0x3},
++	{0x4E, 0x0, 0x3},
++	{0x49, 0x0, 0x3},
++	{0x4A, 0x0, 0x3},
++};
++static unsigned short ts_cpld[] = {
++	0x198,
++	0x199,
++	0x19A,
++	0x19B,
++};
++
++static short swap(short data)
++{
++	data = ((data & 0x00ff) << 8) |
++		((data & 0xff00) >> 8);
++	return data;
++}
++static int LM75_TEMP_FROM_REG(short data)
++{
++	DEBUG_PRINT("LM75_TEMP_FROM_REG %04x\n", data);
++	DEBUG_PRINT("LM75_TEMP_FROM_REG %04x\n", data&0xFFFF);
++	return (swap(data&0xFFFF) /128)/2;
++}
++
++int tsTempGet(int id, short *temp)
++{
++	unsigned short buf;
++	int ret;
++	int res;
++	if(getCpuId() == 0x0)
++	{
++		ret = read_cpld(ts_cpld[id], &buf);
++		DEBUG_PRINT("word is %04x\n", buf);
++		if(ret >= 0)
++		{
++			*temp = (short)buf;
++		}	
++	}
++	else
++	{
++		if((ret = getCtrlOfBus()) < 0)
++			return ret;
++
++		if((ret = enableChip(ts[id].ts_addr)) < 0)
++		{	
++			DEBUG_PRINT("enableChip error=  %d\n", errno);
++			return ret;
++		}
++
++		ret = chips_read_word(ts[id].ts_addr, ts[id].temp_reg, &buf);
++		DEBUG_PRINT("word is %04x\n", buf);
++		if(ret >= 0)
++		{
++			*temp = LM75_TEMP_FROM_REG((short)buf);
++		}
++
++		if((res = disableChip(ts[id].ts_addr)) < 0)
++		{
++			DEBUG_PRINT("disableChip error=  %d\n", errno);
++			//return ret;	
++		}
++	}
++	return ret;
++}
++
++int tsOsGet(int id, unsigned short *temp)
++{
++	unsigned short buf;
++	int ret,res;
++	if((ret = getCtrlOfBus()) < 0)
++		return ret;
++	if((ret = enableChip(ts[id].ts_addr)) < 0)
++		return ret;
++	ret = chips_read_word(ts[id].ts_addr, ts[id].os_reg, &buf);
++	if(ret >= 0)
++	{
++		*temp = LM75_TEMP_FROM_REG(buf);
++	}
++	if((res = disableChip(ts[id].ts_addr)) < 0)
++	{
++		DEBUG_PRINT("disableChip error=  %d\n", errno);
++		//return ret;	
++	}
++	return ret;	
++}
++
++int getTsShutdown(int id)
++{
++	char data;
++	int ret,res;
++	if((ret = getCtrlOfBus()) < 0)
++		return ret;
++	if((ret = enableChip(ts[id].ts_addr)) < 0)
++		return ret;
++	ret = chips_read_byte(ts[id].ts_addr, 0x1, &data);
++	if(ret >= 0)
++	{
++		ret = data & 0x1;
++	}
++	if((res = disableChip(ts[id].ts_addr)) < 0)
++	{
++		DEBUG_PRINT("disableChip error=  %d\n", errno);
++		//return ret;	
++	}
++	return ret;	
++}
++
++int setTsShutdown(int id, int shutdown)
++{
++	char data;
++	int ret;
++	int res;
++	if((ret = getCtrlOfBus()) < 0)
++		return ret;
++	if((ret = enableChip(ts[id].ts_addr)) < 0)
++		return ret;
++	ret = chips_read_byte(ts[id].ts_addr, 0x1, &data);
++	if(ret >= 0)
++	{
++		if(shutdown == 1)
++		{
++			data |= 0x1;
++			ret = chips_write_byte(ts[id].ts_addr, 0x1, data);
++		}
++		else
++		{
++			data &= 0xFE;
++			ret = chips_write_byte(ts[id].ts_addr, 0x1, data);
++		}
++
++	}
++	if((res = disableChip(ts[id].ts_addr)) < 0)
++	{
++		DEBUG_PRINT("disableChip error=  %d\n", errno);
++		//return ret;	
++	}
++
++	return ret;	
++}
++
++static short convert_short(char *s, int len)
++{
++    short i;
++    short res = 0;
++
++    for(i = 1; i < len; i++) {
++        res = res * 2 + (s[i] - '0');
++    }
++    if(s[0] == '1')
++        return -res;
++
++    return res;
++}
++
++static long convert_linear(char *data)
++{
++    unsigned char low, high;
++    short N, Y;
++    long ret;
++    int temp = 1;
++    char s[11];
++    int i;
++
++    low = data[0];
++    high = data[1];
++
++    if((high & 0x80) > 0)
++        high = ~high + 0x88;
++    for(i = 0; i < 5; i++) {
++        s[i] = (high & (0x80 >> i)) > 0 ? '1' : '0';
++    }
++
++    N = convert_short(s, 5);
++    high = data[1];
++    if((high & 0x04) > 0) {
++        high = ~high + 0x40;
++        if((low != 0xff) && (low != 0x0))
++            low = ~low + 0x1;
++        else {
++            low = 0x00;
++            high += 0x1;
++        }
++
++    }
++    for(i = 5; i < 8; i++)
++        s[i-5] = (high & (0x80 >> i)) > 0 ? '1' : '0';
++    for(i = 0; i < 8; i++)
++        s[i + 3] = (low & (0x80 >> i)) > 0 ? '1' : '0';
++
++    Y = convert_short(s, 11);
++
++    if(N > 0) {
++        while(N > 0) {
++            temp = temp * 2;
++            N--;
++        }
++
++        ret = Y * temp * 100;
++    }
++    else {
++        N = 0 - N;
++        while(N > 0) {
++            temp = temp * 2;
++            N--;
++        }
++        ret = (Y * 100) / temp;
++    }
++
++    return ret;
++}
++
++int getPsuInfo(int id, struct psuInfo * info)
++{
++	int status;
++	int ret;
++//	char cpld_psu_reg;
++//	char cpld_psu_reg_tmp;
++	unsigned short vin;
++	unsigned short iin;
++	unsigned short vout;
++	unsigned short iout;
++	unsigned short pout;
++	unsigned short pin;
++	unsigned short temp;
++	char psu_addr[] = {
++		0x58,
++		0x59,
++	};	
++	
++	if((ret = getCtrlOfBus()) < 0)
++		return ret;
++	if((ret = enableChip(psu_addr[id])) < 0)
++		return ret;
++	status = getPsuStatus(id);
++	
++	if (status > 0)
++	{		
++
++		if((ret = chips_read_word(psu_addr[id], PSU_READ_VIN, &vin)) < 0)
++			goto error;
++		if((ret = chips_read_word(psu_addr[id], PSU_READ_IIN, &iin)) < 0)
++			goto error;
++		if((ret = chips_read_word(psu_addr[id], PSU_READ_VOUT, &vout)) < 0)
++			goto error;
++		if((ret = chips_read_word(psu_addr[id], PSU_READ_IOUT, &iout)) < 0)
++			goto error;
++		if((ret = chips_read_word(psu_addr[id], PSU_READ_POUT, &pout)) < 0)
++			goto error;
++		if((ret = chips_read_word(psu_addr[id], PSU_READ_PIN, &pin)) < 0)
++			goto error;
++		if((ret = chips_read_word(psu_addr[id], PSU_READ_TEMP_1, &temp)) < 0)		
++			goto error;
++		info->vin = convert_linear((char *)&vin) * 10;
++		info->iin = convert_linear((char *)&iin) * 10;		
++		info->vout = convert_linear((char *)&vout) * 10;
++		info->iout = convert_linear((char *)&iout) * 10;
++		info->pout = convert_linear((char *)&pout) * 10;
++		info->pin = convert_linear((char *)&pin) * 10;
++		info->temp = convert_linear((char *)&temp)/100;
++		if((ret = disableChip(psu_addr[id])) < 0)
++			return ret;
++		return 0;
++	}
++	else 
++	{
++		goto error;
++	}
++
++error:
++	ret = disableChip(psu_addr[id]);
++	return -1;
++
++}
++
+diff --git a/miscutils/i2c_dev.c b/miscutils/i2c_dev.c
+new file mode 100755
+index 0000000..6170b08
+--- /dev/null
++++ b/miscutils/i2c_dev.c
+@@ -0,0 +1,502 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <fcntl.h>
++#include <errno.h>
++//#include <linux/i2c-dev.h>
++#include "i2c_dev.h"
++#include "debug_util.h"
++//#define HW_SIM 1
++static inline int i2c_smbus_access(int file, char read_write, __u8 command,
++                                     int size, union i2c_smbus_data *data)
++{
++    struct i2c_smbus_ioctl_data args;
++    int ret;
++    int i,len;
++    //DEBUG_PRINT("i2c_smbus_access read_write=%d command=%d,size=%d\n",read_write,command,size);
++    args.read_write = read_write;
++    args.command = command;
++    args.size = size;
++    args.data = data;
++
++if (read_write == I2C_SMBUS_READ) {
++	DEBUG_PRINT("I2C_SMBUS__READ data=%2.2x",command);
++}
++
++if (read_write == I2C_SMBUS_WRITE) {
++	switch (size) {
++	case I2C_SMBUS_BYTE_DATA:
++   		{
++			DEBUG_PRINT("I2C_SMBUS_WRITE data=%2.2x %2.2x ",command,data->byte);
++		break;
++
++		}
++	case I2C_SMBUS_WORD_DATA:
++   		{
++			DEBUG_PRINT("I2C_SMBUS_WRITE data=%2.2x %.4x ",command,data->word);
++			break;
++
++		}
++	case I2C_SMBUS_BLOCK_DATA:
++   		{
++			DEBUG_PRINT("I2C_SMBUS_WRITE data=%2.2x %2.2x ",command,data->block[0]);
++			len = data->block[0];
++			for (i = 0; i < len; i++)
++				DEBUG_PRINT("%2.2x ",data->block[i + 1]);
++			break;
++		}
++    default:
++	  break;	
++	}
++}
++DEBUG_PRINT("\n");
++
++#ifdef HW_SIM
++	ret =0;
++#else
++	ret = ioctl(file, I2C_SMBUS, &args);
++#endif
++
++//	if(size == I2C_SMBUS_WORD_DATA)
++	if(ret < 0)
++	{
++		DEBUG_PRINT("i2c_smbus_access ret = %d error = %d\n",ret,errno);
++	}
++	//else
++	//DEBUG_PRINT("i2c_smbus_access ret = %d\n",ret);
++    return ret;
++}
++
++static int i2c_smbus_read_byte(int file,__u8 *buf)
++{
++	union i2c_smbus_data data;
++	DEBUG_PRINT("i2c_smbus_read_byte in\n");
++	if (i2c_smbus_access(file,I2C_SMBUS_READ,0,I2C_SMBUS_BYTE,&data))
++	{
++		DEBUG_PRINT("i2c_smbus_read_byte failed\n");
++		return -1;
++	}
++	else
++	{
++		*buf = 0x0FF & data.byte;
++		DEBUG_PRINT("i2c_smbus_read_byte read \n");
++        return 0;
++	}	
++}
++
++
++static int i2c_smbus_read_byte_data(int file, __u8 command, __u8 *buf)
++{
++    union i2c_smbus_data data;
++    if (i2c_smbus_access(file, I2C_SMBUS_READ, command,
++                         I2C_SMBUS_BYTE_DATA, &data))
++        return -1;
++    else
++	{
++		*buf = 0x0FF & data.byte;
++        return 0;
++	}
++}
++
++static int i2c_smbus_write_byte_data(int file, __u8 command,
++        __u8 value)
++{
++    union i2c_smbus_data data;
++    data.byte = value;
++    return i2c_smbus_access(file, I2C_SMBUS_WRITE, command,
++                            I2C_SMBUS_BYTE_DATA, &data);
++}
++
++static int i2c_smbus_read_word_data(int file, __u8 command, __u16 *buf)
++{
++    union i2c_smbus_data data;
++    if (i2c_smbus_access(file, I2C_SMBUS_READ, command,
++                         I2C_SMBUS_WORD_DATA, &data))
++		return -1;
++    else
++	{
++		*buf = 0x0FFFF & data.word;
++		//DEBUG_PRINT("WORD Read data is %02x, reg is %02x\n", data.word, command); 
++        return 0;
++	}
++}
++
++static int i2c_smbus_write_word_data(int file, __u8 command,
++        __u16 value)
++{
++    union i2c_smbus_data data;
++    data.word = value;
++    return i2c_smbus_access(file, I2C_SMBUS_WRITE, command,
++                            I2C_SMBUS_WORD_DATA, &data);
++}
++
++int i2_smbus_read(int busNum, short addr, __u8 reg, dataType type,
++									int size,__u8 *buf)
++{
++	int i = 0;
++	int fd;
++	int ret = -1;
++	__u16 val;
++	char fname[20];
++	#ifdef HW_SIM
++	fd = 1;
++	#else
++	sprintf(fname, "/dev/i2c-%d", busNum);
++	fd = open(fname, O_RDWR);
++	#endif	
++	if(fd < 0)
++		return ret;
++	#ifdef HW_SIM
++	ret =0;
++	#else
++	ret = ioctl(fd, I2C_SLAVE, addr);
++	#endif	
++	if(LEN_BYTE == type)
++	{
++		DEBUG_PRINT("LEN_BYTE read\n");
++		for(i=0; i<size; i++)
++		{
++			ret = i2c_smbus_read_byte_data(fd, (reg+i), &buf[i]);
++			if(ret < 0)
++				break;
++			DEBUG_PRINT("Read byte data is i=%d, %02x\n",i, buf[i]);
++		}
++	}
++	else
++	{
++		for(i=0; i<size; i++)
++		{
++			ret = i2c_smbus_read_word_data(fd, (reg+i), &val);
++			if(ret < 0)
++				break;
++//			DEBUG_PRINT("Read word data is %02x\n", val);
++			buf[2*i+1] = (val >> 8) & 0x0FF;
++			buf[2*i] = val & 0x0FF;
++		}
++	}
++	close(fd);
++	return ret;
++}
++
++static int i2_smbus_read_only(int busNum, short addr, dataType type,
++									int size,__u8 *buf)
++{
++	int i;
++	int fd;
++	int ret = -1;
++	__u16 val;
++	char fname[20];
++
++	#ifdef HW_SIM
++	fd = 1;
++	#else
++	sprintf(fname, "/dev/i2c-%d", busNum);
++	fd = open(fname, O_RDWR);
++	#endif	
++	if(fd < 0)
++		return ret;
++
++	#ifdef HW_SIM
++	ret =0;
++	#else
++	ret = ioctl(fd, I2C_SLAVE, addr);
++	#endif	
++	//ioctl(fd, BLKFLSBUF);
++	if(LEN_BYTE == type)
++	{
++		for(i=0; i<size; i++)
++		{
++			
++			ret = i2c_smbus_read_byte(fd, &buf[i]);
++			if(ret < 0)
++				break;
++//			DEBUG_PRINT("Read byte data is %02x\n", buf[i]);
++		}
++		//ret = i;
++	}
++
++	close(fd);
++	return ret;
++}
++
++
++
++int i2c_smbus_write(int busNum, short addr, __u8 reg, dataType type,
++									int size, __u8 *buf)
++{
++	int i;
++	int fd;
++	int ret = -1;
++	short val;
++	char fname[20];
++
++	#ifdef HW_SIM
++	fd = 1;
++	#else
++	sprintf(fname, "/dev/i2c-%d", busNum);
++	fd = open(fname, O_RDWR);
++	#endif	
++	if(fd < 0)
++		return ret;
++	#ifdef HW_SIM
++	ret =0;
++	#else
++	ret = ioctl(fd, I2C_SLAVE, addr);
++	#endif
++	if(LEN_BYTE == type)
++	{
++		for(i=0; i<size; i++)
++		{
++			ret = i2c_smbus_write_byte_data(fd, (reg+i), buf[i]);
++			if(ret)
++				break;
++		}
++	}
++	else
++	{
++		for(i=0; i<size; i++)
++		{
++			val = (((unsigned short)(buf[2*i+1])) << 8) | buf[2*i];
++			//val = (((unsigned short)(buf[2*i])) << 8) | buf[2*i+1];
++			ret = i2c_smbus_write_word_data(fd, (reg+i), val);
++			if(ret)
++				break;
++		}
++	}
++	close(fd);
++	return ret;
++}
++
++int i2c_smbus_read_16reg(int busNum, short addr, short reg,
++									int size, __u8 *buf)
++{	
++	int i;
++	int fd;
++	int ret = -1;
++	char regNum[2];
++	char fname[20];
++	struct i2c_rdwr_ioctl_data ioctl_data;
++	struct i2c_msg msgs[2];
++
++
++	#ifdef HW_SIM
++	fd = 1;
++	#else
++	sprintf(fname, "/dev/i2c-%d", busNum);
++	fd = open(fname, O_RDWR);
++	#endif	
++	if(fd < 0)
++		return ret;
++
++	#ifdef HW_SIM
++	ret = 0;
++	#else
++	ret = ioctl(fd, I2C_SLAVE, addr);
++	#endif
++	
++	for(i=0; i<size; i++)
++	{
++		regNum[1] = (reg + i) & 0x0FF;
++		regNum[0] = ((reg + i) >> 8) & 0x0FF;
++		msgs[0].addr= addr;
++		DEBUG_PRINT("msgs[0].addr=0x%x\n",msgs[0].addr);
++		msgs[0].len= 2;
++		msgs[0].buf= regNum;
++		msgs[1].addr= addr;
++		msgs[1].flags |= I2C_M_RD;
++		msgs[1].len= 1;
++		msgs[1].buf= &buf[i];
++		ioctl_data.nmsgs= 2;
++		ioctl_data.msgs= msgs;  
++		ret = ioctl(fd, I2C_RDWR, &ioctl_data);
++		if(ret)
++			break;
++	}
++	close(fd);
++	return ret;
++}								
++//obsoleted									
++int i2c_smbus_write_16reg(int busNum, short addr, short reg,
++									int size, const __u8 *buf)
++{
++	int i;
++	int fd;
++	int ret = -1;
++	char wBuf[3];
++	char fname[20];
++	struct i2c_rdwr_ioctl_data ioctl_data;
++	struct i2c_msg msg;
++
++	#ifdef HW_SIM
++	fd = 1;
++	#else
++	sprintf(fname, "/dev/i2c-%d", busNum);
++	fd = open(fname, O_RDWR);
++	#endif	
++	if(fd < 0)
++		return ret;
++	ret = ioctl(fd, I2C_SLAVE, addr);
++	for(i=0; i<size; i++)
++	{
++		wBuf[1] = (reg + i) & 0x0FF;
++		wBuf[0] = ((reg + i) >> 8) & 0x0FF;
++		wBuf[2] = buf[i];
++		msg.addr= addr;
++		msg.flags = 0;
++		msg.len= 3;
++		msg.buf= wBuf;
++		ioctl_data.nmsgs= 1;
++		ioctl_data.msgs= &msg;  
++		ret = ioctl(fd, I2C_RDWR, &ioctl_data);
++		if(ret)
++			break;
++	}
++	close(fd);
++	return ret;
++}
++
++int i2c_smbus_write_16reg_8byte(int busNum, short addr, short reg,
++									int size, const __u8 *buf)
++{
++	int i;
++	int fd;
++	int ret = -1;
++	char wBuf[10];
++	char fname[20];
++	struct i2c_rdwr_ioctl_data ioctl_data;
++	struct i2c_msg msg;
++	#ifdef HW_SIM
++	fd = 1;
++	#else
++	sprintf(fname, "/dev/i2c-%d", busNum);
++	fd = open(fname, O_RDWR);
++	#endif
++	if(fd < 0)
++		return ret;
++	for(i=0; i<size; i+=8)
++	{
++		wBuf[1] = (reg + i) & 0x0FF;
++		wBuf[0] = ((reg + i) >> 8) & 0x0FF;
++		memcpy(&wBuf[2],&buf[i], 8);
++		msg.addr= addr;
++		msg.flags = 0;
++		msg.len= 10+1;
++		msg.buf= wBuf;
++		ioctl_data.nmsgs= 1;
++		ioctl_data.msgs= &msg; 
++		DEBUG_PRINT("msg.addr=0x%x,%s\n",msg.addr,msg.buf);
++		ret = ioctl(fd, I2C_RDWR, &ioctl_data);
++		if(ret)
++			break;
++	}
++	close(fd);
++	return ret;
++}
++
++int chips_read_byte(char addr, __u8 reg, __u8 *data)
++{
++	char busNum = 1;
++	dataType type = LEN_BYTE;
++	int ret = -1;
++	DEBUG_PRINT("chips_read_byte=0x%x,0x%x\n",addr,reg);
++	ret = i2_smbus_read(busNum, addr, reg, type, 1, data);
++	return ret;
++}
++
++int chips_read_word(char addr, __u8 reg, unsigned short *data)
++{
++	char busNum = 1;
++	char buf[2];
++	dataType type = LEN_WORD;
++	int ret = -1;
++	ret = i2_smbus_read(busNum, addr, reg, type, 1, buf);
++	if(ret >= 0)
++	{
++		*data = ((unsigned short)buf[1] << 8) | buf[0];
++//		DEBUG_PRINT("word is %d\n", *data);
++//		DEBUG_PRINT("buf0 is %x, buf1 is %x\n", buf[0], buf[1]);
++	}
++	return ret;
++}
++
++int chips_write_byte(char addr, __u8 reg, const __u8 data)
++{
++	char busNum = 1;
++	dataType type = LEN_BYTE;
++	int ret = -1;
++	ret = i2c_smbus_write(busNum, addr, reg, type, 1, (char *)&data);
++	return ret;
++}
++
++
++static int i2c_write_2b(char addr,__u8 buf[2])
++{
++	
++	char busNum = 1;
++	dataType type = LEN_BYTE;
++	int ret = -1;
++
++	// we must simulate a plain I2C byte write with SMBus functions
++	char reg;
++	char data;
++
++	reg = buf[0];
++	data =  buf[1];
++	DEBUG_PRINT("reg = 0x%2x,data = 0x%2x\n",reg,data);	
++	ret = i2c_smbus_write(busNum, addr, reg, type, 1, (char *)&data);
++	DEBUG_PRINT("i2c_write_2b ret=%d\n",ret);
++	return ret;
++}
++static int i2c_write_3b(char addr, __u8 buf[3])
++{
++	char busNum = 1;
++	dataType type = LEN_WORD;
++	int ret = -1;
++	char data[2];
++	data[0] = buf[1];
++	data[1] = buf[2];
++	DEBUG_PRINT("i2c_write_3b write  = %2x:%2x:%2x:\n",buf[0],data[0],data[1]);
++	ret = i2c_smbus_write(busNum, addr, buf[0], type, 1, (char *)&data);	
++	DEBUG_PRINT("i2c_write_3b ret=%d\n",ret);
++	return ret;
++}
++
++
++
++static int eeprom_read_current_byte(char addr, __u8 *data)
++{
++	char busNum = 1;
++	dataType type = LEN_BYTE;
++	int ret = -1;
++	ret = i2_smbus_read_only(busNum, addr, type, 1, data);
++	DEBUG_PRINT("eeprom_read_current_byte ret=%d\n",ret);
++	return ret;
++}
++
++
++int eeprom_read_byte(char addr, __u16 mem_addr, __u8 *data)
++{
++	int ret;
++	char busNum = 1;
++	dataType type = LEN_BYTE;
++	//ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
++
++	__u8 buf[2] = { (mem_addr >> 8) & 0x0ff, mem_addr & 0x0ff };
++	ret = i2c_write_2b(addr, buf);
++
++	if (ret < 0)
++		return ret;
++	ret = i2_smbus_read_only(busNum, addr, type, 1, data);
++	return ret;
++}
++
++
++
++int eeprom_write_byte(char addr, __u16 mem_addr, __u8 data)
++{
++	__u8 buf[3] = 
++		{ (mem_addr >> 8) & 0x00ff, mem_addr & 0x00ff, data };
++	return i2c_write_3b(addr, buf);
++}
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index 3003bd6..17d7281 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -1,8 +1,31 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
+ #include <getopt.h>
+ 
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
++
++static const struct tlv_code_desc tlv_code_default[] = {
++    { TLV_CODE_PRODUCT_NAME	 , "D4060"},
++    { TLV_CODE_PART_NUMBER	 , "R0854-G0008-02"},
++    { TLV_CODE_SERIAL_NUMBER , "D2060023918PE000012"},
++    { TLV_CODE_MAC_BASE	     , "00:E0:EC:25:7B:D0"},
++    { TLV_CODE_MANUF_DATE	 , "11/29/2015 14:30:00"},//MM/DD/YYYY hh:mm:ss
++    { TLV_CODE_DEVICE_VERSION, "2"},
++    { TLV_CODE_LABEL_REVISION, "Seastone"},
++    { TLV_CODE_PLATFORM_NAME , "RANGELEY"},
++    { TLV_CODE_ONIE_VERSION	 , "2015.11"},
++    { TLV_CODE_MAC_SIZE	     , "73"},
++    { TLV_CODE_MANUF_NAME	 , "CELESTICA"},
++    { TLV_CODE_MANUF_COUNTRY , "CHN"},
++    { TLV_CODE_VENDOR_NAME	 , "CELESTICA"},
++    { TLV_CODE_DIAG_VERSION	 , "1.0.0"},
++    { TLV_CODE_SERVICE_TAG   , "LB"},
++    { TLV_CODE_VENDOR_EXT	 , "98"},
++};
+ /*
+  *  This macro defines the onie-syseeprom command line command.
+  */
+@@ -30,6 +53,8 @@ cmd_usage()
+ 	"      List the understood TLV codes and names.\n"
+ 	"   -e --erase\n"
+ 	"      Reset the EEPROM data.\n"
++	"   -r --restore\n"
++	"      Restore the EEPROM data to default.\n"
+ 	"   -g --get <code>\n"
+ 	"      Look up a TLV by code and write the value to stdout.\n"
+ 	"   -s --set <code>=<value>,<code>=<value>...\n"
+@@ -58,11 +83,12 @@ int onie_syseeprom_main(int argc, char **argv)
+ 	sizeof(tlv_code_list[0]);
+ 
+     char *tokens[tlv_code_count + 1];
+-    const char *short_options = "hels:g:";
++    const char *short_options = "helrs:g:";
+     const struct option long_options[] = {
+ 	{"help",    no_argument,          0,    'h'},
+ 	{"list",    no_argument,          0,    'l'},
+ 	{"erase",   no_argument,          0,    'e'},
++	{"restore",	no_argument,	  0,	'r'},
+ 	{"set",     required_argument,    0,    's'},
+ 	{"get",     required_argument,    0,    'g'},
+ 	{0,         0,                    0,      0},
+@@ -99,6 +125,27 @@ int onie_syseeprom_main(int argc, char **argv)
+ 	    update = 1;
+ 	    break;
+ 
++	case 'r':
++	    if (read_eeprom(eeprom)) {
++                err = 1;
++		printf("goto syseeprom_err\n");
++	    }
++	    update_eeprom_header(eeprom);
++	    for (i = 0; i < sizeof(tlv_code_default)/sizeof(struct tlv_code_desc); i++) {
++	     if (tlvinfo_delete_tlv(eeprom, tlv_code_default[i].m_code) == TRUE) {
++	        printf("Deleting TLV 0x%x: %s\n", tlv_code_default[i].m_code, tlv_code_list[i].m_name);
++	     }
++	     if (!tlvinfo_add_tlv(eeprom, tlv_code_default[i].m_code, tlv_code_default[i].m_name)) {
++                err = 1;
++	        goto syseeprom_err;
++	     } else {
++	        printf("Adding   TLV 0x%x: %s\n", tlv_code_default[i].m_code, tlv_code_default[i].m_name);
++	     }
++            }		
++            printf("update eeprom\n");
++	    update = 1;
++	    break;
++
+ 	case 's':
+ 	    subopts = optarg;
+ 	    while (*subopts != '\0' && !err) {
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index ed3235b..207f93d 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -1,8 +1,17 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
+ #include "sys_eeprom.h"
+ #include "24cXX.h"
+ 
++#include "cpld.h"
++#include "i2c_dev.h"
++#include "i2c_chips.h"
++#include "debug_util.h"
++
+ #if SYS_EEPROM_I2C_MEM_ADDR_BITS == 8
+     #define EEPROM_TYPE EEPROM_TYPE_8BIT_ADDR
+ #elif SYS_EEPROM_I2C_MEM_ADDR_BITS == 16
+@@ -11,28 +20,70 @@
+     #define EEPROM_TYPE EEPROM_TYPE_UNKNOWN
+ #endif
+ 
++int eeprom_open(int addr)
++{
++	int ret =0;
++	unsigned char buf = 0x00;
++	int regNum = 0x123;;
++
++	if((ret = getCtrlOfBus()) < 0)
++		printf("ret = %d\n", ret);
++	if((ret = enableChip(addr)) < 0)
++		printf("ret = %d\n", ret);
++	ret = read_cpld(regNum, &buf);
++	buf &= ~(BIT0);
++	ret = write_cpld(regNum, buf);
++	if (ret < 0)
++	{
++		printf("write error\n");
++		return ret;
++	}
++
++	return ret;
++
++}
++int eeprom_close(int addr)
++{
++	int ret =0;
++	unsigned char buf = 0x00;
++	int regNum = 0x123;;
++	if((ret = getCtrlOfBus()) < 0)
++		printf("ret = %d\n", ret);
++	if((ret = disableChip(addr)) < 0)
++		printf("ret = %d\n", ret);
++	ret = read_cpld(regNum, &buf);
++	buf |= BIT0;
++	ret = write_cpld(regNum, buf);	
++	return ret;
++}
++
+ /*
+  * read_sys_eeprom - read the hwinfo from i2c EEPROM
+  */
+ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ {
+     int ret = 0;
+-    struct eeprom e;
++    //struct eeprom e;
+     int i = 0;
+     u_int8_t *c;
+     int addr = SYS_EEPROM_OFFSET + offset;
+ 
+     c = eeprom_data;
+-    if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-		    EEPROM_TYPE, &e)) {
++    if (eeprom_open(SYS_EEPROM_I2C_ADDR) < 0) {
+ 	printf("ERROR: Cannot open I2C device\n");
+ 	return -1;
+     }
+     for (i = 0; i < len; i++) {
+-	*c = eeprom_read_byte(&e, addr);
+-	c++; addr++;
++		//*c = eeprom_read_byte(&e, addr);
++		//c++; addr++;
++		unsigned char buf;
++		ret = eeprom_read_byte(SYS_EEPROM_I2C_ADDR, addr, &buf);
++		*c = buf;
++		c++;
++		addr++;
++
+     }
+-    eeprom_close(&e);
++    eeprom_close(SYS_EEPROM_I2C_ADDR);
+     return ret;
+ }
+ 
+@@ -42,22 +93,28 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ int write_sys_eeprom(void *eeprom_data, int len)
+ {
+     int ret = 0;
+-    struct eeprom e;
+     int i = 0;
+     u_int8_t *c;
+     u_int16_t  addr = SYS_EEPROM_OFFSET;
+-
+-    c = eeprom_data;
+-    for (i = 0; i < len; i++) {
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-			EEPROM_TYPE, &e)) {
++	
++	if (eeprom_open(SYS_EEPROM_I2C_ADDR)) {
+ 	    printf("ERROR: Cannot open I2C device\n");
+ 	    return -1;
+ 	}
+-	eeprom_write_byte(&e, addr, *c);
+-	eeprom_close(&e);
+-	c++; addr++;
++
++    c = eeprom_data;
++    for (i = 0; i < len; i++) {
++		//eeprom_write_byte(&e, addr, *c);
++		//eeprom_close(SYS_EEPROM_I2C_ADDR);
++		//c++; addr++;
++		DEBUG_PRINT("reg=0x%x val=0x%x\n",SYS_EEPROM_OFFSET+i,*c);
++		ret = eeprom_write_byte(SYS_EEPROM_I2C_ADDR, addr, *c);
++		c++; addr++;
++		//sleep(1);
++		usleep(50000);//1000000 no NAK
+     }
++	eeprom_close(SYS_EEPROM_I2C_ADDR);
+ 
+     return ret;
+ }
++

@@ -1,6 +1,7 @@
 # Alpha Networks SNQ60A0-320F
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
@@ -27,7 +28,13 @@ I2CTOOLS_ENABLE = yes
 
 # Console parameters
 CONSOLE_DEV = 1
-CONSOLE_FLAG = 1
+
+# Set Linux kernel version
+LINUX_VERSION		= 3.2
+LINUX_MINOR_VERSION	= 69
+
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
 
 #-------------------------------------------------------------------------------
 #

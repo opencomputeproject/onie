@@ -1,0 +1,231 @@
+==============================================
+Installing ONIE on QEMU armv7a Virtual Machine
+==============================================
+
+Created: October 2014
+Updated: September 2015
+Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINE=qemu_armv7a all"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINE=qemu_armv7a all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-r--r-- 1 4344328 Oct 30 14:21 onie-qemu_armv7a-r0.bin
+-rw-r--r-- 1  530076 Oct 30 14:21 onie-qemu_armv7a-r0.bin.uboot+env
+-rw-r--r-- 1 4445921 Oct 30 14:21 onie-updater-arm-qemu_armv7a-r0
+
+onie-qemu_armv7a-r0.bin -- ONIE kernel + initramfs
+onie-qemu_armv7a-r0.bin.uboot+env -- ONIE u-boot + blank u-boot environment
+
+onie-updater-arm-qemu_armv7a-r0 -- This is the ONIE self-update
+image.  This image is a self-extracting archive used for installing
+ONIE from within ONIE.
+
+Also disk and flash images for QEMU are also produced:
+
+-rw-r--r-- 1  67108864 Sep  3 10:29 onie-qemu_armv7a-r0-nor0.img
+-rw-r--r-- 1  67108864 Sep  3 10:29 onie-qemu_armv7a-r0-nor1.img
+-rw-r--r-- 1 268435456 Sep  3 10:29 onie-qemu_armv7a-r0-sd.img
+
+Creating a New Virtual Machine
+==============================
+
+This section describes how to bootstrap the virtual machine.  Once
+this step is complete you can use the regular 'onie-self-update'
+method to install a new version of ONIE on the VM.
+
+The ONIE virtual machine for ARM is based on the Versatile VEXPRESS
+CA9X4 machine, which already has support in U-Boot, QEMU and the Linux
+kernel.
+
+For demonstration purposes ONIE makes small tweaks to the machine in
+order to support NOR flash functionaliy.
+
+The ONIE machine directory already contains the necessary patches for
+U-Boot and the Linux kernel.  Those components are compiled as part of
+the usual ONIE build process.
+
+In order for all the pieces to work together you have to compile
+qemu-2.4.0 yourself, with a small one line patch applied.
+
+Building and Installing QEMU 2.4.0
+----------------------------------
+
+To patch and build qemu-2.4.0:
+
+1. Download qemu-2.4.0 tarball and untar it:
+
+   $ wget http://wiki.qemu-project.org/download/qemu-2.4.0.tar.bz2
+   $ tar xf qemu-2.4.0.tar.bz2
+
+2. Apply qemu-2.4.0-arm-vexpress-flash.patch or manually edit
+   qemu-2.4.0/hw/arm/vexpress.c yourself:
+
+   $ patch -p0 < ${ONIE_ROOT}/machine/qemu_armv7a/qemu-2.4.0-arm-vexpress-flash.patch
+
+3. Configure qemu-2.4.0 for arm.
+
+   $ cd qemu-2.4.0
+   $ ./configure --target-list="arm-softmmu arm-linux-user" --prefix=/opt/qemu-2.4.0
+
+   This example will install qemu into /opt/qemu-2.4.0.
+
+4. Build and install qemu.  This example will install qemu into
+   /opt/qemu-2.4.0.
+
+   $ make -j12 install
+
+Creating NOR flash and SD card images
+-------------------------------------
+
+[ Note: The build process already creates the QEMU disk and flash
+images described in this section for you.  Leaving these instructions
+here for historical reference. ]
+
+With QEMU you can use files from your host system as the backing store
+for the virtual machine's NOR flash and SD card.  In order to do that
+you first have to prepare the image files.
+
+The Versatile VEXPRESS CA9X4 machine has two 64MB NOR flash parts and
+an SD card slot (visible as /dev/mmcblk0).
+
+1. Create a blank SD card image file.  This example shows a 256MB SD
+   card:
+
+   $ fallocate -l 256M onie-sd.img
+
+2. Create two blank 64MB NOR flash images:
+
+   $ fallocate -l 64M onie-nor0.img
+   $ fallocate -l 64M onie-nor1.img
+
+In the next steps you will "fill in" the blank onie-nor0.img file with
+valid data.  When completed, the contents of onie-nor0.img looks like:
+
+  0x00000000 - 0x0007FFFF: 512K U-Boot Image (2 sectors)
+  0x00080000 - 0x000BFFFF: 256K U-Boot Environment (1 sector)
+  0x000C0000 - 0x000FFFFF: 256K EEPROM data (1 sector)
+  0x00100000 - 0x006FFFFF: 6MB ONIE kernel + initramfs
+
+3. Copy the ONIE u-boot and ONIE kernel images into the
+   ``onie-nor0.img`` file:
+
+   $ dd if=onie-qemu_armv7a-r0.bin.uboot+env of=onie-nor0.img conv=notrunc bs=256k
+   $ dd if=onie-qemu_armv7a-r0.bin           of=onie-nor0.img conv=notrunc bs=256k seek=4
+
+This ONIE platform supports "Board EEPROM Data" in one of the NOR
+flash sectors.  Using this feature you can experiment with the
+"sys_eeprom" command from the U-Boot prompt.
+
+The qemu_armv7a machine directory contains a ready made board EEPROM
+flash sector you can use.  The decoded contents of the EEPROM looks
+like:
+
+  VExpress-ONIE# sys_eeprom
+  TlvInfo Header:
+     Id String:    TlvInfo
+     Version:      1
+     Total Length: 58
+  TLV Name             Code Len Value
+  -------------------- ---- --- -----
+  Product Name         0x21  22 ARM VExpress ONIE QEMU
+  Serial Number        0x23  14 FAKE-SN-123456
+  Base MAC Address     0x24   6 52:54:00:12:34:58
+  MAC Addresses        0x2A   2 1
+  CRC-32               0xFE   4 0x911B1915
+  Checksum is valid.
+
+This EEPROM image was created using the following commands from U-Boot:
+
+  VExpress-ONIE# sys_eeprom set 0x21 "ARM VExpress ONIE QEMU"
+  VExpress-ONIE# sys_eeprom set 0x23 "FAKE-SN-123456"
+  VExpress-ONIE# sys_eeprom set 0x24 52:54:00:12:34:58
+  VExpress-ONIE# sys_eeprom set 0x2a 1
+  VExpress-ONIE# sys_eeprom write
+
+4. Add the EEPROM data to the NOR flash:
+
+  $ dd if=onie-qemu-eeprom.dat of=onie-nor0.img conv=notrunc bs=256k seek=3
+
+Launching the Virtual Machine
+-----------------------------
+
+Use the provided script ``launch-qemu.sh`` to start the virtual
+machine.  Be sure to edit it and update the path to the installed
+qemu bin directory:
+
+  usage: <disk_img> <nor0_img> <nor1_img>
+
+  $ launch-qemu.sh onie-sd.img onie-nor0.img onie-nor1.img
+
+The serial console is redirected to telnet on localhost port 5555.
+Connect to the VM like this:
+
+  $ telnet localhost 5555
+  Connected to localhost.
+  Escape character is '^]'.
+   
+   
+  U-Boot 2013.01.01-g77829ac (Oct 30 2014 - 14:18:37) - ONIE arch-arm-201410301418
+   
+  DRAM:  1 GiB
+  WARNING: Caches not enabled
+  Flash: 128 MiB
+  MMC:   MMC: 0
+  In:    serial
+  Out:   serial
+  Err:   serial
+  EEPROM: TlvInfo v1 len=58
+  Net:   smc911x-0
+  Warning: smc911x-0 MAC addresses don't match:
+  Address in SROM is         52:54:00:12:34:56
+  Address in environment is  52:54:00:12:34:58
+   
+  Hit any key to stop autoboot:  0 
+  VExpress-ONIE# 
+
+From here you can type "run onie_rescue" and the regular ONIE
+experience begins.
+
+Note: The QEMU emulation does not support all of the VExpress
+hardware.  With that in mind the following kernel boot messages can be
+ignored and have no effect:
+
+  GIC CPU mask not found - kernel will fail to boot.
+  GIC CPU mask not found - kernel will fail to boot.
+  of_amba_device_create(): amba_device_add() failed (-19) for /memory-controller@100e0000
+  of_amba_device_create(): amba_device_add() failed (-19) for /memory-controller@100e1000
+  of_amba_device_create(): amba_device_add() failed (-19) for /watchdog@100e5000
+  of_amba_device_create(): amba_device_add() failed (-19) for /smb/motherboard/iofpga@7,00000000/sysctl@01000
+  of_amba_device_create(): amba_device_add() failed (-19) for /smb/motherboard/iofpga@7,00000000/wdt@0f000
+
+Supported Features
+==================
+
+- Setting U-Boot environment variables from U-Boot or ONIE
+- Setting EEPROM contents from U-Boot 'sys_eeprom' command
+- Setting EEPROM contents from ONIE 'onie-syseeprom' command
+- Installing the demo OS using 'onie-nos-install'
+- Upgrading ONIE using 'onie-self-update'
+
+Missing Features
+================
+
+This virtual machine should be considered a proof of concept for ARM
+platforms, demonstrating the tool chain and kernel function properly.
+
+This virtual machine should *not* be considered as a model upon which
+to base physical ONIE on ARM implementations.  The properties of a
+specific board could be quite different than what is demonstrated
+here.  For example modern ARM based machines tend to use NAND flash
+instead of NOR.

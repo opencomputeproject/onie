@@ -1,8 +1,8 @@
 #-------------------------------------------------------------------------------
 #>
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014-2015 Carlos Cardenas <carlos@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #
@@ -133,6 +133,12 @@ MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
 MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
+# Do not pass the MACHINE variable to sub-makes or to the environment.
+# Various sub-projects also define and use a variable called MACHINE
+# for a completely different purpose.
+unexport MACHINE
+MAKEOVERRIDES := $(filter-out MACHINE=%,$(MAKEOVERRIDES))
+
 #-------------------------------------------------------------------------------
 #
 #  machine build tree
@@ -163,11 +169,24 @@ endif
 
 PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
 
+ifeq ($(UBOOT_ENABLE),yes)
+	ROOTFS_ARCH = u-boot-arch
+else
+	ROOTFS_ARCH = $(ONIE_ARCH)
+endif
+
 # Verify partition type
 ifneq ($(filter-out gpt msdos, $(PARTITION_TYPE)),)
   $(warning Unsupported partition type: $(PARTITION_TYPE))
   $(error Supported partition types: gpt, msdos)
 endif
+
+# Switch ASIC vendor, should be set in machine.make
+SWITCH_ASIC_VENDOR ?= unknown
+
+# Should ONIE skip programming the Ethernet management interface MAC
+# addresses?  Can be set to "yes" in machine.make.
+SKIP_ETHMGMT_MACS ?= no
 
 TREE_STAMP  = $(STAMPDIR)/tree
 tree-stamp: $(TREE_STAMP)
@@ -274,9 +293,6 @@ include make/kernel-download.make
 include make/uclibc-download.make
 include make/xtools.make
 include make/sysroot.make
-ifeq ($(SYSLINUX_ENABLE),yes)
-include make/syslinux.make
-endif
 include make/kernel.make
 ifeq ($(UBOOT_ENABLE),yes)
   include make/u-boot.make
@@ -303,6 +319,10 @@ endif
 ifeq ($(GRUB_ENABLE),yes)
   include make/grub.make
 endif
+ifeq ($(UEFI_ENABLE),yes)
+  include make/efivar.make
+  include make/efibootmgr.make
+endif
 ifeq ($(I2CTOOLS_ENABLE),yes)
   include make/i2ctools.make
 endif
@@ -315,8 +335,30 @@ endif
 ifeq ($(MTREE_ENABLE),yes)
   include make/mtree.make
 endif
+ifeq ($(ACPI_ENABLE),yes)
+  include make/acpica-tools.make
+endif
+ifeq ($(DOSFSTOOLS_ENABLE),yes)
+  include make/dosfstools.make
+endif
+ifeq ($(KEXEC_ENABLE),yes)
+  include make/kexec-tools.make
+endif
+ifeq ($(FLASHROM_ENABLE),yes)
+  include make/pciutils.make
+  include make/flashrom.make
+endif
+ifeq ($(IPMITOOL_ENABLE),yes)
+  include make/ipmitool.make
+endif
 include make/images.make
 include make/demo.make
+
+# By default do not enable building firmware updates
+FIRMWARE_UPDATE_ENABLE ?= no
+ifeq ($(FIRMWARE_UPDATE_ENABLE),yes)
+  include make/firmware-update.make
+endif
 
 #-------------------------------------------------------------------------------
 #
@@ -371,15 +413,16 @@ machine-prefix:
 	$(Q) echo $(MACHINE_PREFIX)
 
 # Install required build packages for a x86_64 debian based build host
-DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools \
-				  gperf device-tree-compiler python-all-dev genisoimage \
-				  autoconf automake bison flex texinfo libtool \
-				  realpath gawk libncurses5 libncurses5-dev bc
+DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
+				  gperf device-tree-compiler python-all-dev xorriso \
+				  autoconf automake bison flex texinfo libtool libtool-bin \
+				  realpath gawk libncurses5 libncurses5-dev bc \
+				  dosfstools mtools
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update
-	$(Q) sudo apt-get install $(DEBIAN_BUILD_HOST_PACKAGES)
+	$(Q) sudo apt-get install -y $(DEBIAN_BUILD_HOST_PACKAGES)
 
 PHONY += test-onie
 SITE_CONFIG ?= $(TESTDIR)/site.conf

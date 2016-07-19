@@ -1,6 +1,7 @@
 # KVM x86_64 Virtual Machin
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
@@ -23,6 +24,14 @@ I2CTOOLS_ENABLE = yes
 PARTED_ENABLE = yes
 
 PARTITION_TYPE = gpt
+
+# Set Linux kernel version
+LINUX_VERSION		= 3.2
+LINUX_MINOR_VERSION	= 69
+
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:

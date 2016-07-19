@@ -1,0 +1,401 @@
+From 4641da2adb100ee6bce4a83e7620f4f13ae8743a Mon Sep 17 00:00:00 2001
+From: Emil Medve <Emilian.Medve@Freescale.com>
+Date: Tue, 2 Dec 2014 08:59:57 -0600
+Subject: [PATCH 43/53] powerpc/mpc85xx: Add DPAA Ethernet QMan support to the
+ device tree(s)
+
+Signed-off-by: Emil Medve <Emilian.Medve@Freescale.com>
+---
+ arch/powerpc/boot/dts/b4qds.dtsi               |  1 +
+ arch/powerpc/boot/dts/fsl/qoriq-dpaa-res1.dtsi | 77 ++++++++++++++++++++++++++
+ arch/powerpc/boot/dts/fsl/qoriq-dpaa-res2.dtsi | 56 +++++++++++++++++++
+ arch/powerpc/boot/dts/fsl/qoriq-dpaa-res3.dtsi | 77 ++++++++++++++++++++++++++
+ arch/powerpc/boot/dts/kmcoge4.dts              |  1 +
+ arch/powerpc/boot/dts/oca4080.dts              |  1 +
+ arch/powerpc/boot/dts/p1023rdb.dts             |  1 +
+ arch/powerpc/boot/dts/p2041rdb.dts             |  1 +
+ arch/powerpc/boot/dts/p3041ds.dts              |  1 +
+ arch/powerpc/boot/dts/p4080ds.dts              |  1 +
+ arch/powerpc/boot/dts/p5020ds.dts              |  1 +
+ arch/powerpc/boot/dts/p5040ds.dts              |  1 +
+ arch/powerpc/boot/dts/t104xqds.dtsi            |  2 +
+ arch/powerpc/boot/dts/t104xrdb.dtsi            |  2 +
+ arch/powerpc/boot/dts/t208xqds.dtsi            |  2 +
+ arch/powerpc/boot/dts/t208xrdb.dtsi            |  2 +
+ arch/powerpc/boot/dts/t4240qds.dts             |  1 +
+ arch/powerpc/boot/dts/t4240rdb.dts             |  1 +
+ 18 files changed, 229 insertions(+)
+ create mode 100644 arch/powerpc/boot/dts/fsl/qoriq-dpaa-res1.dtsi
+ create mode 100644 arch/powerpc/boot/dts/fsl/qoriq-dpaa-res2.dtsi
+ create mode 100644 arch/powerpc/boot/dts/fsl/qoriq-dpaa-res3.dtsi
+
+diff --git a/arch/powerpc/boot/dts/b4qds.dtsi b/arch/powerpc/boot/dts/b4qds.dtsi
+index af49456..f485db2 100644
+--- a/arch/powerpc/boot/dts/b4qds.dtsi
++++ b/arch/powerpc/boot/dts/b4qds.dtsi
+@@ -277,3 +277,4 @@
+ };
+ 
+ /include/ "fsl/b4si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res3.dtsi"
+diff --git a/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res1.dtsi b/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res1.dtsi
+new file mode 100644
+index 0000000..24d83e0
+--- /dev/null
++++ b/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res1.dtsi
+@@ -0,0 +1,77 @@
++/*
++ * QorIQ DPAA resources device tree stub [ FQIDs, BPIDs ]
++ *
++ * Copyright 2011-2012 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/* These stubs are required to alloc qbman drivers to determine what ranges of
++ * resources are available for dynamic allocation, primarily because there are
++ * some legacy "a priori" assumptions in certain subsystems (eg. networking)
++ * that certain resources are reserved for their use. When those drivers (and in
++ * some cases, their corresponding device-tree nodes) are updated to dynamically
++ * allocate their resources, then *all* resources can be managed by the
++ * allocators and there may be no further need to define these stubs.
++ *
++ * A couple of qualifiers to the above statement though:
++ *
++ * - Some resource ranges are hardware-specific, rather than being defined by
++ *   software memory allocation choices. Eg. the number of available BPIDs is
++ *   baked into silicon and so will probably always need to be expressed in the
++ *   device-tree, though in that case it will express all BPIDs, not just those
++ *   available for dynamic allocation.
++ *
++ * - Even for memory-backed resources that are software determined (FQIDs), this
++ *   information may only be configured and available on the control-plane
++ *   partition that manages the device, so in AMP or hypervised scenarios there
++ *   may still be need to a way to provide allocation ranges. Ie. for O/S
++ *   instances that don't know how many resources are available to hardware, and
++ *   possibly even for O/S instances that do know how many are available but
++ *   that should not "own" all of them.
++ */
++
++&qportals {
++	qman-fqids@0 {
++		compatible = "fsl,fqid-range";
++		fsl,fqid-range = <256 256>;
++	};
++	qman-fqids@1 {
++		compatible = "fsl,fqid-range";
++		fsl,fqid-range = <32768 32768>;
++	};
++	qman-pools@0 {
++		compatible = "fsl,pool-channel-range";
++		fsl,pool-channel-range = <0x21 0xf>;
++	};
++	qman-cgrids@0 {
++		compatible = "fsl,cgrid-range";
++		fsl,cgrid-range = <0 256>;
++	};
++};
+diff --git a/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res2.dtsi b/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res2.dtsi
+new file mode 100644
+index 0000000..9280f60
+--- /dev/null
++++ b/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res2.dtsi
+@@ -0,0 +1,56 @@
++/*
++ * QorIQ DPAA resources device tree stub [ FQIDs, BPIDs ]
++ *
++ * Copyright 2011-2012 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/* The comments in qoriq-dpaa-res1.dtsi apply here too so will not be repeated.
++ * This alternative file is to support p1023 which does not have the same
++ * resource ranges as other SoCs to date. */
++
++&qportals {
++	qman-fqids@0 {
++		compatible = "fsl,fqid-range";
++		fsl,fqid-range = <256 256>;
++	};
++	qman-fqids@1 {
++		compatible = "fsl,fqid-range";
++		fsl,fqid-range = <32768 32768>;
++	};
++	qman-pools@0 {
++		compatible = "fsl,pool-channel-range";
++		fsl,pool-channel-range = <0x21 0x3>;
++	};
++	qman-cgrids@0 {
++		compatible = "fsl,cgrid-range";
++		fsl,cgrid-range = <0 64>;
++	};
++};
+diff --git a/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res3.dtsi b/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res3.dtsi
+new file mode 100644
+index 0000000..e3bda8b
+--- /dev/null
++++ b/arch/powerpc/boot/dts/fsl/qoriq-dpaa-res3.dtsi
+@@ -0,0 +1,77 @@
++/*
++ * QorIQ DPAA resources device tree stub [ FQIDs, BPIDs ]
++ *
++ * Copyright 2011-2012 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/* These stubs are required to alloc qbman drivers to determine what ranges of
++ * resources are available for dynamic allocation, primarily because there are
++ * some legacy "a priori" assumptions in certain subsystems (eg. networking)
++ * that certain resources are reserved for their use. When those drivers (and in
++ * some cases, their corresponding device-tree nodes) are updated to dynamically
++ * allocate their resources, then *all* resources can be managed by the
++ * allocators and there may be no further need to define these stubs.
++ *
++ * A couple of qualifiers to the above statement though:
++ *
++ * - Some resource ranges are hardware-specific, rather than being defined by
++ *   software memory allocation choices. Eg. the number of available BPIDs is
++ *   baked into silicon and so will probably always need to be expressed in the
++ *   device-tree, though in that case it will express all BPIDs, not just those
++ *   available for dynamic allocation.
++ *
++ * - Even for memory-backed resources that are software determined (FQIDs), this
++ *   information may only be configured and available on the control-plane
++ *   partition that manages the device, so in AMP or hypervised scenarios there
++ *   may still be need to a way to provide allocation ranges. Ie. for O/S
++ *   instances that don't know how many resources are available to hardware, and
++ *   possibly even for O/S instances that do know how many are available but
++ *   that should not "own" all of them.
++ */
++
++&qportals {
++	qman-fqids@0 {
++		compatible = "fsl,fqid-range";
++		fsl,fqid-range = <256 512>;
++	};
++	qman-fqids@1 {
++		compatible = "fsl,fqid-range";
++		fsl,fqid-range = <32768 32768>;
++	};
++	qman-pools@0 {
++		compatible = "fsl,pool-channel-range";
++		fsl,pool-channel-range = <0x401 0xf>;
++	};
++	qman-cgrids@0 {
++		compatible = "fsl,cgrid-range";
++		fsl,cgrid-range = <0 256>;
++	};
++};
+diff --git a/arch/powerpc/boot/dts/kmcoge4.dts b/arch/powerpc/boot/dts/kmcoge4.dts
+index 48dab6a..631eea2 100644
+--- a/arch/powerpc/boot/dts/kmcoge4.dts
++++ b/arch/powerpc/boot/dts/kmcoge4.dts
+@@ -177,3 +177,4 @@
+ };
+ 
+ /include/ "fsl/p2041si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res1.dtsi"
+diff --git a/arch/powerpc/boot/dts/oca4080.dts b/arch/powerpc/boot/dts/oca4080.dts
+index 42796c5..9498d7d 100644
+--- a/arch/powerpc/boot/dts/oca4080.dts
++++ b/arch/powerpc/boot/dts/oca4080.dts
+@@ -143,3 +143,4 @@
+ };
+ 
+ /include/ "fsl/p4080si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res1.dtsi"
+diff --git a/arch/powerpc/boot/dts/p1023rdb.dts b/arch/powerpc/boot/dts/p1023rdb.dts
+index d4b111e7..7d6c175 100644
+--- a/arch/powerpc/boot/dts/p1023rdb.dts
++++ b/arch/powerpc/boot/dts/p1023rdb.dts
+@@ -280,3 +280,4 @@
+ };
+ 
+ /include/ "fsl/p1023si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res2.dtsi"
+diff --git a/arch/powerpc/boot/dts/p2041rdb.dts b/arch/powerpc/boot/dts/p2041rdb.dts
+index 33e194c..9fc793e 100644
+--- a/arch/powerpc/boot/dts/p2041rdb.dts
++++ b/arch/powerpc/boot/dts/p2041rdb.dts
+@@ -338,3 +338,4 @@
+ };
+ 
+ /include/ "fsl/p2041si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res1.dtsi"
+diff --git a/arch/powerpc/boot/dts/p3041ds.dts b/arch/powerpc/boot/dts/p3041ds.dts
+index 80af50e..d6a724f 100644
+--- a/arch/powerpc/boot/dts/p3041ds.dts
++++ b/arch/powerpc/boot/dts/p3041ds.dts
+@@ -392,3 +392,4 @@
+ };
+ 
+ /include/ "fsl/p3041si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res1.dtsi"
+diff --git a/arch/powerpc/boot/dts/p4080ds.dts b/arch/powerpc/boot/dts/p4080ds.dts
+index f115909..7f765be 100644
+--- a/arch/powerpc/boot/dts/p4080ds.dts
++++ b/arch/powerpc/boot/dts/p4080ds.dts
+@@ -398,3 +398,4 @@
+ };
+ 
+ /include/ "fsl/p4080si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res1.dtsi"
+diff --git a/arch/powerpc/boot/dts/p5020ds.dts b/arch/powerpc/boot/dts/p5020ds.dts
+index d052721..3bf3ea3 100644
+--- a/arch/powerpc/boot/dts/p5020ds.dts
++++ b/arch/powerpc/boot/dts/p5020ds.dts
+@@ -392,3 +392,4 @@
+ };
+ 
+ /include/ "fsl/p5020si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res1.dtsi"
+diff --git a/arch/powerpc/boot/dts/p5040ds.dts b/arch/powerpc/boot/dts/p5040ds.dts
+index db31483..5f69348 100644
+--- a/arch/powerpc/boot/dts/p5040ds.dts
++++ b/arch/powerpc/boot/dts/p5040ds.dts
+@@ -484,3 +484,4 @@
+ };
+ 
+ /include/ "fsl/p5040si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res1.dtsi"
+diff --git a/arch/powerpc/boot/dts/t104xqds.dtsi b/arch/powerpc/boot/dts/t104xqds.dtsi
+index a02715b..4e9095c 100644
+--- a/arch/powerpc/boot/dts/t104xqds.dtsi
++++ b/arch/powerpc/boot/dts/t104xqds.dtsi
+@@ -367,3 +367,5 @@
+ 		};
+ 	};
+ };
++
++/include/ "fsl/qoriq-dpaa-res3.dtsi"
+diff --git a/arch/powerpc/boot/dts/t104xrdb.dtsi b/arch/powerpc/boot/dts/t104xrdb.dtsi
+index 521a50b..f7bbb03 100644
+--- a/arch/powerpc/boot/dts/t104xrdb.dtsi
++++ b/arch/powerpc/boot/dts/t104xrdb.dtsi
+@@ -218,3 +218,5 @@
+ 		};
+ 	};
+ };
++
++/include/ "fsl/qoriq-dpaa-res3.dtsi"
+diff --git a/arch/powerpc/boot/dts/t208xqds.dtsi b/arch/powerpc/boot/dts/t208xqds.dtsi
+index 869f915..97e0e08 100644
+--- a/arch/powerpc/boot/dts/t208xqds.dtsi
++++ b/arch/powerpc/boot/dts/t208xqds.dtsi
+@@ -275,3 +275,5 @@
+ 		};
+ 	};
+ };
++
++/include/ "fsl/qoriq-dpaa-res3.dtsi"
+diff --git a/arch/powerpc/boot/dts/t208xrdb.dtsi b/arch/powerpc/boot/dts/t208xrdb.dtsi
+index 693d2a8..08d94c0 100644
+--- a/arch/powerpc/boot/dts/t208xrdb.dtsi
++++ b/arch/powerpc/boot/dts/t208xrdb.dtsi
+@@ -209,3 +209,5 @@
+ 		};
+ 	};
+ };
++
++/include/ "fsl/qoriq-dpaa-res3.dtsi"
+diff --git a/arch/powerpc/boot/dts/t4240qds.dts b/arch/powerpc/boot/dts/t4240qds.dts
+index 38e765c..6c402ec 100644
+--- a/arch/powerpc/boot/dts/t4240qds.dts
++++ b/arch/powerpc/boot/dts/t4240qds.dts
+@@ -706,3 +706,4 @@
+ };
+ 
+ /include/ "fsl/t4240si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res3.dtsi"
+diff --git a/arch/powerpc/boot/dts/t4240rdb.dts b/arch/powerpc/boot/dts/t4240rdb.dts
+index 66ddb35..e38ee08 100644
+--- a/arch/powerpc/boot/dts/t4240rdb.dts
++++ b/arch/powerpc/boot/dts/t4240rdb.dts
+@@ -358,3 +358,4 @@
+ };
+ 
+ /include/ "fsl/t4240si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res3.dtsi"
+-- 
+2.1.0.27.g96db324
+

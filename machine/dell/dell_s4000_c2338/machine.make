@@ -2,6 +2,7 @@
 # CPU Module: Intel Atom Rangeley (C2338)
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
@@ -29,6 +30,13 @@ CONSOLE_DEV = 0
 CONSOLE_FLAG = 0
 
 EXTRA_CMDLINE_LINUX = i2c-ismt.bus_speed=100
+
+# Set Linux kernel version
+LINUX_VERSION		= 3.2
+LINUX_MINOR_VERSION	= 69
+
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
 
 #-------------------------------------------------------------------------------
 #

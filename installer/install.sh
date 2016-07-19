@@ -8,7 +8,7 @@
 cd $(dirname $0)
 
 [ -r ./machine.conf ] || {
-    echo "ERROR: ONIE update machine.conf file is missing."
+    echo "ERROR: machine.conf file is missing."
     exit 1
 }
 . ./machine.conf
@@ -19,11 +19,19 @@ parse_arg_arch()
     return 1
 }
 
-[ -r ./install-arch ] || {
-    echo "ERROR: ONIE update install-arch file is missing."
+[ -r ./update-type ] || {
+    echo "ERROR: update-type file is missing."
     exit 1
 }
-. ./install-arch
+. ./update-type
+
+if [ "$update_type" = "onie" ] ; then
+    [ -r ./install-arch ] || {
+        echo "ERROR: install-arch file is missing."
+        exit 1
+    }
+    . ./install-arch
+fi
 
 # get running machine from conf file
 [ -r /etc/machine.conf ] && . /etc/machine.conf
@@ -36,12 +44,12 @@ true ${onie_machine_rev=0}
 # assume it is 0.
 true ${onie_config_version=0}
 
-args="hvfx${args_arch}"
+args="hivfqx${args_arch}"
 
 usage()
 {
     cat <<EOF
-ONIE Installer -- Installs/Updates ONIE
+$update_label Installer -- Installs/Updates $update_label
 
 COMMAND LINE OPTIONS
 
@@ -51,8 +59,14 @@ COMMAND LINE OPTIONS
 	-v
 		Be verbose.  Print what is happening.
 
+	-q
+		Be quiet.  Do not print what is happening.
+
 	-x
 		Extract image to a temporary directory.
+
+	-i
+		Dump image information.
 
 	-f
 		Force ONIE update opteration, bypassing any safety
@@ -64,6 +78,7 @@ EOF
 
 verbose=no
 force=no
+quiet=no
 while getopts "$args" a ; do
     case $a in
         h)
@@ -73,9 +88,19 @@ while getopts "$args" a ; do
         v)
             verbose=yes
             cmd_verbose=-v
+            quiet=no
             ;;
         f)
             force=yes
+            ;;
+        q)
+            quiet=yes
+            verbose=no
+            ;;
+        i)
+            # Dump the image information
+            cat ./machine.conf
+            exit 0
             ;;
         *)
             parse_arg_arch "$a" "$OPTARG" || {
@@ -106,7 +131,7 @@ fail=
 check_machine_image
 
 if [ "$fail" = "yes" ] && [ "$force" = "no" ] ; then
-    echo "ERROR: Machine mismatch"
+    echo "ERROR:$update_label: Machine mismatch"
     echo "Running machine     : ${onie_arch}-${onie_machine}-${onie_machine_rev}"
     echo "Update Image machine: ${image_arch}-${image_machine}-${image_machine_rev}"
     echo "Source URL: $onie_exec_url"
@@ -114,19 +139,25 @@ if [ "$fail" = "yes" ] && [ "$force" = "no" ] ; then
 fi
 
 [ -r onie-update.tar.xz ] || {
-    echo "ERROR: ONIE update tar file is missing."
+    echo "ERROR:$update_label: update tar file is missing."
     exit 1
 }
 
-echo "ONIE: Version       : $image_version"
-echo "ONIE: Architecture  : $image_arch"
-echo "ONIE: Machine       : $image_machine"
-echo "ONIE: Machine Rev   : $image_machine_rev"
-echo "ONIE: Config Version: $image_config_version"
+[ "$quiet" = "no" ] && echo "$update_label: Version       : $image_version"
+[ "$quiet" = "no" ] && echo "$update_label: Architecture  : $image_arch"
+[ "$quiet" = "no" ] && echo "$update_label: Machine       : $image_machine"
+[ "$quiet" = "no" ] && echo "$update_label: Machine Rev   : $image_machine_rev"
+[ "$quiet" = "no" ] && echo "$update_label: Config Version: $image_config_version"
 
 xz -d -c onie-update.tar.xz | tar -xf -
 
-# arch specific ONIE install method
-install_onie "$@"
+# arch specific install method
+install_image "$@"
+ret=$?
+if [ $ret -ne 0 ] ; then
+    echo "ERROR:$update_label: update failed."
+fi
 
 cd /
+
+exit $ret

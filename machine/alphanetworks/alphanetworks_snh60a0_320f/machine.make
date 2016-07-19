@@ -1,6 +1,7 @@
 # Alpha Networks SNH60A0-320F
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
@@ -27,7 +28,6 @@ I2CTOOLS_ENABLE = yes
 
 # Console parameters
 CONSOLE_DEV = 1
-CONSOLE_FLAG = 1
 
 #-------------------------------------------------------------------------------
 #
@@ -37,3 +37,7 @@ CONSOLE_FLAG = 1
 
 LINUX_VERSION		= 3.14
 LINUX_MINOR_VERSION	= 27
+
+# Specify uClibc version
+UCLIBC_VERSION = 0.9.32.1
+
