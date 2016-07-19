@@ -24,7 +24,8 @@ MTDUTILS_STAMP		= $(MTDUTILS_SOURCE_STAMP) \
 			  $(MTDUTILS_BUILD_STAMP) \
 			  $(MTDUTILS_INSTALL_STAMP)
 
-MTDBINS = mkfs.jffs2 mkfs.ubifs ubinize ubiformat ubinfo mtdinfo ubiattach ubimkvol ubidetach ubirmvol
+MTDBINS = mkfs.jffs2 mkfs.ubifs ubinize ubiformat ubinfo mtdinfo 
+UBIBINS = ubiattach ubimkvol ubidetach ubirmvol
 
 PHONY += mtdutils mtdutils-download mtdutils-source mtdutils-build \
 	 mtdutils-install mtdutils-clean mtdutils-download-clean
@@ -80,6 +81,13 @@ $(MTDUTILS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(MTDUTILS_BUILD_STAMP)
                 install
 	$(Q) for file in $(MTDBINS) ; do \
 		cp -av $(DEV_SYSROOT)/usr/sbin/$$file $(SYSROOTDIR)/usr/sbin/ ; \
+	done
+        #if UBI utils from busybox are not installed, use the mtdtools versions
+	$(Q) for file in $(UBIBINS) ; do \
+		if [ ! -f $(SYSROOTDIR)/usr/sbin/$$file ] ; \
+		then \
+			cp -av $(DEV_SYSROOT)/usr/sbin/$$file $(SYSROOTDIR)/usr/sbin/ ; \
+		fi; \
 	done
 	$(Q) touch $@
 
