@@ -117,3 +117,7 @@ vdevs=$(ls -d /sys/block/vd[a-z] 2&> /dev/null) && {
 }
 
 mkdir -p $ONIE_RUN_DIR
+
+#Create initial device nodes that use dynamic major node numbers. e.g ubi
+mdev -s 
+
