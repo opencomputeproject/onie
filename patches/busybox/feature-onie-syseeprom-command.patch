@@ -1,5 +1,11 @@
 Add to support onie-syseeprom command.
 
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2014,2016 david_yang <david_yang@accton.com>
+Copyright (C) 2015 Ellen Wang <ellen@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
 diff --git a/include/24cXX.h b/include/24cXX.h
 new file mode 100644
 index 0000000..c304273
@@ -786,7 +792,7 @@ index 0000000..b448761
 +	}
 +}
 diff --git a/miscutils/Config.src b/miscutils/Config.src
-index 4a1928d..394b703 100644
+index 4a1928d..6036daf 100644
 --- a/miscutils/Config.src
 +++ b/miscutils/Config.src
 @@ -625,4 +625,84 @@ config WATCHDOG
@@ -887,10 +893,10 @@ index a2a860b..13d8cc3 100644
 +lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
 diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
 new file mode 100644
-index 0000000..95a46e1
+index 0000000..5cf6463
 --- /dev/null
 +++ b/miscutils/onie_tlvinfo.c
-@@ -0,0 +1,753 @@
+@@ -0,0 +1,743 @@
 +#include "libbb.h"
 +#include "onie_tlvinfo.h"
 +#include "sys_eeprom.h"
@@ -1268,27 +1274,21 @@ index 0000000..95a46e1
 +    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
 +    tlvinfo_tlv_t    * eeprom_crc;
 +    unsigned int       calc_crc;
++    int                eeprom_index;
 +
-+    // Is the eeprom header valid?
-+    if (!is_valid_tlvinfo_header(eeprom_hdr)) {
-+	return;
-+    }
-+    // Is the last TLV a CRC?
-+    eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
-+					   be16_to_cpu(eeprom_hdr->totallen) -
-+					   (sizeof(tlvinfo_tlv_t) + 4)];
-+    if (eeprom_crc->type != TLV_CODE_CRC_32) {
++    // Discover the CRC TLV
++    if (!tlvinfo_find_tlv(eeprom, TLV_CODE_CRC_32, &eeprom_index)) {
 +	if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) + 4) >
 +	    TLV_TOTAL_LEN_MAX) {
 +	    return;
 +	}
-+	eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
-+					       be16_to_cpu(
-+						   eeprom_hdr->totallen)];
++	eeprom_index = sizeof(tlvinfo_header_t) +
++	    be16_to_cpu(eeprom_hdr->totallen);
 +	eeprom_hdr->totallen = cpu_to_be16(be16_to_cpu(eeprom_hdr->totallen) +
 +					   sizeof(tlvinfo_tlv_t) + 4);
-+	eeprom_crc->type = TLV_CODE_CRC_32;
 +    }
++    eeprom_crc = (tlvinfo_tlv_t *) &eeprom[eeprom_index];
++    eeprom_crc->type = TLV_CODE_CRC_32;
 +    eeprom_crc->length = 4;
 +
 +    // Calculate the checksum
@@ -1443,10 +1443,6 @@ index 0000000..95a46e1
 +    tlvinfo_tlv_t    * eeprom_tlv;
 +    int eeprom_end;
 +
-+    // Make sure the EEPROM contents are valid
-+    if (!is_valid_tlvinfo_header(eeprom_hdr) || !is_checksum_valid(eeprom)) {
-+	return(FALSE);
-+    }
 +    // Search through the TLVs, looking for the first one which matches the
 +    // supplied type code.
 +    *eeprom_index = sizeof(tlvinfo_header_t);
