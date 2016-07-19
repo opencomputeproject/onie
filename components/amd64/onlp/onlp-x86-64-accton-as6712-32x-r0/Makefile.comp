@@ -1,0 +1,53 @@
+# -*- Makefile -*-
+############################################################
+ifndef ONL
+$(error $$ONL is not set)
+endif
+include $(ONL)/make/config.mk
+
+export TOOLCHAIN := x86_64-linux-gnu
+export ARCH := amd64
+
+MODULE := libonlp-x86-64-accton-as6712-32x
+include $(BUILDER)/standardinit.mk
+
+DEPENDMODULES := AIM x86_64_accton_as6712_32x onlplib sff IOF
+DEPENDMODULE_HEADERS := onlp
+
+include $(BUILDER)/dependmodules.mk
+
+SHAREDLIB := libonlp-x86-64-accton-as6712-32x-r0.so
+$(SHAREDLIB)_TARGETS := $(ALL_TARGETS)
+include $(BUILDER)/so.mk
+.DEFAULT_GOAL := $(SHAREDLIB)
+
+GLOBAL_CFLAGS += -DAIM_CONFIG_INCLUDE_MODULES_INIT=1
+GLOBAL_CFLAGS += -DONLPLIB_CONFIG_INCLUDE_I2C=1
+GLOBAL_CFLAGS += -fPIC
+GLOBAL_LINK_LIBS += -lpthread
+
+include $(BUILDER)/targets.mk
+
+
+############################################################
+#
+# Build both the shared library and the onlpdump binary
+#
+############################################################
+.DEFAULT_GOAL=__start__
+
+__start__: $(SHAREDLIB) onlpdump debug
+ONLPDUMP_DIR := $(ONL_SUBMODULE_ONLP_ACCTON)/targets/x86_64_accton_as6712_32x/onlpdump
+DEBUG_DIR :=    $(ONL_SUBMODULE_ONLP_ACCTON)/targets/x86_64_accton_as6712_32x/debug
+
+onlpdump:
+	$(MAKE) -C $(ONLPDUMP_DIR) SUBMODULE_ONLP=$(ONL_SUBMODULE_ONLP) SUBMODULE_INFRA=$(ONL_SUBMODULE_INFRA) SUBMODULE_BIGCODE=$(ONL_SUBMODULE_BIGCODE) TOOLCHAIN=$(TOOLCHAIN) BUILD_DIR=$(ONLPDUMP_DIR)/build/$(TOOLCHAIN)
+	cp $(ONLPDUMP_DIR)/build/$(TOOLCHAIN)/bin/onlpdump .
+
+debug:
+	$(MAKE) -C $(DEBUG_DIR) SUBMODULE_ONLP=$(ONL_SUBMODULE_ONLP) SUBMODULE_INFRA=$(ONL_SUBMODULE_INFRA) SUBMODULE_BIGCODE=$(ONL_SUBMODULE_BIGCODE) TOOLCHAIN=$(TOOLCHAIN) BUILD_DIR=$(DEBUG_DIR)/build/$(TOOLCHAIN)
+	cp $(DEBUG_DIR)/build/$(TOOLCHAIN)/bin/debug .
+
+.PHONY: deb onlpdump
+deb:
+	$(MAKE) -C deb

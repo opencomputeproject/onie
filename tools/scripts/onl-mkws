@@ -1,0 +1,217 @@
+#!/bin/bash
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+
+if [ "${UID}" != 0 ]; then
+    exec sudo $0 "$@"
+fi
+
+case $(uname -m) in
+    i?86) WS_ARCH=i386 ;;
+    x86_64) WS_ARCH=amd64 ;;
+    ppc) WS_ARCH=powerpc ;;
+    *) WS_ARCH= ;;
+esac
+
+EXTRA_SOURCES=
+EXTRA_REPOS=
+EXTRA_CONFIGS=
+APT_CACHE=
+WS_SUITE=wheezy
+MIRROR=mirrors.kernel.org/debian/
+
+while [ "${1#-}" != "$1" ]; do
+    case "$1" in
+        -s|--suite)
+            shift
+            WS_SUITE=$1
+            ;;
+	-a|--arch)
+	    shift
+	    WS_ARCH=$1
+	    ;;
+	-m|--mirror)
+	    shift
+	    MIRROR=$1
+	    ;;
+	--extra-repo)
+	    shift
+	    EXTRA_SOURCES=$(echo ${EXTRA_SOURCES} $1)
+	    EXTRA_REPOS=$(echo ${EXTRA_REPOS} $(head -1 $1 | sed 's/\[\(.*\)\]/\1/'))
+	    ;;
+	--extra-config)
+	    shift
+	    EXTRA_CONFIGS=$(echo ${EXTRA_CONFIGS} $1)
+	    ;;
+	--apt-cache)
+	    shift
+	    APT_CACHE=$(echo ${APT_CACHE} $1)
+	    ;;
+	--nested)
+	    NESTEDOK=1
+	    ;;
+	-e)
+	    shift
+	    array=(${1//=/ })
+	    if [ "${#array[@]}" = "1" ]; then
+		export $1
+	    else
+		echo $1
+		echo "${array[1]}"
+		export ${array[0]}="${array[1]}"
+	    fi
+	    ;;
+	-h|--help)
+	    echo "Usage: $0 [OPTIONS] WS_ROOT" 2>&1
+	    echo
+	    echo "Options:"
+	    echo "  -a|--arch WS_ARCH: set workspace architecture (i386, amd64, powerpc)"
+	    echo "  -m|--mirror MIRROR: set mirror (default: mirrors.kernel.org/debian/)"
+	    echo "  --extra-repo REPO_CONF: append another repo to multistrap config"
+	    echo "  --extra-config CONFIG_SCRIPT: run another config script in workspace"
+	    echo "  --apt-cache URI: use a caching APT repository"
+	    echo "  --nested: allow creating workspace within an existing workspace"
+            echo "  --apt-cache APT_CACHE: prepend the given APT cacher address when fetching packages (example: --apt-cache 127.0.0.1:3142/ )"
+            echo ""
+	    exit 1
+	    ;;
+	*)
+	    echo "Unrecognized option $1" 2>&1
+	    exit 1
+	    ;;
+    esac
+    shift
+done
+
+WS_ROOT=$1
+
+
+if [ ! "${WS_ROOT}" ]; then
+    echo "Missing required WS_ROOT parameter" 2>&1
+    exit 1
+fi
+
+if [ -e "${WS_ROOT}" ]; then
+    echo "${WS_ROOT} already exists" 2>&1
+    exit 1
+fi
+
+if [ -f "/.pandora-ws" ] && [ "${NESTEDOK}" != 1 ]; then
+    echo "Cannot create within an existing workspace without --nested option" 2>&1
+    exit 1
+fi
+
+if ! multistrap -h 2>/dev/null; then
+    echo "multistrap is not installed" 2>&1
+    exit 1
+fi
+
+if [ "${WS_ARCH}" = powerpc ]; then
+    if [ ! -x /usr/bin/qemu-ppc-static ]; then
+	echo "qemu-user-static is missing" 2>&1
+	exit 1
+    fi
+    if [ ! -e /proc/sys/fs/binfmt_misc/qemu-ppc ]; then
+	echo "binfmt-support is missing" 2>&1
+	exit 1
+    fi
+fi
+
+echo "Creating ${WS_ARCH} workspace in ${WS_ROOT}"
+echo "APT Cache: ${APT_CACHE}"
+
+mkdir -p "${WS_ROOT}"
+
+cat >"${WS_ROOT}/.pandora-ws" <<EOF
+WS_ARCH=${WS_ARCH}
+WS_ROOT=${WS_ROOT}
+EOF
+
+CONF=$(mktemp)
+cat >>"${CONF}" <<EOF
+[General]
+arch=${WS_ARCH}
+cleanup=false
+noauth=true
+explicitsuite=false
+unpack=true
+debootstrap=Debian ONL ${EXTRA_REPOS}
+aptsources=Debian ONL
+
+[Debian]
+packages=locales python apt apt-utils procps net-tools iputils-ping less sudo openssh-server iproute resolvconf vim-tiny zile nano lsof mingetty traceroute realpath rsyslog nfs-common netbase bsdmainutils ifupdown psmisc make lldpd snmpd
+source=http://${APT_CACHE}${MIRROR}
+keyring=debian-archive-keyring
+suite=${WS_SUITE}
+omitdebsrc=false
+
+[ONL]
+packages=
+source=http://apt.opennetlinux.org/debian
+suite=unstable
+omitdebsrc=true
+noauth=true # FIXME
+
+EOF
+
+for repo in ${EXTRA_SOURCES}; do
+    cat "${repo}" >>"${CONF}"
+done
+
+export OPENSSL_ppccap=0
+
+multistrap -d "${WS_ROOT}" -f "${CONF}"
+
+rm -f "${CONF}"
+
+# Copy in qemu for running powerpc binaries under emulation. Old
+# versions of qemu are broken in various ways; version
+# 1.4.0+dfsg-1expubuntu3 from Ubuntu is known to work.
+cp /usr/bin/qemu-ppc-static "${WS_ROOT}/usr/bin/"
+
+cat >"${WS_ROOT}/tmp/config.sh" <<"EOF"
+#!/bin/bash -ex
+echo -e "#!/bin/sh\nexit 101" >/usr/sbin/policy-rc.d
+chmod +x /usr/sbin/policy-rc.d
+export DEBIAN_FRONTEND=noninteractive
+export DEBCONF_NONINTERACTIVE_SEEN=true
+echo "127.0.0.1 localhost" >/etc/hosts
+touch /etc/fstab
+echo "localhost" >/etc/hostname
+/var/lib/dpkg/info/dash.preinst install
+echo "en_US.UTF-8 UTF-8" >/etc/locale.gen
+/usr/sbin/locale-gen
+update-locale LANG=en_US.UTF-8
+dpkg --configure -a || true
+dpkg --configure -a # configure any packages that failed the first time
+rm -f /usr/sbin/policy-rc.d
+EOF
+chmod +x "${WS_ROOT}/tmp/config.sh"
+
+mount -t devtmpfs dev "${WS_ROOT}/dev"
+mount -t proc proc "${WS_ROOT}/proc"
+trap 'umount -l "${WS_ROOT}/proc" "${WS_ROOT}/dev"' EXIT
+
+chroot "${WS_ROOT}" /tmp/config.sh || exit 1
+
+for config in ${EXTRA_CONFIGS}; do
+    "${config}" "${WS_ROOT}" || exit 1
+done

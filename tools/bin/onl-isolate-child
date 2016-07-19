@@ -1,0 +1,79 @@
+#!/bin/bash
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+
+shopt -s extglob
+
+source /var/run/isolate$1.conf
+
+# Ubuntu 12.04 moved resolv.conf to /var/run/resolvconf.
+if [ -f /var/run/resolvconf/resolv.conf ]; then
+    TMP_RESOLVCONF=$(mktemp)
+    cp /var/run/resolvconf/resolv.conf "$TMP_RESOLVCONF"
+fi
+
+# Mount container-private filesystems
+mount -n -t proc proc /proc
+mount -n -t sysfs sysfs /sys
+mount -n -t tmpfs none /var/run
+: >/var/run/utmp
+chmod 664 /var/run/utmp
+chgrp utmp /var/run/utmp
+[ -e /var/lock ] && mount -n -t tmpfs none /var/lock
+
+# Enable loopback interface
+ifconfig lo up
+
+# Set the IP address of our end of the veth pair
+ip addr add ${ip1}/31 dev ${dev1}
+ip link set ${dev1} up
+
+# Add default route
+ip route add to 0.0.0.0/0 via ${ip0}
+
+# Start an SSH server
+mkdir -p /var/run/sshd
+/usr/sbin/sshd
+
+# Include (isolatePID) in the shell prompt
+touch /etc/debian_chroot
+x=$(cat /etc/debian_chroot)
+echo "${x:+$x:}${dev1}" >/var/run/debian_chroot
+mount -n --bind /var/run/debian_chroot /etc/debian_chroot
+
+# Make a private copy of /etc/hosts with only localhost
+# mapped to 127.0.0.1, forcing the real hostname to be
+# looked up in DNS
+echo '127.0.0.1 localhost localhost.localdomain' >/var/run/isolate_hosts
+grep -v '^127\.0\.' /etc/hosts >>/var/run/isolate_hosts
+mount -n --bind /var/run/isolate_hosts /etc/hosts
+
+# Make a private copy of /etc/mtab since we're in a
+# mount namespace
+cp /etc/mtab /var/run/isolate_mtab
+mount -n --bind /var/run/isolate_mtab /etc/mtab
+
+# Move the copy of resolv.conf into the child.
+if [ -n "$TMP_RESOLVCONF" ]; then
+    mkdir -p /var/run/resolvconf
+    mv "$TMP_RESOLVCONF" /var/run/resolvconf/resolv.conf
+    chmod a+r /var/run/resolvconf/resolv.conf
+fi

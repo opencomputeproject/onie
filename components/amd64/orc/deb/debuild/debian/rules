@@ -1,0 +1,49 @@
+#!/usr/bin/make -f
+############################################################
+# <bsn.cl fy=2013 v=none>
+# 
+#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+# 
+# 
+# 
+# </bsn.cl>
+############################################################
+
+DEB_DH_INSTALL_SOURCEDIR = debian/tmp
+INSTALL_DIR = $(CURDIR)/$(DEB_DH_INSTALL_SOURCEDIR)
+PACKAGE_NAME = orc
+ORC_BIN := $(ONL)/components/amd64/orc/build/$(DEB_HOST_GNU_TYPE)
+ORC_SRC := $(ONL)/submodules/bigcode/modules/orc/
+ORC_DOC := $(INSTALL_DIR)/usr/share/doc/orc
+ORC_DRV := $(INSTALL_DIR)/usr/share/orc/drivers
+DRIVERS=veth debug
+
+
+DOCS=AUTHORS  DESIGN  INSTALL  Makefile NOTES  OPERATIONS  README  TODO 
+
+
+%:
+	dh $@
+
+build-arch:
+	dh build-arch
+
+clean:
+	dh clean
+
+override_dh_installinit:
+	dh_installinit --name=orc
+
+override_dh_auto_install:
+	mkdir -p $(INSTALL_DIR)/usr/sbin $(ORC_DOC) $(ORC_DRV)
+	# $(INSTALL_DIR)/etc/init   # add init script later
+	cp $(ORC_BIN)/bin/orced $(INSTALL_DIR)/usr/sbin/orc
+	for f in $(DOCS); do cp $(ORC_SRC)/$$f $(ORC_DOC)/ ; done
+	for f in $(DRIVERS) ; do cp $(ORC_BIN)/bin/$${f}.so $(ORC_DRV)/ ; done
+	mkdir -p $(INSTALL_DIR)/etc/init
+	cp $(ORC_SRC)/orc.upstart $(INSTALL_DIR)/etc/init/orc.init
+	
+override_dh_strip:
+	dh_strip --dbg-package=orc
+override_dh_shlibdeps:
+	@echo "warning: ignoring shlibdeps due to libonlp.so dependency."   # hack!

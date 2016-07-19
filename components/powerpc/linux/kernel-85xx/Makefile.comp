@@ -1,0 +1,90 @@
+# -*- Makefile -*-
+############################################################
+# <bsn.cl fy=2013 v=onl>
+#
+#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+#
+#        http://www.eclipse.org/legal/epl-v10.html
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+#
+# </bsn.cl>
+############################################################
+#
+# Powerpc Linux for 85xx
+#
+############################################################
+BUILD_POWERPC_LINUX_85XX := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
+include $(ONL)/make/config.mk
+
+all: kernel-85xx linux-85xx-headers dtbs
+
+kernel-85xx: $(BUILD_POWERPC_LINUX_85XX)/kernel-85xx
+linux-85xx-headers: $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers
+
+KERNEL_85XX := $(BUILD_POWERPC_LINUX_85XX)/kernel-85xx
+KERNEL_85XX_HEADERS := $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers
+
+DEFCONFIG=onl_mpc85xx_defconfig
+
+$(BUILD_POWERPC_LINUX_85XX)/kernel-85xx: $(ONL_SUBMODULE_LINUX_3_9_6)/arch/powerpc/configs/85xx/$(DEFCONFIG)
+	mkdir -p $(BUILD_POWERPC_LINUX_85XX)/linux-build-85xx
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_9_6) 85xx/$(DEFCONFIG) ARCH=powerpc O=$(BUILD_POWERPC_LINUX_85XX)/linux-build-85xx
+	PATH=$$PATH:$(ONL)/tools $(MAKE) -C $(ONL_SUBMODULE_LINUX_3_9_6) uImage ARCH=powerpc O=$(BUILD_POWERPC_LINUX_85XX)/linux-build-85xx
+	powerpc-linux-gnu-strip -o $(BUILD_POWERPC_LINUX_85XX)/kernel-85xx $(BUILD_POWERPC_LINUX_85XX)/linux-build-85xx/vmlinux
+	cp $(BUILD_POWERPC_LINUX_85XX)/linux-build-85xx/vmlinux.bin.gz $(BUILD_POWERPC_LINUX_85XX)/kernel-85xx.bin.gz
+
+$(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers/.done: $(ONL_SUBMODULE_LINUX_3_9_6)/arch/powerpc/configs/85xx/$(DEFCONFIG)
+	mkdir -p $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers
+	cp -a $(ONL_SUBMODULE_LINUX_3_9_6)/include $(ONL_SUBMODULE_LINUX_3_9_6)/arch/powerpc/include $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_9_6) ARCH=powerpc O=$(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers 85xx/$(DEFCONFIG)
+	$(MAKE) -C $(ONL_SUBMODULE_LINUX_3_9_6) ARCH=powerpc O=$(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers headers_install modules_prepare arch/powerpc/lib/crtsavres.o
+	cp -R $(ONL_SUBMODULE_LINUX_3_9_6)/scripts $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers
+	cp -R $(ONL_SUBMODULE_LINUX_3_9_6)/Makefile $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers
+	cp -R $(ONL_SUBMODULE_LINUX_3_9_6)/arch/powerpc/Makefile $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers/arch/powerpc
+	touch $@
+
+$(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers: $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-headers/.done
+
+# These are the dtb files built for this kernel configuration:
+DTS_LIST := powerpc-quanta-lb9-r0 powerpc-quanta-lb9a-r0 powerpc-quanta-ly2-r0 \
+	    powerpc-as5610-52x powerpc-as5600-52x powerpc-as4600-54t powerpc-dni-7448-r0
+
+DTB_LIST := $(foreach dts,$(DTS_LIST),$(BUILD_POWERPC_LINUX_85XX)/linux-85xx-dtbs/$(dts).dtb)
+
+$(BUILD_POWERPC_LINUX_85XX)/linux-85xx-dtbs/%.dtb: $(ONL_SUBMODULE_LINUX_3_9_6)/arch/powerpc/boot/dts/%.dts kernel-85xx | $(shell mkdir -p $(BUILD_POWERPC_LINUX_85XX)/linux-85xx-dtbs)
+	linux-build-85xx/scripts/dtc/dtc -I dts -O dtb -o $@ $<
+
+dtbs: $(DTB_LIST)
+
+CLEANLIST := kernel-85xx  kernel-85xx.bin.gz  linux-85xx-dtbs  linux-85xx-headers  linux-build-85xx
+
+clean:
+	rm -rf $(CLEANLIST)
+
+.PHONY: deb
+
+deb:
+	$(MAKE) -C deb
+
+
+
+
+
+
+
+
+
+
+
+

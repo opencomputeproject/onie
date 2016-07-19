@@ -1,0 +1,52 @@
+#!/bin/bash
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+#
+# Platform: Quanta LY2
+#
+# Linux assigns I2C bus numbers as it enumerates the I2C master/mux
+# devices in the device tree breadth-first.  The bus numbers below may
+# change if the device tree changes.
+#
+# XXX roth -- does not reflect the device ordering the DTS file!
+#
+############################################################
+
+base=/sys/devices/soc.0/ffe03100.i2c/i2c-1
+first=`/bin/ls -1d $base/i2c-* | /usr/bin/head -1`
+first=${first##*/}
+first=${first#i2c-}
+
+for port in $(seq 1 1 48); do
+  mux=$[ ( $port - 1 ) / 16 ]
+  dev=$[ ( ( $port - 1 ) & 0xF) ^ 0x1 ]
+  gdev=$[ $first + 4 + ( $mux * 16 ) + $dev ]
+  eep=$(printf "%s/i2c-%d/%d-0050/eeprom" $base $gdev $gdev)
+  echo "SFP port $port:"
+  hexdump -C $eep 2>/dev/null
+done
+
+for port in $(seq 49 1 52); do
+  gdev=$[ $port - 49 + $first ]
+  eep=$(printf "%s/i2c-%d/%d-0050/eeprom" $base $gdev $gdev)
+  echo "QSFP port $port:"
+  hexdump -C $eep 2>/dev/null
+done

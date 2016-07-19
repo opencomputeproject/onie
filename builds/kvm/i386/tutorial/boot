@@ -1,0 +1,198 @@
+#!/bin/sh
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 BigSwitch Networks, Inc.        
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+#
+# boot
+#
+# Handle booting SWI image locators.
+#
+############################################################
+
+set -e
+unset nokexec testonly help
+
+kernel=$(cat /etc/onl_kernel)
+initrd=$(cat /etc/onl_initrd)
+rootfs=$(cat /etc/onl_rootfs)
+
+if [ -f /etc/onl_nokexec ]; then
+    # Platforms that should not kexec their kernel by default.
+    nokexec=1
+fi
+
+while [ "$1" ]; do
+    case "$1" in
+        -h|--help)     help=1 ;;
+        -t|--testonly) testonly=1 ;;
+        --nokexec)     nokexec=1 ;;
+        --kexec)       unset nokexec ;; # Overrides platform /etc/onl_nokexec setting
+        --kernel)      shift; kernel="$1" ;;
+        --initrd)      shift; initrd="$1" ;;
+        --rootfs)      shift; rootfs="$1" ;;
+        *)             break ;;
+    esac
+    shift
+done
+SWI=$1
+
+if [ ! "${SWI}" ] || [ "${help}" ]; then
+    cat <<EOF
+Usage: $0 [-h|--help] [-t|--testonly] [--nokexec] [--kernel KERNEL]
+        [--initrd INITRD] [--rootfs ROOTFS] SWI
+
+    Loads and boots a software image (SWI).  The load method depends on the
+    format of the SWI argument:
+
+    DEV:PATH
+    /mnt/DEV/PATH
+        Loads a SWI file from local storage device DEV (e.g. flash).
+    http://[USER:PASSWORD@]SERVER[:PORT]/PATH
+    ftp://[USER:PASSWORD@]SERVER[:PORT]/PATH
+    ssh|scp://USER:PASSWORD[:PORT]@SERVER/PATH
+    tftp://SERVER[:PORT]/PATH
+        Downloads a SWI file via HTTP, FTP, SSH or TFTP.
+    nfs://SERVER[:PORT]/PATH
+        If PATH is a file, mounts the parent directory via NFS and loads the
+        SWI file.  If PATH is a directory, mounts the directory and loads
+        the SWI without unpacking (PATH must end with / and the directory
+        must contain an unpacked SWI).
+
+EOF
+    exit 1
+fi
+
+shift
+append="$@"
+[ ! "${testonly}" ] || set -x
+
+unset swipath host port dir file dev user password
+case "${SWI}" in
+    http:*|ftp:*)
+	if [ ! "${nokexec}" ] || [ ! -f /tmp/swi ]; then
+            echo "Downloading ${SWI}"
+            wget -O /tmp/swi0 "${SWI}"
+	    mv /tmp/swi0 /tmp/swi
+	fi
+        swipath=/tmp/swi
+        ;;
+    scp:*|ssh:*)
+	if [ ! "${nokexec}" ] || [ ! -f /tmp/swi ]; then
+	    echo "Downloading ${SWI}"
+	    eval $(echo "${SWI}" | sed -n 's#\(scp\|ssh\)://\([^:]*\):\([^@]*\)@\([^/:]*\)\(:\([0-9]\+\)\)\?/\(.*\)#user="\2" password="\3" host="\4" port="\6" file="\7"#p')
+	    [ "${port}" ] || port=22
+	    DROPBEAR_PASSWORD="${password}" dbclient -y -p ${port} -l "${user}" "${host}" "cat /${file}" >/tmp/swi0
+	    mv /tmp/swi0 /tmp/swi
+	fi
+	swipath=/tmp/swi
+	;;
+    tftp:*)
+	if [ ! "${nokexec}" ] || [ ! -f /tmp/swi ]; then
+            echo "Downloading ${SWI}"
+            eval $(echo "${SWI}" | sed -n 's#tftp://\([^/:]*\|\[[^]/]*\]\)\(:\([0-9]\+\)\)\?/\(.*\)#host="\1" port="\3" file="\4"#p')
+            tftp -g -r "${file}" -l /tmp/swi0 "${host}" ${port}
+	    mv /tmp/swi0 /tmp/swi
+	fi
+        swipath=/tmp/swi
+        ;;
+    nfs:*)
+        eval $(echo "${SWI}" | sed -n 's#nfs://\([^/:]*\|\[[^]/]*\]\)\(:\([0-9]\+\)\)\?\(.*\)/\(.*\)#host="\1" port="\3" dir="\4" file="\5"#p')
+        [ "${dir}" ] || dir=/
+        [ "${port}" ] || port=0
+        echo "Mounting nfs://${host}:${port}${dir}"
+        umount -l /tmp/nfs 2>/dev/null || :
+        mkdir -p /tmp/nfs
+        mount -t nfs -o "nolock,port=${port}" "${host}:${dir}" /tmp/nfs
+        if [ "${file}" ]; then
+            swipath="/tmp/nfs/${file}"
+            [ ! -d ${swipath} ] || { echo "${SWI} must be a SWI file (use ${SWI}/ for a SWI directory)"; exit 1; }
+        else
+            swipath=/tmp/nfs
+            [ -d "${swipath}/${rootfs}" ] || { echo "${SWI}${rootfs} must be an unpacked rootfs"; exit 1; }
+            mount -t nfs -o "nolock,port=${port}" "${host}:${dir}/${rootfs}" "${swipath}/${rootfs}"
+        fi
+        ;;
+# RobS hack for tutorial
+    file:*)
+        parsefile='s#\(\([^:/]*\):/\?\|/mnt/\([^/]*\)/\)\?\(.*\)#dev="\2\3" file="\4"#p'
+        eval $(echo "${SWI}" | sed -n "${parsefile}")
+	swipath=$file
+        [ -f "${swipath}" ] || { echo "${SWI} not found or not a file"; exit 1; }
+	;;
+# End of Hack
+    *)
+        # Parse dev:file or dev:/file or /mnt/dev/file
+        parselocal='s#\(\([^:/]*\):/\?\|/mnt/\([^/]*\)/\)\?\(.*\)#dev="\2\3" file="\4"#p'
+        eval $(echo "${SWI}" | sed -n "${parselocal}")
+        if [ "${dev}" ] ; then
+            # Wait for /mnt/dev to show up
+            waitforblockdev "/mnt/${dev}"
+        else
+            # Assume file is relative, parse absolutified file
+            eval $(realpath "${file}" | sed -n "${parselocal}")
+            SWI="${dev}:${file}"
+        fi
+        swipath="/mnt/${dev}/${file}"
+        [ -f "${swipath}" ] || { echo "${SWI} not found or not a file"; exit 1; }
+        ;;
+esac
+
+rm -f /tmp/kernel /tmp/initrd0
+if [ -d "${swipath}" ]; then
+    cp "${swipath}/${kernel}" /tmp/kernel
+    cp "${swipath}/${initrd}" /tmp/initrd0
+else
+    unzip -pq "${swipath}" "${kernel}" >/tmp/kernel
+    unzip -pq "${swipath}" "${initrd}" >/tmp/initrd0
+fi
+
+echo "${append}" >/tmp/append
+echo "onl_platform=$(cat /etc/onl_platform)" >>/tmp/append
+echo "onl_stage1" >>/tmp/append
+cat /etc/cmdline >>/tmp/append
+
+echo "SWI=${SWI}" >/etc/boot-config
+echo "CONSOLESPEED=$(stty speed)" >>/etc/boot-config
+PASSWORD=$(cat /etc/PASSWORD)
+[ ! "${PASSWORD}" ] || echo "PASSWORD=${PASSWORD}" >>/etc/boot-config
+if [ "${swipath#/tmp/nfs}" != "${swipath}" ]; then
+    ifget
+    cat /etc/NET >>/etc/boot-config
+fi
+dd if=/tmp/initrd0 of=/tmp/initrd bs=1024 conv=sync 2>/dev/null
+echo etc/boot-config | ( cd /; cpio -H newc -o ) >>/tmp/initrd
+
+if [ "${nokexec}" ]; then
+    . /lib/boot1
+else
+    if [ "${swipath}" = /tmp/swi ]; then
+	mv /tmp/initrd /tmp/initrd0
+	dd if=/tmp/initrd0 of=/tmp/initrd bs=1024 conv=sync 2>/dev/null
+	echo tmp/swi | ( cd /; cpio -H newc -o ) >>/tmp/initrd
+    fi
+    rm -f /tmp/boot0
+    cp /lib/boot0 /tmp/boot0
+    # If swi contains a boot0 script, use it; otherwise use /lib/boot0
+    unzip -oq "${swipath}" boot0 -d /tmp 2>/dev/null || :
+    . /tmp/boot0
+fi
+
+echo "Boot failed"
+exit 1

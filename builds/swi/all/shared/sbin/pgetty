@@ -1,0 +1,24 @@
+#!/bin/sh
+
+t=/dev/$1
+# if $1 is not set, use linux cmdline console as default tty
+[ -z "$1" ] && {
+	tty=$(/bin/sed 's/.*console=\([^,]*\).*/\1/' /proc/cmdline)
+	>&2 echo Connecting tty=$tty with $0
+	t=/dev/$tty
+}
+
+# Reset the console tty to standard settings
+/bin/stty -F $t sane pass8 -ixon -cstopb clocal
+
+# Kill any processes with the console tty open before starting a new
+# login session (login tries to do this, but vhangup() spares processes
+# that ignore SIGHUP)
+#/usr/bin/lsof -p ^$$ -t $t 0<&- 1>&- 2>&- | /usr/bin/xargs -r /bin/kill -9
+
+# Flush tty input and output queues
+#/sbin/flushtty <$t
+
+# We use mingetty instead of agetty, as the latter messes up the tty
+# settings if it receives junk characters at the wrong speed
+exec /sbin/mingetty --noclear $t
