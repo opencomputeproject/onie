@@ -116,6 +116,14 @@ vdevs=$(ls -d /sys/block/vd[a-z] 2&> /dev/null) && {
     done
 }
 
+# create misc device btrfs-control, if enabled
+btrfs_minor=$(grep btrfs-control /proc/misc | awk '{print $1}')
+[ -n "$btrfs_minor" ] && {
+    mknod /dev/btrfs-control c 10 $btrfs_minor || {
+        log_failure_msg "Problems creating /dev/btrfs-control (10, $btrfs_minor)"
+    }
+}
+
 mkdir -p $ONIE_RUN_DIR
 
 #Create initial device nodes that use dynamic major node numbers. e.g ubi

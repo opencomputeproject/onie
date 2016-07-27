@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -56,7 +56,7 @@ MTDUTILS_NEW_FILES = $(shell test -d $(MTDUTILS_DIR) && test -f $(MTDUTILS_BUILD
 endif
 
 mtdutils-build: $(MTDUTILS_BUILD_STAMP)
-$(MTDUTILS_BUILD_STAMP): $(MTDUTILS_NEW_FILES) $(E2FSPROGS_INSTALL_STAMP) \
+$(MTDUTILS_BUILD_STAMP): $(MTDUTILS_NEW_FILES) $(UTILLINUX_INSTALL_STAMP) \
 			 $(LZO_INSTALL_STAMP) $(ZLIB_INSTALL_STAMP) \
 			 $(MTDUTILS_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)

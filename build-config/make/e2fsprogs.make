@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -9,10 +9,10 @@
 # This is a makefile fragment that defines the build of e2fsprogs
 #
 
-E2FSPROGS_VERSION		= 1.42.8
+E2FSPROGS_VERSION		= 1.42.13
 E2FSPROGS_TARBALL		= e2fsprogs-$(E2FSPROGS_VERSION).tar.xz
 E2FSPROGS_TARBALL_URLS		+= $(ONIE_MIRROR) \
-				   https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.42.8
+				   https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v$(E2FSPROGS_VERSION)
 E2FSPROGS_BUILD_DIR		= $(MBUILDDIR)/e2fsprogs
 E2FSPROGS_DIR			= $(E2FSPROGS_BUILD_DIR)/e2fsprogs-$(E2FSPROGS_VERSION)
 
@@ -33,18 +33,11 @@ PHONY += e2fsprogs e2fsprogs-download e2fsprogs-source e2fsprogs-patch \
 	 e2fsprogs-configure e2fsprogs-build e2fsprogs-install e2fsprogs-clean \
 	 e2fsprogs-download-clean
 
-E2FSPROGS_LIB_DIRS	= uuid
-E2FSPROGS_LIBS	= \
-	libuuid.so    libuuid.so.1    libuuid.so.1.2
-
-ifeq ($(EXT3_4_ENABLE),yes)
-E2FSPROGS_LIB_DIRS	+= et e2p blkid ext2fs blkid
-E2FSPROGS_LIBS += \
+E2FSPROGS_LIB_DIRS	= et e2p ext2fs
+E2FSPROGS_LIBS		= \
 	libcom_err.so libcom_err.so.2 libcom_err.so.2.1 \
 	libe2p.so     libe2p.so.2     libe2p.so.2.3     \
-	libblkid.so   libblkid.so.1   libblkid.so.1.0   \
 	libext2fs.so  libext2fs.so.2  libext2fs.so.2.4
-endif
 
 e2fsprogs: $(E2FSPROGS_STAMP)
 
@@ -74,7 +67,8 @@ $(E2FSPROGS_PATCH_STAMP): $(E2FSPROGS_SRCPATCHDIR)/* $(E2FSPROGS_SOURCE_STAMP)
 
 e2fsprogs-configure: $(E2FSPROGS_CONFIGURE_STAMP)
 $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_INSTALL_STAMP) $(LZO_INSTALL_STAMP) \
-			      $(E2FSPROGS_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+			      $(UTILLINUX_INSTALL_STAMP) $(E2FSPROGS_PATCH_STAMP) | \
+			      $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure e2fsprogs-$(E2FSPROGS_VERSION) ===="
 	$(Q) cd $(E2FSPROGS_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
@@ -85,8 +79,12 @@ $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_INSTALL_STAMP) $(LZO_INSTALL_STAMP) \
 		--disable-tls					\
 		--disable-defrag				\
 		--enable-symlink-build				\
+		--disable-libuuid				\
+		--disable-libblkid				\
 		CC=$(CROSSPREFIX)gcc				\
-		CFLAGS="$(ONIE_CFLAGS)"
+		CFLAGS="$(ONIE_CFLAGS)"				\
+		LDFLAGS="$(ONIE_LDFLAGS)"			\
+		$(ONIE_PKG_CONFIG)
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
@@ -113,7 +111,6 @@ $(E2FSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(E2FSPROGS_BUILD_STAMP) $(BUS
 	$(Q) for file in $(E2FSPROGS_LIBS) ; do \
 		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
 	     done
-ifeq ($(EXT3_4_ENABLE),yes)
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(E2FSPROGS_DIR)/misc install
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
@@ -130,7 +127,6 @@ ifeq ($(EXT3_4_ENABLE),yes)
 	$(Q) ln -sf e2fsck $(SYSROOTDIR)/usr/sbin/fsck.ext2
 	$(Q) ln -sf e2fsck $(SYSROOTDIR)/usr/sbin/fsck.ext3
 	$(Q) ln -sf e2fsck $(SYSROOTDIR)/usr/sbin/fsck.ext4
-endif
 	$(Q) touch $@
 
 USERSPACE_CLEAN += e2fsprogs-clean
