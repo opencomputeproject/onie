@@ -2,6 +2,7 @@
 #
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -10,29 +11,32 @@
 # This is a makefile fragment that defines the build of grub
 #
 
-GRUB_VERSION		= e4a1fe391
+GRUB_VERSION		= 2.02~beta3
 GRUB_TARBALL		= grub-$(GRUB_VERSION).tar.xz
-GRUB_TARBALL_URLS	+= $(ONIE_MIRROR) http://git.savannah.gnu.org/cgit/grub.git/snapshot/
+GRUB_TARBALL_URLS	+= $(ONIE_MIRROR) http://git.savannah.gnu.org/cgit/grub.git/snapshot/ ftp://alpha.gnu.org/gnu/grub/
 GRUB_BUILD_DIR		= $(MBUILDDIR)/grub
 GRUB_DIR		= $(GRUB_BUILD_DIR)/grub-$(GRUB_VERSION)
 GRUB_I386_DIR		= $(GRUB_BUILD_DIR)/grub-i386-pc
-GRUB_UEFI_DIR		= $(GRUB_BUILD_DIR)/grub-x86_64-efi
+GRUB_UEFI_DIR		= $(GRUB_BUILD_DIR)/grub-$(ARCH)-efi
 GRUB_I386_COREBOOT_DIR	= $(GRUB_BUILD_DIR)/grub-i386-coreboot
+GRUB_TARGET_LIB_UEFI_DIR       = $(DEV_SYSROOT)/usr/lib/grub/$(ARCH)-efi
 
-GRUB_SRCPATCHDIR	= $(PATCHDIR)/grub
-GRUB_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/grub-download
+GRUB_SRCPATCHDIR	= $(PATCHDIR)/grub/$(GRUB_VERSION)
+GRUB_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/grub-$(GRUB_VERSION)-download
 GRUB_SOURCE_STAMP	= $(STAMPDIR)/grub-source
 GRUB_PATCH_STAMP	= $(STAMPDIR)/grub-patch
 GRUB_CONFIGURE_STAMP	= $(STAMPDIR)/grub-configure
 GRUB_BUILD_STAMP	= $(STAMPDIR)/grub-build
 GRUB_INSTALL_STAMP	= $(STAMPDIR)/grub-install
-GRUB_CONFIGURE_I386_STAMP	= $(STAMPDIR)/grub-configure-i386-pc
-GRUB_BUILD_I386_STAMP		= $(STAMPDIR)/grub-build-i386-pc
-GRUB_INSTALL_I386_STAMP		= $(STAMPDIR)/grub-install-i386-pc
+ifeq ($(FIRMWARE_TYPE),$(filter $(FIRMWARE_TYPE),auto bios))
+  GRUB_CONFIGURE_I386_STAMP	= $(STAMPDIR)/grub-configure-i386-pc
+  GRUB_BUILD_I386_STAMP		= $(STAMPDIR)/grub-build-i386-pc
+  GRUB_INSTALL_I386_STAMP		= $(STAMPDIR)/grub-install-i386-pc
+endif
 ifeq ($(UEFI_ENABLE),yes)
-  GRUB_CONFIGURE_UEFI_STAMP	= $(STAMPDIR)/grub-configure-x86_64-efi
-  GRUB_BUILD_UEFI_STAMP		= $(STAMPDIR)/grub-build-x86_64-efi
-  GRUB_INSTALL_UEFI_STAMP	= $(STAMPDIR)/grub-install-x86_64-efi
+  GRUB_CONFIGURE_UEFI_STAMP	= $(STAMPDIR)/grub-configure-$(ARCH)-efi
+  GRUB_BUILD_UEFI_STAMP		= $(STAMPDIR)/grub-build-$(ARCH)-efi
+  GRUB_INSTALL_UEFI_STAMP	= $(STAMPDIR)/grub-install-$(ARCH)-efi
 endif
 ifeq ($(FIRMWARE_TYPE),coreboot)
   GRUB_CONFIGURE_I386_COREBOOT_STAMP	= $(STAMPDIR)/grub-configure-i386-coreboot
@@ -55,7 +59,7 @@ GRUB_STAMP		= $(GRUB_SOURCE_STAMP) \
 			  $(GRUB_INSTALL_I386_COREBOOT_STAMP) \
 			  $(GRUB_INSTALL_STAMP)
 
-# GRUB configuration options common to i386-pc and x86_64-efi
+# GRUB configuration options common to i386-pc and $(ARCH)-efi
 GRUB_COMMON_CONFIG = 			\
 		--prefix=/usr		\
 		--enable-device-mapper	\
@@ -114,7 +118,7 @@ $(GRUB_CONFIGURE_I386_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_INSTALL_STAMP) | $(DEV_
 
 $(GRUB_CONFIGURE_UEFI_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "====  Configure grub-x86_64-efi-$(GRUB_VERSION) ===="
+	$(Q) echo "====  Configure grub-$(ARCH)-efi-$(GRUB_VERSION) ===="
 	$(Q) mkdir -p $(GRUB_UEFI_DIR)
 	$(Q) cd $(GRUB_UEFI_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
@@ -152,7 +156,7 @@ $(GRUB_BUILD_I386_STAMP): $(GRUB_CONFIGURE_STAMP)
 
 $(GRUB_BUILD_UEFI_STAMP): $(GRUB_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "====  Building grub-x86_64-efi-$(GRUB_VERSION) ===="
+	$(Q) echo "====  Building grub-$(ARCH)-efi-$(GRUB_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(GRUB_UEFI_DIR)
 	$(Q) touch $@
 
@@ -175,7 +179,7 @@ $(GRUB_INSTALL_I386_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_BUILD_I386_STAMP)
 
 $(GRUB_INSTALL_UEFI_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_INSTALL_I386_STAMP) $(GRUB_BUILD_UEFI_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing grub-x86_64-efi in $(DEV_SYSROOT) ===="
+	$(Q) echo "==== Installing grub-$(ARCH)-efi in $(DEV_SYSROOT) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
 		$(MAKE) -C $(GRUB_UEFI_DIR) install DESTDIR=$(DEV_SYSROOT)
 	$(Q) touch $@
