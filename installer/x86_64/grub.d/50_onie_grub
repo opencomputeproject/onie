@@ -24,11 +24,21 @@
 
 # Step 1
 # Depends on UEFI GRUB or Legacy BIOS GRUB
-default_chainloader="+1"
-[ "${onie_firmware}" = "coreboot" ] && default_chainloader=/grub/i386-coreboot/core.elf
+
+if [ "${onie_firmware}" = "coreboot" ] ; then
+    default_chainloader=/grub/i386-coreboot/core.elf
+else
+    default_chainloader="+1"
+fi
+
 uefi_root=/boot/efi
 onie_uefi_grub=EFI/onie/grubx64.efi
-if [ -d "/sys/firmware/efi/efivars" ] && [ -r "${uefi_root}/$onie_uefi_grub" ] ; then
+if [ -d "/sys/firmware/efi/efivars" ] &&
+    [ -r "${uefi_root}/$onie_uefi_grub" ] ; then
+    running_uefi_grub=yes
+fi
+
+if [ "$running_uefi_grub" = "yes" ] ; then
     uefi_uuid=$(grub-probe --target=fs_uuid "${uefi_root}/$onie_uefi_grub") || {
         echo "ERROR: grub-probe failed" > /dev/stderr
         echo "ERROR: failing cmd: grub-probe --target=fs_uuid ${uefi_root}/$onie_uefi_grub" > /dev/stderr
@@ -68,7 +78,7 @@ add_diag_bootcmd()
     cat <<EOF >> $grub_cfg
 diag_menu="$diag_label"
 EOF
-    if [ -d "/sys/firmware/efi/efivars" ] && [ -f "${uefi_root}/$onie_uefi_grub" ] ; then
+    if [ "$running_uefi_grub" = "yes" ] ; then
         # UEFI firmware
         diag_uefi_grub=$(efibootmgr -v | grep $diag_label | sed -e 's/.*)\/File(//' -e 's/)//' -e 's/\\/\//g')
         if [ -f "$uefi_root/$diag_uefi_grub" ] ; then
@@ -93,6 +103,51 @@ function diag_bootcmd {
 }
 EOF
     fi
+}
+
+add_nos_chainload()
+{
+    nos_label="$NOS_BOOT_PARTITION_LABEL"
+    nos_chainload_menu="$NOS_CHAINLOAD_MENU"
+    nos_bootcmd_cfg="$onie_root_dir/grub/nos-bootcmd.cfg"
+    cat <<EOF > $nos_bootcmd_cfg
+# begin: nos-bootcmd.cfg
+
+EOF
+    if [ "$running_uefi_grub" = "yes" ] ; then
+        # UEFI firmware
+        nos_uefi_grub=$(efibootmgr -v | grep $nos_label | sed -e 's/.*)\/File(//' -e 's/)//' -e 's/\\/\//g')
+        if [ -f "$uefi_root/$nos_uefi_grub" ] ; then
+            cat <<EOF >> $nos_bootcmd_cfg
+function nos_chainload {
+  set root='(hd0,gpt1)'
+  search --no-floppy --fs-uuid --set=root $uefi_uuid
+  echo    "Loading $nos_label \$onie_platform ..."
+  chainloader /$nos_uefi_grub
+  boot
+}
+EOF
+        fi
+    else
+        # legacy BIOS firmware
+        cat <<EOF >> $nos_bootcmd_cfg
+function nos_chainload {
+  search --no-floppy --label --set=root $nos_label
+  echo    "Loading $nos_label \$onie_platform ..."
+  chainloader ${default_chainloader}
+  boot
+}
+EOF
+    fi
+    cat <<EOF >> $nos_bootcmd_cfg
+function insert_nos_menuentry {
+  menuentry "$nos_chainload_menu" {
+    nos_chainload
+  }
+}
+
+# end: nos-bootcmd.cfg
+EOF
 }
 
 tmp_mnt=
@@ -179,3 +234,11 @@ EOF
 
 # add ONIE configuration common to all ONIE boot modes
 cat $onie_root_dir/grub/grub-common.cfg >> $grub_cfg
+
+# add NOS chainload configuration if the following variables are defined:
+#   - NOS_BOOT_PARTITION_LABEL
+#   - NOS_CHAINLOAD_MENU
+if [ -n "$NOS_BOOT_PARTITION_LABEL" ] &&
+    [ -n "$NOS_CHAINLOAD_MENU" ] ; then
+    add_nos_chainload
+fi
