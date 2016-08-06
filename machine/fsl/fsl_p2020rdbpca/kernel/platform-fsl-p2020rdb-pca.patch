@@ -1,0 +1,160 @@
+platform fsl p2020rdb patch
+
+#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+Add support for the Freescale P2020RDB-PCA platform.
+
+diff --git a/arch/powerpc/boot/dts/p2020rdb.dts b/arch/powerpc/boot/dts/p2020rdb.dts
+index 1d7a05f..1f75daf 100644
+--- a/arch/powerpc/boot/dts/p2020rdb.dts
++++ b/arch/powerpc/boot/dts/p2020rdb.dts
+@@ -16,9 +16,7 @@
+ 	compatible = "fsl,P2020RDB";
+ 
+ 	aliases {
+-		ethernet0 = &enet0;
+-		ethernet1 = &enet1;
+-		ethernet2 = &enet2;
++		ethernet0 = &enet2;
+ 		serial0 = &serial0;
+ 		serial1 = &serial1;
+ 		pci0 = &pci0;
+@@ -33,8 +31,9 @@
+ 
+ 		/* NOR and NAND Flashes */
+ 		ranges = <0x0 0x0 0x0 0xef000000 0x01000000
+-			  0x1 0x0 0x0 0xffa00000 0x00040000
+-			  0x2 0x0 0x0 0xffb00000 0x00020000>;
++			  0x1 0x0 0x0 0xff800000 0x00008000
++			  0x2 0x0 0x0 0xffb00000 0x00020000
++			  0x3 0x0 0x0 0xffa00000 0x00040000>;
+ 
+ 		nor@0,0 {
+ 			#address-cells = <1>;
+@@ -52,33 +51,35 @@
+ 				read-only;
+ 			};
+ 
+-			partition@40000 {
+-				/* 256KB for DTB Image */
+-				reg = <0x00040000 0x00040000>;
+-				label = "NOR (RO) DTB Image";
+-				read-only;
++			partition@1 {
++				/* EEPROM data, 128KB, 1 sector */
++				reg = <0x00040000 0x00020000>;
++				label = "board_eeprom";
+ 			};
+ 
+-			partition@80000 {
+-				/* 3.5 MB for Linux Kernel Image */
+-				reg = <0x00080000 0x00380000>;
+-				label = "NOR (RO) Linux Kernel Image";
+-				read-only;
++			partition@2 {
++				/* Available for apps */
++				reg = <0x00060000 0x00900000>;
++				label = "open";
+ 			};
+ 
+-			partition@400000 {
+-				/* 11MB for JFFS2 based Root file System */
+-				reg = <0x00400000 0x00b00000>;
+-				label = "NOR (RW) JFFS2 Root File System";
++			partition@3 {
++				/* 6MB ONIE uImage */
++				reg = <0x00960000 0x00600000>;
++				label = "onie";
+ 			};
+ 
+-			partition@f00000 {
+-				/* This location must not be altered  */
+-				/* 512KB for u-boot Bootloader Image */
+-				/* 512KB for u-boot Environment Variables */
+-				reg = <0x00f00000 0x00100000>;
+-				label = "NOR (RO) U-Boot Image";
+-				read-only;
++			partition@4 {
++				/* U-Boot environment varialbes, 128KB, 1 sector */
++				reg = <0x00f60000 0x00020000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++
++			partition@5 {
++				/* 512KB u-boot */
++				reg = <0x00f80000 0x00080000>;
++				label = "uboot";
+ 			};
+ 		};
+ 
+@@ -87,47 +88,11 @@
+ 			#size-cells = <1>;
+ 			compatible = "fsl,p2020-fcm-nand",
+ 				     "fsl,elbc-fcm-nand";
+-			reg = <0x1 0x0 0x40000>;
++			reg = <0x1 0x0 0x8000>;
+ 
+ 			partition@0 {
+-				/* This location must not be altered  */
+-				/* 1MB for u-boot Bootloader Image */
+-				reg = <0x0 0x00100000>;
+-				label = "NAND (RO) U-Boot Image";
+-				read-only;
+-			};
+-
+-			partition@100000 {
+-				/* 1MB for DTB Image */
+-				reg = <0x00100000 0x00100000>;
+-				label = "NAND (RO) DTB Image";
+-				read-only;
+-			};
+-
+-			partition@200000 {
+-				/* 4MB for Linux Kernel Image */
+-				reg = <0x00200000 0x00400000>;
+-				label = "NAND (RO) Linux Kernel Image";
+-				read-only;
+-			};
+-
+-			partition@600000 {
+-				/* 4MB for Compressed Root file System Image */
+-				reg = <0x00600000 0x00400000>;
+-				label = "NAND (RO) Compressed RFS Image";
+-				read-only;
+-			};
+-
+-			partition@a00000 {
+-				/* 7MB for JFFS2 based Root file System */
+-				reg = <0x00a00000 0x00700000>;
+-				label = "NAND (RW) JFFS2 Root File System";
+-			};
+-
+-			partition@1100000 {
+-				/* 15MB for JFFS2 based Root file System */
+-				reg = <0x01100000 0x00f00000>;
+-				label = "NAND (RW) Writable User area";
++				reg = <0x0 0x02000000>;
++				label = "open2";
+ 			};
+ 		};
+ 
+@@ -238,14 +203,11 @@
+ 		};
+ 
+ 		enet0: ethernet@24000 {
+-			fixed-link = <1 1 1000 0 0>;
+-			phy-connection-type = "rgmii-id";
++			status = "disabled";
+ 		};
+ 
+ 		enet1: ethernet@25000 {
+-			tbi-handle = <&tbi0>;
+-			phy-handle = <&phy0>;
+-			phy-connection-type = "sgmii";
++			status = "disabled";
+ 		};
+ 
+ 		enet2: ethernet@26000 {
