@@ -1,0 +1,1780 @@
+diff --git a/drivers/gpio/Kconfig b/drivers/gpio/Kconfig
+index 457ca38..7588f99 100644
+--- a/drivers/gpio/Kconfig
++++ b/drivers/gpio/Kconfig
+@@ -173,6 +173,19 @@ config GPIO_SCH
+ 	  Twenty-one are powered by the core power rail and 9 from the
+ 	  suspend power supply.
+ 
++config GPIO_ICH
++        tristate "Intel ICH GPIO"
++        depends on PCI && X86
++        select MFD_CORE
++        select LPC_ICH
++        help
++          Say yes here to support the GPIO functionality of a number of Intel
++          ICH-based chipsets.  Currently supported devices: ICH6, ICH7, ICH8
++          ICH9, ICH10, Series 5/3400 (eg Ibex Peak), Series 6/C200 (eg
++          Cougar Point), NM10 (Tiger Point), and 3100 (Whitmore Lake).
++
++          If unsure, say N.
++
+ config GPIO_U300
+ 	bool "ST-Ericsson U300 COH 901 335/571 GPIO"
+ 	depends on GPIOLIB && ARCH_U300
+diff --git a/drivers/gpio/Makefile b/drivers/gpio/Makefile
+index 4e018d6..7c03f85 100644
+--- a/drivers/gpio/Makefile
++++ b/drivers/gpio/Makefile
+@@ -45,6 +45,7 @@ obj-$(CONFIG_GPIO_RDC321X)	+= gpio-rdc321x.o
+ obj-$(CONFIG_PLAT_SAMSUNG)	+= gpio-samsung.o
+ obj-$(CONFIG_ARCH_SA1100)	+= gpio-sa1100.o
+ obj-$(CONFIG_GPIO_SCH)		+= gpio-sch.o
++obj-$(CONFIG_GPIO_ICH)		+= gpio-ich.o
+ obj-$(CONFIG_GPIO_STMPE)	+= gpio-stmpe.o
+ obj-$(CONFIG_GPIO_SX150X)	+= gpio-sx150x.o
+ obj-$(CONFIG_GPIO_TC3589X)	+= gpio-tc3589x.o
+diff --git a/drivers/gpio/gpio-ich.c b/drivers/gpio/gpio-ich.c
+new file mode 100644
+index 0000000..d0a743c
+--- /dev/null
++++ b/drivers/gpio/gpio-ich.c
+@@ -0,0 +1,556 @@
++/*
++ * Intel ICH6-10, Series 5 and 6, Atom C2000 (Avoton/Rangeley) GPIO driver
++ *
++ * Copyright (C) 2010 Extreme Engineering Solutions.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
++ */
++
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/module.h>
++#include <linux/pci.h>
++#include <linux/gpio.h>
++#include <linux/platform_device.h>
++#include <linux/mfd/lpc_ich.h>
++
++#define DRV_NAME "gpio_ich"
++
++/*
++ * GPIO register offsets in GPIO I/O space.
++ * Each chunk of 32 GPIOs is manipulated via its own USE_SELx, IO_SELx, and
++ * LVLx registers.  Logic in the read/write functions takes a register and
++ * an absolute bit number and determines the proper register offset and bit
++ * number in that register.  For example, to read the value of GPIO bit 50
++ * the code would access offset ichx_regs[2(=GPIO_LVL)][1(=50/32)],
++ * bit 18 (50%32).
++ */
++enum GPIO_REG {
++	GPIO_USE_SEL = 0,
++	GPIO_IO_SEL,
++	GPIO_LVL,
++	GPO_BLINK
++};
++
++static const u8 ichx_regs[4][3] = {
++	{0x00, 0x30, 0x40},	/* USE_SEL[1-3] offsets */
++	{0x04, 0x34, 0x44},	/* IO_SEL[1-3] offsets */
++	{0x0c, 0x38, 0x48},	/* LVL[1-3] offsets */
++	{0x18, 0x18, 0x18},	/* BLINK offset */
++};
++
++static const u8 ichx_reglen[3] = {
++	0x30, 0x10, 0x10,
++};
++
++static const u8 avoton_regs[4][3] = {
++	{0x00, 0x80, 0x00},
++	{0x04, 0x84, 0x00},
++	{0x08, 0x88, 0x00},
++};
++
++static const u8 avoton_reglen[3] = {
++	0x10, 0x10, 0x00,
++};
++
++#define ICHX_WRITE(val, reg, base_res)	outl(val, (reg) + (base_res)->start)
++#define ICHX_READ(reg, base_res)	inl((reg) + (base_res)->start)
++
++struct ichx_desc {
++	/* Max GPIO pins the chipset can have */
++	uint ngpio;
++
++	/* chipset registers */
++	const u8 (*regs)[3];
++	const u8 *reglen;
++
++	/* GPO_BLINK is available on this chipset */
++	bool have_blink;
++
++	/* Whether the chipset has GPIO in GPE0_STS in the PM IO region */
++	bool uses_gpe0;
++
++	/* USE_SEL is bogus on some chipsets, eg 3100 */
++	u32 use_sel_ignore[3];
++
++	/* Some chipsets have quirks, let these use their own request/get */
++	int (*request)(struct gpio_chip *chip, unsigned offset);
++	int (*get)(struct gpio_chip *chip, unsigned offset);
++
++	/*
++	 * Some chipsets don't let reading output values on GPIO_LVL register
++	 * this option allows driver caching written output values
++	 */
++	bool use_outlvl_cache;
++};
++
++static struct {
++	spinlock_t lock;
++	struct platform_device *dev;
++	struct gpio_chip chip;
++	struct resource *gpio_base;	/* GPIO IO base */
++	struct resource *pm_base;	/* Power Mangagment IO base */
++	struct ichx_desc *desc;	/* Pointer to chipset-specific description */
++	u32 orig_gpio_ctrl;	/* Orig CTRL value, used to restore on exit */
++	u8 use_gpio;		/* Which GPIO groups are usable */
++	int outlvl_cache[3];	/* cached output values */
++} ichx_priv;
++
++static int modparam_gpiobase = 0;//el6661 -1;	/* dynamic */
++module_param_named(gpiobase, modparam_gpiobase, int, 0444);
++MODULE_PARM_DESC(gpiobase, "The GPIO number base. -1 means dynamic, "
++			   "which is the default.");
++
++static int ichx_write_bit(int reg, unsigned nr, int val, int verify)
++{
++	unsigned long flags;
++	u32 data, tmp;
++	int reg_nr = nr / 32;
++	int bit = nr & 0x1f;
++	int ret = 0;
++
++	spin_lock_irqsave(&ichx_priv.lock, flags);
++
++	if (reg == GPIO_LVL && ichx_priv.desc->use_outlvl_cache)
++		data = ichx_priv.outlvl_cache[reg_nr];
++	else
++		data = ICHX_READ(ichx_priv.desc->regs[reg][reg_nr],
++				 ichx_priv.gpio_base);
++
++	if (val)
++		data |= 1 << bit;
++	else
++		data &= ~(1 << bit);
++	ICHX_WRITE(data, ichx_priv.desc->regs[reg][reg_nr],
++			 ichx_priv.gpio_base);
++	if (reg == GPIO_LVL && ichx_priv.desc->use_outlvl_cache)
++		ichx_priv.outlvl_cache[reg_nr] = data;
++
++	tmp = ICHX_READ(ichx_priv.desc->regs[reg][reg_nr],
++			ichx_priv.gpio_base);
++	if (verify && data != tmp)
++		ret = -EPERM;
++
++	spin_unlock_irqrestore(&ichx_priv.lock, flags);
++
++	return ret;
++}
++
++static int ichx_read_bit(int reg, unsigned nr)
++{
++	unsigned long flags;
++	u32 data;
++	int reg_nr = nr / 32;
++	int bit = nr & 0x1f;
++
++	spin_lock_irqsave(&ichx_priv.lock, flags);
++
++	data = ICHX_READ(ichx_priv.desc->regs[reg][reg_nr],
++			 ichx_priv.gpio_base);
++
++	if (reg == GPIO_LVL && ichx_priv.desc->use_outlvl_cache)
++		data = ichx_priv.outlvl_cache[reg_nr] | data;
++
++	spin_unlock_irqrestore(&ichx_priv.lock, flags);
++
++	return data & (1 << bit) ? 1 : 0;
++}
++
++static bool ichx_gpio_check_available(struct gpio_chip *gpio, unsigned nr)
++{
++	return !!(ichx_priv.use_gpio & (1 << (nr / 32)));
++}
++
++static int ichx_gpio_direction_input(struct gpio_chip *gpio, unsigned nr)
++{
++	/*
++	 * Try setting pin as an input and verify it worked since many pins
++	 * are output-only.
++	 */
++	if (ichx_write_bit(GPIO_IO_SEL, nr, 1, 1))
++		return -EINVAL;
++
++	return 0;
++}
++
++static int ichx_gpio_direction_output(struct gpio_chip *gpio, unsigned nr,
++					int val)
++{
++	/* Disable blink hardware which is available for GPIOs from 0 to 31. */
++	if (nr < 32 && ichx_priv.desc->have_blink)
++		ichx_write_bit(GPO_BLINK, nr, 0, 0);
++
++	/* Set GPIO output value. */
++	ichx_write_bit(GPIO_LVL, nr, val, 0);
++
++	/*
++	 * Try setting pin as an output and verify it worked since many pins
++	 * are input-only.
++	 */
++	if (ichx_write_bit(GPIO_IO_SEL, nr, 0, 1))
++		return -EINVAL;
++
++	return 0;
++}
++
++static int ichx_gpio_get(struct gpio_chip *chip, unsigned nr)
++{
++	return ichx_read_bit(GPIO_LVL, nr);
++}
++
++static int ich6_gpio_get(struct gpio_chip *chip, unsigned nr)
++{
++	unsigned long flags;
++	u32 data;
++
++	/*
++	 * GPI 0 - 15 need to be read from the power management registers on
++	 * a ICH6/3100 bridge.
++	 */
++	if (nr < 16) {
++		if (!ichx_priv.pm_base)
++			return -ENXIO;
++
++		spin_lock_irqsave(&ichx_priv.lock, flags);
++
++		/* GPI 0 - 15 are latched, write 1 to clear*/
++		ICHX_WRITE(1 << (16 + nr), 0, ichx_priv.pm_base);
++		data = ICHX_READ(0, ichx_priv.pm_base);
++
++		spin_unlock_irqrestore(&ichx_priv.lock, flags);
++
++		return (data >> 16) & (1 << nr) ? 1 : 0;
++	} else {
++		return ichx_gpio_get(chip, nr);
++	}
++}
++
++static int ichx_gpio_request(struct gpio_chip *chip, unsigned nr)
++{
++	if (!ichx_gpio_check_available(chip, nr))
++		return -ENXIO;
++
++	/*
++	 * Note we assume the BIOS properly set a bridge's USE value.  Some
++	 * chips (eg Intel 3100) have bogus USE values though, so first see if
++	 * the chipset's USE value can be trusted for this specific bit.
++	 * If it can't be trusted, assume that the pin can be used as a GPIO.
++	 */
++	if (ichx_priv.desc->use_sel_ignore[nr / 32] & (1 << (nr & 0x1f)))
++		return 0;
++
++	return ichx_read_bit(GPIO_USE_SEL, nr) ? 0 : -ENODEV;
++}
++
++static int ich6_gpio_request(struct gpio_chip *chip, unsigned nr)
++{
++	/*
++	 * Fixups for bits 16 and 17 are necessary on the Intel ICH6/3100
++	 * bridge as they are controlled by USE register bits 0 and 1.  See
++	 * "Table 704 GPIO_USE_SEL1 register" in the i3100 datasheet for
++	 * additional info.
++	 */
++	if (nr == 16 || nr == 17)
++		nr -= 16;
++
++	return ichx_gpio_request(chip, nr);
++}
++
++static void ichx_gpio_set(struct gpio_chip *chip, unsigned nr, int val)
++{
++	ichx_write_bit(GPIO_LVL, nr, val, 0);
++}
++
++static void ichx_gpiolib_setup(struct gpio_chip *chip)
++{
++	chip->owner = THIS_MODULE;
++	chip->label = DRV_NAME;
++	chip->dev = &ichx_priv.dev->dev;
++
++	/* Allow chip-specific overrides of request()/get() */
++	chip->request = ichx_priv.desc->request ?
++		ichx_priv.desc->request : ichx_gpio_request;
++	chip->get = ichx_priv.desc->get ?
++		ichx_priv.desc->get : ichx_gpio_get;
++
++	chip->set = ichx_gpio_set;
++	chip->direction_input = ichx_gpio_direction_input;
++	chip->direction_output = ichx_gpio_direction_output;
++	chip->base = modparam_gpiobase;
++	chip->ngpio = ichx_priv.desc->ngpio;
++	chip->can_sleep = false;
++	chip->dbg_show = NULL;
++}
++
++/* ICH6-based, 631xesb-based */
++static struct ichx_desc ich6_desc = {
++	/* Bridges using the ICH6 controller need fixups for GPIO 0 - 17 */
++	.request = ich6_gpio_request,
++	.get = ich6_gpio_get,
++
++	/* GPIO 0-15 are read in the GPE0_STS PM register */
++	.uses_gpe0 = true,
++
++	.ngpio = 50,
++	.have_blink = true,
++	.regs = ichx_regs,
++	.reglen = ichx_reglen,
++};
++
++/* Intel 3100 */
++static struct ichx_desc i3100_desc = {
++	/*
++	 * Bits 16,17, 20 of USE_SEL and bit 16 of USE_SEL2 always read 0 on
++	 * the Intel 3100.  See "Table 712. GPIO Summary Table" of 3100
++	 * Datasheet for more info.
++	 */
++	.use_sel_ignore = {0x00130000, 0x00010000, 0x0},
++
++	/* The 3100 needs fixups for GPIO 0 - 17 */
++	.request = ich6_gpio_request,
++	.get = ich6_gpio_get,
++
++	/* GPIO 0-15 are read in the GPE0_STS PM register */
++	.uses_gpe0 = true,
++
++	.ngpio = 50,
++	.regs = ichx_regs,
++	.reglen = ichx_reglen,
++};
++
++/* ICH7 and ICH8-based */
++static struct ichx_desc ich7_desc = {
++	.ngpio = 50,
++	.have_blink = true,
++	.regs = ichx_regs,
++	.reglen = ichx_reglen,
++};
++
++/* ICH9-based */
++static struct ichx_desc ich9_desc = {
++	.ngpio = 61,
++	.have_blink = true,
++	.regs = ichx_regs,
++	.reglen = ichx_reglen,
++};
++
++/* ICH10-based - Consumer/corporate versions have different amount of GPIO */
++static struct ichx_desc ich10_cons_desc = {
++	.ngpio = 61,
++	.have_blink = true,
++	.regs = ichx_regs,
++	.reglen = ichx_reglen,
++};
++static struct ichx_desc ich10_corp_desc = {
++	.ngpio = 72,
++	.have_blink = true,
++	.regs = ichx_regs,
++	.reglen = ichx_reglen,
++};
++
++/* Intel 5 series, 6 series, 3400 series, and C200 series */
++static struct ichx_desc intel5_desc = {
++	.ngpio = 76,
++	.regs = ichx_regs,
++	.reglen = ichx_reglen,
++};
++
++/* Avoton */
++static struct ichx_desc avoton_desc = {
++	/* Avoton has only 59 GPIOs, but we assume the first set of register
++	 * (Core) has 32 instead of 31 to keep gpio-ich compliance
++	 */
++	.ngpio = 60,
++	.regs = avoton_regs,
++	.reglen = avoton_reglen,
++	.use_outlvl_cache = true,
++};
++
++static int ichx_gpio_request_regions(struct resource *res_base,
++						const char *name, u8 use_gpio)
++{
++	int i;
++
++	if (!res_base || !res_base->start || !res_base->end)
++		return -ENODEV;
++
++	for (i = 0; i < ARRAY_SIZE(ichx_priv.desc->regs[0]); i++) {
++		if (!(use_gpio & (1 << i)))
++			continue;
++		if (!request_region(
++				res_base->start + ichx_priv.desc->regs[0][i],
++				ichx_priv.desc->reglen[i], name))
++			goto request_err;
++	}
++	return 0;
++
++request_err:
++	/* Clean up: release already requested regions, if any */
++	for (i--; i >= 0; i--) {
++		if (!(use_gpio & (1 << i)))
++			continue;
++		release_region(res_base->start + ichx_priv.desc->regs[0][i],
++			       ichx_priv.desc->reglen[i]);
++	}
++	return -EBUSY;
++}
++
++static void ichx_gpio_release_regions(struct resource *res_base, u8 use_gpio)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(ichx_priv.desc->regs[0]); i++) {
++		if (!(use_gpio & (1 << i)))
++			continue;
++		release_region(res_base->start + ichx_priv.desc->regs[0][i],
++			       ichx_priv.desc->reglen[i]);
++	}
++}
++
++static int ichx_gpio_probe(struct platform_device *pdev)
++{
++	struct resource *res_base, *res_pm;
++	int err;
++	struct lpc_ich_info *ich_info = dev_get_platdata(&pdev->dev);
++
++	if (!ich_info)
++		return -ENODEV;
++
++	ichx_priv.dev = pdev;
++
++	switch (ich_info->gpio_version) {
++	case ICH_I3100_GPIO:
++		ichx_priv.desc = &i3100_desc;
++		break;
++	case ICH_V5_GPIO:
++		ichx_priv.desc = &intel5_desc;
++		break;
++	case ICH_V6_GPIO:
++		ichx_priv.desc = &ich6_desc;
++		break;
++	case ICH_V7_GPIO:
++		ichx_priv.desc = &ich7_desc;
++		break;
++	case ICH_V9_GPIO:
++		ichx_priv.desc = &ich9_desc;
++		break;
++	case ICH_V10CORP_GPIO:
++		ichx_priv.desc = &ich10_corp_desc;
++		break;
++	case ICH_V10CONS_GPIO:
++		ichx_priv.desc = &ich10_cons_desc;
++		break;
++	case AVOTON_GPIO:
++		ichx_priv.desc = &avoton_desc;
++		break;
++	default:
++		return -ENODEV;
++	}
++
++	spin_lock_init(&ichx_priv.lock);
++	res_base = platform_get_resource(pdev, IORESOURCE_IO, ICH_RES_GPIO);
++	ichx_priv.use_gpio = ich_info->use_gpio;
++	err = ichx_gpio_request_regions(res_base, pdev->name,
++					ichx_priv.use_gpio);
++	if (err)
++		return err;
++
++	ichx_priv.gpio_base = res_base;
++
++	/*
++	 * If necessary, determine the I/O address of ACPI/power management
++	 * registers which are needed to read the the GPE0 register for GPI pins
++	 * 0 - 15 on some chipsets.
++	 */
++	if (!ichx_priv.desc->uses_gpe0)
++		goto init;
++
++	res_pm = platform_get_resource(pdev, IORESOURCE_IO, ICH_RES_GPE0);
++	if (!res_pm) {
++		pr_warn("ACPI BAR is unavailable, GPI 0 - 15 unavailable\n");
++		goto init;
++	}
++
++	if (!request_region(res_pm->start, resource_size(res_pm),
++			pdev->name)) {
++		pr_warn("ACPI BAR is busy, GPI 0 - 15 unavailable\n");
++		goto init;
++	}
++
++	ichx_priv.pm_base = res_pm;
++
++init:
++
++#ifdef CONFIG_INVENTEC_MAGNOLIA
++    //inventec set default suspend well output value
++//0x0B09E000;
++#define DEFAULT_SUS_WELL_OUT_LVL_MAGNOLIA ((1<<13) | (1<<14) | (1<<15) | (1<<16) | (1<<24) | (1<<25) | (1<<27) )
++    ichx_priv.outlvl_cache[1] = DEFAULT_SUS_WELL_OUT_LVL_MAGNOLIA;
++#endif    
++    
++	ichx_gpiolib_setup(&ichx_priv.chip);
++	err = gpiochip_add(&ichx_priv.chip);
++	if (err) {
++		pr_err("Failed to register GPIOs\n");
++		goto add_err;
++	}
++
++	pr_info("GPIO from %d to %d on %s\n", ichx_priv.chip.base,
++	       ichx_priv.chip.base + ichx_priv.chip.ngpio - 1, DRV_NAME);
++
++	return 0;
++
++add_err:
++	ichx_gpio_release_regions(ichx_priv.gpio_base, ichx_priv.use_gpio);
++	if (ichx_priv.pm_base)
++		release_region(ichx_priv.pm_base->start,
++				resource_size(ichx_priv.pm_base));
++	return err;
++}
++
++static int ichx_gpio_remove(struct platform_device *pdev)
++{
++	int err;
++
++	err = gpiochip_remove(&ichx_priv.chip);
++	if (err) {
++		dev_err(&pdev->dev, "%s failed, %d\n",
++				"gpiochip_remove()", err);
++		return err;
++	}
++
++	ichx_gpio_release_regions(ichx_priv.gpio_base, ichx_priv.use_gpio);
++	if (ichx_priv.pm_base)
++		release_region(ichx_priv.pm_base->start,
++				resource_size(ichx_priv.pm_base));
++
++	return 0;
++}
++
++static struct platform_driver ichx_gpio_driver = {
++	.driver		= {
++		.owner	= THIS_MODULE,
++		.name	= DRV_NAME,
++	},
++	.probe		= ichx_gpio_probe,
++	.remove		= ichx_gpio_remove,
++};
++
++module_platform_driver(ichx_gpio_driver);
++
++MODULE_AUTHOR("Peter Tyser <ptyser@xes-inc.com>");
++MODULE_DESCRIPTION("GPIO interface for Intel ICH series");
++MODULE_LICENSE("GPL");
++MODULE_ALIAS("platform:"DRV_NAME);
+diff --git a/drivers/mfd/Kconfig b/drivers/mfd/Kconfig
+index f1391c2..4e19f8e 100644
+--- a/drivers/mfd/Kconfig
++++ b/drivers/mfd/Kconfig
+@@ -658,6 +658,16 @@ config MFD_TIMBERDALE
+ 	The timberdale FPGA can be found on the Intel Atom development board
+ 	for in-vehicle infontainment, called Russellville.
+ 
++config LPC_ICH
++    tristate "Intel ICH LPC"
++    depends on PCI
++    select MFD_CORE
++    help
++      The LPC bridge function of the Intel ICH provides support for
++      many functional units. This driver provides needed support for
++      other drivers to control these functions, currently GPIO and
++      watchdog.
++
+ config LPC_SCH
+ 	tristate "Intel SCH LPC"
+ 	depends on PCI
+diff --git a/drivers/mfd/Makefile b/drivers/mfd/Makefile
+index b2292eb..a422a36 100644
+--- a/drivers/mfd/Makefile
++++ b/drivers/mfd/Makefile
+@@ -91,6 +91,7 @@ obj-$(CONFIG_MFD_DB5500_PRCMU)	+= db5500-prcmu.o
+ obj-$(CONFIG_MFD_TIMBERDALE)    += timberdale.o
+ obj-$(CONFIG_PMIC_ADP5520)	+= adp5520.o
+ obj-$(CONFIG_LPC_SCH)		+= lpc_sch.o
++obj-$(CONFIG_LPC_ICH)		+= lpc_ich.o
+ obj-$(CONFIG_MFD_RDC321X)	+= rdc321x-southbridge.o
+ obj-$(CONFIG_MFD_JANZ_CMODIO)	+= janz-cmodio.o
+ obj-$(CONFIG_MFD_JZ4740_ADC)	+= jz4740-adc.o
+diff --git a/drivers/mfd/lpc_ich.c b/drivers/mfd/lpc_ich.c
+new file mode 100644
+index 0000000..766994f
+--- /dev/null
++++ b/drivers/mfd/lpc_ich.c
+@@ -0,0 +1,1085 @@
++/*
++ *  lpc_ich.c - LPC interface for Intel ICH
++ *
++ *  LPC bridge function of the Intel ICH contains many other
++ *  functional units, such as Interrupt controllers, Timers,
++ *  Power Management, System Management, GPIO, RTC, and LPC
++ *  Configuration Registers.
++ *
++ *  This driver is derived from lpc_sch.
++
++ *  Copyright (c) 2011 Extreme Engineering Solution, Inc.
++ *  Author: Aaron Sierra <asierra@xes-inc.com>
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License 2 as published
++ *  by the Free Software Foundation.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; see the file COPYING.  If not, write to
++ *  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
++ *
++ *  This driver supports the following I/O Controller hubs:
++ *	(See the intel documentation on http://developer.intel.com.)
++ *	document number 290655-003, 290677-014: 82801AA (ICH), 82801AB (ICHO)
++ *	document number 290687-002, 298242-027: 82801BA (ICH2)
++ *	document number 290733-003, 290739-013: 82801CA (ICH3-S)
++ *	document number 290716-001, 290718-007: 82801CAM (ICH3-M)
++ *	document number 290744-001, 290745-025: 82801DB (ICH4)
++ *	document number 252337-001, 252663-008: 82801DBM (ICH4-M)
++ *	document number 273599-001, 273645-002: 82801E (C-ICH)
++ *	document number 252516-001, 252517-028: 82801EB (ICH5), 82801ER (ICH5R)
++ *	document number 300641-004, 300884-013: 6300ESB
++ *	document number 301473-002, 301474-026: 82801F (ICH6)
++ *	document number 313082-001, 313075-006: 631xESB, 632xESB
++ *	document number 307013-003, 307014-024: 82801G (ICH7)
++ *	document number 322896-001, 322897-001: NM10
++ *	document number 313056-003, 313057-017: 82801H (ICH8)
++ *	document number 316972-004, 316973-012: 82801I (ICH9)
++ *	document number 319973-002, 319974-002: 82801J (ICH10)
++ *	document number 322169-001, 322170-003: 5 Series, 3400 Series (PCH)
++ *	document number 320066-003, 320257-008: EP80597 (IICH)
++ *	document number 324645-001, 324646-001: Cougar Point (CPT)
++ *	document number TBD : Patsburg (PBG)
++ *	document number TBD : DH89xxCC
++ *	document number TBD : Panther Point
++ *	document number TBD : Lynx Point
++ *	document number TBD : Lynx Point-LP
++ *	document number TBD : Wellsburg
++ *	document number TBD : Avoton SoC
++ *	document number TBD : Coleto Creek
++ *	document number TBD : Wildcat Point-LP
++ */
++
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/errno.h>
++#include <linux/acpi.h>
++#include <linux/pci.h>
++#include <linux/mfd/core.h>
++#include <linux/mfd/lpc_ich.h>
++
++#define ACPIBASE		0x40
++#define ACPIBASE_GPE_OFF	0x28
++#define ACPIBASE_GPE_END	0x2f
++#define ACPIBASE_SMI_OFF	0x30
++#define ACPIBASE_SMI_END	0x33
++#define ACPIBASE_PMC_OFF	0x08
++#define ACPIBASE_PMC_END	0x0c
++#define ACPIBASE_TCO_OFF	0x60
++#define ACPIBASE_TCO_END	0x7f
++#define ACPICTRL_PMCBASE	0x44
++
++#define ACPIBASE_GCS_OFF	0x3410
++#define ACPIBASE_GCS_END	0x3414
++
++#define GPIOBASE_ICH0		0x58
++#define GPIOCTRL_ICH0		0x5C
++#define GPIOBASE_ICH6		0x48
++#define GPIOCTRL_ICH6		0x4C
++
++#define RCBABASE		0xf0
++
++#define wdt_io_res(i) wdt_res(0, i)
++#define wdt_mem_res(i) wdt_res(ICH_RES_MEM_OFF, i)
++#define wdt_res(b, i) (&wdt_ich_res[(b) + (i)])
++
++struct lpc_ich_priv {
++	int chipset;
++
++	int abase;		/* ACPI base */
++	int actrl_pbase;	/* ACPI control or PMC base */
++	int gbase;		/* GPIO base */
++	int gctrl;		/* GPIO control */
++
++	int abase_save;		/* Cached ACPI base value */
++	int actrl_pbase_save;		/* Cached ACPI control or PMC base value */
++	int gctrl_save;		/* Cached GPIO control value */
++};
++
++static struct resource wdt_ich_res[] = {
++	/* ACPI - TCO */
++	{
++		.flags = IORESOURCE_IO,
++	},
++	/* ACPI - SMI */
++	{
++		.flags = IORESOURCE_IO,
++	},
++	/* GCS or PMC */
++	{
++		.flags = IORESOURCE_MEM,
++	},
++};
++
++static struct resource gpio_ich_res[] = {
++	/* GPIO */
++	{
++		.flags = IORESOURCE_IO,
++	},
++	/* ACPI - GPE0 */
++	{
++		.flags = IORESOURCE_IO,
++	},
++};
++
++enum lpc_cells {
++	LPC_WDT = 0,
++	LPC_GPIO,
++};
++
++static struct mfd_cell lpc_ich_cells[] = {
++	[LPC_WDT] = {
++		.name = "iTCO_wdt",
++		.num_resources = ARRAY_SIZE(wdt_ich_res),
++		.resources = wdt_ich_res,
++		.ignore_resource_conflicts = true,
++	},
++	[LPC_GPIO] = {
++		.name = "gpio_ich",
++		.num_resources = ARRAY_SIZE(gpio_ich_res),
++		.resources = gpio_ich_res,
++		.ignore_resource_conflicts = true,
++	},
++};
++
++/* chipset related info */
++enum lpc_chipsets {
++	LPC_ICH = 0,	/* ICH */
++	LPC_ICH0,	/* ICH0 */
++	LPC_ICH2,	/* ICH2 */
++	LPC_ICH2M,	/* ICH2-M */
++	LPC_ICH3,	/* ICH3-S */
++	LPC_ICH3M,	/* ICH3-M */
++	LPC_ICH4,	/* ICH4 */
++	LPC_ICH4M,	/* ICH4-M */
++	LPC_CICH,	/* C-ICH */
++	LPC_ICH5,	/* ICH5 & ICH5R */
++	LPC_6300ESB,	/* 6300ESB */
++	LPC_ICH6,	/* ICH6 & ICH6R */
++	LPC_ICH6M,	/* ICH6-M */
++	LPC_ICH6W,	/* ICH6W & ICH6RW */
++	LPC_631XESB,	/* 631xESB/632xESB */
++	LPC_ICH7,	/* ICH7 & ICH7R */
++	LPC_ICH7DH,	/* ICH7DH */
++	LPC_ICH7M,	/* ICH7-M & ICH7-U */
++	LPC_ICH7MDH,	/* ICH7-M DH */
++	LPC_NM10,	/* NM10 */
++	LPC_ICH8,	/* ICH8 & ICH8R */
++	LPC_ICH8DH,	/* ICH8DH */
++	LPC_ICH8DO,	/* ICH8DO */
++	LPC_ICH8M,	/* ICH8M */
++	LPC_ICH8ME,	/* ICH8M-E */
++	LPC_ICH9,	/* ICH9 */
++	LPC_ICH9R,	/* ICH9R */
++	LPC_ICH9DH,	/* ICH9DH */
++	LPC_ICH9DO,	/* ICH9DO */
++	LPC_ICH9M,	/* ICH9M */
++	LPC_ICH9ME,	/* ICH9M-E */
++	LPC_ICH10,	/* ICH10 */
++	LPC_ICH10R,	/* ICH10R */
++	LPC_ICH10D,	/* ICH10D */
++	LPC_ICH10DO,	/* ICH10DO */
++	LPC_PCH,	/* PCH Desktop Full Featured */
++	LPC_PCHM,	/* PCH Mobile Full Featured */
++	LPC_P55,	/* P55 */
++	LPC_PM55,	/* PM55 */
++	LPC_H55,	/* H55 */
++	LPC_QM57,	/* QM57 */
++	LPC_H57,	/* H57 */
++	LPC_HM55,	/* HM55 */
++	LPC_Q57,	/* Q57 */
++	LPC_HM57,	/* HM57 */
++	LPC_PCHMSFF,	/* PCH Mobile SFF Full Featured */
++	LPC_QS57,	/* QS57 */
++	LPC_3400,	/* 3400 */
++	LPC_3420,	/* 3420 */
++	LPC_3450,	/* 3450 */
++	LPC_EP80579,	/* EP80579 */
++	LPC_CPT,	/* Cougar Point */
++	LPC_CPTD,	/* Cougar Point Desktop */
++	LPC_CPTM,	/* Cougar Point Mobile */
++	LPC_PBG,	/* Patsburg */
++	LPC_DH89XXCC,	/* DH89xxCC */
++	LPC_PPT,	/* Panther Point */
++	LPC_LPT,	/* Lynx Point */
++	LPC_LPT_LP,	/* Lynx Point-LP */
++	LPC_WBG,	/* Wellsburg */
++	LPC_AVN,	/* Avoton SoC */
++	LPC_BAYTRAIL,   /* Bay Trail SoC */
++	LPC_COLETO,	/* Coleto Creek */
++	LPC_WPT_LP,	/* Wildcat Point-LP */
++};
++
++static struct lpc_ich_info lpc_chipset_info[] = {
++	[LPC_ICH] = {
++		.name = "ICH",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH0] = {
++		.name = "ICH0",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH2] = {
++		.name = "ICH2",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH2M] = {
++		.name = "ICH2-M",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH3] = {
++		.name = "ICH3-S",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH3M] = {
++		.name = "ICH3-M",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH4] = {
++		.name = "ICH4",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH4M] = {
++		.name = "ICH4-M",
++		.iTCO_version = 1,
++	},
++	[LPC_CICH] = {
++		.name = "C-ICH",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH5] = {
++		.name = "ICH5 or ICH5R",
++		.iTCO_version = 1,
++	},
++	[LPC_6300ESB] = {
++		.name = "6300ESB",
++		.iTCO_version = 1,
++	},
++	[LPC_ICH6] = {
++		.name = "ICH6 or ICH6R",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V6_GPIO,
++	},
++	[LPC_ICH6M] = {
++		.name = "ICH6-M",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V6_GPIO,
++	},
++	[LPC_ICH6W] = {
++		.name = "ICH6W or ICH6RW",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V6_GPIO,
++	},
++	[LPC_631XESB] = {
++		.name = "631xESB/632xESB",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V6_GPIO,
++	},
++	[LPC_ICH7] = {
++		.name = "ICH7 or ICH7R",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH7DH] = {
++		.name = "ICH7DH",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH7M] = {
++		.name = "ICH7-M or ICH7-U",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH7MDH] = {
++		.name = "ICH7-M DH",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_NM10] = {
++		.name = "NM10",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH8] = {
++		.name = "ICH8 or ICH8R",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH8DH] = {
++		.name = "ICH8DH",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH8DO] = {
++		.name = "ICH8DO",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH8M] = {
++		.name = "ICH8M",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH8ME] = {
++		.name = "ICH8M-E",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V7_GPIO,
++	},
++	[LPC_ICH9] = {
++		.name = "ICH9",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V9_GPIO,
++	},
++	[LPC_ICH9R] = {
++		.name = "ICH9R",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V9_GPIO,
++	},
++	[LPC_ICH9DH] = {
++		.name = "ICH9DH",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V9_GPIO,
++	},
++	[LPC_ICH9DO] = {
++		.name = "ICH9DO",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V9_GPIO,
++	},
++	[LPC_ICH9M] = {
++		.name = "ICH9M",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V9_GPIO,
++	},
++	[LPC_ICH9ME] = {
++		.name = "ICH9M-E",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V9_GPIO,
++	},
++	[LPC_ICH10] = {
++		.name = "ICH10",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V10CONS_GPIO,
++	},
++	[LPC_ICH10R] = {
++		.name = "ICH10R",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V10CONS_GPIO,
++	},
++	[LPC_ICH10D] = {
++		.name = "ICH10D",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V10CORP_GPIO,
++	},
++	[LPC_ICH10DO] = {
++		.name = "ICH10DO",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V10CORP_GPIO,
++	},
++	[LPC_PCH] = {
++		.name = "PCH Desktop Full Featured",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_PCHM] = {
++		.name = "PCH Mobile Full Featured",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_P55] = {
++		.name = "P55",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_PM55] = {
++		.name = "PM55",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_H55] = {
++		.name = "H55",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_QM57] = {
++		.name = "QM57",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_H57] = {
++		.name = "H57",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_HM55] = {
++		.name = "HM55",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_Q57] = {
++		.name = "Q57",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_HM57] = {
++		.name = "HM57",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_PCHMSFF] = {
++		.name = "PCH Mobile SFF Full Featured",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_QS57] = {
++		.name = "QS57",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_3400] = {
++		.name = "3400",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_3420] = {
++		.name = "3420",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_3450] = {
++		.name = "3450",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_EP80579] = {
++		.name = "EP80579",
++		.iTCO_version = 2,
++	},
++	[LPC_CPT] = {
++		.name = "Cougar Point",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_CPTD] = {
++		.name = "Cougar Point Desktop",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_CPTM] = {
++		.name = "Cougar Point Mobile",
++		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
++	},
++	[LPC_PBG] = {
++		.name = "Patsburg",
++		.iTCO_version = 2,
++	},
++	[LPC_DH89XXCC] = {
++		.name = "DH89xxCC",
++		.iTCO_version = 2,
++	},
++	[LPC_PPT] = {
++		.name = "Panther Point",
++		.iTCO_version = 2,
++	},
++	[LPC_LPT] = {
++		.name = "Lynx Point",
++		.iTCO_version = 2,
++	},
++	[LPC_LPT_LP] = {
++		.name = "Lynx Point_LP",
++		.iTCO_version = 2,
++	},
++	[LPC_WBG] = {
++		.name = "Wellsburg",
++		.iTCO_version = 2,
++	},
++	[LPC_AVN] = {
++		.name = "Avoton SoC",
++		.iTCO_version = 3,
++		.gpio_version = AVOTON_GPIO,
++	},
++	[LPC_BAYTRAIL] = {
++		.name = "Bay Trail SoC",
++		.iTCO_version = 3,
++	},
++	[LPC_COLETO] = {
++		.name = "Coleto Creek",
++		.iTCO_version = 2,
++	},
++	[LPC_WPT_LP] = {
++		.name = "Wildcat Point_LP",
++		.iTCO_version = 2,
++	},
++};
++
++/*
++ * This data only exists for exporting the supported PCI ids
++ * via MODULE_DEVICE_TABLE.  We do not actually register a
++ * pci_driver, because the I/O Controller Hub has also other
++ * functions that probably will be registered by other drivers.
++ */
++static const struct pci_device_id lpc_ich_ids[] = {
++	{ PCI_VDEVICE(INTEL, 0x2410), LPC_ICH},
++	{ PCI_VDEVICE(INTEL, 0x2420), LPC_ICH0},
++	{ PCI_VDEVICE(INTEL, 0x2440), LPC_ICH2},
++	{ PCI_VDEVICE(INTEL, 0x244c), LPC_ICH2M},
++	{ PCI_VDEVICE(INTEL, 0x2480), LPC_ICH3},
++	{ PCI_VDEVICE(INTEL, 0x248c), LPC_ICH3M},
++	{ PCI_VDEVICE(INTEL, 0x24c0), LPC_ICH4},
++	{ PCI_VDEVICE(INTEL, 0x24cc), LPC_ICH4M},
++	{ PCI_VDEVICE(INTEL, 0x2450), LPC_CICH},
++	{ PCI_VDEVICE(INTEL, 0x24d0), LPC_ICH5},
++	{ PCI_VDEVICE(INTEL, 0x25a1), LPC_6300ESB},
++	{ PCI_VDEVICE(INTEL, 0x2640), LPC_ICH6},
++	{ PCI_VDEVICE(INTEL, 0x2641), LPC_ICH6M},
++	{ PCI_VDEVICE(INTEL, 0x2642), LPC_ICH6W},
++	{ PCI_VDEVICE(INTEL, 0x2670), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2671), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2672), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2673), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2674), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2675), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2676), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2677), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2678), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x2679), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x267a), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x267b), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x267c), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x267d), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x267e), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x267f), LPC_631XESB},
++	{ PCI_VDEVICE(INTEL, 0x27b8), LPC_ICH7},
++	{ PCI_VDEVICE(INTEL, 0x27b0), LPC_ICH7DH},
++	{ PCI_VDEVICE(INTEL, 0x27b9), LPC_ICH7M},
++	{ PCI_VDEVICE(INTEL, 0x27bd), LPC_ICH7MDH},
++	{ PCI_VDEVICE(INTEL, 0x27bc), LPC_NM10},
++	{ PCI_VDEVICE(INTEL, 0x2810), LPC_ICH8},
++	{ PCI_VDEVICE(INTEL, 0x2812), LPC_ICH8DH},
++	{ PCI_VDEVICE(INTEL, 0x2814), LPC_ICH8DO},
++	{ PCI_VDEVICE(INTEL, 0x2815), LPC_ICH8M},
++	{ PCI_VDEVICE(INTEL, 0x2811), LPC_ICH8ME},
++	{ PCI_VDEVICE(INTEL, 0x2918), LPC_ICH9},
++	{ PCI_VDEVICE(INTEL, 0x2916), LPC_ICH9R},
++	{ PCI_VDEVICE(INTEL, 0x2912), LPC_ICH9DH},
++	{ PCI_VDEVICE(INTEL, 0x2914), LPC_ICH9DO},
++	{ PCI_VDEVICE(INTEL, 0x2919), LPC_ICH9M},
++	{ PCI_VDEVICE(INTEL, 0x2917), LPC_ICH9ME},
++	{ PCI_VDEVICE(INTEL, 0x3a18), LPC_ICH10},
++	{ PCI_VDEVICE(INTEL, 0x3a16), LPC_ICH10R},
++	{ PCI_VDEVICE(INTEL, 0x3a1a), LPC_ICH10D},
++	{ PCI_VDEVICE(INTEL, 0x3a14), LPC_ICH10DO},
++	{ PCI_VDEVICE(INTEL, 0x3b00), LPC_PCH},
++	{ PCI_VDEVICE(INTEL, 0x3b01), LPC_PCHM},
++	{ PCI_VDEVICE(INTEL, 0x3b02), LPC_P55},
++	{ PCI_VDEVICE(INTEL, 0x3b03), LPC_PM55},
++	{ PCI_VDEVICE(INTEL, 0x3b06), LPC_H55},
++	{ PCI_VDEVICE(INTEL, 0x3b07), LPC_QM57},
++	{ PCI_VDEVICE(INTEL, 0x3b08), LPC_H57},
++	{ PCI_VDEVICE(INTEL, 0x3b09), LPC_HM55},
++	{ PCI_VDEVICE(INTEL, 0x3b0a), LPC_Q57},
++	{ PCI_VDEVICE(INTEL, 0x3b0b), LPC_HM57},
++	{ PCI_VDEVICE(INTEL, 0x3b0d), LPC_PCHMSFF},
++	{ PCI_VDEVICE(INTEL, 0x3b0f), LPC_QS57},
++	{ PCI_VDEVICE(INTEL, 0x3b12), LPC_3400},
++	{ PCI_VDEVICE(INTEL, 0x3b14), LPC_3420},
++	{ PCI_VDEVICE(INTEL, 0x3b16), LPC_3450},
++	{ PCI_VDEVICE(INTEL, 0x5031), LPC_EP80579},
++	{ PCI_VDEVICE(INTEL, 0x1c41), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c42), LPC_CPTD},
++	{ PCI_VDEVICE(INTEL, 0x1c43), LPC_CPTM},
++	{ PCI_VDEVICE(INTEL, 0x1c44), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c45), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c46), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c47), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c48), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c49), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c4a), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c4b), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c4c), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c4d), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c4e), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c4f), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c50), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c51), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c52), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c53), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c54), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c55), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c56), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c57), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c58), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c59), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c5a), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c5b), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c5c), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c5d), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c5e), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1c5f), LPC_CPT},
++	{ PCI_VDEVICE(INTEL, 0x1d40), LPC_PBG},
++	{ PCI_VDEVICE(INTEL, 0x1d41), LPC_PBG},
++	{ PCI_VDEVICE(INTEL, 0x2310), LPC_DH89XXCC},
++	{ PCI_VDEVICE(INTEL, 0x1e40), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e41), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e42), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e43), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e44), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e45), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e46), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e47), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e48), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e49), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e4a), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e4b), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e4c), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e4d), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e4e), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e4f), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e50), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e51), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e52), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e53), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e54), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e55), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e56), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e57), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e58), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e59), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e5a), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e5b), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e5c), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e5d), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e5e), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x1e5f), LPC_PPT},
++	{ PCI_VDEVICE(INTEL, 0x8c40), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c41), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c42), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c43), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c44), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c45), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c46), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c47), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c48), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c49), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c4a), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c4b), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c4c), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c4d), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c4e), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c4f), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c50), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c51), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c52), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c53), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c54), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c55), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c56), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c57), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c58), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c59), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c5a), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c5b), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c5c), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c5d), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c5e), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x8c5f), LPC_LPT},
++	{ PCI_VDEVICE(INTEL, 0x9c40), LPC_LPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9c41), LPC_LPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9c42), LPC_LPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9c43), LPC_LPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9c44), LPC_LPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9c45), LPC_LPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9c46), LPC_LPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9c47), LPC_LPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x8d40), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d41), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d42), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d43), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d44), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d45), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d46), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d47), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d48), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d49), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d4a), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d4b), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d4c), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d4d), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d4e), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d4f), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d50), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d51), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d52), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d53), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d54), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d55), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d56), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d57), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d58), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d59), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d5a), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d5b), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d5c), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d5d), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d5e), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x8d5f), LPC_WBG},
++	{ PCI_VDEVICE(INTEL, 0x1f38), LPC_AVN},
++	{ PCI_VDEVICE(INTEL, 0x1f39), LPC_AVN},
++	{ PCI_VDEVICE(INTEL, 0x1f3a), LPC_AVN},
++	{ PCI_VDEVICE(INTEL, 0x1f3b), LPC_AVN},
++	{ PCI_VDEVICE(INTEL, 0x0f1c), LPC_BAYTRAIL},
++	{ PCI_VDEVICE(INTEL, 0x2390), LPC_COLETO},
++	{ PCI_VDEVICE(INTEL, 0x9cc1), LPC_WPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9cc2), LPC_WPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9cc3), LPC_WPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9cc5), LPC_WPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9cc6), LPC_WPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9cc7), LPC_WPT_LP},
++	{ PCI_VDEVICE(INTEL, 0x9cc9), LPC_WPT_LP},
++	{ 0, },			/* End of list */
++};
++MODULE_DEVICE_TABLE(pci, lpc_ich_ids);
++
++static void lpc_ich_restore_config_space(struct pci_dev *dev)
++{
++	struct lpc_ich_priv *priv = pci_get_drvdata(dev);
++
++	if (priv->abase_save >= 0) {
++		pci_write_config_byte(dev, priv->abase, priv->abase_save);
++		priv->abase_save = -1;
++	}
++
++	if (priv->actrl_pbase_save >= 0) {
++		pci_write_config_byte(dev, priv->actrl_pbase,
++			priv->actrl_pbase_save);
++		priv->actrl_pbase_save = -1;
++	}
++
++	if (priv->gctrl_save >= 0) {
++		pci_write_config_byte(dev, priv->gctrl, priv->gctrl_save);
++		priv->gctrl_save = -1;
++	}
++}
++
++static void lpc_ich_enable_acpi_space(struct pci_dev *dev)
++{
++	struct lpc_ich_priv *priv = pci_get_drvdata(dev);
++	u8 reg_save;
++
++	switch (lpc_chipset_info[priv->chipset].iTCO_version) {
++	case 3:
++		/*
++		 * Some chipsets (eg Avoton) enable the ACPI space in the
++		 * ACPI BASE register.
++		 */
++		pci_read_config_byte(dev, priv->abase, &reg_save);
++		pci_write_config_byte(dev, priv->abase, reg_save | 0x2);
++		priv->abase_save = reg_save;
++		break;
++	default:
++		/*
++		 * Most chipsets enable the ACPI space in the ACPI control
++		 * register.
++		 */
++		pci_read_config_byte(dev, priv->actrl_pbase, &reg_save);
++		pci_write_config_byte(dev, priv->actrl_pbase, reg_save | 0x80);
++		priv->actrl_pbase_save = reg_save;
++		break;
++	}
++}
++
++static void lpc_ich_enable_gpio_space(struct pci_dev *dev)
++{
++	struct lpc_ich_priv *priv = pci_get_drvdata(dev);
++	u8 reg_save;
++
++	pci_read_config_byte(dev, priv->gctrl, &reg_save);
++	pci_write_config_byte(dev, priv->gctrl, reg_save | 0x10);
++	priv->gctrl_save = reg_save;
++}
++
++static void lpc_ich_enable_pmc_space(struct pci_dev *dev)
++{
++	struct lpc_ich_priv *priv = pci_get_drvdata(dev);
++	u8 reg_save;
++
++	pci_read_config_byte(dev, priv->actrl_pbase, &reg_save);
++	pci_write_config_byte(dev, priv->actrl_pbase, reg_save | 0x2);
++
++	priv->actrl_pbase_save = reg_save;
++}
++
++static void lpc_ich_finalize_cell(struct pci_dev *dev, struct mfd_cell *cell)
++{
++	struct lpc_ich_priv *priv = pci_get_drvdata(dev);
++
++	cell->platform_data = &lpc_chipset_info[priv->chipset];
++	cell->pdata_size = sizeof(struct lpc_ich_info);
++}
++
++/*
++ * We don't check for resource conflict globally. There are 2 or 3 independent
++ * GPIO groups and it's enough to have access to one of these to instantiate
++ * the device.
++ */
++static int lpc_ich_check_conflict_gpio(struct resource *res)
++{
++	int ret;
++	u8 use_gpio = 0;
++
++	if (resource_size(res) >= 0x50 &&
++	    !acpi_check_region(res->start + 0x40, 0x10, "LPC ICH GPIO3"))
++		use_gpio |= 1 << 2;
++
++	if (!acpi_check_region(res->start + 0x30, 0x10, "LPC ICH GPIO2"))
++		use_gpio |= 1 << 1;
++
++	ret = acpi_check_region(res->start + 0x00, 0x30, "LPC ICH GPIO1");
++	if (!ret)
++		use_gpio |= 1 << 0;
++
++	return use_gpio ? use_gpio : ret;
++}
++
++static int lpc_ich_init_gpio(struct pci_dev *dev)
++{
++	struct lpc_ich_priv *priv = pci_get_drvdata(dev);
++	u32 base_addr_cfg;
++	u32 base_addr;
++	int ret;
++	bool acpi_conflict = false;
++	struct resource *res;
++
++	/* Setup power management base register */
++	pci_read_config_dword(dev, priv->abase, &base_addr_cfg);
++	base_addr = base_addr_cfg & 0x0000ff80;
++	if (!base_addr) {
++		dev_notice(&dev->dev, "I/O space for ACPI uninitialized\n");
++		lpc_ich_cells[LPC_GPIO].num_resources--;
++		goto gpe0_done;
++	}
++
++	res = &gpio_ich_res[ICH_RES_GPE0];
++	res->start = base_addr + ACPIBASE_GPE_OFF;
++	res->end = base_addr + ACPIBASE_GPE_END;
++	ret = acpi_check_resource_conflict(res);
++	if (ret) {
++		/*
++		 * This isn't fatal for the GPIO, but we have to make sure that
++		 * the platform_device subsystem doesn't see this resource
++		 * or it will register an invalid region.
++		 */
++		lpc_ich_cells[LPC_GPIO].num_resources--;
++		acpi_conflict = true;
++	} else {
++		lpc_ich_enable_acpi_space(dev);
++	}
++
++gpe0_done:
++	/* Setup GPIO base register */
++	pci_read_config_dword(dev, priv->gbase, &base_addr_cfg);
++	base_addr = base_addr_cfg & 0x0000ff80;
++	if (!base_addr) {
++		dev_notice(&dev->dev, "I/O space for GPIO uninitialized\n");
++		ret = -ENODEV;
++		goto gpio_done;
++	}
++
++	/* Older devices provide fewer GPIO and have a smaller resource size. */
++	res = &gpio_ich_res[ICH_RES_GPIO];
++	res->start = base_addr;
++	switch (lpc_chipset_info[priv->chipset].gpio_version) {
++	case ICH_V5_GPIO:
++	case ICH_V10CORP_GPIO:
++		res->end = res->start + 128 - 1;
++		break;
++	default:
++		res->end = res->start + 64 - 1;
++		break;
++	}
++
++	ret = lpc_ich_check_conflict_gpio(res);
++	if (ret < 0) {
++		/* this isn't necessarily fatal for the GPIO */
++		acpi_conflict = true;
++		goto gpio_done;
++	}
++	lpc_chipset_info[priv->chipset].use_gpio = ret;
++	lpc_ich_enable_gpio_space(dev);
++
++	lpc_ich_finalize_cell(dev, &lpc_ich_cells[LPC_GPIO]);
++	ret = mfd_add_devices(&dev->dev, -1, &lpc_ich_cells[LPC_GPIO],
++			      1, NULL, 0);
++
++gpio_done:
++	if (acpi_conflict)
++		pr_warn("Resource conflict(s) found affecting %s\n",
++				lpc_ich_cells[LPC_GPIO].name);
++	return ret;
++}
++
++static int lpc_ich_init_wdt(struct pci_dev *dev)
++{
++	struct lpc_ich_priv *priv = pci_get_drvdata(dev);
++	u32 base_addr_cfg;
++	u32 base_addr;
++	int ret;
++	struct resource *res;
++
++	/* Setup power management base register */
++	pci_read_config_dword(dev, priv->abase, &base_addr_cfg);
++	base_addr = base_addr_cfg & 0x0000ff80;
++	if (!base_addr) {
++		dev_notice(&dev->dev, "I/O space for ACPI uninitialized\n");
++		ret = -ENODEV;
++		goto wdt_done;
++	}
++
++	res = wdt_io_res(ICH_RES_IO_TCO);
++	res->start = base_addr + ACPIBASE_TCO_OFF;
++	res->end = base_addr + ACPIBASE_TCO_END;
++
++	res = wdt_io_res(ICH_RES_IO_SMI);
++	res->start = base_addr + ACPIBASE_SMI_OFF;
++	res->end = base_addr + ACPIBASE_SMI_END;
++
++	lpc_ich_enable_acpi_space(dev);
++
++	/*
++	 * iTCO v2:
++	 * Get the Memory-Mapped GCS register. To get access to it
++	 * we have to read RCBA from PCI Config space 0xf0 and use
++	 * it as base. GCS = RCBA + ICH6_GCS(0x3410).
++	 *
++	 * iTCO v3:
++	 * Get the Power Management Configuration register.  To get access
++	 * to it we have to read the PMC BASE from config space and address
++	 * the register at offset 0x8.
++	 */
++	if (lpc_chipset_info[priv->chipset].iTCO_version == 1) {
++		/* Don't register iomem for TCO ver 1 */
++		lpc_ich_cells[LPC_WDT].num_resources--;
++	} else if (lpc_chipset_info[priv->chipset].iTCO_version == 2) {
++		pci_read_config_dword(dev, RCBABASE, &base_addr_cfg);
++		base_addr = base_addr_cfg & 0xffffc000;
++		if (!(base_addr_cfg & 1)) {
++			dev_notice(&dev->dev, "RCBA is disabled by "
++					"hardware/BIOS, device disabled\n");
++			ret = -ENODEV;
++			goto wdt_done;
++		}
++		res = wdt_mem_res(ICH_RES_MEM_GCS_PMC);
++		res->start = base_addr + ACPIBASE_GCS_OFF;
++		res->end = base_addr + ACPIBASE_GCS_END;
++	} else if (lpc_chipset_info[priv->chipset].iTCO_version == 3) {
++		lpc_ich_enable_pmc_space(dev);
++		pci_read_config_dword(dev, ACPICTRL_PMCBASE, &base_addr_cfg);
++		base_addr = base_addr_cfg & 0xfffffe00;
++
++		res = wdt_mem_res(ICH_RES_MEM_GCS_PMC);
++		res->start = base_addr + ACPIBASE_PMC_OFF;
++		res->end = base_addr + ACPIBASE_PMC_END;
++	}
++
++	lpc_ich_finalize_cell(dev, &lpc_ich_cells[LPC_WDT]);
++	ret = mfd_add_devices(&dev->dev, -1, &lpc_ich_cells[LPC_WDT],
++			      1, NULL, 0);
++
++wdt_done:
++	return ret;
++}
++
++static int lpc_ich_probe(struct pci_dev *dev,
++				const struct pci_device_id *id)
++{
++	struct lpc_ich_priv *priv;
++	int ret;
++	bool cell_added = false;
++
++	priv = devm_kzalloc(&dev->dev,
++			    sizeof(struct lpc_ich_priv), GFP_KERNEL);
++	if (!priv)
++		return -ENOMEM;
++
++	priv->chipset = id->driver_data;
++
++	priv->actrl_pbase_save = -1;
++	priv->abase_save = -1;
++
++	priv->abase = ACPIBASE;
++	priv->actrl_pbase = ACPICTRL_PMCBASE;
++
++	priv->gctrl_save = -1;
++	if (priv->chipset <= LPC_ICH5) {
++		priv->gbase = GPIOBASE_ICH0;
++		priv->gctrl = GPIOCTRL_ICH0;
++	} else {
++		priv->gbase = GPIOBASE_ICH6;
++		priv->gctrl = GPIOCTRL_ICH6;
++	}
++
++	pci_set_drvdata(dev, priv);
++
++	if (lpc_chipset_info[priv->chipset].iTCO_version) {
++		ret = lpc_ich_init_wdt(dev);
++		if (!ret)
++			cell_added = true;
++	}
++
++	if (lpc_chipset_info[priv->chipset].gpio_version) {
++		ret = lpc_ich_init_gpio(dev);
++		if (!ret)
++			cell_added = true;
++	}
++
++	/*
++	 * We only care if at least one or none of the cells registered
++	 * successfully.
++	 */
++	if (!cell_added) {
++		dev_warn(&dev->dev, "No MFD cells added\n");
++		lpc_ich_restore_config_space(dev);
++		return -ENODEV;
++	}
++
++	return 0;
++}
++
++static void lpc_ich_remove(struct pci_dev *dev)
++{
++	mfd_remove_devices(&dev->dev);
++	lpc_ich_restore_config_space(dev);
++}
++
++static struct pci_driver lpc_ich_driver = {
++	.name		= "lpc_ich",
++	.id_table	= lpc_ich_ids,
++	.probe		= lpc_ich_probe,
++	.remove		= lpc_ich_remove,
++};
++
++//module_pci_driver(lpc_ich_driver);
++static int __init lpc_ich_init(void)
++{
++	return pci_register_driver(&lpc_ich_driver);
++}
++
++static void __exit lpc_ich_exit(void)
++{
++	pci_unregister_driver(&lpc_ich_driver);
++}
++
++module_init(lpc_ich_init);
++module_exit(lpc_ich_exit);
++
++MODULE_AUTHOR("Aaron Sierra <asierra@xes-inc.com>");
++MODULE_DESCRIPTION("LPC interface for Intel ICH");
++MODULE_LICENSE("GPL");
+diff --git a/include/linux/mfd/lpc_ich.h b/include/linux/mfd/lpc_ich.h
+new file mode 100644
+index 0000000..8feac78
+--- /dev/null
++++ b/include/linux/mfd/lpc_ich.h
+@@ -0,0 +1,52 @@
++/*
++ *  linux/drivers/mfd/lpc_ich.h
++ *
++ *  Copyright (c) 2012 Extreme Engineering Solution, Inc.
++ *  Author: Aaron Sierra <asierra@xes-inc.com>
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License 2 as published
++ *  by the Free Software Foundation.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; see the file COPYING.  If not, write to
++ *  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
++ */
++#ifndef LPC_ICH_H
++#define LPC_ICH_H
++
++/* Watchdog resources */
++#define ICH_RES_IO_TCO		0
++#define ICH_RES_IO_SMI		1
++#define ICH_RES_MEM_OFF		2
++#define ICH_RES_MEM_GCS_PMC	0
++
++/* GPIO resources */
++#define ICH_RES_GPIO	0
++#define ICH_RES_GPE0	1
++
++/* GPIO compatibility */
++enum {
++	ICH_I3100_GPIO,
++	ICH_V5_GPIO,
++	ICH_V6_GPIO,
++	ICH_V7_GPIO,
++	ICH_V9_GPIO,
++	ICH_V10CORP_GPIO,
++	ICH_V10CONS_GPIO,
++	AVOTON_GPIO,
++};
++
++struct lpc_ich_info {
++	char name[32];
++	unsigned int iTCO_version;
++	unsigned int gpio_version;
++	u8 use_gpio;
++};
++
++#endif
