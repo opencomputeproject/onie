@@ -1,0 +1,68 @@
+#!/bin/sh
+############################################################
+# <bsn.cl fy=2013 v=onl>
+#
+#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#        Copyright 2015 Quanta Computer Inc.
+#
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+#
+#        http://www.eclipse.org/legal/epl-v10.html
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+#
+# </bsn.cl>
+############################################################
+#
+# Platform: Quanta LY8
+#
+############################################################
+
+cur_dir=$(dirname $0)
+if [ -x $cur_dir/functions ]; then
+	. $cur_dir/functions
+else
+	echo "$cur_dir/functions not found"
+	exit 1
+fi
+
+usage() {
+    echo "One parameters <led color {green|orange|off}> required"
+}
+
+case $1 in
+    green)
+        p1=0
+        p2=1
+        ;;
+
+    orange)
+        p1=1
+        p2=0
+        ;;
+    off)
+        p1=1
+        p2=1
+        ;;
+
+    *)
+        usage
+        exit 1
+        ;;
+esac
+
+pca9555_20=$(gpio_find 20)
+pca9555_20p12=$(($pca9555_20 + $pca953x_p12))
+pca9555_20p13=$(($pca9555_20 + $pca953x_p13))
+
+gpio_set $pca9555_20p12 $p1
+gpio_set $pca9555_20p13 $p2
+
+exit 0

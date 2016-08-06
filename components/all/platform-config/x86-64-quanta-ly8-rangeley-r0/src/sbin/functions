@@ -1,0 +1,84 @@
+#!/bin/sh
+PATH=/sbin:/sbin:/usr/sbin:/bin:/usr/bin
+
+for i in `seq 0 4`; do
+	for j in `seq 0 7`; do
+		export pca953x_p$i$j=$(($i * 8 + $j))
+	done
+done
+
+gpio_export=/sys/class/gpio/export
+gpio_unexport=/sys/class/gpio/unexport
+
+gpio_find() {
+	[ $# != 1 ] && {
+		echo "Number of parameter should be 1"
+		exit 1
+	}
+
+	find /sys/devices -name *00$1 -exec ls -1 {}/gpio \; | grep gpiochip | sed "s/gpiochip//"
+}
+
+gpio_get() {
+	[ $# != 1 ] && {
+		echo "Number of parameter should be 1"
+		exit 1
+	}
+
+	gpio=$1
+	gpio_path=/sys/class/gpio/gpio$gpio
+
+	echo $gpio > $gpio_export
+	echo in > $gpio_path/direction
+	value=$(cat $gpio_path/value)
+	echo $gpio > $gpio_unexport
+
+	echo $value
+}
+
+gpio_set() {
+	[ $# != 2 ] && {
+		echo "Number of parameter should be 2"
+		exit 1
+	}
+
+	gpio=$1
+	gpio_path=/sys/class/gpio/gpio$gpio
+	value=$2
+
+	echo $gpio > $gpio_export
+	echo out > $gpio_path/direction
+	echo $value > $gpio_path/value
+	echo $gpio > $gpio_unexport
+}
+
+cpld_gpio_get() {
+	[ $# != 1 ] && {
+		echo "Number of parameter should be 1"
+		exit 1
+	}
+
+	gpio=$1
+	gpio_path=/sys/class/gpio/gpio$gpio
+
+	echo $gpio > $gpio_export
+	value=$(cat $gpio_path/value)
+	echo $gpio > $gpio_unexport
+
+	echo $value
+}
+
+cpld_gpio_set() {
+	[ $# != 2 ] && {
+		echo "Number of parameter should be 2"
+		exit 1
+	}
+
+	gpio=$1
+	gpio_path=/sys/class/gpio/gpio$gpio
+	value=$2
+
+	echo $gpio > $gpio_export
+	echo $value > $gpio_path/value
+	echo $gpio > $gpio_unexport
+}

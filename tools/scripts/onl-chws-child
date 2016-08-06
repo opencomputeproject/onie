@@ -1,0 +1,130 @@
+#!/bin/bash
+############################################################
+# <bsn.cl fy=2013 v=onl>
+#
+#        Copyright 2013, 2014 Big Switch Networks, Inc.
+#
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+#
+#        http://www.eclipse.org/legal/epl-v10.html
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+#
+# </bsn.cl>
+############################################################
+shopt -s extglob
+
+source /var/run/isolate$1.conf
+
+# Mount container-private filesystems
+mount -n -t proc proc "${WS_ROOT}/proc"
+mount -n -t sysfs sysfs "${WS_ROOT}/sys"
+mount -n -t devtmpfs udev "${WS_ROOT}/dev"
+mount -n -t devpts devpts "${WS_ROOT}/dev/pts"
+mount -n -t tmpfs none "${WS_ROOT}/run"
+: >"${WS_ROOT}/run/utmp"
+chmod 664 "${WS_ROOT}/run/utmp"
+chgrp utmp "${WS_ROOT}/run/utmp"
+mkdir "${WS_ROOT}/run/lock"
+chmod 1777 "${WS_ROOT}/run/lock"
+mkdir "${WS_ROOT}/run/resolvconf"
+cat /etc/resolv.conf >"${WS_ROOT}/run/resolvconf/resolv.conf"
+ln -snf ../run/resolvconf/resolv.conf "${WS_ROOT}/etc/resolv.conf"
+mkdir "${WS_ROOT}/run/sshd"
+
+# Enable loopback interface
+ifconfig lo up
+
+# Set the IP address of our end of the veth pair
+ip addr add ${ip1}/31 dev ${dev1}
+ip link set ${dev1} up
+
+# Add default route
+ip route add to 0.0.0.0/0 via ${ip0}
+
+# Include (isolatePID) in the shell prompt
+echo "${dev1}:${WS_ROOT##*/}" >"${WS_ROOT}/run/debian_chroot"
+touch "${WS_ROOT}/etc/debian_chroot"
+mount -n --bind "${WS_ROOT}/run/debian_chroot" "${WS_ROOT}/etc/debian_chroot"
+
+if ! grep -q "^${SUDO_USER}:" "${WS_ROOT}/etc/passwd"; then
+    if ! getent passwd "${SUDO_UID}" >>"${WS_ROOT}/etc/passwd"; then
+	echo "${SUDO_USER}:x:${SUDO_UID}:${SUDO_GID}:${SUDO_USER}:${HOME}:/bin/bash" >>"${WS_ROOT}/etc/passwd"
+    fi
+fi
+
+if ! grep -q "^${SUDO_USER}:" "${WS_ROOT}/etc/shadow"; then
+    if ! getent shadow "${SUDO_UID}" >>"${WS_ROOT}/etc/shadow"; then
+	echo "${SUDO_USER}::::::::" >>"${WS_ROOT}/etc/shadow"
+    fi
+fi
+
+if ! grep -q "^[^:]*:[^:]*:${SUDO_GID}:" "${WS_ROOT}/etc/group"; then
+    if ! getent group "${SUDO_GID}" >>"${WS_ROOT}/etc/group"; then
+	echo "${SUDO_USER}:x:${SUDO_GID}:" >>"${WS_ROOT}/etc/group"
+    fi
+fi
+
+if ! grep -q "OPENSSL_ppccap" "${WS_ROOT}/etc/sudoers"; then
+    echo 'Defaults env_keep="OPENSSL_ppccap"' >>"${WS_ROOT}/etc/sudoers"
+fi
+if ! grep -q "mailerpath" "${WS_ROOT}/etc/sudoers"; then
+    echo 'Defaults !mailerpath' >>"${WS_ROOT}/etc/sudoers"
+fi
+if ! grep -q "^${SUDO_USER} " "${WS_ROOT}/etc/sudoers"; then
+    echo "${SUDO_USER} ALL=(ALL) NOPASSWD: ALL" >>"${WS_ROOT}/etc/sudoers"
+fi
+
+cp /etc/localtime "${WS_ROOT}/etc/localtime"
+
+mkdir -p "${WS_ROOT}${HOME}"
+mount -n --bind "${HOME}" "${WS_ROOT}${HOME}"
+
+if [ ! -f "${WS_ROOT}${WS_ROOT}/.pandora-ws" ]; then
+    d=$(df -P . | tail -1 | awk '{ print $6 }')
+    mkdir -p "${WS_ROOT}$d"
+    mount -n --bind "$d" "${WS_ROOT}$d"
+fi
+
+function source_rc {
+    if [ -f "$1" ]; then
+        echo "Sourcing $1"
+        source $1
+    fi
+}
+
+# external rc files can use these functions to simplify bind-mounting:
+#
+# bind_mount_dst local_src workspace_dst
+#
+# bind mount the given source directory at the given destination in the workspace
+function bind_mount_dst {
+    if [ -d "$1" ]; then
+        mkdir -p "${WS_ROOT}$2"
+        echo "Mounting $1 -> $2"
+        mount -n --bind "$1" "${WS_ROOT}$2"
+    fi
+}
+#
+# bind_mount dir
+#
+# bind mount the given local directory at the same location in the workspace.
+function bind_mount {
+    bind_mount_dst $1 $1
+}
+
+# Include optional system rc, user rc, and workspace rc:
+source_rc /etc/onl-chws.d/onl-chwsrc
+source_rc ${HOME}/.onl-chwsrc
+source_rc ${WS_ROOT}/.onl-chwsrc
+
+# Start an SSH server
+mkdir -p "${WS_ROOT}/var/run/sshd"
+chroot "${WS_ROOT}" /usr/sbin/sshd -4

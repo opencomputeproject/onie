@@ -1,0 +1,26 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:        initdev
+# Required-Start:
+# Required-Stop:
+# Default-Start:   S
+# Default-Stop:
+# Short-Description: Set up block and net devices
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+log_action_begin_msg "Setting up block and net devices"
+
+ln -snf /proc/mounts /etc/mtab
+
+( cd /sys/class/block; for d in *; do /sbin/initblockdev $d add; done )
+if [ -d /sys/class/ubi ]; then
+    ( cd /sys/class/ubi; for d in *; do /sbin/initblockdev $d add; done )
+fi
+( cd /sys/class/net; for d in *; do /sbin/initnetdev $d add; done )
+
+initmounts
+
+log_action_end_msg 0

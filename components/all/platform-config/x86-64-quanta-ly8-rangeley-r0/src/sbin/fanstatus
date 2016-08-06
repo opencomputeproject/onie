@@ -1,0 +1,78 @@
+#!/bin/bash
+
+fanled=$(dirname $0)/fanled
+fans=(1 2 3 5 6 7)
+fanleds=(1 2 3 1 2 3)
+hwmon=quanta_ly8_hwmon
+min_rpm=3000
+
+usage() {
+    echo "Report fan status, parameter 1 could be <devices {fan1|fan2|fan3|fan5|fan6|fan7}>"
+}
+
+show_fan=1
+case $1 in
+    1|fan1)
+        fan=1
+        ;;
+
+    2|fan2)
+        fan=2
+        ;;
+
+    3|fan3)
+        fan=3
+        ;;
+
+    5|fan5)
+        fan=5
+        ;;
+
+    6|fan6)
+        fan=6
+        ;;
+
+    7|fan7)
+        fan=7
+        ;;
+
+    -n|--no-fan)
+        show_fan=1
+        ;;
+
+    -h|--help|fan[0-9]|[0-9])
+        usage
+        exit 0
+        ;;
+
+    *)
+        fan=0
+        ;;
+esac
+
+case $2 in
+    -n|--no-fan)
+        show_fan=0
+        ;;
+esac
+
+for i in `seq 0 $((${#fans[@]}-1))`; do
+    if [ "${fans[$i]}" != "$fan" ] && [ "$fan" != "0" ]; then
+        continue
+    fi
+
+    rpm[$i]=$(sensors ${hwmon}-* | grep "Fan ${fans[$i]}" | sed 's/.* \([[:digit:]]*\) .*/\1/')
+    if [ ${rpm[$i]} -lt ${min_rpm} ]; then
+        if [ "$show_fan" == 1 ]; then
+            echo "${fans[$i]} warn"
+        else
+            echo "warn"
+        fi
+    else
+        if [ "$show_fan" == 1 ]; then
+            echo "${fans[$i]} ok"
+        else
+            echo "ok"
+        fi
+    fi
+done

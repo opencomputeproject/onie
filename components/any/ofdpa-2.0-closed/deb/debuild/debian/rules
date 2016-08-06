@@ -1,0 +1,62 @@
+#!/usr/bin/make -f
+
+DEB_DH_INSTALL_SOURCEDIR = debian/tmp
+INSTALL_DIR = $(CURDIR)/$(DEB_DH_INSTALL_SOURCEDIR)
+PACKAGE_NAME = ofdpa-2.0-closed
+
+OFDPA=$(ONL)/submodules/ofdpa-2.0-closed/
+BUILD=$(OFDPA)/output/ONL/build
+ACCTON=$(OFDPA)/ofdpa-2.0-closed-accton/
+
+DOCS=LEGAL_TERMS README README.md RELEASE_NOTES LICENSE_CDP_BIN README_CDP_SRC
+
+
+# this is a hack, but right now we only support the one kernel/platform
+# FIXME move to use $ONL/tools/kmodcopy.sh
+KERNDIR=3.9.6-OpenNetworkLinux-85xx/ofdpa
+KERNDIR_ACCTON=3.8.13-OpenNetworkLinux-e500mc-1.5/ofdpa
+
+
+%:
+	dh $@
+
+build-arch:
+	dh build-arch
+
+clean:
+	dh clean
+
+override_dh_shlibdeps:
+	@echo "Skipping dh_shlibdeps"
+
+override_dh_auto_install:
+	mkdir -p    $(INSTALL_DIR)/usr/bin \
+                $(INSTALL_DIR)/lib/modules/$(KERNDIR) \
+                $(INSTALL_DIR)/lib/modules/$(KERNDIR_ACCTON) \
+                $(INSTALL_DIR)/usr/sbin \
+                $(INSTALL_DIR)/etc/init.d \
+                $(INSTALL_DIR)/etc/default \
+                $(INSTALL_DIR)/lib/$(DEB_HOST_GNU_TYPE) \
+                $(INSTALL_DIR)/usr/include/ofdpa-2.0 \
+                $(INSTALL_DIR)/usr/share/doc/ofdpa-2.0-closed
+	cp $(BUILD)/linux-kernel-bde.ko \
+        $(BUILD)/linux-user-bde.ko \
+        $(INSTALL_DIR)/lib/modules/$(KERNDIR)
+	cp $(ACCTON)/linux-kernel-bde.ko \
+        $(ACCTON)/linux-user-bde.ko \
+        $(INSTALL_DIR)/lib/modules/$(KERNDIR_ACCTON)
+	cp $(BUILD)/librpc_client.so.1 $(INSTALL_DIR)/lib/$(DEB_HOST_GNU_TYPE)/libofdpa_rpc_client.so.1
+	cp $(BUILD)/ofdpa $(INSTALL_DIR)/usr/sbin/ofdpa-powerpc-quanta-ly2-r0
+	cp $(ACCTON)/ofdpa-powerpc-as5710-54x-r0b $(INSTALL_DIR)/usr/sbin/ofdpa-powerpc-accton-as5710-54x-r0
+	cp $(BUILD)/ofagent $(INSTALL_DIR)/usr/sbin/brcm-indigo-ofdpa-ofagent
+	cp $(OFDPA)/application/api/include/*.h $(INSTALL_DIR)/usr/include/ofdpa-2.0
+	cp $(OFDPA)/ofdpa-init.sh $(INSTALL_DIR)/etc/init.d/ofdpa
+	cp $(OFDPA)/ofdpa-default.sh $(INSTALL_DIR)/etc/default/ofdpa
+	for doc in $(DOCS) ; do \
+        cp $(OFDPA)/$$doc $(INSTALL_DIR)/usr/share/doc/ofdpa-2.0-closed ; \
+        done
+  
+
+
+
+

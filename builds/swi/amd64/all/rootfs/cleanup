@@ -1,0 +1,70 @@
+#!/bin/bash -ex
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+#
+# Perform all post-multistrap rootfs setup.
+#
+############################################################
+
+LOCALDIR=$(dirname "$0")
+SHARED_DIR=${LOCALDIR}/../../../all/shared
+WS_ROOT=$1
+tar -C "${SHARED_DIR}" -c --exclude "*~" . | tar -C "${WS_ROOT}" -x -v --no-same-owner
+RFSTOOL="python ${ONL}/tools/py/rfstool.py --chroot ${WS_ROOT}"
+
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d initdev defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d restorepersist defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d rc.boot defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d sensors-baseconf defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d platform-baseconf defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d loadstartupconfig defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d ssh defaults
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d openbsd-inetd remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d ntp remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d nfs-common remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d rpcbind remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d motd remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d kexec remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d kexec-load remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mountall-bootclean.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mountall.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d checkfs.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mtab.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d checkroot-bootclean.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d checkroot.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mountnfs-bootclean.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d mountnfs.sh remove
+chroot "${WS_ROOT}" /usr/sbin/update-rc.d lm-sensors remove
+
+${RFSTOOL} -c user_password_set root onl
+# Standard admin and recovery accounts
+${RFSTOOL} -c user_recovery_add standard
+${RFSTOOL} -c user_admin_add
+
+rm -f "${WS_ROOT}/etc/securetty" # allow root login via telnet
+sed -i "s/\(^[123456]:.*\)/#\1/" "${WS_ROOT}/etc/inittab"
+echo "T0:23:respawn:/sbin/pgetty" >>"${WS_ROOT}/etc/inittab"
+
+echo "onl-x86" > "${WS_ROOT}/etc/hostname"
+
+${RFSTOOL} -c fsclean
+
+

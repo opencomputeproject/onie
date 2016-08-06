@@ -1,0 +1,71 @@
+#!/usr/bin/python
+############################################################
+# <bsn.cl fy=2013 v=onl>
+# 
+#        Copyright 2013, 2014 Big Switch Networks, Inc.       
+# 
+# Licensed under the Eclipse Public License, Version 1.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+# 
+#        http://www.eclipse.org/legal/epl-v10.html
+# 
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied. See the License for the specific
+# language governing permissions and limitations under the
+# License.
+# 
+# </bsn.cl>
+############################################################
+#
+# watchdir
+#
+############################################################
+import optparse, os.path, sys
+import pyinotify
+
+#pyinotify.log.setLevel(pyinotify.logging.DEBUG)
+
+op = optparse.OptionParser( usage="%prog [OPTIONS] command")
+op.add_option("-w", "--watchdir", action="append",
+              help="monitor watchdir for changes (may be used multiple times)")
+op.add_option("--period", action="store", type="float",
+              help="run command at most every period sec (default=%default)")
+op.add_option("-d", "--daemon", action="store_true",
+              help="run in background")
+op.add_option("--logfile", action="store",
+              help="send output to logfile when running in background")
+op.add_option("--pidfile", action="store",
+              help="write pid to pidfile when running in background")
+op.set_defaults(period=0, logfile="/dev/stdout", pidfile=False)
+opts, args = op.parse_args()
+
+if not opts.watchdir:
+    op.error("need at least one watchdir")
+
+os.close(0)
+os.open("/dev/null", os.O_RDONLY)
+
+wm = pyinotify.WatchManager()
+n = pyinotify.Notifier(wm, read_freq=opts.period)
+def handle(event):
+    dir = None
+    for d in opts.watchdir:
+        if os.path.commonprefix([d, event.pathname]) == d:
+            dir = d
+    sys.stdout.write("%s: %s %s\n" % (dir, event.pathname, event))
+    sys.stdout.flush()
+    if args:
+        os.spawnvp(os.P_WAIT, args[0],
+                   args + [dir, event.pathname, event.maskname])
+wm.add_watch(
+    opts.watchdir,
+    pyinotify.IN_ATTRIB | pyinotify.IN_CREATE | pyinotify.IN_DELETE |
+    pyinotify.IN_MODIFY | pyinotify.IN_MOVED_FROM | pyinotify.IN_MOVED_TO,
+    handle,
+    rec=True,
+    auto_add=True)
+n.loop(daemonize=opts.daemon, stdout=opts.logfile, stderr=opts.logfile,
+       pid_file=opts.pidfile)

@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+  configure)
+    set -x
+    sed -i 's/^%admin .*/%admin ALL=(ALL)NOPASSWD: ALL/' /etc/sudoers
+    if ! grep -q '^# Used by isolate' /etc/hosts; then
+        echo -e "\n# Used by isolate; must be sequential starting with an even address" >>/etc/hosts
+        for i in $(seq 0 31); do
+            echo -e "10.198.0.$i iso$i" >>/etc/hosts
+        done
+    fi
+    set +x
+    ;;
+  abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+  *)
+    echo "postinst called with unknown argument '$1'" >&2
+    exit 0
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0
