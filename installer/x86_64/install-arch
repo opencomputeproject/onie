@@ -77,6 +77,17 @@ init_onie_install()
     }
     . ./onie-blkdev-common
 
+    # wipe out current onie_dev if ONIE will embed to another
+    # one, or just keep updating to current one
+    curr_onie_dev=$(onie_get_boot_disk)
+    if [ -b "$curr_onie_dev" ] && [ "$curr_onie_dev" != "$onie_dev" ] ; then
+        if [ "$onie_boot_reason" = "embed" ] ; then
+            wipe_curr_onie_dev="yes"
+        else
+            onie_dev="$curr_onie_dev"
+        fi
+    fi
+
     running_firmware="$(onie_get_running_firmware)"
 
     # Determine the desired firmware to install based on the
@@ -212,17 +223,42 @@ create_msdos_partition()
     }
 }
 
+init_msdos_partition_table()
+{
+    local blkdev=$1
+    local sgdisk_log=$(mktemp)
+
+    sgdisk --zap-all "$blkdev" > $sgdisk_log 2>&1 || {
+        # retry again for fixing the issue:
+        # Invalid partition data!
+        sgdisk --zap-all "$blkdev" >> $sgdisk_log 2>&1 || {
+            echo "ERROR: Problems wiping GPT and MBR on: $blkdev"
+            cat $sgdisk_log && rm -f $sgdisk_log
+            exit 1
+        }
+    }
+
+    rm -f $sgdisk_log
+
+    parted -s "$blkdev" mklabel msdos || {
+        echo "ERROR: Problems creating msdos disk label on: $blkdev"
+        exit 1
+    }
+}
+
 # Initializes the disk for msdos usage.
 # - Creates the msdos disk label on the device, wiping out all partitions
 # - Creates the needed msdos partitions
 init_msdos_disk()
 {
-    # Create GPT disk label
+    # Create MSDOS disk label
     [ "$verbose" = "yes" ] && echo "Creating msdos disk label on: $onie_dev"
-    parted -s "$onie_dev" mklabel msdos || {
-        echo "ERROR: Problems creating msdos disk label on: $onie_dev"
-        exit 1
-    }
+
+    if [ "$wipe_curr_onie_dev" = "yes" ] ; then
+        init_msdos_partition_table "$curr_onie_dev"
+    fi
+
+    init_msdos_partition_table "$onie_dev"
 
     for p in onie_boot ; do
         create_msdos_partition $p
@@ -311,6 +347,30 @@ create_gpt_partition()
     rm -f $sgdisk_log
 }
 
+init_gpt_partition_table()
+{
+    local blkdev=$1
+    local sgdisk_log=$(mktemp)
+
+    sgdisk --zap-all "$blkdev" > $sgdisk_log 2>&1 || {
+        # retry again for fixing the issue:
+        # Invalid partition data!
+        sgdisk --zap-all "$blkdev" >> $sgdisk_log 2>&1 || {
+            echo "ERROR: Problems wiping GPT and MBR on: $blkdev"
+            cat $sgdisk_log && rm -f $sgdisk_log
+            exit 1
+        }
+    }
+
+    sgdisk --clear --mbrtogpt "$blkdev" > $sgdisk_log 2>&1 || {
+        echo "ERROR: Problems creating GPT disk label on: $blkdev"
+        cat $sgdisk_log && rm -f $sgdisk_log
+        exit 1
+    }
+
+    rm -f $sgdisk_log
+}
+
 # Initializes the disk for GPT usage.
 # - Creates the GPT disk label on the device, wiping out all partitions
 # - Creates the needed GPT partitions
@@ -318,20 +378,12 @@ init_gpt_disk()
 {
     # Create GPT disk label
     [ "$verbose" = "yes" ] && echo "Creating GPT disk label on: $onie_dev"
-    local sgdisk_log=$(mktemp)
 
-    sgdisk --zap-all "$onie_dev" > $sgdisk_log 2>&1 || {
-	echo "ERROR: Problems wiping GPT and MBR on: $onie_dev"
-	cat $sgdisk_log && rm -f $sgdisk_log
-	exit 1
-    }
+    if [ "$wipe_curr_onie_dev" = "yes" ] ; then
+        init_gpt_partition_table "$curr_onie_dev"
+    fi
 
-    sgdisk --clear --mbrtogpt "$onie_dev" > $sgdisk_log 2>&1 || {
-        echo "ERROR: Problems creating GPT disk label on: $onie_dev"
-        cat $sgdisk_log && rm -f $sgdisk_log
-        exit 1
-    }
-    rm -f $sgdisk_log
+    init_gpt_partition_table "$onie_dev"
 
     for p in grub_boot onie_boot ; do
         create_gpt_partition $p
@@ -383,20 +435,12 @@ init_uefi_disk()
 {
     # Create GPT disk label
     [ "$verbose" = "yes" ] && echo "Initializing UEFI disk partitions on: $onie_dev"
-    local sgdisk_log=$(mktemp)
 
-    sgdisk --zap-all "$onie_dev" > $sgdisk_log 2>&1 || {
-        echo "ERROR: Problems wiping GPT and MBR on: $onie_dev"
-        cat $sgdisk_log && rm -f $sgdisk_log
-        exit 1
-    }
+    if [ "$wipe_curr_onie_dev" = "yes" ] ; then
+        init_gpt_partition_table "$curr_onie_dev"
+    fi
 
-    sgdisk --clear --mbrtogpt "$onie_dev" > $sgdisk_log 2>&1 || {
-        echo "ERROR: Problems creating GPT disk label on: $onie_dev"
-        cat $sgdisk_log && rm -f $sgdisk_log
-        exit 1
-    }
-    rm -f $sgdisk_log
+    init_gpt_partition_table "$onie_dev"
 
     for p in uefi_esp onie_boot ; do
         create_gpt_partition $p
@@ -620,6 +664,7 @@ install_image()
     if [ "$onie_boot_reason" = "embed" ] ; then
         # umount any partitions that might be mounted on this disk
         for p in $(seq 8) ; do
+            umount ${curr_onie_dev}$blk_suffix$p > /dev/null 2>&1
             umount ${onie_dev}$blk_suffix$p > /dev/null 2>&1
         done
         # Initialize block device
