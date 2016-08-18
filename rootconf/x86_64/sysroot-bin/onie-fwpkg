@@ -166,6 +166,7 @@ shift $(( $OPTIND - 1 ))
 remove_update()
 {
     local name="$1"
+    local warn_exists="$2"
 
     local exists=no
 
@@ -188,8 +189,10 @@ remove_update()
         exists=yes
     }
 
-    if [ "$exists" = "no" ] ; then
-        [ "$quiet" != "yes" ] && echo "Warning: No files exist for update: $name"
+    if [ "$warn_exists" = "yes" ] ; then
+        if [ "$exists" = "no" ] ; then
+            [ "$quiet" != "yes" ] && echo "Warning: No files exist for update: $name"
+        fi
     fi
 
 }
@@ -233,7 +236,7 @@ cmd_add()
     # OK to stage the update.
 
     # Removing any old attempts and results files.
-    remove_update "$name"
+    remove_update "$name" "no"
 
     # Stage the update
     [ "$quiet" != "yes" ] && echo "Staging firmware update: $file"
@@ -254,7 +257,7 @@ cmd_remove()
     local pending="${onie_update_pending_dir}/$name"
 
     # Remove any associated files.
-    remove_update "$name" && return 0
+    remove_update "$name" "yes" && return 0
 
     return 1
 }
