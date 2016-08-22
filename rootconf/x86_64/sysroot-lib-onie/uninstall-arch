@@ -169,14 +169,6 @@ uninstall_system()
         exit 1
     }
 
-    # Wipe out and delete all partitions, except for important ones,
-    # like GRUB, ONIE and possibly a DIAG.
-    ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev//" | while read part ; do
-        if eval $should_delete_partition $blk_dev $part ; then
-            erase_part $blk_dev $part
-        fi
-    done
-
     if [ "$(onie_get_running_firmware)" = "uefi" ] ; then
         uefi_clean_up
         uefi_boot_onie_install
@@ -185,6 +177,14 @@ uninstall_system()
         # probably installed there.
         bios_boot_onie_install
     fi
+
+    # Wipe out and delete all partitions, except for important ones,
+    # like GRUB, ONIE and possibly a DIAG.
+    ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev//" | while read part ; do
+        if eval $should_delete_partition $blk_dev $part ; then
+            erase_part $blk_dev $part
+        fi
+    done
 
     return 0
 }
