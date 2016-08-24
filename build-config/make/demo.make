@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2015,2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -86,6 +86,7 @@ $(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
 	$(Q) echo "==== Create demo $(MACHINE_PREFIX) u-boot multi-file initramfs itb ===="
 	$(Q) cd $(IMAGEDIR) && \
 		V=$(V) $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) $(MACHINE_PREFIX) $(UBOOT_ITB_ARCH) \
+		$(KERNEL_LOAD_ADDRESS) $(KERNEL_ENTRY_POINT) \
 		$(KERNEL_VMLINUZ) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb $(DEMO_SYSROOT_CPIO_XZ) $(DEMO_UIMAGE)
 	$(Q) touch $@
 

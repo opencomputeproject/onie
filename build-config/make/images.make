@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
 #  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
@@ -294,6 +294,7 @@ $(IMAGEDIR)/%.itb : $(KERNEL_INSTALL_STAMP) $(SYSROOT_CPIO_XZ) $(SCRIPTDIR)/onie
 	$(Q) echo "==== Create $* u-boot multi-file .itb image ===="
 	$(Q) cd $(IMAGEDIR) && \
 		V=$(V) $(SCRIPTDIR)/onie-mk-itb.sh $(MACHINE) $(MACHINE_PREFIX) $(UBOOT_ITB_ARCH) \
+		$(KERNEL_LOAD_ADDRESS) $(KERNEL_ENTRY_POINT) \
 		$(KERNEL_VMLINUZ) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb $(SYSROOT_CPIO_XZ) $@
 
 $(UPDATER_ITB) : $(ITB_IMAGE)

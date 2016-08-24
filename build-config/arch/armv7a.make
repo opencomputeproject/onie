@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -13,6 +14,8 @@ CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
 
 KERNEL_ARCH		= arm
+KERNEL_LOAD_ADDRESS	?= 0x60008000
+KERNEL_ENTRY_POINT	?= 0x60008000
 KERNEL_DTB		?= $(MACHINE).dtb
 KERNEL_DTB_PATH		?= $(KERNEL_DTB)
 KERNEL_IMAGE_FILE	= $(LINUX_BOOTDIR)/compressed/piggy.gzip
