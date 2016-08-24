@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -151,7 +151,7 @@ CLEAN += u-boot-clean
 u-boot-clean:
 	$(Q) rm -rf $(UBOOT_BUILD_DIR)
 	$(Q) rm -f $(UBOOT_STAMP)
-	$(Q) rm -f $(IMAGEDIR)/*.u-boot
+	$(Q) rm -f $(UBOOT_INSTALL_IMAGE)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
 DOWNLOAD_CLEAN += u-boot-download-clean
