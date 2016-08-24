@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -21,45 +22,47 @@ MACHINE_PREFIX="$2"
 }
 
 ARCH="$3"
-case $ARCH in
-    ppc)
-        KERNEL_COMPRESSION="gzip"
-        KERNEL_LOAD="0x00000000"
-        KERNEL_ENTRY="0x00000000"
-        INITRD_LOAD="0x00000000"
-        FTD="fdt = \"dtb\";"
-        ;;
-    arm)
-        KERNEL_COMPRESSION="gzip"
-        KERNEL_LOAD="0x61008000"
-        KERNEL_ENTRY="0x61008000"
-        INITRD_LOAD="0x00000000"
-        FTD="fdt = \"dtb\";"
-        ;;
-    *)
-        echo "Error: Unsupported architecture: $ARCH"
-        exit 1
-esac
+if [ "$ARCH" != "ppc" ] &&
+   [ "$ARCH" != "arm" ] ; then
+    echo "Error: Unsupported architecture: $ARCH"
+    exit 1
+fi
 
-KERNEL="$4"
+KERNEL_LOAD="$4"
+[ -n "$KERNEL_LOAD" ] || {
+    echo "Error: KERNEL_LOAD was not specified"
+    exit 1
+}
+
+KERNEL_ENTRY="$5"
+[ -n "$KERNEL_ENTRY" ] || {
+    echo "Error: KERNEL_ENTRY was not specified"
+    exit 1
+}
+
+KERNEL_COMPRESSION="gzip"
+INITRD_LOAD="0x00000000"
+FDT="fdt = \"dtb\";"
+
+KERNEL="$6"
 [ -r "$KERNEL" ] || {
     echo "Error: KERNEL file is not readable: $KERNEL"
     exit 1
 }
 
-DTB="$5"
+DTB="$7"
 [ -r "$DTB" ] || {
     echo "Error: DTB file is not readable: $DTB"
     exit 1
 }
 
-SYSROOT="$6"
+SYSROOT="$8"
 [ -r "$SYSROOT" ] || {
     echo "Error: SYSROOT file is not readable: $SYSROOT"
     exit 1
 }
 
-OUTFILE="$7"
+OUTFILE="$9"
 [ -n "$OUTFILE" ] || {
     echo "Error: output .itb file not specified"
     exit 1
@@ -149,7 +152,7 @@ DTB="$(realpath $DTB)"
 			description = "${MACHINE_PREFIX}";
 			kernel = "kernel";
 			ramdisk = "initramfs";
-			$FTD
+			$FDT
 		};
 	};
 };
