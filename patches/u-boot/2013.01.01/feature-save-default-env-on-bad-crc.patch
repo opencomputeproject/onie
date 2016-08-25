@@ -1,6 +1,8 @@
 Save default env when crc is bad.
 
 Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2013 Miles Tseng <miles_tseng@accton.com>
+Copyright (C) 2016 david_yang <david_yang@accton.com>
 
 SPDX-License-Identifier:     GPL-2.0
 
@@ -47,10 +49,18 @@ index 6a7bf4b..079c693 100644
  	WATCHDOG_RESET();
  	bedbug_init();
 diff --git a/common/env_common.c b/common/env_common.c
-index 906b41f..df0f1ba 100644
+index 906b41f..0de1920 100644
 --- a/common/env_common.c
 +++ b/common/env_common.c
-@@ -240,3 +240,24 @@ int env_complete(char *var, int maxv, char *cmdv[], int bufsz, char *buf)
+@@ -31,6 +31,7 @@
+ #include <search.h>
+ #include <errno.h>
+ #include <malloc.h>
++#include <spi_flash.h>
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+@@ -240,3 +241,52 @@ int env_complete(char *var, int maxv, char *cmdv[], int bufsz, char *buf)
  	return found;
  }
  #endif
@@ -68,11 +78,39 @@ index 906b41f..df0f1ba 100644
 +*/
 +void env_write_default_if_crc_bad(void)
 +{
++#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
++	int ret;
++	struct spi_flash *env_flash = NULL;
++	env_t *env_ptr = (env_t *)malloc(sizeof(env_t));
++	memset(env_ptr, '\0', sizeof(env_t));
++
++	env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
++			CONFIG_ENV_SPI_CS,
++			CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
++	if (!env_flash) {
++		set_default_env("!spi_flash_probe() failed");
++		goto free_and_exit;
++	}
++
++	ret = spi_flash_read(env_flash, CONFIG_ENV_OFFSET, ENV_SIZE, (char *)env_ptr);
++	if (ret) {
++		printf("SPI Read Fail!\n");
++		goto free_and_exit;
++	}
++#else
 +	env_t *env_ptr = (env_t *)CONFIG_ENV_ADDR;
++#endif
++
 +	if (crc32(0, env_ptr->data, ENV_SIZE) != env_ptr->crc) {
 +		puts("Writing default environment\n");
 +		saveenv();
 +	}
++
++#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
++free_and_exit:
++	free(env_ptr);
++#endif
++	return;
 +}
 +#endif
 diff --git a/include/environment.h b/include/environment.h

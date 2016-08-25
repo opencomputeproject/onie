@@ -2,16 +2,17 @@ Add to support 'sys_eeprom' command (common part)
 
 Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
 Copyright (C) 2014 Srideep <srideep_devireddy@dell.com>
+Copyright (C) 2013 Miles Tseng <miles_tseng@accton.com>
 Copyright (C) 2014,2016 david_yang <david_yang@accton.com>
 
 SPDX-License-Identifier:     GPL-2.0
 
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
 new file mode 100644
-index 0000000..ab02104
+index 0000000..cf2ed1c
 --- /dev/null
 +++ b/common/cmd_sys_eeprom.c
-@@ -0,0 +1,1129 @@
+@@ -0,0 +1,1276 @@
 +/*
 + * See file CREDITS for list of people who contributed to this
 + * project.
@@ -22,7 +23,10 @@ index 0000000..ab02104
 +#include <common.h>
 +#include <command.h>
 +#include <i2c.h>
++#include <spi_flash.h>
++#include <environment.h>
 +#include <linux/ctype.h>
++#include <nand.h>
 +
 +#include "sys_eeprom.h"
 +
@@ -118,7 +122,9 @@ index 0000000..ab02104
 +{
 +	int ret;
 +	tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
++#ifndef CONFIG_SYS_EEPROM_USE_COMMON_NAND_IO
 +	tlvinfo_tlv_t    * eeprom_tlv = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t)];
++#endif
 +
 +	if (has_been_read)
 +		return 0;
@@ -127,8 +133,14 @@ index 0000000..ab02104
 +	ret = read_sys_eeprom((void *)eeprom_hdr, 0, sizeof(tlvinfo_header_t));
 +	/* If the header was successfully read, read the TLVs */
 +	if ((ret == 0) && is_valid_tlvinfo_header(eeprom_hdr)) {
++#ifdef CONFIG_SYS_EEPROM_USE_COMMON_NAND_IO
++		/* NAND flash requires page-aligned read */
++		ret = read_sys_eeprom((void *)eeprom_hdr, 0,
++				be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_header_t));
++#else
 +		ret = read_sys_eeprom((void *)eeprom_tlv, sizeof(tlvinfo_header_t),
 +				  be16_to_cpu(eeprom_hdr->totallen));
++#endif
 +	}
 +
 +	// If the contents are invalid, start over with default contents
@@ -938,7 +950,83 @@ index 0000000..ab02104
 +	return 0;
 +}
 +
-+#endif /* CONFIG_SYS_FLASH_HWINFO_ADDR && CONFIG_SYS_FLASH_HWINFO_SECT_SIZE */
++#endif /* CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO */
++
++#ifdef CONFIG_SYS_EEPROM_USE_COMMON_SPI_IO
++
++/**
++ *  Use common spi read/write functions
++ *
++ */
++
++#ifndef CONFIG_SYS_SPI_FLASH_HWINFO_ADDR
++# error CONFIG_SYS_SPI_FLASH_HWINFO_ADDR must be defined when using common spi i/o.
++#endif
++#ifndef CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE
++# error CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE must be defined when using common spi i/o.
++#endif
++
++int read_sys_eeprom(void *eeprom, int offset, int len)
++{
++	int ret;
++	struct spi_flash *env_flash = NULL;
++
++	if (!env_flash) {
++		env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
++				CONFIG_ENV_SPI_CS,
++				CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
++		if (!env_flash) {
++			set_default_env("!spi_flash_probe() failed");
++			return -1;
++		}
++	}
++
++	ret = spi_flash_read(env_flash, CONFIG_SYS_SPI_FLASH_HWINFO_ADDR+offset, len, eeprom);
++	if (ret) {
++		printf("SPI Read Fail!\n");
++		return -1;
++	}
++
++	return 0;
++}
++
++int write_sys_eeprom(void *eeprom, int len)
++{
++	int ret;
++	struct spi_flash *env_flash = NULL;
++
++	if (len > CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE) {
++		printf("write_sys_eeprom() failed, len > HWINFO SIZE\n");
++		return -1;
++	}
++
++	if (!env_flash) {
++		env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
++				CONFIG_ENV_SPI_CS,
++				CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
++		if (!env_flash) {
++			set_default_env("!spi_flash_probe() failed");
++			return -1;
++		}
++	}
++
++	ret = spi_flash_erase(env_flash, CONFIG_SYS_SPI_FLASH_HWINFO_ADDR,
++			CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE);
++	if (ret) {
++		printf("SPI Flash erase failed\n");
++		return 1;
++	}
++
++	ret = spi_flash_write(env_flash, CONFIG_SYS_SPI_FLASH_HWINFO_ADDR, len, eeprom);
++	if (ret) {
++		printf("SPI Flash write failed\n");
++		return 1;
++	}
++
++	return 0;
++}
++
++#endif /* CONFIG_SYS_EEPROM_USE_COMMON_SPI_IO */
 +
 +#ifdef CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO
 +
@@ -975,10 +1063,17 @@ index 0000000..ab02104
 +#ifdef CONFIG_SYS_EEPROM_BUS_NUM
 +	unsigned int bus;
 +#endif
++#ifdef CONFIG_SYS_I2C_EEPROM_MUX_ADDR
++	uchar data = (1 << CONFIG_SYS_I2C_EEPROM_MUX_CHAN);
++#endif
 +
 +#ifdef CONFIG_SYS_EEPROM_BUS_NUM
 +	bus = i2c_get_bus_num();
 +	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
++#endif
++#ifdef CONFIG_SYS_I2C_EEPROM_MUX_ADDR
++	i2c_write(CONFIG_SYS_I2C_EEPROM_MUX_ADDR,
++			CONFIG_SYS_I2C_EEPROM_MUX_CTRL, 1, &data, 1);
 +#endif
 +	ret = eeprom_read(CONFIG_SYS_I2C_EEPROM_ADDR,
 +			  EEPROM_OFFSET + offset,
@@ -1002,12 +1097,18 @@ index 0000000..ab02104
 +#ifdef CONFIG_SYS_EEPROM_BUS_NUM
 +	unsigned int bus;
 +#endif
++#ifdef CONFIG_SYS_I2C_EEPROM_MUX_ADDR
++	uchar data = (1 << CONFIG_SYS_I2C_EEPROM_MUX_CHAN);
++#endif
 +
 +#ifdef CONFIG_SYS_EEPROM_BUS_NUM
 +	bus = i2c_get_bus_num();
 +	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
 +#endif
-+
++#ifdef CONFIG_SYS_I2C_EEPROM_MUX_ADDR
++	i2c_write(CONFIG_SYS_I2C_EEPROM_MUX_ADDR,
++			CONFIG_SYS_I2C_EEPROM_MUX_CTRL, 1, &data, 1);
++#endif
 +	ret = eeprom_write(CONFIG_SYS_I2C_EEPROM_ADDR,
 +			   EEPROM_OFFSET,
 +			   eeprom, len);
@@ -1019,7 +1120,47 @@ index 0000000..ab02104
 +	return ret;
 +}
 +
-+#endif /* CONFIG_SYS_EEPROM_USE_COMMON_IO */
++#endif /* CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO */
++
++#ifdef CONFIG_SYS_EEPROM_USE_COMMON_NAND_IO
++
++/**
++ * Provide sys_eeprom read/write functions for platforms that store
++ * the information in a flash sector.
++ */
++
++#ifndef CONFIG_SYS_NAND_HWINFO_OFFSET
++# error CONFIG_SYS_NAND_HWINFO_OFFSET must be defined when using common nand i/o.
++#endif
++
++#ifndef CONFIG_SYS_NAND_HWINFO_SECT_SIZE
++# error CONFIG_SYS_NAND_HWINFO_SECT_SIZE must be defined when using common nand i/o.
++#endif
++
++/**
++ * read_sys_eeprom - read the hwinfo from nand flash
++ */
++int read_sys_eeprom(void *eeprom, int offset, int len)
++{
++	size_t readlen = len;
++
++	return nand_read_skip_bad(&nand_info[0],
++			CONFIG_SYS_NAND_HWINFO_OFFSET + offset,
++			&readlen, (u_char *)eeprom);
++}
++
++/**
++ * write_sys_eeprom - write the hwinfo to nand flash
++ */
++int write_sys_eeprom(void *eeprom, int len)
++{
++	size_t writelen = len;
++
++	return nand_write_skip_bad(&nand_info[0],
++			CONFIG_SYS_NAND_HWINFO_OFFSET, &writelen,
++			(u_char *)eeprom, 0);
++}
++#endif /* CONFIG_SYS_EEPROM_USE_COMMON_NAND_IO */
 +
 +#ifdef CONFIG_SYS_EEPROM_LOAD_ENV_MAC
 +
@@ -1047,6 +1188,13 @@ index 0000000..ab02104
 +
 +	puts("EEPROM: ");
 +
++#ifdef CONFIG_SYS_I2C_EEPROM_MUX_ADDR
++	/*
++	 * Required one time in the case of Helix4 / Broadcom iproc
++	 * i2c driver in order to init the i2c before read/write
++	 */
++	i2c_probe(CONFIG_SYS_I2C_EEPROM_MUX_ADDR);
++#endif
 +	if (read_eeprom(eeprom)) {
 +		printf("Read failed.\n");
 +		return -1;
