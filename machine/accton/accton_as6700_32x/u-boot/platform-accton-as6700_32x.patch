@@ -21069,104 +21069,10 @@ index b175358..099a3cb 100644
  
  #ifdef CONFIG_CMD_SF_TEST
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
-index ab02104..9c36aba 100644
+index cf2ed1c..3677c1e 100644
 --- a/common/cmd_sys_eeprom.c
 +++ b/common/cmd_sys_eeprom.c
-@@ -8,6 +8,8 @@
- #include <common.h>
- #include <command.h>
- #include <i2c.h>
-+#include <spi_flash.h>
-+#include <environment.h>
- #include <linux/ctype.h>
- 
- #include "sys_eeprom.h"
-@@ -926,6 +928,84 @@ int write_sys_eeprom(void *eeprom, int len)
- 
- #endif /* CONFIG_SYS_FLASH_HWINFO_ADDR && CONFIG_SYS_FLASH_HWINFO_SECT_SIZE */
- 
-+
-+#ifdef CONFIG_SYS_EEPROM_USE_COMMON_SPI_IO
-+
-+ /**
-+  *  Use common spi read/write functions
-+  *
-+  */
-+
-+#ifndef CONFIG_SYS_SPI_FLASH_HWINFO_ADDR
-+# error CONFIG_SYS_SPI_FLASH_HWINFO_ADDR must be defined when using common spi i/o.
-+#endif
-+#ifndef CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE
-+# error CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE must be defined when using common spi i/o.
-+#endif
-+
-+int read_sys_eeprom(void *eeprom, int offset, int len)
-+{
-+    int ret;
-+    struct spi_flash *env_flash = NULL;
-+
-+    if (!env_flash) {
-+        env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
-+            CONFIG_ENV_SPI_CS,
-+            CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
-+        if (!env_flash) {
-+            set_default_env("!spi_flash_probe() failed");
-+            return -1;
-+        }
-+    }
-+
-+    ret = spi_flash_read(env_flash, CONFIG_SYS_SPI_FLASH_HWINFO_ADDR+offset, len, eeprom);
-+    if (ret) {
-+        printf("SPI Read Fail!\n");
-+        return -1;
-+    }
-+
-+	return 0;
-+}
-+
-+int write_sys_eeprom(void *eeprom, int len)
-+{
-+	int ret;
-+    struct spi_flash *env_flash = NULL;
-+
-+    if (len > CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE) {
-+        printf("write_sys_eeprom() failed, len > HWINFO SIZE\n");
-+        return -1;
-+    }
-+
-+    if (!env_flash) {
-+        env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
-+            CONFIG_ENV_SPI_CS,
-+            CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
-+        if (!env_flash) {
-+            set_default_env("!spi_flash_probe() failed");
-+            return -1;
-+        }
-+    }
-+
-+    ret = spi_flash_erase(env_flash, CONFIG_SYS_SPI_FLASH_HWINFO_ADDR,
-+        CONFIG_SYS_SPI_FLASH_HWINFO_SECT_SIZE);
-+	if (ret) {
-+		printf("SPI Flash erase failed\n");
-+		return 1;
-+	}
-+
-+    ret = spi_flash_write(env_flash, CONFIG_SYS_SPI_FLASH_HWINFO_ADDR, len, eeprom);
-+	if (ret) {
-+		printf("SPI Flash write failed\n");
-+		return 1;
-+	}
-+
-+	return 0;
-+}
-+
-+#endif /* CONFIG_SYS_EEPROM_USE_COMMON_SPI_IO */
-+
-+
- #ifdef CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO
- 
- /**
-@@ -1052,18 +1132,35 @@ int mac_read_from_eeprom(void)
+@@ -1199,18 +1199,35 @@ int mac_read_from_eeprom(void)
  
  	for (i = 0; i < min(maccount, CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS); i++) {
  		if (is_valid_ether_addr(macbase)) {
@@ -21203,7 +21109,7 @@ index ab02104..9c36aba 100644
  
  			macbase[5]++;
  			if (macbase[5] == 0) {
-@@ -1127,3 +1224,36 @@ int populate_serial_number(void)
+@@ -1274,3 +1291,36 @@ int populate_serial_number(void)
  }
  
  #endif /* CONFIG_POPULATE_SERIAL_NUMBER */
@@ -21240,59 +21146,6 @@ index ab02104..9c36aba 100644
 +
 +    return 0;
 +}
-diff --git a/common/env_common.c b/common/env_common.c
-index df0f1ba..8a696ff 100644
---- a/common/env_common.c
-+++ b/common/env_common.c
-@@ -31,6 +31,7 @@
- #include <search.h>
- #include <errno.h>
- #include <malloc.h>
-+#include <spi_flash.h>
- 
- DECLARE_GLOBAL_DATA_PTR;
- 
-@@ -254,10 +255,39 @@ int env_complete(char *var, int maxv, char *cmdv[], int bufsz, char *buf)
- */
- void env_write_default_if_crc_bad(void)
- {
-+#ifdef CONFIG_SPIFLASH
-+    int ret;
-+    env_t *env_ptr = (env_t *)malloc(sizeof(env_t));
-+    memset(env_ptr, '\0', sizeof(env_t));
-+
-+    struct spi_flash *env_flash = NULL;
-+
-+    if (!env_flash) {
-+        env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
-+            CONFIG_ENV_SPI_CS,
-+            CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
-+        if (!env_flash) {
-+            set_default_env("!spi_flash_probe() failed");
-+            return;
-+        }
-+    }
-+
-+    ret = spi_flash_read(env_flash, CONFIG_ENV_OFFSET, ENV_SIZE, (char *)env_ptr);
-+    if (ret) {
-+        printf("SPI Read Fail!\n");
-+        return;
-+    }
-+#else
- 	env_t *env_ptr = (env_t *)CONFIG_ENV_ADDR;
--	if (crc32(0, env_ptr->data, ENV_SIZE) != env_ptr->crc) {
-+#endif
-+
-+	if (crc32(0,env_ptr->data, ENV_SIZE) != env_ptr->crc) {
- 		puts("Writing default environment\n");
- 		saveenv();
- 	}
-+
-+#ifdef CONFIG_SPIFLASH
-+    free(env_ptr);
-+#endif
- }
- #endif
 diff --git a/common/image.c b/common/image.c
 index 95498e6..2edd747 100644
 --- a/common/image.c
