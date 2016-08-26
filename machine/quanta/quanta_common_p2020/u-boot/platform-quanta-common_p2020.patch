@@ -1043,18 +1043,18 @@ index 7633f0c..ab20665 100644
   *
   * @param varname	Environmet variable to set
 diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
-index 3d5dace..15db7c1 100644
+index cf2ed1c..92a7b2e 100644
 --- a/common/cmd_sys_eeprom.c
 +++ b/common/cmd_sys_eeprom.c
-@@ -9,6 +9,7 @@
- #include <command.h>
- #include <i2c.h>
+@@ -12,6 +12,7 @@
+ #include <environment.h>
  #include <linux/ctype.h>
+ #include <nand.h>
 +#include <mb_detect.h>
  
  #include "sys_eeprom.h"
  
-@@ -23,7 +24,6 @@ static bool tlvinfo_find_tlv(u8 * eeprom, u8 tcode, int * eeprom_index);
+@@ -26,7 +27,6 @@ static bool tlvinfo_find_tlv(u8 * eeprom, u8 tcode, int * eeprom_index);
  static bool tlvinfo_delete_tlv(u8 * eeprom, u8 code);
  static bool tlvinfo_add_tlv(u8 * eeprom, int tcode, char * strval);
  static int set_mac(char *buf, const char *string);
@@ -1062,7 +1062,7 @@ index 3d5dace..15db7c1 100644
  static int set_bytes(char *buf, const char *string, int * converted_accum);
  
  /* Set to 1 if we've read EEPROM into memory */
-@@ -175,6 +175,7 @@ static void show_eeprom(u8 *eeprom)
+@@ -186,6 +186,7 @@ static void show_eeprom(u8 *eeprom)
  	printf("Checksum is %s.\n", is_checksum_valid(eeprom) ? "valid" : "invalid");
  
  #ifdef DEBUG
@@ -1070,7 +1070,7 @@ index 3d5dace..15db7c1 100644
  	printf("EEPROM dump: (0x%x bytes)", TLV_INFO_MAX_LEN);
  	for (i = 0; i < TLV_INFO_MAX_LEN; i++) {
  		if ((i % 16) == 0)
-@@ -279,11 +280,15 @@ static void decode_tlv(tlvinfo_tlv_t * tlv)
+@@ -290,11 +291,15 @@ static void decode_tlv(tlvinfo_tlv_t * tlv)
  	case TLV_CODE_MANUF_NAME:
  	case TLV_CODE_MANUF_COUNTRY:
  	case TLV_CODE_VENDOR_NAME:
@@ -1182,7 +1182,7 @@ index 3d5dace..15db7c1 100644
   *  set_bytes
   *
   *  Converts a space-separated string of decimal numbers into a
-@@ -969,6 +916,15 @@ int write_sys_eeprom(void *eeprom, int len)
+@@ -1045,6 +992,15 @@ int write_sys_eeprom(void *eeprom, int len)
  int read_sys_eeprom(void *eeprom, int offset, int len)
  {
  	int ret;
@@ -1198,9 +1198,9 @@ index 3d5dace..15db7c1 100644
  #ifdef CONFIG_SYS_EEPROM_BUS_NUM
  	unsigned int bus;
  #endif
-@@ -977,9 +933,29 @@ int read_sys_eeprom(void *eeprom, int offset, int len)
- 	bus = i2c_get_bus_num();
- 	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
+@@ -1060,9 +1016,29 @@ int read_sys_eeprom(void *eeprom, int offset, int len)
+ 	i2c_write(CONFIG_SYS_I2C_EEPROM_MUX_ADDR,
+ 			CONFIG_SYS_I2C_EEPROM_MUX_CTRL, 1, &data, 1);
  #endif
 +#ifdef CONFIG_MB_DETECT
 +	ret2 = i2c_mux_select(ep.i2c_mux, ep.i2c_channel);
@@ -1228,7 +1228,7 @@ index 3d5dace..15db7c1 100644
  
  #ifdef CONFIG_SYS_EEPROM_BUS_NUM
  	i2c_set_bus_num(bus);
-@@ -994,8 +970,15 @@ int read_sys_eeprom(void *eeprom, int offset, int len)
+@@ -1077,8 +1053,15 @@ int read_sys_eeprom(void *eeprom, int offset, int len)
  int write_sys_eeprom(void *eeprom, int len)
  {
  	int ret = 0;
@@ -1246,10 +1246,10 @@ index 3d5dace..15db7c1 100644
  #ifdef CONFIG_SYS_EEPROM_BUS_NUM
  	unsigned int bus;
  #endif
-@@ -1005,9 +988,29 @@ int write_sys_eeprom(void *eeprom, int len)
- 	i2c_set_bus_num(CONFIG_SYS_EEPROM_BUS_NUM);
+@@ -1094,9 +1077,29 @@ int write_sys_eeprom(void *eeprom, int len)
+ 	i2c_write(CONFIG_SYS_I2C_EEPROM_MUX_ADDR,
+ 			CONFIG_SYS_I2C_EEPROM_MUX_CTRL, 1, &data, 1);
  #endif
- 
 +#ifdef CONFIG_MB_DETECT
 +	ret2 = i2c_mux_select(ep.i2c_mux, ep.i2c_channel);
 +	if(ret2)
