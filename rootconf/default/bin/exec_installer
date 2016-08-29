@@ -2,7 +2,7 @@
 
 #  Copyright (C) 2013-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 Matt Peterson <matt-github@peterson.org>
-#  Copyright (C) 2014-2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -99,7 +99,8 @@ run_installer()
     if [ "$tee_path" = "/dev/null" ] || [ -z "$tee_path" ] ; then
         tee_path=/dev/console
     fi
-    { $onie_installer; echo "$?" > $install_result; } 2>&1 | tee $tee_path | logger $log_stderr -t os-install -p ${syslog_onie}.info
+    { $onie_installer $onie_installer_parms; echo "$?" > $install_result; } 2>&1 | \
+        tee $tee_path | logger $log_stderr -t os-install -p ${syslog_onie}.info
 
     case $image_type in
         "$onie_image_type_nos")
@@ -454,12 +455,14 @@ rm -f $onie_installer
 [ -z "$onie_serial_num" ] && onie_serial_num="$(onie-sysinfo -s)"
 
 from_cli=no
+onie_installer_parms=
 
 # Try static installer URL from CLI
 if [ -n "$onie_cli_static_url" ] ; then
     from_cli=yes
     # also send to stdout of current process
     tee_log_file=/proc/$$/fd/1
+    onie_installer_parms="$onie_cli_static_parms"
     url_run "$onie_cli_static_url" && exit 0
     # stop here if it didn't work
     exit 1
@@ -470,6 +473,7 @@ if [ -n "$onie_cli_static_update_url" ] ; then
     from_cli=yes
     # also send to stdout of current process
     tee_log_file=/proc/$$/fd/1
+    onie_installer_parms="$onie_cli_static_update_parms"
     url_run "$onie_cli_static_update_url" && exit 0
     # stop here if it didn't work
     exit 1
