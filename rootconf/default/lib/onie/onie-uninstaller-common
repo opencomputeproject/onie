@@ -1,0 +1,174 @@
+# common uninstall routine
+
+#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# for backward compatibility if running partition_type is empty assume it
+# is msdos.
+true ${onie_partition_type:="msdos"}
+
+if [ "$onie_partition_type" = "gpt" ] ; then
+    # Helper functions
+    delete_partition="delete_gpt_partition"
+    should_delete_partition="should_delete_gpt_partition"
+elif [ "$onie_partition_type" = "msdos" ] ; then
+    # Helper functions
+    delete_partition="delete_msdos_partition"
+    should_delete_partition="should_delete_msdos_partition"
+else
+    echo "ERROR: Unsupported partition type: $onie_partition_type"
+    exit 1
+fi
+
+# Deletes a GPT partition
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+delete_gpt_partition()
+{
+    sgdisk -d $2 /dev/$1 > /dev/null 2>&1
+}
+
+# Deletes a MSDOS partition
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+delete_msdos_partition()
+{
+    if [ -x /usr/sbin/parted ] ; then
+        parted -s /dev/$1 rm $2 > /dev/null 2>&1
+    else
+        echo -e "d\n$2\nw\n" | fdisk /dev/$1 > /dev/null 2>&1
+    fi
+}
+
+# Erase a block device
+#
+# arg $1 - block device without the "/dev"
+erase_block_device()
+{
+    device=$1
+
+    dev_sz=$(blockdev --getsize64 /dev/$device)
+    cur_sz=0
+    count=0
+    n_mb=8
+    step=$(( $n_mb * 1024 * 1024 ))
+    total=$(( $dev_sz + $step - 1 ))
+    total=$(( $total / $step ))
+    mb_sz=$(( $dev_sz / ( 1024 * 1024 ) ))
+    printf "${log_pre}Erasing internal mass storage device: /dev/$device (${mb_sz}MB)\n"
+    if [ "$onie_testing" != "y" ] ; then
+        dd if=/dev/urandom of=/tmp/junk.bin bs=1M count=$n_mb > /dev/null 2>&1
+        while [ $cur_sz -lt $dev_sz ] ; do
+            dd if=/tmp/junk.bin of=/dev/$device bs=$step seek=$count > /dev/null 2>&1
+            count=$(( $count + 1 ))
+            cur_sz=$(( $step * $count ))
+            printf "\r  Percent complete: %02u%%" $(( ($count * 100) / $total ))
+        done
+        printf "\n"
+    fi
+    printf "${log_pre}Erase complete.\n"
+}
+
+# Erase a block device partition
+# Step 1 -- Overwrite the partition with random data
+# Step 2 -- Remove the partition from the partition table
+erase_part()
+{
+    local blk_dev="$1"
+    local part="$2"
+
+    erase_block_device "${blk_dev}$part"
+
+    if [ "$onie_testing" != "y" ] ; then
+        printf "${log_pre}Deleting partition $part from /dev/$blk_dev\n"
+        eval $delete_partition $blk_dev $part || {
+            printf "${log_pre}Unable to remove partition $part on /dev/$blk_dev\n"
+            return 1
+        }
+    fi
+}
+
+# When deleting partitions this function determines whether or not to
+# keep the specified GPT partition.
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+#
+# Returns 0 to delete the partition.
+should_delete_gpt_partition()
+{
+    # Check for precious GPT Partition GUIDs
+    if [ "$onie_arch" = "x86_64" ] ; then
+        local part_guid="$(sgdisk -i $2 /dev/$1 | grep 'Partition GUID code:')"
+        local part_guid=${part_guid##Partition GUID code: }
+        local part_guid=${part_guid%% *}
+        case "$part_guid" in
+            $uefi_esp_gpt_uuid|$grub_boot_gpt_uuid|$onie_boot_gpt_uuid)
+                # echo "skipping ONIE part"
+                return 1
+                ;;
+            *)
+                ;;
+        esac
+    fi
+
+    # Check for precious GPT Partition names
+    local part_name="$(sgdisk -i $2 /dev/$1 | grep 'Partition name:')"
+    local part_name=${part_name#*"'"}
+    local part_name=${part_name%"'"*}
+    case "$part_name" in
+        *-DIAG)
+            # check system attributes
+            local attr=$(sgdisk -i $2 /dev/$1 | grep 'Attribute flags')
+            attr=${attr##*: }
+            if [ "$attr" = "0000000000000001" ] ; then
+                # system attribute is set, skip this part
+                # echo "skipping DIAG part"
+                return 1
+            fi
+            ;;
+        *)
+            ;;
+    esac
+
+    return 0
+}
+
+# When deleting partitions this function determines whether or not to
+# keep the specified msdos partition.
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+#
+# Returns 0 to delete the partition.
+should_delete_msdos_partition()
+{
+    # check for ONIE-BOOT file system volume label
+    blkid /dev/${1}$2 | egrep -q '(ONIE-BOOT|-DIAG)' && return 1
+    return 0
+}
+
+# Erase a mass storage
+#
+# arg $1 - block device without the "/dev"
+erase_mass_storage()
+{
+    local blk_dev=$1
+
+    if ls -d /sys/block/$blk_dev/${blk_dev}* > /dev/null 2>&1 ; then
+        # Wipe out and delete all partitions, except for important ones,
+        # like GRUB, ONIE and possibly a DIAG.
+        ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev//" | while read part ; do
+            if eval $should_delete_partition $blk_dev $part ; then
+                erase_part $blk_dev $part
+            fi
+        done
+    else
+        # Wipe out the whole block device
+        erase_block_device $blk_dev
+    fi
+}
