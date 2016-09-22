@@ -423,7 +423,7 @@ DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  gperf device-tree-compiler python-all-dev xorriso \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
 				  realpath gawk libncurses5 libncurses5-dev bc \
-				  dosfstools mtools
+				  dosfstools mtools pkg-config
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
