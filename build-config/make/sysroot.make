@@ -52,6 +52,10 @@ $(DEV_SYSROOT_INIT_STAMP): $(TREE_STAMP) | $(XTOOLS_BUILD_STAMP)
 	$(Q) echo "==== Preparing a new development sysroot ===="
 	$(Q) rm -rf $(DEV_SYSROOT)
 	$(Q) cp -a $$($(CROSSBIN)/$(CROSSPREFIX)gcc -print-sysroot) $(DEV_SYSROOT)
+	$(Q) rsync -rl $(XTOOLS_INSTALL_DIR)/$(TARGET)/$(TARGET)/lib $(DEV_SYSROOT)
+        ifeq ($(ARCH),$(filter $(ARCH),arm64 x86_64))
+		$(Q) rsync -rl $(XTOOLS_INSTALL_DIR)/$(TARGET)/$(TARGET)/lib64 $(DEV_SYSROOT)
+        endif
 	$(Q) find $(DEV_SYSROOT) -print0 | xargs -0 chmod +w
 	$(Q) touch $@
 
