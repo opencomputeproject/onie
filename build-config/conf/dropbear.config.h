@@ -163,6 +163,22 @@ much traffic. */
  * ECDSA above */
 #define DROPBEAR_ECDH
 
+/* Key exchange algorithm.
+ * group14_sha1 - 2048 bit, sha1
+ * group14_sha256 - 2048 bit, sha2-256
+ * group16 - 4096 bit, sha2-512
+ * group1 - 1024 bit, sha1
+ *
+ * group14 is supported by most implementations.
+ * group16 provides a greater strength level but is slower and increases binary size
+ * group1 is too small for security though is necessary if you need 
+     compatibility with some implementations such as Dropbear versions < 0.53
+ */ 
+#define DROPBEAR_DH_GROUP1 1
+#define DROPBEAR_DH_GROUP14_SHA1 1
+#define DROPBEAR_DH_GROUP14_SHA256 1
+#define DROPBEAR_DH_GROUP16 0
+
 /* Control the memory/performance/compression tradeoff for zlib.
  * Set windowBits=8 for least memory usage, see your system's
  * zlib.h for full details.
@@ -289,7 +305,7 @@ much traffic. */
 
 /* This is used by the scp binary when used as a client binary. If you're
  * not using the Dropbear client, you'll need to change it */
-#define _PATH_SSH_PROGRAM "/usr/bin/dbclient"
+#define DROPBEAR_PATH_SSH_PROGRAM "/usr/bin/dbclient"
 
 /* Whether to log commands executed by a client. This only logs the 
  * (single) command sent to the server, not what a user did in a 

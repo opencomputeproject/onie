@@ -14,7 +14,7 @@ daemon=/usr/sbin/$name
 
 [ -x $daemon ] || exit 0
 
-ARGS="-m -B -P"
+ARGS="-m -B"
 
 RSA_KEY=/etc/dropbear/dropbear_rsa_host_key
 DSS_KEY=/etc/dropbear/dropbear_dss_host_key
