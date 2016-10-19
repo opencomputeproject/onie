@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -16,7 +17,7 @@ EFIVAR_BUILD_DIR		= $(MBUILDDIR)/efivar
 EFIVAR_DIR			= $(EFIVAR_BUILD_DIR)/efivar-$(EFIVAR_VERSION)
 
 EFIVAR_SRCPATCHDIR		= $(PATCHDIR)/efivar
-EFIVAR_DOWNLOAD_STAMP		= $(DOWNLOADDIR)/efivar-download
+EFIVAR_DOWNLOAD_STAMP		= $(DOWNLOADDIR)/efivar-$(EFIVAR_VERSION)-download
 EFIVAR_SOURCE_STAMP		= $(STAMPDIR)/efivar-source
 EFIVAR_PATCH_STAMP		= $(STAMPDIR)/efivar-patch
 EFIVAR_BUILD_STAMP		= $(STAMPDIR)/efivar-build
@@ -82,7 +83,11 @@ $(EFIVAR_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(EFIVAR_BUILD_STAMP)
 		cp -av $(DEV_SYSROOT)/usr/bin/$$file $(SYSROOTDIR)/usr/bin/ ; \
 	     done
 	$(Q) for file in $(EFIVAR_LIBS); do \
-		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
+		if [ "$(ARCH)" == "arm64" ] || [ "$(ARCH)" == "x86_64" ]; then \
+		    cp -av $(DEV_SYSROOT)/usr/lib64/$$file $(SYSROOTDIR)/usr/lib/ ; \
+		else \
+		    cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
+		fi \
 	     done
 	$(Q) touch $@
 

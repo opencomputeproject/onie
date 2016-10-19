@@ -68,7 +68,7 @@ $(FIRMWARE_UPDATE_COMPLETE_STAMP): $(IMAGE_UPDATER_SHARCH) $(MACHINE_FW_INSTALLE
 	$(Q) echo "onie_build_date=\"$$(date -Imin)\"" >> $(FIRMWARE_CONF)
 	$(Q) echo "==== Create firmware update $(PLATFORM) self-extracting archive ===="
 	$(Q) rm -f $(FIRMWARE_UPDATE_IMAGE)
-	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh firmware $(ONIE_ARCH) $(MACHINEDIR) \
+	$(Q) $(SCRIPTDIR)/onie-mk-installer.sh firmware $(ROOTFS_ARCH) $(MACHINEDIR) \
 		$(FIRMWARE_CONF) $(INSTALLER_DIR) $(FIRMWARE_UPDATE_IMAGE)
 	$(Q) touch $@
 

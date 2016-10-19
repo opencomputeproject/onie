@@ -9,6 +9,7 @@
 #
 
 ARCH        ?= arm
+XTOOLS_ENABLE ?= yes
 TARGET	    ?= $(ARCH)-onie-linux-uclibcgnueabi
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin

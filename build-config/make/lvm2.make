@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -9,14 +10,14 @@
 # This is a makefile fragment that defines the build of lvm2
 #
 
-LVM2_VERSION		= 2_02_105
+LVM2_VERSION		= 2_02_155
 LVM2_TARBALL		= lvm2-$(LVM2_VERSION).tar.xz
 LVM2_TARBALL_URLS	+= $(ONIE_MIRROR) https://git.fedorahosted.org/cgit/lvm2.git/snapshot/
 LVM2_BUILD_DIR		= $(MBUILDDIR)/lvm2
 LVM2_DIR		= $(LVM2_BUILD_DIR)/lvm2-$(LVM2_VERSION)
 
-LVM2_SRCPATCHDIR	= $(PATCHDIR)/lvm2
-LVM2_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/lvm2-download
+LVM2_SRCPATCHDIR	= $(PATCHDIR)/lvm2/$(LVM2_VERSION)
+LVM2_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/lvm2-$(LVM2_VERSION)-download
 LVM2_SOURCE_STAMP	= $(STAMPDIR)/lvm2-source
 LVM2_PATCH_STAMP	= $(STAMPDIR)/lvm2-patch
 LVM2_CONFIGURE_STAMP	= $(STAMPDIR)/lvm2-configure

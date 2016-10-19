@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -11,7 +12,7 @@
 
 #-------------------------------------------------------------------------------
 
-LINUX_CONFIG 		= conf/kernel/$(LINUX_RELEASE)/linux.$(ONIE_ARCH).config
+LINUX_CONFIG 		?= conf/kernel/$(LINUX_RELEASE)/linux.$(ONIE_ARCH).config
 KERNELDIR   		= $(MBUILDDIR)/kernel
 LINUXDIR   		= $(KERNELDIR)/linux
 
