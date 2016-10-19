@@ -1,0 +1,1 @@
+../init.d/mellanox-machine-model.sh
