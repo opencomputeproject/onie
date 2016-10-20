@@ -1,0 +1,43 @@
+Accton Wedge100_32X has to configure MUX before accessing EEPROM
+
+diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
+index b448761..ada1d88 100644
+--- a/miscutils/24cXX.c
++++ b/miscutils/24cXX.c
+@@ -92,6 +92,17 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_WORD_DATA );
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_WORD_DATA );
+ 
++	if ((r = ioctl(fd, I2C_SLAVE, 0x74)) < 0)
++	{
++		return r;
++	}
++	if ((r = i2c_smbus_write_byte_data(fd, 0x0, 0x40)) < 0)
++	{
++		fprintf(stderr, "Error i2c_smbus_write_byte_data: %s\n", strerror(errno));
++		return r;
++	}
++	usleep(2000);
++
+ 	// set working device
+ 	if( ( r = ioctl(fd, I2C_SLAVE, addr)) < 0)
+ 		return r;
+@@ -104,6 +115,18 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ 
+ int eeprom_close(struct eeprom *e)
+ {
++	int r;
++	if ((r = ioctl(e->fd, I2C_SLAVE, 0x74)) < 0)
++	{
++		return r;
++	}
++	if ((r = i2c_smbus_write_byte_data(e->fd, 0x0, 0x0)) < 0)
++	{
++		fprintf(stderr, "Error i2c_smbus_write_byte_data: %s\n", strerror(errno));
++		return r;
++	}
++	usleep(2000);
++
+ 	close(e->fd);
+ 	e->fd = -1;
+ 	e->dev = 0;
