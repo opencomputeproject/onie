@@ -34,7 +34,7 @@ UTILLINUX_CONFIG	= --enable-libuuid
 UTILLINUX_LIBS		= \
 	libuuid.so    libuuid.so.1    libuuid.so.1.3.0
 
-ifeq ($(EXT3_4_ENABLE),yes)
+ifneq ($(filter yes, $(EXT3_4_ENABLE) $(LVM2_ENABLE)),)
 UTILLINUX_CONFIG	+= --enable-libblkid
 UTILLINUX_LIBS		+= \
 	libblkid.so   libblkid.so.1   libblkid.so.1.1.0
