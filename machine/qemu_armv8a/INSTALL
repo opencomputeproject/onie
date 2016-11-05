@@ -1,0 +1,69 @@
+==============================================
+Installing ONIE on QEMU armv8a Virtual Machine
+==============================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINE=qemu_armv8a all"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINE=qemu_armv8a all demo
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-rw-r-- 1 b58867 b58867 9.8M Sep 27 23:26 demo-diag-installer-arm64-qemu_armv8a-r0.bin
+-rw-rw-r-- 1 b58867 b58867 9.8M Sep 27 23:26 demo-installer-arm64-qemu_armv8a-r0.bin
+-rw-rw-r-- 1 b58867 b58867  24M Sep 27 23:26 onie-recovery-arm64-qemu_armv8a-r0.efi64.pxe
+-rw-rw-r-- 1 b58867 b58867  22M Sep 27 23:26 onie-recovery-arm64-qemu_armv8a-r0.iso
+-rw-rw-r-- 1 b58867 b58867 9.8M Sep 27 23:25 onie-updater-arm64-qemu_armv8a-r0
+-rw-rw-r-- 1 b58867 b58867 5.2M Sep 27 23:25 qemu_armv8a-r0.initrd
+-rw-rw-r-- 1 b58867 b58867 4.6M Sep 27 23:23 qemu_armv8a-r0.vmlinuz
+
+
+qemu_armv8a-r0.initrd -- ONIE kernel
+qemu_armv8a-r0.vmlinuz -- ONIE initramfs
+onie-recovery-arm64-qemu_armv8a-r0.iso -- CDROM image to install onie binary
+onie-recovery-arm64-qemu_armv8a-r0.efi64.pxe -- efi image to install onie binary using tftp or PXE boot
+demo-installer-arm64-qemu_armv8a-r0.bin -- Demo OS image
+
+Building and Installing QEMU (should be version 2.2 or later)
+----------------------------------
+
+sudo apt install qemu-system-arm
+sudo apt install qemu-utils
+
+Launching the Virtual Machine
+-----------------------------
+1. Create a 1 GB blank disk image to use as the "hard drive" for your VM.
+   Name the file onie-aarch64-demo.img, putting it somewhere in your home
+   directory::
+
+     $ qemu-img create -f qcow2 onie-aarch64-demo.img 1G
+
+2. In order to boot qemu with UEFI firmware you need to download the
+UEFI image (QEMU_EFI.fd) from http://snapshots.linaro.org/components/kernel/leg-virt-tianocore-edk2-upstream/
+
+Create flash0.img containing the UEFI image:
+    $ cat QEMU_EFI.fd /dev/zero | dd iflag=fullblock bs=1M count=64 of=flash0.img
+Create a blank flash1.img:
+    $ dd if=/dev/zero of=flash1.img bs=1M count=64
+
+3. For Installation using cdrom image, invoke qemu using below command
+    $ qemu-system-aarch64 -machine virt -m 1024M -cpu cortex-a57 -serial stdio -drive if=none,file=onie-aarch64-demo.img,id=hd0 -device virtio-blk-device,drive=hd0 -cdrom onie-recovery-arm64-qemu_armv8a-r0.iso -pflash flash0.img -pflash flash1.img
+
+3. For Installation using network Prepare system for network boot : See Network_Configuration.txt
+
+4. Place onie-recovery-arm64-qemu_armv8a-r0.efi64.pxe and demo-installer-arm64-qemu_armv8a-r0.bin files in tftp root directory.
+
+5. rename demo-installer-arm64-qemu_armv8a-r0.bin
+    $ mv demo-installer-arm64-qemu_armv8a-r0.bin onie-installer-arm64-qemu_armv8a-r0
+	 
+6. Invoke Qemu using below commands for Network booting
+
+    $ qemu-system-aarch64 -machine virt -m 1024M -cpu cortex-a57 -serial stdio -drive if=none,file=onie-aarch64-demo.img,id=hd0 -device virtio-blk-device,drive=hd0 -netdev tap,id=mynet0,ifname=tap0,script=no,downscript=no -device virtio-net-device,mac=52:54:00:12:34:56,netdev=mynet0 -pflash flash0.img -pflash flash1.img
+

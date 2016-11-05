@@ -1,0 +1,57 @@
+To test network booting in qemu we need to make the host machine as dhcp server and tftp server which will serve onie images to qemu host.
+
+1. First install below packages in host machine :
+
+    $ sudo apt install isc-dhcp-server tftpd-hpa
+
+2. Next we need to create a tap interface to provide network services to qemu guest machine :
+   
+    $ sudo ip tuntap add name tap0 mode tap
+
+   Check if the tap0 interface is visible or not in network interfaces ?
+    
+    $ ifconfig -a
+
+      tap0      Link encap:Ethernet  HWaddr d2:01:87:62:4f:5b  
+                BROADCAST MULTICAST  MTU:1500  Metric:1
+                RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+                TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+                collisions:0 txqueuelen:1000 
+                RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+3. Assign an ip to tap0 interface. It should be out of dhcp ip range, but on the same subnet:
+    $ sudo ifconfig tap0 192.168.1.40 up
+
+4. Now we need to setup dhcp server. By default isc-dhcp-server provides dhcp services to all network interfaces. to limit the dhcp service to tap0 interface, edit below file.
+    $ sudo vim /etc/default/isc-dhcp-server
+   Add tap0 to interfaces
+    $ INTERFACES="tap0"
+
+5. Now edit dhcp configuration :
+    $ sudo vim /etc/dhcp/dhcpd.conf
+   Add this configuration at the end :
+    
+    subnet 192.168.1.0 netmask 255.255.255.0 {
+    range 192.168.1.100 192.168.1.200;
+    option domain-name-servers 8.8.8.8; #Google DNS
+    option routers 192.168.1.40; #default gateway ip of tap0 interface, it should be out of dhcp ip range specified above, but on the same subnet
+
+      host qemu_onie {
+        hardware ethernet 52:54:00:12:34:56;
+        filename "onie-recovery-arm64-qemu_armv8a-r0.efi64.pxe";
+      }
+    }
+
+6. restart dhcp and tftp services
+    $ sudo service isc-dhcp-server restart
+    $ sudo service tftpd-hpa restart
+
+7. check tftp configuration file:
+# /etc/default/tftpd-hpa
+
+TFTP_USERNAME="tftp"
+TFTP_DIRECTORY="/var/lib/tftpboot"
+TFTP_ADDRESS="[::]:69"
+TFTP_OPTIONS="--secure"
+
+8. /var/lib/tftpboot is the tftp root directory. we need to place all the files for network booting at this location
