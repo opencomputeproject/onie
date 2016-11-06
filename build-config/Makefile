@@ -5,6 +5,7 @@
 #  Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -290,7 +291,9 @@ ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 
 include make/crosstool-ng.make
 include make/kernel-download.make
-include make/uclibc-download.make
+ifneq ($(XTOOLS_LIBC),glibc)
+  include make/uclibc-download.make
+endif
 include make/xtools.make
 include make/sysroot.make
 include make/kernel.make

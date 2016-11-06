@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -10,9 +11,6 @@
 # toolchain using crosstool-NG.
 #
 
-# Default GCC version to build for the toolchain
-GCC_VERSION ?= 4.9.2
-
 # Note: To help debug problems with building a toolchain enable these
 # options in $(XTOOLS_CONFIG)
 #
@@ -21,9 +19,9 @@ GCC_VERSION ?= 4.9.2
 #   CT_DEBUG_CT_SAVE_STEPS_GZIP=y
 #
 
-XTOOLS_CONFIG		= conf/crosstool/gcc-$(GCC_VERSION)/uClibc-$(UCLIBC_VERSION)/crosstool.$(ONIE_ARCH).config
+XTOOLS_CONFIG		?= conf/crosstool/gcc-$(GCC_VERSION)/$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)/crosstool.$(ONIE_ARCH).config
 XTOOLS_ROOT		= $(BUILDDIR)/x-tools
-XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(LINUX_RELEASE)-u$(UCLIBC_VERSION)
+XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(LINUX_RELEASE)-$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)
 XTOOLS_DIR		= $(XTOOLS_ROOT)/$(XTOOLS_VERSION)
 XTOOLS_BUILD_DIR	= $(XTOOLS_DIR)/build
 XTOOLS_INSTALL_DIR	= $(XTOOLS_DIR)/install
@@ -31,7 +29,7 @@ XTOOLS_DEBUG_ROOT	= $(XTOOLS_INSTALL_DIR)/$(TARGET)/$(TARGET)/debug-root
 XTOOLS_STAMP_DIR	= $(XTOOLS_DIR)/stamp
 XTOOLS_PREP_STAMP	= $(XTOOLS_STAMP_DIR)/xtools-prep
 XTOOLS_DOWNLOAD_STAMP	= $(XTOOLS_STAMP_DIR)/xtools-download
-XTOOLS_BUILD_STAMP	= $(XTOOLS_STAMP_DIR)/xtools-build
+XTOOLS_BUILD_STAMP	?= $(XTOOLS_STAMP_DIR)/xtools-build
 XTOOLS_STAMP		= $(XTOOLS_PREP_STAMP) \
 			  $(XTOOLS_DOWNLOAD_STAMP) \
 			  $(XTOOLS_BUILD_STAMP) 
@@ -44,6 +42,7 @@ PHONY += xtools xtools-prep xtools-download xtools-config \
 	 xtools-build xtools-clean xtools-distclean
 
 # List of common packages needed by crosstool-NG
+
 CT_NG_COMPONENTS		=	\
 	make-3.81.tar.bz2		\
 	m4-1.4.13.tar.xz		\
@@ -51,7 +50,7 @@ CT_NG_COMPONENTS		=	\
 	automake-1.11.1.tar.bz2		\
 	libelf-0.8.13.tar.gz		\
 	duma_2_5_15.tar.gz		\
-	libtool-2.2.6b.tar.lzma
+	libtool-2.4.6.tar.gz
 
 ifeq ($(GCC_VERSION),4.9.2)
 CT_NG_COMPONENTS +=	\
@@ -63,9 +62,16 @@ CT_NG_COMPONENTS +=	\
 	binutils-2.25.tar.bz2		\
 	binutils-2.24.tar.bz2		\
 	gcc-4.9.2.tar.bz2		\
-	gdb-7.7.1.tar.bz2		\
+	gdb-7.11.tar.xz			\
 	ltrace_0.7.3.orig.tar.bz2	\
-	strace-4.9.tar.xz
+	strace-4.9.tar.xz		\
+	ncurses-6.0.tar.gz		\
+	libiconv-1.14.tar.gz		\
+	gettext-0.19.6.tar.xz		\
+	expat-2.1.0.tar.gz
+       ifeq ($(XTOOLS_LIBC),glibc)
+	CT_NG_COMPONENTS += glibc-2.24.tar.xz
+       endif
 else ifeq ($(GCC_VERSION),4.7.3)
 CT_NG_COMPONENTS +=	\
         gmp-4.3.2.tar.bz2               \

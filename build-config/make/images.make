@@ -129,17 +129,29 @@ CHECKDIR	= $(CHECKROOT)/checkdir
 CHECKFILES	= $(CHECKROOT)/checkfiles.txt
 SYSFILES	= $(CHECKROOT)/sysfiles.txt
 
-SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(UCLIBC_VERSION).so \
-		  libm.so.0 libm-$(UCLIBC_VERSION).so \
+ifeq ($(XTOOLS_LIBC),uClibc)
+SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
+		  libm.so.0 libm-$(XTOOLS_LIBC_VERSION).so \
 		  libgcc_s.so.1 libgcc_s.so \
-		  libc.so.0 libuClibc-$(UCLIBC_VERSION).so \
-		  libcrypt.so.0 libcrypt-$(UCLIBC_VERSION).so \
-		  libutil.so.0 libutil-$(UCLIBC_VERSION).so
-
-ifeq ($(EXT3_4_ENABLE),yes)
-SYSROOT_LIBS	+= \
-		  libdl.so.0 libdl-$(UCLIBC_VERSION).so \
-		  libpthread.so.0 libpthread-$(UCLIBC_VERSION).so
+		  libc.so.0 libuClibc-$(XTOOLS_LIBC_VERSION).so \
+		  libcrypt.so.0 libcrypt-$(XTOOLS_LIBC_VERSION).so \
+		  libutil.so.0 libutil-$(XTOOLS_LIBC_VERSION).so \
+	     	  libdl.so.0 libdl-$(XTOOLS_LIBC_VERSION).so \
+		  libpthread.so.0 libpthread-$(XTOOLS_LIBC_VERSION).so \
+		  librt.so.0 librt-$(XTOOLS_LIBC_VERSION).so
+else ifeq ($(XTOOLS_LIBC),glibc)
+SYSROOT_LIBS	= ld-$(XTOOLS_LIBC_VERSION).so \
+		  libm.so.6 libm-$(XTOOLS_LIBC_VERSION).so \
+		  libgcc_s.so.1 libgcc_s.so \
+		  libc.so.6 libc-$(XTOOLS_LIBC_VERSION).so \
+		  libcrypt.so.1 libcrypt-$(XTOOLS_LIBC_VERSION).so \
+		  libutil.so.1 libutil-$(XTOOLS_LIBC_VERSION).so \
+		  libdl.so.2 libdl-$(XTOOLS_LIBC_VERSION).so \
+		  libpthread.so.0 libpthread-$(XTOOLS_LIBC_VERSION).so \
+		  librt.so.1 librt-$(XTOOLS_LIBC_VERSION).so
+  ifeq ($(ARCH),arm64)
+    SYSROOT_LIBS	+= ld-linux-aarch64.so.1
+  endif
 endif
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)
@@ -151,11 +163,6 @@ ifeq ($(REQUIRE_CXX_LIBS),yes)
   else
     $(error C++ support: Unsupported GCC version: $(GCC_VERSION))
   endif
-endif
-
-# Add librt if ACPI or LVM2 is enabled
-ifneq ($(filter yes, $(ACPI_ENABLE) $(LVM2_ENABLE)),)
-  SYSROOT_LIBS += librt.so.0 librt-$(UCLIBC_VERSION).so
 endif
 
 # Optionally add debug utilities
@@ -179,11 +186,17 @@ endif
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
-		[ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
-			echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
-			exit 1; } ; \
-		find $(DEV_SYSROOT)/lib -name $$file | xargs -i \
-		cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
+		if [ "$(ARCH)" == "arm64" ] || [ "$(ARCH)" == "x86_64" ] ; then \
+		    [ -r "$(DEV_SYSROOT)/lib64/$$file" ] || [ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
+			    echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
+			    exit 1; } ; \
+			find $(DEV_SYSROOT)/lib64 $(DEV_SYSROOT)/lib -name $$file | xargs -i cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
+		else \
+		    [ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
+			    echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
+			    exit 1; } ; \
+			find $(DEV_SYSROOT)/lib -name $$file | xargs -i cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
+		fi; \
 	done
 	$(Q) for file in $(DEBUG_UTILS) ; do \
 		cp -av $$file $(SYSROOTDIR)/usr/bin || exit 1 ; \
