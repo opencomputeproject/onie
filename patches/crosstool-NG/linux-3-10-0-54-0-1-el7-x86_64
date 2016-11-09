@@ -1,0 +1,145 @@
+linux-3.10.0-54.0.1.el7.x86_64-install-headers-argument-too-long.patch
+
+Backport upstream 3.10.y patch to handle build directories that have a
+deep hierarchy.
+
+This patch backports a 3.10.y kernel build system fix:
+
+  From: Nicolas Dichtel <nicolas.dichtel@6wind.com>
+  Date: Mon, 29 Apr 2013 14:15:51 +0200
+  Subject: [PATCH 1/1] kbuild: fix make headers_install when path is too long
+
+  commit c0ff68f1611d6855a06d672989ad5cfea160a4eb upstream.
+
+diff --git a/patches/linux/3.10.0-54.0.1.el7.x86_64/0001-kbuild-fix-make-headers_install-when-path-is-too-lon.patch b/patches/linux/3.10.0-54.0.1.el7.x86_64/0001-kbuild-fix-make-headers_install-when-path-is-too-lon.patch
+new file mode 100644
+index 0000000..460421e
+--- /dev/null
++++ b/patches/linux/3.10.0-54.0.1.el7.x86_64/0001-kbuild-fix-make-headers_install-when-path-is-too-lon.patch
+@@ -0,0 +1,126 @@
++From 3246a0352e3d58380b9386570f1db1faf7edf8a8 Mon Sep 17 00:00:00 2001
++From: Nicolas Dichtel <nicolas.dichtel@6wind.com>
++Date: Mon, 29 Apr 2013 14:15:51 +0200
++Subject: [PATCH 1/1] kbuild: fix make headers_install when path is too long
++
++commit c0ff68f1611d6855a06d672989ad5cfea160a4eb upstream.
++
++If headers_install is executed from a deep/long directory structure, the
++shell's maximum argument length can be execeeded, which breaks the operation
++with:
++
++| make[2]: execvp: /bin/sh: Argument list too long
++| make[2]: ***
++
++Instead of passing each files name with the entire path, I give only the file
++name without the source path and give this path as a new argument to
++headers_install.pl.
++
++Because there is three possible paths, I have tree input-files list, one per
++path.
++
++Signed-off-by: Nicolas Dichtel <nicolas.dichtel@6wind.com>
++Tested-by: Bruce Ashfield <bruce.ashfield@windriver.com>
++Signed-off-by: Michal Marek <mmarek@suse.cz>
++Cc: Wang Nan <wangnan0@huawei.com>
++Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
++---
++ scripts/Makefile.headersinst | 20 ++++++++++++++------
++ scripts/headers_install.sh   |  7 +++++--
++ 2 files changed, 19 insertions(+), 8 deletions(-)
++
++diff --git a/scripts/Makefile.headersinst b/scripts/Makefile.headersinst
++index 182084d..8ccf830 100644
++--- a/scripts/Makefile.headersinst
+++++ b/scripts/Makefile.headersinst
++@@ -47,18 +47,24 @@ header-y      := $(filter-out $(generic-y), $(header-y))
++ all-files     := $(header-y) $(genhdr-y) $(wrapper-files)
++ output-files  := $(addprefix $(installdir)/, $(all-files))
++ 
++-input-files   := $(foreach hdr, $(header-y), \
+++input-files1  := $(foreach hdr, $(header-y), \
++ 		   $(if $(wildcard $(srcdir)/$(hdr)), \
++-			$(wildcard $(srcdir)/$(hdr)), \
+++			$(wildcard $(srcdir)/$(hdr))) \
+++		   )
+++input-files1-name := $(notdir $(input-files1))
+++input-files2  := $(foreach hdr, $(header-y), \
+++		   $(if  $(wildcard $(srcdir)/$(hdr)),, \
++ 			$(if $(wildcard $(oldsrcdir)/$(hdr)), \
++ 				$(wildcard $(oldsrcdir)/$(hdr)), \
++ 				$(error Missing UAPI file $(srcdir)/$(hdr))) \
++-		   )) \
++-		 $(foreach hdr, $(genhdr-y), \
+++		   ))
+++input-files2-name := $(notdir $(input-files2))
+++input-files3  := $(foreach hdr, $(genhdr-y), \
++ 		   $(if	$(wildcard $(gendir)/$(hdr)), \
++ 			$(wildcard $(gendir)/$(hdr)), \
++ 			$(error Missing generated UAPI file $(gendir)/$(hdr)) \
++ 		   ))
+++input-files3-name := $(notdir $(input-files3))
++ 
++ # Work out what needs to be removed
++ oldheaders    := $(patsubst $(installdir)/%,%,$(wildcard $(installdir)/*.h))
++@@ -72,7 +78,9 @@ printdir = $(patsubst $(INSTALL_HDR_PATH)/%/,%,$(dir $@))
++ quiet_cmd_install = INSTALL $(printdir) ($(words $(all-files))\
++                             file$(if $(word 2, $(all-files)),s))
++       cmd_install = \
++-        $(CONFIG_SHELL) $< $(installdir) $(input-files); \
+++        $(CONFIG_SHELL) $< $(installdir) $(srcdir) $(input-files1-name); \
+++        $(CONFIG_SHELL) $< $(installdir) $(oldsrcdir) $(input-files2-name); \
+++        $(CONFIG_SHELL) $< $(installdir) $(gendir) $(input-files3-name); \
++         for F in $(wrapper-files); do                                   \
++                 echo "\#include <asm-generic/$$F>" > $(installdir)/$$F;    \
++         done;                                                           \
++@@ -98,7 +106,7 @@ __headersinst: $(subdirs) $(install-file)
++ 	@:
++ 
++ targets += $(install-file)
++-$(install-file): scripts/headers_install.sh $(input-files) FORCE
+++$(install-file): scripts/headers_install.sh $(input-files1) $(input-files2) $(input-files3) FORCE
++ 	$(if $(unwanted),$(call cmd,remove),)
++ 	$(if $(wildcard $(dir $@)),,$(shell mkdir -p $(dir $@)))
++ 	$(call if_changed,install)
++diff --git a/scripts/headers_install.sh b/scripts/headers_install.sh
++index 643764f..5de5660 100644
++--- a/scripts/headers_install.sh
+++++ b/scripts/headers_install.sh
++@@ -2,7 +2,7 @@
++ 
++ if [ $# -lt 1 ]
++ then
++-	echo "Usage: headers_install.sh OUTDIR [FILES...]
+++	echo "Usage: headers_install.sh OUTDIR SRCDIR [FILES...]
++ 	echo
++ 	echo "Prepares kernel header files for use by user space, by removing"
++ 	echo "all compiler.h definitions and #includes, removing any"
++@@ -10,6 +10,7 @@ then
++ 	echo "asm/inline/volatile keywords."
++ 	echo
++ 	echo "OUTDIR: directory to write each userspace header FILE to."
+++	echo "SRCDIR: source directory where files are picked."
++ 	echo "FILES:  list of header files to operate on."
++ 
++ 	exit 1
++@@ -19,6 +20,8 @@ fi
++ 
++ OUTDIR="$1"
++ shift
+++SRCDIR="$1"
+++shift
++ 
++ # Iterate through files listed on command line
++ 
++@@ -34,7 +37,7 @@ do
++ 		-e 's/(^|[^a-zA-Z0-9])__packed([^a-zA-Z0-9_]|$)/\1__attribute__((packed))\2/g' \
++ 		-e 's/(^|[ \t(])(inline|asm|volatile)([ \t(]|$)/\1__\2__\3/g' \
++ 		-e 's@#(ifndef|define|endif[ \t]*/[*])[ \t]*_UAPI@#\1 @' \
++-		"$i" > "$OUTDIR/$FILE.sed" || exit 1
+++		"$SRCDIR/$i" > "$OUTDIR/$FILE.sed" || exit 1
++ 	scripts/unifdef -U__KERNEL__ -D__EXPORTED_HEADERS__ "$OUTDIR/$FILE.sed" \
++ 		> "$OUTDIR/$FILE"
++ 	[ $? -gt 1 ] && exit 1
++-- 
++1.9.1
++
