@@ -2,6 +2,7 @@
 
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -72,9 +73,12 @@ create_demo_gpt_partition()
     # Find next available partition
     last_part=$(sgdisk -p $blk_dev | tail -n 1 | awk '{print $1}')
     demo_part=$(( $last_part + 1 ))
+    # check if we have an mmcblk device
+    blk_suffix=
+    echo ${blk_dev} | grep -q mmcblk && blk_suffix="p"
 
     # Create new partition
-    echo "Creating new demo partition ${blk_dev}$demo_part ..."
+    echo "Creating new demo partition ${blk_dev}$blk_suffix$demo_part ..."
 
     if [ "$demo_type" = "DIAG" ] ; then
         # set the GPT 'system partition' attribute bit for the DIAG
@@ -226,6 +230,9 @@ demo_install_uefi_grub()
     local demo_mnt="$1"
     local blk_dev="$2"
 
+	# get running machine from conf file
+    [ -r /etc/machine.conf ] && . /etc/machine.conf
+	
     # Look for the EFI system partition UUID on the same block device as
     # the ONIE-BOOT partition.
     local uefi_part=0
@@ -260,7 +267,7 @@ demo_install_uefi_grub()
     efibootmgr --quiet --create \
         --label "$demo_volume_label" \
         --disk $blk_dev --part $uefi_part \
-        --loader "/EFI/$demo_volume_label/grubx64.efi" || {
+        --loader "/EFI/$demo_volume_label/${onie_grub_image_name}" || {
         echo "ERROR: efibootmgr failed to create new boot variable on: $blk_dev"
         exit 1
     }
