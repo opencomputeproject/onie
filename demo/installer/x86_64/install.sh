@@ -292,7 +292,7 @@ demo_dev=$(echo $blk_dev | sed -e 's/\(mmcblk[0-9]\)/\1p/')$demo_part
 partprobe
 
 # Create filesystem on demo partition with a label
-mkfs.ext4 -L $demo_volume_label $demo_dev || {
+mkfs.ext4 -F -L $demo_volume_label $demo_dev || {
     echo "Error: Unable to create file system on $demo_dev"
     exit 1
 }
