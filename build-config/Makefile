@@ -154,6 +154,8 @@ INITRAMFSDIR	=  $(MBUILDDIR)/initramfs
 # These directories are needed per machine
 TREEDIRS     += $(STAMPDIR) $(STAGE_SYSROOT) $(INITRAMFSDIR)
 
+XTOOLS_ENABLE ?= yes
+
 ifneq (,$(MAKECMDGOALS))
   ifeq (,$(filter onie-release-tag help distclean %build-host, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)

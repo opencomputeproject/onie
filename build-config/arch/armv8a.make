@@ -9,7 +9,6 @@
 #
 
 ARCH        ?= arm64
-XTOOLS_ENABLE ?= yes
 TARGET	    ?= aarch64-onie-linux-gnueabi
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin

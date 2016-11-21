@@ -11,7 +11,6 @@
 #
 
 ARCH        ?= x86_64
-XTOOLS_ENABLE ?= yes
 TARGET      ?= $(ARCH)-onie-linux-uclibc
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
