@@ -1,0 +1,68 @@
+From d8cec1d0c6948283309a276430b7e11ba22d9ee0 Mon Sep 17 00:00:00 2001
+From: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+Date: Mon, 25 Jan 2016 12:00:27 +0200
+Subject: [PATCH 067/146] dpaa_eth: use IFF_UP to check the Eth interface
+
+Currently, I use an atomic variable to check if an interface is up/down. In the
+kernel there are other methods to check the interface state. One of them is by
+using IFF_UP offset from the net_dev->flags variable.
+
+Signed-off-by: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+---
+ drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c | 6 +-----
+ drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.h | 1 -
+ 2 files changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
+index 5bdcb83..033f985 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
+@@ -96,7 +96,7 @@ static void dpa_generic_draining_timer(unsigned long arg)
+ 	dpa_generic_drain_sg_bp(priv->draining_tx_sg_bp,
+ 			DPA_GENERIC_BUFFER_QUOTA);
+ 
+-	if (atomic_read(&priv->ifup))
++	if (priv->net_dev->flags & IFF_UP)
+ 		mod_timer(&(priv->timer), jiffies + 1);
+ }
+ 
+@@ -246,7 +246,6 @@ static int __cold dpa_generic_start(struct net_device *netdev)
+ 	netif_tx_start_all_queues(netdev);
+ 
+ 	mod_timer(&priv->timer, jiffies + 100);
+-	atomic_dec(&priv->ifup);
+ 
+ 	return 0;
+ }
+@@ -258,8 +257,6 @@ static int __cold dpa_generic_stop(struct net_device *netdev)
+ 	netif_tx_stop_all_queues(netdev);
+ 	dpaa_generic_napi_disable(priv);
+ 
+-	atomic_inc_not_zero(&priv->ifup);
+-
+ 	return 0;
+ }
+ 
+@@ -1660,7 +1657,6 @@ static int dpa_generic_eth_probe(struct platform_device *_of_dev)
+ 	priv->tx_headroom = DPA_DEFAULT_TX_HEADROOM;
+ 
+ 	init_timer(&priv->timer);
+-	atomic_set(&priv->ifup, 0);
+ 	priv->timer.data = (unsigned long)priv;
+ 	priv->timer.function = dpa_generic_draining_timer;
+ 
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.h b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.h
+index 98f7073..7618aaf 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.h
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.h
+@@ -81,7 +81,6 @@ struct dpa_generic_priv_s {
+ 	char if_type[30];
+ 
+ 	/* periodic drain */
+-	atomic_t ifup;
+ 	struct timer_list timer;
+ };
+ 
+-- 
+2.1.0.27.g96db324
+
