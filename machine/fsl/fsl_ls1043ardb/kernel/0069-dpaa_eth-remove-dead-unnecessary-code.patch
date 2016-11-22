@@ -1,0 +1,123 @@
+From 407eb4ffd0cc1e1d7ad7ca7d4e968c87984c070f Mon Sep 17 00:00:00 2001
+From: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+Date: Mon, 25 Jan 2016 12:24:31 +0200
+Subject: [PATCH 069/146] dpaa_eth: remove dead/unnecessary code
+
+Signed-off-by: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+---
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c | 80 ++++++++++------------
+ 1 file changed, 36 insertions(+), 44 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
+index 6777bfe..6fc5193 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
+@@ -1315,12 +1315,8 @@ static inline void dpa_generic_setup_egress(
+ 	fq->fq_base = *template;
+ 	fq->net_dev = priv->net_dev;
+ 
+-	if (port) {
+-		fq->flags = QMAN_FQ_FLAG_TO_DCPORTAL;
+-		fq->channel = fm_get_tx_port_channel(port);
+-	} else {
+-		fq->flags = QMAN_FQ_FLAG_NO_MODIFY;
+-	}
++	fq->flags = QMAN_FQ_FLAG_TO_DCPORTAL;
++	fq->channel = fm_get_tx_port_channel(port);
+ }
+ 
+ static void dpa_generic_fq_setup(struct dpa_generic_priv_s *priv,
+@@ -1386,8 +1382,6 @@ static int dpa_generic_fq_init(struct dpa_fq *dpa_fq, int disable_buff_dealloc)
+ 	if (dpa_fq->fqid == 0)
+ 		dpa_fq->flags |= QMAN_FQ_FLAG_DYNAMIC_FQID;
+ 
+-	dpa_fq->init = !(dpa_fq->flags & QMAN_FQ_FLAG_NO_MODIFY);
+-
+ 	_errno = qman_create_fq(dpa_fq->fqid, dpa_fq->flags, &dpa_fq->fq_base);
+ 	if (_errno) {
+ 		dev_err(dev, "qman_create_fq() failed\n");
+@@ -1395,47 +1389,45 @@ static int dpa_generic_fq_init(struct dpa_fq *dpa_fq, int disable_buff_dealloc)
+ 	}
+ 	fq = &dpa_fq->fq_base;
+ 
+-	if (dpa_fq->init) {
+-		initfq.we_mask = QM_INITFQ_WE_FQCTRL;
+-		/* FIXME: why would we want to keep an empty FQ in cache? */
+-		initfq.fqd.fq_ctrl = QM_FQCTRL_PREFERINCACHE;
++	initfq.we_mask = QM_INITFQ_WE_FQCTRL;
++	/* FIXME: why would we want to keep an empty FQ in cache? */
++	initfq.fqd.fq_ctrl = QM_FQCTRL_PREFERINCACHE;
+ 
+-		/* FQ placement */
+-		initfq.we_mask |= QM_INITFQ_WE_DESTWQ;
++	/* FQ placement */
++	initfq.we_mask |= QM_INITFQ_WE_DESTWQ;
+ 
+-		initfq.fqd.dest.channel	= dpa_fq->channel;
+-		initfq.fqd.dest.wq = dpa_fq->wq;
++	initfq.fqd.dest.channel	= dpa_fq->channel;
++	initfq.fqd.dest.wq = dpa_fq->wq;
+ 
+-		if (dpa_fq->fq_type == FQ_TYPE_TX && !disable_buff_dealloc) {
+-			initfq.we_mask |= QM_INITFQ_WE_CONTEXTA;
+-			/* ContextA: A2V=1 (contextA A2 field is valid)
+-			 * ContextA A2: EBD=1 (deallocate buffers inside FMan)
+-			 */
+-			initfq.fqd.context_a.hi = 0x10000000;
+-			initfq.fqd.context_a.lo = 0x80000000;
+-		}
++	if (dpa_fq->fq_type == FQ_TYPE_TX && !disable_buff_dealloc) {
++		initfq.we_mask |= QM_INITFQ_WE_CONTEXTA;
++		/* ContextA: A2V=1 (contextA A2 field is valid)
++		 * ContextA A2: EBD=1 (deallocate buffers inside FMan)
++		 */
++		initfq.fqd.context_a.hi = 0x10000000;
++		initfq.fqd.context_a.lo = 0x80000000;
++	}
+ 
+-		/* Initialization common to all ingress queues */
+-		if (dpa_fq->flags & QMAN_FQ_FLAG_NO_ENQUEUE) {
+-			initfq.we_mask |= QM_INITFQ_WE_CONTEXTA;
+-			initfq.fqd.fq_ctrl |=
+-				QM_FQCTRL_CTXASTASHING | QM_FQCTRL_AVOIDBLOCK;
+-			initfq.fqd.context_a.stashing.exclusive =
+-				QM_STASHING_EXCL_DATA | QM_STASHING_EXCL_CTX |
+-				QM_STASHING_EXCL_ANNOTATION;
+-			initfq.fqd.context_a.stashing.data_cl = 2;
+-			initfq.fqd.context_a.stashing.annotation_cl = 1;
+-			initfq.fqd.context_a.stashing.context_cl =
+-				DIV_ROUND_UP(sizeof(struct qman_fq), 64);
+-		}
++	/* Initialization common to all ingress queues */
++	if (dpa_fq->flags & QMAN_FQ_FLAG_NO_ENQUEUE) {
++		initfq.we_mask |= QM_INITFQ_WE_CONTEXTA;
++		initfq.fqd.fq_ctrl |=
++			QM_FQCTRL_CTXASTASHING | QM_FQCTRL_AVOIDBLOCK;
++		initfq.fqd.context_a.stashing.exclusive =
++			QM_STASHING_EXCL_DATA | QM_STASHING_EXCL_CTX |
++			QM_STASHING_EXCL_ANNOTATION;
++		initfq.fqd.context_a.stashing.data_cl = 2;
++		initfq.fqd.context_a.stashing.annotation_cl = 1;
++		initfq.fqd.context_a.stashing.context_cl =
++			DIV_ROUND_UP(sizeof(struct qman_fq), 64);
++	}
+ 
+-		_errno = qman_init_fq(fq, QMAN_INITFQ_FLAG_SCHED, &initfq);
+-		if (_errno < 0) {
+-			dev_err(dev, "qman_init_fq(%u) = %d\n",
+-					qman_fq_fqid(fq), _errno);
+-			qman_destroy_fq(fq, 0);
+-			return _errno;
+-		}
++	_errno = qman_init_fq(fq, QMAN_INITFQ_FLAG_SCHED, &initfq);
++	if (_errno < 0) {
++		dev_err(dev, "qman_init_fq(%u) = %d\n",
++				qman_fq_fqid(fq), _errno);
++		qman_destroy_fq(fq, 0);
++		return _errno;
+ 	}
+ 
+ 	dpa_fq->fqid = qman_fq_fqid(fq);
+-- 
+2.1.0.27.g96db324
+

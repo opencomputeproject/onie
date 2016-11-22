@@ -1,0 +1,96 @@
+From 473590ed67d9622bcdff880a514268860d90435b Mon Sep 17 00:00:00 2001
+From: Marc Zyngier <marc.zyngier@arm.com>
+Date: Mon, 1 Jun 2015 10:47:42 +0100
+Subject: [PATCH 143/245] arm64: alternative: Work around .inst assembler bugs
+
+AArch64 toolchains suffer from the following bug:
+
+$ cat blah.S
+1:
+	.inst	0x01020304
+	.if ((. - 1b) != 4)
+		.error	"blah"
+	.endif
+$ aarch64-linux-gnu-gcc -c blah.S
+blah.S: Assembler messages:
+blah.S:3: Error: non-constant expression in ".if" statement
+
+which precludes the use of msr_s and co as part of alternatives.
+
+We workaround this issue by not directly testing the labels
+themselves, but by moving the current output pointer by a value
+that should always be zero. If this value is not null, then
+we will trigger a backward move, which is expclicitely forbidden.
+This triggers the error we're after:
+
+  AS      arch/arm64/kvm/hyp.o
+arch/arm64/kvm/hyp.S: Assembler messages:
+arch/arm64/kvm/hyp.S:1377: Error: attempt to move .org backwards
+scripts/Makefile.build:294: recipe for target 'arch/arm64/kvm/hyp.o' failed
+make[1]: *** [arch/arm64/kvm/hyp.o] Error 1
+Makefile:946: recipe for target 'arch/arm64/kvm' failed
+
+Not pretty, but at least works on the current toolchains.
+
+Acked-by: Will Deacon <will.deacon@arm.com>
+Signed-off-by: Marc Zyngier <marc.zyngier@arm.com>
+Signed-off-by: Catalin Marinas <catalin.marinas@arm.com>
+(cherry picked from commit eb7c11ee3c5ce6c45ac28a5015a8e60ed458b412)
+Signed-off-by: Stuart Yoder <stuart.yoder@nxp.com>
+---
+ arch/arm64/include/asm/alternative.h | 25 ++++++++++++++++++-------
+ 1 file changed, 18 insertions(+), 7 deletions(-)
+
+diff --git a/arch/arm64/include/asm/alternative.h b/arch/arm64/include/asm/alternative.h
+index 265b13e..c385a0c 100644
+--- a/arch/arm64/include/asm/alternative.h
++++ b/arch/arm64/include/asm/alternative.h
+@@ -26,7 +26,20 @@ void free_alternatives_memory(void);
+ 	" .byte 662b-661b\n"				/* source len      */ \
+ 	" .byte 664f-663f\n"				/* replacement len */
+ 
+-/* alternative assembly primitive: */
++/*
++ * alternative assembly primitive:
++ *
++ * If any of these .org directive fail, it means that insn1 and insn2
++ * don't have the same length. This used to be written as
++ *
++ * .if ((664b-663b) != (662b-661b))
++ * 	.error "Alternatives instruction length mismatch"
++ * .endif
++ *
++ * but most assemblers die if insn1 or insn2 have a .inst. This should
++ * be fixed in a binutils release posterior to 2.25.51.0.2 (anything
++ * containing commit 4e4d08cf7399b606 or c1baaddf8861).
++ */
+ #define ALTERNATIVE(oldinstr, newinstr, feature)			\
+ 	"661:\n\t"							\
+ 	oldinstr "\n"							\
+@@ -39,9 +52,8 @@ void free_alternatives_memory(void);
+ 	newinstr "\n"							\
+ 	"664:\n\t"							\
+ 	".popsection\n\t"						\
+-	".if ((664b-663b) != (662b-661b))\n\t"				\
+-	"	.error \"Alternatives instruction length mismatch\"\n\t"\
+-	".endif\n"
++	".org	. - (664b-663b) + (662b-661b)\n\t"			\
++	".org	. - (662b-661b) + (664b-663b)\n"
+ 
+ #else
+ 
+@@ -61,9 +73,8 @@ void free_alternatives_memory(void);
+ 	.pushsection .altinstr_replacement, "ax"
+ 663:	\insn2
+ 664:	.popsection
+-	.if ((664b-663b) != (662b-661b))
+-		.error "Alternatives instruction length mismatch"
+-	.endif
++	.org	. - (664b-663b) + (662b-661b)
++	.org	. - (662b-661b) + (664b-663b)
+ .endm
+ 
+ #endif  /*  __ASSEMBLY__  */
+-- 
+2.1.0.27.g96db324
+

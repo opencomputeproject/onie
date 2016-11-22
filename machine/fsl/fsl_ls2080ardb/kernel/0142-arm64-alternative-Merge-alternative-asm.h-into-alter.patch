@@ -1,0 +1,133 @@
+From 18d4cadf66e1ac9e7abe315bdfd03404476c5784 Mon Sep 17 00:00:00 2001
+From: Marc Zyngier <marc.zyngier@arm.com>
+Date: Mon, 1 Jun 2015 10:47:41 +0100
+Subject: [PATCH 142/245] arm64: alternative: Merge alternative-asm.h into
+ alternative.h
+
+asm/alternative-asm.h and asm/alternative.h are extremely similar,
+and really deserve to live in the same file (as this makes further
+modufications a bit easier).
+
+Fold the content of alternative-asm.h into alternative.h, and
+update the few users.
+
+Acked-by: Will Deacon <will.deacon@arm.com>
+Signed-off-by: Marc Zyngier <marc.zyngier@arm.com>
+Signed-off-by: Catalin Marinas <catalin.marinas@arm.com>
+(cherry picked from commit 8d883b23aed73cad844ba48051c7e96eddf0f51c)
+Signed-off-by: Stuart Yoder <stuart.yoder@nxp.com>
+---
+ arch/arm64/include/asm/alternative-asm.h | 29 -----------------------------
+ arch/arm64/include/asm/alternative.h     | 27 +++++++++++++++++++++++++++
+ arch/arm64/kernel/entry.S                |  2 +-
+ arch/arm64/mm/cache.S                    |  2 +-
+ 4 files changed, 29 insertions(+), 31 deletions(-)
+ delete mode 100644 arch/arm64/include/asm/alternative-asm.h
+
+diff --git a/arch/arm64/include/asm/alternative-asm.h b/arch/arm64/include/asm/alternative-asm.h
+deleted file mode 100644
+index 919a678..0000000
+--- a/arch/arm64/include/asm/alternative-asm.h
++++ /dev/null
+@@ -1,29 +0,0 @@
+-#ifndef __ASM_ALTERNATIVE_ASM_H
+-#define __ASM_ALTERNATIVE_ASM_H
+-
+-#ifdef __ASSEMBLY__
+-
+-.macro altinstruction_entry orig_offset alt_offset feature orig_len alt_len
+-	.word \orig_offset - .
+-	.word \alt_offset - .
+-	.hword \feature
+-	.byte \orig_len
+-	.byte \alt_len
+-.endm
+-
+-.macro alternative_insn insn1 insn2 cap
+-661:	\insn1
+-662:	.pushsection .altinstructions, "a"
+-	altinstruction_entry 661b, 663f, \cap, 662b-661b, 664f-663f
+-	.popsection
+-	.pushsection .altinstr_replacement, "ax"
+-663:	\insn2
+-664:	.popsection
+-	.if ((664b-663b) != (662b-661b))
+-		.error "Alternatives instruction length mismatch"
+-	.endif
+-.endm
+-
+-#endif  /*  __ASSEMBLY__  */
+-
+-#endif /* __ASM_ALTERNATIVE_ASM_H */
+diff --git a/arch/arm64/include/asm/alternative.h b/arch/arm64/include/asm/alternative.h
+index d261f01..265b13e 100644
+--- a/arch/arm64/include/asm/alternative.h
++++ b/arch/arm64/include/asm/alternative.h
+@@ -1,6 +1,8 @@
+ #ifndef __ASM_ALTERNATIVE_H
+ #define __ASM_ALTERNATIVE_H
+ 
++#ifndef __ASSEMBLY__
++
+ #include <linux/types.h>
+ #include <linux/stddef.h>
+ #include <linux/stringify.h>
+@@ -41,4 +43,29 @@ void free_alternatives_memory(void);
+ 	"	.error \"Alternatives instruction length mismatch\"\n\t"\
+ 	".endif\n"
+ 
++#else
++
++.macro altinstruction_entry orig_offset alt_offset feature orig_len alt_len
++	.word \orig_offset - .
++	.word \alt_offset - .
++	.hword \feature
++	.byte \orig_len
++	.byte \alt_len
++.endm
++
++.macro alternative_insn insn1 insn2 cap
++661:	\insn1
++662:	.pushsection .altinstructions, "a"
++	altinstruction_entry 661b, 663f, \cap, 662b-661b, 664f-663f
++	.popsection
++	.pushsection .altinstr_replacement, "ax"
++663:	\insn2
++664:	.popsection
++	.if ((664b-663b) != (662b-661b))
++		.error "Alternatives instruction length mismatch"
++	.endif
++.endm
++
++#endif  /*  __ASSEMBLY__  */
++
+ #endif /* __ASM_ALTERNATIVE_H */
+diff --git a/arch/arm64/kernel/entry.S b/arch/arm64/kernel/entry.S
+index bddd04d..3661b12 100644
+--- a/arch/arm64/kernel/entry.S
++++ b/arch/arm64/kernel/entry.S
+@@ -21,7 +21,7 @@
+ #include <linux/init.h>
+ #include <linux/linkage.h>
+ 
+-#include <asm/alternative-asm.h>
++#include <asm/alternative.h>
+ #include <asm/assembler.h>
+ #include <asm/asm-offsets.h>
+ #include <asm/cpufeature.h>
+diff --git a/arch/arm64/mm/cache.S b/arch/arm64/mm/cache.S
+index 2560e1e..70a79cb 100644
+--- a/arch/arm64/mm/cache.S
++++ b/arch/arm64/mm/cache.S
+@@ -22,7 +22,7 @@
+ #include <linux/init.h>
+ #include <asm/assembler.h>
+ #include <asm/cpufeature.h>
+-#include <asm/alternative-asm.h>
++#include <asm/alternative.h>
+ 
+ #include "proc-macros.S"
+ 
+-- 
+2.1.0.27.g96db324
+

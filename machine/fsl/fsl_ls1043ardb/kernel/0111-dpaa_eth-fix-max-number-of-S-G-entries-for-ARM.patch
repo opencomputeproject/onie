@@ -1,0 +1,47 @@
+From e0c2d6aee8e9612ce558c666d79d1772a2b057a8 Mon Sep 17 00:00:00 2001
+From: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+Date: Wed, 28 Oct 2015 20:00:40 +0200
+Subject: [PATCH 111/146] dpaa_eth: fix max number of S/G entries for ARM
+
+Signed-off-by: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+---
+ drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h | 9 +++++++++
+ drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c     | 2 +-
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h
+index 08fddf9..557a800 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.h
+@@ -56,6 +56,15 @@
+ }
+ 
+ #define DPA_SGT_MAX_ENTRIES 16 /* maximum number of entries in SG Table */
++
++#ifdef DPAA_LS1043A_DMA_4K_ISSUE
++/* each S/G entry can be divided into two S/G entries */
++#define DPA_SGT_ENTRIES_THRESHOLD 	7
++#else
++#define DPA_SGT_ENTRIES_THRESHOLD	DPA_SGT_MAX_ENTRIES
++#endif /* DPAA_LS1043A_DMA_4K_ISSUE */
++
++
+ #define DPA_BUFF_RELEASE_MAX 8 /* maximum number of buffers released at once */
+ 
+ /* return codes for the dpaa-eth hooks */
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c
+index 65c3605..104bf1e 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c
+@@ -1019,7 +1019,7 @@ int __hot dpa_tx_extended(struct sk_buff *skb, struct net_device *net_dev,
+ 	 * the skb, so we're one extra frag short.
+ 	 */
+ 	if (nonlinear &&
+-		likely(skb_shinfo(skb)->nr_frags < DPA_SGT_MAX_ENTRIES)) {
++		likely(skb_shinfo(skb)->nr_frags < DPA_SGT_ENTRIES_THRESHOLD)) {
+ 		/* Just create a S/G fd based on the skb */
+ 		err = skb_to_sg_fd(priv, skb, &fd);
+ 		percpu_priv->tx_frag_skbuffs++;
+-- 
+2.1.0.27.g96db324
+
