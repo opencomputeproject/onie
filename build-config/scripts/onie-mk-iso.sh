@@ -36,7 +36,7 @@ RECOVERY_INITRD=$3
 RECOVERY_DIR=$4
 MACHINE_CONF=$5
 RECOVERY_CONF_DIR=$6
-GRUB_HOST_LIB_I386_DIR=$7
+GRUB_TARGET_LIB_I386_DIR=$7
 GRUB_HOST_BIN_I386_DIR=$8
 GRUB_TARGET_LIB_UEFI_DIR=$9
 GRUB_HOST_BIN_UEFI_DIR=${10}
@@ -64,8 +64,8 @@ RECOVERY_ISO_IMAGE=${12}
     echo "ERROR: Unable to read recovery config directory: $RECOVERY_CONF_DIR"
     exit 1
 }
-[ -r "${GRUB_HOST_LIB_I386_DIR}/biosdisk.mod" ] || {
-    echo "ERROR: Does not look like valid GRUB i386-pc library directory: $GRUB_HOST_LIB_I386_DIR"
+[ -r "${GRUB_TARGET_LIB_I386_DIR}/biosdisk.mod" ] || {
+    echo "ERROR: Does not look like valid GRUB i386-pc library directory: $GRUB_TARGET_LIB_I386_DIR"
     exit 1
 }
 [ -x "${GRUB_HOST_BIN_I386_DIR}/grub-mkimage" ] || {
@@ -142,19 +142,19 @@ sed -e "s/<CONSOLE_SPEED>/$CONSOLE_SPEED/g"           \
 if [ "$FIRMWARE_TYPE" != "uefi" ] ; then
 	# Populate .ISO sysroot with i386-pc GRUB modules
 	mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc
-	(cd $GRUB_HOST_LIB_I386_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc)
+	(cd $GRUB_TARGET_LIB_I386_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc)
 	
 	# Generate legacy BIOS eltorito format GRUB image
 	$GRUB_HOST_BIN_I386_DIR/grub-mkimage \
 		--format=i386-pc \
-		--directory=$GRUB_HOST_LIB_I386_DIR \
+		--directory=$GRUB_TARGET_LIB_I386_DIR \
 		--prefix=/boot/grub \
 		--output=$RECOVERY_CORE_IMG \
 		part_msdos part_gpt iso9660 biosdisk
-	cat $GRUB_HOST_LIB_I386_DIR/cdboot.img $RECOVERY_CORE_IMG > $RECOVERY_ELTORITO_IMG
+	cat $GRUB_TARGET_LIB_I386_DIR/cdboot.img $RECOVERY_CORE_IMG > $RECOVERY_ELTORITO_IMG
 	
 	# Generate legacy BIOS MBR format GRUB image
-	cat $GRUB_HOST_LIB_I386_DIR/boot.img $RECOVERY_CORE_IMG > $RECOVERY_EMBEDDED_IMG
+	cat $GRUB_TARGET_LIB_I386_DIR/boot.img $RECOVERY_CORE_IMG > $RECOVERY_EMBEDDED_IMG
 fi
 
 if [ "$UEFI_ENABLE" = "yes" ] ; then

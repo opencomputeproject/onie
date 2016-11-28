@@ -402,7 +402,7 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 
 # Make hybrid .iso image containing the ONIE kernel and recovery intrd
 recovery-iso: $(RECOVERY_ISO_STAMP)
-$(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
+$(RECOVERY_ISO_STAMP): $(GRUB_INSTALL_STAMP) $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
 			$(RECOVERY_CONF_DIR)/grub-iso.cfg
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE Recovery Hybrid iso ===="
 	$(Q) Q=$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
@@ -415,14 +415,14 @@ $(RECOVERY_ISO_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_INITRD_STAMP) \
 	     $(SCRIPTDIR)/onie-mk-iso.sh $(ARCH) $(UPDATER_VMLINUZ) \
 		$(RECOVERY_INITRD) $(RECOVERY_DIR) \
 		$(MACHINE_CONF) $(RECOVERY_CONF_DIR) \
-		$(GRUB_HOST_LIB_I386_DIR) $(GRUB_HOST_BIN_I386_DIR) \
+		$(GRUB_TARGET_LIB_I386_DIR) $(GRUB_HOST_BIN_I386_DIR) \
 		$(GRUB_TARGET_LIB_UEFI_DIR) $(GRUB_HOST_BIN_UEFI_DIR) \
 		$(FIRMWARE_TYPE) $(RECOVERY_ISO_IMAGE)
 	$(Q) touch $@
 
 # Convert the .iso to a PXE-EFI64 bootable image using GRUB
 pxe-efi64: $(PXE_EFI64_STAMP)
-$(PXE_EFI64_STAMP): $(GRUB_HOST_INSTALL_STAMP) $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
+$(PXE_EFI64_STAMP): $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
 	$(Q) echo "==== Create $(MACHINE_PREFIX) ONIE PXE EFI64 Recovery Image ===="
 	$(Q) cd $(GRUB_TARGET_LIB_UEFI_DIR) && \
 		ls *.mod|sed -e 's/\.mod//g'|egrep -v '(ehci|at_keyboard)' > $(PXE_EFI64_GRUB_MODS)

@@ -19,6 +19,7 @@ GRUB_DIR		= $(GRUB_BUILD_DIR)/grub-$(GRUB_VERSION)
 GRUB_I386_DIR		= $(GRUB_BUILD_DIR)/grub-i386-pc
 GRUB_UEFI_DIR		= $(GRUB_BUILD_DIR)/grub-$(ARCH)-efi
 GRUB_I386_COREBOOT_DIR	= $(GRUB_BUILD_DIR)/grub-i386-coreboot
+GRUB_TARGET_LIB_I386_DIR       = $(DEV_SYSROOT)/usr/lib/grub/i386-pc
 GRUB_TARGET_LIB_UEFI_DIR       = $(DEV_SYSROOT)/usr/lib/grub/$(ARCH)-efi
 
 GRUB_SRCPATCHDIR	= $(PATCHDIR)/grub/$(GRUB_VERSION)
@@ -34,6 +35,12 @@ ifeq ($(FIRMWARE_TYPE),$(filter $(FIRMWARE_TYPE),auto bios))
   GRUB_INSTALL_I386_STAMP		= $(STAMPDIR)/grub-install-i386-pc
 endif
 ifeq ($(UEFI_ENABLE),yes)
+  GRUB_TARGET_UEFI_ENABLE	= yes
+endif
+ifeq ($(PXE_EFI64_ENABLE),yes)
+  GRUB_TARGET_UEFI_ENABLE	= yes
+endif
+ifeq ($(GRUB_TARGET_UEFI_ENABLE),yes)
   GRUB_CONFIGURE_UEFI_STAMP	= $(STAMPDIR)/grub-configure-$(ARCH)-efi
   GRUB_BUILD_UEFI_STAMP		= $(STAMPDIR)/grub-build-$(ARCH)-efi
   GRUB_INSTALL_UEFI_STAMP	= $(STAMPDIR)/grub-install-$(ARCH)-efi
