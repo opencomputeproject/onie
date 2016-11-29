@@ -137,9 +137,18 @@ SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION)
 		  libc.so.0 libuClibc-$(XTOOLS_LIBC_VERSION).so \
 		  libcrypt.so.0 libcrypt-$(XTOOLS_LIBC_VERSION).so \
 		  libutil.so.0 libutil-$(XTOOLS_LIBC_VERSION).so \
-	     	  libdl.so.0 libdl-$(XTOOLS_LIBC_VERSION).so \
-		  libpthread.so.0 libpthread-$(XTOOLS_LIBC_VERSION).so \
+
+
+  ifeq ($(EXT3_4_ENABLE),yes)
+    SYSROOT_LIBS	+= \
+		  libdl.so.0 libdl-$(XTOOLS_LIBC_VERSION).so \
+		  libpthread.so.0 libpthread-$(XTOOLS_LIBC_VERSION).so
+  endif
+  # Add librt if ACPI or LVM2 is enabled
+  ifneq ($(filter yes, $(ACPI_ENABLE) $(LVM2_ENABLE)),)
+    SYSROOT_LIBS	+= \
 		  librt.so.0 librt-$(XTOOLS_LIBC_VERSION).so
+  endif
 else ifeq ($(XTOOLS_LIBC),glibc)
 SYSROOT_LIBS	= ld-$(XTOOLS_LIBC_VERSION).so \
 		  libm.so.6 libm-$(XTOOLS_LIBC_VERSION).so \
