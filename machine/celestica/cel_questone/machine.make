@@ -32,9 +32,6 @@ I2CTOOLS_SYSEEPROM = no
 #LINUX_VERSION		= 4.1
 #LINUX_MINOR_VERSION	= 17 
 
-# Specify uClibc version
-#UCLIBC_VERSION = 0.9.32.1
-
 UEFI_ENABLE = yes
 
 #-------------------------------------------------------------------------------

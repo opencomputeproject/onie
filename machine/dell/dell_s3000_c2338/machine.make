@@ -35,9 +35,6 @@ EXTRA_CMDLINE_LINUX = i2c-ismt.bus_speed=100
 LINUX_VERSION		= 3.2
 LINUX_MINOR_VERSION	= 69
 
-# Specify uClibc version
-UCLIBC_VERSION = 0.9.32.1
-
 #-------------------------------------------------------------------------------
 #
 # Local Variables:

@@ -20,9 +20,6 @@ VENDOR_ID = 12244
 LINUX_VERSION		= 3.2
 LINUX_MINOR_VERSION	= 69
 
-# Specify uClibc version
-UCLIBC_VERSION = 0.9.32.1
-
 # Exclude ext3/4 file system tools
 EXT3_4_ENABLE = no
 # Exclude btrfs file system tools

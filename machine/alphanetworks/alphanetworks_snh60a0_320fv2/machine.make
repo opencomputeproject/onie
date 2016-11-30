@@ -33,9 +33,6 @@ CONSOLE_DEV = 1
 LINUX_VERSION		= 3.14
 LINUX_MINOR_VERSION	= 27
 
-# Specify uClibc version
-UCLIBC_VERSION = 0.9.32.1
-
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
