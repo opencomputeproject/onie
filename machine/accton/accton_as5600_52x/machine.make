@@ -42,6 +42,8 @@ LINUX_MINOR_VERSION	= 69
 EXT3_4_ENABLE = no
 # Exclude btrfs file system tools
 BTRFS_PROGS_ENABLE = no
+# Exclude strace debug utility
+STRACE_ENABLE = no
 
 #-------------------------------------------------------------------------------
 #
