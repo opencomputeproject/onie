@@ -28,7 +28,7 @@ I2CTOOLS_ENABLE = yes
 I2CTOOLS_SYSEEPROM = no
 
 # Console parameters
-CONSOLE_DEV = 1
+CONSOLE_DEV = 0
 
 # Set Linux kernel version
 LINUX_VERSION		= 3.14
