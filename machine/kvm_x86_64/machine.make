@@ -1,4 +1,4 @@
-# KVM x86_64 Virtual Machin
+# KVM x86_64 Virtual Machine
 
 #  Copyright (C) 2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
@@ -75,6 +75,10 @@ SKIP_ETHMGMT_MACS = yes
 # values are "rescue" or "embed" (without double-quotes). This
 # parameter defaults to "rescue" mode if not specified here.
 # RECOVERY_DEFAULT_ENTRY = embed
+
+# Include additional files in the installer image.  This is useful to
+# share code between the ONIE run-time and the installer.
+UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/test-install-sharing
 
 #-------------------------------------------------------------------------------
 #
