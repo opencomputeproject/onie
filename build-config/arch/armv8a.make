@@ -2,6 +2,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
+#  Copyright (C) 2016 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -49,7 +50,7 @@ ifeq ($(PXE_EFI64_ENABLE),yes)
 endif
 
 UPDATER_IMAGE_PARTS = $(UPDATER_VMLINUZ) $(UPDATER_INITRD) $(UPDATER_ONIE_TOOLS) \
-			$(ROOTCONFDIR)/grub-arch/sysroot-lib-onie/onie-blkdev-common $(UPDATER_IMAGE_PARTS_PLATFORM)
+			$(ROOTCONFDIR)/grub-arch/sysroot-lib-onie/onie-blkdev-common
 UPDATER_IMAGE_PARTS_COMPLETE = $(KERNEL_INSTALL_STAMP) $(UPDATER_INITRD) $(UPDATER_ONIE_TOOLS)
 
 DEMO_IMAGE_PARTS = $(DEMO_KERNEL_VMLINUZ) $(DEMO_SYSROOT_CPIO_XZ)

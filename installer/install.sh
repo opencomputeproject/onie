@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013-2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -112,6 +112,13 @@ while getopts "$args" a ; do
     esac
 done
 
+[ -r onie-update.tar.xz ] || {
+    echo "ERROR:$update_label: update tar file is missing."
+    exit 1
+}
+
+xz -d -c onie-update.tar.xz | tar -xf -
+
 check_machine_image()
 {
     if [ "$onie_machine" != "$image_machine" ] ; then
@@ -138,18 +145,11 @@ if [ "$fail" = "yes" ] && [ "$force" = "no" ] ; then
     exit 1
 fi
 
-[ -r onie-update.tar.xz ] || {
-    echo "ERROR:$update_label: update tar file is missing."
-    exit 1
-}
-
 [ "$quiet" = "no" ] && echo "$update_label: Version       : $image_version"
 [ "$quiet" = "no" ] && echo "$update_label: Architecture  : $image_arch"
 [ "$quiet" = "no" ] && echo "$update_label: Machine       : $image_machine"
 [ "$quiet" = "no" ] && echo "$update_label: Machine Rev   : $image_machine_rev"
 [ "$quiet" = "no" ] && echo "$update_label: Config Version: $image_config_version"
-
-xz -d -c onie-update.tar.xz | tar -xf -
 
 # arch specific install method
 install_image "$@"
