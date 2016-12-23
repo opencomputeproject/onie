@@ -1,0 +1,121 @@
+====================================
+Installing ONIE on WNC model
+====================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/wnc MACHINE=wnc_ssb1_w1 all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/wnc MACHINE=wnc_ssb1_w1 all recovery-iso
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-r--r-- 1 5381208 Jul  4 11:15 ssb1_w1-r0.initrd
+-rw-r--r-- 1 3349344 Jul  4 11:14 ssb1_w1-r0.vmlinuz
+-rw-r--r-- 1 8746613 Jul  4 11:15 onie-updater-x86_64-wnc_ssb1_w1-r0
+
+wnc_ssb1_w1-r0.vmlinuz -- This is the ONIE kernel image
+
+wnc_ssb1_w1-r0.initrd  -- This is the ONIE initramfs (filesystem)
+
+onie-recovery-x86_64-wnc_ssb1_w1-r0.iso -- This is the ONIE recovery
+ISO image.  This image can be used to create a bootable USB memory stick
+for installing/recovery ONIE.
+
+onie-updater-x86_64-wnc_ssb1_w1-r0 -- This is the ONIE self-update
+image.  This image is a self-extracting archive used for installing ONIE.
+
+Build demo OS
+=============
+To compile the demo OS first change directories to ``build-config``
+and then type ``"make MACHINE=wnc_ssb1_w1 demo"``.  For example::
+
+  $ cd build-config
+  $make -j4 MACHINEROOT=../machine/wnc MACHINE=wnc_ssb1_w1 all recovery-iso demo
+
+
+Installing ONIE on a Blank Machine
+==================================
+
+To install ONIE on a new machine, you can use the recovery ISO image to
+create a bootable USB memory stick.
+
+Creating bootable USB stick
+---------------------------
+
+Use ``dd`` to copy the .iso image to a USB stick and boot from that::
+
+  dd if=<machine>.iso of=/dev/sdX bs=10M
+
+For example::
+  dd if=onie-recovery-x86_64-wnc_ssb1_w1-r0.iso of=/dev/sdb bs=10M
+
+You can find the correct ``/dev/sdX`` by inspecing the ``dmesg``
+output after inserting the USB stick into your work station.
+
+Booting from USB stick
+----------------------
+
+To enable booting from USB in the BIOS:
+
+1. Insert the USB stick
+
+2. Power on the switch and enter the BIOS configuration
+
+3. Set the hard drive boot order:
+
+  In "Boot Option #1" select the device that corresponds to your
+  device::
+
+    Boot-->Boot Option Priorities-->Boot Option #1
+
+  If the device name is not listed in "Boot Option #1", please
+  check the priorities in the hard drive boot order::
+
+    Boot-->Hard Drive BBS Priorities-->Boot Option #1
+
+  Taking ``JetFlashTranscend 8GB 8.07`` as an example, the boot
+  order will look like following::
+
+    Boot Option Priorities
+    Boot Option #1          [JetFlashTranscend 8...]
+    Boot Option #2          [ATP ATP IG eUSB 1100]
+    Boot Option #3          [IBA GE Slot 00A0 v1543]
+    Boot Option #4          [UEFI: Built-in EFI ...]
+
+4. Save and Exit the BIOS configuration
+
+5. After several seconds, you should see:
+
+                     GNU GRUB  version 2.02~beta2+e4a1fe391
+
+ +----------------------------------------------------------------------------+
+ |*ONIE: Rescue                                                               |
+ | ONIE: Embed ONIE                                                           |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line.
+
+  - Choose ``ONIE: Embed ONIE`` for creating a fresh partition layout and
+    installing ONIE automatically.  All data on the mass storage will be
+    erased.
+- Choose ``ONIE: Rescue`` for entering ONIE recovery command-line shell.
