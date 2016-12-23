@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -33,21 +34,19 @@ onie_parms_file="${ONIE_RUN_DIR}/onie_parms_file.txt"
 neigh_discovery()
 {
 
-    intf_list=$(net_intf)
+    intf=$1
     ping_cnt=3
 
-    for i in $intf_list ; do
-        # Wait for interface link-local addr to leave tentative state
-        cnt=300
-        while [ $cnt -gt 0 ] ; do
-            foo=$(ip addr show dev $i | grep tentative)
-            [ "$?" -ne 0 ] && break
-            cnt=$(( $cnt - 1 ))
-            sleep 0.1
-        done
-        ping6 -I $i -c $ping_cnt ff02::1 > /dev/null 2>&1
-        ping -I $i -w 2 -c $ping_cnt -q 255.255.255.255 > /dev/null 2>&1
+    # Wait for interface link-local addr to leave tentative state
+    cnt=300
+    while [ $cnt -gt 0 ] ; do
+        foo=$(ip addr show dev $intf | grep tentative)
+        [ "$?" -ne 0 ] && break
+        cnt=$(( $cnt - 1 ))
+        sleep 0.1
     done
+    ping6 -I $intf -c $ping_cnt ff02::1 > /dev/null 2>&1
+    ping -I $intf -w 2 -c $ping_cnt -q 255.255.255.255 > /dev/null 2>&1
 
     # Allow neighbor table to populate -- better way?
     sleep 4
@@ -115,22 +114,19 @@ sd_dhcp6()
 # DHCPv4 service discovery
 sd_dhcp4()
 {
-    intf_list=$(net_intf)
+    intf=$1
     udhcp_args="$(udhcpc_args) -t 2 -T 2 -n"
+    tmp=
 
     udhcp_request_opts=
     for o in 7 43 54 66 67 72 114 125 ; do
         udhcp_request_opts="$udhcp_request_opts -O $o"
     done
 
-    # Initate DHCP request on every interface in the list.  Stop after
-    # one works.
+    # Initate DHCP request on specified interface.
 
-    for i in $intf_list ; do
-        log_debug_msg "Trying DHCPv4 on interface: $i"
-        tmp=$(udhcpc $udhcp_args $udhcp_request_opts -i $i -s /lib/onie/udhcp4_sd) && break
-        tmp=
-    done
+    log_debug_msg "Trying DHCPv4 on interface: $intf"
+    tmp=$(udhcpc $udhcp_args $udhcp_request_opts -i $intf -s /lib/onie/udhcp4_sd)
 
     onie_disco="${onie_disco}${tmp##*ONIE_PARMS:}"
     if [ -n "$onie_disco" ] ; then
@@ -162,30 +158,33 @@ service_discovery()
     # add/update $onie_disco
     log_console_msg "Starting ONIE Service Discovery"
     onie_disco=
-    sd_static  && return
-    sd_localfs
-    sd_dhcp6
-    sd_dhcp4
-    sd_mdns
-    sd_fallback
+    sd_static $* && return
+    sd_localfs $*
+    sd_dhcp6 $*
+    sd_dhcp4 $*
+    sd_mdns $*
+    sd_fallback $*
 }
 
 delay=20
 
 # Download and run installer entry point
 while true ; do
-    /etc/init.d/networking.sh discover
-    /etc/init.d/syslogd.sh discover
-    service_discovery
-    log_debug_msg "onie_disco: $onie_disco"
-    neigh_discovery
+    intf_list=$(net_intf)
+    for i in $intf_list ; do
+        /etc/init.d/networking.sh "$i" discover
+        /etc/init.d/syslogd.sh discover
+        service_discovery "$i"
+        log_debug_msg "onie_disco: $onie_disco"
+        neigh_discovery
     
-    rm -f /var/run/install.rc
-    cat $onie_neigh_file > $onie_parms_file
-    echo "$onie_disco" >>  $onie_parms_file
-    sed -e 's/@@/ = /g' -e 's/##/\n/g' $onie_parms_file | logger -t discover -p ${syslog_onie}.info
-    exec_installer $onie_parms_file 2>&1 | tee $tee_log_file | logger -t onie-exec -p ${syslog_onie}.info
-    [ -r /var/run/install.rc ] && [ "$(cat /var/run/install.rc)" = "0" ] && exit 0
+        rm -f /var/run/install.rc
+        cat $onie_neigh_file > $onie_parms_file
+        echo "$onie_disco" >>  $onie_parms_file
+        sed -e 's/@@/ = /g' -e 's/##/\n/g' $onie_parms_file | logger -t discover -p ${syslog_onie}.info
+        exec_installer $onie_parms_file 2>&1 | tee $tee_log_file | logger -t onie-exec -p ${syslog_onie}.info
+        [ -r /var/run/install.rc ] && [ "$(cat /var/run/install.rc)" = "0" ] && exit 0
+    done
     # pause to avoid DoSing someone
     log_info_msg "Sleeping for $delay seconds "
     cnt=0
