@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2015,2016,2017 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -49,6 +49,13 @@ do_start() {
             exit 0
             ;;
         install)
+            cat <<EOF >> /etc/issue
+NOTE: ONIE install mode booting has been sticky. i.e.,
+      it stays install mode until a NOS installer runs
+      successfully.
+
+EOF
+            log_console_msg "Installer mode detected.  Making install boot mode sticky."
             install_remain_sticky_arch || {
                 echo "Error: problems making install boot mode sticky" > /dev/console
             }
