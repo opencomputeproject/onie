@@ -153,6 +153,19 @@ elif [ "$format" = "uboot_ubootenv-up" ] ; then
     }
     cat $UBOOT_BIN $pad_file > ${output_bin}.uboot+env
     rm -f $pad_file
+elif [ "$format" = "contiguous-onie_uboot" ] ; then
+    # No ubootenv included. It's in a separate piece of flash and we'd end up creating a
+    # giant image if we included it.
+    # Instead include instructions on wiping the env in the install details
+    #   low : onie 
+    #   high: u-boot
+    pad_file=$(tempfile)
+    dd if=$onie_uimage of=$pad_file ibs=$onie_uimage_size conv=sync > /dev/null 2>&1 || {
+        echo "ERROR: Problems with dd for $format image"
+        exit 1
+    }
+    cat $pad_file $UBOOT_BIN > $output_bin
+    rm -f $pad_file
 else
     echo "ERROR: Unknown ROM format '$format'."
     exit 1
