@@ -1,0 +1,764 @@
+diff --git a/arch/powerpc/boot/dts/lenovo_g8272.dts b/arch/powerpc/boot/dts/lenovo_g8272.dts
+new file mode 100644
+index 0000000..57c9a64
+--- /dev/null
++++ b/arch/powerpc/boot/dts/lenovo_g8272.dts
+@@ -0,0 +1,571 @@
++/*
++ * Lenovo G8272 Device Tree Source
++ *
++ */
++/dts-v1/;
++
++/ {
++	model = "Lenovo,G8272";
++	compatible = "Lenovo,g8272";
++	#address-cells = <2>;
++	#size-cells = <2>;
++
++	aliases {
++		ethernet0 = &enet1;
++		serial0 = &serial0;
++		serial1 = &serial1;
++		pci0 = &pci0;
++	};
++
++	cpus {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		PowerPC,P2020@0 {
++			device_type = "cpu";
++			reg = <0x0>;
++			next-level-cache = <&L2>;
++		};
++		PowerPC,P2020@1 {
++			device_type = "cpu";
++			reg = <0x1>;
++			next-level-cache = <&L2>;
++		};
++	};
++
++	memory {
++		device_type = "memory";
++	};
++
++	mass_storage {
++		device = "mmcblk0";
++	};
++
++	localbus@fffe05000 {
++		#address-cells = <2>;
++		#size-cells = <1>;
++		compatible = "fsl,p2020-elbc", "fsl,elbc", "simple-bus";
++		reg = <0xf 0xffe05000 0 0x1000>;
++		interrupts = <19 2>;
++		interrupt-parent = <&mpic>;
++
++		/* NOR and NAND Flashes */
++		ranges = <0x0 0x0 0xf 0xef000000 0x01000000
++				0x1 0x0 0xf 0xff800000 0x00040000>;
++
++		nor@0,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x01000000>;
++			bank-width = <2>;
++			device-width = <1>;
++                       device-tree@0 {
++                           label = "device-tree";
++                           reg = <0x0 0x20000>;
++                       };
++                       u-boot-env@20000 {
++                           label = "uboot-env";
++                           reg = <0x20000 0x20000>;
++                           env_size = <0x2000>;
++                       };
++                       linux-kernel@40000 {
++                           label = "linux-kernel";
++                           reg = <0x40000 0x300000>;
++                       };
++                       rfs@340000 {
++                           label = "root filesystem";
++                           reg = <0x340000 0x500000>;
++                       };
++                       onie@ba0000 {
++                           label ="onie";
++                           reg = <0xba0000 0x3e0000>;
++                       };
++                       u-boot@f80000 {
++                           label = "uboot";
++                           reg = <0xf80000 0x80000>;
++                       };
++                       open@40000 {
++                           label = "open";
++                           reg = <0x40000 0x800000>;
++                       };
++		};
++	};
++
++	soc@fffe00000 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		device_type = "soc";
++		compatible = "fsl,p2020-immr", "simple-bus";
++		ranges = <0x0  0xf 0xffe00000 0x100000>;
++		bus-frequency = <0>;		// Filled out by uboot.
++
++		ecm-law@0 {
++			compatible = "fsl,ecm-law";
++			reg = <0x0 0x1000>;
++			fsl,num-laws = <12>;
++		};
++
++		ecm@1000 {
++			compatible = "fsl,p2020-ecm", "fsl,ecm";
++			reg = <0x1000 0x1000>;
++			interrupts = <17 2>;
++			interrupt-parent = <&mpic>;
++		};
++
++		memory-controller@2000 {
++			compatible = "fsl,p2020-memory-controller";
++			reg = <0x2000 0x1000>;
++			interrupt-parent = <&mpic>;
++			interrupts = <18 2>;
++		};
++
++		i2c@3000 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			cell-index = <0>;
++			compatible = "fsl-i2c";
++			reg = <0x3000 0x100>;
++			interrupts = <43 2>;
++			interrupt-parent = <&mpic>;
++			dfsrr;
++
++                        dimm@52 {
++                            compatible = "atmel,spd";
++                            reg = <0x52>;
++                        };
++                        eeprom@55 {
++                            compatible = "atmel,24c02";
++                            reg = <0x55>;
++                        };
++                        /* Not sure eeprom driver supports RTC IDT1339. So far only confirm RTC has ack. */
++                        ds1339@68 {
++                            compatible = "rtc-ds1307,ds1339";
++                            reg = <0x68>;
++                        };
++                        lm75@4b {
++                            compatible = "lm75,lm75";
++                            reg = <0x4b>;
++                        };
++                        cpld@47 {
++                            compatible = "atmel,24c02";
++                            reg = <0x47>;
++                            pagesize = <64>;
++                        };
++                        pca9539@75 {
++                            compatible = "pca95xx,pca95xx";
++                            reg = <0x75>;
++                        };
++                        mux@70 {
++                                compatible = "pca9548,pca9548";
++                                reg = <0x70>;
++                                #address-cells = <1>;
++                                #size-cells = <0>;
++
++                                i2c@0 {
++                                        #address-cells = <1>;
++                                        #size-cells = <0>;
++                                        reg = <0>;
++                                        psu1-eeprom@50 {
++                                            compatible = "atmel,24c02";
++                                            reg = <0x50>;
++                                        };
++                                        psu1@58 {
++                                            compatible = "psu,psu";
++                                            reg = <0x58>;
++                                        };
++                                };
++                                i2c@1 {
++                                        #address-cells = <1>;
++                                        #size-cells = <0>;
++                                        reg = <1>;
++                                        psu2-eeprom@50 {
++                                            compatible = "atmel,24c02";
++                                            reg = <0x50>;
++                                        };
++                                        psu2@58 {
++                                            compatible = "psu,psu";
++                                            reg = <0x58>;
++                                        };
++                                };
++                                i2c@2 {
++                                        #address-cells = <1>;
++                                        #size-cells = <0>;
++                                        reg = <2>;
++                                        /* This is the mainboard EEPROM  */
++                                        mb-eeprom@56 {
++                                            compatible = "atmel,24c128";
++                                            reg = <0x56>;
++                                        };
++                                };
++                                i2c@3 {
++                                        #address-cells = <1>;
++                                        #size-cells = <0>;
++                                        reg = <3>;
++                                        lm75-0@4c {
++                                            compatible = "lm75,lm75";
++                                            reg = <0x4c>;
++                                        };
++                                };
++                                i2c@4 {
++                                        #address-cells = <1>;
++                                        #size-cells = <0>;
++                                        reg = <4>;
++                                        lm75-1@4c {
++                                            compatible = "lm75,lm75";
++                                            reg = <0x4c>;
++                                        };
++                                };
++                                i2c@5 {
++                                        #address-cells = <1>;
++                                        #size-cells = <0>;
++                                        reg = <5>;
++                                };
++                                i2c@7 {
++                                        #address-cells = <1>;
++                                        #size-cells = <0>;
++                                        reg = <7>;
++                                        mux@73 {
++                                            compatible = "pca9548,pca9548";
++                                            reg = <0x73>;
++                                            #address-cells = <1>;
++                                            #size-cells = <0>;
++                                            i2c@0 {
++                                                #address-cells = <1>;
++                                                #size-cells = <0>;
++                                                reg = <0>;
++                                                adt7470@2c {
++                                                    compatible = "adt7470,adt7470";
++                                                    reg = <0x2c>;
++                                                };
++                                            };
++                                            i2c@1 {
++                                                #address-cells = <1>;
++                                                #size-cells = <0>;
++                                                reg = <1>;
++                                                adt7470@2c {
++                                                    compatible = "adt7470,adt7470";
++                                                    reg = <0x2c>;
++                                                };
++                                            };
++                                        };
++                                };
++                       };
++		};
++
++		i2c@3100 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			cell-index = <1>;
++			compatible = "fsl-i2c";
++			reg = <0x3100 0x100>;
++			interrupts = <43 2>;
++			interrupt-parent = <&mpic>;
++			dfsrr;
++		};
++
++		serial0: serial@4500 {
++			cell-index = <0>;
++			device_type = "serial";
++			compatible = "ns16550";
++			reg = <0x4500 0x100>;
++			clock-frequency = <0>;
++			interrupts = <42 2>;
++			interrupt-parent = <&mpic>;
++		};
++
++		serial1: serial@4600 {
++			cell-index = <1>;
++			device_type = "serial";
++			compatible = "ns16550";
++			reg = <0x4600 0x100>;
++			clock-frequency = <0>;
++			interrupts = <42 2>;
++			interrupt-parent = <&mpic>;
++		};
++
++		dma@c300 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,eloplus-dma";
++			reg = <0xc300 0x4>;
++			ranges = <0x0 0xc100 0x200>;
++			cell-index = <1>;
++			dma-channel@0 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x0 0x80>;
++				cell-index = <0>;
++				interrupt-parent = <&mpic>;
++				interrupts = <76 2>;
++			};
++			dma-channel@80 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x80 0x80>;
++				cell-index = <1>;
++				interrupt-parent = <&mpic>;
++				interrupts = <77 2>;
++			};
++			dma-channel@100 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x100 0x80>;
++				cell-index = <2>;
++				interrupt-parent = <&mpic>;
++				interrupts = <78 2>;
++			};
++			dma-channel@180 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x180 0x80>;
++				cell-index = <3>;
++				interrupt-parent = <&mpic>;
++				interrupts = <79 2>;
++			};
++		};
++
++		gpio: gpio-controller@f000 {
++			#gpio-cells = <2>;
++			compatible = "fsl,mpc8572-gpio";
++			reg = <0xf000 0x100>;
++			interrupts = <47 0x2>;
++			interrupt-parent = <&mpic>;
++			gpio-controller;
++		};
++
++		L2: l2-cache-controller@20000 {
++			compatible = "fsl,p2020-l2-cache-controller";
++			reg = <0x20000 0x1000>;
++			cache-line-size = <32>;	// 32 bytes
++			cache-size = <0x80000>; // L2,512K
++			interrupt-parent = <&mpic>;
++			interrupts = <16 2>;
++		};
++
++		dma@21300 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,eloplus-dma";
++			reg = <0x21300 0x4>;
++			ranges = <0x0 0x21100 0x200>;
++			cell-index = <0>;
++			dma-channel@0 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x0 0x80>;
++				cell-index = <0>;
++				interrupt-parent = <&mpic>;
++				interrupts = <20 2>;
++			};
++			dma-channel@80 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x80 0x80>;
++				cell-index = <1>;
++				interrupt-parent = <&mpic>;
++				interrupts = <21 2>;
++			};
++			dma-channel@100 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x100 0x80>;
++				cell-index = <2>;
++				interrupt-parent = <&mpic>;
++				interrupts = <22 2>;
++			};
++			dma-channel@180 {
++				compatible = "fsl,eloplus-dma-channel";
++				reg = <0x180 0x80>;
++				cell-index = <3>;
++				interrupt-parent = <&mpic>;
++				interrupts = <23 2>;
++			};
++		};
++
++		usb@22000 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl-usb2-dr";
++			reg = <0x22000 0x1000>;
++			interrupt-parent = <&mpic>;
++			interrupts = <28 0x2>;
++			phy_type = "ulpi";
++		};
++		mdio@24520 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x24520 0x20>;
++			phy0: ethernet-phy@1 {
++				interrupt-parent = <&mpic>;
++				interrupts = <3 1>;
++				reg = <0x1>;
++			};
++
++			tbi0: tbi-phy@11 {
++				reg = <0x11>;
++				device_type = "tbi-phy";
++			};
++		};
++
++		mdio@25520 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x25520 0x20>;
++			tbi1: tbi-phy@11 {
++				reg = <0x11>;
++				device_type = "tbi-phy";
++			};
++		};
++
++		mdio@26520 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,gianfar-mdio";
++			reg = <0x26520 0x20>;
++			tbi2: tbi-phy@11 {
++				reg = <0x11>;
++				device_type = "tbi-phy";
++			};
++		};
++
++		ptp_clock@24E00 {
++			compatible = "fsl,etsec-ptp";
++			reg = <0x24E00 0xB0>;
++			interrupts = <68 2 69 2 70 2>;
++			interrupt-parent = < &mpic >;
++			fsl,tclk-period = <5>;
++			fsl,tmr-prsc = <200>;
++			fsl,tmr-add = <0xCCCCCCCD>;
++			fsl,tmr-fiper1 = <0x3B9AC9FB>;
++			fsl,tmr-fiper2 = <0x0001869B>;
++			fsl,max-adj = <249999999>;
++		};
++
++		enet1: ethernet@25000 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			cell-index = <0>;
++			device_type = "network";
++			model = "eTSEC";
++			compatible = "gianfar";
++			reg = <0x25000 0x1000>;
++			ranges = <0x0 0x25000 0x1000>;
++			local-mac-address = [ 00 12 34 56 78 00 ];
++			interrupts = <35 2 36 2 40 2>;
++			interrupt-parent = <&mpic>;
++			tbi-handle = <&tbi1>;
++			phy-handle = <&phy0>;
++			phy-connection-type = "sgmii";
++		};
++
++		sdhci@2e000 {
++			compatible = "fsl,p2020-esdhc", "fsl,esdhc";
++			reg = <0x2e000 0x1000>;
++			interrupts = <72 0x2>;
++			interrupt-parent = <&mpic>;
++			fsl,sdhci-adjust-timeout;
++			/* Filled in by U-Boot */
++			clock-frequency = <0>;
++		};
++
++		crypto@30000 {
++			compatible = "fsl,sec3.1", "fsl,sec3.0", "fsl,sec2.4",
++					"fsl,sec2.2", "fsl,sec2.1", "fsl,sec2.0";
++			reg = <0x30000 0x10000>;
++			interrupts = <45 2 58 2>;
++			interrupt-parent = <&mpic>;
++			fsl,num-channels = <4>;
++			fsl,channel-fifo-len = <24>;
++			fsl,exec-units-mask = <0xbfe>;
++			fsl,descriptor-types-mask = <0x3ab0ebf>;
++			fsl,multi-host-mode = "dual";
++			fsl,channel-remap = <0x3>;
++		};
++
++		mpic: pic@40000 {
++			interrupt-controller;
++			#address-cells = <0>;
++			#interrupt-cells = <2>;
++			reg = <0x40000 0x40000>;
++			compatible = "chrp,open-pic";
++			device_type = "open-pic";
++		};
++
++		message@41400 {
++			compatible = "fsl,p2020-msg", "fsl,mpic-msg";
++			reg = <0x41400 0x200>;
++			interrupts = <
++				0xb0 2
++				0xb1 2
++				0xb2 2
++				0xb3 2>;
++			interrupt-parent = <&mpic>;
++		};
++
++		message@42400 {
++			compatible = "fsl,p2020-msg", "fsl,mpic-msg";
++			reg = <0x42400 0x200>;
++			interrupts = <
++				0xb4 2
++				0xb5 2
++				0xb6 2
++				0xb7 2>;
++			interrupt-parent = <&mpic>;
++		};
++
++		msi@41600 {
++			compatible = "fsl,p2020-msi", "fsl,mpic-msi";
++			reg = <0x41600 0x80>;
++			msi-available-ranges = <0 0x100>;
++			interrupts = <
++				0xe0 0
++				0xe1 0
++				0xe2 0
++				0xe3 0
++				0xe4 0
++				0xe5 0
++				0xe6 0
++				0xe7 0>;
++			interrupt-parent = <&mpic>;
++		};
++
++		global-utilities@e0000 {	//global utilities block
++			compatible = "fsl,p2020-guts";
++			reg = <0xe0000 0x1000>;
++			fsl,has-rstcr;
++		};
++	};
++
++	pci0: pcie@fffe0a000 {
++		cell-index = <2>;
++		compatible = "fsl,mpc8548-pcie";
++		device_type = "pci";
++		#interrupt-cells = <1>;
++		#size-cells = <2>;
++		#address-cells = <3>;
++		reg = <0xf 0xffe0a000 0 0x1000>;
++		bus-range = <0 255>;
++		ranges = <0x2000000 0x0 0xe0000000 0xc 0x00000000 0x0 0x20000000
++			  0x1000000 0x0 0x00000000 0xf 0xffc00000 0x0 0x10000>;
++		clock-frequency = <33333333>;
++		interrupt-parent = <&mpic>;
++		interrupts = <26 2>;
++		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
++		interrupt-map = <
++			/* IDSEL 0x0 */
++			0000 0x0 0x0 0x1 &mpic 0x0 0x1
++			0000 0x0 0x0 0x2 &mpic 0x1 0x1
++			0000 0x0 0x0 0x3 &mpic 0x2 0x1
++			0000 0x0 0x0 0x4 &mpic 0x3 0x1
++			>;
++		pcie@0 {
++			reg = <0x0 0x0 0x0 0x0 0x0>;
++			#size-cells = <2>;
++			#address-cells = <3>;
++			device_type = "pci";
++			ranges = <0x2000000 0x0 0x80000000
++				  0x2000000 0x0 0x80000000
++				  0x0 0x20000000
++
++				  0x1000000 0x0 0x0
++				  0x1000000 0x0 0x0
++				  0x0 0x100000>;
++		};
++	};
++};
+diff --git a/arch/powerpc/platforms/85xx/Kconfig b/arch/powerpc/platforms/85xx/Kconfig
+index d7946be..eee094f 100644
+--- a/arch/powerpc/platforms/85xx/Kconfig
++++ b/arch/powerpc/platforms/85xx/Kconfig
+@@ -222,6 +222,12 @@ config P4080_DS
+ 	help
+ 	  This option enables support for the P4080 DS board
+ 
++config LENOVO_G8272
++       bool "Lenovo G8272"
++       select DEFAULT_UIMAGE
++       help
++	 This option enables support for the Lenovo G8272 networking platform
++
+ endif # PPC32
+ 
+ config P5020_DS
+diff --git a/arch/powerpc/platforms/85xx/Makefile b/arch/powerpc/platforms/85xx/Makefile
+index bc5acb9..f628d6a 100644
+--- a/arch/powerpc/platforms/85xx/Makefile
++++ b/arch/powerpc/platforms/85xx/Makefile
+@@ -25,3 +25,4 @@ obj-$(CONFIG_SBC8548)     += sbc8548.o
+ obj-$(CONFIG_SOCRATES)    += socrates.o socrates_fpga_pic.o
+ obj-$(CONFIG_KSI8560)	  += ksi8560.o
+ obj-$(CONFIG_XES_MPC85xx) += xes_mpc85xx.o
++obj-$(CONFIG_LENOVO_G8272) += lenovo_g8272.o
+diff --git a/arch/powerpc/platforms/85xx/lenovo_g8272.c b/arch/powerpc/platforms/85xx/lenovo_g8272.c
+new file mode 100644
+index 0000000..82206ba
+--- /dev/null
++++ b/arch/powerpc/platforms/85xx/lenovo_g8272.c
+@@ -0,0 +1,136 @@
++/*
++ * Lenovo G8272  Board Setup
++ *
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#include <linux/stddef.h>
++#include <linux/kernel.h>
++#include <linux/pci.h>
++#include <linux/kdev_t.h>
++#include <linux/delay.h>
++#include <linux/seq_file.h>
++#include <linux/interrupt.h>
++#include <linux/of_platform.h>
++
++#include <asm/system.h>
++#include <asm/time.h>
++#include <asm/machdep.h>
++#include <asm/pci-bridge.h>
++#include <mm/mmu_decl.h>
++#include <asm/prom.h>
++#include <asm/udbg.h>
++#include <asm/mpic.h>
++
++#include <sysdev/fsl_soc.h>
++#include <sysdev/fsl_pci.h>
++
++#undef DEBUG
++
++#ifdef DEBUG
++#define DBG(fmt, args...) printk(KERN_ERR "%s: " fmt, __func__, ## args)
++#else
++#define DBG(fmt, args...)
++#endif
++
++
++void __init lenovo_g8272_pic_init(void)
++{
++	struct mpic *mpic;
++	struct resource r;
++	struct device_node *np;
++
++	np = of_find_node_by_type(NULL, "open-pic");
++	if (np == NULL) {
++		printk(KERN_ERR "Could not find open-pic node\n");
++		return;
++	}
++
++	if (of_address_to_resource(np, 0, &r)) {
++		printk(KERN_ERR "Failed to map mpic register space\n");
++		of_node_put(np);
++		return;
++	}
++
++	mpic = mpic_alloc(np, r.start,
++			MPIC_PRIMARY | MPIC_WANTS_RESET |
++			MPIC_BIG_ENDIAN | MPIC_BROKEN_FRR_NIRQS |
++			MPIC_SINGLE_DEST_CPU,
++			0, 256, " OpenPIC  ");
++	BUG_ON(mpic == NULL);
++	of_node_put(np);
++
++	mpic_init(mpic);
++
++}
++
++/*
++ * Setup the architecture
++ */
++#ifdef CONFIG_SMP
++extern void __init mpc85xx_smp_init(void);
++#endif
++static void __init lenovo_g8272_setup_arch(void)
++{
++#ifdef CONFIG_PCI
++	struct device_node *np;
++#endif
++
++#ifdef CONFIG_PCI
++	for_each_node_by_type(np, "pci") {
++		if (of_device_is_compatible(np, "fsl,mpc8548-pcie"))
++			fsl_add_bridge(np, 0);
++	}
++
++#endif
++
++#ifdef CONFIG_SMP
++	mpc85xx_smp_init();
++#endif
++
++	printk(KERN_INFO "G8272 board from Lenovo\n");
++}
++
++static struct of_device_id __initdata lenovo_g8272_ids[] = {
++	{ .type = "soc", },
++	{ .compatible = "soc", },
++	{ .compatible = "simple-bus", },
++	{ .compatible = "gianfar", },
++	{},
++};
++
++static int __init lenovo_g8272_publish_devices(void)
++{
++	return of_platform_bus_probe(NULL, lenovo_g8272_ids, NULL);
++}
++machine_device_initcall(lenovo_g8272, lenovo_g8272_publish_devices);
++
++/*
++ * Called very early, device-tree isn't unflattened
++ */
++static int __init lenovo_g8272_probe(void)
++{
++	unsigned long root = of_get_flat_dt_root();
++
++	if (of_flat_dt_is_compatible(root, "Lenovo,g8272"))
++		return 1;
++	return 0;
++}
++
++define_machine(lenovo_g8272) {
++	.name			= "Lenovo G8272",
++	.probe			= lenovo_g8272_probe,
++	.setup_arch		= lenovo_g8272_setup_arch,
++	.init_IRQ		= lenovo_g8272_pic_init,
++#ifdef CONFIG_PCI
++	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
++#endif
++	.get_irq		= mpic_get_irq,
++	.restart		= fsl_rstcr_restart,
++	.calibrate_decr		= generic_calibrate_decr,
++	.progress		= udbg_progress,
++};
+diff --git a/drivers/net/ethernet/freescale/gianfar.c b/drivers/net/ethernet/freescale/gianfar.c
+index b167e38..d49218e 100644
+--- a/drivers/net/ethernet/freescale/gianfar.c
++++ b/drivers/net/ethernet/freescale/gianfar.c
+@@ -1528,10 +1528,13 @@ static void gfar_configure_serdes(struct net_device *dev)
+ 	/* Single clk mode, mii mode off(for serdes communication) */
+ 	phy_write(tbiphy, MII_TBICON, TBICON_CLK_SELECT);
+ 
++#ifdef CONFIG_LENOVO_G8272
++	phy_write(tbiphy, MII_ADVERTISE, 0x4001);
++#else
+ 	phy_write(tbiphy, MII_ADVERTISE,
+ 			ADVERTISE_1000XFULL | ADVERTISE_1000XPAUSE |
+ 			ADVERTISE_1000XPSE_ASYM);
+-
++#endif
+ 	phy_write(tbiphy, MII_BMCR, BMCR_ANENABLE |
+ 			BMCR_ANRESTART | BMCR_FULLDPLX | BMCR_SPEED1000);
+ }
