@@ -43,6 +43,8 @@ $(SYSROOT_INIT_STAMP): $(TREE_STAMP)
 	$(Q) mkdir -p -v -m 0755 $(SYSROOTDIR)/dev
 	$(Q) mkdir -p -v $(SYSROOTDIR)/{sys,proc,tmp,etc,lib,mnt}
 	$(Q) mkdir -p -v $(SYSROOTDIR)/{var/log,usr/lib,usr/bin,usr/sbin,usr/share/locale,lib,mnt}
+	$(Q) cd $(SYSROOTDIR) && ln -s lib lib32 && ln -s lib lib64
+	$(Q) cd $(SYSROOTDIR)/usr && ln -s lib lib32 && ln -s lib lib64
 	$(Q) touch $@
 
 # Development sysroot, used for compiling and linking user space
@@ -53,6 +55,10 @@ $(DEV_SYSROOT_INIT_STAMP): $(TREE_STAMP) | $(XTOOLS_BUILD_STAMP)
 	$(Q) echo "==== Preparing a new development sysroot ===="
 	$(Q) rm -rf $(DEV_SYSROOT)
 	$(Q) cp -a $$($(CROSSBIN)/$(CROSSPREFIX)gcc -print-sysroot) $(DEV_SYSROOT)
+	$(Q) rsync -rl $(XTOOLS_INSTALL_DIR)/$(TARGET)/$(TARGET)/lib $(DEV_SYSROOT)
+       ifeq ($(ARCH),$(filter $(ARCH),arm64 x86_64))
+		$(Q) rsync -rl $(XTOOLS_INSTALL_DIR)/$(TARGET)/$(TARGET)/lib64 $(DEV_SYSROOT)
+       endif
 	$(Q) chmod +w -R $(DEV_SYSROOT)
 	$(Q) touch $@
 

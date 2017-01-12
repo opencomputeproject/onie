@@ -64,10 +64,12 @@ RECOVERY_ISO_IMAGE=${12}
     echo "ERROR: Unable to read recovery config directory: $RECOVERY_CONF_DIR"
     exit 1
 }
-[ -r "${GRUB_TARGET_LIB_I386_DIR}/biosdisk.mod" ] || {
-    echo "ERROR: Does not look like valid GRUB i386-pc library directory: $GRUB_TARGET_LIB_I386_DIR"
-    exit 1
-}
+if [ "$FIRMWARE_TYPE" = "auto" ] || [ "$FIRMWARE_TYPE" = "bios" ] ; then
+    [ -r "${GRUB_TARGET_LIB_I386_DIR}/biosdisk.mod" ] || {
+        echo "ERROR: Does not look like valid GRUB i386-pc library directory: $GRUB_TARGET_LIB_I386_DIR"
+        exit 1
+    }
+fi
 [ -x "${GRUB_HOST_BIN_I386_DIR}/grub-mkimage" ] || {
     echo "ERROR: Does not look like valid GRUB i386-pc bin directory: $GRUB_HOST_BIN_I386_DIR"
     exit 1

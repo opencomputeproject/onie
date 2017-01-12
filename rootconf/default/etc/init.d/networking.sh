@@ -3,6 +3,7 @@
 #  Copyright (C) 2013,2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2013 Doron Tsur <doront@mellanox.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -78,8 +79,6 @@ config_ethmgmt_fallback()
 
     local prefix=16
     local default_hn="onie-host"
-    local intf_counter=$1
-    shift
     local intf=$1
     shift
 
@@ -155,34 +154,29 @@ check_link_up()
 # 4. Fall back to well known IP address
 config_ethmgmt()
 {
-    intf_list=$(net_intf)
-    intf_counter=0
+    intf=$1
+    shift
     return_value=0
 
-    # Bring up all the interfaces for the subsequent methods.
-    for intf in $intf_list ; do
-        cmd_run ifconfig $intf up
-        params="$intf $*"
-        eval "result_${intf}=0"
-        check_link_up $intf || {
-            log_console_msg "${intf}: link down.  Skipping configuration."
-            eval "result_${intf}=1"
-            continue
-        }
-        config_ethmgmt_static    $params || \
-            config_ethmgmt_dhcp6 $params || \
-            config_ethmgmt_dhcp4 $params || \
-            config_ethmgmt_fallback $intf_counter $params || \
-            eval "result_${intf}=1"
-        intf_counter=$(( $intf_counter + 1))
-    done
-    for intf in $intf_list ; do
-        eval "curr_intf_result=\${result_${intf}}"
-        if [ "x$curr_intf_result" != "x0" ] ; then
-            log_console_msg "Failed to configure ${intf} interface"
-            return_value=1
-        fi
-    done
+    # Bring up the interface for the subsequent methods.
+    cmd_run ifconfig $intf up
+    params="$intf $*"
+    eval "result_${intf}=0"
+    check_link_up $intf || {
+        log_console_msg "${intf}: link down.  Skipping configuration."
+        eval "result_${intf}=1"
+        return $return_value
+    }
+    config_ethmgmt_static    $params || \
+        config_ethmgmt_dhcp6 $params || \
+        config_ethmgmt_dhcp4 $params || \
+        config_ethmgmt_fallback $params || \
+    eval "result_${intf}=1"
+    eval "curr_intf_result=\${result_${intf}}"
+    if [ "x$curr_intf_result" != "x0" ] ; then
+        log_console_msg "Failed to configure ${intf} interface"
+        return_value=1
+    fi
     return $return_value
 }
 
@@ -209,7 +203,8 @@ if [ "$1" = "start" ] ; then
         fi
         log_info_msg "Using $intf MAC address: $mac"
         intf_counter=$(( $intf_counter + 1))
+        config_ethmgmt "$intf" $*
     done
+else
+    config_ethmgmt $*
 fi
-
-config_ethmgmt "$*"

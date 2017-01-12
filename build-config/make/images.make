@@ -196,11 +196,17 @@ endif
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
-		[ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
-			echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
-			exit 1; } ; \
-		find $(DEV_SYSROOT)/lib -name $$file | xargs -i \
-			cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
+		if [ "$(ARCH)" == "arm64" ] || [ "$(ARCH)" == "x86_64" ] ; then \
+		    [ -r "$(DEV_SYSROOT)/lib64/$$file" ] || [ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
+			    echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
+			    exit 1; } ; \
+			find $(DEV_SYSROOT)/lib64 $(DEV_SYSROOT)/lib -name $$file | xargs -i cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
+		else \
+		    [ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
+			    echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
+			    exit 1; } ; \
+			find $(DEV_SYSROOT)/lib -name $$file | xargs -i cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
+		fi; \
 	done
 	$(Q) for file in $(DEBUG_UTILS) ; do \
 		cp -av $$file $(SYSROOTDIR)/usr/bin || exit 1 ; \
