@@ -1,0 +1,37 @@
+From c62cf69641b0c35b9a89bd725f8415f81dd5803f Mon Sep 17 00:00:00 2001
+From: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+Date: Tue, 8 Dec 2015 18:18:18 +0200
+Subject: [PATCH 054/146] dpaa_eth: add promisc handler for proxy driver
+
+This patch adds promisc capability to the macless over proxy feature.
+Currently, using the standard kernel interface you cannot set the MAC device
+controlled by the macless driver into the promiscuous mode.
+
+Signed-off-by: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+---
+ drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_proxy.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_proxy.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_proxy.c
+index bc8f5f7..8ad015d 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_proxy.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_proxy.c
+@@ -228,6 +228,15 @@ int dpa_proxy_set_rx_mode(struct proxy_device *proxy_dev,
+ 	struct mac_device *mac_dev = proxy_dev->mac_dev;
+ 	int _errno;
+ 
++	if (!!(net_dev->flags & IFF_PROMISC) != mac_dev->promisc) {
++		mac_dev->promisc = !mac_dev->promisc;
++		_errno = mac_dev->set_promisc(mac_dev->get_mac_handle(mac_dev),
++				mac_dev->promisc);
++		if (unlikely(_errno < 0))
++			netdev_err(net_dev, "mac_dev->set_promisc() = %d\n",
++					_errno);
++	}
++
+ 	_errno = mac_dev->set_multi(net_dev, mac_dev);
+ 	if (unlikely(_errno < 0))
+ 		return _errno;
+-- 
+2.1.0.27.g96db324
+

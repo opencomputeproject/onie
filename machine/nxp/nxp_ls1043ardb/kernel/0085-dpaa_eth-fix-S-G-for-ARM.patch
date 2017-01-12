@@ -1,0 +1,56 @@
+From 0ff540b2b867c6d6d8d92c6e2021045bf540eb9e Mon Sep 17 00:00:00 2001
+From: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+Date: Mon, 11 May 2015 17:45:48 +0300
+Subject: [PATCH 085/146] dpaa_eth: fix S/G for ARM
+
+This patch makes the endianness conversion needed for ARM's LE data processing
+of the S/G tables.
+
+A new union was created in the S/G Table structure for easy reference to the
+32bit concatenated field.
+
+Change-Id: I7d21da325596530528805845acad92d7f9a707df
+Signed-off-by: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+
+Conflicts:
+
+	drivers/net/ethernet/freescale/dpa/dpaa_eth_common.c
+	drivers/net/ethernet/freescale/dpa/dpaa_eth_sg.c
+---
+ include/linux/fsl_qman.h | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/include/linux/fsl_qman.h b/include/linux/fsl_qman.h
+index bc4ee50..b8c89b9 100644
+--- a/include/linux/fsl_qman.h
++++ b/include/linux/fsl_qman.h
+@@ -274,15 +274,20 @@ struct qm_sg_entry {
+ #endif
+ 		};
+ 	};
++	union {
++		struct {
+ #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+-	u32 extension:1;	/* Extension bit */
+-	u32 final:1;		/* Final bit */
+-	u32 length:30;
++			u32 extension:1;	/* Extension bit */
++			u32 final:1;		/* Final bit */
++			u32 length:30;
+ #else
+-	u32 length:30;
+-	u32 final:1;		/* Final bit */
+-	u32 extension:1;	/* Extension bit */
++			u32 length:30;
++			u32 final:1;		/* Final bit */
++			u32 extension:1;	/* Extension bit */
+ #endif
++		};
++		u32 sgt_efl;
++	};
+ 	u8 __reserved2;
+ 	u8 bpid;
+ #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+-- 
+2.1.0.27.g96db324
+
