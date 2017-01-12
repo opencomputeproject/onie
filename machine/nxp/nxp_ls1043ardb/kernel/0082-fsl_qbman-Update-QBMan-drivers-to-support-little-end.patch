@@ -1,0 +1,2549 @@
+From 537bf0103605807d277b56b764fa863591bf9f46 Mon Sep 17 00:00:00 2001
+From: Roy Pledge <Roy.Pledge@freescale.com>
+Date: Tue, 19 Apr 2016 15:05:08 +0800
+Subject: [PATCH 082/146] fsl_qbman: Update QBMan drivers to support little
+ endian CPUs
+
+commit 66ba9d4429d1b2ab4cfe87f78584768f88d6a992
+[doesn't apply arch/powerpc/platforms/85xx/corenet_generic.c]
+
+This patch adds support for little endian CPUs and the ARM64
+platform for the QBMan device (which is inherently big endian).
+
+Signed-off-by: Roy Pledge <Roy.Pledge@freescale.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ drivers/staging/fsl_qbman/Kconfig               |   2 +
+ drivers/staging/fsl_qbman/bman_config.c         |  79 ++------
+ drivers/staging/fsl_qbman/bman_driver.c         |  40 ++--
+ drivers/staging/fsl_qbman/bman_high.c           |  40 ++--
+ drivers/staging/fsl_qbman/bman_low.h            |  43 ++++-
+ drivers/staging/fsl_qbman/dpa_sys.h             |  60 +-----
+ drivers/staging/fsl_qbman/dpa_sys_arm64.h       | 102 ++++++++++
+ drivers/staging/fsl_qbman/dpa_sys_ppc32.h       |  70 +++++++
+ drivers/staging/fsl_qbman/dpa_sys_ppc64.h       |  79 ++++++++
+ drivers/staging/fsl_qbman/fsl_usdpaa.c          |  31 ++-
+ drivers/staging/fsl_qbman/fsl_usdpaa_irq.c      |   7 +-
+ drivers/staging/fsl_qbman/qbman_driver.c        |   2 +
+ drivers/staging/fsl_qbman/qman_config.c         |  88 +++++----
+ drivers/staging/fsl_qbman/qman_driver.c         |  96 +++++----
+ drivers/staging/fsl_qbman/qman_high.c           | 247 +++++++++++++++++++++---
+ drivers/staging/fsl_qbman/qman_low.h            |  74 +++++--
+ drivers/staging/fsl_qbman/qman_private.h        |   5 +
+ drivers/staging/fsl_qbman/qman_test.h           |   1 +
+ drivers/staging/fsl_qbman/qman_test_high.c      |   2 +
+ drivers/staging/fsl_qbman/qman_test_hotpotato.c |   2 +
+ include/linux/fsl_bman.h                        |  13 ++
+ include/linux/fsl_qman.h                        | 159 ++++++++++++++-
+ include/linux/fsl_usdpaa.h                      |   2 +-
+ 23 files changed, 970 insertions(+), 274 deletions(-)
+ create mode 100644 drivers/staging/fsl_qbman/dpa_sys_arm64.h
+ create mode 100644 drivers/staging/fsl_qbman/dpa_sys_ppc32.h
+ create mode 100644 drivers/staging/fsl_qbman/dpa_sys_ppc64.h
+
+diff --git a/drivers/staging/fsl_qbman/Kconfig b/drivers/staging/fsl_qbman/Kconfig
+index c857514..959d537 100644
+--- a/drivers/staging/fsl_qbman/Kconfig
++++ b/drivers/staging/fsl_qbman/Kconfig
+@@ -3,6 +3,8 @@ config FSL_DPA
+ 	depends on HAS_FSL_QBMAN
+ 	default y
+ 	select FSL_QMAN_FQ_LOOKUP if PPC64
++	select FSL_QMAN_FQ_LOOKUP if ARM64
++
+ 
+ menu "Freescale Datapath QMan/BMan options"
+ 	depends on FSL_DPA
+diff --git a/drivers/staging/fsl_qbman/bman_config.c b/drivers/staging/fsl_qbman/bman_config.c
+index 136e22d..5d80d1d 100644
+--- a/drivers/staging/fsl_qbman/bman_config.c
++++ b/drivers/staging/fsl_qbman/bman_config.c
+@@ -31,6 +31,7 @@
+ 
+ #include <asm/cacheflush.h>
+ #include "bman_private.h"
++#include <linux/of_reserved_mem.h>
+ 
+ /* Last updated for v00.79 of the BG */
+ 
+@@ -248,61 +249,16 @@ static struct device_node *bm_node;
+ static dma_addr_t fbpr_a;
+ static size_t fbpr_sz = DEFAULT_FBPR_SZ;
+ 
+-/* Parse the <name> property to extract the memory location and size and
+- * memblock_reserve() it. If it isn't supplied, memblock_alloc() the default
+- * size. Also flush this memory range from data cache so that BMAN originated
+- * transactions for this memory region could be marked non-coherent.
+- */
+-static __init int parse_mem_property(struct device_node *node, const char *name,
+-				dma_addr_t *addr, size_t *sz, int zero)
++static int bman_fbpr(struct reserved_mem *rmem)
+ {
+-	const u32 *pint;
+-	int ret;
+-	unsigned long vaddr;
+-
+-	pint = of_get_property(node, name, &ret);
+-	if (!pint || (ret != 16)) {
+-		pr_info("No %s property '%s', using memblock_alloc(%016zx)\n",
+-				node->full_name, name, *sz);
+-		*addr = memblock_alloc(*sz, *sz);
+-		vaddr = (unsigned long)phys_to_virt(*addr);
+-		if (zero)
+-			memset((void *)vaddr, 0, *sz);
+-		flush_dcache_range(vaddr, vaddr + *sz);
+-		return 0;
+-	}
+-	pr_info("Using %s property '%s'\n", node->full_name, name);
+-	/* If using a "zero-pma", don't try to zero it, even if you asked */
+-	if (zero && of_find_property(node, "zero-pma", &ret)) {
+-		pr_info("  it's a 'zero-pma', not zeroing from s/w\n");
+-		zero = 0;
+-	}
+-	*addr = ((u64)pint[0] << 32) | (u64)pint[1];
+-	*sz = ((u64)pint[2] << 32) | (u64)pint[3];
+-	/* Keep things simple, it's either all in the DRAM range or it's all
+-	 * outside. */
+-	if (*addr < memblock_end_of_DRAM()) {
+-		BUG_ON((u64)*addr + (u64)*sz > memblock_end_of_DRAM());
+-		if (memblock_reserve(*addr, *sz) < 0) {
+-			pr_err("Failed to reserve %s\n", name);
+-			return -ENOMEM;
+-		}
+-		vaddr = (unsigned long)phys_to_virt(*addr);
+-		if (zero)
+-			memset((void *)vaddr, 0, *sz);
+-		flush_dcache_range(vaddr, vaddr + *sz);
+-	} else if (zero) {
+-		/* map as cacheable, non-guarded */
+-		void __iomem *tmpp = ioremap_prot(*addr, *sz, 0);
+-		if (!tmpp)
+-			return -ENOMEM;
+-		memset_io(tmpp, 0, *sz);
+-		vaddr = (unsigned long)tmpp;
+-		flush_dcache_range(vaddr, vaddr + *sz);
+-		iounmap(tmpp);
+-	}
++	fbpr_a = rmem->base;
++	fbpr_sz = rmem->size;
++
++	WARN_ON(!(fbpr_a && fbpr_sz));
++
+ 	return 0;
+ }
++RESERVEDMEM_OF_DECLARE(bman_fbpr, "fsl,bman-fbpr", bman_fbpr);
+ 
+ static int __init fsl_bman_init(struct device_node *node)
+ {
+@@ -322,11 +278,6 @@ static int __init fsl_bman_init(struct device_node *node)
+ 	s = of_get_property(node, "fsl,hv-claimable", &ret);
+ 	if (s && !strcmp(s, "standby"))
+ 		standby = 1;
+-	if (!standby) {
+-		ret = parse_mem_property(node, "fsl,bman-fbpr",
+-					&fbpr_a, &fbpr_sz, 0);
+-		BUG_ON(ret);
+-	}
+ 	/* Global configuration */
+ 	regs = ioremap(res.start, res.end - res.start + 1);
+ 	bm = bm_create(regs);
+@@ -363,13 +314,14 @@ int bm_pool_set(u32 bpid, const u32 *thresholds)
+ {
+ 	if (!bm)
+ 		return -ENODEV;
+-	bm_set_pool(bm, bpid, thresholds[0], thresholds[1],
+-		thresholds[2], thresholds[3]);
++	bm_set_pool(bm, bpid, thresholds[0],
++		    thresholds[1], thresholds[2],
++		    thresholds[3]);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(bm_pool_set);
+ 
+-__init void bman_init_early(void)
++__init int bman_init_early(void)
+ {
+ 	struct device_node *dn;
+ 	int ret;
+@@ -386,7 +338,10 @@ __init void bman_init_early(void)
+ 			BUG_ON(ret);
+ 		}
+ 	}
++	return 0;
+ }
++postcore_initcall_sync(bman_init_early);
++
+ 
+ static void log_edata_bits(u32 bit_count)
+ {
+@@ -464,7 +419,7 @@ static int __bind_irq(void)
+ 	int ret, err_irq;
+ 
+ 	err_irq = of_irq_to_resource(bm_node, 0, NULL);
+-	if (err_irq == NO_IRQ) {
++	if (err_irq == 0) {
+ 		pr_info("Can't get %s property '%s'\n", bm_node->full_name,
+ 			"interrupts");
+ 		return -ENODEV;
+@@ -494,6 +449,8 @@ int bman_init_ccsr(struct device_node *node)
+ 		return -EINVAL;
+ 	/* FBPR memory */
+ 	bm_set_memory(bm, fbpr_a, 0, fbpr_sz);
++	pr_info("bman-fbpr addr 0x%llx size 0x%zx\n", fbpr_a, fbpr_sz);
++
+ 	ret = __bind_irq();
+ 	if (ret)
+ 		return ret;
+diff --git a/drivers/staging/fsl_qbman/bman_driver.c b/drivers/staging/fsl_qbman/bman_driver.c
+index 980a7d3..94053f8 100644
+--- a/drivers/staging/fsl_qbman/bman_driver.c
++++ b/drivers/staging/fsl_qbman/bman_driver.c
+@@ -28,7 +28,7 @@
+  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+-#include "bman_private.h"
++#include "bman_low.h"
+ #ifdef CONFIG_HOTPLUG_CPU
+ #include <linux/cpu.h>
+ #endif
+@@ -70,7 +70,7 @@ static int __init fsl_bpool_init(struct device_node *node)
+ 	}
+ 	if (thresh) {
+ #ifdef CONFIG_FSL_BMAN_CONFIG
+-		ret = bm_pool_set(*bpid, thresh);
++		ret = bm_pool_set(be32_to_cpu(*bpid), thresh);
+ 		if (ret)
+ 			pr_err("No CCSR node for %s property '%s'\n",
+ 				node->full_name, "fsl,bpool-thresholds");
+@@ -97,9 +97,9 @@ static int __init fsl_bpid_range_init(struct device_node *node)
+ 			node->full_name);
+ 		return -EINVAL;
+ 	}
+-	bman_seed_bpid_range(range[0], range[1]);
++	bman_seed_bpid_range(be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	pr_info("Bman: BPID allocator includes range %d:%d\n",
+-		range[0], range[1]);
++		be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	return 0;
+ }
+ 
+@@ -142,6 +142,12 @@ static struct bm_portal_config * __init parse_pcfg(struct device_node *node)
+ 		bman_ip_rev = BMAN_REV21;
+ 		bman_pool_max = 64;
+ 		bman_portal_max = 10;
++	} else {
++		pr_warn("unknown BMan version in portal node,"
++			"default to rev1.0\n");
++		bman_ip_rev = BMAN_REV10;
++		bman_pool_max = 64;
++		bman_portal_max = 10;
+ 	}
+ 
+ 	ret = of_address_to_resource(node, DPA_PORTAL_CE,
+@@ -163,24 +169,36 @@ static struct bm_portal_config * __init parse_pcfg(struct device_node *node)
+ 			"cell-index");
+ 		goto err;
+ 	}
+-	if (*index >= bman_portal_max)
++	if (be32_to_cpu(*index) >= bman_portal_max) {
++		pr_err("BMan portal cell index %d out of range, max %d\n",
++		       be32_to_cpu(*index), bman_portal_max);
+ 		goto err;
++	}
+ 
+ 	pcfg->public_cfg.cpu = -1;
+ 
+ 	irq = irq_of_parse_and_map(node, 0);
+-	if (irq == NO_IRQ) {
++	if (irq == 0) {
+ 		pr_err("Can't get %s property 'interrupts'\n", node->full_name);
+ 		goto err;
+ 	}
+ 	pcfg->public_cfg.irq = irq;
+-	pcfg->public_cfg.index = *index;
++	pcfg->public_cfg.index = be32_to_cpu(*index);
+ 	bman_depletion_fill(&pcfg->public_cfg.mask);
+ 
+ 	len = resource_size(&pcfg->addr_phys[DPA_PORTAL_CE]);
+ 	if (len != (unsigned long)len)
+ 		goto err;
+ 
++#ifdef CONFIG_ARM64
++	pcfg->addr_virt[DPA_PORTAL_CE] = ioremap_cache_ns(
++                                pcfg->addr_phys[DPA_PORTAL_CE].start,
++                                resource_size(&pcfg->addr_phys[DPA_PORTAL_CE]));
++        pcfg->addr_virt[DPA_PORTAL_CI] = ioremap(
++                                pcfg->addr_phys[DPA_PORTAL_CI].start,
++                                resource_size(&pcfg->addr_phys[DPA_PORTAL_CI]));
++
++#else
+ 	pcfg->addr_virt[DPA_PORTAL_CE] = ioremap_prot(
+ 				pcfg->addr_phys[DPA_PORTAL_CE].start,
+ 				(unsigned long)len,
+@@ -189,10 +207,10 @@ static struct bm_portal_config * __init parse_pcfg(struct device_node *node)
+ 				pcfg->addr_phys[DPA_PORTAL_CI].start,
+ 				resource_size(&pcfg->addr_phys[DPA_PORTAL_CI]),
+ 				_PAGE_GUARDED | _PAGE_NO_CACHE);
+-
++#endif
+ 	/* disable bp depletion */
+-	__raw_writel(0x0, pcfg->addr_virt[DPA_PORTAL_CI] + 0x200);
+-	__raw_writel(0x0, pcfg->addr_virt[DPA_PORTAL_CI] + 0x204);
++	__raw_writel(0x0, pcfg->addr_virt[DPA_PORTAL_CI] + BM_REG_SCN(0));
++	__raw_writel(0x0, pcfg->addr_virt[DPA_PORTAL_CI] + BM_REG_SCN(1));
+ 	return pcfg;
+ err:
+ 	kfree(pcfg);
+@@ -433,7 +451,7 @@ __init int bman_init(void)
+ 	}
+ 	if (list_empty(&shared_pcfgs) && list_empty(&unshared_pcfgs)) {
+ 		/* Default, give an unshared portal to each online cpu */
+-		for_each_possible_cpu(cpu) {
++		for_each_online_cpu(cpu) {
+ 			pcfg = get_pcfg(&unused_pcfgs);
+ 			if (!pcfg)
+ 				break;
+diff --git a/drivers/staging/fsl_qbman/bman_high.c b/drivers/staging/fsl_qbman/bman_high.c
+index 9986120..2ece0f3 100644
+--- a/drivers/staging/fsl_qbman/bman_high.c
++++ b/drivers/staging/fsl_qbman/bman_high.c
+@@ -316,7 +316,7 @@ struct bman_portal *bman_create_portal(
+ 			irq_can_set_affinity(config->public_cfg.irq) &&
+ 			irq_set_affinity(config->public_cfg.irq,
+ 				cpumask_of(config->public_cfg.cpu))) {
+-		pr_err("irq_set_affinity() failed\n");
++		pr_err("irq_set_affinity() failed %s\n", portal->irqname);
+ 		goto fail_affinity;
+ 	}
+ 
+@@ -460,6 +460,8 @@ static u32 __poll_portal_slow(struct bman_portal *p, u32 is)
+ 		while (!(mcr = bm_mc_result(&p->p)))
+ 			cpu_relax();
+ 		tmp = mcr->query.ds.state;
++		tmp.__state[0] = be32_to_cpu(tmp.__state[0]);
++		tmp.__state[1] = be32_to_cpu(tmp.__state[1]);
+ 		PORTAL_IRQ_UNLOCK(p, irqflags);
+ 		for (i = 0; i < 2; i++) {
+ 			int idx = i * 32;
+@@ -831,21 +833,11 @@ static noinline struct bm_rcr_entry *wait_rel_start(struct bman_portal **p,
+ }
+ #endif
+ 
+-/* to facilitate better copying of bufs into the ring without either (a) copying
+- * noise into the first byte (prematurely triggering the command), nor (b) being
+- * very inefficient by copying small fields using read-modify-write */
+-struct overlay_bm_buffer {
+-	u32 first;
+-	u32 second;
+-};
+-
+ static inline int __bman_release(struct bman_pool *pool,
+ 			const struct bm_buffer *bufs, u8 num, u32 flags)
+ {
+ 	struct bman_portal *p;
+ 	struct bm_rcr_entry *r;
+-	struct overlay_bm_buffer *o_dest;
+-	struct overlay_bm_buffer *o_src = (struct overlay_bm_buffer *)&bufs[0];
+ 	__maybe_unused unsigned long irqflags;
+ 	u32 i = num - 1;
+ 
+@@ -861,12 +853,16 @@ static inline int __bman_release(struct bman_pool *pool,
+ 		return -EBUSY;
+ 	/* We can copy all but the first entry, as this can trigger badness
+ 	 * with the valid-bit. Use the overlay to mask the verb byte. */
+-	o_dest = (struct overlay_bm_buffer *)&r->bufs[0];
+-	o_dest->first = (o_src->first & 0x0000ffff) |
+-		(((u32)pool->params.bpid << 16) & 0x00ff0000);
+-	o_dest->second = o_src->second;
+-	if (i)
+-		copy_words(&r->bufs[1], &bufs[1], i * sizeof(bufs[0]));
++	r->bufs[0].opaque =
++		((cpu_to_be64((bufs[0].opaque |
++			      ((u64)pool->params.bpid<<48))
++			      & 0x00ffffffffffffff)));
++	if (i) {
++		for (i = 1; i < num; i++)
++			r->bufs[i].opaque =
++				cpu_to_be64(bufs[i].opaque);
++	}
++
+ 	bm_rcr_pvb_commit(&p->p, BM_RCR_VERB_CMD_BPID_SINGLE |
+ 			(num & BM_RCR_VERB_BUFCOUNT_MASK));
+ #ifdef CONFIG_FSL_DPA_CAN_WAIT_SYNC
+@@ -962,7 +958,7 @@ static inline int __bman_acquire(struct bman_pool *pool, struct bm_buffer *bufs,
+ 	struct bm_mc_command *mcc;
+ 	struct bm_mc_result *mcr;
+ 	__maybe_unused unsigned long irqflags;
+-	int ret;
++	int ret, i;
+ 
+ 	PORTAL_IRQ_LOCK(p, irqflags);
+ 	mcc = bm_mc_start(&p->p);
+@@ -972,9 +968,11 @@ static inline int __bman_acquire(struct bman_pool *pool, struct bm_buffer *bufs,
+ 	while (!(mcr = bm_mc_result(&p->p)))
+ 		cpu_relax();
+ 	ret = mcr->verb & BM_MCR_VERB_ACQUIRE_BUFCOUNT;
+-	if (bufs)
+-		copy_words(&bufs[0], &mcr->acquire.bufs[0],
+-				num * sizeof(bufs[0]));
++	if (bufs) {
++		for (i = 0; i < num; i++)
++			bufs[i].opaque =
++				be64_to_cpu(mcr->acquire.bufs[i].opaque);
++	}
+ 	PORTAL_IRQ_UNLOCK(p, irqflags);
+ 	put_affine_portal();
+ 	if (ret != num)
+diff --git a/drivers/staging/fsl_qbman/bman_low.h b/drivers/staging/fsl_qbman/bman_low.h
+index e4ab771..7dc9d54 100644
+--- a/drivers/staging/fsl_qbman/bman_low.h
++++ b/drivers/staging/fsl_qbman/bman_low.h
+@@ -35,6 +35,8 @@
+ /* Portal register assists */
+ /***************************/
+ 
++#if defined(CONFIG_PPC32) || defined(CONFIG_PPC64)
++
+ /* Cache-inhibited register offsets */
+ #define BM_REG_RCR_PI_CINH	0x0000
+ #define BM_REG_RCR_CI_CINH	0x0004
+@@ -52,6 +54,29 @@
+ #define BM_CL_RCR_PI_CENA	0x3000
+ #define BM_CL_RCR_CI_CENA	0x3100
+ 
++#endif
++
++#if defined(CONFIG_ARM64)
++
++/* Cache-inhibited register offsets */
++#define BM_REG_RCR_PI_CINH	0x3000
++#define BM_REG_RCR_CI_CINH	0x3100
++#define BM_REG_RCR_ITR		0x3200
++#define BM_REG_CFG		0x3300
++#define BM_REG_SCN(n)		(0x3400 + ((n) << 6))
++#define BM_REG_ISR		0x3e00
++#define BM_REG_IIR              0x3ec0
++
++/* Cache-enabled register offsets */
++#define BM_CL_CR		0x0000
++#define BM_CL_RR0		0x0100
++#define BM_CL_RR1		0x0140
++#define BM_CL_RCR		0x1000
++#define BM_CL_RCR_PI_CENA	0x3000
++#define BM_CL_RCR_CI_CENA	0x3100
++
++#endif
++
+ /* BTW, the drivers (and h/w programming model) already obtain the required
+  * synchronisation for portal accesses via lwsync(), hwsync(), and
+  * data-dependencies. Use of barrier()s or other order-preserving primitives
+@@ -60,19 +85,20 @@
+  * non-coherent). */
+ 
+ /* Cache-inhibited register access. */
+-#define __bm_in(bm, o)		__raw_readl((bm)->addr_ci + (o))
+-#define __bm_out(bm, o, val)	__raw_writel((val), (bm)->addr_ci + (o))
++#define __bm_in(bm, o)		be32_to_cpu(__raw_readl((bm)->addr_ci + (o)))
++#define __bm_out(bm, o, val)    __raw_writel(cpu_to_be32(val), \
++					     (bm)->addr_ci + (o));
+ #define bm_in(reg)		__bm_in(&portal->addr, BM_REG_##reg)
+ #define bm_out(reg, val)	__bm_out(&portal->addr, BM_REG_##reg, val)
+ 
+ /* Cache-enabled (index) register access */
+ #define __bm_cl_touch_ro(bm, o) dcbt_ro((bm)->addr_ce + (o))
+ #define __bm_cl_touch_rw(bm, o) dcbt_rw((bm)->addr_ce + (o))
+-#define __bm_cl_in(bm, o)	__raw_readl((bm)->addr_ce + (o))
++#define __bm_cl_in(bm, o)	be32_to_cpu(__raw_readl((bm)->addr_ce + (o)))
+ #define __bm_cl_out(bm, o, val) \
+ 	do { \
+ 		u32 *__tmpclout = (bm)->addr_ce + (o); \
+-		__raw_writel((val), __tmpclout); \
++		__raw_writel(cpu_to_be32(val), __tmpclout); \
+ 		dcbf(__tmpclout); \
+ 	} while (0)
+ #define __bm_cl_invalidate(bm, o) dcbi((bm)->addr_ce + (o))
+@@ -196,6 +222,7 @@ static inline int bm_rcr_init(struct bm_portal *portal, enum bm_rcr_pmode pmode,
+ 
+ 	rcr->ring = portal->addr.addr_ce + BM_CL_RCR;
+ 	rcr->ci = bm_in(RCR_CI_CINH) & (BM_RCR_SIZE - 1);
++
+ 	pi = bm_in(RCR_PI_CINH) & (BM_RCR_SIZE - 1);
+ 	rcr->cursor = rcr->ring + pi;
+ 	rcr->vbit = (bm_in(RCR_PI_CINH) & BM_RCR_SIZE) ?  BM_RCR_VERB_VBIT : 0;
+@@ -487,13 +514,21 @@ static inline void bm_isr_bscn_mask(struct bm_portal *portal, u8 bpid,
+ 
+ static inline u32 __bm_isr_read(struct bm_portal *portal, enum bm_isr_reg n)
+ {
++#if defined(CONFIG_ARM64)
++	return __bm_in(&portal->addr, BM_REG_ISR + (n << 6));
++#else
+ 	return __bm_in(&portal->addr, BM_REG_ISR + (n << 2));
++#endif
+ }
+ 
+ static inline void __bm_isr_write(struct bm_portal *portal, enum bm_isr_reg n,
+ 					u32 val)
+ {
++#if defined(CONFIG_ARM64)
++	__bm_out(&portal->addr, BM_REG_ISR + (n << 6), val);
++#else
+ 	__bm_out(&portal->addr, BM_REG_ISR + (n << 2), val);
++#endif
+ }
+ 
+ /* Buffer Pool Cleanup */
+diff --git a/drivers/staging/fsl_qbman/dpa_sys.h b/drivers/staging/fsl_qbman/dpa_sys.h
+index 7dd0640..afa2613 100644
+--- a/drivers/staging/fsl_qbman/dpa_sys.h
++++ b/drivers/staging/fsl_qbman/dpa_sys.h
+@@ -58,11 +58,11 @@
+ #include <linux/device.h>
+ #include <linux/uio_driver.h>
+ #include <linux/smp.h>
+-#include <sysdev/fsl_soc.h>
+ #include <linux/fsl_hypervisor.h>
+ #include <linux/vmalloc.h>
+ #include <linux/ctype.h>
+ #include <linux/math64.h>
++#include <linux/bitops.h>
+ 
+ #include <linux/fsl_usdpaa.h>
+ 
+@@ -77,58 +77,14 @@
+ /* Misc inline assists */
+ /***********************/
+ 
+-/* TODO: NB, we currently assume that hwsync() and lwsync() imply compiler
+- * barriers and that dcb*() won't fall victim to compiler or execution
+- * reordering with respect to other code/instructions that manipulate the same
+- * cacheline. */
+-#define hwsync() __asm__ __volatile__ ("sync" : : : "memory")
+-#define lwsync()__asm__ __volatile__ (stringify_in_c(LWSYNC) : : : "memory")
+-#define dcbf(p) __asm__ __volatile__ ("dcbf 0,%0" : : "r" (p) : "memory")
+-#define dcbt_ro(p) __asm__ __volatile__ ("dcbt 0,%0" : : "r" (p))
+-#define dcbt_rw(p) __asm__ __volatile__ ("dcbtst 0,%0" : : "r" (p))
+-#define dcbi(p) dcbf(p)
+-#ifdef CONFIG_PPC_E500MC
+-#define dcbzl(p) __asm__ __volatile__ ("dcbzl 0,%0" : : "r" (p))
+-#define dcbz_64(p) dcbzl(p)
+-#define dcbf_64(p) dcbf(p)
+-/* Commonly used combo */
+-#define dcbit_ro(p) \
+-	do { \
+-		dcbi(p); \
+-		dcbt_ro(p); \
+-	} while (0)
+-#else
+-#define dcbz(p)__asm__ __volatile__ ("dcbz 0,%0" : : "r" (p))
+-#define dcbz_64(p) \
+-	do { \
+-		dcbz((u32)p + 32);	\
+-		dcbz(p);	\
+-	} while (0)
+-#define dcbf_64(p) \
+-	do { \
+-		dcbf((u32)p + 32); \
+-		dcbf(p); \
+-	} while (0)
+-/* Commonly used combo */
+-#define dcbit_ro(p) \
+-	do { \
+-		dcbi(p); \
+-		dcbi((u32)p + 32); \
+-		dcbt_ro(p); \
+-		dcbt_ro((u32)p + 32); \
+-	} while (0)
+-#endif /* CONFIG_PPC_E500MC */
++#if defined CONFIG_PPC32
++#include "dpa_sys_ppc32.h"
++#elif defined CONFIG_PPC64
++#include "dpa_sys_ppc64.h"
++#elif defined CONFIG_ARM64
++#include "dpa_sys_arm64.h"
++#endif
+ 
+-static inline u64 mfatb(void)
+-{
+-	u32 hi, lo, chk;
+-	do {
+-		hi = mfspr(SPRN_ATBU);
+-		lo = mfspr(SPRN_ATBL);
+-		chk = mfspr(SPRN_ATBU);
+-	} while (unlikely(hi != chk));
+-	return ((u64)hi << 32) | (u64)lo;
+-}
+ 
+ #ifdef CONFIG_FSL_DPA_CHECKING
+ #define DPA_ASSERT(x) \
+diff --git a/drivers/staging/fsl_qbman/dpa_sys_arm64.h b/drivers/staging/fsl_qbman/dpa_sys_arm64.h
+new file mode 100644
+index 0000000..b119095
+--- /dev/null
++++ b/drivers/staging/fsl_qbman/dpa_sys_arm64.h
+@@ -0,0 +1,102 @@
++/* Copyright 2014 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef DPA_SYS_ARM64_H
++#define DPA_SYS_ARM64_H
++
++#include <asm/cacheflush.h>
++#include <asm/barrier.h>
++
++/* Implementation of ARM 64 bit specific routines */
++
++/* TODO: NB, we currently assume that hwsync() and lwsync() imply compiler
++ * barriers and that dcb*() won't fall victim to compiler or execution
++ * reordering with respect to other code/instructions that manipulate the same
++ * cacheline. */
++#define hwsync() { asm volatile("dmb st" : : : "memory"); }
++#define lwsync() { asm volatile("dmb st" : : : "memory"); }
++#define dcbf(p) { asm volatile("dc cvac, %0;" : : "r" (p) : "memory"); }
++#define dcbt_ro(p) { asm volatile("prfm pldl1keep, [%0, #64]" : : "r" (p)); }
++#define dcbt_rw(p) { asm volatile("prfm pldl1keep, [%0, #64]" : : "r" (p)); }
++#define dcbi(p) { asm volatile("dc ivac, %0" : : "r"(p) : "memory"); }
++#define dcbz(p) { asm volatile("dc zva, %0" : : "r" (p) : "memory"); }
++
++#define dcbz_64(p) \
++	do { \
++		dcbz(p);	\
++	} while (0)
++
++#define dcbf_64(p) \
++	do { \
++		dcbf(p); \
++	} while (0)
++/* Commonly used combo */
++#define dcbit_ro(p) \
++	do { \
++		dcbi(p); \
++		dcbt_ro(p); \
++	} while (0)
++
++static inline u64 mfatb(void)
++{
++	return get_cycles();
++}
++
++static inline u32 in_be32(volatile void *addr)
++{
++	return be32_to_cpu(*((volatile u32 *) addr));
++}
++
++static inline void out_be32(void *addr, u32 val)
++{
++	*((u32 *) addr) = cpu_to_be32(val);
++}
++
++
++static inline void set_bits(unsigned long mask, volatile unsigned long *p)
++{
++	*p |= mask;
++}
++static inline void clear_bits(unsigned long mask, volatile unsigned long *p)
++{
++	*p &= ~mask;
++}
++
++static inline void flush_dcache_range(unsigned long start, unsigned long stop)
++{
++	__flush_dcache_area((void *) start, stop - start + 1);
++}
++
++#define hard_smp_processor_id() raw_smp_processor_id()
++
++
++
++#endif
+diff --git a/drivers/staging/fsl_qbman/dpa_sys_ppc32.h b/drivers/staging/fsl_qbman/dpa_sys_ppc32.h
+new file mode 100644
+index 0000000..874616d
+--- /dev/null
++++ b/drivers/staging/fsl_qbman/dpa_sys_ppc32.h
+@@ -0,0 +1,70 @@
++/* Copyright 2014 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef DPA_SYS_PPC32_H
++#define DPA_SYS_PPC32_H
++
++/* Implementation of PowerPC 32 bit specific routines */
++
++/* TODO: NB, we currently assume that hwsync() and lwsync() imply compiler
++ * barriers and that dcb*() won't fall victim to compiler or execution
++ * reordering with respect to other code/instructions that manipulate the same
++ * cacheline. */
++#define hwsync() __asm__ __volatile__ ("sync" : : : "memory")
++#define lwsync() __asm__ __volatile__ (stringify_in_c(LWSYNC) : : : "memory")
++#define dcbf(p) __asm__ __volatile__ ("dcbf 0,%0" : : "r" (p) : "memory")
++#define dcbt_ro(p) __asm__ __volatile__ ("dcbt 0,%0" : : "r" (p))
++#define dcbt_rw(p) __asm__ __volatile__ ("dcbtst 0,%0" : : "r" (p))
++#define dcbi(p) dcbf(p)
++
++#define dcbzl(p) __asm__ __volatile__ ("dcbzl 0,%0" : : "r" (p))
++#define dcbz_64(p) dcbzl(p)
++#define dcbf_64(p) dcbf(p)
++
++/* Commonly used combo */
++#define dcbit_ro(p) \
++	do { \
++		dcbi(p); \
++		dcbt_ro(p); \
++	} while (0)
++
++static inline u64 mfatb(void)
++{
++	u32 hi, lo, chk;
++	do {
++		hi = mfspr(SPRN_ATBU);
++		lo = mfspr(SPRN_ATBL);
++		chk = mfspr(SPRN_ATBU);
++	} while (unlikely(hi != chk));
++	return ((u64)hi << 32) | (u64)lo;
++}
++
++#endif
+diff --git a/drivers/staging/fsl_qbman/dpa_sys_ppc64.h b/drivers/staging/fsl_qbman/dpa_sys_ppc64.h
+new file mode 100644
+index 0000000..d980319
+--- /dev/null
++++ b/drivers/staging/fsl_qbman/dpa_sys_ppc64.h
+@@ -0,0 +1,79 @@
++/* Copyright 2014 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef DPA_SYS_PPC64_H
++#define DPA_SYS_PPC64_H
++
++/* Implementation of PowerPC 64 bit specific routines */
++
++/* TODO: NB, we currently assume that hwsync() and lwsync() imply compiler
++ * barriers and that dcb*() won't fall victim to compiler or execution
++ * reordering with respect to other code/instructions that manipulate the same
++ * cacheline. */
++#define hwsync() __asm__ __volatile__ ("sync" : : : "memory")
++#define lwsync() __asm__ __volatile__ (stringify_in_c(LWSYNC) : : : "memory")
++#define dcbf(p) __asm__ __volatile__ ("dcbf 0,%0" : : "r" (p) : "memory")
++#define dcbt_ro(p) __asm__ __volatile__ ("dcbt 0,%0" : : "r" (p))
++#define dcbt_rw(p) __asm__ __volatile__ ("dcbtst 0,%0" : : "r" (p))
++#define dcbi(p) dcbf(p)
++
++#define dcbz(p) __asm__ __volatile__ ("dcbz 0,%0" : : "r" (p))
++#define dcbz_64(p) \
++	do { \
++		dcbz((void*)p + 32);	\
++		dcbz(p);	\
++	} while (0)
++#define dcbf_64(p) \
++	do { \
++		dcbf((void*)p + 32); \
++		dcbf(p); \
++	} while (0)
++/* Commonly used combo */
++#define dcbit_ro(p) \
++	do { \
++		dcbi(p); \
++		dcbi((void*)p + 32); \
++		dcbt_ro(p); \
++		dcbt_ro((void*)p + 32); \
++	} while (0)
++
++static inline u64 mfatb(void)
++{
++	u32 hi, lo, chk;
++	do {
++		hi = mfspr(SPRN_ATBU);
++		lo = mfspr(SPRN_ATBL);
++		chk = mfspr(SPRN_ATBU);
++	} while (unlikely(hi != chk));
++	return ((u64)hi << 32) | (u64)lo;
++}
++
++#endif
+diff --git a/drivers/staging/fsl_qbman/fsl_usdpaa.c b/drivers/staging/fsl_qbman/fsl_usdpaa.c
+index 955b345..9386402 100644
+--- a/drivers/staging/fsl_qbman/fsl_usdpaa.c
++++ b/drivers/staging/fsl_qbman/fsl_usdpaa.c
+@@ -8,9 +8,6 @@
+  * kind, whether express or implied.
+  */
+ 
+-#include <linux/fsl_usdpaa.h>
+-#include "bman_low.h"
+-#include "qman_low.h"
+ 
+ #include <linux/miscdevice.h>
+ #include <linux/fs.h>
+@@ -20,7 +17,15 @@
+ #include <linux/memblock.h>
+ #include <linux/slab.h>
+ #include <linux/mman.h>
++
++#ifndef CONFIG_ARM64
+ #include <mm/mmu_decl.h>
++#endif
++
++#include "dpa_sys.h"
++#include <linux/fsl_usdpaa.h>
++#include "bman_low.h"
++#include "qman_low.h"
+ 
+ /* Physical address range of the memory reservation, exported for mm/mem.c */
+ static u64 phys_start;
+@@ -728,7 +733,11 @@ static int check_mmap_portal(struct ctx *ctx, struct vm_area_struct *vma,
+ 					  match, pfn);
+ 		if (*match) {
+ 			vma->vm_page_prot =
++#ifdef CONFIG_ARM64
++				pgprot_cached_ns(vma->vm_page_prot);
++#else
+ 				pgprot_cached_noncoherent(vma->vm_page_prot);
++#endif
+ 			return ret;
+ 		}
+ 		ret = check_mmap_resource(&portal->phys[DPA_PORTAL_CI], vma,
+@@ -1167,6 +1176,7 @@ map_match:
+ 	for (i = 0; i < map->frag_count; i++) {
+ 		DPA_ASSERT(current_frag->refs > 0);
+ 		--current_frag->refs;
++#ifndef CONFIG_ARM64
+ 		/*
+ 		 * Make sure we invalidate the TLB entry for
+ 		 * this fragment, otherwise a remap of a different
+@@ -1174,7 +1184,7 @@ map_match:
+ 		 * incorrect piece of memory
+ 		 */
+ 		cleartlbcam(vaddr, mfspr(SPRN_PID));
+-
++#endif
+ 		vaddr += current_frag->len;
+ 		current_frag = list_entry(current_frag->list.prev,
+ 					  struct mem_fragment, list);
+@@ -1855,16 +1865,16 @@ static __init int usdpaa_mem(char *arg)
+ }
+ early_param("usdpaa_mem", usdpaa_mem);
+ 
+-__init void fsl_usdpaa_init_early(void)
++__init int fsl_usdpaa_init_early(void)
+ {
+ 	if (!phys_size) {
+ 		pr_info("No USDPAA memory, no 'usdpaa_mem' bootarg\n");
+-		return;
++		return 0;
+ 	}
+ 	if (phys_size % PAGE_SIZE) {
+ 		pr_err("'usdpaa_mem' bootarg must be a multiple of page size\n");
+ 		phys_size = 0;
+-		return;
++		return 0;
+ 	}
+ 	phys_start = __memblock_alloc_base(phys_size,
+ 					   largest_page_size(phys_size),
+@@ -1872,15 +1882,20 @@ __init void fsl_usdpaa_init_early(void)
+ 	if (!phys_start) {
+ 		pr_err("Failed to reserve USDPAA region (sz:%llx)\n",
+ 		       phys_size);
+-		return;
++		return 0;
+ 	}
+ 	pfn_start = phys_start >> PAGE_SHIFT;
+ 	pfn_size = phys_size >> PAGE_SHIFT;
++#ifdef CONFIG_PPC
+ 	first_tlb = current_tlb = tlbcam_index;
+ 	tlbcam_index += num_tlb;
++#endif
+ 	pr_info("USDPAA region at %llx:%llx(%lx:%lx), %d TLB1 entries)\n",
+ 		phys_start, phys_size, pfn_start, pfn_size, num_tlb);
++	return 0;
+ }
++subsys_initcall(fsl_usdpaa_init_early);
++
+ 
+ static int __init usdpaa_init(void)
+ {
+diff --git a/drivers/staging/fsl_qbman/fsl_usdpaa_irq.c b/drivers/staging/fsl_qbman/fsl_usdpaa_irq.c
+index 1f8260b..b13ba32 100644
+--- a/drivers/staging/fsl_qbman/fsl_usdpaa_irq.c
++++ b/drivers/staging/fsl_qbman/fsl_usdpaa_irq.c
+@@ -59,6 +59,7 @@ struct usdpaa_irq_ctx {
+ 	spinlock_t lock;
+ 	void *inhibit_addr; /* inhibit register address */
+ 	struct file *usdpaa_filp;
++	char irq_name[128];
+ };
+ 
+ static int usdpaa_irq_open(struct inode *inode, struct file *filp)
+@@ -101,6 +102,7 @@ static irqreturn_t usdpaa_irq_handler(int irq, void *_ctx)
+ 	/* Set the inhibit register.  This will be reenabled
+ 	   once the USDPAA code handles the IRQ */
+ 	out_be32(ctx->inhibit_addr, 0x1);
++	pr_info("Inhibit at %p count %d", ctx->inhibit_addr, ctx->irq_count);
+ 	return IRQ_HANDLED;
+ }
+ 
+@@ -131,8 +133,11 @@ static int map_irq(struct file *fp, struct usdpaa_ioctl_irq_map *irq_map)
+ 
+ 	ctx->irq_set = 1;
+ 
++	snprintf(ctx->irq_name, sizeof(ctx->irq_name),
++		 "usdpaa_irq %d", ctx->irq_num);
++
+ 	ret = request_irq(ctx->irq_num, usdpaa_irq_handler, 0,
+-			  "usdpaa_irq", ctx);
++			  ctx->irq_name, ctx);
+ 	if (ret) {
+ 		pr_err("USDPAA request_irq(%d) failed, ret= %d\n",
+ 		       ctx->irq_num, ret);
+diff --git a/drivers/staging/fsl_qbman/qbman_driver.c b/drivers/staging/fsl_qbman/qbman_driver.c
+index a2904bd..ab487d5 100644
+--- a/drivers/staging/fsl_qbman/qbman_driver.c
++++ b/drivers/staging/fsl_qbman/qbman_driver.c
+@@ -32,6 +32,8 @@
+ #include <linux/time.h>
+ #include "qman_private.h"
+ #include "bman_private.h"
++__init void qman_init_early(void);
++__init void bman_init_early(void);
+ 
+ static __init int qbman_init(void)
+ {
+diff --git a/drivers/staging/fsl_qbman/qman_config.c b/drivers/staging/fsl_qbman/qman_config.c
+index 2ce3255..c2ba677 100644
+--- a/drivers/staging/fsl_qbman/qman_config.c
++++ b/drivers/staging/fsl_qbman/qman_config.c
+@@ -31,6 +31,8 @@
+ 
+ #include <asm/cacheflush.h>
+ #include "qman_private.h"
++#include <linux/highmem.h>
++#include <linux/of_reserved_mem.h>
+ 
+ /* Last updated for v00.800 of the BG */
+ 
+@@ -428,6 +430,28 @@ static struct device_node *qm_node;
+ static dma_addr_t fqd_a, pfdr_a;
+ static size_t fqd_sz = DEFAULT_FQD_SZ, pfdr_sz = DEFAULT_PFDR_SZ;
+ 
++static int qman_fqd(struct reserved_mem *rmem)
++{
++	fqd_a = rmem->base;
++	fqd_sz = rmem->size;
++
++	WARN_ON(!(fqd_a && fqd_sz));
++
++	return 0;
++}
++RESERVEDMEM_OF_DECLARE(qman_fqd, "fsl,qman-fqd", qman_fqd);
++
++static int qman_pfdr(struct reserved_mem *rmem)
++{
++	pfdr_a = rmem->base;
++	pfdr_sz = rmem->size;
++
++	WARN_ON(!(pfdr_a && pfdr_sz));
++
++	return 0;
++}
++RESERVEDMEM_OF_DECLARE(qman_fbpr, "fsl,qman-pfdr", qman_pfdr);
++
+ /* Parse the <name> property to extract the memory location and size and
+  * memblock_reserve() it. If it isn't supplied, memblock_alloc() the default
+  * size. Also flush this memory range from data cache so that QMAN originated
+@@ -436,51 +460,30 @@ static size_t fqd_sz = DEFAULT_FQD_SZ, pfdr_sz = DEFAULT_PFDR_SZ;
+ static __init int parse_mem_property(struct device_node *node, const char *name,
+ 				dma_addr_t *addr, size_t *sz, int zero)
+ {
+-	const u32 *pint;
+ 	int ret;
+-	unsigned long vaddr;
+-
+-	pint = of_get_property(node, name, &ret);
+-	if (!pint || (ret != 16)) {
+-		pr_info("No %s property '%s', using memblock_alloc(%016zx)\n",
+-				node->full_name, name, *sz);
+-		*addr = memblock_alloc(*sz, *sz);
+-		vaddr = (unsigned long)phys_to_virt(*addr);
+-		if (zero)
+-			memset((void *)vaddr, 0, *sz);
+-		flush_dcache_range(vaddr, vaddr + *sz);
+-		return 0;
+-	}
+-	pr_info("Using %s property '%s'\n", node->full_name, name);
++
+ 	/* If using a "zero-pma", don't try to zero it, even if you asked */
+ 	if (zero && of_find_property(node, "zero-pma", &ret)) {
+ 		pr_info("  it's a 'zero-pma', not zeroing from s/w\n");
+ 		zero = 0;
+ 	}
+-	*addr = ((u64)pint[0] << 32) | (u64)pint[1];
+-	*sz = ((u64)pint[2] << 32) | (u64)pint[3];
+-	/* Keep things simple, it's either all in the DRAM range or it's all
+-	 * outside. */
+-	if (*addr < memblock_end_of_DRAM()) {
+-		BUG_ON((u64)*addr + (u64)*sz > memblock_end_of_DRAM());
+-		if (memblock_reserve(*addr, *sz) < 0) {
+-			pr_err("Failed to reserve %s\n", name);
+-			return -ENOMEM;
+-		}
+-		vaddr = (unsigned long)phys_to_virt(*addr);
+-		if (zero)
+-			memset(phys_to_virt(*addr), 0, *sz);
+-		flush_dcache_range(vaddr, vaddr + *sz);
+-	} else if (zero) {
++
++	if (zero) {
+ 		/* map as cacheable, non-guarded */
+-		void __iomem *tmpp = ioremap_prot(*addr, *sz, 0);
++#ifdef CONFIG_ARM64
++		void __iomem *tmpp = ioremap_cache(*addr, *sz);
++#else
++		void __iomem *tmpp = ioremap(*addr, *sz);
++#endif
++
+ 		if (!tmpp)
+ 			return -ENOMEM;
+ 		memset_io(tmpp, 0, *sz);
+-		vaddr = (unsigned long)tmpp;
+-		flush_dcache_range(vaddr, vaddr + *sz);
++		flush_dcache_range((unsigned long)tmpp,
++				   (unsigned long)tmpp + *sz);
+ 		iounmap(tmpp);
+ 	}
++
+ 	return 0;
+ }
+ 
+@@ -509,9 +512,11 @@ static int __init fsl_qman_init(struct device_node *node)
+ 	if (!standby) {
+ 		ret = parse_mem_property(node, "fsl,qman-fqd",
+ 					&fqd_a, &fqd_sz, 1);
++		pr_info("qman-fqd addr 0x%llx size 0x%zx\n", fqd_a, fqd_sz);
+ 		BUG_ON(ret);
+ 		ret = parse_mem_property(node, "fsl,qman-pfdr",
+ 					&pfdr_a, &pfdr_sz, 0);
++		pr_info("qman-pfdr addr 0x%llx size 0x%zx\n", pfdr_a, pfdr_sz);
+ 		BUG_ON(ret);
+ 	}
+ 	/* Global configuration */
+@@ -538,6 +543,8 @@ static int __init fsl_qman_init(struct device_node *node)
+ 			qman_ip_rev = QMAN_REV30;
+ 		else if ((major == 3) && (minor == 1))
+ 			qman_ip_rev = QMAN_REV31;
++		else if ((major == 3) && (minor == 2))
++			qman_ip_rev = QMAN_REV32;
+ 		else {
+ 			pr_warn("unknown Qman version, default to rev1.1\n");
+ 			qman_ip_rev = QMAN_REV11;
+@@ -557,7 +564,7 @@ int qman_have_ccsr(void)
+ 	return qm ? 1 : 0;
+ }
+ 
+-__init void qman_init_early(void)
++__init int qman_init_early(void)
+ {
+ 	struct device_node *dn;
+ 	int ret;
+@@ -574,7 +581,9 @@ __init void qman_init_early(void)
+ 			BUG_ON(ret);
+ 		}
+ 	}
++	return 0;
+ }
++postcore_initcall_sync(qman_init_early);
+ 
+ static void log_edata_bits(u32 bit_count)
+ {
+@@ -679,7 +688,7 @@ static int __bind_irq(void)
+ 	int ret, err_irq;
+ 
+ 	err_irq = of_irq_to_resource(qm_node, 0, NULL);
+-	if (err_irq == NO_IRQ) {
++	if (err_irq == 0) {
+ 		pr_info("Can't get %s property '%s'\n", qm_node->full_name,
+ 			"interrupts");
+ 		return -ENODEV;
+@@ -705,6 +714,11 @@ int qman_init_ccsr(struct device_node *node)
+ 		return 0;
+ 	if (node != qm_node)
+ 		return -EINVAL;
++#ifdef CONFIG_ARM64
++	/* TEMP for LS1043 : should be done in uboot */
++	qm_out(QCSP_BARE, 0x5);
++	qm_out(QCSP_BAR, 0x0);
++#endif
+ 	/* FQD memory */
+ 	qm_set_memory(qm, qm_memory_fqd, fqd_a, 1, 0, 0, fqd_sz);
+ 	/* PFDR memory */
+@@ -766,6 +780,10 @@ int qman_set_sdest(u16 channel, unsigned int cpu_idx)
+ 
+ 	if (!qman_have_ccsr())
+ 		return -ENODEV;
++	if ((qman_ip_rev & 0xFF00) == QMAN_REV31) {
++		/* LS1043A - only one L2 cache */
++		cpu_idx = 0;
++	}
+ 
+ 	if ((qman_ip_rev & 0xFF00) >= QMAN_REV30) {
+ 		before = qm_in(REV3_QCSP_IO_CFG(idx));
+diff --git a/drivers/staging/fsl_qbman/qman_driver.c b/drivers/staging/fsl_qbman/qman_driver.c
+index c3e5718..3c347f9 100644
+--- a/drivers/staging/fsl_qbman/qman_driver.c
++++ b/drivers/staging/fsl_qbman/qman_driver.c
+@@ -93,9 +93,9 @@ static __init int fsl_fqid_range_init(struct device_node *node)
+ 		pr_err(STR_ERR_CELL, STR_FQID_RANGE, 2, node->full_name);
+ 		return -EINVAL;
+ 	}
+-	qman_seed_fqid_range(range[0], range[1]);
++	qman_seed_fqid_range(be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	pr_info("Qman: FQID allocator includes range %d:%d\n",
+-		range[0], range[1]);
++		be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	return 0;
+ }
+ 
+@@ -112,8 +112,8 @@ static __init int fsl_pool_channel_range_sdqcr(struct device_node *node)
+ 		pr_err(STR_ERR_CELL, STR_POOL_CHAN_RANGE, 1, node->full_name);
+ 		return -EINVAL;
+ 	}
+-	for (ret = 0; ret < chanid[1]; ret++)
+-		pools_sdqcr |= QM_SDQCR_CHANNELS_POOL_CONV(chanid[0] + ret);
++	for (ret = 0; ret < be32_to_cpu(chanid[1]); ret++)
++		pools_sdqcr |= QM_SDQCR_CHANNELS_POOL_CONV(be32_to_cpu(chanid[0]) + ret);
+ 	return 0;
+ }
+ 
+@@ -130,9 +130,9 @@ static __init int fsl_pool_channel_range_init(struct device_node *node)
+ 		pr_err(STR_ERR_CELL, STR_POOL_CHAN_RANGE, 1, node->full_name);
+ 		return -EINVAL;
+ 	}
+-	qman_seed_pool_range(chanid[0], chanid[1]);
++	qman_seed_pool_range(be32_to_cpu(chanid[0]), be32_to_cpu(chanid[1]));
+ 	pr_info("Qman: pool channel allocator includes range %d:%d\n",
+-		chanid[0], chanid[1]);
++		be32_to_cpu(chanid[0]), be32_to_cpu(chanid[1]));
+ 	return 0;
+ }
+ 
+@@ -150,9 +150,9 @@ static __init int fsl_cgrid_range_init(struct device_node *node)
+ 		pr_err(STR_ERR_CELL, STR_CGRID_RANGE, 2, node->full_name);
+ 		return -EINVAL;
+ 	}
+-	qman_seed_cgrid_range(range[0], range[1]);
++	qman_seed_cgrid_range(be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	pr_info("Qman: CGRID allocator includes range %d:%d\n",
+-		range[0], range[1]);
++		be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	for (cgr.cgrid = 0; cgr.cgrid < __CGR_NUM; cgr.cgrid++) {
+ 		ret = qman_modify_cgr(&cgr, QMAN_CGR_FLAG_USE_INIT, NULL);
+ 		if (ret)
+@@ -185,18 +185,18 @@ static __init int fsl_ceetm_init(struct device_node *node)
+ 		return -EINVAL;
+ 	}
+ 
+-	dcp_portal = (range[0] & 0x0F0000) >> 16;
++	dcp_portal = (be32_to_cpu(range[0]) & 0x0F0000) >> 16;
+ 	if (dcp_portal > qm_dc_portal_fman1) {
+ 		pr_err("The DCP portal %d doesn't support CEETM\n", dcp_portal);
+ 		return -EINVAL;
+ 	}
+ 
+ 	if (dcp_portal == qm_dc_portal_fman0)
+-		qman_seed_ceetm0_lfqid_range(range[0], range[1]);
++		qman_seed_ceetm0_lfqid_range(be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	if (dcp_portal == qm_dc_portal_fman1)
+-		qman_seed_ceetm1_lfqid_range(range[0], range[1]);
++		qman_seed_ceetm1_lfqid_range(be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	pr_debug("Qman: The lfqid allocator of CEETM %d includes range"
+-			" 0x%x:0x%x\n", dcp_portal, range[0], range[1]);
++		 " 0x%x:0x%x\n", dcp_portal, be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 
+ 	qman_ceetms[dcp_portal].idx = dcp_portal;
+ 	INIT_LIST_HEAD(&qman_ceetms[dcp_portal].sub_portals);
+@@ -221,16 +221,16 @@ static __init int fsl_ceetm_init(struct device_node *node)
+ 							range[0] + i);
+ 			return -ENOMEM;
+ 		}
+-		sp->idx = range[0] + i;
++		sp->idx = be32_to_cpu(range[0]) + i;
+ 		sp->dcp_idx = dcp_portal;
+ 		sp->is_claimed = 0;
+ 		list_add_tail(&sp->node, &qman_ceetms[dcp_portal].sub_portals);
+ 		sp++;
+ 	}
+ 	pr_debug("Qman: Reserve sub-portal %d:%d for CEETM %d\n",
+-					range[0], range[1], dcp_portal);
+-	qman_ceetms[dcp_portal].sp_range[0] = range[0];
+-	qman_ceetms[dcp_portal].sp_range[1] = range[1];
++		 be32_to_cpu(range[0]), be32_to_cpu(range[1]), dcp_portal);
++	qman_ceetms[dcp_portal].sp_range[0] = be32_to_cpu(range[0]);
++	qman_ceetms[dcp_portal].sp_range[1] = be32_to_cpu(range[1]);
+ 
+ 	/* Find LNI range */
+ 	range = of_get_property(node, "fsl,ceetm-lni-range", &ret);
+@@ -251,7 +251,7 @@ static __init int fsl_ceetm_init(struct device_node *node)
+ 							range[0] + i);
+ 			return -ENOMEM;
+ 		}
+-		lni->idx = range[0] + i;
++		lni->idx = be32_to_cpu(range[0]) + i;
+ 		lni->dcp_idx = dcp_portal;
+ 		lni->is_claimed = 0;
+ 		INIT_LIST_HEAD(&lni->channels);
+@@ -259,9 +259,9 @@ static __init int fsl_ceetm_init(struct device_node *node)
+ 		lni++;
+ 	}
+ 	pr_debug("Qman: Reserve LNI %d:%d for CEETM %d\n",
+-					range[0], range[1], dcp_portal);
+-	qman_ceetms[dcp_portal].lni_range[0] = range[0];
+-	qman_ceetms[dcp_portal].lni_range[1] = range[1];
++		 be32_to_cpu(range[0]), be32_to_cpu(range[1]), dcp_portal);
++	qman_ceetms[dcp_portal].lni_range[0] = be32_to_cpu(range[0]);
++	qman_ceetms[dcp_portal].lni_range[1] = be32_to_cpu(range[1]);
+ 
+ 	/* Find CEETM channel range */
+ 	range = of_get_property(node, "fsl,ceetm-channel-range", &ret);
+@@ -277,11 +277,11 @@ static __init int fsl_ceetm_init(struct device_node *node)
+ 	}
+ 
+ 	if (dcp_portal == qm_dc_portal_fman0)
+-		qman_seed_ceetm0_channel_range(range[0], range[1]);
++		qman_seed_ceetm0_channel_range(be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	if (dcp_portal == qm_dc_portal_fman1)
+-		qman_seed_ceetm1_channel_range(range[0], range[1]);
++		qman_seed_ceetm1_channel_range(be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 	pr_debug("Qman: The channel allocator of CEETM %d includes"
+-			" range %d:%d\n", dcp_portal, range[0], range[1]);
++		 " range %d:%d\n", dcp_portal, be32_to_cpu(range[0]), be32_to_cpu(range[1]));
+ 
+ 	/* Set CEETM PRES register */
+ 	ret = qman_ceetm_set_prescaler(dcp_portal);
+@@ -341,6 +341,11 @@ static void qman_get_ip_revision(struct device_node *dn)
+ 			ip_rev = QMAN_REV31;
+ 			qman_portal_max = 10;
+ 			ip_cfg = QMAN_REV_CFG_3;
++		} else if (of_device_is_compatible(dn,
++						"fsl,qman-portal-3.2.0")) {
++			ip_rev = QMAN_REV32;
++			qman_portal_max = 10;
++			ip_cfg = QMAN_REV_CFG_3; // TODO: Verify for ls1043
+ 		} else {
+ 			pr_warn("unknown QMan version in portal node,"
+ 				"default to rev1.1\n");
+@@ -373,7 +378,8 @@ static void qman_get_ip_revision(struct device_node *dn)
+ static struct qm_portal_config * __init parse_pcfg(struct device_node *node)
+ {
+ 	struct qm_portal_config *pcfg;
+-	const u32 *index, *channel;
++	const u32 *index_p, *channel_p;
++	u32 index, channel;
+ 	int irq, ret;
+ 	resource_size_t len;
+ 
+@@ -393,7 +399,7 @@ static struct qm_portal_config * __init parse_pcfg(struct device_node *node)
+ 	 */
+ 	pcfg->dev.bus = &platform_bus_type;
+ 	pcfg->dev.of_node = node;
+-#ifdef CONFIG_IOMMU_API
++#ifdef CONFIG_FSL_PAMU
+ 	pcfg->dev.archdata.iommu_domain = NULL;
+ #endif
+ 
+@@ -411,34 +417,39 @@ static struct qm_portal_config * __init parse_pcfg(struct device_node *node)
+ 			"reg::CI");
+ 		goto err;
+ 	}
+-	index = of_get_property(node, "cell-index", &ret);
+-	if (!index || (ret != 4)) {
++	index_p = of_get_property(node, "cell-index", &ret);
++	if (!index_p || (ret != 4)) {
+ 		pr_err("Can't get %s property '%s'\n", node->full_name,
+ 			"cell-index");
+ 		goto err;
+ 	}
+-	if (*index >= qman_portal_max)
++	index = be32_to_cpu(*index_p);
++	if (index >= qman_portal_max) {
++		pr_err("QMan portal index %d is beyond max (%d)\n",
++		       index, qman_portal_max);
+ 		goto err;
++	}
+ 
+-	channel = of_get_property(node, "fsl,qman-channel-id", &ret);
+-	if (!channel || (ret != 4)) {
++	channel_p = of_get_property(node, "fsl,qman-channel-id", &ret);
++	if (!channel_p || (ret != 4)) {
+ 		pr_err("Can't get %s property '%s'\n", node->full_name,
+ 			"fsl,qman-channel-id");
+ 		goto err;
+ 	}
+-	if (*channel != (*index + QM_CHANNEL_SWPORTAL0))
++	channel = be32_to_cpu(*channel_p);
++	if (channel != (index + QM_CHANNEL_SWPORTAL0))
+ 		pr_err("Warning: node %s has mismatched %s and %s\n",
+ 			node->full_name, "cell-index", "fsl,qman-channel-id");
+-	pcfg->public_cfg.channel = *channel;
++	pcfg->public_cfg.channel = channel;
+ 	pcfg->public_cfg.cpu = -1;
+ 	irq = irq_of_parse_and_map(node, 0);
+-	if (irq == NO_IRQ) {
++	if (irq == 0) {
+ 		pr_err("Can't get %s property '%s'\n", node->full_name,
+ 			"interrupts");
+ 		goto err;
+ 	}
+ 	pcfg->public_cfg.irq = irq;
+-	pcfg->public_cfg.index = *index;
++	pcfg->public_cfg.index = index;
+ #ifdef CONFIG_FSL_QMAN_CONFIG
+ 	/* We need the same LIODN offset for all portals */
+ 	qman_liodn_fixup(pcfg->public_cfg.channel);
+@@ -447,6 +458,16 @@ static struct qm_portal_config * __init parse_pcfg(struct device_node *node)
+ 	len = resource_size(&pcfg->addr_phys[DPA_PORTAL_CE]);
+ 	if (len != (unsigned long)len)
+ 		goto err;
++
++#ifdef CONFIG_ARM64
++	pcfg->addr_virt[DPA_PORTAL_CE] = ioremap_cache_ns(
++                                pcfg->addr_phys[DPA_PORTAL_CE].start,
++                                resource_size(&pcfg->addr_phys[DPA_PORTAL_CE]));
++
++        pcfg->addr_virt[DPA_PORTAL_CI] = ioremap(
++                                pcfg->addr_phys[DPA_PORTAL_CI].start,
++                                resource_size(&pcfg->addr_phys[DPA_PORTAL_CI]));
++#else
+ 	pcfg->addr_virt[DPA_PORTAL_CE] = ioremap_prot(
+ 				pcfg->addr_phys[DPA_PORTAL_CE].start,
+ 				(unsigned long)len,
+@@ -455,7 +476,7 @@ static struct qm_portal_config * __init parse_pcfg(struct device_node *node)
+ 				pcfg->addr_phys[DPA_PORTAL_CI].start,
+ 				resource_size(&pcfg->addr_phys[DPA_PORTAL_CI]),
+ 				_PAGE_GUARDED | _PAGE_NO_CACHE);
+-
++#endif
+ 	return pcfg;
+ err:
+ 	kfree(pcfg);
+@@ -674,9 +695,9 @@ static void qman_portal_update_sdest(const struct qm_portal_config *pcfg,
+ 			return;
+ 		}
+ 	}
++#endif
+ #ifdef CONFIG_FSL_QMAN_CONFIG
+ 	if (qman_set_sdest(pcfg->public_cfg.channel, cpu))
+-#endif
+ 		pr_warn("Failed to update portal's stash request queue\n");
+ #endif
+ }
+@@ -775,6 +796,7 @@ __init int qman_init(void)
+ 		qm_channel_caam = QMAN_CHANNEL_CAAM_REV3;
+ 		qm_channel_pme = QMAN_CHANNEL_PME_REV3;
+ 	}
++
+ 	if ((qman_ip_rev == QMAN_REV31) && (qman_ip_cfg == QMAN_REV_CFG_2))
+ 		qm_channel_dce = QMAN_CHANNEL_DCE_QMANREV312;
+ 
+@@ -827,7 +849,7 @@ __init int qman_init(void)
+ 		}
+ 	}
+ 	if (list_empty(&shared_pcfgs) && list_empty(&unshared_pcfgs)) {
+-		for_each_possible_cpu(cpu) {
++		for_each_online_cpu(cpu) {
+ 			pcfg = get_pcfg(&unused_pcfgs);
+ 			if (!pcfg)
+ 				break;
+diff --git a/drivers/staging/fsl_qbman/qman_high.c b/drivers/staging/fsl_qbman/qman_high.c
+index 580adb0..c13d0ee 100644
+--- a/drivers/staging/fsl_qbman/qman_high.c
++++ b/drivers/staging/fsl_qbman/qman_high.c
+@@ -125,6 +125,15 @@ struct qman_portal {
+ 	u8 alloced;
+ 	/* power management data */
+ 	u32 save_isdr;
++#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
++	/* Keep a shadow copy of the DQRR on LE systems
++	   as the SW needs to do byteswaps of read only
++	   memory.  Must be aligned to the size of the
++	   ring to ensure easy index calcualtions based
++	   on address */
++	struct qm_dqrr_entry shadow_dqrr[QM_DQRR_SIZE]
++	            __attribute__((aligned(512)));
++#endif
+ };
+ 
+ #ifdef CONFIG_FSL_DPA_PORTAL_SHARE
+@@ -281,6 +290,103 @@ static inline struct qman_fq *get_fq_table_entry(u32 entry)
+ }
+ #endif
+ 
++static inline void cpu_to_hw_fqd(struct qm_fqd *fqd)
++{
++	/* Byteswap the FQD to HW format */
++	fqd->fq_ctrl = cpu_to_be16(fqd->fq_ctrl);
++	fqd->dest_wq = cpu_to_be16(fqd->dest_wq);
++	fqd->ics_cred = cpu_to_be16(fqd->ics_cred);
++	fqd->context_b = cpu_to_be32(fqd->context_b);
++	fqd->context_a.opaque = cpu_to_be64(fqd->context_a.opaque);
++}
++
++static inline void hw_fqd_to_cpu(struct qm_fqd *fqd)
++{
++	/* Byteswap the FQD to CPU format */
++	fqd->fq_ctrl = be16_to_cpu(fqd->fq_ctrl);
++	fqd->dest_wq = be16_to_cpu(fqd->dest_wq);
++	fqd->ics_cred = be16_to_cpu(fqd->ics_cred);
++	fqd->context_b = be32_to_cpu(fqd->context_b);
++	fqd->context_a.opaque = be64_to_cpu(fqd->context_a.opaque);
++}
++
++/* Swap a 40 bit address */
++static inline u64 cpu_to_be40(u64 in)
++{
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++	return in;
++#else
++	u64 out = 0;
++	u8 *p = (u8 *) &out;
++	p[0] = in >> 32;
++	p[1] = in >> 24;
++	p[2] = in >> 16;
++	p[3] = in >> 8;
++	p[4] = in >> 0;
++	return out;
++#endif
++}
++static inline u64 be40_to_cpu(u64 in)
++{
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++	return in;
++#else
++	u64 out = 0;
++	u8 *pout = (u8 *) &out;
++	u8 *pin = (u8 *) &in;
++	pout[0] = pin[4];
++	pout[1] = pin[3];
++	pout[2] = pin[2];
++	pout[3] = pin[1];
++	pout[4] = pin[0];
++	return out;
++#endif
++}
++
++/* Swap a 24 bit value */
++static inline u32 cpu_to_be24(u32 in)
++{
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++	return in;
++#else
++	u32 out = 0;
++	u8 *p = (u8 *) &out;
++	p[0] = in >> 16;
++	p[1] = in >> 8;
++	p[2] = in >> 0;
++	return out;
++#endif
++}
++
++static inline u32 be24_to_cpu(u32 in)
++{
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++	return in;
++#else
++	u32 out = 0;
++	u8 *pout = (u8 *) &out;
++	u8 *pin = (u8 *) &in;
++	pout[0] = pin[2];
++	pout[1] = pin[1];
++	pout[2] = pin[0];
++	return out;
++#endif
++}
++
++static inline void cpu_to_hw_fd(struct qm_fd *fd)
++{
++	fd->addr = cpu_to_be40(fd->addr);
++	fd->status = cpu_to_be32(fd->status);
++	fd->opaque = cpu_to_be32(fd->opaque);
++}
++
++static inline void hw_fd_to_cpu(struct qm_fd *fd)
++{
++	fd->addr = be40_to_cpu(fd->addr);
++	fd->status = be32_to_cpu(fd->status);
++	fd->opaque = be32_to_cpu(fd->opaque);
++}
++
+ /* In the case that slow- and fast-path handling are both done by qman_poll()
+  * (ie. because there is no interrupt handling), we ought to balance how often
+  * we do the fast-path poll versus the slow-path poll. We'll use two decrementer
+@@ -500,15 +606,21 @@ struct qman_portal *qman_create_portal(
+ 	portal->cb_dc_ern = NULL;
+ 	sprintf(buf, "qportal-%d", config->public_cfg.channel);
+ 	portal->pdev = platform_device_alloc(buf, -1);
+-	if (!portal->pdev)
++	if (!portal->pdev) {
++		pr_err("qman_portal - platform_device_alloc() failed\n");
+ 		goto fail_devalloc;
+-	if (dma_set_mask(&portal->pdev->dev, DMA_BIT_MASK(40)))
++	}
++	if (dma_set_mask(&portal->pdev->dev, DMA_BIT_MASK(40))) {
++		pr_err("qman_portal - dma_set_mask() failed\n");
+ 		goto fail_devadd;
++	}
+ 	portal->pdev->dev.pm_domain = &qman_portal_device_pm_domain;
+ 	portal->pdev->dev.platform_data = portal;
+ 	ret = platform_device_add(portal->pdev);
+-	if (ret)
++	if (ret) {
++		pr_err("qman_portal - platform_device_add() failed\n");
+ 		goto fail_devadd;
++	}
+ 	dpa_rbtree_init(&portal->retire_table);
+ 	isdr = 0xffffffff;
+ 	qm_isr_disable_write(__p, isdr);
+@@ -858,7 +970,7 @@ mr_loop:
+ 			case QM_MR_VERB_FQRN:
+ 			case QM_MR_VERB_FQRL:
+ 				/* Lookup in the retirement table */
+-				fq = table_find_fq(p, msg->fq.fqid);
++				fq = table_find_fq(p, be32_to_cpu(msg->fq.fqid));
+ 				BUG_ON(!fq);
+ 				fq_state_change(p, fq, msg, verb);
+ 				if (fq->cb.fqs)
+@@ -867,9 +979,11 @@ mr_loop:
+ 			case QM_MR_VERB_FQPN:
+ 				/* Parked */
+ #ifdef CONFIG_FSL_QMAN_FQ_LOOKUP
+-				fq = get_fq_table_entry(msg->fq.contextB);
++				fq = get_fq_table_entry(
++					be32_to_cpu(msg->fq.contextB));
+ #else
+-				fq = (void *)(uintptr_t)msg->fq.contextB;
++				fq = (void *)(uintptr_t)
++					be32_to_cpu(msg->fq.contextB);
+ #endif
+ 				fq_state_change(p, fq, msg, verb);
+ 				if (fq->cb.fqs)
+@@ -895,9 +1009,10 @@ mr_loop:
+ 		} else {
+ 			/* Its a software ERN */
+ #ifdef CONFIG_FSL_QMAN_FQ_LOOKUP
+-			fq = get_fq_table_entry(msg->ern.tag);
++			pr_info("ROY\n");
++			fq = get_fq_table_entry(be32_to_cpu(msg->ern.tag));
+ #else
+-			fq = (void *)(uintptr_t)msg->ern.tag;
++			fq = (void *)(uintptr_t)be32_to_cpu(msg->ern.tag);
+ #endif
+ 			fq->cb.ern(p, fq, msg);
+ 		}
+@@ -960,12 +1075,27 @@ static inline unsigned int __poll_portal_fast(struct qman_portal *p,
+ 	struct qman_fq *fq;
+ 	enum qman_cb_dqrr_result res;
+ 	unsigned int limit = 0;
+-
++#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
++	struct qm_dqrr_entry *shadow;
++#endif
+ loop:
+ 	qm_dqrr_pvb_update(&p->p);
+ 	dq = qm_dqrr_current(&p->p);
+ 	if (!dq)
+ 		goto done;
++#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
++	/* If running on an LE system the fields of the
++	   dequeue entry must be swapped.  Because the
++	   QMan HW will ignore writes the DQRR entry is
++	   copied and the index stored within the copy */
++	shadow = &p->shadow_dqrr[DQRR_PTR2IDX(dq)];
++	*shadow = *dq;
++	dq = shadow;
++	shadow->fqid = be32_to_cpu(shadow->fqid);
++	shadow->contextB = be32_to_cpu(shadow->contextB);
++	shadow->seqnum = be16_to_cpu(shadow->seqnum);
++	hw_fd_to_cpu(&shadow->fd);
++#endif
+ 	if (dq->stat & QM_DQRR_STAT_UNSCHEDULED) {
+ 		/* VDQCR: don't trust contextB as the FQ may have been
+ 		 * configured for h/w consumption and we're draining it
+@@ -994,6 +1124,7 @@ loop:
+ #endif
+ 		/* Now let the callback do its stuff */
+ 		res = fq->cb.dqrr(p, fq, dq);
++
+ 		/* The callback can request that we exit without consuming this
+ 		 * entry nor advancing; */
+ 		if (res == qman_cb_dqrr_stop)
+@@ -1082,6 +1213,7 @@ int qman_p_irqsource_remove(struct qman_portal *p, u32 bits)
+ 	bits &= QM_PIRQ_VISIBLE;
+ 	clear_bits(bits, &p->irq_sources);
+ 	qm_isr_enable_write(&p->p, p->irq_sources);
++
+ 	ier = qm_isr_enable_read(&p->p);
+ 	/* Using "~ier" (rather than "bits" or "~p->irq_sources") creates a
+ 	 * data-dependency, ie. to protect against re-ordering. */
+@@ -1368,7 +1500,7 @@ int qman_create_fq(u32 fqid, u32 flags, struct qman_fq *fq)
+ 	p = get_affine_portal();
+ 	PORTAL_IRQ_LOCK(p, irqflags);
+ 	mcc = qm_mc_start(&p->p);
+-	mcc->queryfq.fqid = fqid;
++	mcc->queryfq.fqid = cpu_to_be32(fqid);
+ 	qm_mc_commit(&p->p, QM_MCC_VERB_QUERYFQ);
+ 	while (!(mcr = qm_mc_result(&p->p)))
+ 		cpu_relax();
+@@ -1378,8 +1510,9 @@ int qman_create_fq(u32 fqid, u32 flags, struct qman_fq *fq)
+ 		goto err;
+ 	}
+ 	fqd = mcr->queryfq.fqd;
++	hw_fqd_to_cpu(&fqd);
+ 	mcc = qm_mc_start(&p->p);
+-	mcc->queryfq_np.fqid = fqid;
++	mcc->queryfq_np.fqid = cpu_to_be32(fqid);
+ 	qm_mc_commit(&p->p, QM_MCC_VERB_QUERYFQ_NP);
+ 	while (!(mcr = qm_mc_result(&p->p)))
+ 		cpu_relax();
+@@ -1500,8 +1633,9 @@ int qman_init_fq(struct qman_fq *fq, u32 flags, struct qm_mcc_initfq *opts)
+ 	mcc = qm_mc_start(&p->p);
+ 	if (opts)
+ 		mcc->initfq = *opts;
+-	mcc->initfq.fqid = fq->fqid;
++	mcc->initfq.fqid = cpu_to_be32(fq->fqid);
+ 	mcc->initfq.count = 0;
++
+ 	/* If the FQ does *not* have the TO_DCPORTAL flag, contextB is set as a
+ 	 * demux pointer. Otherwise, the caller-provided value is allowed to
+ 	 * stand, don't overwrite it. */
+@@ -1532,6 +1666,8 @@ int qman_init_fq(struct qman_fq *fq, u32 flags, struct qm_mcc_initfq *opts)
+ 			mcc->initfq.fqd.dest.wq = 4;
+ 		}
+ 	}
++	mcc->initfq.we_mask = cpu_to_be16(mcc->initfq.we_mask);
++	cpu_to_hw_fqd(&mcc->initfq.fqd);
+ 	qm_mc_commit(&p->p, myverb);
+ 	while (!(mcr = qm_mc_result(&p->p)))
+ 		cpu_relax();
+@@ -1587,7 +1723,7 @@ int qman_schedule_fq(struct qman_fq *fq)
+ 		goto out;
+ 	}
+ 	mcc = qm_mc_start(&p->p);
+-	mcc->alterfq.fqid = fq->fqid;
++	mcc->alterfq.fqid = cpu_to_be32(fq->fqid);
+ 	qm_mc_commit(&p->p, QM_MCC_VERB_ALTER_SCHED);
+ 	while (!(mcr = qm_mc_result(&p->p)))
+ 		cpu_relax();
+@@ -1635,7 +1771,7 @@ int qman_retire_fq(struct qman_fq *fq, u32 *flags)
+ 	if (rval)
+ 		goto out;
+ 	mcc = qm_mc_start(&p->p);
+-	mcc->alterfq.fqid = fq->fqid;
++	mcc->alterfq.fqid = cpu_to_be32(fq->fqid);
+ 	qm_mc_commit(&p->p, QM_MCC_VERB_ALTER_RETIRE);
+ 	while (!(mcr = qm_mc_result(&p->p)))
+ 		cpu_relax();
+@@ -1718,7 +1854,7 @@ int qman_oos_fq(struct qman_fq *fq)
+ 		goto out;
+ 	}
+ 	mcc = qm_mc_start(&p->p);
+-	mcc->alterfq.fqid = fq->fqid;
++	mcc->alterfq.fqid = cpu_to_be32(fq->fqid);
+ 	qm_mc_commit(&p->p, QM_MCC_VERB_ALTER_OOS);
+ 	while (!(mcr = qm_mc_result(&p->p)))
+ 		cpu_relax();
+@@ -1800,14 +1936,15 @@ int qman_query_fq(struct qman_fq *fq, struct qm_fqd *fqd)
+ 
+ 	PORTAL_IRQ_LOCK(p, irqflags);
+ 	mcc = qm_mc_start(&p->p);
+-	mcc->queryfq.fqid = fq->fqid;
++	mcc->queryfq.fqid = cpu_to_be32(fq->fqid);
+ 	qm_mc_commit(&p->p, QM_MCC_VERB_QUERYFQ);
+ 	while (!(mcr = qm_mc_result(&p->p)))
+ 		cpu_relax();
+ 	DPA_ASSERT((mcr->verb & QM_MCR_VERB_MASK) == QM_MCR_VERB_QUERYFQ);
+ 	res = mcr->result;
+ 	if (res == QM_MCR_RESULT_OK)
+-		*fqd = mcr->queryfq.fqd;
++		memcpy_fromio(fqd, &mcr->queryfq.fqd, sizeof(*fqd));
++	hw_fqd_to_cpu(fqd);
+ 	PORTAL_IRQ_UNLOCK(p, irqflags);
+ 	put_affine_portal();
+ 	if (res != QM_MCR_RESULT_OK)
+@@ -1826,14 +1963,35 @@ int qman_query_fq_np(struct qman_fq *fq, struct qm_mcr_queryfq_np *np)
+ 
+ 	PORTAL_IRQ_LOCK(p, irqflags);
+ 	mcc = qm_mc_start(&p->p);
+-	mcc->queryfq.fqid = fq->fqid;
++	mcc->queryfq.fqid = cpu_to_be32(fq->fqid);
+ 	qm_mc_commit(&p->p, QM_MCC_VERB_QUERYFQ_NP);
+ 	while (!(mcr = qm_mc_result(&p->p)))
+ 		cpu_relax();
+ 	DPA_ASSERT((mcr->verb & QM_MCR_VERB_MASK) == QM_MCR_VERB_QUERYFQ_NP);
+ 	res = mcr->result;
+-	if (res == QM_MCR_RESULT_OK)
+-		*np = mcr->queryfq_np;
++	if (res == QM_MCR_RESULT_OK) {
++		memcpy_fromio(np, &mcr->queryfq_np, sizeof(*np));
++		np->fqd_link = be24_to_cpu(np->fqd_link);
++		np->odp_seq = be16_to_cpu(np->odp_seq);
++		np->orp_nesn = be16_to_cpu(np->orp_nesn);
++		np->orp_ea_hseq  = be16_to_cpu(np->orp_ea_hseq);
++		np->orp_ea_tseq  = be16_to_cpu(np->orp_ea_tseq);
++		np->orp_ea_hptr = be24_to_cpu(np->orp_ea_hptr);
++		np->orp_ea_tptr = be24_to_cpu(np->orp_ea_tptr);
++		np->pfdr_hptr = be24_to_cpu(np->pfdr_hptr);
++		np->pfdr_tptr = be24_to_cpu(np->pfdr_tptr);
++		np->ics_surp = be16_to_cpu(np->ics_surp);
++		np->byte_cnt = be32_to_cpu(np->byte_cnt);
++		np->frm_cnt = be24_to_cpu(np->frm_cnt);
++		np->ra1_sfdr = be16_to_cpu(np->ra1_sfdr);
++		np->ra2_sfdr = be16_to_cpu(np->ra2_sfdr);
++		np->od1_sfdr = be16_to_cpu(np->od1_sfdr);
++		np->od2_sfdr = be16_to_cpu(np->od2_sfdr);
++		np->od3_sfdr = be16_to_cpu(np->od3_sfdr);
++
++
++	}
++
+ 	PORTAL_IRQ_UNLOCK(p, irqflags);
+ 	put_affine_portal();
+ 	if (res == QM_MCR_RESULT_ERR_FQID)
+@@ -1863,7 +2021,7 @@ int qman_query_wq(u8 query_dedicated, struct qm_mcr_querywq *wq)
+ 	DPA_ASSERT((mcr->verb & QM_MCR_VERB_MASK) == myverb);
+ 	res = mcr->result;
+ 	if (res == QM_MCR_RESULT_OK)
+-		*wq = mcr->querywq;
++		memcpy_fromio(wq, &mcr->querywq, sizeof(*wq));
+ 	PORTAL_IRQ_UNLOCK(p, irqflags);
+ 	put_affine_portal();
+ 	if (res != QM_MCR_RESULT_OK) {
+@@ -1894,7 +2052,7 @@ int qman_testwrite_cgr(struct qman_cgr *cgr, u64 i_bcnt,
+ 	DPA_ASSERT((mcr->verb & QM_MCR_VERB_MASK) == QM_MCC_VERB_CGRTESTWRITE);
+ 	res = mcr->result;
+ 	if (res == QM_MCR_RESULT_OK)
+-		*result = mcr->cgrtestwrite;
++		memcpy_fromio(result,  &mcr->cgrtestwrite, sizeof(*result));
+ 	PORTAL_IRQ_UNLOCK(p, irqflags);
+ 	put_affine_portal();
+ 	if (res != QM_MCR_RESULT_OK) {
+@@ -1912,6 +2070,7 @@ int qman_query_cgr(struct qman_cgr *cgr, struct qm_mcr_querycgr *cgrd)
+ 	struct qman_portal *p = get_affine_portal();
+ 	unsigned long irqflags __maybe_unused;
+ 	u8 res;
++	int i;
+ 
+ 	PORTAL_IRQ_LOCK(p, irqflags);
+ 	mcc = qm_mc_start(&p->p);
+@@ -1922,13 +2081,23 @@ int qman_query_cgr(struct qman_cgr *cgr, struct qm_mcr_querycgr *cgrd)
+ 	DPA_ASSERT((mcr->verb & QM_MCR_VERB_MASK) == QM_MCC_VERB_QUERYCGR);
+ 	res = mcr->result;
+ 	if (res == QM_MCR_RESULT_OK)
+-		*cgrd = mcr->querycgr;
++		memcpy_fromio(cgrd, &mcr->querycgr, sizeof(*cgrd));
+ 	PORTAL_IRQ_UNLOCK(p, irqflags);
+ 	put_affine_portal();
+ 	if (res != QM_MCR_RESULT_OK) {
+ 		pr_err("QUERY_CGR failed: %s\n", mcr_result_str(res));
+ 		return -EIO;
+ 	}
++	cgrd->cgr.wr_parm_g.word =
++		be32_to_cpu(cgrd->cgr.wr_parm_g.word);
++	cgrd->cgr.wr_parm_y.word =
++		be32_to_cpu(cgrd->cgr.wr_parm_y.word);
++	cgrd->cgr.wr_parm_r.word =
++		be32_to_cpu(cgrd->cgr.wr_parm_r.word);
++	cgrd->cgr.cscn_targ =  be32_to_cpu(cgrd->cgr.cscn_targ);
++	cgrd->cgr.__cs_thres = be16_to_cpu(cgrd->cgr.__cs_thres);
++	for (i = 0; i < ARRAY_SIZE(cgrd->cscn_targ_swp); i++)
++			be32_to_cpus(&cgrd->cscn_targ_swp[i]);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(qman_query_cgr);
+@@ -1939,6 +2108,7 @@ int qman_query_congestion(struct qm_mcr_querycongestion *congestion)
+ 	struct qman_portal *p = get_affine_portal();
+ 	unsigned long irqflags __maybe_unused;
+ 	u8 res;
++	int i;
+ 
+ 	PORTAL_IRQ_LOCK(p, irqflags);
+ 	qm_mc_start(&p->p);
+@@ -1949,13 +2119,17 @@ int qman_query_congestion(struct qm_mcr_querycongestion *congestion)
+ 			QM_MCC_VERB_QUERYCONGESTION);
+ 	res = mcr->result;
+ 	if (res == QM_MCR_RESULT_OK)
+-		*congestion = mcr->querycongestion;
++		memcpy_fromio(congestion, &mcr->querycongestion,
++			      sizeof(*congestion));
+ 	PORTAL_IRQ_UNLOCK(p, irqflags);
+ 	put_affine_portal();
+ 	if (res != QM_MCR_RESULT_OK) {
+ 		pr_err("QUERY_CONGESTION failed: %s\n", mcr_result_str(res));
+ 		return -EIO;
+ 	}
++
++	for (i = 0; i < ARRAY_SIZE(congestion->state.__state); i++)
++			be32_to_cpus(&congestion->state.__state[i]);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(qman_query_congestion);
+@@ -2185,13 +2359,14 @@ static inline struct qm_eqcr_entry *try_p_eq_start(struct qman_portal *p,
+ 			((flags & QMAN_ENQUEUE_FLAG_DCA_PARK) ?
+ 					QM_EQCR_DCA_PARK : 0) |
+ 			((flags >> 8) & QM_EQCR_DCA_IDXMASK);
+-	eq->fqid = fq->fqid;
++	eq->fqid = cpu_to_be32(fq->fqid);
+ #ifdef CONFIG_FSL_QMAN_FQ_LOOKUP
+-	eq->tag = fq->key;
++	eq->tag = cpu_to_be32(fq->key);
+ #else
+-	eq->tag = (u32)(uintptr_t)fq;
++	eq->tag = cpu_to_be32((u32)(uintptr_t)fq);
+ #endif
+ 	eq->fd = *fd;
++	cpu_to_hw_fd(&eq->fd);
+ 	return eq;
+ }
+ 
+@@ -2365,8 +2540,8 @@ int qman_p_enqueue_orp(struct qman_portal *p, struct qman_fq *fq,
+ 			/* No need to check 4 QMAN_ENQUEUE_FLAG_HOLE */
+ 			orp_seqnum &= ~QM_EQCR_SEQNUM_NESN;
+ 	}
+-	eq->seqnum = orp_seqnum;
+-	eq->orp = orp->fqid;
++	eq->seqnum = cpu_to_be16(orp_seqnum);
++	eq->orp = cpu_to_be32(orp->fqid);
+ 	/* Note: QM_EQCR_VERB_INTERRUPT == QMAN_ENQUEUE_FLAG_WAIT_SYNC */
+ 	qm_eqcr_pvb_commit(&p->p, QM_EQCR_VERB_ORP |
+ 		((flags & (QMAN_ENQUEUE_FLAG_HOLE | QMAN_ENQUEUE_FLAG_NESN)) ?
+@@ -2415,8 +2590,8 @@ int qman_enqueue_orp(struct qman_fq *fq, const struct qm_fd *fd, u32 flags,
+ 			/* No need to check 4 QMAN_ENQUEUE_FLAG_HOLE */
+ 			orp_seqnum &= ~QM_EQCR_SEQNUM_NESN;
+ 	}
+-	eq->seqnum = orp_seqnum;
+-	eq->orp = orp->fqid;
++	eq->seqnum = cpu_to_be16(orp_seqnum);
++	eq->orp = cpu_to_be32(orp->fqid);
+ 	/* Note: QM_EQCR_VERB_INTERRUPT == QMAN_ENQUEUE_FLAG_WAIT_SYNC */
+ 	qm_eqcr_pvb_commit(&p->p, QM_EQCR_VERB_ORP |
+ 		((flags & (QMAN_ENQUEUE_FLAG_HOLE | QMAN_ENQUEUE_FLAG_NESN)) ?
+@@ -2538,6 +2713,16 @@ int qman_modify_cgr(struct qman_cgr *cgr, u32 flags,
+ 	mcc = qm_mc_start(&p->p);
+ 	if (opts)
+ 		mcc->initcgr = *opts;
++	mcc->initcgr.we_mask = cpu_to_be16(mcc->initcgr.we_mask);
++	mcc->initcgr.cgr.wr_parm_g.word =
++		cpu_to_be32(mcc->initcgr.cgr.wr_parm_g.word);
++	mcc->initcgr.cgr.wr_parm_y.word =
++		cpu_to_be32(mcc->initcgr.cgr.wr_parm_y.word);
++	mcc->initcgr.cgr.wr_parm_r.word =
++		cpu_to_be32(mcc->initcgr.cgr.wr_parm_r.word);
++	mcc->initcgr.cgr.cscn_targ =  cpu_to_be32(mcc->initcgr.cgr.cscn_targ);
++	mcc->initcgr.cgr.__cs_thres = cpu_to_be16(mcc->initcgr.cgr.__cs_thres);
++
+ 	mcc->initcgr.cgid = cgr->cgrid;
+ 	if (flags & QMAN_CGR_FLAG_USE_INIT)
+ 		verb = QM_MCC_VERB_INITCGR;
+diff --git a/drivers/staging/fsl_qbman/qman_low.h b/drivers/staging/fsl_qbman/qman_low.h
+index 6ac7ecd..9b76b56 100644
+--- a/drivers/staging/fsl_qbman/qman_low.h
++++ b/drivers/staging/fsl_qbman/qman_low.h
+@@ -36,6 +36,8 @@
+ /***************************/
+ 
+ /* Cache-inhibited register offsets */
++#if defined(CONFIG_PPC32) || defined(CONFIG_PPC64)
++
+ #define QM_REG_EQCR_PI_CINH	0x0000
+ #define QM_REG_EQCR_CI_CINH	0x0004
+ #define QM_REG_EQCR_ITR		0x0008
+@@ -68,6 +70,45 @@
+ #define QM_CL_RR0		0x3900
+ #define QM_CL_RR1		0x3940
+ 
++#endif
++
++#if defined(CONFIG_ARM64)
++
++#define QM_REG_EQCR_PI_CINH	0x3000
++#define QM_REG_EQCR_CI_CINH	0x3040
++#define QM_REG_EQCR_ITR		0x3080
++#define QM_REG_DQRR_PI_CINH	0x3100
++#define QM_REG_DQRR_CI_CINH	0x3140
++#define QM_REG_DQRR_ITR		0x3180
++#define QM_REG_DQRR_DCAP	0x31C0
++#define QM_REG_DQRR_SDQCR	0x3200
++#define QM_REG_DQRR_VDQCR	0x3240
++#define QM_REG_DQRR_PDQCR	0x3280
++#define QM_REG_MR_PI_CINH	0x3300
++#define QM_REG_MR_CI_CINH	0x3340
++#define QM_REG_MR_ITR		0x3380
++#define QM_REG_CFG		0x3500
++#define QM_REG_ISR		0x3600
++#define QM_REG_IIR              0x36C0
++#define QM_REG_ITPR		0x3740
++
++/* Cache-enabled register offsets */
++#define QM_CL_EQCR		0x0000
++#define QM_CL_DQRR		0x1000
++#define QM_CL_MR		0x2000
++#define QM_CL_EQCR_PI_CENA	0x3000
++#define QM_CL_EQCR_CI_CENA	0x3040
++#define QM_CL_DQRR_PI_CENA	0x3100
++#define QM_CL_DQRR_CI_CENA	0x3140
++#define QM_CL_MR_PI_CENA	0x3300
++#define QM_CL_MR_CI_CENA	0x3340
++#define QM_CL_CR		0x3800
++#define QM_CL_RR0		0x3900
++#define QM_CL_RR1		0x3940
++
++#endif
++
++
+ /* BTW, the drivers (and h/w programming model) already obtain the required
+  * synchronisation for portal accesses via lwsync(), hwsync(), and
+  * data-dependencies. Use of barrier()s or other order-preserving primitives
+@@ -76,19 +117,20 @@
+  * non-coherent). */
+ 
+ /* Cache-inhibited register access. */
+-#define __qm_in(qm, o)		__raw_readl((qm)->addr_ci + (o))
+-#define __qm_out(qm, o, val)	__raw_writel((val), (qm)->addr_ci + (o))
++#define __qm_in(qm, o)		be32_to_cpu(__raw_readl((qm)->addr_ci  + (o)))
++#define __qm_out(qm, o, val)	__raw_writel((cpu_to_be32(val)), \
++					     (qm)->addr_ci + (o));
+ #define qm_in(reg)		__qm_in(&portal->addr, QM_REG_##reg)
+ #define qm_out(reg, val)	__qm_out(&portal->addr, QM_REG_##reg, val)
+ 
+ /* Cache-enabled (index) register access */
+ #define __qm_cl_touch_ro(qm, o) dcbt_ro((qm)->addr_ce + (o))
+ #define __qm_cl_touch_rw(qm, o) dcbt_rw((qm)->addr_ce + (o))
+-#define __qm_cl_in(qm, o)	__raw_readl((qm)->addr_ce + (o))
++#define __qm_cl_in(qm, o)	be32_to_cpu(__raw_readl((qm)->addr_ce + (o)))
+ #define __qm_cl_out(qm, o, val) \
+ 	do { \
+ 		u32 *__tmpclout = (qm)->addr_ce + (o); \
+-		__raw_writel((val), __tmpclout); \
++		__raw_writel(cpu_to_be32(val), __tmpclout); \
+ 		dcbf(__tmpclout); \
+ 	} while (0)
+ #define __qm_cl_invalidate(qm, o) dcbi((qm)->addr_ce + (o))
+@@ -1131,13 +1173,21 @@ static inline void qm_isr_set_iperiod(struct qm_portal *portal, u16 iperiod)
+ 
+ static inline u32 __qm_isr_read(struct qm_portal *portal, enum qm_isr_reg n)
+ {
++#if defined(CONFIG_ARM64)
++	return __qm_in(&portal->addr, QM_REG_ISR + (n << 6));
++#else
+ 	return __qm_in(&portal->addr, QM_REG_ISR + (n << 2));
++#endif
+ }
+ 
+ static inline void __qm_isr_write(struct qm_portal *portal, enum qm_isr_reg n,
+ 					u32 val)
+ {
++#if defined(CONFIG_ARM64)
++	__qm_out(&portal->addr, QM_REG_ISR + (n << 6), val);
++#else
+ 	__qm_out(&portal->addr, QM_REG_ISR + (n << 2), val);
++#endif
+ }
+ 
+ /* Cleanup FQs */
+@@ -1151,10 +1201,11 @@ static inline int qm_shutdown_fq(struct qm_portal **portal, int portal_count,
+ 	int orl_empty, fq_empty, i, drain = 0;
+ 	u32 result;
+ 	u32 channel, wq;
++	u16 dest_wq;
+ 
+ 	/* Determine the state of the FQID */
+ 	mcc = qm_mc_start(portal[0]);
+-	mcc->queryfq_np.fqid = fqid;
++	mcc->queryfq_np.fqid = cpu_to_be32(fqid);
+ 	qm_mc_commit(portal[0], QM_MCC_VERB_QUERYFQ_NP);
+ 	while (!(mcr = qm_mc_result(portal[0])))
+ 		cpu_relax();
+@@ -1165,15 +1216,16 @@ static inline int qm_shutdown_fq(struct qm_portal **portal, int portal_count,
+ 
+ 	/* Query which channel the FQ is using */
+ 	mcc = qm_mc_start(portal[0]);
+-	mcc->queryfq.fqid = fqid;
++	mcc->queryfq.fqid = cpu_to_be32(fqid);
+ 	qm_mc_commit(portal[0], QM_MCC_VERB_QUERYFQ);
+ 	while (!(mcr = qm_mc_result(portal[0])))
+ 		cpu_relax();
+ 	DPA_ASSERT((mcr->verb & QM_MCR_VERB_MASK) == QM_MCR_VERB_QUERYFQ);
+ 
+ 	/* Need to store these since the MCR gets reused */
+-	channel = mcr->queryfq.fqd.dest.channel;
+-	wq = mcr->queryfq.fqd.dest.wq;
++	dest_wq = be16_to_cpu(mcr->queryfq.fqd.dest_wq);
++	channel = dest_wq & 0x7;
++	wq = dest_wq>>3;
+ 
+ 	switch (state) {
+ 	case QM_MCR_NP_STATE_TEN_SCHED:
+@@ -1182,7 +1234,7 @@ static inline int qm_shutdown_fq(struct qm_portal **portal, int portal_count,
+ 	case QM_MCR_NP_STATE_PARKED:
+ 		orl_empty = 0;
+ 		mcc = qm_mc_start(portal[0]);
+-		mcc->alterfq.fqid = fqid;
++		mcc->alterfq.fqid = cpu_to_be32(fqid);
+ 		qm_mc_commit(portal[0], QM_MCC_VERB_ALTER_RETIRE);
+ 		while (!(mcr = qm_mc_result(portal[0])))
+ 			cpu_relax();
+@@ -1324,7 +1376,7 @@ static inline int qm_shutdown_fq(struct qm_portal **portal, int portal_count,
+ 			cpu_relax();
+ 		}
+ 		mcc = qm_mc_start(portal[0]);
+-		mcc->alterfq.fqid = fqid;
++		mcc->alterfq.fqid = cpu_to_be32(fqid);
+ 		qm_mc_commit(portal[0], QM_MCC_VERB_ALTER_OOS);
+ 		while (!(mcr = qm_mc_result(portal[0])))
+ 			cpu_relax();
+@@ -1339,7 +1391,7 @@ static inline int qm_shutdown_fq(struct qm_portal **portal, int portal_count,
+ 	case QM_MCR_NP_STATE_RETIRED:
+ 		/* Send OOS Command */
+ 		mcc = qm_mc_start(portal[0]);
+-		mcc->alterfq.fqid = fqid;
++		mcc->alterfq.fqid = cpu_to_be32(fqid);
+ 		qm_mc_commit(portal[0], QM_MCC_VERB_ALTER_OOS);
+ 		while (!(mcr = qm_mc_result(portal[0])))
+ 			cpu_relax();
+diff --git a/drivers/staging/fsl_qbman/qman_private.h b/drivers/staging/fsl_qbman/qman_private.h
+index e9f60d5..e35a5bb 100644
+--- a/drivers/staging/fsl_qbman/qman_private.h
++++ b/drivers/staging/fsl_qbman/qman_private.h
+@@ -32,7 +32,10 @@
+ #include "dpa_sys.h"
+ #include <linux/fsl_qman.h>
+ #include <linux/iommu.h>
++
++#if defined(CONFIG_FSL_PAMU)
+ #include <asm/fsl_pamu_stash.h>
++#endif
+ 
+ #if !defined(CONFIG_FSL_QMAN_FQ_LOOKUP) && defined(CONFIG_PPC64)
+ #error "_PPC64 requires _FSL_QMAN_FQ_LOOKUP"
+@@ -193,6 +196,8 @@ struct qm_portal_config {
+ #define QMAN_REV20 0x0200
+ #define QMAN_REV30 0x0300
+ #define QMAN_REV31 0x0301
++#define QMAN_REV32 0x0302
++
+ /* QMan REV_2 register contains the Cfg option */
+ #define QMAN_REV_CFG_0 0x0
+ #define QMAN_REV_CFG_1 0x1
+diff --git a/drivers/staging/fsl_qbman/qman_test.h b/drivers/staging/fsl_qbman/qman_test.h
+index 49c5679..8c4181c 100644
+--- a/drivers/staging/fsl_qbman/qman_test.h
++++ b/drivers/staging/fsl_qbman/qman_test.h
+@@ -36,6 +36,7 @@
+ #include <linux/module.h>
+ #include <linux/interrupt.h>
+ #include <linux/delay.h>
++#include <linux/sched.h>
+ 
+ #include <linux/fsl_qman.h>
+ 
+diff --git a/drivers/staging/fsl_qbman/qman_test_high.c b/drivers/staging/fsl_qbman/qman_test_high.c
+index 45a459b..a9462f1 100644
+--- a/drivers/staging/fsl_qbman/qman_test_high.c
++++ b/drivers/staging/fsl_qbman/qman_test_high.c
+@@ -185,6 +185,8 @@ static enum qman_cb_dqrr_result cb_dqrr(struct qman_portal *p,
+ {
+ 	if (fd_cmp(&fd_dq, &dq->fd)) {
+ 		pr_err("BADNESS: dequeued frame doesn't match;\n");
++		pr_err("Expected 0x%llx, got 0x%llx\n",
++		       fd_dq.length29, dq->fd.length29);
+ 		BUG();
+ 	}
+ 	fd_inc(&fd_dq);
+diff --git a/drivers/staging/fsl_qbman/qman_test_hotpotato.c b/drivers/staging/fsl_qbman/qman_test_hotpotato.c
+index 05b744d..145a480 100644
+--- a/drivers/staging/fsl_qbman/qman_test_hotpotato.c
++++ b/drivers/staging/fsl_qbman/qman_test_hotpotato.c
+@@ -290,6 +290,7 @@ static void create_per_cpu_handlers(void)
+ 		handler->frame_ptr = frame_ptr;
+ 		list_add_tail(&handler->node, &hp_cpu->handlers);
+ 	}
++	put_cpu_var(hp_cpus);
+ }
+ 
+ static void destroy_per_cpu_handlers(void)
+@@ -315,6 +316,7 @@ static void destroy_per_cpu_handlers(void)
+ 		list_del(&handler->node);
+ 		kmem_cache_free(hp_handler_slab, handler);
+ 	}
++	put_cpu_var(hp_cpus);
+ }
+ 
+ static inline u8 num_cachelines(u32 offset)
+diff --git a/include/linux/fsl_bman.h b/include/linux/fsl_bman.h
+index 265d806..4394222 100644
+--- a/include/linux/fsl_bman.h
++++ b/include/linux/fsl_bman.h
+@@ -87,15 +87,28 @@ struct bm_mc_result;	/* MC result */
+ struct bm_buffer {
+ 	union {
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u8 __reserved1;
+ 			u8 bpid;
+ 			u16 hi; /* High 16-bits of 48-bit address */
+ 			u32 lo; /* Low 32-bits of 48-bit address */
++#else
++			u32 lo;
++			u16 hi;
++			u8 bpid;
++			u8 __reserved;
++#endif
+ 		};
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u64 __notaddress:16;
+ 			u64 addr:48;
++#else
++			u64 addr:48;
++			u64 __notaddress:16;
++#endif
+ 		};
++		u64 opaque;
+ 	};
+ } __aligned(8);
+ static inline u64 bm_buffer_get64(const struct bm_buffer *buf)
+diff --git a/include/linux/fsl_qman.h b/include/linux/fsl_qman.h
+index 991729e..0c54e0a 100644
+--- a/include/linux/fsl_qman.h
++++ b/include/linux/fsl_qman.h
+@@ -150,6 +150,7 @@ enum qm_fd_format {
+ struct qm_fd {
+ 	union {
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u8 dd:2;	/* dynamic debug */
+ 			u8 liodn_offset:6;
+ 			u8 bpid:8;	/* Buffer Pool ID */
+@@ -157,6 +158,15 @@ struct qm_fd {
+ 			u8 __reserved:4;
+ 			u8 addr_hi;	/* high 8-bits of 40-bit address */
+ 			u32 addr_lo;	/* low 32-bits of 40-bit address */
++#else
++			u8 liodn_offset:6;
++			u8 dd:2;	/* dynamic debug */
++			u8 bpid:8;	/* Buffer Pool ID */
++			u8 __reserved:4;
++			u8 eliodn_offset:4;
++			u8 addr_hi;	/* high 8-bits of 40-bit address */
++			u32 addr_lo;	/* low 32-bits of 40-bit address */
++#endif
+ 		};
+ 		struct {
+ 			u64 __notaddress:24;
+@@ -239,17 +249,33 @@ struct qm_sg_entry {
+ 			u32 addr_lo;	/* low 32-bits of 40-bit address */
+ 		};
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u64 __notaddress:24;
+ 			u64 addr:40;
++#else
++			u64 addr:40;
++			u64 __notaddress:24;
++#endif
+ 		};
+ 	};
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 	u32 extension:1;	/* Extension bit */
+ 	u32 final:1;		/* Final bit */
+ 	u32 length:30;
++#else
++	u32 length:30;
++	u32 final:1;		/* Final bit */
++	u32 extension:1;	/* Extension bit */
++#endif
+ 	u8 __reserved2;
+ 	u8 bpid;
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 	u16 __reserved3:3;
+ 	u16 offset:13;
++#else
++	u16 offset:13;
++	u16 __reserved3:3;
++#endif
+ } __packed;
+ static inline u64 qm_sg_entry_get64(const struct qm_sg_entry *sg)
+ {
+@@ -332,9 +358,15 @@ struct qm_mr_entry {
+ 			struct qm_fd fd;
+ 		} __packed ern;
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u8 colour:2;	/* See QM_MR_DCERN_COLOUR_* */
+ 			u8 __reserved1:3;
+ 			enum qm_dc_portal portal:3;
++#else
++			enum qm_dc_portal portal:3;
++			u8 __reserved1:3;
++			u8 colour:2;	/* See QM_MR_DCERN_COLOUR_* */
++#endif
+ 			u16 __reserved2;
+ 			u8 rc;		/* Rejection Code */
+ 			u32 __reserved3:24;
+@@ -387,21 +419,39 @@ struct qm_mr_entry {
+ struct qm_fqd_stashing {
+ 	/* See QM_STASHING_EXCL_<...> */
+ 	u8 exclusive;
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 	u8 __reserved1:2;
+ 	/* Numbers of cachelines */
+ 	u8 annotation_cl:2;
+ 	u8 data_cl:2;
+ 	u8 context_cl:2;
++#else
++	u8 context_cl:2;
++	u8 data_cl:2;
++	u8 annotation_cl:2;
++	u8 __reserved1:2;
++#endif
+ } __packed;
+ struct qm_fqd_taildrop {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 	u16 __reserved1:3;
+ 	u16 mant:8;
+ 	u16 exp:5;
++#else
++	u16 exp:5;
++	u16 mant:8;
++	u16 __reserved1:3;
++#endif
+ } __packed;
+ struct qm_fqd_oac {
+ 	/* See QM_OAC_<...> */
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 	u8 oac:2; /* "Overhead Accounting Control" */
+ 	u8 __reserved1:6;
++#else
++	u8 __reserved1:6;
++	u8 oac:2; /* "Overhead Accounting Control" */
++#endif
+ 	/* Two's-complement value (-128 to +127) */
+ 	signed char oal; /* "Overhead Accounting Length" */
+ } __packed;
+@@ -409,10 +459,17 @@ struct qm_fqd {
+ 	union {
+ 		u8 orpc;
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u8 __reserved1:2;
+ 			u8 orprws:3;
+ 			u8 oa:1;
+ 			u8 olws:2;
++#else
++			u8 olws:2;
++			u8 oa:1;
++			u8 orprws:3;
++			u8 __reserved1:2;
++#endif
+ 		} __packed;
+ 	};
+ 	u8 cgid;
+@@ -420,12 +477,22 @@ struct qm_fqd {
+ 	union {
+ 		u16 dest_wq;
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u16 channel:13; /* qm_channel */
+ 			u16 wq:3;
++#else
++			u16 wq:3;
++			u16 channel:13; /* qm_channel */
++#endif
+ 		} __packed dest;
+ 	};
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 	u16 __reserved2:1;
+ 	u16 ics_cred:15;
++#else
++	u16 __reserved2:1;
++	u16 ics_cred:15;
++#endif
+ 	/* For "Initialize Frame Queue" commands, the write-enable mask
+ 	 * determines whether 'td' or 'oac_init' is observed. For query
+ 	 * commands, this field is always 'td', and 'oac_query' (below) reflects
+@@ -439,17 +506,28 @@ struct qm_fqd {
+ 		/* Treat it as 64-bit opaque */
+ 		u64 opaque;
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u32 hi;
+ 			u32 lo;
++#else
++			u32 lo;
++			u32 hi;
++#endif
+ 		};
+ 		/* Treat it as s/w portal stashing config */
+ 		/* See 1.5.6.7.1: "FQD Context_A field used for [...] */
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			struct qm_fqd_stashing stashing;
+ 			/* 48-bit address of FQ context to
+ 			 * stash, must be cacheline-aligned */
+ 			u16 context_hi;
+ 			u32 context_lo;
++#else
++			u32 context_lo;
++			u16 context_hi;
++			struct qm_fqd_stashing stashing;
++#endif
+ 		} __packed;
+ 	} context_a;
+ 	struct qm_fqd_oac oac_query;
+@@ -544,11 +622,19 @@ struct qm_cgr_wr_parm {
+ 	union {
+ 		u32 word;
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u32 MA:8;
+ 			u32 Mn:5;
+ 			u32 SA:7; /* must be between 64-127 */
+ 			u32 Sn:6;
+ 			u32 Pn:6;
++#else
++			u32 Pn:6;
++			u32 Sn:6;
++			u32 SA:7; /* must be between 64-127 */
++			u32 Mn:5;
++			u32 MA:8;
++#endif
+ 		} __packed;
+ 	};
+ } __packed;
+@@ -559,9 +645,15 @@ struct qm_cgr_wr_parm {
+  *   CS threshold = TA * (2 ^ Tn)
+  */
+ struct qm_cgr_cs_thres {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 	u16 __reserved:3;
+ 	u16 TA:8;
+ 	u16 Tn:5;
++#else
++	u16 Tn:5;
++	u16 TA:8;
++	u16 __reserved:3;
++#endif
+ } __packed;
+ /* This identical structure of CGR fields is present in the "Init/Modify CGR"
+  * commands and the "Query CGR" result. It's suctioned out here into its own
+@@ -576,14 +668,23 @@ struct __qm_mc_cgr {
+ 	u8 cscn_en;	/* boolean, use QM_CGR_EN */
+ 	union {
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u16 cscn_targ_upd_ctrl; /* use QM_CSCN_TARG_UDP_ */
+ 			u16 cscn_targ_dcp_low;  /* CSCN_TARG_DCP low-16bits */
++#else
++			u16 cscn_targ_dcp_low;  /* CSCN_TARG_DCP low-16bits */
++			u16 cscn_targ_upd_ctrl; /* use QM_CSCN_TARG_UDP_ */
++#endif
+ 		};
+ 		u32 cscn_targ;	/* use QM_CGR_TARG_* */
+ 	};
+ 	u8 cstd_en;	/* boolean, use QM_CGR_EN */
+ 	u8 cs;		/* boolean, only used in query response */
+-	struct qm_cgr_cs_thres cs_thres; /* use qm_cgr_cs_thres_set64() */
++	union {
++		/* use qm_cgr_cs_thres_set64() */
++		struct qm_cgr_cs_thres cs_thres;
++		u16 __cs_thres;
++	};
+ 	u8 mode;	/* QMAN_CGR_MODE_FRAME not supported in rev1.0 */
+ } __packed;
+ #define QM_CGR_EN		0x01 /* For wr_en_*, cscn_en, cstd_en */
+@@ -679,8 +780,13 @@ struct qm_mcc_querywq {
+ 	union {
+ 		u16 channel_wq; /* ignores wq (3 lsbits) */
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u16 id:13; /* qm_channel */
+ 			u16 __reserved1:3;
++#else
++			u16 __reserved1:3;
++			u16 id:13; /* qm_channel */
++#endif
+ 		} __packed channel;
+ 	};
+ 	u8 __reserved2[60];
+@@ -779,8 +885,13 @@ struct qm_mcc_ceetm_mapping_shaper_tcfc_config {
+ 			u8 __reserved2[58];
+ 		} __packed channel_mapping;
+ 		struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u8 map_reserved:5;
+ 			u8 map_lni_id:3;
++#else
++			u8 map_lni_id:3;
++			u8 map_reserved:5;
++#endif
+ 			u8 __reserved2[58];
+ 		} __packed sp_mapping;
+ 		struct {
+@@ -988,6 +1099,7 @@ struct qm_mcr_queryfq {
+ struct qm_mcr_queryfq_np {
+ 	u8 __reserved1;
+ 	u8 state;	/* QM_MCR_NP_STATE_*** */
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 	u8 __reserved2;
+ 	u32 fqd_link:24;
+ 	u16 __reserved3:2;
+@@ -1020,7 +1132,52 @@ struct qm_mcr_queryfq_np {
+ 	u16 od1_sfdr;	/* QM_MCR_NP_OD1_*** */
+ 	u16 od2_sfdr;	/* QM_MCR_NP_OD2_*** */
+ 	u16 od3_sfdr;	/* QM_MCR_NP_OD3_*** */
++#else
++	u8 __reserved2;
++	u32 fqd_link:24;
++
++	u16 odp_seq:14;
++	u16 __reserved3:2;
++
++	u16 orp_nesn:14;
++	u16 __reserved4:2;
++
++	u16 orp_ea_hseq:15;
++	u16 __reserved5:1;
++
++	u16 orp_ea_tseq:15;
++	u16 __reserved6:1;
++
++	u8 __reserved7;
++	u32 orp_ea_hptr:24;
++
++	u8 __reserved8;
++	u32 orp_ea_tptr:24;
++
++	u8 __reserved9;
++	u32 pfdr_hptr:24;
++
++	u8 __reserved10;
++	u32 pfdr_tptr:24;
++
++	u8 __reserved11[5];
++	u8 is:1;
++	u8 __reserved12:7;
++	u16 ics_surp;
++	u32 byte_cnt;
++	u8 __reserved13;
++	u32 frm_cnt:24;
++	u32 __reserved14;
++	u16 ra1_sfdr;	/* QM_MCR_NP_RA1_*** */
++	u16 ra2_sfdr;	/* QM_MCR_NP_RA2_*** */
++	u16 __reserved15;
++	u16 od1_sfdr;	/* QM_MCR_NP_OD1_*** */
++	u16 od2_sfdr;	/* QM_MCR_NP_OD2_*** */
++	u16 od3_sfdr;	/* QM_MCR_NP_OD3_*** */
++#endif
+ } __packed;
++
++
+ struct qm_mcr_alterfq {
+ 	u8 fqs;		/* Frame Queue Status */
+ 	u8 __reserved1[61];
+diff --git a/include/linux/fsl_usdpaa.h b/include/linux/fsl_usdpaa.h
+index 896c03a..381853d 100644
+--- a/include/linux/fsl_usdpaa.h
++++ b/include/linux/fsl_usdpaa.h
+@@ -311,7 +311,7 @@ struct compat_ioctl_raw_portal {
+ #ifdef __KERNEL__
+ 
+ /* Early-boot hook */
+-void __init fsl_usdpaa_init_early(void);
++int __init fsl_usdpaa_init_early(void);
+ 
+ /* Fault-handling in arch/powerpc/mm/mem.c gives USDPAA an opportunity to detect
+  * faults within its ranges via this hook. */
+-- 
+2.1.0.27.g96db324
+
