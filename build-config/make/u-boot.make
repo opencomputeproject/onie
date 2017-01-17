@@ -35,12 +35,16 @@ UBOOT_NAME		= $(shell echo $(MACHINE_PREFIX) | tr [:lower:] [:upper:])
 UBOOT_MACHINE		?= $(UBOOT_NAME)
 UBOOT_BIN		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.bin
 UBOOT_PBL		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot.pbl
+UBOOT_DTB		= $(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE)/u-boot-dtb.bin
 UBOOT_INSTALL_IMAGE	= $(IMAGEDIR)/$(MACHINE_PREFIX).u-boot
 UPDATER_UBOOT		= $(MBUILDDIR)/u-boot.bin
 ifeq ($(UBOOT_PBL_ENABLE),yes)
   UPDATER_UBOOT		+= $(MBUILDDIR)/u-boot.pbl
   UPDATER_UBOOT_NAME	= u-boot.pbl
   UBOOT_IMAGE		= $(UBOOT_PBL)
+else ifeq ($(UBOOT_DTB_ENABLE),yes)
+  UPDATER_UBOOT_NAME	= u-boot-dtb.bin
+  UBOOT_IMAGE		= $(UBOOT_DTB)
 else
   UPDATER_UBOOT_NAME	= u-boot.bin
   UBOOT_IMAGE		= $(UBOOT_BIN)
@@ -115,6 +119,15 @@ endif
 
 $(UBOOT_BUILD_DIR)/%/u-boot.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
 	$(Q) echo "==== Building u-boot ($*) ===="
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
+		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
+		$*_config
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
+		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
+		all
+
+$(UBOOT_BUILD_DIR)/%/u-boot-dtb.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
+	$(Q) echo "==== Building u-boot-dtb ($*) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
 		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
 		$*_config
