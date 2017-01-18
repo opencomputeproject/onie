@@ -23,7 +23,8 @@ MACHINE_PREFIX="$2"
 
 ARCH="$3"
 if [ "$ARCH" != "ppc" ] &&
-   [ "$ARCH" != "arm" ] ; then
+   [ "$ARCH" != "arm" ] &&
+   [ "$ARCH" != "arm64" ] ; then
     echo "Error: Unsupported architecture: $ARCH"
     exit 1
 fi
@@ -40,6 +41,11 @@ KERNEL_ENTRY="$5"
     exit 1
 }
 
+FDT_LOAD="$10"
+[ -n "$FDT_LOAD" ] || {
+    echo "Error: FDT_LOAD was not specified"
+    exit 1
+}
 KERNEL_COMPRESSION="gzip"
 INITRD_LOAD="0x00000000"
 FDT="fdt = \"dtb\";"
@@ -84,6 +90,8 @@ set -e
 KERNEL="$(realpath $KERNEL)"
 SYSROOT="$(realpath $SYSROOT)"
 DTB="$(realpath $DTB)"
+
+cat $its_file
 
 # Create a .its file for this machine type on the fly
 (cat <<EOF
@@ -139,6 +147,17 @@ DTB="$(realpath $DTB)"
 			arch = "$ARCH";
 			os = "linux";
 			compression = "none";
+EOF
+) > $its_file
+
+if [ "$FDT_LOAD" != "no" ] ; then
+(cat <<EOF
+			load = <$FDT_LOAD>;
+EOF
+) >> $its_file
+fi
+
+(cat <<EOF
 			hash@1 {
 				algo = "crc32";
 			};
@@ -158,7 +177,9 @@ DTB="$(realpath $DTB)"
 };
 
 EOF
-) > $its_file
+) >> $its_file
+
+cat $its_file
 
 if [ "$V" != "0" ] ; then
     echo "=========================================="
