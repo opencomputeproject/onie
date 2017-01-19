@@ -20,6 +20,8 @@ UBOOT_MACHINE = ls1043ardb_ONIE_$(MACHINE_REV)
 KERNEL_DTB = freescale/fsl-ls1043a-rdb.dtb
 KERNEL_DTB_PATH = dts/$(KERNEL_DTB)
 
+FDT_LOAD_ADDRESS = 0x90000000
+
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
 VENDOR_ID = 33118
