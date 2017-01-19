@@ -23,7 +23,8 @@ MACHINE_PREFIX="$2"
 
 ARCH="$3"
 if [ "$ARCH" != "ppc" ] &&
-   [ "$ARCH" != "arm" ] ; then
+   [ "$ARCH" != "arm" ] &&
+   [ "$ARCH" != "arm64" ] ; then
     echo "Error: Unsupported architecture: $ARCH"
     exit 1
 fi
@@ -40,29 +41,40 @@ KERNEL_ENTRY="$5"
     exit 1
 }
 
+FDT_LOAD="$6"
+[ -n "$FDT_LOAD" ] || {
+    echo "Error: FDT_LOAD was not specified"
+    exit 1
+}
+if [ "$FDT_LOAD" != "no" ] ; then
+    FDT_LOAD_TEXT="load = <$FDT_LOAD>;"
+else
+    FDT_LOAD_TEXT=""
+fi
+
 KERNEL_COMPRESSION="gzip"
 INITRD_LOAD="0x00000000"
 FDT="fdt = \"dtb\";"
 
-KERNEL="$6"
+KERNEL="$7"
 [ -r "$KERNEL" ] || {
     echo "Error: KERNEL file is not readable: $KERNEL"
     exit 1
 }
 
-DTB="$7"
+DTB="$8"
 [ -r "$DTB" ] || {
     echo "Error: DTB file is not readable: $DTB"
     exit 1
 }
 
-SYSROOT="$8"
+SYSROOT="$9"
 [ -r "$SYSROOT" ] || {
     echo "Error: SYSROOT file is not readable: $SYSROOT"
     exit 1
 }
 
-OUTFILE="$9"
+OUTFILE="$10"
 [ -n "$OUTFILE" ] || {
     echo "Error: output .itb file not specified"
     exit 1
@@ -86,7 +98,7 @@ SYSROOT="$(realpath $SYSROOT)"
 DTB="$(realpath $DTB)"
 
 # Create a .its file for this machine type on the fly
-(cat <<EOF
+cat <<EOF > $its_file
 /*
 *
 * U-boot uImage source file with a kernel, ramdisk and FDT
@@ -139,6 +151,7 @@ DTB="$(realpath $DTB)"
 			arch = "$ARCH";
 			os = "linux";
 			compression = "none";
+			$FDT_LOAD_TEXT
 			hash@1 {
 				algo = "crc32";
 			};
@@ -158,7 +171,6 @@ DTB="$(realpath $DTB)"
 };
 
 EOF
-) > $its_file
 
 if [ "$V" != "0" ] ; then
     echo "=========================================="
