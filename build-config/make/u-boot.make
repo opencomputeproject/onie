@@ -42,12 +42,15 @@ ifeq ($(UBOOT_PBL_ENABLE),yes)
   UPDATER_UBOOT		+= $(MBUILDDIR)/u-boot.pbl
   UPDATER_UBOOT_NAME	= u-boot.pbl
   UBOOT_IMAGE		= $(UBOOT_PBL)
+  UBOOT_TARGET		= $(UBOOT_PBL)
 else ifeq ($(UBOOT_DTB_ENABLE),yes)
   UPDATER_UBOOT_NAME	= u-boot-dtb.bin
   UBOOT_IMAGE		= $(UBOOT_DTB)
+  UBOOT_TARGET		= all
 else
   UPDATER_UBOOT_NAME	= u-boot.bin
   UBOOT_IMAGE		= $(UBOOT_BIN)
+  UBOOT_TARGET		= all
 endif
 
 UBOOT_IDENT_STRING	?= ONIE $(LSB_RELEASE_TAG)
@@ -117,32 +120,14 @@ UBOOT_NEW = $(shell test -d $(UBOOT_DIR) && test -f $(UBOOT_BUILD_STAMP) && \
 	       find -L $(UBOOT_DIR) -newer $(UBOOT_BUILD_STAMP) -print -quit)
 endif
 
-$(UBOOT_BUILD_DIR)/%/u-boot.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
-	$(Q) echo "==== Building u-boot ($*) ===="
+$(UBOOT_IMAGE): $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
+	$(Q) echo "==== Building u-boot ($(UBOOT_MACHINE)) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
-		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
-		$*_config
+		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE) \
+		$(UBOOT_MACHINE)_config
 	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
-		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
-		all
-
-$(UBOOT_BUILD_DIR)/%/u-boot-dtb.bin: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
-	$(Q) echo "==== Building u-boot-dtb ($*) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
-		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
-		$*_config
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
-		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
-		all
-
-$(UBOOT_BUILD_DIR)/%/u-boot.pbl: $(UBOOT_PATCH_STAMP) $(UBOOT_NEW) | $(XTOOLS_BUILD_STAMP)
-	$(Q) echo "==== Building u-boot PBL image ($*) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
-		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
-		$*_config
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UBOOT_DIR)		\
-		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$*	\
-		$(UBOOT_PBL)
+		CROSS_COMPILE=$(CROSSPREFIX) O=$(UBOOT_BUILD_DIR)/$(UBOOT_MACHINE) \
+		$(UBOOT_TARGET)
 
 u-boot-build: $(UBOOT_BUILD_STAMP)
 $(UBOOT_BUILD_STAMP): $(UBOOT_IMAGE)
