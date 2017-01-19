@@ -1,0 +1,757 @@
+From 59068a873781ddeda1d68790c1c18e991be80601 Mon Sep 17 00:00:00 2001
+From: Ioana Ciornei <ioana.ciornei@freescale.com>
+Date: Mon, 18 Jan 2016 12:54:48 +0200
+Subject: [PATCH 074/146] dpaa_eth: Move debugfs into ethtool stats for macsec
+
+Signed-off-by: Ioana Ciornei <ioana.ciornei@freescale.com>
+---
+ drivers/net/ethernet/freescale/sdk_dpaa/Kconfig    |   7 -
+ drivers/net/ethernet/freescale/sdk_dpaa/Makefile   |   6 +-
+ .../freescale/sdk_dpaa/dpaa_debugfs_macsec.c       | 191 ----------------
+ .../freescale/sdk_dpaa/dpaa_debugfs_macsec.h       |  45 ----
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c  |  83 ++++---
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.h  |  13 +-
+ .../freescale/sdk_dpaa/dpaa_macsec_ethtool.c       | 246 +++++++++++++++++++++
+ 7 files changed, 295 insertions(+), 296 deletions(-)
+ delete mode 100644 drivers/net/ethernet/freescale/sdk_dpaa/dpaa_debugfs_macsec.c
+ delete mode 100644 drivers/net/ethernet/freescale/sdk_dpaa/dpaa_debugfs_macsec.h
+ create mode 100644 drivers/net/ethernet/freescale/sdk_dpaa/dpaa_macsec_ethtool.c
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/Kconfig b/drivers/net/ethernet/freescale/sdk_dpaa/Kconfig
+index 760ac79..9af50cc 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/Kconfig
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/Kconfig
+@@ -154,13 +154,6 @@ config FSL_DPAA_ETH_DEBUGFS
+ 	---help---
+ 	  This option compiles debugfs code for the DPAA Ethernet driver.
+ 
+-config FSL_DPAA_MACSEC_DEBUGFS
+-	bool "DPAA MACSEC debugfs interface"
+-	default y
+-	depends on DEBUG_FS && FSL_DPAA_MACSEC
+-	---help---
+-	  This option compiles debugfs code for the DPAA Ethernet MACSEC driver.
+-
+ config FSL_DPAA_ETH_DEBUG
+ 	bool "DPAA Ethernet Debug Support"
+ 	depends on FSL_SDK_DPAA_ETH
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/Makefile b/drivers/net/ethernet/freescale/sdk_dpaa/Makefile
+index acb7415..d220f16 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/Makefile
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/Makefile
+@@ -35,11 +35,7 @@ fsl_advanced-objs += dpaa_eth_base.o
+ fsl_proxy-objs += dpaa_eth_proxy.o
+ fsl_dpa_shared-objs += dpaa_eth_shared.o
+ fsl_dpa_macless-objs += dpaa_eth_macless.o
+-fsl_dpa_macsec-objs += dpaa_eth_macsec.o
+-
+-ifeq ($(CONFIG_FSL_DPAA_MACSEC_DEBUGFS),y)
+-fsl_dpa_macsec-objs += dpaa_debugfs_macsec.o
+-endif
++fsl_dpa_macsec-objs += dpaa_eth_macsec.o dpaa_macsec_ethtool.o
+ 
+ ifeq ($(CONFIG_FSL_DPAA_OFFLINE_PORTS),y)
+ obj-$(CONFIG_FSL_SDK_DPAA_ETH) += fsl_oh.o
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_debugfs_macsec.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_debugfs_macsec.c
+deleted file mode 100644
+index 72de669..0000000
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_debugfs_macsec.c
++++ /dev/null
+@@ -1,191 +0,0 @@
+-/* Copyright 2015 Freescale Semiconductor Inc.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions are met:
+- *     * Redistributions of source code must retain the above copyright
+- *	 notice, this list of conditions and the following disclaimer.
+- *     * Redistributions in binary form must reproduce the above copyright
+- *	 notice, this list of conditions and the following disclaimer in the
+- *	 documentation and/or other materials provided with the distribution.
+- *     * Neither the name of Freescale Semiconductor nor the
+- *	 names of its contributors may be used to endorse or promote products
+- *	 derived from this software without specific prior written permission.
+- *
+- *
+- * ALTERNATIVELY, this software may be distributed under the terms of the
+- * GNU General Public License ("GPL") as published by the Free Software
+- * Foundation, either version 2 of that License or (at your option) any
+- * later version.
+- *
+- * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
+- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+- * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
+- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- */
+-
+-#include <linux/module.h>
+-#include <linux/debugfs.h>
+-#include "dpaa_eth_macsec.h"
+-#include "dpaa_eth.h"
+-
+-#define MACSEC_DEBUGFS_DESCRIPTION "FSL DPAA Ethernet MACsec debugfs entries"
+-#define MACSEC_DEBUGFS_ROOT "fsl_macsec_dpa"
+-
+-static int __cold macsec_debugfs_open(struct inode *inode, struct file *file);
+-
+-static struct dentry *dpa_debugfs_root;
+-static const struct file_operations macsec_debugfs_fops = {
+-	.open		= macsec_debugfs_open,
+-	.read		= seq_read,
+-	.llseek		= seq_lseek,
+-	.release	= single_release,
+-};
+-
+-static struct macsec_priv_s *macsec_priv[FM_MAX_NUM_OF_MACS];
+-void set_macsec_priv(struct macsec_priv_s *macsec_priv_src, int index)
+-{
+-	macsec_priv[index] = macsec_priv_src;
+-}
+-EXPORT_SYMBOL(set_macsec_priv);
+-
+-void unset_macsec_priv(int index)
+-{
+-	macsec_priv[index] = NULL;
+-}
+-EXPORT_SYMBOL(unset_macsec_priv);
+-
+-static int dpa_debugfs_show(struct seq_file *file, void *offset)
+-{
+-	int				 i;
+-	struct macsec_percpu_priv_s	*percpu_priv, total;
+-	struct net_device *net_dev;
+-	struct macsec_priv_s *selected_macsec_priv;
+-
+-	BUG_ON(offset == NULL);
+-
+-	memset(&total, 0, sizeof(total));
+-
+-	net_dev = (struct net_device *)file->private;
+-
+-	selected_macsec_priv = macsec_priv[net_dev->ifindex - 1];
+-	if (unlikely(!selected_macsec_priv)) {
+-		pr_err("selected macsec_priv is null\n");
+-		return -EFAULT;
+-	}
+-
+-	/* "Standard" counters */
+-	seq_printf(file, "\nMacsec counters for %s:\n",
+-				selected_macsec_priv->net_dev->name);
+-	seq_printf(file, "%s %8s %8s\n", "CPU", "tx", "rx");
+-
+-
+-	for_each_online_cpu(i) {
+-		percpu_priv = per_cpu_ptr(selected_macsec_priv->percpu_priv, i);
+-
+-		total.tx_macsec += percpu_priv->tx_macsec;
+-		total.rx_macsec += percpu_priv->rx_macsec;
+-
+-		seq_printf(file, "%3hu %8llu %8llu\n",
+-				i,
+-				percpu_priv->tx_macsec,
+-				percpu_priv->rx_macsec);
+-	}
+-	seq_printf(file, "Total: %5llu %8llu\n",
+-			total.tx_macsec,
+-			total.rx_macsec);
+-
+-	return 0;
+-}
+-
+-static int __cold macsec_debugfs_open(struct inode *inode, struct file *file)
+-{
+-	int			 _errno;
+-	const struct net_device	*net_dev;
+-
+-	_errno = single_open(file, dpa_debugfs_show, inode->i_private);
+-	if (unlikely(_errno < 0)) {
+-		net_dev = (struct net_device *)inode->i_private;
+-
+-		if (netif_msg_drv((struct macsec_priv_s *)netdev_priv(net_dev)))
+-			netdev_err(net_dev, "single_open() = %d\n",
+-					_errno);
+-	}
+-	return _errno;
+-}
+-
+-int macsec_netdev_debugfs_create(struct net_device *net_dev)
+-{
+-	char buf[256];
+-	struct macsec_priv_s *selected_macsec_priv;
+-
+-	if (unlikely(dpa_debugfs_root == NULL)) {
+-		pr_err(KBUILD_MODNAME ": %s:%hu:%s(): \t%s\n",
+-				   KBUILD_BASENAME".c", __LINE__, __func__,
+-				   "root debugfs missing, possible module ordering issue");
+-		return -EINVAL;
+-	}
+-
+-	sprintf(buf, "%s_macsec", net_dev->name);
+-
+-	selected_macsec_priv = macsec_priv[net_dev->ifindex - 1];
+-
+-	if (unlikely(!selected_macsec_priv)) {
+-		pr_err("selected macsec_priv is null\n");
+-		return -EFAULT;
+-	}
+-
+-	selected_macsec_priv->debugfs_file = debugfs_create_file(
+-							net_dev->name,
+-							S_IRUGO,
+-							dpa_debugfs_root,
+-							net_dev,
+-							&macsec_debugfs_fops);
+-	if (unlikely(selected_macsec_priv->debugfs_file == NULL)) {
+-		netdev_err(net_dev, "debugfs_create_file(%s/%s)",
+-				dpa_debugfs_root->d_iname,
+-				buf);
+-
+-		return -EINVAL;
+-	}
+-
+-	return 0;
+-}
+-EXPORT_SYMBOL(macsec_netdev_debugfs_create);
+-
+-void macsec_netdev_debugfs_remove(struct net_device *net_dev)
+-{
+-	struct macsec_priv_s *selected_macsec_priv;
+-
+-	selected_macsec_priv = macsec_priv[net_dev->ifindex - 1];
+-	debugfs_remove(selected_macsec_priv->debugfs_file);
+-}
+-EXPORT_SYMBOL(macsec_netdev_debugfs_remove);
+-
+-int __init macsec_debugfs_module_init(void)
+-{
+-	int	 _errno = 0;
+-
+-	dpa_debugfs_root = debugfs_create_dir(MACSEC_DEBUGFS_ROOT, NULL);
+-
+-	if (unlikely(dpa_debugfs_root == NULL)) {
+-		_errno = -ENOMEM;
+-		pr_err(KBUILD_MODNAME ": %s:%hu:%s():\n",
+-				   KBUILD_BASENAME".c", __LINE__, __func__);
+-		pr_err("\tdebugfs_create_dir(%s/"KBUILD_MODNAME") = %d\n",
+-			   MACSEC_DEBUGFS_ROOT, _errno);
+-	}
+-
+-	return _errno;
+-}
+-
+-void __exit macsec_debugfs_module_exit(void)
+-{
+-	debugfs_remove(dpa_debugfs_root);
+-}
+-
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_debugfs_macsec.h b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_debugfs_macsec.h
+deleted file mode 100644
+index 3090f8f..0000000
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_debugfs_macsec.h
++++ /dev/null
+@@ -1,45 +0,0 @@
+-/* Copyright 2015 Freescale Semiconductor Inc.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions are met:
+- *     * Redistributions of source code must retain the above copyright
+- *	 notice, this list of conditions and the following disclaimer.
+- *     * Redistributions in binary form must reproduce the above copyright
+- *	 notice, this list of conditions and the following disclaimer in the
+- *	 documentation and/or other materials provided with the distribution.
+- *     * Neither the name of Freescale Semiconductor nor the
+- *	 names of its contributors may be used to endorse or promote products
+- *	 derived from this software without specific prior written permission.
+- *
+- *
+- * ALTERNATIVELY, this software may be distributed under the terms of the
+- * GNU General Public License ("GPL") as published by the Free Software
+- * Foundation, either version 2 of that License or (at your option) any
+- * later version.
+- *
+- * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
+- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+- * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
+- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- */
+-
+-#ifndef DPAA_DEBUGFS_MACSEC_H_
+-#define DPAA_DEBUGFS_MACSEC_H_
+-
+-#include <linux/netdevice.h>
+-#include <linux/dcache.h>	/* struct dentry needed in dpaa_eth.h */
+-
+-int macsec_netdev_debugfs_create(struct net_device *net_dev);
+-void macsec_netdev_debugfs_remove(struct net_device *net_dev);
+-int set_macsec_priv(struct macsec_priv_s *macsec_priv_src, int index);
+-void unset_macsec_priv(int index);
+-int __init macsec_debugfs_module_init(void);
+-void __exit macsec_debugfs_module_exit(void);
+-
+-#endif /* DPAA_DEBUGFS_MACSEC_H_ */
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c
+index 6275648..0a9da8f 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.c
+@@ -45,34 +45,47 @@
+ #include "dpaa_1588.h"
+ #endif
+ 
+-#ifdef CONFIG_FSL_DPAA_MACSEC_DEBUGFS
+-#include "dpaa_debugfs_macsec.h"
+-#endif /* CONFIG_FSL_DPAA_MACSEC_DEBUGFS */
+-
+ static struct sock *nl_sk;
+ static struct macsec_priv_s *macsec_priv[FM_MAX_NUM_OF_MACS];
+ static char *macsec_ifs[FM_MAX_NUM_OF_MACS];
+ static int macsec_ifs_cnt;
+ 
+ static char ifs[MAX_LEN];
++const struct ethtool_ops *dpa_ethtool_ops_prev;
++static struct ethtool_ops dpa_macsec_ethtool_ops;
++
+ module_param_string(ifs, ifs, MAX_LEN, 0000);
+ MODULE_PARM_DESC(ifs, "Comma separated interface list");
+ 
+-#ifdef CONFIG_FSL_DPAA_MACSEC_DEBUGFS
+-static void remove_debugfs(int index)
++struct macsec_priv_s *dpa_macsec_get_priv(struct net_device *net_dev)
+ {
+-	struct net_device *net_dev;
+-	net_dev = first_net_device(&init_net);
+-	while (net_dev) {
+-		if (strcmp(net_dev->name, macsec_ifs[index]) == 0) {
+-			macsec_netdev_debugfs_remove(net_dev);
+-			unset_macsec_priv(index);
+-			break;
+-		}
+-		net_dev = next_net_device(net_dev);
++	return macsec_priv[net_dev->ifindex - 1];
++}
++
++static void macsec_setup_ethtool_ops(struct net_device *net_dev)
++{
++	/* remember private driver's ethtool ops just once */
++	if (!dpa_ethtool_ops_prev) {
++		dpa_ethtool_ops_prev = net_dev->ethtool_ops;
++
++		memcpy(&dpa_macsec_ethtool_ops, net_dev->ethtool_ops,
++		       sizeof(struct ethtool_ops));
++		dpa_macsec_ethtool_ops.get_sset_count =
++		    dpa_macsec_get_sset_count;
++		dpa_macsec_ethtool_ops.get_ethtool_stats =
++		    dpa_macsec_get_ethtool_stats;
++		dpa_macsec_ethtool_ops.get_strings =
++		    dpa_macsec_get_strings;
+ 	}
++
++	net_dev->ethtool_ops = &dpa_macsec_ethtool_ops;
+ }
+-#endif /* CONFIG_FSL_DPAA_MACSEC_DEBUGFS */
++
++static void macsec_restore_ethtool_ops(struct net_device *net_dev)
++{
++	net_dev->ethtool_ops = dpa_ethtool_ops_prev;
++}
++
+ 
+ static int ifname_to_id(char *ifname)
+ {
+@@ -1480,15 +1493,6 @@ static int macsec_setup(void)
+ 
+ 			alloc_priv(percpu_priv, macsec_priv[macsec_id], dev);
+ 
+-#ifdef CONFIG_FSL_DPAA_MACSEC_DEBUGFS
+-			/* copy macsec_priv to dpaa_debugfs_macsec */
+-			set_macsec_priv(macsec_priv[macsec_id], macsec_id);
+-
+-			/* create debugfs entry for this net_device */
+-			err = macsec_netdev_debugfs_create(net_dev);
+-			if (unlikely(err))
+-				goto _err_debugfs_create;
+-#endif /* CONFIG_FSL_DPAA_MACSEC_DEBUGFS */
+ 			break;
+ 		}
+ 		if (macsec_priv[macsec_id]->net_dev == NULL) {
+@@ -1496,13 +1500,12 @@ static int macsec_setup(void)
+ 			err = -EINVAL;
+ 			goto _error;
+ 		}
++
++		/* setup specific ethtool ops for macsec */
++		macsec_setup_ethtool_ops(net_dev);
+ 	}
+ 	return 0;
+-#ifdef CONFIG_FSL_DPAA_MACSEC_DEBUGFS
+-_err_debugfs_create:
+-	for (i = 0; i < macsec_ifs_cnt; i++)
+-		remove_debugfs(i);
+-#endif /* CONFIG_FSL_DPAA_MACSEC_DEBUGFS */
++
+ _error:
+ 	for (j = 0; j < i; i++) {
+ 		net_dev = first_net_device(&init_net);
+@@ -1516,6 +1519,7 @@ _error:
+ 				&macsec_priv[macsec_id]->dpa_fq_list);
+ 			break;
+ 		}
++		macsec_restore_ethtool_ops(macsec_priv[j]->net_dev);
+ 		kfree(macsec_priv[j]);
+ 	}
+ 	for (j = i; j < FM_MAX_NUM_OF_MACS; j++)
+@@ -2008,10 +2012,6 @@ _release:
+ 	memset(&macsec_dpaa_eth_hooks, 0, sizeof(macsec_dpaa_eth_hooks));
+ 	fsl_dpaa_eth_set_hooks(&macsec_dpaa_eth_hooks);
+ 
+-#ifdef CONFIG_FSL_DPAA_MACSEC_DEBUGFS
+-	for (i = 0; i < macsec_ifs_cnt; i++)
+-		remove_debugfs(i);
+-#endif /* CONFIG_FSL_DPAA_MACSEC_DEBUGFS */
+ 	for (i = 0; i < FM_MAX_NUM_OF_MACS; i++) {
+ 
+ 		if (!macsec_priv[i]->net_dev)
+@@ -2030,6 +2030,7 @@ _release:
+ 				pr_err("_dpa_fq_fre=%d\n", rv);
+ 		}
+ 
++		macsec_restore_ethtool_ops(macsec_priv[i]->net_dev);
+ 		kfree(macsec_priv[i]);
+ 		macsec_priv[i] = NULL;
+ 	}
+@@ -2060,10 +2061,6 @@ static int __init macsec_init(void)
+ 		}
+ 	}
+ 
+-#ifdef CONFIG_FSL_DPAA_MACSEC_DEBUGFS
+-	macsec_debugfs_module_init();
+-#endif /* CONFIG_FSL_DPAA_MACSEC_DEBUGFS */
+-
+ 	/* Actually send the info to the user through a given socket. */
+ 	nl_sk = netlink_kernel_create(&init_net, NETLINK_USER, &ms_cfg);
+ 	if (unlikely(!nl_sk)) {
+@@ -2120,13 +2117,6 @@ static void __exit macsec_exit(void)
+ 	memset(&macsec_dpaa_eth_hooks, 0, sizeof(macsec_dpaa_eth_hooks));
+ 	fsl_dpaa_eth_set_hooks(&macsec_dpaa_eth_hooks);
+ 
+-#ifdef CONFIG_FSL_DPAA_MACSEC_DEBUGFS
+-	for (i = 0; i < macsec_ifs_cnt; i++)
+-		remove_debugfs(i);
+-
+-	macsec_debugfs_module_exit();
+-#endif /* CONFIG_FSL_DPAA_MACSEC_DEBUGFS */
+-
+ 	for (i = 0; i < FM_MAX_NUM_OF_MACS; i++) {
+ 
+ 		if (!macsec_priv[i]->net_dev) {
+@@ -2148,6 +2138,9 @@ static void __exit macsec_exit(void)
+ 			}
+ 		}
+ 
++		/* restore ethtool ops to the previous private ones */
++		macsec_restore_ethtool_ops(macsec_priv[i]->net_dev);
++
+ 		kfree(macsec_priv[i]);
+ 	}
+ 
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.h b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.h
+index b7a8795..8d41e78 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.h
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_macsec.h
+@@ -45,6 +45,14 @@
+ 
+ extern const struct dpa_fq_cbs_t private_fq_cbs;
+ 
++extern int dpa_macsec_get_sset_count(struct net_device *net_dev, int type);
++extern void
++dpa_macsec_get_ethtool_stats(struct net_device *net_dev,
++			     struct ethtool_stats *stats, u64 *data);
++extern void
++dpa_macsec_get_strings(struct net_device *net_dev,
++		       u32 stringset, u8 *data);
++
+ enum msg_type {ENABLE_MACSEC,
+ 	SET_EXCEPTION,
+ 	ENABLE_SECY,
+@@ -266,9 +274,6 @@ struct macsec_priv_s {
+ 	struct qman_fq		*egress_fqs[MACSEC_ETH_TX_QUEUES];
+ 	struct qman_fq		*conf_fqs[MACSEC_ETH_TX_QUEUES];
+ 	struct list_head	 dpa_fq_list;
+-#ifdef CONFIG_FSL_DPAA_MACSEC_DEBUGFS
+-	struct dentry		*debugfs_file;
+-#endif /* CONFIG_FSL_DPAA_MACSEC_DEBUGFS */
+ 	uint32_t		 msg_enable;	/* net_device message level */
+ 	uint16_t                 channel;
+ 	struct fm_macsec_dev *fm_macsec;
+@@ -284,4 +289,6 @@ struct macsec_priv_s {
+ 	struct resource *fman_resource;
+ };
+ 
++struct macsec_priv_s *dpa_macsec_get_priv(struct net_device *net_dev);
++
+ #endif /* __DPAA_ETH_MACSEC_H */
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_macsec_ethtool.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_macsec_ethtool.c
+new file mode 100644
+index 0000000..6673996
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_macsec_ethtool.c
+@@ -0,0 +1,246 @@
++/* Copyright 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <linux/string.h>
++
++#include "dpaa_eth.h"
++#include "dpaa_eth_macsec.h"
++
++static const char dpa_macsec_stats_percpu[][ETH_GSTRING_LEN] = {
++	"interrupts",
++	"rx packets",
++	"tx packets",
++	"tx recycled",
++	"tx confirm",
++	"tx S/G",
++	"tx error",
++	"rx error",
++	"bp count",
++	"tx macsec",
++	"rx macsec"
++};
++
++static char dpa_macsec_stats_global[][ETH_GSTRING_LEN] = {
++	/* dpa rx errors */
++	"rx dma error",
++	"rx frame physical error",
++	"rx frame size error",
++	"rx header error",
++	"rx csum error",
++
++	/* demultiplexing errors */
++	"qman cg_tdrop",
++	"qman wred",
++	"qman error cond",
++	"qman early window",
++	"qman late window",
++	"qman fq tdrop",
++	"qman fq retired",
++	"qman orp disabled",
++
++	/* congestion related stats */
++	"congestion time (ms)",
++	"entered congestion",
++	"congested (0/1)"
++};
++
++#define DPA_MACSEC_STATS_PERCPU_LEN ARRAY_SIZE(dpa_macsec_stats_percpu)
++#define DPA_MACSEC_STATS_GLOBAL_LEN ARRAY_SIZE(dpa_macsec_stats_global)
++
++static void copy_stats(struct dpa_percpu_priv_s *percpu_priv, int num_cpus,
++		       int crr_cpu, u64 bp_count, u64 tx_macsec,
++		       u64 rx_macsec, u64 *data)
++{
++	int num_values = num_cpus + 1;
++	int crr = 0;
++
++	/* update current CPU's stats and also add them to the total values */
++	data[crr * num_values + crr_cpu] = percpu_priv->in_interrupt;
++	data[crr++ * num_values + num_cpus] += percpu_priv->in_interrupt;
++
++	data[crr * num_values + crr_cpu] = percpu_priv->stats.rx_packets;
++	data[crr++ * num_values + num_cpus] += percpu_priv->stats.rx_packets;
++
++	data[crr * num_values + crr_cpu] = percpu_priv->stats.tx_packets;
++	data[crr++ * num_values + num_cpus] += percpu_priv->stats.tx_packets;
++
++	data[crr * num_values + crr_cpu] = percpu_priv->tx_returned;
++	data[crr++ * num_values + num_cpus] += percpu_priv->tx_returned;
++
++	data[crr * num_values + crr_cpu] = percpu_priv->tx_confirm;
++	data[crr++ * num_values + num_cpus] += percpu_priv->tx_confirm;
++
++	data[crr * num_values + crr_cpu] = percpu_priv->tx_frag_skbuffs;
++	data[crr++ * num_values + num_cpus] += percpu_priv->tx_frag_skbuffs;
++
++	data[crr * num_values + crr_cpu] = percpu_priv->stats.tx_errors;
++	data[crr++ * num_values + num_cpus] += percpu_priv->stats.tx_errors;
++
++	data[crr * num_values + crr_cpu] = percpu_priv->stats.rx_errors;
++	data[crr++ * num_values + num_cpus] += percpu_priv->stats.rx_errors;
++
++	data[crr * num_values + crr_cpu] = bp_count;
++	data[crr++ * num_values + num_cpus] += bp_count;
++
++	data[crr * num_values + crr_cpu] = tx_macsec;
++	data[crr++ * num_values + num_cpus] += tx_macsec;
++
++	data[crr * num_values + crr_cpu] = rx_macsec;
++	data[crr++ * num_values + num_cpus] += rx_macsec;
++}
++
++int dpa_macsec_get_sset_count(struct net_device *net_dev, int type)
++{
++	unsigned int total_stats, num_stats;
++
++	num_stats   = num_online_cpus() + 1;
++	total_stats = num_stats * DPA_MACSEC_STATS_PERCPU_LEN +
++		DPA_MACSEC_STATS_GLOBAL_LEN;
++
++	switch (type) {
++	case ETH_SS_STATS:
++		return total_stats;
++	default:
++		return -EOPNOTSUPP;
++	}
++}
++
++void dpa_macsec_get_ethtool_stats(struct net_device *net_dev,
++				  struct ethtool_stats *stats, u64 *data)
++{
++	u64 bp_count, bp_total, cg_time, cg_num, cg_status;
++	struct macsec_percpu_priv_s *percpu_priv_macsec;
++	struct dpa_percpu_priv_s *percpu_priv;
++	struct macsec_priv_s *macsec_priv;
++	struct qm_mcr_querycgr query_cgr;
++	struct dpa_rx_errors rx_errors;
++	struct dpa_ern_cnt ern_cnt;
++	struct dpa_priv_s *priv;
++	unsigned int num_cpus, offset;
++	struct dpa_bp *dpa_bp;
++	int total_stats, i;
++
++	macsec_priv = dpa_macsec_get_priv(net_dev);
++	if (unlikely(!macsec_priv)) {
++		pr_err("selected macsec_priv is NULL\n");
++		return;
++	}
++
++	total_stats = dpa_macsec_get_sset_count(net_dev, ETH_SS_STATS);
++	priv     = netdev_priv(net_dev);
++	dpa_bp   = priv->dpa_bp;
++	num_cpus = num_online_cpus();
++	bp_count = 0;
++	bp_total = 0;
++
++	memset(&rx_errors, 0, sizeof(struct dpa_rx_errors));
++	memset(&ern_cnt, 0, sizeof(struct dpa_ern_cnt));
++	memset(data, 0, total_stats * sizeof(u64));
++
++	for_each_online_cpu(i) {
++		percpu_priv = per_cpu_ptr(priv->percpu_priv, i);
++		percpu_priv_macsec = per_cpu_ptr(macsec_priv->percpu_priv, i);
++
++		if (dpa_bp->percpu_count)
++			bp_count = *(per_cpu_ptr(dpa_bp->percpu_count, i));
++
++		rx_errors.dme += percpu_priv->rx_errors.dme;
++		rx_errors.fpe += percpu_priv->rx_errors.fpe;
++		rx_errors.fse += percpu_priv->rx_errors.fse;
++		rx_errors.phe += percpu_priv->rx_errors.phe;
++		rx_errors.cse += percpu_priv->rx_errors.cse;
++
++		ern_cnt.cg_tdrop     += percpu_priv->ern_cnt.cg_tdrop;
++		ern_cnt.wred         += percpu_priv->ern_cnt.wred;
++		ern_cnt.err_cond     += percpu_priv->ern_cnt.err_cond;
++		ern_cnt.early_window += percpu_priv->ern_cnt.early_window;
++		ern_cnt.late_window  += percpu_priv->ern_cnt.late_window;
++		ern_cnt.fq_tdrop     += percpu_priv->ern_cnt.fq_tdrop;
++		ern_cnt.fq_retired   += percpu_priv->ern_cnt.fq_retired;
++		ern_cnt.orp_zero     += percpu_priv->ern_cnt.orp_zero;
++
++		copy_stats(percpu_priv, num_cpus, i, bp_count,
++			   percpu_priv_macsec->tx_macsec,
++			   percpu_priv_macsec->rx_macsec,
++			   data);
++	}
++
++	offset = (num_cpus + 1) * DPA_MACSEC_STATS_PERCPU_LEN;
++	memcpy(data + offset, &rx_errors, sizeof(struct dpa_rx_errors));
++
++	offset += sizeof(struct dpa_rx_errors) / sizeof(u64);
++	memcpy(data + offset, &ern_cnt, sizeof(struct dpa_ern_cnt));
++
++	/* gather congestion related counters */
++	cg_num    = 0;
++	cg_status = 0;
++	cg_time   = jiffies_to_msecs(priv->cgr_data.congested_jiffies);
++	if (qman_query_cgr(&priv->cgr_data.cgr, &query_cgr) == 0) {
++		cg_num    = priv->cgr_data.cgr_congested_count;
++		cg_status = query_cgr.cgr.cs;
++
++		/* reset congestion stats (like QMan API does */
++		priv->cgr_data.congested_jiffies   = 0;
++		priv->cgr_data.cgr_congested_count = 0;
++	}
++
++	offset += sizeof(struct dpa_ern_cnt) / sizeof(u64);
++	data[offset++] = cg_time;
++	data[offset++] = cg_num;
++	data[offset++] = cg_status;
++}
++
++void dpa_macsec_get_strings(struct net_device *net_dev,
++			    u32 stringset, u8 *data)
++{
++	unsigned int i, j, num_cpus, size;
++	char string_cpu[ETH_GSTRING_LEN];
++	u8 *strings;
++
++	strings   = data;
++	num_cpus  = num_online_cpus();
++	size      = DPA_MACSEC_STATS_GLOBAL_LEN * ETH_GSTRING_LEN;
++
++	for (i = 0; i < DPA_MACSEC_STATS_PERCPU_LEN; i++) {
++		for (j = 0; j < num_cpus; j++) {
++			snprintf(string_cpu, ETH_GSTRING_LEN, "%s [CPU %d]",
++				 dpa_macsec_stats_percpu[i], j);
++			memcpy(strings, string_cpu, ETH_GSTRING_LEN);
++			strings += ETH_GSTRING_LEN;
++		}
++		snprintf(string_cpu, ETH_GSTRING_LEN, "%s [TOTAL]",
++			 dpa_macsec_stats_percpu[i]);
++		memcpy(strings, string_cpu, ETH_GSTRING_LEN);
++		strings += ETH_GSTRING_LEN;
++	}
++	memcpy(strings, dpa_macsec_stats_global, size);
++}
++
+-- 
+2.1.0.27.g96db324
+

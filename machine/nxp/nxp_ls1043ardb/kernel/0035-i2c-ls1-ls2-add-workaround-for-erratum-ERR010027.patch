@@ -1,0 +1,38 @@
+From 48ff5f1b97e70023a9419fdbfb1d994ab9f51508 Mon Sep 17 00:00:00 2001
+From: Ying Zhang <b40530@freescale.com>
+Date: Tue, 26 Jan 2016 11:31:50 +0800
+Subject: [PATCH 035/146] i2c: ls1/ls2: add workaround for erratum ERR010027
+
+ERR010027/ERR008951: Attempting a start cycle while the
+bus is busy may generate a short clock pulse.
+
+Software must ensure that the I2C BUS is idle by checking the
+bus busy before switching to master mode and attempting a Start
+cycle.
+
+Signed-off-by: Ying Zhang <b40530@freescale.com>
+---
+ drivers/i2c/busses/i2c-imx.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/drivers/i2c/busses/i2c-imx.c b/drivers/i2c/busses/i2c-imx.c
+index a53a7dd..569ab94 100644
+--- a/drivers/i2c/busses/i2c-imx.c
++++ b/drivers/i2c/busses/i2c-imx.c
+@@ -894,6 +894,13 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
+ 
+ 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
+ 
++	/* workround for ERR010027: ensure that the I2C BUS is idle
++	   before switching to master mode and attempting a Start cycle
++	 */
++	result =  i2c_imx_bus_busy(i2c_imx, 0);
++	if (result)
++		goto fail0;
++
+ 	/* Start I2C transfer */
+ 	result = i2c_imx_start(i2c_imx);
+ 	if (result)
+-- 
+2.1.0.27.g96db324
+

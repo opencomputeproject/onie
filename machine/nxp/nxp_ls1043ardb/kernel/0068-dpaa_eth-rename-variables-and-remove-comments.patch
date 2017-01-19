@@ -1,0 +1,75 @@
+From 5708722c319f22ea079fd1946d46d86b2fafdffa Mon Sep 17 00:00:00 2001
+From: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+Date: Mon, 25 Jan 2016 12:13:13 +0200
+Subject: [PATCH 068/146] dpaa_eth: rename variables and remove comments
+
+Some function/variable names are not consistent throughout the file and some
+comments are not useful.
+
+Signed-off-by: Marian-Cristian Rotariu <marian.rotariu@freescale.com>
+---
+ drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c | 13 ++++++-------
+ 1 file changed, 6 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
+index 033f985..6777bfe 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_generic.c
+@@ -162,7 +162,7 @@ static int get_port_ref(struct device_node *dev_node,
+ 		  struct fm_port **port)
+ {
+ 	struct platform_device *port_of_dev = NULL;
+-	struct device *op_dev = NULL;
++	struct device *oh_dev = NULL;
+ 	struct device_node *port_node = NULL;
+ 
+ 	port_node = of_parse_phandle(dev_node, "fsl,fman-oh-port", 0);
+@@ -176,8 +176,8 @@ static int get_port_ref(struct device_node *dev_node,
+ 		return -EINVAL;
+ 
+ 	/* get the reference to oh port from FMD */
+-	op_dev = &port_of_dev->dev;
+-	*port = fm_port_bind(op_dev);
++	oh_dev = &port_of_dev->dev;
++	*port = fm_port_bind(oh_dev);
+ 
+ 	if (*port == NULL)
+ 		return -EINVAL;
+@@ -211,7 +211,7 @@ static void dpaa_generic_napi_disable(struct dpa_generic_priv_s *priv)
+ 	}
+ }
+ 
+-static struct device_node *get_rx_op_port_node(struct platform_device *_of_dev)
++static struct device_node *get_rx_oh_port_node(struct platform_device *_of_dev)
+ {
+ 	struct device *dev = &_of_dev->dev;
+ 	struct device_node *port_node = NULL;
+@@ -391,7 +391,6 @@ dpa_generic_rx_dqrr(struct qman_portal *portal,
+ 	}
+ 
+ 	bp = dpa_bpid2pool(fd->bpid);
+-	/* TODO add bp check on hot path? */
+ 
+ 	/* find out the pad */
+ 	skb_addr = virt_to_phys(skb->head);
+@@ -982,7 +981,7 @@ static struct list_head *dpa_generic_fq_probe(struct platform_device *_of_dev,
+ 	INIT_LIST_HEAD(list);
+ 
+ 	/* RX queues (RX error, RX default) are specified in Rx O/H port node */
+-	oh_node = get_rx_op_port_node(_of_dev);
++	oh_node = get_rx_oh_port_node(_of_dev);
+ 	fqids_off = of_get_property(oh_node, "fsl,qman-frame-queues-oh", &lenp);
+ 	if (fqids_off == NULL) {
+ 		dev_err(dev, "Need Rx FQ definition in dts for generic devices\n");
+@@ -1085,7 +1084,7 @@ static int dpa_generic_rx_bp_probe(struct platform_device *_of_dev,
+ 	int na = 0, ns = 0;
+ 	int err = 0, i = 0;
+ 
+-	oh_node = get_rx_op_port_node(_of_dev);
++	oh_node = get_rx_oh_port_node(_of_dev);
+ 
+ 	bp_count = of_count_phandle_with_args(oh_node,
+ 			"fsl,bman-buffer-pools", NULL);
+-- 
+2.1.0.27.g96db324
+
