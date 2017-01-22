@@ -1,0 +1,53 @@
+From e0a5a20d13824561636fcf1c6345b1eee045afb5 Mon Sep 17 00:00:00 2001
+From: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Date: Fri, 5 Dec 2014 13:02:23 +0530
+Subject: [PATCH 093/124] drivers:usb: Fix usb suspend/resume for deep-sleep
+
+Save usb controller and phy registers for deep-sleep
+
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Change-Id: I58696ab15c629a7712adcba67df9b8fd582a1c6e
+Reviewed-on: http://git.am.freescale.net:8181/25418
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Suresh Gupta <suresh.gupta@freescale.com>
+Reviewed-by: Matthew Weigel <Matthew.Weigel@freescale.com>
+---
+ drivers/usb/host/ehci-fsl.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/usb/host/ehci-fsl.c b/drivers/usb/host/ehci-fsl.c
+index 552d436..6e48992 100644
+--- a/drivers/usb/host/ehci-fsl.c
++++ b/drivers/usb/host/ehci-fsl.c
+@@ -709,6 +709,9 @@ static int ehci_fsl_drv_suspend(struct device *dev)
+ 	struct usb_hcd *hcd = dev_get_drvdata(dev);
+ 	struct ehci_fsl *ehci_fsl = hcd_to_ehci_fsl(hcd);
+ 	void __iomem *non_ehci = hcd->regs;
++
++	ehci_fsl_save_context(hcd);
++
+ #if defined(CONFIG_FSL_USB2_OTG) || defined(CONFIG_FSL_USB2_OTG_MODULE)
+ 	struct usb_bus host = hcd->self;
+ #endif
+@@ -736,8 +739,6 @@ static int ehci_fsl_drv_suspend(struct device *dev)
+ 	if (!fsl_deep_sleep())
+ 		return 0;
+ 
+-	ehci_fsl_save_context(hcd);
+-
+ 	ehci_fsl->usb_ctrl = ioread32be(non_ehci + FSL_SOC_USB_CTRL);
+ 	return 0;
+ }
+@@ -749,8 +750,7 @@ static int ehci_fsl_drv_resume(struct device *dev)
+ 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+ 	void __iomem *non_ehci = hcd->regs;
+ 
+-	if (fsl_deep_sleep())
+-		ehci_fsl_restore_context(hcd);
++	ehci_fsl_restore_context(hcd);
+ 
+ #if defined(CONFIG_FSL_USB2_OTG) || defined(CONFIG_FSL_USB2_OTG_MODULE)
+ 	struct usb_bus host = hcd->self;
+-- 
+2.1.0.27.g96db324
+

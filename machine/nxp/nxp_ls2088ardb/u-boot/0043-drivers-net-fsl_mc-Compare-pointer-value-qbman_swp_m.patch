@@ -1,0 +1,39 @@
+From 1d05f04270a45278373a90cc80e416662ff1d262 Mon Sep 17 00:00:00 2001
+From: Pratiyush Mohan Srivastava <pratiyush.srivastava@freescale.com>
+Date: Tue, 22 Dec 2015 16:50:19 +0530
+Subject: [PATCH 43/74] drivers: net: fsl_mc: Compare pointer value
+ qbman_swp_mc_start
+
+Current code compares the return pointer of function qbman_cena_write_start
+with NULL. Instead the value of the return pointer should be compared.
+Signed-off-by: Pratiyush Mohan Srivastava <pratiyush.srivastava@freescale.com>
+Acked-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+
+Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+---
+ drivers/net/fsl-mc/dpio/qbman_portal.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/fsl-mc/dpio/qbman_portal.c b/drivers/net/fsl-mc/dpio/qbman_portal.c
+index 449ff8a..4b64c8a 100644
+--- a/drivers/net/fsl-mc/dpio/qbman_portal.c
++++ b/drivers/net/fsl-mc/dpio/qbman_portal.c
+@@ -102,12 +102,14 @@ struct qbman_swp *qbman_swp_init(const struct qbman_swp_desc *d)
+ void *qbman_swp_mc_start(struct qbman_swp *p)
+ {
+ 	void *ret;
++	int *return_val;
+ #ifdef QBMAN_CHECKING
+ 	BUG_ON(p->mc.check != swp_mc_can_start);
+ #endif
+ 	ret = qbman_cena_write_start(&p->sys, QBMAN_CENA_SWP_CR);
+ #ifdef QBMAN_CHECKING
+-	if (!ret)
++	return_val = (int *)ret;
++	if (!(*return_val))
+ 		p->mc.check = swp_mc_can_submit;
+ #endif
+ 	return ret;
+-- 
+2.1.0.27.g96db324
+

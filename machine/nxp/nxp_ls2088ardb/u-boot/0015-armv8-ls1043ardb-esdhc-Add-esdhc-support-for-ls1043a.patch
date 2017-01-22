@@ -1,0 +1,188 @@
+From b8799973845f2ff6434c54fc7a5c86d110a683f3 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@freescale.com>
+Date: Mon, 26 Oct 2015 19:47:55 +0800
+Subject: [PATCH 15/74] armv8/ls1043ardb: esdhc: Add esdhc support for
+ ls1043ardb
+
+This patch adds esdhc support for ls1043ardb.
+
+Signed-off-by: Yangbo Lu <yangbo.lu@freescale.com>
+Signed-off-by: Gong Qianyu <Qianyu.Gong@freescale.com>
+Reviewed-by: York Sun <yorksun@freescale.com>
+---
+ .../arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c | 22 +++++++++++++++++++++-
+ board/freescale/ls1043ardb/ls1043ardb.c            |  1 +
+ drivers/mmc/fsl_esdhc.c                            | 12 ++++++------
+ include/configs/ls1043a_common.h                   | 11 +++++++++++
+ include/fsl_esdhc.h                                |  2 +-
+ 5 files changed, 40 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c b/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
+index 9d5bbe7..6f6a588 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
+@@ -25,7 +25,7 @@ void get_sys_info(struct sys_info *sys_info)
+ 	struct fsl_ifc ifc_regs = {(void *)CONFIG_SYS_IFC_ADDR, (void *)NULL};
+ 	u32 ccr;
+ #endif
+-#ifdef CONFIG_SYS_DPAA_FMAN
++#if defined(CONFIG_FSL_ESDHC) || defined(CONFIG_SYS_DPAA_FMAN)
+ 	u32 rcw_tmp;
+ #endif
+ 	struct ccsr_clk *clk = (void *)(CONFIG_SYS_FSL_CLK_ADDR);
+@@ -105,6 +105,11 @@ void get_sys_info(struct sys_info *sys_info)
+ 
+ #define HWA_CGA_M2_CLK_SEL	0x00000007
+ #define HWA_CGA_M2_CLK_SHIFT	0
++#ifdef CONFIG_FSL_ESDHC
++	rcw_tmp = in_be32(&gur->rcwsr[15]);
++	rcw_tmp = (rcw_tmp & HWA_CGA_M2_CLK_SEL) >> HWA_CGA_M2_CLK_SHIFT;
++	sys_info->freq_sdhc = freq_c_pll[1] / rcw_tmp;
++#endif
+ 
+ #if defined(CONFIG_FSL_IFC)
+ 	ccr = ifc_in32(&ifc_regs.gregs->ifc_ccr);
+@@ -123,6 +128,10 @@ int get_clocks(void)
+ 	gd->bus_clk = sys_info.freq_systembus;
+ 	gd->mem_clk = sys_info.freq_ddrbus;
+ 
++#ifdef CONFIG_FSL_ESDHC
++	gd->arch.sdhc_clk = sys_info.freq_sdhc;
++#endif
++
+ 	if (gd->cpu_clk != 0)
+ 		return 0;
+ 	else
+@@ -139,6 +148,13 @@ ulong get_ddr_freq(ulong dummy)
+ 	return gd->mem_clk;
+ }
+ 
++#ifdef CONFIG_FSL_ESDHC
++int get_sdhc_freq(ulong dummy)
++{
++	return gd->arch.sdhc_clk;
++}
++#endif
++
+ int get_serial_clock(void)
+ {
+ 	return gd->bus_clk;
+@@ -149,6 +165,10 @@ unsigned int mxc_get_clock(enum mxc_clock clk)
+ 	switch (clk) {
+ 	case MXC_I2C_CLK:
+ 		return get_bus_freq(0);
++#if defined(CONFIG_FSL_ESDHC)
++	case MXC_ESDHC_CLK:
++		return get_sdhc_freq(0);
++#endif
+ 	case MXC_DSPI_CLK:
+ 		return get_bus_freq(0);
+ 	case MXC_UART_CLK:
+diff --git a/board/freescale/ls1043ardb/ls1043ardb.c b/board/freescale/ls1043ardb/ls1043ardb.c
+index 6c0dd3f..461a195 100644
+--- a/board/freescale/ls1043ardb/ls1043ardb.c
++++ b/board/freescale/ls1043ardb/ls1043ardb.c
+@@ -12,6 +12,7 @@
+ #include <asm/arch/soc.h>
+ #include <hwconfig.h>
+ #include <ahci.h>
++#include <mmc.h>
+ #include <scsi.h>
+ #include <fm_eth.h>
+ #include <fsl_csu.h>
+diff --git a/drivers/mmc/fsl_esdhc.c b/drivers/mmc/fsl_esdhc.c
+index 0b37002..471d6ee 100644
+--- a/drivers/mmc/fsl_esdhc.c
++++ b/drivers/mmc/fsl_esdhc.c
+@@ -106,7 +106,7 @@ static uint esdhc_xfertyp(struct mmc_cmd *cmd, struct mmc_data *data)
+ 		xfertyp |= XFERTYP_RSPTYP_48;
+ 
+ #if defined(CONFIG_MX53) || defined(CONFIG_PPC_T4240) || \
+-	defined(CONFIG_LS102XA) || defined(CONFIG_LS2085A)
++	defined(CONFIG_LS102XA) || defined(CONFIG_FSL_LAYERSCAPE)
+ 	if (cmd->cmdidx == MMC_CMD_STOP_TRANSMISSION)
+ 		xfertyp |= XFERTYP_CMDTYP_ABORT;
+ #endif
+@@ -184,7 +184,7 @@ static int esdhc_setup_data(struct mmc *mmc, struct mmc_data *data)
+ 	int timeout;
+ 	struct fsl_esdhc_cfg *cfg = mmc->priv;
+ 	struct fsl_esdhc *regs = (struct fsl_esdhc *)cfg->esdhc_base;
+-#ifdef CONFIG_LS2085A
++#ifdef CONFIG_FSL_LAYERSCAPE
+ 	dma_addr_t addr;
+ #endif
+ 	uint wml_value;
+@@ -197,7 +197,7 @@ static int esdhc_setup_data(struct mmc *mmc, struct mmc_data *data)
+ 
+ 		esdhc_clrsetbits32(&regs->wml, WML_RD_WML_MASK, wml_value);
+ #ifndef CONFIG_SYS_FSL_ESDHC_USE_PIO
+-#ifdef CONFIG_LS2085A
++#ifdef CONFIG_FSL_LAYERSCAPE
+ 		addr = virt_to_phys((void *)(data->dest));
+ 		if (upper_32_bits(addr))
+ 			printf("Error found for upper 32 bits\n");
+@@ -223,7 +223,7 @@ static int esdhc_setup_data(struct mmc *mmc, struct mmc_data *data)
+ 		esdhc_clrsetbits32(&regs->wml, WML_WR_WML_MASK,
+ 					wml_value << 16);
+ #ifndef CONFIG_SYS_FSL_ESDHC_USE_PIO
+-#ifdef CONFIG_LS2085A
++#ifdef CONFIG_FSL_LAYERSCAPE
+ 		addr = virt_to_phys((void *)(data->src));
+ 		if (upper_32_bits(addr))
+ 			printf("Error found for upper 32 bits\n");
+@@ -277,7 +277,7 @@ static int esdhc_setup_data(struct mmc *mmc, struct mmc_data *data)
+ static void check_and_invalidate_dcache_range
+ 	(struct mmc_cmd *cmd,
+ 	 struct mmc_data *data) {
+-#ifdef CONFIG_LS2085A
++#ifdef CONFIG_FSL_LAYERSCAPE
+ 	unsigned start = 0;
+ #else
+ 	unsigned start = (unsigned)data->dest ;
+@@ -285,7 +285,7 @@ static void check_and_invalidate_dcache_range
+ 	unsigned size = roundup(ARCH_DMA_MINALIGN,
+ 				data->blocks*data->blocksize);
+ 	unsigned end = start+size ;
+-#ifdef CONFIG_LS2085A
++#ifdef CONFIG_FSL_LAYERSCAPE
+ 	dma_addr_t addr;
+ 
+ 	addr = virt_to_phys((void *)(data->dest));
+diff --git a/include/configs/ls1043a_common.h b/include/configs/ls1043a_common.h
+index 2ba9a46..2e255b9 100644
+--- a/include/configs/ls1043a_common.h
++++ b/include/configs/ls1043a_common.h
+@@ -126,6 +126,17 @@
+ #define CONFIG_CMD_ENV
+ #define CONFIG_CMD_PING
+ 
++/*  MMC  */
++#define CONFIG_MMC
++#ifdef CONFIG_MMC
++#define CONFIG_CMD_MMC
++#define CONFIG_CMD_FAT
++#define CONFIG_FSL_ESDHC
++#define CONFIG_SYS_FSL_MMC_HAS_CAPBLT_VS33
++#define CONFIG_GENERIC_MMC
++#define CONFIG_DOS_PARTITION
++#endif
++
+ /* FMan ucode */
+ #define CONFIG_SYS_DPAA_FMAN
+ #ifdef CONFIG_SYS_DPAA_FMAN
+diff --git a/include/fsl_esdhc.h b/include/fsl_esdhc.h
+index 0d00b7d..aa1b4cf 100644
+--- a/include/fsl_esdhc.h
++++ b/include/fsl_esdhc.h
+@@ -166,7 +166,7 @@
+ #define ESDHC_VENDORSPEC_VSELECT 0x00000002 /* Use 1.8V */
+ 
+ struct fsl_esdhc_cfg {
+-#ifdef CONFIG_LS2085A
++#ifdef CONFIG_FSL_LAYERSCAPE
+ 	u64	esdhc_base;
+ #else
+ 	u32	esdhc_base;
+-- 
+2.1.0.27.g96db324
+

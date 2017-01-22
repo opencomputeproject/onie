@@ -1,0 +1,46 @@
+From 5342aa28cf035b9761242e8dba6f976cc44e8849 Mon Sep 17 00:00:00 2001
+From: Nikhil Badola <nikhil.badola@freescale.com>
+Date: Mon, 2 Jun 2014 09:59:38 +0530
+Subject: [PATCH 084/124] drivers/usb : Set DMA_MASK of usb platform device
+
+Set DMA_MASK of usb platform device
+
+Signed-off-by: Nikhil Badola <nikhil.badola@freescale.com>
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Signed-off-by: Suresh Gupta <suresh.gupta@freescale.com>
+Change-Id: I7d6387f3b95b6ec7c1999e14801dc4cfec7b016d
+Reviewed-on: http://git.am.freescale.net:8181/21816
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Zhengxiong Jin <Jason.Jin@freescale.com>
+---
+ drivers/usb/host/fsl-mph-dr-of.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/usb/host/fsl-mph-dr-of.c b/drivers/usb/host/fsl-mph-dr-of.c
+index ae62f6b..49a23ad 100644
+--- a/drivers/usb/host/fsl-mph-dr-of.c
++++ b/drivers/usb/host/fsl-mph-dr-of.c
+@@ -17,6 +17,7 @@
+ #include <linux/of_platform.h>
+ #include <linux/clk.h>
+ #include <linux/module.h>
++#include <linux/dma-mapping.h>
+ 
+ struct fsl_usb2_dev_data {
+ 	char *dr_mode;		/* controller mode */
+@@ -94,7 +95,11 @@ static struct platform_device *fsl_usb2_device_register(
+ 	pdev->dev.parent = &ofdev->dev;
+ 
+ 	pdev->dev.coherent_dma_mask = ofdev->dev.coherent_dma_mask;
+-	*pdev->dev.dma_mask = *ofdev->dev.dma_mask;
++
++	if (!pdev->dev.dma_mask)
++		pdev->dev.dma_mask = &ofdev->dev.coherent_dma_mask;
++	else
++		dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
+ 
+ 	retval = platform_device_add_data(pdev, pdata, sizeof(*pdata));
+ 	if (retval)
+-- 
+2.1.0.27.g96db324
+

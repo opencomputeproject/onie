@@ -1,0 +1,182 @@
+From 00064feb219ac6283558e5599142b3d8590aef21 Mon Sep 17 00:00:00 2001
+From: York Sun <yorksun@freescale.com>
+Date: Mon, 7 Dec 2015 11:08:58 -0800
+Subject: [PATCH 59/74] armv8: fsl-layerscale: Rewrite reserving memory for MC
+ and debug server
+
+MC and debug server are not board-specific. Move reserving memory to SoC
+file, using the new board_reserve_ram_top function. Reduce debug server
+memory by 2MB to make room for secure memory.
+
+In the system with MC and debug server, the top of u-boot memory
+is not the end of memory. PRAM is not used for this reservation.
+
+Signed-off-by: York Sun <yorksun@freescale.com>
+---
+ README                                  |  4 ++--
+ arch/arm/cpu/armv8/fsl-layerscape/cpu.c | 21 +++++++++++++++++++++
+ board/freescale/ls2080a/ls2080a.c       | 17 -----------------
+ board/freescale/ls2080aqds/ls2080aqds.c | 17 -----------------
+ board/freescale/ls2080ardb/ls2080ardb.c | 17 -----------------
+ include/configs/ls2080a_common.h        |  9 ++-------
+ 6 files changed, 25 insertions(+), 60 deletions(-)
+
+diff --git a/README b/README
+index 059f803..4bea552 100644
+--- a/README
++++ b/README
+@@ -5075,8 +5075,8 @@ This firmware often needs to be loaded during U-Boot booting.
+ - CONFIG_SYS_DEBUG_SERVER_DRAM_BLOCK_MIN_SIZE
+ 	Define minimum DDR size required for debug server image
+ 
+-- CONFIG_SYS_MEM_TOP_HIDE_MIN
+-	Define minimum DDR size to be hided from top of the DDR memory
++- CONFIG_SYS_MC_RSV_MEM_ALIGN
++	Define alignment of reserved memory MC requires
+ 
+ Reproducible builds
+ -------------------
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/cpu.c b/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
+index 2697258..f69688a 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
+@@ -630,3 +630,24 @@ void reset_cpu(ulong addr)
+ 	val |= 0x02;
+ 	scfg_out32(rstcr, val);
+ }
++
++phys_size_t board_reserve_ram_top(phys_size_t ram_size)
++{
++	phys_size_t ram_top = ram_size;
++
++#ifdef CONFIG_SYS_MEM_TOP_HIDE
++#error CONFIG_SYS_MEM_TOP_HIDE not to be used together with this function
++#endif
++/* Carve the Debug Server private DRAM block from the end of DRAM */
++#ifdef CONFIG_FSL_DEBUG_SERVER
++	ram_top -= debug_server_get_dram_block_size();
++#endif
++
++/* Carve the MC private DRAM block from the end of DRAM */
++#ifdef CONFIG_FSL_MC_ENET
++	ram_top -= mc_get_dram_block_size();
++	ram_top &= ~(CONFIG_SYS_MC_RSV_MEM_ALIGN - 1);
++#endif
++
++	return ram_top;
++}
+diff --git a/board/freescale/ls2080a/ls2080a.c b/board/freescale/ls2080a/ls2080a.c
+index 827fbf0..7bce8b0 100644
+--- a/board/freescale/ls2080a/ls2080a.c
++++ b/board/freescale/ls2080a/ls2080a.c
+@@ -68,23 +68,6 @@ int arch_misc_init(void)
+ }
+ #endif
+ 
+-unsigned long get_dram_size_to_hide(void)
+-{
+-	unsigned long dram_to_hide = 0;
+-
+-/* Carve the Debug Server private DRAM block from the end of DRAM */
+-#ifdef CONFIG_FSL_DEBUG_SERVER
+-	dram_to_hide += debug_server_get_dram_block_size();
+-#endif
+-
+-/* Carve the MC private DRAM block from the end of DRAM */
+-#ifdef CONFIG_FSL_MC_ENET
+-	dram_to_hide += mc_get_dram_block_size();
+-#endif
+-
+-	return roundup(dram_to_hide, CONFIG_SYS_MEM_TOP_HIDE_MIN);
+-}
+-
+ int board_eth_init(bd_t *bis)
+ {
+ 	int error = 0;
+diff --git a/board/freescale/ls2080aqds/ls2080aqds.c b/board/freescale/ls2080aqds/ls2080aqds.c
+index 1f99072..aa256a2 100644
+--- a/board/freescale/ls2080aqds/ls2080aqds.c
++++ b/board/freescale/ls2080aqds/ls2080aqds.c
+@@ -253,23 +253,6 @@ int arch_misc_init(void)
+ }
+ #endif
+ 
+-unsigned long get_dram_size_to_hide(void)
+-{
+-	unsigned long dram_to_hide = 0;
+-
+-/* Carve the Debug Server private DRAM block from the end of DRAM */
+-#ifdef CONFIG_FSL_DEBUG_SERVER
+-	dram_to_hide += debug_server_get_dram_block_size();
+-#endif
+-
+-/* Carve the MC private DRAM block from the end of DRAM */
+-#ifdef CONFIG_FSL_MC_ENET
+-	dram_to_hide += mc_get_dram_block_size();
+-#endif
+-
+-	return roundup(dram_to_hide, CONFIG_SYS_MEM_TOP_HIDE_MIN);
+-}
+-
+ #ifdef CONFIG_FSL_MC_ENET
+ void fdt_fixup_board_enet(void *fdt)
+ {
+diff --git a/board/freescale/ls2080ardb/ls2080ardb.c b/board/freescale/ls2080ardb/ls2080ardb.c
+index da227a7..12638df 100644
+--- a/board/freescale/ls2080ardb/ls2080ardb.c
++++ b/board/freescale/ls2080ardb/ls2080ardb.c
+@@ -223,23 +223,6 @@ int arch_misc_init(void)
+ }
+ #endif
+ 
+-unsigned long get_dram_size_to_hide(void)
+-{
+-	unsigned long dram_to_hide = 0;
+-
+-/* Carve the Debug Server private DRAM block from the end of DRAM */
+-#ifdef CONFIG_FSL_DEBUG_SERVER
+-	dram_to_hide += debug_server_get_dram_block_size();
+-#endif
+-
+-/* Carve the MC private DRAM block from the end of DRAM */
+-#ifdef CONFIG_FSL_MC_ENET
+-	dram_to_hide += mc_get_dram_block_size();
+-#endif
+-
+-	return roundup(dram_to_hide, CONFIG_SYS_MEM_TOP_HIDE_MIN);
+-}
+-
+ #ifdef CONFIG_FSL_MC_ENET
+ void fdt_fixup_board_enet(void *fdt)
+ {
+diff --git a/include/configs/ls2080a_common.h b/include/configs/ls2080a_common.h
+index a7bf921..9a6b9a8 100644
+--- a/include/configs/ls2080a_common.h
++++ b/include/configs/ls2080a_common.h
+@@ -196,10 +196,9 @@ unsigned long long get_qixis_addr(void);
+  * 512MB aligned, so the min size to hide is 512MB.
+  */
+ #if defined(CONFIG_FSL_MC_ENET) || defined(CONFIG_FSL_DEBUG_SERVER)
+-#define CONFIG_SYS_DEBUG_SERVER_DRAM_BLOCK_MIN_SIZE	(256UL * 1024 * 1024)
++#define CONFIG_SYS_DEBUG_SERVER_DRAM_BLOCK_MIN_SIZE	(254UL * 1024 * 1024)
+ #define CONFIG_SYS_LS_MC_DRAM_BLOCK_MIN_SIZE		(256UL * 1024 * 1024)
+-#define CONFIG_SYS_MEM_TOP_HIDE_MIN			(512UL * 1024 * 1024)
+-#define CONFIG_SYS_MEM_TOP_HIDE		get_dram_size_to_hide()
++#define CONFIG_SYS_MC_RSV_MEM_ALIGN			(512UL * 1024 * 1024)
+ #endif
+ 
+ /* PCIe */
+@@ -282,10 +281,6 @@ unsigned long long get_qixis_addr(void);
+ #define CONFIG_AUTO_COMPLETE
+ #define CONFIG_SYS_MAXARGS		64	/* max command args */
+ 
+-#ifndef __ASSEMBLY__
+-unsigned long get_dram_size_to_hide(void);
+-#endif
+-
+ #define CONFIG_PANIC_HANG	/* do not reset board on panic */
+ 
+ #define CONFIG_SPL_BSS_START_ADDR	0x80100000
+-- 
+2.1.0.27.g96db324
+

@@ -1,0 +1,304 @@
+From b61bf2614e2ce953d115323e2a95ad53b128d072 Mon Sep 17 00:00:00 2001
+From: Gong Qianyu <Qianyu.Gong@freescale.com>
+Date: Wed, 30 Mar 2016 09:54:44 +0800
+Subject: [PATCH 17/74] armv8/ls1043ardb: dts: add dtb support
+
+commit e1cecb4d4245beac8184af8988be0ffbb4e7a9d6
+[context adjustment]
+
+Reuse dts files from ls1043a linux kernel. Some parts in dts files
+may not be needed by U-Boot.
+
+Signed-off-by: Gong Qianyu <Qianyu.Gong@freescale.com>
+Reviewed-by: York Sun <yorksun@freescale.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/dts/Makefile            |   1 +
+ arch/arm/dts/fsl-ls1043a-rdb.dts |  84 ++++++++++++++++++++
+ arch/arm/dts/fsl-ls1043a.dtsi    | 160 +++++++++++++++++++++++++++++++++++++++
+ configs/ls1043ardb_defconfig     |   2 +
+ 4 files changed, 247 insertions(+)
+ create mode 100644 arch/arm/dts/fsl-ls1043a-rdb.dts
+ create mode 100644 arch/arm/dts/fsl-ls1043a.dtsi
+
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 65b4230..53fecb5 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -76,6 +76,7 @@ dtb-$(CONFIG_LS102XA) += ls1021a-qds.dtb \
+ 	ls1021a-twr.dtb
+ dtb-$(CONFIG_FSL_LSCH3) += fsl-ls2085a-qds.dtb \
+ 	fsl-ls2085a-rdb.dtb
++dtb-$(CONFIG_FSL_LSCH2) += fsl-ls1043a-rdb.dtb
+ 
+ dtb-$(CONFIG_MACH_SUN4I) += \
+ 	sun4i-a10-a1000.dtb \
+diff --git a/arch/arm/dts/fsl-ls1043a-rdb.dts b/arch/arm/dts/fsl-ls1043a-rdb.dts
+new file mode 100644
+index 0000000..17a0681
+--- /dev/null
++++ b/arch/arm/dts/fsl-ls1043a-rdb.dts
+@@ -0,0 +1,84 @@
++/*
++ * Device Tree Include file for Freescale Layerscape-1043A family SoC.
++ *
++ * Copyright (C) 2015, Freescale Semiconductor
++ *
++ * Mingkai Hu <Mingkai.hu@freescale.com>
++ *
++ * This file is licensed under the terms of the GNU General Public
++ * License version 2.  This program is licensed "as is" without any
++ * warranty of any kind, whether express or implied.
++ */
++
++/dts-v1/;
++/include/ "fsl-ls1043a.dtsi"
++
++/ {
++	model = "LS1043A RDB Board";
++};
++
++&i2c0 {
++	status = "okay";
++	ina220@40 {
++		compatible = "ti,ina220";
++		reg = <0x40>;
++		shunt-resistor = <1000>;
++	};
++	adt7461a@4c {
++		compatible = "adi,adt7461a";
++		reg = <0x4c>;
++	};
++	eeprom@56 {
++		compatible = "at24,24c512";
++		reg = <0x52>;
++	};
++
++	eeprom@57 {
++		compatible = "at24,24c512";
++		reg = <0x53>;
++	};
++
++	rtc@68 {
++		compatible = "pericom,pt7c4338";
++		reg = <0x68>;
++	};
++};
++
++&ifc {
++	status = "okay";
++	#address-cells = <2>;
++	#size-cells = <1>;
++	/* NOR, NAND Flashes and FPGA on board */
++	ranges = <0x0 0x0 0x0 0x60000000 0x08000000
++		  0x2 0x0 0x0 0x7e800000 0x00010000
++		  0x3 0x0 0x0 0x7fb00000 0x00000100>;
++
++		nor@0,0 {
++			compatible = "cfi-flash";
++			#address-cells = <1>;
++			#size-cells = <1>;
++			reg = <0x0 0x0 0x8000000>;
++			bank-width = <2>;
++			device-width = <1>;
++		};
++
++		nand@1,0 {
++			compatible = "fsl,ifc-nand";
++			#address-cells = <1>;
++			#size-cells = <1>;
++			reg = <0x1 0x0 0x10000>;
++		};
++
++		cpld: board-control@2,0 {
++			compatible = "fsl,ls1043ardb-cpld";
++			reg = <0x2 0x0 0x0000100>;
++		};
++};
++
++&duart0 {
++	status = "okay";
++};
++
++&duart1 {
++	status = "okay";
++};
+diff --git a/arch/arm/dts/fsl-ls1043a.dtsi b/arch/arm/dts/fsl-ls1043a.dtsi
+new file mode 100644
+index 0000000..280e959
+--- /dev/null
++++ b/arch/arm/dts/fsl-ls1043a.dtsi
+@@ -0,0 +1,160 @@
++/*
++ * Device Tree Include file for Freescale Layerscape-1043A family SoC.
++ *
++ * Copyright (C) 2014-2015, Freescale Semiconductor
++ *
++ * Mingkai Hu <Mingkai.hu@freescale.com>
++ *
++ * This file is licensed under the terms of the GNU General Public
++ * License version 2.  This program is licensed "as is" without any
++ * warranty of any kind, whether express or implied.
++ */
++
++/include/ "skeleton64.dtsi"
++
++/ {
++	compatible = "fsl,ls1043a";
++	interrupt-parent = <&gic>;
++	cpus {
++		#address-cells = <2>;
++		#size-cells = <0>;
++
++		cpu0: cpu@0 {
++			device_type = "cpu";
++			compatible = "arm,cortex-a53";
++			reg = <0x0 0x0>;
++			clocks = <&clockgen 1 0>;
++		};
++
++		cpu1: cpu@1 {
++			device_type = "cpu";
++			compatible = "arm,cortex-a53";
++			reg = <0x0 0x1>;
++			clocks = <&clockgen 1 0>;
++		};
++
++		cpu2: cpu@2 {
++			device_type = "cpu";
++			compatible = "arm,cortex-a53";
++			reg = <0x0 0x2>;
++			clocks = <&clockgen 1 0>;
++		};
++
++		cpu3: cpu@3 {
++			device_type = "cpu";
++			compatible = "arm,cortex-a53";
++			reg = <0x0 0x3>;
++			clocks = <&clockgen 1 0>;
++		};
++	};
++
++	sysclk: sysclk {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <100000000>;
++		clock-output-names = "sysclk";
++	};
++
++	gic: interrupt-controller@1400000 {
++		compatible = "arm,gic-400";
++		#interrupt-cells = <3>;
++		interrupt-controller;
++		reg = <0x0 0x1401000 0 0x1000>, /* GICD */
++		      <0x0 0x1402000 0 0x2000>, /* GICC */
++		      <0x0 0x1404000 0 0x2000>, /* GICH */
++		      <0x0 0x1406000 0 0x2000>; /* GICV */
++		interrupts = <1 9 0xf08>;
++	};
++
++	soc {
++		compatible = "simple-bus";
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		clockgen: clocking@1ee1000 {
++			compatible = "fsl,ls1043a-clockgen";
++			reg = <0x0 0x1ee1000 0x0 0x1000>;
++			#clock-cells = <2>;
++			clocks = <&sysclk>;
++		};
++
++		ifc: ifc@1530000 {
++			compatible = "fsl,ifc", "simple-bus";
++			reg = <0x0 0x1530000 0x0 0x10000>;
++			interrupts = <0 43 0x4>;
++		};
++
++		i2c0: i2c@2180000 {
++			compatible = "fsl,vf610-i2c";
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x0 0x2180000 0x0 0x10000>;
++			interrupts = <0 56 0x4>;
++			clock-names = "i2c";
++			clocks = <&clockgen 4 0>;
++			status = "disabled";
++		};
++
++		i2c1: i2c@2190000 {
++			compatible = "fsl,vf610-i2c";
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x0 0x2190000 0x0 0x10000>;
++			interrupts = <0 57 0x4>;
++			clock-names = "i2c";
++			clocks = <&clockgen 4 0>;
++			status = "disabled";
++		};
++
++		i2c2: i2c@21a0000 {
++			compatible = "fsl,vf610-i2c";
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x0 0x21a0000 0x0 0x10000>;
++			interrupts = <0 58 0x4>;
++			clock-names = "i2c";
++			clocks = <&clockgen 4 0>;
++			status = "disabled";
++		};
++
++		i2c3: i2c@21b0000 {
++			compatible = "fsl,vf610-i2c";
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x0 0x21b0000 0x0 0x10000>;
++			interrupts = <0 59 0x4>;
++			clock-names = "i2c";
++			clocks = <&clockgen 4 0>;
++			status = "disabled";
++		};
++
++		duart0: serial@21c0500 {
++			compatible = "fsl,ns16550", "ns16550a";
++			reg = <0x00 0x21c0500 0x0 0x100>;
++			interrupts = <0 54 0x4>;
++			clocks = <&clockgen 4 0>;
++		};
++
++		duart1: serial@21c0600 {
++			compatible = "fsl,ns16550", "ns16550a";
++			reg = <0x00 0x21c0600 0x0 0x100>;
++			interrupts = <0 54 0x4>;
++			clocks = <&clockgen 4 0>;
++		};
++
++		duart2: serial@21d0500 {
++			compatible = "fsl,ns16550", "ns16550a";
++			reg = <0x0 0x21d0500 0x0 0x100>;
++			interrupts = <0 55 0x4>;
++			clocks = <&clockgen 4 0>;
++		};
++
++		duart3: serial@21d0600 {
++			compatible = "fsl,ns16550", "ns16550a";
++			reg = <0x0 0x21d0600 0x0 0x100>;
++			interrupts = <0 55 0x4>;
++			clocks = <&clockgen 4 0>;
++		};
++	};
++};
+diff --git a/configs/ls1043ardb_defconfig b/configs/ls1043ardb_defconfig
+index ae84d2e..f77fbbf 100644
+--- a/configs/ls1043ardb_defconfig
++++ b/configs/ls1043ardb_defconfig
+@@ -2,3 +2,5 @@ CONFIG_SYS_EXTRA_OPTIONS="SYS_FSL_DDR4"
+ CONFIG_ARM=y
+ CONFIG_TARGET_LS1043ARDB=y
+ CONFIG_FSL_LAYERSCAPE=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1043a-rdb"
++CONFIG_OF_CONTROL=y
+-- 
+2.1.0.27.g96db324
+
