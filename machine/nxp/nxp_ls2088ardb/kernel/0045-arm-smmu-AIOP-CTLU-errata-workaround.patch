@@ -1,0 +1,72 @@
+From 74dfa475c6c9ccafaaa93f765668664b218b33fd Mon Sep 17 00:00:00 2001
+From: Varun Sethi <Varun.Sethi@freescale.com>
+Date: Sun, 4 Jan 2015 00:26:03 +0530
+Subject: [PATCH 045/124] arm/smmu: AIOP CTLU errata workaround.
+
+Translate the memory attributes correspnding to the AIOP CTLU ICID
+to make them cacheable and coherent.
+
+Signed-off-by: Varun Sethi <Varun.Sethi@freescale.com>
+[Stuart: fixed minor merge conflict]
+Signed-off-by: Stuart Yoder <stuart.yoder@freescale.com>
+---
+ drivers/iommu/arm-smmu.c | 36 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+
+diff --git a/drivers/iommu/arm-smmu.c b/drivers/iommu/arm-smmu.c
+index 2fda664..3337b4a 100644
+--- a/drivers/iommu/arm-smmu.c
++++ b/drivers/iommu/arm-smmu.c
+@@ -363,6 +363,38 @@ static struct arm_smmu_option_prop arm_smmu_options[] = {
+ 	{ ARM_SMMU_OPT_SECURE_CFG_ACCESS, "calxeda,smmu-secure-config-access" },
+ 	{ 0, NULL},
+ };
++#define CONFIG_AIOP_ERRATA
++#ifdef CONFIG_AIOP_ERRATA
++/*
++ * PL = 1, BMT = 1, VA = 1
++ */
++#define AIOP_SMR_VALUE 0x380
++/*
++ * Following should be set:
++ * SHCFG: 0x3
++ * MTCFG: 0x1
++ * MemAttr: 0xf
++ * Type: 0x1
++ * RACFG: 0x2
++ * WACFG: 0x2
++ */
++#define AIOP_S2CR_VALUE 0xA1FB00
++
++static void arm_smmu_aiop_attr_trans(struct arm_smmu_device *smmu)
++{
++	void __iomem *gr0_base = ARM_SMMU_GR0(smmu);
++	u16 mask = 0x7c7f;
++	int index;
++	u32 reg;
++	/* reserve one smr group for AIOP */
++	index = --smmu->num_mapping_groups;
++
++	reg = SMR_VALID | AIOP_SMR_VALUE << SMR_ID_SHIFT |
++		  mask << SMR_MASK_SHIFT;
++	writel(reg, gr0_base + ARM_SMMU_GR0_SMR(index));
++	writel(AIOP_S2CR_VALUE, gr0_base + ARM_SMMU_GR0_S2CR(index));
++}
++#endif
+ 
+ static struct arm_smmu_domain *to_smmu_domain(struct iommu_domain *dom)
+ {
+@@ -1912,6 +1944,10 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
+ 	spin_unlock(&arm_smmu_devices_lock);
+ 
+ 	arm_smmu_device_reset(smmu);
++		/* AIOP Rev1 errata work around */
++#ifdef CONFIG_AIOP_ERRATA
++		arm_smmu_aiop_attr_trans(smmu);
++#endif
+ 	return 0;
+ 
+ out_free_irqs:
+-- 
+2.1.0.27.g96db324
+

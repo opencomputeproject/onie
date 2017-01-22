@@ -1,0 +1,108 @@
+From a98944a4d1c6865bd28f7cec07379f69a0b46c05 Mon Sep 17 00:00:00 2001
+From: York Sun <yorksun@freescale.com>
+Date: Fri, 4 Dec 2015 11:57:07 -0800
+Subject: [PATCH 56/74] Reserve secure memory
+
+Secure memory is at the end of memory, separated and reserved
+from OS, tracked by gd->secure_ram. Secure memory can host
+MMU tables, security monitor, etc. This is different from PRAM
+used to reserve private memory. PRAM offers memory at the top
+of u-boot memory, not necessarily the real end of memory for
+systems with very large DDR. Using the end of memory simplifies
+MMU setup and avoid memory fragmentation.
+
+"bdinfo" command shows gd->secure_ram value if this memory is
+marked as secured.
+
+Signed-off-by: York Sun <yorksun@freescale.com>
+---
+ README                            |  8 ++++++++
+ common/board_f.c                  |  9 +++++++++
+ common/cmd_bdinfo.c               |  6 ++++++
+ include/asm-generic/global_data.h | 14 ++++++++++++++
+ 4 files changed, 37 insertions(+)
+
+diff --git a/README b/README
+index ac5371f..ccc16a3 100644
+--- a/README
++++ b/README
+@@ -3888,6 +3888,14 @@ Configuration Settings:
+ 		Scratch address used by the alternate memory test
+ 		You only need to set this if address zero isn't writeable
+ 
++- CONFIG_SYS_MEM_RESERVE_SECURE
++		If defined, the size of CONFIG_SYS_MEM_RESERVE_SECURE memory
++		is substracted from total RAM and won't be reported to OS.
++		This memory can be used as secure memory. A variable
++		gd->secure_ram is used to track the location. In systems
++		the RAM base is not zero, or RAM is divided into banks,
++		this variable needs to be recalcuated to get the address.
++
+ - CONFIG_SYS_MEM_TOP_HIDE (PPC only):
+ 		If CONFIG_SYS_MEM_TOP_HIDE is defined in the board config header,
+ 		this specified memory area will get subtracted from the top
+diff --git a/common/board_f.c b/common/board_f.c
+index b3a6693..9c0c423 100644
+--- a/common/board_f.c
++++ b/common/board_f.c
+@@ -323,6 +323,15 @@ static int setup_dest_addr(void)
+ 	 * Ram is setup, size stored in gd !!
+ 	 */
+ 	debug("Ram size: %08lX\n", (ulong)gd->ram_size);
++#ifdef CONFIG_SYS_MEM_RESERVE_SECURE
++	/* Reserve memory for secure MMU tables, and/or security monitor */
++	gd->ram_size -= CONFIG_SYS_MEM_RESERVE_SECURE;
++	/*
++	 * Record secure memory location. Need recalcuate if memory splits
++	 * into banks, or the ram base is not zero.
++	 */
++	gd->secure_ram = gd->ram_size;
++#endif
+ #if defined(CONFIG_SYS_MEM_TOP_HIDE)
+ 	/*
+ 	 * Subtract specified amount of memory to hide so that it won't
+diff --git a/common/cmd_bdinfo.c b/common/cmd_bdinfo.c
+index ed3b935..471e137 100644
+--- a/common/cmd_bdinfo.c
++++ b/common/cmd_bdinfo.c
+@@ -377,6 +377,12 @@ static int do_bdinfo(cmd_tbl_t *cmdtp, int flag, int argc,
+ 		print_num("-> size",	bd->bi_dram[i].size);
+ 	}
+ 
++#ifdef CONFIG_SYS_MEM_RESERVE_SECURE
++	if (gd->secure_ram & MEM_RESERVE_SECURE_SECURED) {
++		print_num("Secure ram",
++			  gd->secure_ram & MEM_RESERVE_SECURE_ADDR_MASK);
++	}
++#endif
+ #if defined(CONFIG_CMD_NET) && !defined(CONFIG_DM_ETH)
+ 	print_eths();
+ #endif
+diff --git a/include/asm-generic/global_data.h b/include/asm-generic/global_data.h
+index 2155265..7b12ba4 100644
+--- a/include/asm-generic/global_data.h
++++ b/include/asm-generic/global_data.h
+@@ -58,6 +58,20 @@ typedef struct global_data {
+ 
+ 	unsigned long relocaddr;	/* Start address of U-Boot in RAM */
+ 	phys_size_t ram_size;	/* RAM size */
++#ifdef CONFIG_SYS_MEM_RESERVE_SECURE
++#define MEM_RESERVE_SECURE_SECURED	0x1
++#define MEM_RESERVE_SECURE_MAINTAINED	0x2
++#define MEM_RESERVE_SECURE_ADDR_MASK	(~0x3)
++	/*
++	 * Secure memory addr
++	 * This variable needs maintenance if the RAM base is not zero,
++	 * or if RAM splits into non-consecutive banks. It also has a
++	 * flag indicating the secure memory is marked as secure by MMU.
++	 * Flags used: 0x1 secured
++	 *             0x2 maintained
++	 */
++	phys_addr_t secure_ram;
++#endif
+ 	unsigned long mon_len;	/* monitor len */
+ 	unsigned long irq_sp;		/* irq stack pointer */
+ 	unsigned long start_addr_sp;	/* start_addr_stackpointer */
+-- 
+2.1.0.27.g96db324
+

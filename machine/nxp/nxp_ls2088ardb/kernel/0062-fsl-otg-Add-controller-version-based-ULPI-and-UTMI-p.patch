@@ -1,0 +1,79 @@
+From 1e4c8c04f0b223150ac2452a41b2d2c0b038025f Mon Sep 17 00:00:00 2001
+From: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Date: Thu, 11 Apr 2013 09:57:14 +0530
+Subject: [PATCH 062/124] fsl/otg: Add controller version based ULPI and UTMI
+ phy
+
+Add controller version based ULPI and UTMI phy initialization for
+otg driver
+
+Change-Id: I5f64d5e70ecec7ad341a0e4a1a201f965d628ca6
+Signed-off-by: Shengzhou Liu <Shengzhou.Liu@freescale.com>
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Reviewed-on: http://git.am.freescale.net:8181/1366
+Reviewed-by: Fleming Andrew-AFLEMING <AFLEMING@freescale.com>
+Tested-by: Fleming Andrew-AFLEMING <AFLEMING@freescale.com>
+---
+ drivers/usb/phy/phy-fsl-usb.c | 20 ++++++++++++++++++++
+ drivers/usb/phy/phy-fsl-usb.h |  8 ++++++++
+ 2 files changed, 28 insertions(+)
+
+diff --git a/drivers/usb/phy/phy-fsl-usb.c b/drivers/usb/phy/phy-fsl-usb.c
+index 94eb292..43963e8 100644
+--- a/drivers/usb/phy/phy-fsl-usb.c
++++ b/drivers/usb/phy/phy-fsl-usb.c
+@@ -923,12 +923,32 @@ int usb_otg_start(struct platform_device *pdev)
+ 	temp &= ~(PORTSC_PHY_TYPE_SEL | PORTSC_PTW);
+ 	switch (pdata->phy_mode) {
+ 	case FSL_USB2_PHY_ULPI:
++		if (pdata->controller_ver) {
++			/* controller version 1.6 or above */
++			setbits32(&p_otg->dr_mem_map->control,
++				USB_CTRL_ULPI_PHY_CLK_SEL);
++			/*
++			* Due to controller issue of PHY_CLK_VALID in ULPI
++			* mode, we set USB_CTRL_USB_EN before checking
++			* PHY_CLK_VALID, otherwise PHY_CLK_VALID doesn't work.
++			*/
++			clrsetbits_be32(&p_otg->dr_mem_map->control,
++				USB_CTRL_UTMI_PHY_EN, USB_CTRL_IOENB);
++		}
+ 		temp |= PORTSC_PTS_ULPI;
+ 		break;
+ 	case FSL_USB2_PHY_UTMI_WIDE:
+ 		temp |= PORTSC_PTW_16BIT;
+ 		/* fall through */
+ 	case FSL_USB2_PHY_UTMI:
++		if (pdata->controller_ver) {
++			/* controller version 1.6 or above */
++			setbits32(&p_otg->dr_mem_map->control,
++				USB_CTRL_UTMI_PHY_EN);
++			/* Delay for UTMI PHY CLK to become stable - 10ms */
++			mdelay(FSL_UTMI_PHY_DLY);
++		}
++		setbits32(&p_otg->dr_mem_map->control, USB_CTRL_UTMI_PHY_EN);
+ 		temp |= PORTSC_PTS_UTMI;
+ 		/* fall through */
+ 	default:
+diff --git a/drivers/usb/phy/phy-fsl-usb.h b/drivers/usb/phy/phy-fsl-usb.h
+index 2314995..c4c0873 100644
+--- a/drivers/usb/phy/phy-fsl-usb.h
++++ b/drivers/usb/phy/phy-fsl-usb.h
+@@ -199,6 +199,14 @@
+ /* control Register Bit Masks */
+ #define  USB_CTRL_IOENB			(0x1<<2)
+ #define  USB_CTRL_ULPI_INT0EN		(0x1<<0)
++#define	USB_CTRL_WU_INT_EN		(0x1<<1)
++#define	USB_CTRL_LINE_STATE_FILTER__EN	(0x1<<3)
++#define	USB_CTRL_KEEP_OTG_ON		(0x1<<4)
++#define	USB_CTRL_OTG_PORT		(0x1<<5)
++#define	USB_CTRL_PLL_RESET		(0x1<<8)
++#define	USB_CTRL_UTMI_PHY_EN		(0x1<<9)
++#define	USB_CTRL_ULPI_PHY_CLK_SEL	(0x1<<10)
++#define	USB_CTRL_PHY_CLK_VALID		(0x1<<17)
+ 
+ /* BCSR5 */
+ #define BCSR5_INT_USB			(0x02)
+-- 
+2.1.0.27.g96db324
+

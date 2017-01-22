@@ -1,0 +1,78 @@
+From db1641a43a2e712b536395f829decb740a5f3d42 Mon Sep 17 00:00:00 2001
+From: Pankaj Chauhan <pankaj.chauhan@freescale.com>
+Date: Tue, 23 Dec 2014 17:14:53 +0530
+Subject: [PATCH 051/124] irq/msi: Move msi_desc allocation out of pci/msi
+
+In order to support MSI for non PCI devices move
+msi_alloc_entry() out of PCI/MSI, so that non PCI
+devices can also allocate msi_descs.
+
+Signed-off-by: Pankaj Chauhan <pankaj.chauhan@freescale.com>
+Change-Id: Iebfb5716318167b39eb88479c905ff0b5d6d5f5c
+Reviewed-on: http://git.am.freescale.net:8181/33325
+Reviewed-by: Stuart Yoder <stuart.yoder@freescale.com>
+Tested-by: Stuart Yoder <stuart.yoder@freescale.com>
+---
+ drivers/pci/msi.c   | 11 -----------
+ include/linux/msi.h |  1 +
+ kernel/irq/msi.c    | 12 ++++++++++++
+ 3 files changed, 13 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/pci/msi.c b/drivers/pci/msi.c
+index c3e7dfc..1029685 100644
+--- a/drivers/pci/msi.c
++++ b/drivers/pci/msi.c
+@@ -423,17 +423,6 @@ static void free_msi_irqs(struct pci_dev *dev)
+ 	}
+ }
+ 
+-static struct msi_desc *alloc_msi_entry(struct pci_dev *dev)
+-{
+-	struct msi_desc *desc = kzalloc(sizeof(*desc), GFP_KERNEL);
+-	if (!desc)
+-		return NULL;
+-
+-	INIT_LIST_HEAD(&desc->list);
+-	desc->dev = dev;
+-
+-	return desc;
+-}
+ 
+ static void pci_intx_for_msi(struct pci_dev *dev, int enable)
+ {
+diff --git a/include/linux/msi.h b/include/linux/msi.h
+index 8ac4a68..fa474655 100644
+--- a/include/linux/msi.h
++++ b/include/linux/msi.h
+@@ -238,6 +238,7 @@ irq_hw_number_t pci_msi_domain_calc_hwirq(struct pci_dev *dev,
+ 					  struct msi_desc *desc);
+ int pci_msi_domain_check_cap(struct irq_domain *domain,
+ 			     struct msi_domain_info *info, struct device *dev);
++struct msi_desc *alloc_msi_entry(struct device *dev);
+ #endif /* CONFIG_PCI_MSI_IRQ_DOMAIN */
+ 
+ #endif /* LINUX_MSI_H */
+diff --git a/kernel/irq/msi.c b/kernel/irq/msi.c
+index 49e1b80..964c424 100644
+--- a/kernel/irq/msi.c
++++ b/kernel/irq/msi.c
+@@ -336,4 +336,16 @@ struct msi_domain_info *msi_get_domain_info(struct irq_domain *domain)
+ 	return (struct msi_domain_info *)domain->host_data;
+ }
+ 
++struct msi_desc *alloc_msi_entry(struct device *dev)
++{
++	struct msi_desc *desc = kzalloc(sizeof(*desc), GFP_KERNEL);
++	if (!desc)
++		return NULL;
++
++	INIT_LIST_HEAD(&desc->list);
++	desc->dev = dev;
++
++	return desc;
++}
++
+ #endif /* CONFIG_GENERIC_MSI_IRQ_DOMAIN */
+-- 
+2.1.0.27.g96db324
+

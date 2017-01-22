@@ -1,0 +1,34 @@
+From 302acad7d64297a003c499e921c3612de7ea252d Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@freescale.com>
+Date: Fri, 10 Jul 2015 11:36:45 +0800
+Subject: [PATCH 111/124] mmc: sdio: avoid using NULL sdio_irq_thread pointer
+
+For Freescale QorIQ LS1021AQDS board, there is a SDIO interrupt
+in the process of resume without inserting SD adapter because of
+some unknown issue. But the driver doesn't assign sdio_irq_thread
+pointer. This will block the resume of kernel. This patch is used
+to avoid using NULL sdio_irq_thread pointer.
+
+Signed-off-by: Yangbo Lu <yangbo.lu@freescale.com>
+Signed-off-by: Ulf Hansson <ulf.hansson@linaro.org>
+---
+ include/linux/mmc/host.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/include/linux/mmc/host.h b/include/linux/mmc/host.h
+index b5bedae..90c0400 100644
+--- a/include/linux/mmc/host.h
++++ b/include/linux/mmc/host.h
+@@ -400,7 +400,8 @@ static inline void mmc_signal_sdio_irq(struct mmc_host *host)
+ {
+ 	host->ops->enable_sdio_irq(host, 0);
+ 	host->sdio_irq_pending = true;
+-	wake_up_process(host->sdio_irq_thread);
++	if (host->sdio_irq_thread)
++		wake_up_process(host->sdio_irq_thread);
+ }
+ 
+ void sdio_run_irqs(struct mmc_host *host);
+-- 
+2.1.0.27.g96db324
+

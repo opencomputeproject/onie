@@ -1,0 +1,57 @@
+From 798d84db9391ea556f1ca176910cc047317a89ac Mon Sep 17 00:00:00 2001
+From: Minghuan Lian <Minghuan.Lian@nxp.com>
+Date: Wed, 8 Jun 2016 14:36:47 +0800
+Subject: [PATCH 033/124] pci/layerscape: fix error response behavior
+
+By default, when the PCIe controller experiences an erroneous
+completion from an external completer for its outbound non-posted
+request, it always sends an OKAY response to the device's internal
+AXI slave system interface. However, such default system error
+response behavior cannot be used for other types of outbound
+non-posted requests. For example, the outbound memory read
+transaction requires an actual ERROR response, like UR completion
+or completion timeout. The patch is to fix it by forwarding
+the error response of the non-posted request.
+
+Signed-off-by: Minghuan Lian <Minghuan.Lian@nxp.com>
+---
+ drivers/pci/host/pci-layerscape.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/pci/host/pci-layerscape.c b/drivers/pci/host/pci-layerscape.c
+index 3aabfdb..8b6a59e 100644
+--- a/drivers/pci/host/pci-layerscape.c
++++ b/drivers/pci/host/pci-layerscape.c
+@@ -45,6 +45,8 @@
+ /* PEX Internal Configuration Registers */
+ #define PCIE_STRFMR1		0x71c /* Symbol Timer & Filter Mask Register1 */
+ #define PCIE_DBI_RO_WR_EN	0x8bc /* DBI Read-Only Write Enable Register */
++#define PCIE_ABSERR		0x8d0 /* Bridge Slave Error Response Register */
++#define PCIE_ABSERR_SETTING	0x9401 /* Forward error of non-posted request */
+ 
+ /* PEX LUT registers */
+ #define PCIE_LUT_DBG		0x7FC /* PEX LUT Debug Register */
+@@ -204,6 +206,12 @@ static void ls_pcie_disable_outbound_atus(struct ls_pcie *pcie)
+ 		dw_pcie_disable_outbound_atu(&pcie->pp, i);
+ }
+ 
++/* Forward error response of outbound non-posted requests */
++static void ls_pcie_fix_error_response(struct ls_pcie *pcie)
++{
++	iowrite32(PCIE_ABSERR_SETTING, pcie->dbi + PCIE_ABSERR);
++}
++
+ static int ls1021_pcie_link_up(struct pcie_port *pp)
+ {
+ 	u32 state;
+@@ -352,6 +360,7 @@ static void ls_pcie_host_init(struct pcie_port *pp)
+ 
+ 	ls_pcie_disable_bars(pcie);
+ 	ls_pcie_disable_outbound_atus(pcie);
++	ls_pcie_fix_error_response(pcie);
+ }
+ 
+ static int ls_pcie_msi_host_init(struct pcie_port *pp,
+-- 
+2.1.0.27.g96db324
+

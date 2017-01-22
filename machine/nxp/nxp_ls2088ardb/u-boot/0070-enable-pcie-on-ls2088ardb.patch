@@ -1,0 +1,158 @@
+From eb89d7c8af4fec12102080c3bd8cdc911790c8ad Mon Sep 17 00:00:00 2001
+From: Zhao Qiang <qiang.zhao@nxp.com>
+Date: Wed, 8 Feb 2017 10:00:16 +0800
+Subject: [PATCH 70/74] enable pcie on ls2088ardb
+
+Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/dts/fsl-ls2080a-rdb.dts               |  8 ++---
+ arch/arm/dts/fsl-ls2080a.dtsi                  | 41 ++++++++++++++------------
+ arch/arm/include/asm/arch-fsl-layerscape/soc.h |  2 +-
+ 3 files changed, 27 insertions(+), 24 deletions(-)
+
+diff --git a/arch/arm/dts/fsl-ls2080a-rdb.dts b/arch/arm/dts/fsl-ls2080a-rdb.dts
+index 1a1813b..751185f 100644
+--- a/arch/arm/dts/fsl-ls2080a-rdb.dts
++++ b/arch/arm/dts/fsl-ls2080a-rdb.dts
+@@ -1,7 +1,7 @@
+ /*
+- * Freescale ls2080a RDB board device tree source
++ * Freescale ls2088a RDB board device tree source
+  *
+- * Copyright 2013-2015 Freescale Semiconductor, Inc.
++ * Copyright 2016 Freescale Semiconductor, Inc.
+  *
+  * SPDX-License-Identifier:	GPL-2.0+
+  */
+@@ -11,8 +11,8 @@
+ #include "fsl-ls2080a.dtsi"
+ 
+ / {
+-	model = "Freescale Layerscape 2080a RDB Board";
+-	compatible = "fsl,ls2080a-rdb", "fsl,ls2080a";
++	model = "Freescale Layerscape 2088A RDB Board";
++	compatible = "fsl,ls2088a-rdb", "fsl,ls2088a";
+ 
+ 	aliases {
+ 		spi1 = &dspi;
+diff --git a/arch/arm/dts/fsl-ls2080a.dtsi b/arch/arm/dts/fsl-ls2080a.dtsi
+index a5c579c..ad2ac69 100644
+--- a/arch/arm/dts/fsl-ls2080a.dtsi
++++ b/arch/arm/dts/fsl-ls2080a.dtsi
+@@ -1,13 +1,13 @@
+ /*
+- * Freescale ls2080a SOC common device tree source
++ * Freescale ls2088a SOC common device tree source
+  *
+- * Copyright 2013-2015 Freescale Semiconductor, Inc.
++ * Copyright 2016 Freescale Semiconductor, Inc.
+  *
+  * SPDX-License-Identifier:	GPL-2.0+
+  */
+ 
+ / {
+-	compatible = "fsl,ls2080a";
++	compatible = "fsl,ls2088a";
+ 	interrupt-parent = <&gic>;
+ 	#address-cells = <2>;
+ 	#size-cells = <2>;
+@@ -16,59 +16,52 @@
+ 		#address-cells = <2>;
+ 		#size-cells = <0>;
+ 
+-		/*
+-		 * We expect the enable-method for cpu's to be "psci", but this
+-		 * is dependent on the SoC FW, which will fill this in.
+-		 *
+-		 * Currently supported enable-method is psci v0.2
+-		 */
+-
+-		/* We have 4 clusters having 2 Cortex-A57 cores each */
++		/* We have 4 clusters having 2 Cortex-A72 cores each */
+ 		cpu@0 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a57";
++			compatible = "arm,cortex-a72";
+ 			reg = <0x0 0x0>;
+ 		};
+ 
+ 		cpu@1 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a57";
++			compatible = "arm,cortex-a72";
+ 			reg = <0x0 0x1>;
+ 		};
+ 
+ 		cpu@100 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a57";
++			compatible = "arm,cortex-a72";
+ 			reg = <0x0 0x100>;
+ 		};
+ 
+ 		cpu@101 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a57";
++			compatible = "arm,cortex-a72";
+ 			reg = <0x0 0x101>;
+ 		};
+ 
+ 		cpu@200 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a57";
++			compatible = "arm,cortex-a72";
+ 			reg = <0x0 0x200>;
+ 		};
+ 
+ 		cpu@201 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a57";
++			compatible = "arm,cortex-a72";
+ 			reg = <0x0 0x201>;
+ 		};
+ 
+ 		cpu@300 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a57";
++			compatible = "arm,cortex-a72";
+ 			reg = <0x0 0x300>;
+ 		};
+ 
+ 		cpu@301 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a57";
++			compatible = "arm,cortex-a72";
+ 			reg = <0x0 0x301>;
+ 		};
+ 	};
+@@ -126,4 +119,14 @@
+ 		interrupts = <0 26 0x4>; /* Level high type */
+ 		num-cs = <6>;
+ 	};
++
++	qspi: quadspi@1550000 {
++		compatible = "fsl,vf610-qspi";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0x0 0x20c0000 0x0 0x10000>,
++			<0x0 0x20000000 0x0 0x10000000>;
++		reg-names = "QuadSPI", "QuadSPI-memory";
++		num-cs = <4>;
++	};
+ };
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/soc.h b/arch/arm/include/asm/arch-fsl-layerscape/soc.h
+index d0958b6..1c80435 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/soc.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/soc.h
+@@ -46,7 +46,7 @@ struct cpu_type {
+ #define SVR_LS2045		0x870120
+ #define SVR_LS2080		0x870110
+ #define SVR_LS2085		0x870100
+-#define SVR_LS2088		0x870901
++#define SVR_LS2088		0x870900
+ #define SVR_LS2084		0x870911
+ #define SVR_LS2048		0x870921
+ #define SVR_LS2044		0x870931
+-- 
+2.1.0.27.g96db324
+

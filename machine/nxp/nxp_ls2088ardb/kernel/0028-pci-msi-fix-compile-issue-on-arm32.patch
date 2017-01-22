@@ -1,0 +1,40 @@
+From c91230f49605ab92db78f92408da16ba0d06948c Mon Sep 17 00:00:00 2001
+From: Stuart Yoder <stuart.yoder@nxp.com>
+Date: Fri, 22 Jan 2016 13:23:43 -0600
+Subject: [PATCH 028/124] pci/msi: fix compile issue on arm32
+
+commit 52bcf2046acc5d7ea756654c57e8ae401397776a
+moved msi_list from pdev to dev, which includes
+a change the dev field in msi_desc.  This patch
+fixes a build break on arm32.
+
+Signed-off-by: Stuart Yoder <stuart.yoder@nxp.com>
+---
+ drivers/pci/host/pcie-designware.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/pci/host/pcie-designware.c b/drivers/pci/host/pcie-designware.c
+index 854a68b..ae7a1e5 100644
+--- a/drivers/pci/host/pcie-designware.c
++++ b/drivers/pci/host/pcie-designware.c
+@@ -238,7 +238,7 @@ static void dw_pcie_msi_set_irq(struct pcie_port *pp, int irq)
+ static int assign_irq(int no_irqs, struct msi_desc *desc, int *pos)
+ {
+ 	int irq, pos0, i;
+-	struct pcie_port *pp = sys_to_pcie(desc->dev->bus->sysdata);
++	struct pcie_port *pp = sys_to_pcie(to_pci_dev(desc->dev)->bus->sysdata);
+ 
+ 	pos0 = bitmap_find_free_region(pp->msi_irq_in_use, MAX_MSI_IRQS,
+ 				       order_base_2(no_irqs));
+@@ -310,7 +310,7 @@ static void dw_msi_teardown_irq(struct msi_controller *chip, unsigned int irq)
+ {
+ 	struct irq_data *data = irq_get_irq_data(irq);
+ 	struct msi_desc *msi = irq_data_get_msi(data);
+-	struct pcie_port *pp = sys_to_pcie(msi->dev->bus->sysdata);
++	struct pcie_port *pp = sys_to_pcie(to_pci_dev(msi->dev)->bus->sysdata);
+ 
+ 	clear_irq_range(pp, irq, 1, data->hwirq);
+ }
+-- 
+2.1.0.27.g96db324
+

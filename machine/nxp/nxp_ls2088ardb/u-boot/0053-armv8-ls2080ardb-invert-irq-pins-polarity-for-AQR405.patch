@@ -1,0 +1,70 @@
+From 6cc678a56d8643534ef9a8f028c7816853084f9f Mon Sep 17 00:00:00 2001
+From: Shaohui Xie <Shaohui.Xie@nxp.com>
+Date: Thu, 28 Jan 2016 15:38:15 +0800
+Subject: [PATCH 53/74] armv8: ls2080ardb: invert irq pins polarity for AQR405
+ PHY
+
+To use AQR405 PHY's interrupt, we need to invert the relative IRQ pins
+polarity by setting IRQCR register, because AQR405 interrupt is low
+active but GIC accepts high active.
+
+Signed-off-by: Shaohui Xie <Shaohui.Xie@nxp.com>
+Reviewed-by: York Sun <york.sun@nxp.com>
+---
+ arch/arm/include/asm/arch-fsl-layerscape/immap_lsch3.h | 4 ++++
+ board/freescale/ls2080ardb/ls2080ardb.c                | 4 ++++
+ include/configs/ls2080ardb.h                           | 1 +
+ 3 files changed, 9 insertions(+)
+
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch3.h b/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch3.h
+index cd96604..f182dea 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch3.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch3.h
+@@ -94,6 +94,10 @@
+ #define DCFG_DCSR_BASE		0X700100000ULL
+ #define DCFG_DCSR_PORCR1		0x000
+ 
++/* Interrupt Sampling Control */
++#define ISC_BASE		0x01F70000
++#define IRQCR_OFFSET		0x14
++
+ /* Supplemental Configuration */
+ #define SCFG_BASE		0x01fc0000
+ #define SCFG_USB3PRM1CR			0x000
+diff --git a/board/freescale/ls2080ardb/ls2080ardb.c b/board/freescale/ls2080ardb/ls2080ardb.c
+index 2ae9d6c..da227a7 100644
+--- a/board/freescale/ls2080ardb/ls2080ardb.c
++++ b/board/freescale/ls2080ardb/ls2080ardb.c
+@@ -149,6 +149,7 @@ int board_init(void)
+ {
+ 	char *env_hwconfig;
+ 	u32 __iomem *dcfg_ccsr = (u32 __iomem *)DCFG_BASE;
++	u32 __iomem *irq_ccsr = (u32 __iomem *)ISC_BASE;
+ 	u32 val;
+ 
+ 	init_final_memctl_regs();
+@@ -170,6 +171,9 @@ int board_init(void)
+ 
+ 	QIXIS_WRITE(rst_ctl, QIXIS_RST_CTL_RESET_EN);
+ 
++	/* invert AQR405 IRQ pins polarity */
++	out_le32(irq_ccsr + IRQCR_OFFSET / 4, AQR405_IRQ_MASK);
++
+ 	return 0;
+ }
+ 
+diff --git a/include/configs/ls2080ardb.h b/include/configs/ls2080ardb.h
+index 90f97d5..29b70e1 100644
+--- a/include/configs/ls2080ardb.h
++++ b/include/configs/ls2080ardb.h
+@@ -335,6 +335,7 @@ unsigned long get_board_sys_clk(void);
+ #define AQ_PHY_ADDR2		0x01
+ #define AQ_PHY_ADDR3		0x02
+ #define AQ_PHY_ADDR4		0x03
++#define AQR405_IRQ_MASK		0x36
+ 
+ #define CONFIG_MII
+ #define CONFIG_ETHPRIME		"DPNI1"
+-- 
+2.1.0.27.g96db324
+

@@ -1,0 +1,126 @@
+From 9226d3a9512bb7e9e21468adbb85dd86b59f1fba Mon Sep 17 00:00:00 2001
+From: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+Date: Wed, 11 May 2016 09:25:49 +0800
+Subject: [PATCH 60/74] board: ls2080a: Add "mcinitcmd" env for MC & DPL
+ deployment
+
+commit 026ff365fc67488bfb9e28fbb71aaa16b5e9dfdb
+[context adjustment]
+
+Environment variable mcinitcmd is defined to initiate MC and DPL deployment
+from the location where it is stored(NOR, NAND, SD, SATA, USB)during u-boot
+booting.If this variable is not defined then macro MC_BOOT_ENV_VAR will be null and
+MC will not be booted and DPL will not be applied during U-boot booting.
+
+Signed-off-by: Pratiyush Mohan Srivastava <pratiyush.srivastava@nxp.com>
+Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/README.lsch3 | 29 ++++++++++++++++++++++++++
+ board/freescale/ls2080aqds/eth.c               |  5 +++++
+ board/freescale/ls2080ardb/eth_ls2080rdb.c     |  5 +++++
+ 3 files changed, 39 insertions(+)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/README.lsch3 b/arch/arm/cpu/armv8/fsl-layerscape/README.lsch3
+index db9359d..d40f639 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/README.lsch3
++++ b/arch/arm/cpu/armv8/fsl-layerscape/README.lsch3
+@@ -121,6 +121,35 @@ mcboottimeout:	MC boot timeout in milliseconds. If this variable is not defined
+ mcmemsize:	MC DRAM block size. If this variable is not defined, the value
+ 		CONFIG_SYS_LS_MC_DRAM_BLOCK_MIN_SIZE will be assumed.
+ 
++mcinitcmd:	This environment variable is defined to initiate MC and DPL deployment
++		from the location where it is stored(NOR, NAND, SD, SATA, USB)during
++		u-boot booting.If this variable is not defined then MC_BOOT_ENV_VAR
++		will be null and MC will not be booted and DPL will not be applied
++		during U-boot booting.However the MC, DPC and DPL can be applied from
++		console independently.
++		The variable needs to be set from the console once and then on
++		rebooting the parameters set in the varible will automatically be
++		executed. The commmand is demostrated taking an example of mc boot
++		using NOR Flash i.e. MC, DPL, and DPC is stored in the NOR flash:
++
++		cp.b 0xa0000000 0x580300000 $filesize
++		cp.b 0x80000000 0x580800000 $filesize
++		cp.b 0x90000000 0x580700000 $filesize
++
++		setenv mcinitcmd 'fsl_mc start mc 0x580300000 0x580800000'
++
++		If only linux is to be booted then the mcinitcmd environment should be set as
++
++		setenv mcinitcmd 'fsl_mc start mc 0x580300000 0x580800000;fsl_mc apply DPL 0x580700000'
++
++		Here the addresses 0xa0000000, 0x80000000, 0x80000000 are of DDR to where
++		MC binary, DPC binary and DPL binary are stored and 0x580300000, 0x580800000
++		and 0x580700000 are addresses in NOR where these are copied. It is to be
++		noted that these addresses in 'fsl_mc start mc 0x580300000 0x580800000;fsl_mc apply DPL 0x580700000'
++		can be replaced with the addresses of DDR to
++		which these will be copied in case of these binaries being stored in other
++		devices like SATA, USB, NAND, SD etc.
++
+ Booting from NAND
+ -------------------
+ Booting from NAND requires two images, RCW and u-boot-with-spl.bin.
+diff --git a/board/freescale/ls2080aqds/eth.c b/board/freescale/ls2080aqds/eth.c
+index ec0acee..f2996e9 100644
+--- a/board/freescale/ls2080aqds/eth.c
++++ b/board/freescale/ls2080aqds/eth.c
+@@ -20,6 +20,7 @@
+ 
+ #include "ls2080aqds_qixis.h"
+ 
++#define MC_BOOT_ENV_VAR "mcinitcmd"
+ 
+ #ifdef CONFIG_FSL_MC_ENET
+  /* - In LS2080A there are only 16 SERDES lanes, spread across 2 SERDES banks.
+@@ -739,6 +740,7 @@ void ls2080a_handle_phy_interface_xsgmii(int i)
+ int board_eth_init(bd_t *bis)
+ {
+ 	int error;
++	char *mc_boot_env_var;
+ #ifdef CONFIG_FSL_MC_ENET
+ 	struct ccsr_gur __iomem *gur = (void *)CONFIG_SYS_FSL_GUTS_ADDR;
+ 	int serdes1_prtcl = (in_le32(&gur->rcwsr[28]) &
+@@ -806,6 +808,9 @@ int board_eth_init(bd_t *bis)
+ 		}
+ 	}
+ 
++	mc_boot_env_var = getenv(MC_BOOT_ENV_VAR);
++	if (mc_boot_env_var)
++		run_command_list(mc_boot_env_var, -1, 0);
+ 	error = cpu_eth_init(bis);
+ 
+ 	if (hwconfig_f("xqsgmii", env_hwconfig)) {
+diff --git a/board/freescale/ls2080ardb/eth_ls2080rdb.c b/board/freescale/ls2080ardb/eth_ls2080rdb.c
+index db50e4e..cb0f153 100644
+--- a/board/freescale/ls2080ardb/eth_ls2080rdb.c
++++ b/board/freescale/ls2080ardb/eth_ls2080rdb.c
+@@ -20,6 +20,7 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++#define MC_BOOT_ENV_VAR "mcinitcmd"
+ int load_firmware_cortina(struct phy_device *phy_dev)
+ {
+ 	if (phy_dev->drv->config)
+@@ -59,6 +60,7 @@ void load_phy_firmware(void)
+ int board_eth_init(bd_t *bis)
+ {
+ #if defined(CONFIG_FSL_MC_ENET)
++	char *mc_boot_env_var;
+ 	int i, interface;
+ 	struct memac_mdio_info mdio_info;
+ 	struct mii_dev *dev;
+@@ -128,6 +130,9 @@ int board_eth_init(bd_t *bis)
+ 	/* Load CORTINA CS4340 PHY firmware */
+ 	load_phy_firmware();
+ 
++	mc_boot_env_var = getenv(MC_BOOT_ENV_VAR);
++	if (mc_boot_env_var)
++		run_command_list(mc_boot_env_var, -1, 0);
+ 	cpu_eth_init(bis);
+ #endif /* CONFIG_FMAN_ENET */
+ 
+-- 
+2.1.0.27.g96db324
+

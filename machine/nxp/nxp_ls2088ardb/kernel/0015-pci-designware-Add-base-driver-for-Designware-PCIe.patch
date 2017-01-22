@@ -1,0 +1,407 @@
+From c000cabb83bdc281e9f3a70a37be194f6263e9be Mon Sep 17 00:00:00 2001
+From: Minghuan Lian <Minghuan.Lian@freescale.com>
+Date: Mon, 23 Mar 2015 15:55:52 +0800
+Subject: [PATCH 015/124] pci/designware: Add base driver for Designware PCIe
+
+The Synopsys Designware IP is shared with couples of platforms
+under multiple architectures. The patch is to provide basic
+architecture-independent Designware PCIe host driver including
+ATU initialization and PCI OPS. Currently, which supports arm
+and arm64 simultaneously.
+
+Signed-off-by: Minghuan Lian <Minghuan.Lian@freescale.com>
+Change-Id: I6daa7853c6acf0d14264d9f14cf2bb40e0e5c928
+Reviewed-on: http://git.am.freescale.net:8181/33248
+Reviewed-by: Stuart Yoder <stuart.yoder@freescale.com>
+Tested-by: Stuart Yoder <stuart.yoder@freescale.com>
+---
+ drivers/pci/host/Kconfig                |   3 +
+ drivers/pci/host/Makefile               |   1 +
+ drivers/pci/host/pcie-designware-base.c | 282 ++++++++++++++++++++++++++++++++
+ drivers/pci/host/pcie-designware-base.h |  62 +++++++
+ 4 files changed, 348 insertions(+)
+ create mode 100644 drivers/pci/host/pcie-designware-base.c
+ create mode 100644 drivers/pci/host/pcie-designware-base.h
+
+diff --git a/drivers/pci/host/Kconfig b/drivers/pci/host/Kconfig
+index 1dfb567..2a697c0a 100644
+--- a/drivers/pci/host/Kconfig
++++ b/drivers/pci/host/Kconfig
+@@ -18,6 +18,9 @@ config PCI_MVEBU
+ config PCIE_DW
+ 	bool
+ 
++config PCIE_DW_BASE
++	bool
++
+ config PCI_EXYNOS
+ 	bool "Samsung Exynos PCIe controller"
+ 	depends on SOC_EXYNOS5440
+diff --git a/drivers/pci/host/Makefile b/drivers/pci/host/Makefile
+index f733b4e..da985e1 100644
+--- a/drivers/pci/host/Makefile
++++ b/drivers/pci/host/Makefile
+@@ -1,3 +1,4 @@
++obj-$(CONFIG_PCIE_DW_BASE) += pcie-designware-base.o
+ obj-$(CONFIG_PCIE_DW) += pcie-designware.o
+ obj-$(CONFIG_PCI_DRA7XX) += pci-dra7xx.o
+ obj-$(CONFIG_PCI_EXYNOS) += pci-exynos.o
+diff --git a/drivers/pci/host/pcie-designware-base.c b/drivers/pci/host/pcie-designware-base.c
+new file mode 100644
+index 0000000..f661151
+--- /dev/null
++++ b/drivers/pci/host/pcie-designware-base.c
+@@ -0,0 +1,282 @@
++/*
++ * Synopsys Designware PCIe host controller base driver
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/of_pci.h>
++#include <linux/pci.h>
++#include <linux/pci_regs.h>
++#include <linux/platform_device.h>
++
++#include "pcie-designware-base.h"
++
++void dw_pcie_dbi_write(struct dw_pcie_port *pp, u32 value, u32 offset)
++{
++	iowrite32(value, pp->dbi + offset);
++}
++
++u32 dw_pcie_dbi_read(struct dw_pcie_port *pp, u32 offset)
++{
++	return ioread32(pp->dbi + offset);
++}
++
++int dw_pcie_host_link_up(struct dw_pcie_port *pp)
++{
++	if (pp->dw_ops->link_up)
++		return pp->dw_ops->link_up(pp);
++	else
++		return 0;
++}
++
++void dw_pcie_atu_outbound_set(struct dw_pcie_port *pp, int idx, int type,
++			      u64 cpu_addr, u64 pci_addr, u32 size)
++{
++	if (idx >= pp->atu_num)
++		return;
++
++	dw_pcie_dbi_write(pp, PCIE_ATU_REGION_OUTBOUND | idx,
++			  PCIE_ATU_VIEWPORT);
++	dw_pcie_dbi_write(pp, lower_32_bits(cpu_addr),
++			  PCIE_ATU_LOWER_BASE);
++	dw_pcie_dbi_write(pp, upper_32_bits(cpu_addr),
++			  PCIE_ATU_UPPER_BASE);
++	dw_pcie_dbi_write(pp, lower_32_bits(cpu_addr + size - 1),
++			  PCIE_ATU_LIMIT);
++	dw_pcie_dbi_write(pp, lower_32_bits(pci_addr),
++			  PCIE_ATU_LOWER_TARGET);
++	dw_pcie_dbi_write(pp, upper_32_bits(pci_addr),
++			  PCIE_ATU_UPPER_TARGET);
++	dw_pcie_dbi_write(pp, type, PCIE_ATU_CR1);
++	dw_pcie_dbi_write(pp, PCIE_ATU_ENABLE, PCIE_ATU_CR2);
++}
++
++static void __iomem *
++dw_pcie_map_bus(struct pci_bus *bus, unsigned int devfn, int offset)
++{
++	struct dw_pcie_port *pp = bus->sysdata;
++	u32 type, busdev;
++
++	/* If there is no link, then there is no device */
++	if (!pci_is_root_bus(bus) && !dw_pcie_host_link_up(pp))
++		return NULL;
++
++	/* access only one slot on each root port */
++	if (pci_is_root_bus(bus) && devfn > 0)
++		return NULL;
++
++	if (pci_is_root_bus(bus))
++		return pp->dbi + offset;
++
++	busdev = PCIE_ATU_BUS(bus->number) |
++		 PCIE_ATU_DEV(PCI_SLOT(devfn)) |
++		 PCIE_ATU_FUNC(PCI_FUNC(devfn));
++
++	if (pci_is_root_bus(bus->parent))
++		type = PCIE_ATU_TYPE_CFG0;
++	else
++		type = PCIE_ATU_TYPE_CFG1;
++
++	dw_pcie_atu_outbound_set(pp,
++				 PCIE_ATU_REGION_INDEX0,
++				 type,
++				 pp->cfg_addr,
++				 busdev,
++				 pp->cfg_size);
++
++	return pp->cfg + offset;
++}
++
++static int dw_pcie_config_read(struct pci_bus *bus, unsigned int devfn,
++			       int where, int size, u32 *val)
++{
++	struct dw_pcie_port *pp = bus->sysdata;
++	int ret;
++
++	ret = pci_generic_config_read32(bus, devfn, where, size, val);
++
++	if (pp->atu_num == 2 && !pci_is_root_bus(bus))
++		/* reassign ATU0 to map IO space */
++		dw_pcie_atu_outbound_set(pp,
++					 PCIE_ATU_REGION_INDEX0,
++					 PCIE_ATU_TYPE_IO,
++					 pp->io_cpu_addr,
++					 pp->io_pci_addr,
++					 pp->io_size);
++
++	return ret;
++}
++
++static int dw_pcie_config_write(struct pci_bus *bus, unsigned int devfn,
++			       int where, int size, u32 val)
++{
++	struct dw_pcie_port *pp = bus->sysdata;
++	int ret;
++
++	ret = pci_generic_config_write32(bus, devfn, where, size, val);
++
++	if (pp->atu_num == 2 && !pci_is_root_bus(bus))
++		/* reassign ATU0 to map IO space */
++		dw_pcie_atu_outbound_set(pp,
++					 PCIE_ATU_REGION_INDEX0,
++					 PCIE_ATU_TYPE_IO,
++					 pp->io_cpu_addr,
++					 pp->io_pci_addr,
++					 pp->io_size);
++
++	return ret;
++}
++
++static struct pci_ops dw_pcie_ops = {
++	.map_bus = dw_pcie_map_bus,
++	.read = dw_pcie_config_read,
++	.write = dw_pcie_config_write,
++};
++
++static int dw_pcie_map_reg(struct dw_pcie_port *pp)
++{
++	struct platform_device *pdev = to_platform_device(pp->dev);
++	struct resource *res;
++
++	if (!pp->dbi) {
++		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
++						   "dbi");
++		if (!res) {
++			dev_err(pp->dev, "missing *dbi* reg space\n");
++			return -ENODEV;
++		}
++
++		pp->dbi = devm_ioremap_resource(pp->dev, res);
++		if (IS_ERR(pp->dbi))
++			return PTR_ERR(pp->dbi);
++	}
++
++	if (!pp->cfg) {
++		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
++						   "config");
++		if (!res) {
++			dev_err(pp->dev, "missing *config* reg space\n");
++			return -ENODEV;
++		}
++
++		pp->cfg = devm_ioremap_resource(pp->dev, res);
++		if (IS_ERR(pp->cfg))
++			return PTR_ERR(pp->cfg);
++
++		pp->cfg_addr = res->start;
++		pp->cfg_size = resource_size(res);
++	}
++
++	return 0;
++}
++
++/*
++ * If ATU number = 2, ATU0 is shared by transaction CFG and IO,
++ * ATU1 is used for transaction MEM
++ * If ATU number > 2, ATU0 is used for transaction CFG
++ * the other ATUs are used for MEM and IO separately.
++ */
++static int dw_pcie_atu_init(struct dw_pcie_port *pp,
++			    struct list_head *res,
++			    resource_size_t io_base)
++{
++	struct resource_entry *window;
++	struct device *dev = pp->dev;
++	int idx = 1, ret;
++
++	if (pp->atu_num < 2)
++		pp->atu_num = 2;
++
++	resource_list_for_each_entry(window, res) {
++		struct resource *res = window->res;
++		unsigned long restype = resource_type(res);
++
++		switch (restype) {
++		case IORESOURCE_IO:
++			if (pp->atu_num == 2)
++				idx = 0;
++
++			pp->io_cpu_addr = io_base;
++			pp->io_pci_addr = res->start - window->offset;
++			pp->io_size = resource_size(res);
++			dw_pcie_atu_outbound_set(pp,
++						 idx,
++						 PCIE_ATU_TYPE_IO,
++						 pp->io_cpu_addr,
++						 pp->io_pci_addr,
++						 pp->io_size);
++			ret = pci_remap_iospace(res, io_base);
++			if (ret < 0)
++				return ret;
++			idx++;
++			break;
++		case IORESOURCE_MEM:
++			if (pp->atu_num == 2)
++				idx = 1;
++
++			dw_pcie_atu_outbound_set(pp,
++						 idx,
++						 PCIE_ATU_TYPE_MEM,
++						 res->start,
++						 res->start - window->offset,
++						 resource_size(res));
++			idx++;
++			break;
++		case IORESOURCE_BUS:
++			break;
++		default:
++			dev_err(dev, "invalid resource %pR\n", res);
++			return -EINVAL;
++		}
++	}
++
++	return 0;
++}
++
++int dw_pcie_port_init(struct dw_pcie_port *pp)
++{
++	struct device_node *dn = pp->dev->of_node;
++	resource_size_t iobase = 0;
++	struct pci_bus *bus;
++	int ret;
++	LIST_HEAD(res);
++
++	ret = dw_pcie_map_reg(pp);
++	if (ret)
++		return ret;
++
++	ret = of_pci_get_host_bridge_resources(dn, 0, 0xff, &res, &iobase);
++	if (ret)
++		return ret;
++
++	ret = dw_pcie_atu_init(pp, &res, iobase);
++	if (ret)
++		return ret;
++
++	if (!pp->pci_ops)
++		pp->pci_ops = &dw_pcie_ops;
++
++	if (pp->dw_ops->host_init) {
++		if (pp->dw_ops->host_init(pp))
++			return ret;
++	}
++
++	bus = pci_create_root_bus(pp->dev, 0, pp->pci_ops,
++				  pp, &res);
++	if (!bus)
++		return -ENOMEM;
++
++	pci_scan_child_bus(bus);
++	pci_assign_unassigned_bus_resources(bus);
++	pci_bus_add_devices(bus);
++
++	return 0;
++}
++
++MODULE_AUTHOR("Minghuan Lian <Minghuan.Lian@freescale.com>");
++MODULE_DESCRIPTION("Designware PCIe controller driver with Multiarch support");
++MODULE_LICENSE("GPL v2");
+diff --git a/drivers/pci/host/pcie-designware-base.h b/drivers/pci/host/pcie-designware-base.h
+new file mode 100644
+index 0000000..dd7a3b3
+--- /dev/null
++++ b/drivers/pci/host/pcie-designware-base.h
+@@ -0,0 +1,62 @@
++/*
++ * Synopsys Designware PCIe host controller base driver
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#ifndef _PCIE_DESIGNWARE_BASE_H
++#define _PCIE_DESIGNWARE_BASE_H
++
++/* Synopsis specific PCIE configuration registers */
++#define PCIE_ATU_VIEWPORT		0x900
++#define PCIE_ATU_REGION_INBOUND		(0x1 << 31)
++#define PCIE_ATU_REGION_OUTBOUND	(0x0 << 31)
++#define PCIE_ATU_REGION_INDEX0		(0x0 << 0)
++#define PCIE_ATU_CR1			0x904
++#define PCIE_ATU_TYPE_MEM		(0x0 << 0)
++#define PCIE_ATU_TYPE_IO		(0x2 << 0)
++#define PCIE_ATU_TYPE_CFG0		(0x4 << 0)
++#define PCIE_ATU_TYPE_CFG1		(0x5 << 0)
++#define PCIE_ATU_CR2			0x908
++#define PCIE_ATU_ENABLE			(0x1 << 31)
++#define PCIE_ATU_BAR_MODE_ENABLE	(0x1 << 30)
++#define PCIE_ATU_LOWER_BASE		0x90C
++#define PCIE_ATU_UPPER_BASE		0x910
++#define PCIE_ATU_LIMIT			0x914
++#define PCIE_ATU_LOWER_TARGET		0x918
++#define PCIE_ATU_BUS(x)			(((x) & 0xff) << 24)
++#define PCIE_ATU_DEV(x)			(((x) & 0x1f) << 19)
++#define PCIE_ATU_FUNC(x)		(((x) & 0x7) << 16)
++#define PCIE_ATU_UPPER_TARGET		0x91C
++
++struct dw_pcie_port;
++
++struct dw_host_ops {
++	int (*link_up)(struct dw_pcie_port *pp);
++	int (*host_init)(struct dw_pcie_port *pp);
++};
++
++struct dw_pcie_port {
++	struct device		*dev;
++	void __iomem		*dbi;
++	void __iomem		*cfg;
++	u64			cfg_addr;
++	u32			cfg_size;
++	u64			io_cpu_addr;
++	u64			io_pci_addr;
++	u32			io_size;
++	u32			atu_num;
++	struct dw_host_ops	*dw_ops;
++	struct pci_ops		*pci_ops;
++};
++
++void dw_pcie_dbi_write(struct dw_pcie_port *pp, u32 value, u32 offset);
++u32 dw_pcie_dbi_read(struct dw_pcie_port *pp, u32 offset);
++int dw_pcie_host_link_up(struct dw_pcie_port *pp);
++void dw_pcie_atu_outbound_set(struct dw_pcie_port *pp, int idx, int type,
++			      u64 cpu_addr, u64 pci_addr, u32 size);
++int dw_pcie_port_init(struct dw_pcie_port *pp);
++
++#endif /* _PCIE_DESIGNWARE_BASE_H */
+-- 
+2.1.0.27.g96db324
+

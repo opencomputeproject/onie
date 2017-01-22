@@ -1,0 +1,88 @@
+From d98f3f6f00b9a649c40ec3e199bf78cbea7c4d34 Mon Sep 17 00:00:00 2001
+From: Li Jingyu <jingyu.li@nxp.com>
+Date: Wed, 11 May 2016 11:20:06 +0800
+Subject: [PATCH 74/74] platform freescale ls2080ardb u-boot
+
+Add ONIE support for Freescale ls2080ardb platform.
+
+Signed-off-by: Li Jingyu <jingyu.li@nxp.com>
+Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ configs/ls2080ardb_ONIE_1_defconfig | 14 +++++++++++++
+ include/configs/ls2080ardb.h        | 41 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 55 insertions(+)
+ create mode 100644 configs/ls2080ardb_ONIE_1_defconfig
+
+diff --git a/configs/ls2080ardb_ONIE_1_defconfig b/configs/ls2080ardb_ONIE_1_defconfig
+new file mode 100644
+index 0000000..b16a344
+--- /dev/null
++++ b/configs/ls2080ardb_ONIE_1_defconfig
+@@ -0,0 +1,14 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS2080ARDB=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_DM_SPI=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls2080a-rdb"
++CONFIG_SYS_EXTRA_OPTIONS="SYS_FSL_DDR4,ONIE,ONIE_PLATFORM_REV=0"
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_OF_CONTROL=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_FSL_DSPI=y
+diff --git a/include/configs/ls2080ardb.h b/include/configs/ls2080ardb.h
+index 29b70e1..ecf36aa 100644
+--- a/include/configs/ls2080ardb.h
++++ b/include/configs/ls2080ardb.h
+@@ -343,4 +343,45 @@ unsigned long get_board_sys_clk(void);
+ #define CONFIG_PHY_AQUANTIA
+ #endif
+ 
++#ifdef CONFIG_ONIE
++/* Undefine those macros which are provided by common_config.h */
++#undef CONFIG_BOOTCOMMAND
++#undef CONFIG_SYS_PBSIZE
++#undef CONFIG_DOS_PARTITION
++#undef CONFIG_CMDLINE_EDITING
++#undef CONFIG_SYS_MAXARGS
++#undef CONFIG_OF_LIBFDT
++#undef CONFIG_OF_BOARD_SETUP
++#undef CONFIG_SYS_BAUDRATE_TABLE
++#undef CONFIG_ENV_SIZE
++#undef CONFIG_FIT
++#undef CONFIG_EXTRA_ENV_SETTINGS
++
++#include "configs/common_config.h"
++
++#undef CONFIG_CMD_IRQ
++#undef CONFIG_CMD_JFFS2
++#undef CONFIG_OF_STDOUT_VIA_ALIAS
++#undef CONFIG_API
++
++/* Platform environment variables needed by the common env infrastructure */
++#define CONFIG_PLATFORM_ENV    \
++	"consoledev=ttyS1,115200 root=/dev/ram0\0" \
++	"onie_start=0x581100000\0" \
++	"onie_sz.b=0xac0000\0"  \
++	"hwconfig=fsl_ddr:bank_intlv=auto\0"	\
++	"loadaddr=0xa0000000\0"			\
++	"bootargs=console=ttyS1,115200 root=/dev/ram0 " \
++		"earlycon=uart8250,mmio,0x21c0600 ramdisk_size=0x2000000 " \
++		"default_hugepagesz=2m hugepagesz=2m hugepages=256\0" \
++	"mcinitcmd=fsl_mc start mc 580300000 580800000 && fsl_mc apply DPL 0x580700000\0" \
++	"fdt_high=0xa0000000\0"		\
++	"initrd_high=0xffffffffffffffff\0"
++
++#define CONFIG_EXTRA_ENV_SETTINGS \
++       	CONFIG_PLATFORM_ENV       \
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++#endif /* CONFIG_ONIE */
++
+ #endif /* __LS2_RDB_H */
+-- 
+2.1.0.27.g96db324
+

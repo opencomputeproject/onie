@@ -1,0 +1,43 @@
+From 0f6fbd1f3346d722b06f07d306b409be6e5f1fc1 Mon Sep 17 00:00:00 2001
+From: Nikhil Badola <nikhil.badola@freescale.com>
+Date: Thu, 4 Dec 2014 10:23:10 +0530
+Subject: [PATCH 095/124] drivers: usb: Modify workaround for USB Erratum
+ A005697
+
+Change the position of delay introduced by erratum A005697 workaround
+
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Signed-off-by: Nikhil Badola <nikhil.badola@freescale.com>
+Change-Id: Idb1127ac310efc6eba7726a7b95a41a830aba178
+Reviewed-on: http://git.am.freescale.net:8181/25349
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Matthew Weigel <Matthew.Weigel@freescale.com>
+---
+ drivers/usb/host/ehci-hub.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/usb/host/ehci-hub.c b/drivers/usb/host/ehci-hub.c
+index 5842ad4..fae6227 100644
+--- a/drivers/usb/host/ehci-hub.c
++++ b/drivers/usb/host/ehci-hub.c
+@@ -275,8 +275,6 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
+ 		else if ((t1 & PORT_PE) && !(t1 & PORT_SUSPEND)) {
+ 			t2 |= PORT_SUSPEND;
+ 			set_bit(port, &ehci->bus_suspended);
+-			if (ehci_has_fsl_susp_errata(ehci))
+-				usleep_range(10000, 20000);
+ 		}
+ 
+ 		/* enable remote wakeup on all ports, if told to do so */
+@@ -304,6 +302,8 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
+ 						USB_PORT_STAT_HIGH_SPEED)
+ 				fs_idle_delay = true;
+ 			ehci_writel(ehci, t2, reg);
++			if (ehci_has_fsl_susp_errata(ehci))
++				usleep_range(10000, 20000);
+ 			changed = 1;
+ 		}
+ 	}
+-- 
+2.1.0.27.g96db324
+

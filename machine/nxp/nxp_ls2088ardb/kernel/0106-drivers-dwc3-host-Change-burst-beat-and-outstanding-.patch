@@ -1,0 +1,36 @@
+From db660e38ff0ce2df3be96007d7f7c0e57a135f4b Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@freescale.com>
+Date: Fri, 20 Nov 2015 12:44:41 +0530
+Subject: [PATCH 106/124] drivers: dwc3: host: Change burst beat and
+ outstanding pipelined transfers requests.
+
+This is required for better performance, and performs below tuning:
+1. Enable burst length set, and define it as 4/8/16.
+2. Set burst request limit to 16 requests.
+
+Signed-off-by: Nikhil Badola <nikhil.badola@freescale.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@freescale.com>
+---
+ drivers/usb/dwc3/core.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/usb/dwc3/core.c b/drivers/usb/dwc3/core.c
+index 523b63c..4b789fa 100644
+--- a/drivers/usb/dwc3/core.c
++++ b/drivers/usb/dwc3/core.c
+@@ -914,6 +914,12 @@ static int dwc3_probe(struct platform_device *pdev)
+ 		dwc3_writel(dwc->regs, DWC3_GFLADJ, GFLADJ_30MHZ_REG_SEL |
+ 			    GFLADJ_30MHZ(GFLADJ_30MHZ_DEFAULT));
+ 
++	/* Change burst beat and outstanding pipelined transfers requests */
++	dwc3_writel(dwc->regs, DWC3_GSBUSCFG0,
++		(dwc3_readl(dwc->regs, DWC3_GSBUSCFG0) & ~0xff) | 0xf);
++	dwc3_writel(dwc->regs, DWC3_GSBUSCFG1,
++		dwc3_readl(dwc->regs, DWC3_GSBUSCFG1) | 0xf00);
++
+ 	if (IS_ENABLED(CONFIG_USB_DWC3_HOST))
+ 		dwc->dr_mode = USB_DR_MODE_HOST;
+ 	else if (IS_ENABLED(CONFIG_USB_DWC3_GADGET))
+-- 
+2.1.0.27.g96db324
+

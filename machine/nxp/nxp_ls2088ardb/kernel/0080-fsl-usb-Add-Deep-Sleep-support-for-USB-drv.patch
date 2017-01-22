@@ -1,0 +1,101 @@
+From caeeaed211844bb6a66ab7e28826a1bb78c322d7 Mon Sep 17 00:00:00 2001
+From: Nikhil Badola <nikhil.badola@freescale.com>
+Date: Tue, 8 Apr 2014 16:40:51 +0530
+Subject: [PATCH 080/124] fsl/usb: Add Deep Sleep support for USB drv
+
+Saves and Restores USB register context when the system
+goes to deep sleep and resumes from it. This is required
+only when USB controller and phys are OFF during Deep
+Sleep
+
+Signed-off-by: Nikhil Badola <nikhil.badola@freescale.com>
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Change-Id: I5af0b680a9c3b4dd014c8266f5e8b00ca56264df
+Reviewed-on: http://git.am.freescale.net:8181/10994
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Varun Sethi <Varun.Sethi@freescale.com>
+Reviewed-by: Prabhakar Kushwaha <prabhakar@freescale.com>
+Reviewed-by: Jose Rivera <German.Rivera@freescale.com>
+---
+ drivers/usb/host/ehci-fsl.c | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 43 insertions(+)
+
+diff --git a/drivers/usb/host/ehci-fsl.c b/drivers/usb/host/ehci-fsl.c
+index ce32ec4..aaf9b6b 100644
+--- a/drivers/usb/host/ehci-fsl.c
++++ b/drivers/usb/host/ehci-fsl.c
+@@ -37,6 +37,7 @@ struct ehci_fsl {
+ 	struct ehci_hcd ehci;
+ 
+ #ifdef CONFIG_PM
++	struct ehci_regs *saved_regs;
+ 	/* Saved USB PHY settings, need to restore after deep sleep. */
+ 	u32 usb_ctrl;
+ #endif
+@@ -464,7 +465,43 @@ static int ehci_fsl_setup(struct usb_hcd *hcd)
+ 	return retval;
+ }
+ 
++
++
++
+ #ifdef CONFIG_PM
++/* save usb registers */
++static int ehci_fsl_save_context(struct usb_hcd *hcd)
++{
++	struct ehci_fsl *ehci_fsl = hcd_to_ehci_fsl(hcd);
++	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
++	void __iomem *non_ehci = hcd->regs;
++
++	ehci_fsl->saved_regs = kzalloc(sizeof(struct ehci_regs), GFP_KERNEL);
++	if (!ehci_fsl->saved_regs)
++		return -ENOMEM;
++	_memcpy_fromio(ehci_fsl->saved_regs, ehci->regs,
++					sizeof(struct ehci_regs));
++	ehci_fsl->usb_ctrl = in_be32(non_ehci + FSL_SOC_USB_CTRL);
++	return 0;
++
++}
++
++/*Restore usb registers */
++static int ehci_fsl_restore_context(struct usb_hcd *hcd)
++{
++	struct ehci_fsl *ehci_fsl = hcd_to_ehci_fsl(hcd);
++	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
++	void __iomem *non_ehci = hcd->regs;
++
++	if (ehci_fsl->saved_regs) {
++		_memcpy_toio(ehci->regs, ehci_fsl->saved_regs,
++						sizeof(struct ehci_regs));
++		out_be32(non_ehci + FSL_SOC_USB_CTRL, ehci_fsl->usb_ctrl);
++		kfree(ehci_fsl->saved_regs);
++		ehci_fsl->saved_regs = NULL;
++	}
++	return 0;
++}
+ 
+ #ifdef CONFIG_PPC_MPC512x
+ static int ehci_fsl_mpc512x_drv_suspend(struct device *dev)
+@@ -639,6 +676,9 @@ static int ehci_fsl_drv_suspend(struct device *dev)
+ 
+ 	ehci_prepare_ports_for_controller_suspend(hcd_to_ehci(hcd),
+ 			device_may_wakeup(dev));
++
++	ehci_fsl_save_context(hcd);
++
+ 	if (!fsl_deep_sleep())
+ 		return 0;
+ 
+@@ -652,6 +692,9 @@ static int ehci_fsl_drv_resume(struct device *dev)
+ 	struct ehci_fsl *ehci_fsl = hcd_to_ehci_fsl(hcd);
+ 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+ 	void __iomem *non_ehci = hcd->regs;
++
++	ehci_fsl_restore_context(hcd);
++
+ #if defined(CONFIG_FSL_USB2_OTG) || defined(CONFIG_FSL_USB2_OTG_MODULE)
+ 	struct usb_bus host = hcd->self;
+ #endif
+-- 
+2.1.0.27.g96db324
+
