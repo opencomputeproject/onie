@@ -1,0 +1,105 @@
+From 438ef0cb6260d41c881e2275292650312fb1b503 Mon Sep 17 00:00:00 2001
+From: Scott Wood <scottwood@freescale.com>
+Date: Thu, 18 Jun 2015 21:49:17 -0500
+Subject: [PATCH 49/53] clk: qoriq: Expose OF clocks directly from the clockgen
+ node
+
+This allows the "clocks" property to be used in the absence of
+legacy nodes, and for clocks that the legacy nodes do not describe.
+
+Signed-off-by: Scott Wood <scottwood@freescale.com>
+---
+ drivers/clk/clk-qoriq.c | 63 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 62 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/clk/clk-qoriq.c b/drivers/clk/clk-qoriq.c
+index f6aa106..e408965 100644
+--- a/drivers/clk/clk-qoriq.c
++++ b/drivers/clk/clk-qoriq.c
+@@ -938,6 +938,61 @@ static void __init pltfrm_pll_init(struct device_node *np)
+ 	legacy_pll_init(np, PLATFORM_PLL);
+ }
+ 
++static struct clk *clockgen_clk_get(struct of_phandle_args *clkspec, void *data)
++{
++	struct clockgen *cg = data;
++	struct clk *clk;
++	struct clockgen_pll *pll;
++	u32 type, idx;
++
++	if (clkspec->args_count < 2) {
++		pr_err("%s: insufficient phandle args\n", __func__);
++		return ERR_PTR(-EINVAL);
++	}
++
++	type = clkspec->args[0];
++	idx = clkspec->args[1];
++
++	switch (type) {
++	case 0:
++		if (idx != 0)
++			goto bad_args;
++		clk = cg->sysclk;
++		break;
++	case 1:
++		if (idx >= ARRAY_SIZE(cg->cmux))
++			goto bad_args;
++		clk = cg->cmux[idx];
++		break;
++	case 2:
++		if (idx >= ARRAY_SIZE(cg->hwaccel))
++			goto bad_args;
++		clk = cg->hwaccel[idx];
++		break;
++	case 3:
++		if (idx >= ARRAY_SIZE(cg->fman))
++			goto bad_args;
++		clk = cg->fman[idx];
++		break;
++	case 4:
++		pll = &cg->pll[PLATFORM_PLL];
++		if (idx >= ARRAY_SIZE(pll->div))
++			goto bad_args;
++		clk = pll->div[idx].clk;
++		break;
++	default:
++		goto bad_args;
++	}
++
++	if (!clk)
++		return ERR_PTR(-ENOENT);
++	return clk;
++
++bad_args:
++	pr_err("%s: Bad phandle args %u %u\n", __func__, type, idx);
++	return ERR_PTR(-EINVAL);
++}
++
+ #ifdef CONFIG_PPC
+ #include <asm/mpc85xx.h>
+ 
+@@ -982,7 +1037,7 @@ static bool __init has_erratum_a4510(void)
+ 
+ static void __init clockgen_init(struct device_node *np)
+ {
+-	int i;
++	int i, ret;
+ 
+ 	clockgen.node = np;
+ 	clockgen.regs = of_iomap(np, 0);
+@@ -1028,6 +1083,12 @@ static void __init clockgen_init(struct device_node *np)
+ 	if (clockgen.info.init_periph)
+ 		clockgen.info.init_periph(&clockgen);
+ 
++	ret = of_clk_add_provider(np, clockgen_clk_get, &clockgen);
++	if (ret) {
++		pr_err("%s: Couldn't register clk provider for node %s: %d\n",
++		       __func__, np->name, ret);
++	}
++
+ 	return;
+ err:
+ 	iounmap(clockgen.regs);
+-- 
+2.1.0.27.g96db324
+
