@@ -1,0 +1,34 @@
+lvm2 conf install directory fixup
+
+Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+The lvm2 install target for the conf/ subdirectory is not quite right
+for cross compiling.  It tries to install files in /etc instead of the
+target sysroot directory.
+
+diff --git a/conf/Makefile.in b/conf/Makefile.in
+index 3f66621..4193111 100644
+--- a/conf/Makefile.in
++++ b/conf/Makefile.in
+@@ -24,14 +24,14 @@ PROFILES=$(DEFAULT_PROFILE) $(srcdir)/thin-performance.profile
+ include $(top_builddir)/make.tmpl
+ 
+ install_conf: $(CONFSRC)
+-	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
+-		echo "$(INSTALL_WDATA) -D $< $(confdir)/$(CONFDEST)"; \
+-		$(INSTALL_WDATA) -D $< $(confdir)/$(CONFDEST); \
++	@if [ ! -e $(sysconfdir)/$(CONFDEST) ]; then \
++		echo "$(INSTALL_WDATA) -D $< $(sysconfdir)/$(CONFDEST)"; \
++		$(INSTALL_WDATA) -D $< $(sysconfdir)/$(CONFDEST); \
+ 	fi
+ 
+ install_profiles: $(PROFILES)
+-	$(INSTALL_DIR) $(DESTDIR)$(DEFAULT_PROFILE_DIR)
+-	$(INSTALL_DATA) $(PROFILES) $(DESTDIR)$(DEFAULT_PROFILE_DIR)/
++	$(INSTALL_DIR) $(sysconfdir)/profile
++	$(INSTALL_DATA) $(PROFILES) $(sysconfdir)/profile/
+ 
+ install_lvm2: install_conf install_profiles
+ 
