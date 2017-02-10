@@ -93,6 +93,8 @@ I2CTOOLS_ENABLE ?= yes
 
 # Include lvm2 tools (needed for parted)
 LVM2_ENABLE = yes
+# Currently armv8a requires a special version of lvm2
+LVM2_VERSION ?= 2_02_155
 
 # Include ethtool by default
 ETHTOOL_ENABLE ?= yes

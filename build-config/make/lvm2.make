@@ -10,7 +10,7 @@
 # This is a makefile fragment that defines the build of lvm2
 #
 
-LVM2_VERSION		= 2_02_155
+LVM2_VERSION		?= 2_02_105
 LVM2_TARBALL		= lvm2-$(LVM2_VERSION).tar.xz
 LVM2_TARBALL_URLS	+= $(ONIE_MIRROR) https://git.fedorahosted.org/cgit/lvm2.git/snapshot/
 LVM2_BUILD_DIR		= $(MBUILDDIR)/lvm2
