@@ -1,40 +1,17 @@
 Add to support onie-syseeprom command.
 
 Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
-Copyright (C) 2014,2016 david_yang <david_yang@accton.com>
+Copyright (C) 2014,2016,2017 david_yang <david_yang@accton.com>
 Copyright (C) 2015 Ellen Wang <ellen@cumulusnetworks.com>
 
 SPDX-License-Identifier:     GPL-2.0
----
- include/24cXX.h            |   57 +++
- include/applets.src.h      |    1 
- include/i2c-dev.h          |  330 ++++++++++++++++++++
- include/onie_tlvinfo.h     |  172 ++++++++++
- include/sys_eeprom.h       |    2 
- miscutils/24cXX.c          |  182 +++++++++++
- miscutils/Config.src       |   80 +++++
- miscutils/Kbuild.src       |    3 
- miscutils/onie_tlvinfo.c   |  743 ++++++++++++++++++++++++++++++++++++++++++++
- miscutils/sys_eeprom.c     |  181 +++++++++++
- miscutils/sys_eeprom_i2c.c |   63 ++++
- miscutils/sys_eeprom_mtd.c |  126 +++++++
- 12 files changed, 1940 insertions(+)
- create mode 100644 include/24cXX.h
- create mode 100644 include/i2c-dev.h
- create mode 100644 include/onie_tlvinfo.h
- create mode 100644 include/sys_eeprom.h
- create mode 100644 miscutils/24cXX.c
- create mode 100644 miscutils/onie_tlvinfo.c
- create mode 100644 miscutils/sys_eeprom.c
- create mode 100644 miscutils/sys_eeprom_i2c.c
- create mode 100644 miscutils/sys_eeprom_mtd.c
 
 diff --git a/include/24cXX.h b/include/24cXX.h
 new file mode 100644
-index 0000000..c304273
+index 0000000..5fb4641
 --- /dev/null
 +++ b/include/24cXX.h
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,66 @@
 +/***************************************************************************
 +    copyright            : (C) by 2002-2003 Stefano Barbato
 +    email                : stefano@codesink.org
@@ -57,6 +34,15 @@ index 0000000..c304273
 +#define EEPROM_TYPE_UNKNOWN	0
 +#define EEPROM_TYPE_8BIT_ADDR	1
 +#define EEPROM_TYPE_16BIT_ADDR 	2
++
++/*
++ * SYS_EEPROM_I2C_WRITE_1B_DELAY: delay number of microseconds after writing 1 byte
++ * SYS_EEPROM_I2C_WRITE_2B_DELAY: delay number of microseconds after writing 2 bytes
++ * SYS_EEPROM_I2C_WRITE_3B_DELAY: delay number of microseconds after writing 3 bytes
++ */
++#define SYS_EEPROM_I2C_WRITE_1B_DELAY   CONFIG_SYS_EEPROM_I2C_WRITE_1B_DELAY
++#define SYS_EEPROM_I2C_WRITE_2B_DELAY   CONFIG_SYS_EEPROM_I2C_WRITE_2B_DELAY
++#define SYS_EEPROM_I2C_WRITE_3B_DELAY   CONFIG_SYS_EEPROM_I2C_WRITE_3B_DELAY
 +
 +struct eeprom
 +{
@@ -628,7 +614,7 @@ index 0000000..94dfd5a
 +int write_sys_eeprom(void *eeprom_data, int len);
 diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
 new file mode 100644
-index 0000000..b448761
+index 0000000..ccc0965
 --- /dev/null
 +++ b/miscutils/24cXX.c
 @@ -0,0 +1,182 @@
@@ -667,7 +653,7 @@ index 0000000..b448761
 +	r = i2c_smbus_write_byte(e->fd, buf);
 +	if(r < 0)
 +		fprintf(stderr, "Error i2c_write_1b: %s\n", strerror(errno));
-+	usleep(10);
++	usleep(SYS_EEPROM_I2C_WRITE_1B_DELAY);
 +	return r;
 +}
 +
@@ -678,7 +664,7 @@ index 0000000..b448761
 +	r = i2c_smbus_write_byte_data(e->fd, buf[0], buf[1]);
 +	if(r < 0)
 +		fprintf(stderr, "Error i2c_write_2b: %s\n", strerror(errno));
-+	usleep(1000);
++	usleep(SYS_EEPROM_I2C_WRITE_2B_DELAY);
 +	return r;
 +}
 +
@@ -690,7 +676,7 @@ index 0000000..b448761
 +	r = i2c_smbus_write_word_data(e->fd, buf[0], buf[2] << 8 | buf[1]);
 +	if(r < 0)
 +		fprintf(stderr, "Error i2c_write_3b: %s\n", strerror(errno));
-+	usleep(10);
++	usleep(SYS_EEPROM_I2C_WRITE_3B_DELAY);
 +	return r;
 +}
 +
@@ -815,10 +801,10 @@ index 0000000..b448761
 +	}
 +}
 diff --git a/miscutils/Config.src b/miscutils/Config.src
-index 4d6425f..4e5aed3 100644
+index 4d6425f..cdae45b 100644
 --- a/miscutils/Config.src
 +++ b/miscutils/Config.src
-@@ -546,4 +546,84 @@ config WATCHDOG
+@@ -546,4 +546,108 @@ config WATCHDOG
  	  certain amount of time, the watchdog device assumes the system has
  	  hung, and will cause the hardware to reboot.
  
@@ -868,6 +854,30 @@ index 4d6425f..4e5aed3 100644
 +	help
 +	  Number of bits needed to address a byte in the EEPROM.
 +	  e.g., 8 or 16.
++
++config SYS_EEPROM_I2C_WRITE_1B_DELAY
++	int "delay time for i2c writing 1 byte"
++	range 10 1000000
++	default 10
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  Delay number of microseconds after writing 1 byte.
++
++config SYS_EEPROM_I2C_WRITE_2B_DELAY
++	int "delay time for i2c writing 2 bytes"
++	range 10 1000000
++	default 1000
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  Delay number of microseconds after writing 2 bytes.
++
++config SYS_EEPROM_I2C_WRITE_3B_DELAY
++	int "delay time for i2c writing 3 bytes"
++	range 10 1000000
++	default 10
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  Delay number of microseconds after writing 3 bytes.
 +
 +config SYS_EEPROM_MTD_DEVICE
 +	string "MTD device"

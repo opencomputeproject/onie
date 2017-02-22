@@ -1,0 +1,24 @@
+select slave device before accessing EEPROM
+
+diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
+index 3f2ba25..2a9cfd5 100644
+--- a/miscutils/24cXX.c
++++ b/miscutils/24cXX.c
+@@ -152,6 +152,8 @@ int eeprom_read_byte(struct eeprom* e, __u16 mem_addr)
+ 	if(e->type == EEPROM_TYPE_8BIT_ADDR)
+ 	{
+ 		__u8 buf =  mem_addr & 0x0ff;
++		ioctl(e->fd, I2C_SLAVE, e->addr + ((mem_addr >> 8) & 0x07));
++		usleep(100);
+ 		r = i2c_write_1b(e, buf);
+ 	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
+ 		__u8 buf[2] = { (mem_addr >> 8) & 0x0ff, mem_addr & 0x0ff };
+@@ -170,6 +172,8 @@ int eeprom_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data)
+ {
+ 	if(e->type == EEPROM_TYPE_8BIT_ADDR) {
+ 		__u8 buf[2] = { mem_addr & 0x00ff, data };
++		ioctl(e->fd, I2C_SLAVE, e->addr + ((mem_addr >> 8) & 0x07));
++		usleep(100);
+ 		return i2c_write_2b(e, buf);
+ 	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
+ 		__u8 buf[3] =
