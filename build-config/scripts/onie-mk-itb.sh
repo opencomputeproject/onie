@@ -74,7 +74,7 @@ SYSROOT="$9"
     exit 1
 }
 
-OUTFILE="$10"
+OUTFILE="${10}"
 [ -n "$OUTFILE" ] || {
     echo "Error: output .itb file not specified"
     exit 1
