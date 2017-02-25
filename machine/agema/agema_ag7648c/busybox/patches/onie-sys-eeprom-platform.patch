@@ -1,0 +1,52 @@
+Add platform specific stuff for the sys-eeprom
+
+diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
+index 94dfd5a..1e7c90f 100644
+--- a/include/sys_eeprom.h
++++ b/include/sys_eeprom.h
+@@ -1,2 +1,9 @@
++
++#define SYS_EEPROM_I2C_SW_I2C_BUS     0
++#define SYS_EEPROM_I2C_SW_I2C_ADDR    0x70
++#define SYS_EEPROM_I2C_SW_CH_SEL_REG  0
++#define SYS_EEPROM_I2C_SW_CH_SEL_VAL  8
++#define SYS_EEPROM_I2C_SW_CMD_SZ      50
++
+ int read_sys_eeprom(void *eeprom_data, int offset, int len);
+ int write_sys_eeprom(void *eeprom_data, int len);
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index 3003bd6..8b80a13 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -1,5 +1,6 @@
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
+ #include <getopt.h>
+ 
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+@@ -53,6 +54,7 @@ int onie_syseeprom_main(int argc, char **argv)
+     char *value, *subopts, *tname;
+     int index, c, i, option_index, tcode;
+     char tlv_value[TLV_DECODE_VALUE_MAX_LEN];
++    char i2c_sw_sel_cmd[SYS_EEPROM_I2C_SW_CMD_SZ];
+ 
+     const size_t tlv_code_count = sizeof(tlv_code_list) /
+ 	sizeof(tlv_code_list[0]);
+@@ -68,6 +70,16 @@ int onie_syseeprom_main(int argc, char **argv)
+ 	{0,         0,                    0,      0},
+     };
+ 
++    /*
++     * Set the I2C switch config so that ID-eeprom channel is selected.
++     */
++    memset(i2c_sw_sel_cmd, 0, SYS_EEPROM_I2C_SW_CMD_SZ);
++    snprintf(i2c_sw_sel_cmd, SYS_EEPROM_I2C_SW_CMD_SZ, "i2cset -y %d 0x%x %d %d ",
++	SYS_EEPROM_I2C_SW_I2C_BUS, SYS_EEPROM_I2C_SW_I2C_ADDR,
++	SYS_EEPROM_I2C_SW_CH_SEL_REG, SYS_EEPROM_I2C_SW_CH_SEL_VAL);
++
++    system(i2c_sw_sel_cmd);
++
+     for (i = 0; i < tlv_code_count; i++) {
+ 	    tokens[i] = (char *) malloc(6);
+ 	    sprintf(tokens[i], "0x%x", tlv_code_list[i].m_code);
