@@ -2,7 +2,7 @@
 
 #  Copyright (C) 2013-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014 Matt Peterson <matt-github@peterson.org>
-#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -252,44 +252,42 @@ url_run()
     return 1
 }
 
+get_onie_neighs()
+{
+    while [ ${#onie_neighs} -gt 0 ] ; do
+        local n=${onie_neighs%%,*}
+        onie_neighs=${onie_neighs#*,}
+        echo $n | sed -e 's/-/%/g'
+    done
+}
+
+ulist()
+{
+    local list=$(echo "$1" | sed -e '/#/d')
+    # make list items unique, while preserving list order
+    { local cnt=0; for s in $list ; do printf "%d\t%s\n" $cnt $s ; cnt=$(( $cnt + 1 )) ; done ; } | \
+        sort -u -k2 | sort -n | cut -f2-
+}
+
 # Try various HTTP URLs
 http_download()
 {
     # Build list of HTTP servers to try
-    http_servers="$onie_server_name"
+    local http_servers=$(ulist "\
+$onie_server_name
+# HTTP server IP only
+$onie_disco_wwwsrv
+# Try BOOTP next-server IP as HTTP
+$onie_disco_siaddr
+# Try DHCP server IP as HTTP
+$onie_disco_serverid
+# Try TFTP server IP as HTTP
+$onie_disco_tftpsiaddr
+# Add link local neighbors
+$(get_onie_neighs)
+")
 
-    # HTTP server IP only
-    if [ -n "$onie_disco_wwwsrv" ] ; then
-        http_servers="$http_servers $onie_disco_wwwsrv"
-    fi
-
-    # Try BOOTP next-server IP as HTTP
-    if [ -n "$onie_disco_siaddr" ] ; then
-        http_servers="$http_servers $onie_disco_siaddr"
-    fi
-
-    # Try DHCP server IP as HTTP
-    if [ -n "$onie_disco_serverid" ] ; then
-        http_servers="$http_servers $onie_disco_serverid"
-    fi
-
-    # Try TFTP server IP as HTTP
-    if [ -n "$onie_disco_tftpsiaddr" ] ; then
-        http_servers="$http_servers $onie_disco_tftpsiaddr"
-    fi
-
-    # Add link local neighbors
-    while [ ${#onie_neighs} -gt 0 ] ; do
-        n=${onie_neighs%%,*}
-        onie_neighs=${onie_neighs#*,}
-        tmp=$(echo $n | sed -e 's/-/%/g');
-        http_servers="$http_servers $tmp"
-    done
-
-    # make list items unique, while preserving list order
-    ulist=$({ cnt=0; for s in $http_servers ; do printf "%d\t%s\n" $cnt $s ; cnt=$(( $cnt + 1 )) ; done ; } | \
-        sort -u -k2 | sort -n | cut -f2-)
-    for server in $ulist ; do
+    for server in $http_servers ; do
         # Check if server appears to be alive
         nc -w 10 $server 80 -e /bin/true > /dev/null 2>&1 && {
             # Try list of default file names
@@ -309,25 +307,27 @@ http_download()
 
 tftp_download()
 {
+    local tftp_servers=$(ulist "\
+# Try BOOTP next-server
+$onie_disco_siaddr
+# Try DHCP TFTP server name (opt 66)
+# Requires DNS
+$onie_disco_tftp
+# Try DHCP TFTP server IP address (opt 150)
+$onie_disco_tftpsiaddr
+")
+
     # Busybox sets "boot_file" for the BOOTP boot file and sets
     # "bootfile" (no underscore) for DHCP option 67.
+    local tftp_bootfiles=$(ulist "\
+$onie_disco_bootfile
+$onie_disco_boot_file
+")
 
-    for f in $onie_disco_bootfile $onie_disco_boot_file ; do
-        # Try BOOTP next-server and bootfile
-        if [ -n "$onie_disco_siaddr" ] && [ -n "$f" ] ; then
-            url_run "tftp://$onie_disco_siaddr/$f" && return 0
-        fi
-
-        # Try DHCP TFTP server name (opt 66) and bootfile
-        # Requires DNS
-        if [ -n "$onie_disco_tftp" ] && [ -n "$f" ] ; then
-            url_run "tftp://$onie_disco_tftp/$f" && return 0
-        fi
-
-        # Try DHCP TFTP server IP address (opt 150) and bootfile
-        if [ -n "$onie_disco_tftpsiaddr" ] && [ -n "$f" ] ; then
-            url_run "tftp://$onie_disco_tftpsiaddr/$f" && return 0
-        fi
+    for server in $tftp_servers ; do
+        for f in $tftp_bootfiles ; do
+            url_run "tftp://$server/$f" && return 0
+        done
     done
 
     return 1
@@ -357,7 +357,7 @@ waterfall()
     wf_paths="$wf_paths $onie_default_filenames"
 
     # TFTP waterfall
-    tftp_servers="$onie_server_name $onie_disco_siaddr $onie_disco_tftp $onie_disco_tftpsiaddr"
+    local tftp_servers=$(ulist "$onie_server_name $onie_disco_siaddr $onie_disco_tftp $onie_disco_tftpsiaddr")
     for s in $tftp_servers ; do
         for p in $wf_paths ; do
             url_run "tftp://$s/$p" && return 0
