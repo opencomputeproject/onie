@@ -8,11 +8,13 @@
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
 
-VENDOR_REV ?= 0
+VENDOR_REV ?= 1
 
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),0)
   MACHINE_REV = 0
+else ifeq ($(VENDOR_REV),1)
+  MACHINE_REV = 1
 else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
@@ -25,6 +27,8 @@ VENDOR_ID = 259
 
 I2CTOOLS_ENABLE = yes
 I2CTOOLS_SYSEEPROM = no
+
+MACHINE_BUSYBOX_DIR = $(MACHINEDIR)/busybox/r$(MACHINE_REV)
 
 # Console parameters
 CONSOLE_DEV = 0
