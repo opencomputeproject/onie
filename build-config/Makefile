@@ -156,6 +156,15 @@ TREEDIRS     += $(STAMPDIR) $(STAGE_SYSROOT) $(INITRAMFSDIR)
 
 XTOOLS_ENABLE ?= yes
 
+# List of known ASIC vendors -- keep this list in alphabetical order
+KNOWN_ASIC_VENDORS = \
+  bcm    \
+  cavium \
+  centec \
+  mlnx   \
+  nephos \
+  qemu
+
 ifneq (,$(MAKECMDGOALS))
   ifeq (,$(filter onie-release-tag help distclean %build-host, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
@@ -165,6 +174,15 @@ ifneq (,$(MAKECMDGOALS))
       $(error Unable to find valid machine configuration directory.)
     endif
     include $(MACHINEDIR)/machine.make
+
+    # Switch ASIC vendor, should be set in machine.make
+    SWITCH_ASIC_VENDOR ?= unknown
+    ifneq ($(filter-out $(KNOWN_ASIC_VENDORS), $(SWITCH_ASIC_VENDOR)),)
+      $(warning Unsupported switch ASIC vendor: $(SWITCH_ASIC_VENDOR))
+      $(warning Check the setting of SWITCH_ASIC_VENDOR in machine.make)
+      $(error Supported switch ASIC vendors: $(KNOWN_ASIC_VENDORS))
+    endif
+
     ARCHDIR ?= $(realpath ./arch)
     include $(ARCHDIR)/$(ONIE_ARCH).make
   endif
@@ -185,9 +203,6 @@ ifneq ($(filter-out gpt msdos, $(PARTITION_TYPE)),)
   $(warning Unsupported partition type: $(PARTITION_TYPE))
   $(error Supported partition types: gpt, msdos)
 endif
-
-# Switch ASIC vendor, should be set in machine.make
-SWITCH_ASIC_VENDOR ?= unknown
 
 # Should ONIE skip programming the Ethernet management interface MAC
 # addresses?  Can be set to "yes" in machine.make.
