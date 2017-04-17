@@ -186,10 +186,12 @@ config_ethmgmt()
     return $return_value
 }
 
-# When starting the network at boot time configure the MAC addresses
-# for all the Ethernet management interfaces.
 if [ "$1" = "start" ] ; then
-    # Configure Ethernet management MAC addresses
+    # Bring up the loopback interface
+    cmd_run ip link set dev lo up
+
+    # When starting the network at boot time configure the MAC
+    # addresses for all the Ethernet management interfaces.
     intf_list=$(net_intf)
     intf_counter=0
 
