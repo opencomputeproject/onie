@@ -5,6 +5,7 @@
 # SPDX-License-Identifier:     GPL-2.0
 
 ONIE_ARCH ?= armv8a
+SWITCH_ASIC_VENDOR = none
 
 VENDOR_REV ?= ONIE
 
