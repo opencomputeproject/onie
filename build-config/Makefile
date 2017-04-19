@@ -163,6 +163,7 @@ KNOWN_ASIC_VENDORS = \
   centec \
   mlnx   \
   nephos \
+  none   \
   qemu
 
 ifneq (,$(MAKECMDGOALS))

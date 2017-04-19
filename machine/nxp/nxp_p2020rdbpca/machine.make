@@ -8,6 +8,8 @@ ONIE_ARCH ?= powerpc-softfloat
 
 VENDOR_REV ?= ONIE
 
+SWITCH_ASIC_VENDOR = none
+
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),ONIE)
   MACHINE_REV = 0
