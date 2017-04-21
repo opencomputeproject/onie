@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -13,17 +13,18 @@ BTRFSPROGS_VERSION		= v4.3.1
 BTRFSPROGS_TARBALL		= btrfs-progs-$(BTRFSPROGS_VERSION).tar.xz
 BTRFSPROGS_TARBALL_URLS		+= $(ONIE_MIRROR) \
 				   https://www.kernel.org/pub/linux/kernel/people/kdave/btrfs-progs
-BTRFSPROGS_BUILD_DIR		= $(MBUILDDIR)/btrfs-progs
+BTRFSPROGS_BUILD_DIR		= $(USER_BUILDDIR)/btrfs-progs
 BTRFSPROGS_DIR			= $(BTRFSPROGS_BUILD_DIR)/btrfs-progs-$(BTRFSPROGS_VERSION)
 
 BTRFSPROGS_SRCPATCHDIR		= $(PATCHDIR)/btrfs-progs
 BTRFSPROGS_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/btrfs-progs-download
-BTRFSPROGS_SOURCE_STAMP		= $(STAMPDIR)/btrfs-progs-source
-BTRFSPROGS_PATCH_STAMP		= $(STAMPDIR)/btrfs-progs-patch
-BTRFSPROGS_CONFIGURE_STAMP	= $(STAMPDIR)/btrfs-progs-configure
-BTRFSPROGS_BUILD_STAMP		= $(STAMPDIR)/btrfs-progs-build
+BTRFSPROGS_SOURCE_STAMP		= $(USER_STAMPDIR)/btrfs-progs-source
+BTRFSPROGS_PATCH_STAMP		= $(USER_STAMPDIR)/btrfs-progs-patch
+BTRFSPROGS_CONFIGURE_STAMP	= $(USER_STAMPDIR)/btrfs-progs-configure
+BTRFSPROGS_BUILD_STAMP		= $(USER_STAMPDIR)/btrfs-progs-build
 BTRFSPROGS_INSTALL_STAMP	= $(STAMPDIR)/btrfs-progs-install
 BTRFSPROGS_STAMP		= $(BTRFSPROGS_SOURCE_STAMP) \
+				  $(BTRFSPROGS_PATCH_STAMP) \
 				  $(BTRFSPROGS_CONFIGURE_STAMP) \
 				  $(BTRFSPROGS_BUILD_STAMP) \
 				  $(BTRFSPROGS_INSTALL_STAMP)
@@ -55,7 +56,7 @@ $(BTRFSPROGS_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(BTRFSPROGS_SOURCE_STAMP)
 btrfs-progs-source: $(BTRFSPROGS_SOURCE_STAMP)
-$(BTRFSPROGS_SOURCE_STAMP): $(TREE_STAMP) | $(BTRFSPROGS_DOWNLOAD_STAMP)
+$(BTRFSPROGS_SOURCE_STAMP): $(USER_TREE_STAMP) | $(BTRFSPROGS_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream btrfs-progs ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(BTRFSPROGS_BUILD_DIR) $(DOWNLOADDIR)/$(BTRFSPROGS_TARBALL)
@@ -69,7 +70,7 @@ $(BTRFSPROGS_PATCH_STAMP): $(BTRFSPROGS_SRCPATCHDIR)/* $(BTRFSPROGS_SOURCE_STAMP
 	$(Q) touch $@
 
 btrfs-progs-configure: $(BTRFSPROGS_CONFIGURE_STAMP)
-$(BTRFSPROGS_CONFIGURE_STAMP): $(E2FSPROGS_INSTALL_STAMP) \
+$(BTRFSPROGS_CONFIGURE_STAMP): $(E2FSPROGS_BUILD_STAMP) \
 			      $(BTRFSPROGS_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure btrfs-progs-$(BTRFSPROGS_VERSION) ===="
@@ -95,13 +96,13 @@ $(BTRFSPROGS_BUILD_STAMP): $(BTRFSPROGS_NEW_FILES) $(BTRFSPROGS_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building btrfs-progs-$(BTRFSPROGS_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(BTRFSPROGS_DIR)
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(BTRFSPROGS_DIR) install
 	$(Q) touch $@
 
 btrfs-progs-install: $(BTRFSPROGS_INSTALL_STAMP)
 $(BTRFSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(BTRFSPROGS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing btrfs-progs in $(DEV_SYSROOT) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(BTRFSPROGS_DIR) install
+	$(Q) echo "==== Installing btrfs-progs in $(SYSROOTDIR) ===="
 	$(Q) for file in $(BTRFSPROGS_LIBS) ; do \
 		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
 	     done
@@ -110,7 +111,7 @@ $(BTRFSPROGS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(BTRFSPROGS_BUILD_STAMP)
 	     done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += btrfs-progs-clean
+USER_CLEAN += btrfs-progs-clean
 btrfs-progs-clean:
 	$(Q) rm -rf $(BTRFSPROGS_BUILD_DIR)
 	$(Q) rm -f $(BTRFSPROGS_STAMP)

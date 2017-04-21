@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -12,16 +12,17 @@
 DOSFSTOOLS_VERSION		= 3.0.26
 DOSFSTOOLS_TARBALL		= dosfstools-$(DOSFSTOOLS_VERSION).tar.xz
 DOSFSTOOLS_TARBALL_URLS		+= $(ONIE_MIRROR) http://daniel-baumann.ch/files/software/dosfstools
-DOSFSTOOLS_BUILD_DIR		= $(MBUILDDIR)/dosfstools
+DOSFSTOOLS_BUILD_DIR		= $(USER_BUILDDIR)/dosfstools
 DOSFSTOOLS_DIR			= $(DOSFSTOOLS_BUILD_DIR)/dosfstools-$(DOSFSTOOLS_VERSION)
 
 DOSFSTOOLS_SRCPATCHDIR		= $(PATCHDIR)/dosfstools
 DOSFSTOOLS_DOWNLOAD_STAMP		= $(DOWNLOADDIR)/dosfstools-download
-DOSFSTOOLS_SOURCE_STAMP		= $(STAMPDIR)/dosfstools-source
-DOSFSTOOLS_PATCH_STAMP		= $(STAMPDIR)/dosfstools-patch
-DOSFSTOOLS_BUILD_STAMP		= $(STAMPDIR)/dosfstools-build
+DOSFSTOOLS_SOURCE_STAMP		= $(USER_STAMPDIR)/dosfstools-source
+DOSFSTOOLS_PATCH_STAMP		= $(USER_STAMPDIR)/dosfstools-patch
+DOSFSTOOLS_BUILD_STAMP		= $(USER_STAMPDIR)/dosfstools-build
 DOSFSTOOLS_INSTALL_STAMP	= $(STAMPDIR)/dosfstools-install
 DOSFSTOOLS_STAMP		= $(DOSFSTOOLS_SOURCE_STAMP) \
+				  $(DOSFSTOOLS_PATCH_STAMP) \
 				  $(DOSFSTOOLS_BUILD_STAMP) \
 				  $(DOSFSTOOLS_INSTALL_STAMP)
 
@@ -45,7 +46,7 @@ $(DOSFSTOOLS_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(DOSFSTOOLS_SOURCE_STAMP)
 dosfstools-source: $(DOSFSTOOLS_SOURCE_STAMP)
-$(DOSFSTOOLS_SOURCE_STAMP): $(TREE_STAMP) | $(DOSFSTOOLS_DOWNLOAD_STAMP)
+$(DOSFSTOOLS_SOURCE_STAMP): $(USER_TREE_STAMP) | $(DOSFSTOOLS_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream dosfstools ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(DOSFSTOOLS_BUILD_DIR) $(DOWNLOADDIR)/$(DOSFSTOOLS_TARBALL)
@@ -75,20 +76,20 @@ $(DOSFSTOOLS_BUILD_STAMP): $(DOSFSTOOLS_PATCH_STAMP) $(DOSFSTOOLS_NEW_FILES) \
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building dosfstools-$(DOSFSTOOLS_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DOSFSTOOLS_DIR) $(DOSFSTOOLS_MAKE_VARS)
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DOSFSTOOLS_DIR) $(DOSFSTOOLS_MAKE_VARS) \
+		install-symlinks
 	$(Q) touch $@
 
 dosfstools-install: $(DOSFSTOOLS_INSTALL_STAMP)
 $(DOSFSTOOLS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(DOSFSTOOLS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing dosfstools programs in $(SYSROOTDIR) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DOSFSTOOLS_DIR) $(DOSFSTOOLS_MAKE_VARS) \
-		install-symlinks
 	$(Q) for file in $(DOSFSTOOLS_PROGRAMS); do \
 		cp -av $(DEV_SYSROOT)/usr/sbin/$$file $(SYSROOTDIR)/usr/sbin ; \
 	     done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += dosfstools-clean
+USER_CLEAN += dosfstools-clean
 dosfstools-clean:
 	$(Q) rm -rf $(DOSFSTOOLS_BUILD_DIR)
 	$(Q) rm -f $(DOSFSTOOLS_STAMP)

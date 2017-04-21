@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #>
 #
-#  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
@@ -11,44 +11,65 @@
 #
 # Builds the Open Network Install Environment install images
 #
-# The image contains:
+# The install image contains:
 #
-#   u-boot
-#   kernel
-#   initramfs loaded with the ONIE discovery and execution application.
+#   install scripts
+#   Linux kernel
+#   initramfs
+#   boot loader specific binaries, like GRUB or U-Boot
 #
-# THIS MAKEFILE USES SUDO TO EXECUTE VARIOUS OPERATIONS WITH ROOT PRIVILEGES!!!!
+# The configuration for a specific platform is located in
+# ../machine/<vendor>/<platform>
 #
-# The configuration for a specific platform must be located in
-# ../machine/<platform>
+# The build specification is in this directory.  The results of the
+# build process end up in ../build.  The dependencies follow a source,
+# patch, build, install sequence and use stamps to track targets.
 #
-# The build specification is in this directory, and the results of the process end
-# up in ../build.  The dependencies follow a source, patch, build, install
-# sequence and use stamps to track targets.
+# When building multiple machines, common components are only built
+# once per toolchain.
 #
 # Typical usage is to checkout a tree and type:
 #
-#    make MACHINE=<platform> all
+#    make MACHINEROOT=../machine/<vendor> MACHINE=<platform> all demo
 #
-# Note: The directory ../machine/<platform> must exist.
+# Note: The directory ../machine/<vendor>/<platform> must exist.
 #
-# The result of the build creates the following directory tree...
+# The result of the build creates the following directory tree.
+# Platform specific components are in build/<platform>, while common
+# components are in build/user/<toolchain>.
 # 
 #   build
 #   ├── <platform>
 #   │   ├── busybox
-#   |   |-- i2ctools
 #   │   ├── initramfs
 #   │   ├── kernel
 #   │   ├── stamp
-#   │   ├── sysroot
-#   │   ├── u-boot
-#   │   ├── uclibc
-#   │   ├── e2fsprogs
-#   │   ├── zlib
-#   │   ├── lzo
-#   │   ├── mtdutils
-#   │   └── dropbear
+#   │   └── sysroot
+#   ├── user/<toolchain>/
+#   │        ├── btrfs-progs
+#   │        ├── dmidecode
+#   │        ├── dosfstools
+#   │        ├── dropbear
+#   │        ├── e2fsprogs
+#   │        ├── efibootmgr
+#   │        ├── efivar
+#   │        ├── ethtool
+#   │        ├── flashrom
+#   │        ├── gptfdisk
+#   │        ├── grub
+#   │        ├── grub-host
+#   │        ├── kexec-tools
+#   │        ├── lvm2
+#   │        ├── lzo
+#   │        ├── mtd-utils
+#   │        ├── parted
+#   │        ├── pciutils
+#   │        ├── popt
+#   │        ├── stamp
+#   │        ├── util-linux
+#   │        └── zlib
+#   ├── download
+#   ├── x-tools
 #   └── images
 #
 #<
@@ -148,7 +169,6 @@ MAKEOVERRIDES := $(filter-out MACHINE=%,$(MAKEOVERRIDES))
 MBUILDDIR	=  $(BUILDDIR)/$(MACHINE_PREFIX)
 STAMPDIR	=  $(MBUILDDIR)/stamp
 SYSROOTDIR	=  $(MBUILDDIR)/sysroot
-DEV_SYSROOT	=  $(MBUILDDIR)/dev-sysroot
 INITRAMFSDIR	=  $(MBUILDDIR)/initramfs
 
 # These directories are needed per machine
@@ -396,32 +416,42 @@ endif
 # top level targets
 #
 
-PHONY += all source demo clean userspace-clean download download-clean
-
+PHONY += source
 source: $(SOURCE)
 	$(Q) echo "=== Finished making $@ ==="
 
+PHONY += download
 download: $(DOWNLOAD)
 	$(Q) echo "=== Finished making $@ ==="
 
+PHONY += all
 all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE)
 	$(Q) echo "=== Finished making onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
 
+PHONY += demo
 demo: $(KERNEL) $(DEMO_IMAGE)
 	$(Q) echo "=== Finished making demo onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
 
-userspace-clean: $(USERSPACE_CLEAN)
-	$(Q) echo "=== Finished making $@ ==="
-
-clean: 	$(CLEAN) $(USERSPACE_CLEAN)
+PHONY += machine-clean
+machine-clean: $(MACHINE_CLEAN)
 	$(Q) rm -rf $(BUILDDIR)/images/*$(MACHINE_PREFIX)*
 	$(Q) rm -rf $(MBUILDDIR)
+	$(Q) echo "=== Finished making $@ ==="
+
+PHONY += clean
+clean: 	machine-clean
 	$(Q) echo "=== Finished making $@ for $(PLATFORM) ==="
 
+PHONY += user-clean
+user-clean: machine-clean $(USER_CLEAN)
+	$(Q) echo "=== Finished making $@ ==="
+
+PHONY += download-clean
 download-clean: $(DOWNLOAD_CLEAN)
 	$(Q) rm -rf $(DOWNLOADDIR)/*
 	$(Q) echo "=== Finished making $@ ==="
 
+PHONY += distclean
 distclean: download-clean $(DIST_CLEAN)
 	$(Q) for d in $(BUILDDIR)/* ; do \
 		[ -e "$$d" ] || break ; \

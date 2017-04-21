@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
+#  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -12,13 +13,13 @@
 MTREE_VERSION		= 1.0.3
 MTREE_TARBALL		= mtree-$(MTREE_VERSION).tar.gz
 MTREE_TARBALL_URLS	+= $(ONIE_MIRROR)
-MTREE_BUILD_DIR	= $(MBUILDDIR)/mtree
+MTREE_BUILD_DIR	= $(USER_BUILDDIR)/mtree
 MTREE_DIR		= $(MTREE_BUILD_DIR)/mtree-$(MTREE_VERSION)
 
 MTREE_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/mtree-download
-MTREE_SOURCE_STAMP	= $(STAMPDIR)/mtree-source
-MTREE_CONFIGURE_STAMP	= $(STAMPDIR)/mtree-configure
-MTREE_BUILD_STAMP	= $(STAMPDIR)/mtree-build
+MTREE_SOURCE_STAMP	= $(USER_STAMPDIR)/mtree-source
+MTREE_CONFIGURE_STAMP	= $(USER_STAMPDIR)/mtree-configure
+MTREE_BUILD_STAMP	= $(USER_STAMPDIR)/mtree-build
 MTREE_INSTALL_STAMP	= $(STAMPDIR)/mtree-install
 MTREE_STAMP		= $(MTREE_SOURCE_STAMP) \
 			  $(MTREE_CONFIGURE_STAMP) \
@@ -43,7 +44,7 @@ $(MTREE_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(MTREE_SOURCE_STAMP)
 mtree-source: $(MTREE_SOURCE_STAMP)
-$(MTREE_SOURCE_STAMP): $(TREE_STAMP) | $(MTREE_DOWNLOAD_STAMP)
+$(MTREE_SOURCE_STAMP): $(USER_TREE_STAMP) | $(MTREE_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream mtree ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(MTREE_BUILD_DIR) $(DOWNLOADDIR)/$(MTREE_TARBALL)
@@ -67,17 +68,17 @@ $(MTREE_BUILD_STAMP): $(MTREE_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building mtree-$(MTREE_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(MTREE_DIR)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(MTREE_DIR) install
 	$(Q) touch $@
 
 mtree-install: $(MTREE_INSTALL_STAMP)
 $(MTREE_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(MTREE_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing mtree in $(DEV_SYSROOT) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(MTREE_DIR) install
+	$(Q) echo "==== Installing mtree in $(SYSROOTDIR) ===="
 	$(Q) cp -av $(DEV_SYSROOT)/usr/bin/$(MTREE_BIN) $(SYSROOTDIR)/usr/bin
 	$(Q) touch $@
 
-USERSPACE_CLEAN += mtree-clean
+USER_CLEAN += mtree-clean
 mtree-clean:
 	$(Q) rm -rf $(MTREE_BUILD_DIR)
 	$(Q) rm -f $(MTREE_STAMP)

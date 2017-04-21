@@ -2,6 +2,7 @@
 #
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
 #  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -88,7 +89,7 @@ endif
 
 i2ctools-build: $(I2CTOOLS_BUILD_STAMP)
 $(I2CTOOLS_BUILD_STAMP): $(I2CTOOLS_NEW_FILES) $(I2CTOOLS_PATCH_STAMP) \
-	$(ZLIB_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+	$(ZLIB_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building i2ctools-$(I2CTOOLS_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(I2CTOOLS_DIR) \
@@ -97,7 +98,7 @@ $(I2CTOOLS_BUILD_STAMP): $(I2CTOOLS_NEW_FILES) $(I2CTOOLS_PATCH_STAMP) \
 	$(Q) touch $@
 
 i2ctools-install: $(I2CTOOLS_INSTALL_STAMP)
-$(I2CTOOLS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(I2CTOOLS_BUILD_STAMP)
+$(I2CTOOLS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(I2CTOOLS_BUILD_STAMP) $(ZLIB_INSTALL_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing i2ctools in $(DEV_SYSROOT) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(I2CTOOLS_DIR) \
@@ -111,7 +112,7 @@ ifeq ($(I2CTOOLS_SYSEEPROM),yes)
 endif
 	$(Q) touch $@
 
-USERSPACE_CLEAN += i2ctools-clean
+MACHINE_CLEAN += i2ctools-clean
 i2ctools-clean:
 	$(Q) rm -rf $(I2CTOOLS_BUILD_DIR)
 	$(Q) rm -f $(I2CTOOLS_STAMP)

@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -149,7 +149,7 @@ ifeq ($(UBOOT_PBL_ENABLE),yes)
 endif
 	$(Q) touch $@
 
-CLEAN += u-boot-clean
+MACHINE_CLEAN += u-boot-clean
 u-boot-clean:
 	$(Q) rm -rf $(UBOOT_BUILD_DIR)
 	$(Q) rm -f $(UBOOT_STAMP)
