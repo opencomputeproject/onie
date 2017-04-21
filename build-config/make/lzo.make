@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -13,13 +13,13 @@
 LZO_VERSION		= 2.09
 LZO_TARBALL		= lzo-$(LZO_VERSION).tar.gz
 LZO_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.oberhumer.com/opensource/lzo/download
-LZO_BUILD_DIR		= $(MBUILDDIR)/lzo
+LZO_BUILD_DIR		= $(USER_BUILDDIR)/lzo
 LZO_DIR			= $(LZO_BUILD_DIR)/lzo-$(LZO_VERSION)
 
 LZO_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/lzo-$(LZO_VERSION)-download
-LZO_SOURCE_STAMP	= $(STAMPDIR)/lzo-source
-LZO_CONFIGURE_STAMP	= $(STAMPDIR)/lzo-configure
-LZO_BUILD_STAMP		= $(STAMPDIR)/lzo-build
+LZO_SOURCE_STAMP	= $(USER_STAMPDIR)/lzo-source
+LZO_CONFIGURE_STAMP	= $(USER_STAMPDIR)/lzo-configure
+LZO_BUILD_STAMP		= $(USER_STAMPDIR)/lzo-build
 LZO_INSTALL_STAMP	= $(STAMPDIR)/lzo-install
 LZO_STAMP		= $(LZO_SOURCE_STAMP) \
 			  $(LZO_CONFIGURE_STAMP) \
@@ -44,7 +44,7 @@ $(LZO_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(LZO_SOURCE_STAMP)
 lzo-source: $(LZO_SOURCE_STAMP)
-$(LZO_SOURCE_STAMP): $(TREE_STAMP) | $(LZO_DOWNLOAD_STAMP)
+$(LZO_SOURCE_STAMP): $(USER_TREE_STAMP) | $(LZO_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream lzo ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(LZO_BUILD_DIR) $(DOWNLOADDIR)/$(LZO_TARBALL)
@@ -73,20 +73,19 @@ $(LZO_BUILD_STAMP): $(LZO_CONFIGURE_STAMP) $(LZO_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building lzo-$(LZO_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(LZO_DIR)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(LZO_DIR) install
 	$(Q) touch $@
 
 lzo-install: $(LZO_INSTALL_STAMP)
 $(LZO_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(LZO_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing lzo in $(DEV_SYSROOT) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
-		$(MAKE) -C $(LZO_DIR) install
+	$(Q) echo "==== Installing lzo in $(SYSROOTDIR) ===="
 	$(Q) for file in $(LZO_LIBS) ; do \
 		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
 	done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += lzo-clean
+USER_CLEAN += lzo-clean
 lzo-clean:
 	$(Q) rm -rf $(LZO_BUILD_DIR)
 	$(Q) rm -f $(LZO_STAMP)

@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -14,12 +14,12 @@ MTDUTILS_VERSION	= 1.5.2
 MTDUTILS_COMMIT		= e4c8885bddac201ba0ef88560d6444f39e1ff870
 MTDUTILS_TARBALL	= mtd-utils-$(MTDUTILS_VERSION).tar.gz
 MTDUTILS_TARBALL_URLS	+= $(ONIE_MIRROR) http://git.infradead.org/mtd-utils.git/snapshot
-MTDUTILS_BUILD_DIR	= $(MBUILDDIR)/mtd-utils
+MTDUTILS_BUILD_DIR	= $(USER_BUILDDIR)/mtd-utils
 MTDUTILS_DIR		= $(MTDUTILS_BUILD_DIR)/mtd-utils-e4c8885
 
 MTDUTILS_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/mtdutils-$(MTDUTILS_VERSION)-download
-MTDUTILS_SOURCE_STAMP	= $(STAMPDIR)/mtdutils-source
-MTDUTILS_BUILD_STAMP	= $(STAMPDIR)/mtdutils-build
+MTDUTILS_SOURCE_STAMP	= $(USER_STAMPDIR)/mtdutils-source
+MTDUTILS_BUILD_STAMP	= $(USER_STAMPDIR)/mtdutils-build
 MTDUTILS_INSTALL_STAMP	= $(STAMPDIR)/mtdutils-install
 MTDUTILS_STAMP		= $(MTDUTILS_SOURCE_STAMP) \
 			  $(MTDUTILS_BUILD_STAMP) \
@@ -45,7 +45,7 @@ $(MTDUTILS_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(MTDUTILS_SOURCE_STAMP)
 mtdutils-source: $(MTDUTILS_SOURCE_STAMP)
-$(MTDUTILS_SOURCE_STAMP): $(TREE_STAMP) | $(MTDUTILS_DOWNLOAD_STAMP)
+$(MTDUTILS_SOURCE_STAMP): $(USER_TREE_STAMP) | $(MTDUTILS_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream mtdutils ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(MTDUTILS_BUILD_DIR) $(DOWNLOADDIR)/$(MTDUTILS_TARBALL)
@@ -57,8 +57,8 @@ MTDUTILS_NEW_FILES = $(shell test -d $(MTDUTILS_DIR) && test -f $(MTDUTILS_BUILD
 endif
 
 mtdutils-build: $(MTDUTILS_BUILD_STAMP)
-$(MTDUTILS_BUILD_STAMP): $(MTDUTILS_NEW_FILES) $(UTILLINUX_INSTALL_STAMP) \
-			 $(LZO_INSTALL_STAMP) $(ZLIB_INSTALL_STAMP) \
+$(MTDUTILS_BUILD_STAMP): $(MTDUTILS_NEW_FILES) $(UTILLINUX_BUILD_STAMP) \
+			 $(LZO_BUILD_STAMP) $(ZLIB_BUILD_STAMP) \
 			 $(MTDUTILS_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) PATH='$(CROSSBIN):$(PATH)'				\
@@ -67,12 +67,6 @@ $(MTDUTILS_BUILD_STAMP): $(MTDUTILS_NEW_FILES) $(UTILLINUX_INSTALL_STAMP) \
 		CROSS=$(CROSSPREFIX)				\
 		CFLAGS="-g $(ONIE_CFLAGS)"			\
                 WITHOUT_XATTR=1
-	$(Q) touch $@
-
-mtdutils-install: $(MTDUTILS_INSTALL_STAMP)
-$(MTDUTILS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(MTDUTILS_BUILD_STAMP)
-	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing mtdutils in $(DEV_SYSROOT) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'				\
 	    $(MAKE) -C $(MTDUTILS_DIR)				\
 		PREFIX=$(DEV_SYSROOT)/usr			\
@@ -80,6 +74,13 @@ $(MTDUTILS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(MTDUTILS_BUILD_STAMP)
 		CFLAGS="-g $(ONIE_CFLAGS)"			\
                 WITHOUT_XATTR=1                                 \
                 install
+	$(Q) touch $@
+
+mtdutils-install: $(MTDUTILS_INSTALL_STAMP)
+$(MTDUTILS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(MTDUTILS_BUILD_STAMP) $(UTILLINUX_INSTALL_STAMP) \
+				$(LZO_INSTALL_STAMP) $(ZLIB_INSTALL_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "==== Installing mtdutils in $(SYSROOTDIR) ===="
 	$(Q) for file in $(MTDBINS) ; do \
 		cp -av $(DEV_SYSROOT)/usr/sbin/$$file $(SYSROOTDIR)/usr/sbin/ ; \
 	done
@@ -92,7 +93,7 @@ $(MTDUTILS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(MTDUTILS_BUILD_STAMP)
 	done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += mtdutils-clean
+USER_CLEAN += mtdutils-clean
 mtdutils-clean:
 	$(Q) rm -rf $(MTDUTILS_BUILD_DIR)
 	$(Q) rm -f $(MTDUTILS_STAMP)

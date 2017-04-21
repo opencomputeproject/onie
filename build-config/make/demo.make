@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -123,7 +123,7 @@ demo-image-complete: $(DEMO_IMAGE_COMPLETE_STAMP)
 $(DEMO_IMAGE_COMPLETE_STAMP): $(DEMO_ARCH_BINS)
 	$(Q) touch $@
 
-CLEAN += demo-clean
+MACHINE_CLEAN += demo-clean
 demo-clean:
 	$(Q) rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) rm -f $(MBUILDDIR)/demo-* $(DEMO_IMAGE_PARTS) $(DEMO_OS_BIN) $(DEMO_DIAG_BIN)

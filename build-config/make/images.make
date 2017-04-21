@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
@@ -461,7 +461,7 @@ image-complete: $(IMAGE_COMPLETE_STAMP)
 $(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE) $(MACHINE_IMAGE_COMPLETE_STAMP)
 	$(Q) touch $@
 
-USERSPACE_CLEAN += image-clean
+MACHINE_CLEAN += image-clean
 image-clean:
 	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP) $(KERNEL_VMLINUZ_INSTALL_STAMP)
 	$(Q) rm -rf $(RECOVERY_DIR) $(MACHINE_IMAGE_COMPLETE_STAMP) $(MACHINE_IMAGE_PRODUCTS)
