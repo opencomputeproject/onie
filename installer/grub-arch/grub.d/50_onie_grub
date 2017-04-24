@@ -32,11 +32,11 @@
 default_chainloader="+1"
 [ "${onie_firmware}" = "coreboot" ] && default_chainloader=/grub/i386-coreboot/core.elf
 uefi_root=/boot/efi
-onie_uefi_grub=EFI/onie/${onie_grub_image_name}
-if [ -d "/sys/firmware/efi/efivars" ] && [ -r "${uefi_root}/${onie_uefi_grub}" ] ; then
-    uefi_uuid=$(grub-probe --target=fs_uuid "${uefi_root}/${onie_uefi_grub}") || {
+onie_uefi_loader="EFI/onie/%%UEFI_BOOT_LOADER%%"
+if [ -d "/sys/firmware/efi/efivars" ] && [ -r "${uefi_root}/${onie_uefi_loader}" ] ; then
+    uefi_uuid=$(grub-probe --target=fs_uuid "${uefi_root}/${onie_uefi_loader}") || {
         echo "ERROR: grub-probe failed" > /dev/stderr
-        echo "ERROR: failing cmd: grub-probe --target=fs_uuid ${uefi_root}/${onie_uefi_grub}" > /dev/stderr
+        echo "ERROR: failing cmd: grub-probe --target=fs_uuid ${uefi_root}/${onie_uefi_loader}" > /dev/stderr
         exit 1
     }
     cat <<EOF
@@ -45,7 +45,7 @@ menuentry ONIE {
 	set root='(hd0,gpt1)'
 	search --no-floppy --fs-uuid --set=root ${uefi_uuid}
 	echo	'Loading ONIE ...'
-	chainloader /${onie_uefi_grub}
+	chainloader /${onie_uefi_loader}
 }
 EOF
 else
@@ -73,7 +73,7 @@ add_diag_bootcmd()
     cat <<EOF >> $grub_cfg
 diag_menu="$diag_label"
 EOF
-    if [ -d "/sys/firmware/efi/efivars" ] && [ -f "${uefi_root}/$onie_uefi_grub" ] ; then
+    if [ -d "/sys/firmware/efi/efivars" ] && [ -f "${uefi_root}/$onie_uefi_loader" ] ; then
         # UEFI firmware
         diag_uefi_grub=$(efibootmgr -v | grep $diag_label | sed -e 's/.*)\/File(//' -e 's/)//' -e 's/\\/\//g')
         if [ -f "$uefi_root/$diag_uefi_grub" ] ; then
