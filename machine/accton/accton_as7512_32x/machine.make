@@ -7,7 +7,7 @@
 
 
 ONIE_ARCH ?= x86_64
-SWITCH_ASIC_VENDOR = bcm
+SWITCH_ASIC_VENDOR = cavium
 
 VENDOR_REV ?= 0
 
