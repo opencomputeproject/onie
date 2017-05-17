@@ -182,6 +182,7 @@ KNOWN_ASIC_VENDORS = \
   cavium \
   centec \
   mlnx   \
+  mvl    \
   nephos \
   none   \
   qemu
