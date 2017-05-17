@@ -178,6 +178,7 @@ XTOOLS_ENABLE ?= yes
 # List of known ASIC vendors -- keep this list in alphabetical order
 KNOWN_ASIC_VENDORS = \
   bcm    \
+  bft    \
   cavium \
   centec \
   mlnx   \
