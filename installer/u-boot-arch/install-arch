@@ -43,7 +43,18 @@ update_uboot_env()
     # - update the onie_bootcmd variable as this command may have changed
     #   from one version to the next.  Use the value found in the update
     #   image.
-    ver=$(dd if=u-boot.bin bs=1 skip=4 count=256 2>/dev/null | awk -F\x00 '{ print $1; exit }')
+    case "$onie_arch" in
+        powerpc)
+            ver=$(dd if=u-boot.bin bs=1 skip=4 count=256 2>/dev/null | awk -F\x00 '{ print $1; exit }')
+            ;;
+        arm)
+            ver=$(awk -F\x00 '{print $1}' u-boot.bin | grep U-Boot | head -n 1)
+            ;;
+        *)
+            echo "ERROR: Unsupported ONIE U-Boot architecture: $onie_arch"
+            echo "ERROR: Setting U-Boot env 'onie_uboot_version' to 'unknown'"
+            ver="unknown"
+    esac
     bootcmd=$(awk -F\x00 '{print $1}' u-boot.bin | awk -F= '{ if ($1 == "onie_bootcmd") { print $2 } }')
     if [ -z "$bootcmd" ] ; then
     # do not update this var
