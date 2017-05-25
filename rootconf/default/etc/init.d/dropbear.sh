@@ -27,10 +27,10 @@ get_keys() {
 
     get_keys_arch || {
         # If problems just make new keys in ramdisk
-        # genereate rsa key
-        dropbearkey -t rsa -s 1024 -f $RSA_KEY > /dev/null 2>&1
+        # genereate rsa key 
+        dropbearkey -t rsa -s 2048 -f $RSA_KEY > /dev/null 2>&1
         # genereate dss key
-        dropbearkey -t dss -s 1024 -f $DSS_KEY > /dev/null 2>&1
+        dropbearkey -t dss -s 2048 -f $DSS_KEY > /dev/null 2>&1
     }
 }
 
