@@ -1,6 +1,7 @@
 # dropbear config for x86_64 platforms
 
 #  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2017 Nikolay Shopik <shopik@nvcube.net>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -13,6 +14,15 @@ get_keys_arch() {
 
     # The ONIE-CONFIG partition is unavailable during recovery.
     [ "$boot_env" = "recovery" ] && return 1
+
+    if [ -r "$onie_config_dir/$ECDSA_KEY" ] ; then
+        cp "$onie_config_dir/$ECDSA_KEY" $ECDSA_KEY
+    else
+        # genereate ecdsa key
+        dropbearkey -t ecdsa -s 256 -f $ECDSA_KEY > /dev/null 2>&1
+        mkdir -p "$(dirname $onie_config_dir/$ECDSA_KEY)"
+        cp $ECDSA_KEY "$onie_config_dir/$ECDSA_KEY"
+    fi
 
     if [ -r "$onie_config_dir/$RSA_KEY" ] ; then
         cp "$onie_config_dir/$RSA_KEY" $RSA_KEY
