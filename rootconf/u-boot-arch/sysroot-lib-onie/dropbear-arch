@@ -1,9 +1,11 @@
 # dropbear config for U-Boot platforms
 
 #  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2017 Nikolay Shopik <shopik@nvcube.net>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
+ecdsa_var=onie_dropbear_ecdsa_host_key
 rsa_var=onie_dropbear_rsa_host_key
 dss_var=onie_dropbear_dss_host_key
 
@@ -11,6 +13,15 @@ dss_var=onie_dropbear_dss_host_key
 # the variables are empty generate the keys and store the results for
 # future boots.
 get_keys_arch() {
+    ecdsa_val=$(fw_printenv -n "$ecdsa_var" 2> /dev/null)
+    if [ -n "$ecdsa_val" ] ; then
+        # decode base64 string
+        echo "$ecdsa_val" | tr '@#' ' \n' | uudecode -o $ECDSA_KEY
+    else
+        # genereate ecdsa key
+        dropbearkey -t ecdsa -s 256 -f $ECDSA_KEY > /dev/null 2>&1
+    fi
+
     rsa_val=$(fw_printenv -n "$rsa_var" 2> /dev/null)
     if [ -n "$rsa_val" ] ; then
         # decode base64 string
@@ -29,9 +40,13 @@ get_keys_arch() {
         dropbearkey -t dss -s 1024 -f $DSS_KEY > /dev/null 2>&1
     fi
 
-    if [ -z "$rsa_val" ] || [ -z "$dss_val" ] ; then
+    if [ -z "$ecdsa_val" ] || [ -z "$rsa_val" ] || [ -z "$dss_val" ] ; then
         tmp_env=$(mktemp)
         # encode key values
+        if [ -z "$ecdsa_val" ] ; then
+            ecdsa_val=$(uuencode -m $ECDSA_KEY r | tr ' \n' '@#')
+            echo "$ecdsa_var $ecdsa_val" >> $tmp_env
+        fi
         if [ -z "$rsa_val" ] ; then
             rsa_val=$(uuencode -m $RSA_KEY r | tr ' \n' '@#')
             echo "$rsa_var $rsa_val" >> $tmp_env
