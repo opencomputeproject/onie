@@ -1,0 +1,324 @@
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+new file mode 100644
+index 0000000..749d4d5
+--- /dev/null
++++ b/miscutils/mb_detect.c
+@@ -0,0 +1,318 @@
++#include "libbb.h"
++#include <i2c-dev.h>
++#include <getopt.h>
++#include <mb_detect.h>
++
++extern void mbdetect_usage(void);
++
++SysBoardInfo sysBoardInfo[MAX_NUM_MB] = {
++    { HURACAN_WITH_BMC, "aurora_720_rangeley_with_bmc", "AURORA-720-BMC\0", "Aurora 720-BMC\0"},
++    { HURACAN_WITHOUT_BMC, "aurora_720_rangeley", "AURORA-720\0", "Aurora 720\0"},
++    { CABRERAIII_WITH_BMC, "cabrera3_rangeley_with_bmc", "CABRERA3-BMC\0", "CABRERA3-RANGELEY-BMC\0"},
++    { CABRERAIII_WITHOUT_BMC, "cabrera3_rangeley", "CABRERA3\0", "CABRERA3-RANGELEY\0"},
++    { SESTO_WITH_BMC, "aurora_620_rangeley_with_bmc", "AURORA-620-BMC\0", "Aurora 620-BMC\0"},
++    { SESTO_WITHOUT_BMC, "aurora_620_rangeley", "AURORA-620\0", "Aurora 620\0"},
++    { NCIIX_WITH_BMC, "nc2x_rangeley_with_bmc", "NCIIX-BMC\0", "NCIIX-RANGELEY-BMC\0"},
++    { NCIIX_WITHOUT_BMC, "nc2x_rangeley", "NCIIX\0", "S7810-54QS\0"},
++    { ASTERION_WITH_BMC, "asterion_rangeley_with_bmc", "ASTERION-BMC\0", "ASTERION-RANGELEY-BMC\0"},
++    { ASTERION_WITHOUT_BMC, "asterion_rangeley", "ASTERION\0", "S8900-64XC\0"},
++    { HURACAN_A_WITH_BMC, "huracan_a_rangeley_with_bmc", "HURACAN-A-BMC\0", "HURACAN-A-RANGELEY-BMC\0"},
++    { HURACAN_A_WITHOUT_BMC, "huracan_a_rangeley", "HURACAN-A\0", "S9110-32X\0"},
++    { EVORA_WITHOUT_BMC, "evora_rangeley", "EVORA\0", "S7860-54XS\0"},
++    { EUROPA_WITHOUT_BMC, "europa_rangeley", "EUROPA\0", "S8960-54XC\0"},
++};
++
++SysEEPROMPath sysEEPROMPath[] = {
++    { 0x70, 7, 0x54, "/dev/i2c-1"}, /* Huracan, Huracan-A */
++    { 0x72, 7, 0x54, "/dev/i2c-1"}, /* Sesto, Evora, Europa */
++    { 0x00, 0, 0x56, "/dev/i2c-0"}, /* NCIIX */
++    { 0x70, 2, 0x56, "/dev/i2c-1"}, /* NCIIX - PVT */
++    { 0x72, 5, 0x54, "/dev/i2c-1"}, /* Asterion */
++};
++
++/*
++ *  This macro defines the mbdetect command line command.
++ */
++//usage:#define mbdetect_trivial_usage
++//usage:       "[-ifpdmbsce]"
++//usage:#define mbdetect_full_usage "\n\n"
++//usage:     "Display Ingrasys Switch Motherboard detect result.\n"
++//usage:     "\n  -i  Output motherboard id."
++//usage:     "\n  -f  Output motherboard platform."
++//usage:     "\n  -p  Output motherboard project."
++//usage:     "\n  -d  Output motherboard product."
++//usage:     "\n  -m  Output motherboard model."
++//usage:     "\n  -b  Output eeprom i2c bus."
++//usage:     "\n  -s  Output eeprom channel-selector address."
++//usage:     "\n  -c  Output eeprom channel-selector channel."
++//usage:     "\n  -e  Output eeprom slave address."
++
++void mbdetect_usage(void)
++{
++    static const char *usage =
++        "Display Ingrasys Switch Motherboard detect result.\n"
++        "Usage: mbdetect [-h] [-i] [-f] [-p] [-d] [-m] [-b] [-s] [-c] [-e]\n"
++        "   With no arguments display all motherboard information.\n"
++        "   -h --help\n"
++        "      Display usage\n"
++        "   -i --id\n"
++        "      Output motherboard id.\n"
++        "   -f --platform\n"
++        "      Output motherboard platform name.\n"
++        "   -p --project\n"
++        "      Output motherboard project name.\n"
++        "   -d --product\n"
++        "      Output motherboard product name.\n"
++        "   -m --model\n"
++        "      Output motherboard model name.\n"
++        "   -b --i2c-bus\n"
++        "      Output eeprom i2c bus num.\n"
++        "   -s --chan-select\n"
++        "      Output eeprom i2c channel-selector address.\n"
++        "   -c --chan\n"
++        "      Output eeprom i2c channel-selector channel.\n"
++        "   -e --eeprom-slave\n"
++        "      Output eeprom i2c slave address.\n";
++
++    fprintf(stderr, "%s", usage);
++    exit(1);
++}
++
++/*
++ *  do_mbdetect
++ *  This function implements the mbdetect command.
++ */
++int mbdetect_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
++int mbdetect_main(int argc, char **argv)
++{
++    int count = 0;
++    int c, option_index;
++    __u8 id;
++    SysBoardInfo bdinfo;
++    SysEEPROMPath ep;
++
++    const char *short_options = "hifpdmbsce";
++    const struct option long_options[] = {
++        {"help",        no_argument,          0,    'h'},
++        {"id",          no_argument,          0,    'i'},
++        {"platform",    no_argument,          0,    'f'},
++        {"project",     no_argument,          0,    'p'},
++        {"product",     no_argument,          0,    'd'},
++        {"model",       no_argument,          0,    'm'},
++        {"i2c-bus",     no_argument,          0,    'b'},
++        {"chan-select", no_argument,          0,    's'},
++        {"chan",        no_argument,          0,    'c'},
++        {"eeprom-slave",no_argument,          0,    'e'},
++        {0,                       0,          0,      0},
++    };
++
++    while (TRUE) {
++        c = getopt_long(argc, argv, short_options,
++                        long_options, &option_index);
++        if (c == EOF)
++            break;
++
++        count++;
++        switch (c) {
++            case 'h':
++                mbdetect_usage();
++                break;
++
++            case 'i':
++                id = mb_id_get();
++                printf("%d\n", id);
++                break;
++
++            case 'f':
++                if(sys_board_info_get(&bdinfo) == 0) {
++                  printf("netberg_%s\n", bdinfo.projectName);
++                }
++                else {
++                  printf("No match motherboard detected.\n");
++                }
++                break;
++
++            case 'p':
++                if(sys_board_info_get(&bdinfo) == 0) {
++                  printf("%s\n", bdinfo.projectName);
++                }
++                else {
++                  printf("No match motherboard detected.\n");
++                }
++                break;
++
++            case 'd':
++                if(sys_board_info_get(&bdinfo) == 0) {
++                  printf("%s\n", bdinfo.productName);
++                }
++                else {
++                  printf("No match motherboard detected.\n");
++                }
++                break;
++
++            case 'm':
++                if(sys_board_info_get(&bdinfo) == 0) {
++                  printf("%s\n", bdinfo.modelName);
++                }
++                else {
++                  printf("No match motherboard detected.\n");
++                }
++                break;
++
++            case 'b':
++                printf("0x%02x\n", MB_DETECT_I2C_BUS);
++                break;
++
++            case 's':
++                if(sys_eeprom_path_get(&ep) == 0) {
++                  printf("0x%02x\n", ep.i2c_mux);
++                }
++                else {
++                  printf("No match motherboard detected.\n");
++                }
++                break;
++
++            case 'c':
++                if(sys_eeprom_path_get(&ep) == 0) {
++                  printf("0x%02x\n", (1<<ep.i2c_channel));
++                }
++                else {
++                  printf("No match motherboard detected.\n");
++                }
++                break;
++
++            case 'e':
++                if(sys_eeprom_path_get(&ep) == 0) {
++                  printf("0x%02x\n", ep.i2c_dev);
++                }
++                else {
++                  printf("No match motherboard detected.\n");
++                }
++                break;
++
++            default:
++                mbdetect_usage();
++                break;
++        }
++    }
++
++    return 0;
++}
++
++u8 mb_id_get(void) {
++    static u8 id = MAX_NUM_MB;
++    u8 data = 0;
++    int rc;
++
++    if(id != MAX_NUM_MB) {
++        return id;
++    }
++
++    rc = i2c_read(0, 0x33, 0, &data,1);
++    if (rc == 0)
++        id = (data >> 4) & 0x0f;
++
++    if(id == 0x0e) {  /* Extended Board Type */
++        rc = i2c_read(0, 0x33, 0x7, &data,1);
++        if (rc == 0)
++            id = ((id << 4) & 0xf0) | (data & 0x0f);
++
++    }
++
++    return id;
++}
++
++static u8 mb_build_rev_get(void) {
++    u8 build_rev = 0;
++    u8 data = 0;
++    int rc;
++
++    rc = i2c_read(0, 0x33, 0, &data,1);
++    if (rc == 0)
++        build_rev = (data&0x03);
++    return build_rev;
++}
++
++static u8 mb_hw_rev_get(void) {
++    u8 hw_rev = 0;
++    u8 data = 0;
++    int rc;
++
++    rc = i2c_read(0, 0x33, 0, &data,1);
++    if (rc == 0)
++        hw_rev = ((data >> 2)&0x03);
++    return hw_rev;
++}
++
++u8 mb_index_get(void) {
++    SysBoardInfo *bdinfo = sysBoardInfo;
++    u8 index;
++    u8 motherboard_id = mb_id_get();
++
++    for(index=0;index<MB_LAST;index++) {
++        if(motherboard_id == bdinfo->motherboard_id) {
++            break;
++        }
++        bdinfo++;
++    }
++
++    return index;
++}
++
++s32 sys_board_info_get(SysBoardInfo *bdinfo) {
++    u8 index = mb_index_get();
++
++    if(index < MB_LAST) {
++        memcpy(bdinfo, &sysBoardInfo[index], sizeof(SysBoardInfo));
++        return 0;
++    }
++
++    bdinfo = NULL;
++    return -1;
++}
++
++s32 sys_eeprom_path_get(SysEEPROMPath *ep) {
++    u8 index = mb_index_get();
++
++    if(index < MB_LAST) {
++        switch(index) {
++            default:
++            case MB_HURACAN_BMC:
++            case MB_HURACAN:
++            case MB_HURACAN_A_BMC:
++            case MB_HURACAN_A:
++                memcpy(ep, &sysEEPROMPath[0], sizeof(SysEEPROMPath));
++                break;
++
++            case MB_SESTO_BMC:
++            case MB_SESTO:
++            case MB_EVORA:
++            case MB_EUROPA:
++                memcpy(ep, &sysEEPROMPath[1], sizeof(SysEEPROMPath));
++                break;
++
++            case MB_NCIIX_BMC:
++            case MB_NCIIX:
++                {
++                  u8 build_rev = mb_build_rev_get();
++                  u8 hw_rev = mb_hw_rev_get();
++
++                  if ((build_rev == 0x01)&&(hw_rev == 0x03)) /* PVT */
++                      memcpy(ep, &sysEEPROMPath[3], sizeof(SysEEPROMPath));
++                  else
++                      memcpy(ep, &sysEEPROMPath[2], sizeof(SysEEPROMPath));
++                }
++                break;
++
++            case MB_ASTERION_BMC:
++            case MB_ASTERION:
++                memcpy(ep, &sysEEPROMPath[4], sizeof(SysEEPROMPath));
++                break;
++        }
++
++        return 0;
++    }
++
++    ep = NULL;
++    return -1;
++}
