@@ -1,0 +1,224 @@
+Add support for Netberg Rangeley P1330 CPU board
+
+================================================================================
+  Netberg Rangeley P1330 CPU board
+================================================================================
+
+  Netberg switch which supports modularized CPU board design, have a
+non-Netberg H/W component for mother board detection. For motherboard
+detection, please refer to ``busybox/miscutils/mb_detect.c``
+
+  Supported Platforms
+=======================
+- Aurora 620  (cpu module)
+   48x25GbE SFP28 ports and 6x100GbE QSFP28 ports
+
+- Aurora 720  (cpu module)
+   32x100GbE QSFP28 ports
+
+  Specification
+===============
+ - Modularized CPU board design (Intel Rangeley Processor C2558)
+ - 1 RJ-45 out-of-band management port (10/100/1000M)
+ - 1 console port (RJ-45 on Aurora 720, Mini-USB on Aurora 620)
+ - 1 8GB DDR3 SDRAM
+ - 1 SSD 32GB
+ - 1 USB 2.0 port
+
+===================================================
+Installing ONIE on Netberg Rangeley P1330 CPU board
+===================================================
+
+Cross-Compiling ONIE
+====================
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/netberg/ MACHINE=netberg_rangeley_p1330 all"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/netberg/ MACHINE=netberg_rangeley_p1330 all
+
+Or, change directories to ``machine/netberg/netberg_rangeley_p1330`` to compile ONIE,
+use ``build.sh`` to compile ONIE. For example:
+
+  $ cd machine/netberg/netberg_rangeley_p1330
+  $ ./build.sh all
+
+When complete, the ONIE binaries are located in
+``build/images``:
+
+-rw-rw-r-- 1 user user  6026032 Jun  5 00:36 netberg_rangeley_p1330-r0.initrd
+-rw-rw-r-- 1 user user  3464784 Jun  5 00:20 netberg_rangeley_p1330-r0.vmlinuz
+-rw-rw-r-- 1 user user 21626880 Jun  5 00:24 onie-recovery-x86_64-netberg_rangeley_p1330-r0.iso
+-rw-rw-r-- 1 user user  9535351 Jun  5 00:23 onie-updater-x86_64-netberg_rangeley_p1330-r0
+
+Cross-Compiling the DEMO OS
+===========================
+
+To compile the demo OS first change directories to ``build-config``
+and then type ``"make MACHINE=netberg_rangeley_p1330 demo"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/netberg/ MACHINE=netberg_rangeley_p1330 demo
+
+Or, change directories to ``machine/netberg/netberg_rangeley_p1330`` to compile ONIE,
+use ``build.sh`` to compile ONIE. For example:
+
+  $ cd machine/netberg/netberg_rangeley_p1330
+  $ ./build.sh demo
+
+When complete, the demo OS installer is located in ``build/images``::
+
+-rw-rw-r-- 1 user user  9514248 Jun  5 00:36 demo-diag-installer-x86_64-netberg_rangeley_p1330-r0.bin
+-rw-rw-r-- 1 user user  9514248 Jun  5 00:36 demo-installer-x86_64-netberg_rangeley_p1330-r0.bin
+
+Installing ONIE on a Blank Machine
+==================================
+
+To install ONIE on a new machine use one of the onie-recovery images.
+
+Overview
+--------
+
+An "ONIE recovery image" is used for:
+
+1. installing ONIE on a blank machine, i.e. what manufacturing would
+   use.
+
+2. recovering a destroyed ONIE system.
+
+The recovery image is:
+
+. <machine>.iso       -- a hybrid ISO image.
+
+ISO Recovery Image
+------------------
+
+The .iso image is used to create the usb recovery disk.
+
+You can use the .iso image to create a bootable USB memory stick.
+Use ``dd`` to copy the .iso image to a USB stick and boot from that::
+
+  dd if=<machine>.iso of=/dev/sdX bs=10M
+
+For can find the correct ``/dev/sdX`` by inspecing the ``dmesg``
+output after inserting the USB stick into your work station.
+
+To enable booting from USB in the AMI-BIOS:
+
+1. Insert the USB stick
+
+2. Power on the Netberg Aurora Switch
+
+3. While seeing ``Press <DEL> or <ESC> to enter setup.``, press ESC to interrupt
+  You shall see:
+
+       Aptio Setup Utility - Copyright (C) 2015 American Megatrends, Inc.       
+    Main  Advanced  IntelRCSetup  Server Mgmt  Security  Boot  Save & Exit      
+/----------------------------------------------------+-------------------------\
+|  BIOS Information                                  |Set the Date. Use Tab    |
+|  BIOS Vendor             American Megatrends       |to switch between Date   |
+|  Core Version            5.009                     |elements.                |
+|  Compliancy              UEFI 2.3; PI 1.2          |                         |
+|  Project Version         0HURA 1.42 x64            |                         |
+|  Build Date and Time     11/19/2015 17:23:17       |                         |
+|                                                    |                         |
+|  Memory Information                                |                         |
+|  Total Memory            8192 MB (DDR3)            |                         |
+|                                                    |-------------------------|
+|                                                    |><: Select Screen        |
+|  System Date             [Fri 05/26/2017]          |^v: Select Item          |
+|  System Time             [12:10:30]                |Enter: Select            |
+|                                                    |+/-: Change Opt.         |
+|  Access Level            Administrator             |F1: General Help         |
+|                                                    |F2: Previous Values      |
+|                                                    |F3: Optimized Defaults   |
+|                                                    |F4: Save & Exit          |
+|                                                    |ESC: Exit                |
+\----------------------------------------------------+-------------------------/
+        Version 2.17.1245. Copyright (C) 2015 American Megatrends, Inc.        
+                                                                             AB
+
+4. Switch to the ``Boot`` page and enable booting from USB in field ``Boot Option #1``:
+
+       Aptio Setup Utility - Copyright (C) 2015 American Megatrends, Inc.       
+    Main  Advanced  IntelRCSetup  Server Mgmt  Security  Boot  Save & Exit      
+/----------------------------------------------------+-------------------------\
+|  Boot Option Priorities                            |Sets the system boot     |
+|  Boot Option #1          [USB DISK 1100]           |order                    |
+|  Boot Option #2          [P0: SanDisk SD7SN3Q...]  |                         |
+|  Boot Option #3          [Disabled]                |                         |
+|                                                    |                         |
+|  Hard Drive BBS Priorities                         |                         |
+|  Floppy Drive BBS Priorities                       |                         |
+|                                                    |                         |
+|                                                    |                         |
+|                                                    |-------------------------|
+|                                                    |><: Select Screen        |
+|                                                    |^v: Select Item          |
+|                                                    |Enter: Select            |
+|                                                    |+/-: Change Opt.         |
+|                                                    |F1: General Help         |
+|                                                    |F2: Previous Values      |
+|                                                    |F3: Optimized Defaults   |
+|                                                    |F4: Save & Exit          |
+|                                                    |ESC: Exit                |
+\----------------------------------------------------+-------------------------/
+        Version 2.17.1245. Copyright (C) 2015 American Megatrends, Inc.        
+                                                                             AB
+
+5. Switch to the ``Save & Exit`` page and select ``Save Changes and Exit``:
+
+       Aptio Setup Utility - Copyright (C) 2015 American Megatrends, Inc.       
+    Main  Advanced  IntelRCSetup  Server Mgmt  Security  Boot  Save & Exit      
+/----------------------------------------------------+-------------------------\
+|  Save Changes and Exit                             |Exit system setup after  |
+|  Discard Changes and Exit                          |saving the changes.      |
+|  Save Changes and Reset                            |                         |
+|  Discard Changes and Reset                         |                         |
+|                                                    |                         |
+|  Save Options         /----- Save & Exit Setup ------\                       |
+|  Save Changes         |                              |                       |
+|  Discard Changes      | Save configuration and exit? |                       |
+|                       |                              |                       |
+|  Restore Defaults     |------------------------------|  ---------------------|
+|  Save as User Defaults|       Yes       No           |  Select Screen        |
+|  Restore User Defaults\------------------------------/  Select Item          |
+|                                                         r: Select            |
+|  Boot Override                                     |+/-: Change Opt.         |
+|  UEFI: Built-in EFI Shell                          |F1: General Help         |
+|  P0: SanDisk SD7SN3Q064G                           |F2: Previous Values      |
+|  USB DISK 1100                                     |F3: Optimized Defaults   |
+|                                                    |F4: Save & Exit          |
+|  Launch EFI Shell from filesystem device           |ESC: Exit                |
+\----------------------------------------------------+-------------------------/
+        Version 2.17.1245. Copyright (C) 2015 American Megatrends, Inc.        
+                                                                             AB
+
+6. Wait for booting from USB and scanning USB disk grub.cfg
+
+                           GNU GRUB  version 2.02~beta3
+
+ +----------------------------------------------------------------------------+
+ | ONIE: Rescue                                                               | 
+ |*ONIE: Embed ONIE                                                           |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            | 
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.          
+      Press enter to boot the selected OS, `e' to edit the commands       
+      before booting or `c' for a command-line.                           
+
+7. Choose ``ONIE: Embed ONIE``, then ONIE will be ready after reboot.
+
+8. ``ONIE: Rescue`` for ONIE rescue mode on USB disk shall also provide
+  an debugging environment.
