@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2015,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -203,17 +203,17 @@ endef
 
 $(GRUB_INSTALL_I386_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_BUILD_I386_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(call grub_install grub-i386-pc $(GRUB_INSTALL_I386_DIR) $(SYSROOTDIR))
+	$(call grub_install, grub-i386-pc, $(GRUB_INSTALL_I386_DIR), $(SYSROOTDIR))
 	$(Q) touch $@
 
 $(GRUB_INSTALL_UEFI_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_INSTALL_I386_STAMP) $(GRUB_BUILD_UEFI_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(call grub_install grub-$(ARCH)-efi $(GRUB_INSTALL_UEFI_DIR) $(SYSROOTDIR))
+	$(call grub_install, grub-$(ARCH)-efi, $(GRUB_INSTALL_UEFI_DIR), $(SYSROOTDIR))
 	$(Q) touch $@
 
 $(GRUB_INSTALL_I386_COREBOOT_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_INSTALL_I386_STAMP) $(GRUB_BUILD_I386_COREBOOT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(call grub_install grub-i386-coreboot $(GRUB_INSTALL_I386_COREBOOT_DIR) $(SYSROOTDIR))
+	$(call grub_install, grub-i386-coreboot, $(GRUB_INSTALL_I386_COREBOOT_DIR), $(SYSROOTDIR))
 	$(Q) touch $@
 
 grub-install: $(GRUB_INSTALL_STAMP)
