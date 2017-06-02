@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -109,7 +109,7 @@ $(UBOOT_PATCH_STAMP): $(UBOOT_CMNPATCHDIR)/* $(UBOOT_SRCPATCHDIR)/* $(MACHINEDIR
 		\"onie_machine_rev=$(MACHINE_REV)\\0\"	\
 		\"dhcp_vendor-class-identifier=$(PLATFORM)\\0\"	\
 		\"dhcp_user-class=$(PLATFORM)_uboot\\0\"	\
-		\"onie_build_date=$$(LC_ALL=C date -Imin)\\0\"	\
+		\"onie_build_date=$(ONIE_BUILD_DATE)\\0\"	\
 		\"onie_uboot_version=\" U_BOOT_VERSION_STRING \"\\0\" \
 		\"ver=\" U_BOOT_VERSION_STRING \"\\0\" \
 		" >> $(UBOOT_DIR)/include/configs/onie_version.h
