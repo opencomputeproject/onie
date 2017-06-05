@@ -1,4 +1,4 @@
-# Netberg Common Rangeley CPU board
+# Netberg Rangeley P1330 CPU board
 
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
@@ -23,7 +23,6 @@ I2CTOOLS_SYSEEPROM = no
 
 CONSOLE_SPEED = 115200
 CONSOLE_DEV = 1
-CONSOLE_FLAG = 0
 
 # Recovery ISO default entry set to embed for factory production
 RECOVERY_DEFAULT_ENTRY=embed

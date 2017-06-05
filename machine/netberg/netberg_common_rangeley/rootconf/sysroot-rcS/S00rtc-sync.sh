@@ -1,1 +1,0 @@
-../init.d/rtc-sync.sh
