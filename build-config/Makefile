@@ -70,6 +70,7 @@
 #   │        └── zlib
 #   ├── download
 #   ├── x-tools
+#   ├── docs
 #   └── images
 #
 #<
@@ -188,7 +189,7 @@ KNOWN_ASIC_VENDORS = \
   qemu
 
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter onie-release-tag help distclean %build-host, $(MAKECMDGOALS)))
+  ifeq (,$(filter onie-release-tag help distclean %build-host doc% %html, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINEDIR)')
       $(warning You must set the MACHINE= variable when invoking make.)
@@ -405,6 +406,7 @@ ifeq ($(IPMITOOL_ENABLE),yes)
 endif
 include make/images.make
 include make/demo.make
+include make/docs.make
 
 # By default do not enable building firmware updates
 FIRMWARE_UPDATE_ENABLE ?= no
@@ -462,6 +464,9 @@ distclean: download-clean $(DIST_CLEAN)
 	$(Q) rm -f $(PROJECT_STAMP)
 	$(Q) echo "=== Finished making $@ ==="
 
+PHONY += docs
+docs: html
+
 PHONY += onie-release-tag
 onie-release-tag:
 	$(Q) echo $(ONIE_RELEASE_TAG)
@@ -480,7 +485,7 @@ DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
 				  realpath gawk libncurses5 libncurses5-dev bc \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
-				  libexpat1-dev fakeroot
+				  libexpat1-dev fakeroot python-sphinx rst2pdf
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
