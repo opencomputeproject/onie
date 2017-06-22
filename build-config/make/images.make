@@ -130,8 +130,13 @@ CHECKDIR	= $(CHECKROOT)/checkdir
 CHECKFILES	= $(CHECKROOT)/checkfiles.txt
 SYSFILES	= $(CHECKROOT)/sysfiles.txt
 
-ifeq ($(XTOOLS_LIBC),uClibc)
-SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
+ifeq ($(XTOOLS_LIBC),uClibc-ng)
+  SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
+		  ld$(CLIB64)-uClibc.so.1 \
+		  libc.so.0 libuClibc-$(XTOOLS_LIBC_VERSION).so \
+		  libgcc_s.so.1 libgcc_s.so
+else ifeq ($(XTOOLS_LIBC),uClibc)
+  SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
 		  libm.so.0 libm-$(XTOOLS_LIBC_VERSION).so \
 		  libgcc_s.so.1 libgcc_s.so \
 		  libc.so.0 libuClibc-$(XTOOLS_LIBC_VERSION).so \
@@ -166,7 +171,9 @@ endif
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)
   SYSROOT_LIBS += libstdc++.so libstdc++.so.6
-  ifeq ($(GCC_VERSION),4.9.2)
+  ifeq ($(GCC_VERSION),6.3.0)
+    SYSROOT_LIBS += libstdc++.so.6.0.22
+  else ifeq ($(GCC_VERSION),4.9.2)
     SYSROOT_LIBS += libstdc++.so.6.0.20
   else ifeq ($(GCC_VERSION),4.7.3)
     SYSROOT_LIBS += libstdc++.so.6.0.17
