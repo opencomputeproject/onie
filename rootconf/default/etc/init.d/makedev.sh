@@ -17,8 +17,8 @@ mount -t proc -o nodev,noexec,nosuid proc /proc
 
 . /lib/onie/functions
 
-# Set console logging to show KERN_NOTICE and above
-echo "6 4 1 6" > /proc/sys/kernel/printk
+# Set console logging to show KERN_WARNING and above
+echo "5 4 1 5" > /proc/sys/kernel/printk
 
 ##
 ## Mount kernel virtual file systems, ala debian init script of the
