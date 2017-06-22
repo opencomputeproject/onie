@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -43,37 +43,64 @@ PHONY += xtools xtools-prep xtools-download xtools-config \
 
 # List of common packages needed by crosstool-NG
 
-CT_NG_COMPONENTS		=	\
+ifeq ($(GCC_VERSION),6.3.0)
+CT_NG_COMPONENTS =	\
+	autoconf-2.69.tar.xz		\
+	automake-1.15.tar.xz		\
+	binutils-2.28.tar.bz2		\
+	duma_2_5_15.tar.gz		\
+	expat-2.2.0.tar.bz2		\
+	gcc-6.3.0.tar.bz2		\
+	gdb-7.12.1.tar.xz		\
+	gettext-0.19.8.1.tar.xz		\
+	gmp-6.1.2.tar.xz		\
+	isl-0.16.1.tar.xz		\
+	libelf-0.8.13.tar.gz		\
+	libiconv-1.15.tar.gz		\
+	libtool-2.4.6.tar.xz		\
+	ltrace_0.7.3.orig.tar.bz2	\
+	m4-1.4.18.tar.xz		\
+	make-4.2.1.tar.bz2		\
+	mpc-1.0.3.tar.gz		\
+	mpfr-3.1.5.tar.xz		\
+	ncurses-6.0.tar.gz		\
+	strace-4.16.tar.xz
+else ifeq ($(GCC_VERSION),4.9.2)
+CT_NG_COMPONENTS =	\
+	autoconf-2.65.tar.xz		\
+	automake-1.11.1.tar.bz2		\
+	binutils-2.24.tar.bz2		\
+	binutils-2.25.tar.bz2		\
+	cloog-0.18.1.tar.gz		\
+	duma_2_5_15.tar.gz		\
+	expat-2.1.0.tar.gz		\
+	gcc-4.9.2.tar.bz2		\
+	gdb-7.11.tar.xz			\
+	gettext-0.19.6.tar.xz		\
+	gmp-6.0.0a.tar.xz		\
+	isl-0.12.2.tar.bz2		\
+	libelf-0.8.13.tar.gz		\
+	libiconv-1.14.tar.gz		\
+	libtool-2.4.6.tar.gz		\
+	ltrace_0.7.3.orig.tar.bz2	\
+	m4-1.4.13.tar.xz		\
+	make-3.81.tar.bz2		\
+	mpc-1.0.2.tar.gz		\
+	mpfr-3.1.2.tar.xz		\
+	ncurses-6.0.tar.gz		\
+	strace-4.9.tar.xz
+       ifeq ($(XTOOLS_LIBC),glibc)
+	CT_NG_COMPONENTS += glibc-2.24.tar.xz
+       endif
+else ifeq ($(GCC_VERSION),4.7.3)
+CT_NG_COMPONENTS =	\
 	make-3.81.tar.bz2		\
 	m4-1.4.13.tar.xz		\
 	autoconf-2.65.tar.xz		\
 	automake-1.11.1.tar.bz2		\
 	libelf-0.8.13.tar.gz		\
 	duma_2_5_15.tar.gz		\
-	libtool-2.4.6.tar.gz
-
-ifeq ($(GCC_VERSION),4.9.2)
-CT_NG_COMPONENTS +=	\
-	cloog-0.18.1.tar.gz		\
-	gmp-6.0.0a.tar.xz		\
-	isl-0.12.2.tar.bz2		\
-	mpfr-3.1.2.tar.xz		\
-	mpc-1.0.2.tar.gz		\
-	binutils-2.25.tar.bz2		\
-	binutils-2.24.tar.bz2		\
-	gcc-4.9.2.tar.bz2		\
-	gdb-7.11.tar.xz			\
-	ltrace_0.7.3.orig.tar.bz2	\
-	strace-4.9.tar.xz		\
-	ncurses-6.0.tar.gz		\
-	libiconv-1.14.tar.gz		\
-	gettext-0.19.6.tar.xz		\
-	expat-2.1.0.tar.gz
-       ifeq ($(XTOOLS_LIBC),glibc)
-	CT_NG_COMPONENTS += glibc-2.24.tar.xz
-       endif
-else ifeq ($(GCC_VERSION),4.7.3)
-CT_NG_COMPONENTS +=	\
+	libtool-2.4.6.tar.gz		\
         gmp-4.3.2.tar.bz2               \
         mpfr-2.4.2.tar.bz2              \
         ppl-0.11.2.tar.lzma             \
