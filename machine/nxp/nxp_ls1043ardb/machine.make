@@ -36,6 +36,10 @@ UBOOT_DTB_ENABLE = yes
 # Set the desired U-Boot version
 UBOOT_VERSION = 2015.10
 
+# Specify Linux kernel version -- comment out to use the default
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
+
 #---------------------------------------------------------
 #
 # Local Variables:
