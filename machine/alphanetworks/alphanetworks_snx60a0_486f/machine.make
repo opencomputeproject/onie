@@ -33,6 +33,9 @@ CONSOLE_DEV = 1
 LINUX_VERSION		= 3.2
 LINUX_MINOR_VERSION	= 69
 
+# Older GCC required for older 3.2 kernel
+GCC_VERSION = 4.9.4
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
