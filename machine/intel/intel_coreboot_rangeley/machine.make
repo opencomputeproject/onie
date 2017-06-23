@@ -45,6 +45,10 @@ I2CTOOLS_ENABLE = no
 
 CONSOLE_SPEED ?= 115200
 
+# Specify Linux kernel version -- comment out to use the default
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
+
 # Specify any extra parameters that you'd want to pass to the onie linux
 # kernel command line in EXTRA_CMDLINE_LINUX env variable. Eg:
 #
