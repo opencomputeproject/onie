@@ -92,25 +92,6 @@ CT_NG_COMPONENTS =	\
        ifeq ($(XTOOLS_LIBC),glibc)
 	CT_NG_COMPONENTS += glibc-2.24.tar.xz
        endif
-else ifeq ($(GCC_VERSION),4.7.3)
-CT_NG_COMPONENTS =	\
-	make-3.81.tar.bz2		\
-	m4-1.4.13.tar.xz		\
-	autoconf-2.65.tar.xz		\
-	automake-1.11.1.tar.bz2		\
-	libelf-0.8.13.tar.gz		\
-	duma_2_5_15.tar.gz		\
-	libtool-2.4.6.tar.gz		\
-        gmp-4.3.2.tar.bz2               \
-        mpfr-2.4.2.tar.bz2              \
-        ppl-0.11.2.tar.lzma             \
-        cloog-ppl-0.15.10.tar.gz        \
-        mpc-1.0.1.tar.gz                \
-        binutils-2.22.tar.bz2           \
-        gcc-4.7.3.tar.bz2               \
-        gdb-7.4.1.tar.bz2               \
-        ltrace_0.5.3.orig.tar.gz        \
-        strace-4.6.tar.xz
 else
   $(error CT_NG_COMPONENTS download: Unsupported GCC version: $(GCC_VERSION))
 endif
