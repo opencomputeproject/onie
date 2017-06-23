@@ -10,15 +10,8 @@
 # This is a makefile fragment that defines the download of uClibc
 #
 
-UCLIBC_MAJOR_VERSION	= $(word 1, $(subst ., ,$(XTOOLS_LIBC_VERSION)))
-ifeq ($(UCLIBC_MAJOR_VERSION),1)
-  # From version 1.x.y.z onward uClibc is Uclibc-ng
-  UCLIBC_TARBALL	= uClibc-ng-$(XTOOLS_LIBC_VERSION).tar.xz
-  UCLIBC_TARBALL_URLS	+= $(ONIE_MIRROR) http://downloads.uclibc-ng.org/releases/$(XTOOLS_LIBC_VERSION)
-else
-  UCLIBC_TARBALL	= uClibc-$(XTOOLS_LIBC_VERSION).tar.xz
-  UCLIBC_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.uclibc.org/downloads
-endif
+UCLIBC_TARBALL		= uClibc-ng-$(XTOOLS_LIBC_VERSION).tar.xz
+UCLIBC_TARBALL_URLS	+= $(ONIE_MIRROR) http://downloads.uclibc-ng.org/releases/$(XTOOLS_LIBC_VERSION)
 UCLIBC_CONFIG		= $(realpath conf)/uclibc/$(XTOOLS_LIBC_VERSION)/uclibc.$(ONIE_ARCH).config
 
 UCLIBC_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/uclibc-$(XTOOLS_LIBC_VERSION)-download
