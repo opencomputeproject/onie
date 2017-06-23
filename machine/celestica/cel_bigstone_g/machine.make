@@ -50,6 +50,10 @@ SKIP_ETHMGMT_MACS = yes
 # Put the platform-discover file in the installer image
 UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/platform-discover
 
+# Specify Linux kernel version -- comment out to use the default
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
