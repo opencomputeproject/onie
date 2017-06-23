@@ -31,6 +31,10 @@ CONSOLE_DEV = 0
 
 #UEFI_ENABLE = yes
 
+# Specify Linux kernel version -- comment out to use the default
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
