@@ -69,11 +69,9 @@ dev-sysroot-init: $(DEV_SYSROOT_INIT_STAMP)
 $(DEV_SYSROOT_INIT_STAMP): $(USER_TREE_STAMP) | $(XTOOLS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Preparing a new development sysroot ===="
+	$(Q) [ -d $(DEV_SYSROOT) ] && chmod +w -R $(DEV_SYSROOT) || true
 	$(Q) rm -rf $(DEV_SYSROOT)
 	$(Q) cp -a $$($(CROSSBIN)/$(CROSSPREFIX)gcc -print-sysroot) $(DEV_SYSROOT)
-        ifeq ($(ARCH),$(filter $(ARCH),arm64))
-		$(Q) rsync -rl $(XTOOLS_INSTALL_DIR)/$(TARGET)/$(TARGET)/lib64 $(DEV_SYSROOT)
-        endif
 	$(Q) chmod +w -R $(DEV_SYSROOT)
 	$(Q) touch $@
 
@@ -87,6 +85,7 @@ sysroot-clean:
 
 USER_CLEAN += dev-sysroot-clean
 dev-sysroot-clean:
+	$(Q) [ -d $(DEV_SYSROOT) ] && chmod +w -R $(DEV_SYSROOT) || true
 	$(Q) rm -rf $(DEV_SYSROOT)
 	$(Q) rm -f $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -rf $(USER_BUILDDIR)
