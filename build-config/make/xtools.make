@@ -71,11 +71,12 @@ CT_NG_COMPONENTS +=	\
 	cloog-0.18.4.tar.gz		\
 	gcc-4.9.4.tar.bz2		\
 	isl-0.15.tar.xz
-       ifeq ($(XTOOLS_LIBC),glibc)
-	CT_NG_COMPONENTS += glibc-2.24.tar.xz
-       endif
 else
   $(error CT_NG_COMPONENTS download: Unsupported GCC version: $(GCC_VERSION))
+endif
+
+ifeq ($(XTOOLS_LIBC),glibc)
+  CT_NG_COMPONENTS += glibc-$(XTOOLS_LIBC_VERSION).tar.xz
 endif
 
 xtools: $(XTOOLS_STAMP)
