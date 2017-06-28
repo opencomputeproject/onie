@@ -1,0 +1,78 @@
+mpc85xx/u-boot*.lds: remove _GLOBAL_OFFSET_TABLE_ definition
+
+Back port upstream fix for modern binutils.  Original commit message
+follows:
+
+commit 522b021a8a042273bd8fd241e628b61d1a9d4cf4
+Author: Zhenhua Luo <zhenhua.luo@freescale.com>
+Date:   Sun Oct 25 10:32:28 2015 +0530
+
+    mpc85xx/u-boot*.lds: remove _GLOBAL_OFFSET_TABLE_ definition
+
+    In binutils-2.25, the _GLOBAL_OFFSET_TABLE_ symbols defined by
+    PROVIDE in u-boot.lds overrides the linker built-in symbols
+    (https://sourceware.org/git/gitweb.cgi?p=binutils-gdb.git;a=commitdiff;
+    h=b893397a4b1316610f49819344817715e4305de9), so the linker is
+    treating _GLOBAL_OFFSET_TABLE_ as a definition into the .reloc
+    section.
+
+    To align with the change of binutils-2.25, the
+    _GLOBAL_OFFSET_TABLE_ symbol should not be defined in sections,
+    and the symbols in linker generated .got section should be
+    used(https://sourceware.org/ml/binutils/2008-09/ msg00122.html)
+
+    Fixed the following build errors with binutils-2.25:
+    | powerpc-poky-linux-gnuspe-ld.bfd: _GLOBAL_OFFSET_TABLE_ not defined in
+      linker created .got
+
+    Signed-off-by: Zhenhua Luo <zhenhua.luo@freescale.com>
+    Signed-off-by: Prabhakar Kushwaha <prabhakar@freescale.com>
+
+diff --git a/arch/powerpc/cpu/mpc85xx/u-boot-nand.lds b/arch/powerpc/cpu/mpc85xx/u-boot-nand.lds
+index f7c4a22..199ebb5 100644
+--- a/arch/powerpc/cpu/mpc85xx/u-boot-nand.lds
++++ b/arch/powerpc/cpu/mpc85xx/u-boot-nand.lds
+@@ -54,7 +54,6 @@ SECTIONS
+     _GOT2_TABLE_ = .;
+     KEEP(*(.got2))
+     KEEP(*(.got))
+-    PROVIDE(_GLOBAL_OFFSET_TABLE_ = . + 4);
+     _FIXUP_TABLE_ = .;
+     KEEP(*(.fixup))
+   }
+diff --git a/arch/powerpc/cpu/mpc85xx/u-boot-nand_spl.lds b/arch/powerpc/cpu/mpc85xx/u-boot-nand_spl.lds
+index 46dbaed..5e763b8 100644
+--- a/arch/powerpc/cpu/mpc85xx/u-boot-nand_spl.lds
++++ b/arch/powerpc/cpu/mpc85xx/u-boot-nand_spl.lds
+@@ -38,7 +38,6 @@ SECTIONS
+ 		_GOT2_TABLE_ = .;
+ 		KEEP(*(.got2))
+ 		KEEP(*(.got))
+-		PROVIDE(_GLOBAL_OFFSET_TABLE_ = . + 4);
+ 		_FIXUP_TABLE_ = .;
+ 		KEEP(*(.fixup))
+ 	}
+diff --git a/arch/powerpc/cpu/mpc85xx/u-boot-spl.lds b/arch/powerpc/cpu/mpc85xx/u-boot-spl.lds
+index 1c408e2..ecd42c6 100644
+--- a/arch/powerpc/cpu/mpc85xx/u-boot-spl.lds
++++ b/arch/powerpc/cpu/mpc85xx/u-boot-spl.lds
+@@ -38,7 +38,6 @@ SECTIONS
+ 		_GOT2_TABLE_ = .;
+ 		KEEP(*(.got2))
+ 		KEEP(*(.got))
+-		PROVIDE(_GLOBAL_OFFSET_TABLE_ = . + 4);
+ 		_FIXUP_TABLE_ = .;
+ 		KEEP(*(.fixup))
+ 	}
+diff --git a/arch/powerpc/cpu/mpc85xx/u-boot.lds b/arch/powerpc/cpu/mpc85xx/u-boot.lds
+index 4a40a1f..83c2562 100644
+--- a/arch/powerpc/cpu/mpc85xx/u-boot.lds
++++ b/arch/powerpc/cpu/mpc85xx/u-boot.lds
+@@ -61,7 +61,6 @@ SECTIONS
+     _GOT2_TABLE_ = .;
+     KEEP(*(.got2))
+     KEEP(*(.got))
+-    PROVIDE(_GLOBAL_OFFSET_TABLE_ = . + 4);
+     _FIXUP_TABLE_ = .;
+     KEEP(*(.fixup))
+   }
