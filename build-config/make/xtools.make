@@ -121,13 +121,22 @@ $(XTOOLS_BUILD_STAMP): $(XTOOLS_BUILD_DIR)/.config $(XTOOLS_DOWNLOAD_STAMP) $(CR
 	$(Q) touch $@
 
 xtools-clean:
-	$(Q) ( [ -d $(XTOOLS_DIR) ] && chmod +w -R $(XTOOLS_DIR) ) || true
-	$(Q) rm -rf $(XTOOLS_DIR) 
+	$(Q) if [ -d $(XTOOLS_DIR) ] ; then \
+		echo -n "=== Cleaning $(XTOOLS_VERSION) ..." ; \
+		chmod +w -R $(XTOOLS_DIR) ; \
+		rm -rf $(XTOOLS_DIR) ; \
+		echo " done ===" ; \
+	fi
 	$(Q) echo "=== Finished making $@ ==="
 
 DIST_CLEAN += xtools-distclean
 xtools-distclean:
 	$(Q) ( [ -d $(XTOOLS_ROOT) ] && chmod +w -R $(XTOOLS_ROOT) ) || true
+	$(Q) for d in $(XTOOLS_ROOT)/* ; do \
+		[ -e "$$d" ] || break ; \
+		echo -n "=== Cleaning $$(basename $$d) ... " ; \
+		rm -rf $$d ; \
+		echo " done ===" ; done
 	$(Q) rm -rf $(XTOOLS_ROOT)
 	$(Q) echo "=== Finished making $@ ==="
 
