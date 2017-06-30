@@ -179,6 +179,12 @@ sub devices
 	makedev("mmcblk0p${i}", "b", 179, ${i}, ${root}, ${root}, 0660);
     }
 
+    print "NVMe SSD access: nvme0n1 nvme0n1p{1..7}\n";
+    makedev("nvme0n1", "b", 259, 0, ${root}, ${root}, 0660);
+    foreach my $i (1..7) {
+    makedev("nvme0n1p${i}", "b", 259, ${i}, ${root}, ${root}, 0660);
+    }
+
     print "I2C:\n";
     foreach my $i (0..3) {
 	makedev("i2c-${i}", "c", 89, ${i}, ${root}, ${root}, 0660);
