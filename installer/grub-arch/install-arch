@@ -71,6 +71,8 @@ init_onie_install()
     # check if we have an mmcblk device
     blk_suffix=
     echo $onie_dev | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo $onie_dev | grep -q nvme && blk_suffix="p"
 
     [ -r ./onie-blkdev-common ] || {
         echo "ERROR: Unable to find onie-blkdev-common"
@@ -458,6 +460,21 @@ init_uefi_disk()
     for p in uefi_esp onie_boot ; do
         create_gpt_partition $p
     done
+
+    # Update new partition node if we have nvme device
+    # Currently we only support 1 device at nvme0n1
+    nvme_devs=$(ls -d /sys/block/nvme0n1/nvme0n1p[1-7] 2> /dev/null) && {
+    for nd in $nvme_devs ; do
+        dev=$(basename $nd)
+        major=$(sed -e 's/:.*$//' $nd/dev)
+        minor=$(sed -e 's/^.*://' $nd/dev)
+        rm -f /dev/$dev
+        mknod /dev/$dev b $major $minor || {
+            echo "Problems creating /dev/$dev block device."
+            continue
+        }
+        done
+    }
 
     # Create file system on UEFI ESP partition
     local uefi_esp_dev="${onie_dev}$blk_suffix$uefi_esp_part"
