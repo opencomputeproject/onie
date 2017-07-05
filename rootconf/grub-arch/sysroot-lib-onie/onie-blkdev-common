@@ -52,6 +52,8 @@ onie_get_boot_disk()
     disk="${disk%%[0-9]}"
     # remove partition suffix p in case of MMC card
     echo ${disk} | grep -q mmcblk && disk="${disk%%p}"
+    # remove partition suffix p in case of NVMe disk
+    echo ${disk} | grep -q nvme && disk="${disk%%p}"
     [ -n "$disk" ] && echo -n "$disk"
 }
 
@@ -87,6 +89,8 @@ onie_get_uefi_uuid()
     # check if we have an mmcblk device
     local blk_suffix=
     echo ${disk} | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo ${disk} | grep -q nvme && blk_suffix="p"
 
     if [ -n "$disk" -a -n "$uefi_part" ] ; then
         local uefi_uuid=$(blkid "${disk}$blk_suffix$uefi_part" | sed -e 's/^.*UUID="//' -e 's/".*$//')

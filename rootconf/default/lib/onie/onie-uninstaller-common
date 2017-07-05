@@ -80,8 +80,13 @@ erase_part()
 {
     local blk_dev="$1"
     local part="$2"
+    # check if we have an mmcblk device
+    local blk_suffix=
+    echo ${blk_dev} | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo ${blk_dev} | grep -q nvme && blk_suffix="p"
 
-    erase_block_device "${blk_dev}$part"
+    erase_block_device "${blk_dev}$blk_suffix$part"
 
     if [ "$onie_testing" != "y" ] ; then
         printf "${log_pre}Deleting partition $part from /dev/$blk_dev\n"
@@ -158,11 +163,16 @@ should_delete_msdos_partition()
 erase_mass_storage()
 {
     local blk_dev=$1
+    # check if we have an mmcblk device
+    local blk_suffix=
+    echo ${blk_dev} | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo ${blk_dev} | grep -q nvme && blk_suffix="p"
 
     if ls -d /sys/block/$blk_dev/${blk_dev}* > /dev/null 2>&1 ; then
         # Wipe out and delete all partitions, except for important ones,
         # like GRUB, ONIE and possibly a DIAG.
-        ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev//" | while read part ; do
+        ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev$blk_suffix//" | while read part ; do
             if eval $should_delete_partition $blk_dev $part ; then
                 erase_part $blk_dev $part
             fi
