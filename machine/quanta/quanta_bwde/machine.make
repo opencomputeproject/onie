@@ -55,9 +55,6 @@ PXE_EFI64_ENABLE = yes
 LINUX_VERSION		= 4.1
 LINUX_MINOR_VERSION	= 38
 
-# Set the desired uClibc version
-UCLIBC_VERSION = 0.9.33.2
-
 #
 # Console parameters can be defined here (default values are in
 # build-config/arch/x86_64.make).
