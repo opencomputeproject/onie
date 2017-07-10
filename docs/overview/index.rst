@@ -1,4 +1,4 @@
-.. Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2013,2017 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2013 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -12,30 +12,33 @@ Project Overview
 ================
 
 The Open Network Install Environment (ONIE) is an open source
-initiative that defines an open "install environment" for bare metal
-network switches.  ONIE enables a bare metal network switch ecosystem
-where end users have a choice among different network operating
-systems.
+initiative that defines an open "install environment" for modern
+networking hardware.  ONIE enables an open networking hardware
+ecosystem where end users have a choice among different network
+operating systems.
 
-Traditionally, Ethernet switches are procured with pre-installed,
-captive operating systems, effectively creating networking appliances
-that lock end users into a vertical supply chain.  While there is
-industry-wide discussion of a mythical "white box" network switch,
-this ecosystem does not exist; failing in part due to the fact that
-the hardware cannot accept multiple operating systems.
+Before the advent of ONIE, Ethernet switches were procured with
+pre-installed, captive operating systems, effectively creating
+networking appliances that lock end users into a vertical supply
+chain.
 
-As a matter of form, these switches have a management subsystem, based
-on a variety of CPU architectures that typically include serial
-console, out-of-band Ethernet, and sometimes even pluggable mass
-storage.  This subsystem can function independently from the switching
-ASIC(s) associated with the "front panel" Ethernet interfaces
-(that is, without a full network OS, or NOS).
+Initially, ONIE enabled the "white box" or "bare metal" network
+switching ecosystem by opening up the hardware to multiple operating
+system vendors.  Since that time, ONIE is now the de facto install
+environment across the networking hardware industry.
+
+Modern network switches have a management subsystem, based on a
+variety of CPU architectures that typically include serial console,
+out-of-band Ethernet and mass storage.  This subsystem can function
+independently from the switching ASIC(s) associated with the "front
+panel" Ethernet interfaces (that is, without a full network operating
+system).
 
 ONIE defines an open source "install environment" that runs on this
-management subsystem utilizing facilities in a Linux/BusyBox
-environment. This environment allows end users and channel partners to
-install the target NOS as part of data center provisioning, in
-the fashion that servers are provisioned.
+management subsystem utilizing facilities in a Linux kernel and
+BusyBox environment. This environment allows end users and channel
+partners to install the target NOS as part of data center
+provisioning, in the fashion that servers are provisioned.
 
 ONIE enables switch hardware suppliers, distributors and resellers to
 manage their operations based on a small number of hardware SKUs.
@@ -57,9 +60,9 @@ Design Overview
 .. note:: For the complete design, see the :ref:`full_design_spec`.
 
 ONIE is the combination of a boot loader and a small operating system
-for bare metal network switches that provides an environment for
-automated provisioning.  ONIE utilizes the CPU complex of the switch,
-but not the forwarding data plane as shown in the following figure:
+for network switches that provides an environment for automated
+provisioning.  ONIE utilizes the CPU complex of the switch, but not
+the forwarding data plane as shown in the following figure:
 
 .. figure:: CPU_Complex.png
   :scale: 99
@@ -110,7 +113,7 @@ including, but not limited to:
 * DHCPv4 / DHCPv6
 * IPv4 / IPv6 link local neighbors
 * mDNS / DNS-SD
-* PXE-like TFTP waterfall
+* PXE-like TFTP and HTTP waterfalls
 
 The preferred method for image download is HTTP as it offers robust
 performance for large image sizes.  TFTP is also supported, but its
@@ -132,7 +135,7 @@ In the previous diagram the "Less Exact Methods" box refers to
 mechanisms that use probing techniques to locate an image, such as:
 
 * IPv4 / IPv6 link local neighbors
-* PXE-like TFTP waterfall
+* PXE-like TFTP and HTTP waterfalls
 
 Installer Execution Environment
 -------------------------------
@@ -159,8 +162,8 @@ An example of the information exported to the installer includes:
 * Hostname (from DHCP)
 
 These variables allow an installer to integrate with other process
-automation and orchestration, immediately tying together serial
-numbers, MAC addresses and NOS versions.
+automation and orchestration, immediately tying together product
+serial numbers, MAC addresses and NOS versions.
 
 Installer Overview
 ------------------
@@ -175,7 +178,7 @@ Some examples of what an installer could do:
 
 * Chat with inventory control systems via HTTP
 
-* Download a new kernel+initramfs and kexec(8) into it
+* Download a new kernel+initramfs and ``kexec(8)`` into it
 
 Network Operating System Interface
 ----------------------------------
@@ -200,3 +203,12 @@ ONIE provides a mechanism for updating itself.  This mechanism
 proceeds much like the network installer discovery and executing
 phase, but the image in this case is an ONIE update image.  Once
 located, the ONIE update image is downloaded and executed.
+
+Firmware Updates
+----------------
+
+ONIE provides a mechanism for updating the firmware of the machine.
+In this context, firmware refers to software like CPLD/FPGA code and
+BIOS firmware.  This mechanism proceeds much like updating ONIE
+itself, except the image in this case is ONIE firmware update image.
+Once located, the ONIE update image is downloaded and executed.
