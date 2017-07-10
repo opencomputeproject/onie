@@ -1,12 +1,12 @@
-.. Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2013 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
-.. _quick_start_guide:
+.. _user_start_guide:
 
-************************************
-Quick Start Guide -- ONIE By Example
-************************************
+*****************************
+User Guide -- ONIE By Example
+*****************************
 
 ONIE supports a number of methods for locating a Network Operating
 System (NOS) installer image.  The methods range from **really easy** to
@@ -42,7 +42,7 @@ Copy the installer file to the root of the USB thumb drive like this::
 
   linux:~$ sudo mkdir /mnt/usb
   linux:~$ sudo mount /dev/sdd1 /mnt/usb
-  linux:~$ sudo cp ACME_XYZ1234_PowerPC_Installer.bin /mnt/usb
+  linux:~$ sudo cp ACME_XYZ1234_PowerPC_Installer.bin /mnt/usb/onie-installer
   linux:~$ sudo umount /mnt/usb
 
 Now remove the USB drive from your computer and insert it into the USB
@@ -69,7 +69,7 @@ Installing and Configuring the HTTP Server
 ------------------------------------------
 
 Download and install your favorite HTTP server [#apache_httpd]_
-[#thttpd]_.
+[#nginx]_.
 
 The examples in this guide assume Apache httpd is installed on a Linux
 machine with the default configuration options.  The document root of
@@ -508,7 +508,6 @@ headers are set::
   ONIE-MACHINE:
   ONIE-MACHINE-REV:
   ONIE-ARCH:
-  ONIE-SECURITY-KEY:
   ONIE-OPERATION:
 
 See :ref:`http_headers` for more about these HTTP headers.
@@ -609,7 +608,7 @@ switch.  ONIE uses a baud rate of 115200.
 ..  [#isc_dhcp] `ISC DHCP Server <http://www.isc.org/downloads/dhcp/>`_
 ..  [#isc_dhcp_options] `ISC DHCP Server Options <http://www.ipamworldwide.com/dhcp-options/isc-dhcpv4-options.html>`_
 ..  [#apache_httpd] `Apache httpd <http://httpd.apache.org/>`_
-..  [#thttpd]       `tiny/turbo/throttling HTTP server <http://acme.com/software/thttpd/>`_
+..  [#nginx]        `NGINX HTTP server <http://nginx.org/>`_
 ..  [#wget]         `wget http download <http://linux.die.net/man/1/wget>`_
 ..  [#curl]         `curl http download <http://linux.die.net/man/1/curl>`_
 ..  [#dhcp_eval]    `dhcp-eval(5) <http://linux.die.net/man/5/dhcp-eval>`_
