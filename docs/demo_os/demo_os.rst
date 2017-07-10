@@ -38,7 +38,7 @@ Using the Installer with ONIE
 -----------------------------
 
 The installer needs to be located where the ONIE discovery mechanisms
-can find it.  See :ref:`quick_start_guide` for more on the discovery
+can find it.  See :ref:`user_guide` for more on the discovery
 mechanisms and usage models.
 
 For a quick lab demo, the IPv6 neighbor discovery method is described

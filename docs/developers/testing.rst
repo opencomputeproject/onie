@@ -35,7 +35,7 @@ Using a locally attached HTTP server, verify the following:
 #. The machine installs the demo NOS.
 #. The machine reboots into the demo NOS.
 
-See :ref:`quick_start_guide` for more on how to configure a HTTP
+See :ref:`user_guide` for more on how to configure a HTTP
 server and set up the directly attached network.
 
 Locally Attached File System Install (USB Memory Stick)
