@@ -19,20 +19,20 @@ operating systems.
 
 Before the advent of ONIE, Ethernet switches were procured with
 pre-installed, captive operating systems, effectively creating
-networking appliances that lock end users into a vertical supply
+networking appliances that locked end users into a vertical supply
 chain.
 
-Initially, ONIE enabled the "white box" or "bare metal" network
+Initially, ONIE enabled the "white box" and "bare metal" network
 switching ecosystem by opening up the hardware to multiple operating
-system vendors.  Since that time, ONIE is now the de facto install
-environment across the networking hardware industry.
+system vendors.  Over time ONIE's popularity grew, to where now ONIE
+is the de facto install environment across the networking hardware
+industry.
 
 Modern network switches have a management subsystem, based on a
 variety of CPU architectures that typically include serial console,
 out-of-band Ethernet and mass storage.  This subsystem can function
 independently from the switching ASIC(s) associated with the "front
-panel" Ethernet interfaces (that is, without a full network operating
-system).
+panel" Ethernet interfaces.
 
 ONIE defines an open source "install environment" that runs on this
 management subsystem utilizing facilities in a Linux kernel and
@@ -193,6 +193,8 @@ provisioning and maintenance operations, including:
 * Rescue and recovery
 
 * Updating ONIE
+
+* Updating the machine CPLD/FPGAs and BIOS firmware
 
 This environment forms an interface between ONIE and the NOS.
 
