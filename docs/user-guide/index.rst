@@ -2,11 +2,11 @@
    Copyright (C) 2013 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
-.. _user_start_guide:
+.. _user_guide:
 
-*****************************
-User Guide -- ONIE By Example
-*****************************
+**********
+User Guide
+**********
 
 ONIE supports a number of methods for locating a Network Operating
 System (NOS) installer image.  The methods range from **really easy** to
@@ -122,6 +122,8 @@ following diagram.
   :align: center
   :alt: Switch and Web Server Directly Connected
 
+  Switch and Web Server Directly Connected
+
 This simple configuration is appropriate for provisioning a small
 number of switches without relying on a lot of infrastructure.  You
 might have this scenario in a production environment when you wheel a
@@ -175,6 +177,8 @@ same unmanaged switch. This is depicted in the following diagram.
   :align: center
   :alt: Switch and Web Server on Same L2 Network
 
+  Switch and Web Server on Same L2 Network
+
 This scenario proceeds just like the :ref:`directly_connected`
 described previously.  ONIE discovers the IP address of the Web server
 and tries to download a series of default file names from the server.
@@ -194,6 +198,8 @@ following diagram.
   :scale: 75
   :align: center
   :alt: Switch and Web Server on Same L2 Network with DHCP Server
+
+  Switch and Web Server on Same L2 Network with DHCP Server
 
 The DHCP server provides the following information:
 
@@ -256,6 +262,8 @@ Web server.  The network topology is shown in the following diagram.
   :scale: 75
   :align: center
   :alt: Switch and Web Server on Different L3 Networks with DHCP Server
+
+  Switch and Web Server on Different L3 Networks with DHCP Server
 
 With this setup, the Web server and target switch can reside on
 different subnets.  The target switch needs to send packets via a
