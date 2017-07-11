@@ -12,6 +12,7 @@ Open Network Install Environment Documentation
    :titlesonly:
 
    overview/index
+   community/index
    user-guide/index
    design-spec/index
    testing-certification/index

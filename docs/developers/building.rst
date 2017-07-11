@@ -1,4 +1,4 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -94,9 +94,6 @@ about how to install the ONIE binary on a particular platform.
 
 Source Code Description
 =======================
-
-The ONIE git repository is hosted on GitHub:
-https://github.com/opencomputeproject/onie
 
 Source Code Layout
 ------------------
