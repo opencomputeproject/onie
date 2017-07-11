@@ -387,6 +387,8 @@ The following options can be used to form an exact URL.
   150 + 67 | TFTP server IP and TFTP bootfile |  Both options required for an exact URL.
   66 + 67 | TFTP server name and TFTP bootfile |  Both options required for an exact URL.  Requires DNS.
 
+.. _partial_install_urls:
+
 Partial Installer URLs
 ----------------------
 
