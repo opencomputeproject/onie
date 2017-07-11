@@ -245,6 +245,7 @@ COMMAND LINE OPTIONS
   -f | ONIE configuration version
   -d | ONIE build date
   -t | ONIE partition type
+  -S | ONIE switch silicon vendor
 
 EXAMPLES
 --------
@@ -322,3 +323,119 @@ For the ``-o`` option the available ONIE mode settings are:
 - update    -- ONIE self update mode
 - embed	    -- ONIE self update mode and embed ONIE
 - none	    -- Use system default boot mode
+
+``onie-fwpkg``
+--------------
+
+Availability
+````````````
+
+This command is available in the 2015.08 release and beyond for x86_64
+systems.  This command is not supported on ARM or PowerPC.
+
+SYNOPSIS
+````````
+
+  onie-fwpkg [-hvqf] add <package file_name> | remove <package_name> |
+                     purge | show-pending [name] | show-results [name] |
+                     show [name] | show-log
+
+DESCRIPTION
+```````````
+
+Command line tool for managing ONIE firmware update packages.  The
+default is to show any currently pending firmware update packages.
+
+COMMAND LINE OPTIONS
+````````````````````
+
+.. csv-table::
+  :header: "Option", "Description"
+  :widths: 1, 3
+  :delim: |
+
+  -h | Help. Print a help message.
+  -v | Be verbose. Print what is happening.
+  -q | Be quiet. No printing, except for errors.
+  -f | Force the operation.  Automatically answer 'yes' to any confirmation questions.
+
+Tool Commands
+`````````````
+
+This tool accepts one of the following commands. If no command is
+specified the default command is ``show-pending``.
+
+``add <file name>``
+^^^^^^^^^^^^^^^^^^^
+
+The ``add`` command takes a required file name argument.  The file
+name must specify a valid ONIE firmware update package.
+
+The command stages the firmware update package for processing during
+the next ONIE-update sequence.
+
+It is an error to attempt to add an already existing firmware update
+package.
+
+``remove <package name>``
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``remove`` command takes a required ONIE firmware update package
+name argument.  The package name refers to a previously staged
+firmware update package.
+
+The command unstages the firmware update package and any associated
+state files.  This includes any previous install failure attempts and
+results.
+
+For a list of pending firmware updates use the 'show-pending' command
+described below.
+
+``purge``
+^^^^^^^^^
+
+The ``purge`` command removes *all* pending firmware update packages and
+associated state.  Think of this as ``rm *`` for all firmware update
+packages and associated state.
+
+``show-pending [name]``
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``show-pending`` command takes an optional firmware update
+``[name]``.
+
+If the name is not specified the command lists all pending firmware
+update packages and any associated install attempt state.
+
+Install attempt state includes any previous install failure attempts.
+
+If ``[name]`` is specified the ``show-pending`` command dumps all
+available information about the firmware update package.
+
+``show-results [name]``
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``show-results`` command takes an optional firmware update
+``[name]``.
+
+If firmware update ``[name]`` is not specified the command lists all
+available result files.
+
+If firmware update ``[name]`` is specified the command output all
+available result information for the firmware update.
+
+``show [name]``
+^^^^^^^^^^^^^^^
+
+.. note:: This is the default command.
+
+The ``show`` command takes an optional firmware update ``[name]``.
+
+This command combines the output of the ``show-pending`` and
+``show-results`` command.
+
+``show-log``
+^^^^^^^^^^^^
+
+The ``show-log`` command dumps the entire contents of the ONIE firmware
+update log to stdout.

@@ -16,7 +16,6 @@ Open Network Install Environment Documentation
    design-spec/index
    testing-certification/index
    developers/index
-   glossary/index
    cli/index
    faq/index
 
