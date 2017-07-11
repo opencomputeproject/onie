@@ -131,8 +131,8 @@ everything.  They do not need to configure DHCP servers, etc. in this
 scenario.
 
 For more information on the tool for staging firmware updates see the
-documentation for the <FIXME FIXME>.  This covers staging, unstaging
-and querying information about pending firmware updates.
+documentation for :ref:`cli_onie_fwpkg`.  This covers staging,
+unstaging and querying information about pending firmware updates.
 
 .. note::
  
@@ -173,8 +173,8 @@ information about the update version and whether the update was
 successful or not.  These records are stored persistently in the ONIE
 partition.
 
-The <FIXME FIXME> command has options for dumping the result records
-and update status.
+The :ref:`cli_onie_fwpkg` command has options for dumping the result
+records and update status.
 
 Example: Staging a Firmware Update From a NOS
 '''''''''''''''''''''''''''''''''''''''''''''

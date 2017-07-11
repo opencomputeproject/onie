@@ -212,8 +212,9 @@ install a new version of ONIE.
 .. note:: At this time, the ``embed`` operation is available only on the x86
    platform.
 
-For more details on the ``update`` and ``embed`` operations see the
-CURT-FIXME sections for the corresponding CPU architectures:
+For more details on the ``update`` and ``embed`` operations see
+:ref:`x86_nos_intf_update` and :ref:`uboot_nos_intf_update` for the
+corresponding CPU architectures.
 
 See the :ref:`updating_onie` section for more about updating ONIE.
 
