@@ -7,11 +7,12 @@ Developer Documentation
 ***********************
 
 .. toctree::
-   :maxdepth: 3
-   :titlesonly:
+   :maxdepth: 2
 
    building
    debugging
    contributing
    porting
-   testing
+   demo_os
+   demo_diag
+ 

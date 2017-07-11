@@ -9,16 +9,11 @@ Machine Definition Files
 ------------------------
 
 In order to compile ONIE for a particular platform, you need the
-platform's machine definition, located in ``$ONIE_ROOT/machine/<platform>``.
+platform's machine definition, located in
+``$ONIE_ROOT/machine/<vendor>/<vendor>_<model>``.
 
-If you received a machine definition tarball separately, you must first
-untar it in the ``$ONIE_ROOT`` directory.  For example::
-
-  $ cd onie
-  $ tar xJf /path/to/tarball/onie-<platform>.tar.xz
-
-See the README file in ``machine/<platform>`` for additional information
-about a particular platform.
+See the INSTALL file in ``machine/<vendor>/<vendor>_<model>`` for
+additional information about a particular platform.
 
 Preparing a New Build Machine
 -----------------------------
@@ -27,9 +22,11 @@ To prepare a new build machine for compiling, ONIE must first install a
 number of standard development packages.
 
 For a `Debian-based system <http://www.debian.org/>`_, a Makefile
-target exists that installs the required packages on your build
-machine.  This target requires the use of ``sudo(8)``, since package
-installation requires root privileges::
+target exists that installs the required packages on your build machine.
+
+The ONIE project will maintain this target for the current stable
+version of Debian.  This target requires the use of ``sudo(8)``, since
+package installation requires root privileges::
 
   $ cd build-config
   $ sudo apt-get update
@@ -39,6 +36,15 @@ installation requires root privileges::
 For a different Linux distribution, look at the Makefile and the
 ``$(DEBIAN_BUILD_HOST_PACKAGES)`` variable.  Then install packages for
 your distribution that provide the same tools.
+
+Preparing a New Build User Account
+----------------------------------
+
+The user account for compiling ONIE must have ``/sbin`` and ``/usr/sbin``
+in the ``$PATH`` environment variable.  As an example, when using the
+``bash`` shell add the following near the end of ``$HOME/.bashrc``::
+
+  export PATH="/sbin:/usr/sbin:$PATH"
 
 Cross-Compiler Toolchain
 ------------------------
@@ -62,11 +68,11 @@ Cross-Compiling ONIE
 --------------------
 
 To compile ONIE, first change directories to ``build-config`` and then
-type ``make MACHINE=<platform> all``, specifying the target machine.
-For example::
+type ``make MACHINEROOT=../machine/<vendor> MACHINE=<vendor>_<model>
+all``, specifying the target machine.  For example::
 
   $ cd build-config
-  $ make -j4 MACHINE=<platform> all
+  $ make -j4 MACHINEROOT=../machine/<vendor> MACHINE=<vendor>_<model> all
 
 When complete, the following ONIE binaries are created in the ``build/images``
 directory:
@@ -167,22 +173,23 @@ Machine Definition Directory
 The ``machine`` directory layout is as follows::
 
   onie/machine
-  └── <platform>
-      ├── demo
-      │   └── platform.conf
-      ├── INSTALL
-      ├── kernel
-      │   ├── config
-      │   ├── platform-<platform>.patch
-      │   └── series
-      ├── machine.make
-      ├── onie-rom.conf
-      └── u-boot
-          ├── platform-<platform>.patch
-          └── series
+  └── <vendor>
+      └── <vendor>_<model>
+          ├── demo
+          │   └── platform.conf
+          ├── INSTALL
+          ├── kernel
+          │   ├── config
+          │   ├── platform-<platform>.patch
+          │   └── series
+          ├── machine.make
+          ├── onie-rom.conf
+          └── u-boot
+              ├── platform-<platform>.patch
+              └── series
 
-This directory contains all the files necessary to build ONIE for the
-Freescale P2020RBD-PCA reference platform.
+The machine/nxp/nxp_p2020rbdpca directory contains all the files
+necessary to build ONIE for the NXP P2020RBD-PCA reference platform.
 
 ================================   =======
 File                               Purpose

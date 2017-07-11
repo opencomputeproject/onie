@@ -24,12 +24,13 @@ installers:
 Building the Demo Installer
 ---------------------------
 
-To compile the demo installer, first change directories to ``build-config`` 
-and then type ``make MACHINE=<platform> demo``, specifying the target machine.
-For example::
+To compile the demo installer, first change directories to
+``build-config`` and then type ``make MACHINEROOT=../machine/<vendor>
+MACHINE=<platform> demo``, specifying the target machine.  For
+example::
 
   $ cd build-config
-  $ make -j4 MACHINE=<platform> demo
+  $ make -j4 MACHINEROOT=../machine/<vendor> MACHINE=<platform> demo
 
 When compilation finishes, the demo installer is located in
 ``build/images/demo-installer-<platform>.bin``.
@@ -59,7 +60,8 @@ Copy the demo installer to the HTTP server root, using the name
 
   $ cp build/images/demo-installer-<platform>.bin /var/www/onie-installer-<platform>-<arch>
 
-Currently the only supported ``<arch>`` are ``powerpc`` and ``x86_64``.
+Currently the only supported ``<arch>`` are ``x86_64``, ``powerpc``,
+``armv8`` and ``armv7``.
 
 Powering on the Network Switch
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -68,10 +70,10 @@ When the switch powers up, ONIE will run and attempt to find an installer.
 One of the methods is to look for a file named
 ``onie-installer-<platform>-<arch>`` on all of the switch's IPv6 neighbors.
 
-Using the Freescale P2020RDB-PCA reference platform as an example, the
+Using the NXP P2020RDB-PCA reference platform as an example, the
 default installer name would be::
 
-  onie-installer-fsl_p2020rdbpca-powerpc
+  onie-installer-nxp_p2020rdbpca-powerpc
 
 1.  Connect to the serial console of the network switch.
 2.  Power cycle the machine.
@@ -189,19 +191,21 @@ The demo installer and OS source code is laid out as follows::
       │       ├── profile
       │       └── rc3.d
       │           └── S99demo.sh -> ../init.d/demo.sh
-      └── install
+      ├── grub-arch
+      └── u-boot-arch
 
 ====================  =======
 Directory             Purpose
 ====================  =======
 installer             Files used for making the installer.
 os/default            Files copied into the final sysroot image.
-os/install            The installer.
+os/grub-arch          Files specific to GRUB based platforms.
+os/u-boot-arch        Files specific to U-Boot based platforms.
 ====================  =======
 
 A machine-specific configuration file is also required::
 
-  machine/<platform>/demo/platform.conf
+  machine/<vendor>/<vendor>_<model>/demo/platform.conf
 
 This contains instructions specific to the machine needed by the
 installer.
