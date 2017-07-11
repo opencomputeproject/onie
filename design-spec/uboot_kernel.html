@@ -1,0 +1,435 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+  
+  <!-- Licensed under the Apache 2.0 License -->
+  <link rel="stylesheet" type="text/css" href="../_static/fonts/open-sans/stylesheet.css" />
+  <!-- Licensed under the SIL Open Font License -->
+  <link rel="stylesheet" type="text/css" href="../_static/fonts/source-serif-pro/source-serif-pro.css" />
+  <link rel="stylesheet" type="text/css" href="../_static/css/bootstrap.min.css" />
+  <link rel="stylesheet" type="text/css" href="../_static/css/bootstrap-theme.min.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+    <title>U-Boot Platform Linux Kernel and Device Tree Source &mdash; Open Network Install Environment  documentation</title>
+    
+    <link rel="stylesheet" href="../_static/guzzle.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment  documentation" href="../index.html" />
+    <link rel="up" title="U-Boot Platform Architecture Design" href="uboot_arch_design.html" />
+    <link rel="next" title="U-Boot Platform NOS Interface Details" href="uboot_nos_interface.html" />
+    <link rel="prev" title="U-Boot Boot Loader" href="uboot_boot_loader.html" />
+  
+   
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="uboot_nos_interface.html" title="U-Boot Platform NOS Interface Details"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="uboot_boot_loader.html" title="U-Boot Boot Loader"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Open Network Install Environment  documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="uboot_arch_design.html" accesskey="U">U-Boot Platform Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="container-wrapper">
+
+      <div id="mobile-toggle">
+        <a href="#"><span class="glyphicon glyphicon-align-justify" aria-hidden="true"></span></a>
+      </div>
+  <div id="left-column">
+    <div class="sphinxsidebar">
+  <a href="
+      ../index.html" class="logo">
+  
+  <img src="../_static/ONIE-logo-green-160x60.png" class="logo" />
+  </a>
+
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <h2>Table Of Contents</h2>
+  </div>
+  <div class="sidebar-toc">
+    
+    
+      <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview/index.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Design Specification</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="switch_hw_requirements.html">Switch Hardware Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operating_sw_design.html">Operating Software Design</a></li>
+<li class="toctree-l2"><a class="reference internal" href="x86_arch_design.html">x86 CPU Architecture Design</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="uboot_arch_design.html">U-Boot Platform Architecture Design</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../testing-certification/index.html">Testing and Certification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/index.html">Developer Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../faq/index.html">FAQ</a></li>
+</ul>
+
+    
+  </div>
+</div>
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <h2>Contents</h2>
+    <div class="sidebar-localtoc">
+      <ul>
+<li><a class="reference internal" href="#">U-Boot Platform Linux Kernel and Device Tree Source</a><ul>
+<li><a class="reference internal" href="#id1">Device Tree Source</a><ul>
+<li><a class="reference internal" href="#model-and-compatible-properties"><code class="docutils literal"><span class="pre">model</span></code> and <code class="docutils literal"><span class="pre">compatible</span></code> Properties</a></li>
+<li><a class="reference internal" href="#boot-flash-partitioning">Boot Flash Partitioning</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#kconfig-and-makefile">Kconfig and Makefile</a></li>
+<li><a class="reference internal" href="#platform-support-c-files">Platform Support C Files</a></li>
+</ul>
+</li>
+</ul>
+
+    </div>
+  </div>
+</div>
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <div id="main-search">
+      <form class="form-inline" action="../search.html" method="GET" role="form">
+        <div class="input-group">
+          <input name="q" type="text" class="form-control" placeholder="Search...">
+        </div>
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div>
+      
+    </div>
+  </div>
+        <div id="right-column">
+          
+          <div role="navigation" aria-label="breadcrumbs navigation">
+            <ol class="breadcrumb">
+              <li><a href="../index.html">Docs</a></li>
+              
+                <li><a href="index.html">Design Specification</a></li>
+              
+                <li><a href="uboot_arch_design.html">U-Boot Platform Architecture Design</a></li>
+              
+              <li>U-Boot Platform Linux Kernel and Device Tree Source</li>
+            </ol>
+          </div>
+          
+          <div class="document clearer body">
+            
+  <div class="section" id="u-boot-platform-linux-kernel-and-device-tree-source">
+<span id="uboot-kernel"></span><h1>U-Boot Platform Linux Kernel and Device Tree Source<a class="headerlink" href="#u-boot-platform-linux-kernel-and-device-tree-source" title="Permalink to this headline">¶</a></h1>
+<p>ONIE provides an environment in which a network operating system (NOS) installer
+can run. As such, the kernel must provide features and services useful for an
+installer.  This places a number of requirements on the Linux kernel configuration.</p>
+<p>In addition, the kernel requires support for individual hardware platforms and the
+associated <a class="reference external" href="http://devicetree.org/Device_Tree_Usage">device tree source</a>.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The examples throughout this section reference a
+hypothetical machine, called <em>MACHINE</em>, manufactured by a
+hypothetical hardware manufacturer, called <em>VENDOR</em>.  The machine is
+based on a Freescale <a class="reference external" href="http://www.freescale.com/webapp/sps/site/homepage.jsp?code=QORIQ_HOME">QorIQ PowerPC</a> CPU.</p>
+</div>
+<p>Every platform must add platform support to the Linux kernel.  In
+general these types of files need to be added or modified:</p>
+<table class="table table-bordered">
+<colgroup>
+<col width="49%" />
+<col width="51%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">File</th>
+<th class="head">Purpose</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">linux/arch/$(CPU)/boot/dts/vendor_machine.dts</span></code></td>
+<td>Device Tree Source (DTS) for the platform.</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">linux/arch/$(CPU)/.../Kconfig</span></code></td>
+<td>Kernel configuration fragment that allows
+the new platform to be selected.</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">linux/arch/$(CPU)/.../Makefile</span></code></td>
+<td>Makefile fragment detailing what C file to
+compile when the platform is selected.</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">linux/arch/$(CPU)/.../vendor_machine.c</span></code></td>
+<td>Platform support C file. Basic initialization and reset.</td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="id1">
+<h2>Device Tree Source<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>The device tree is a simple tree structure of nodes and properties
+that describe the hardware platform. Properties are key-value pairs,
+and nodes may contain both properties and child nodes.  The nodes and
+properties relevant to ONIE are discussed here.</p>
+<table class="table table-bordered">
+<colgroup>
+<col width="22%" />
+<col width="18%" />
+<col width="61%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-even"><th class="head">Node</th>
+<th class="head">Property</th>
+<th class="head">Purpose</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">/</span></code></td>
+<td><code class="docutils literal"><span class="pre">model</span></code></td>
+<td>A string that uniquely identifies the hardware
+platform. For example, &quot;vendor,model-XYZ&quot;.</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">/</span></code></td>
+<td><code class="docutils literal"><span class="pre">compatible</span></code></td>
+<td>A string that identifies a platform that is
+compatible with the model. For example,
+&quot;vendor,model&quot;.</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">/localbus/nor</span></code></td>
+<td><code class="docutils literal"><span class="pre">partitions</span></code></td>
+<td>Node that partitions the NOR flash into
+logical regions.  NAND flash could also be used.</td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="model-and-compatible-properties">
+<h3><code class="docutils literal"><span class="pre">model</span></code> and <code class="docutils literal"><span class="pre">compatible</span></code> Properties<a class="headerlink" href="#model-and-compatible-properties" title="Permalink to this headline">¶</a></h3>
+<p>The <code class="docutils literal"><span class="pre">model</span></code> and <code class="docutils literal"><span class="pre">compatible</span></code> properties are used by the kernel at
+boot time to invoke the correct platform initialization routines. For example:</p>
+<div class="highlight-python"><div class="highlight"><pre>/dts-v1/;
+/ {
+        model = &quot;vendor,model-XYZ&quot;;
+        compatible = &quot;vendor,model&quot;;
+[ ... ]
+};
+</pre></div>
+</div>
+<p>See how the <code class="docutils literal"><span class="pre">compatible</span></code> property is used in <a class="reference internal" href="#platform-support-c-file"><span>Platform Support C Files</span></a> below.</p>
+</div>
+<div class="section" id="boot-flash-partitioning">
+<span id="nor-flash-partition"></span><h3>Boot Flash Partitioning<a class="headerlink" href="#boot-flash-partitioning" title="Permalink to this headline">¶</a></h3>
+<p>For an ONIE system the partitioning looks like:</p>
+<table class="table table-bordered">
+<colgroup>
+<col width="15%" />
+<col width="19%" />
+<col width="66%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-even"><th class="head">Region Label</th>
+<th class="head">Typical Size</th>
+<th class="head">Purpose</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-odd"><td>open</td>
+<td>---</td>
+<td>Leftover space for use by the operating system.</td>
+</tr>
+<tr class="row-even"><td>diag</td>
+<td>---</td>
+<td>Space occupied by hardware diagnostics [optional].</td>
+</tr>
+<tr class="row-odd"><td>onie</td>
+<td>4MB</td>
+<td>Space occupied by the ONIE kernel and <code class="docutils literal"><span class="pre">initramfs</span></code>.</td>
+</tr>
+<tr class="row-even"><td>uboot-env</td>
+<td>64KB (1 sector)</td>
+<td>Space occupied by the U-Boot environment variables.</td>
+</tr>
+<tr class="row-odd"><td>uboot</td>
+<td>512KB</td>
+<td>Space occupied by the U-Boot binary.</td>
+</tr>
+</tbody>
+</table>
+<p>Here is an example NOR flash node where the NOR flash is 128MB in size:</p>
+<div class="highlight-python"><div class="highlight"><pre>nor@0,0 {
+        #address-cells = &lt;0x1&gt;;
+        #size-cells = &lt;0x1&gt;;
+        compatible = &quot;cfi-flash&quot;;
+        reg = &lt;0x0 0x0 0x8000000&gt;;
+        bank-width = &lt;0x2&gt;;
+        device-width = &lt;0x2&gt;;
+        byteswap;
+        partition@0 {
+                /* Entire flash minus (u-boot + onie + diag) */
+                reg = &lt;0x00000000 0x07760000&gt;;
+                label = &quot;open&quot;;
+        };
+        partition@1 {
+                /* Optional hardware diagnostic image, 4MB */
+                reg = &lt;0x07760000 0x00400000&gt;;
+                label = &quot;diag&quot;;
+        };
+        partition@2 {
+                /* 4MB onie */
+                reg = &lt;0x07b60000 0x00400000&gt;;
+                label = &quot;onie&quot;;
+        };
+        partition@3 {
+                /* 128KB, 1 sector */
+                reg = &lt;0x07f60000 0x00020000&gt;;
+                label = &quot;uboot-env&quot;;
+                env_size = &lt;0x2000&gt;;
+        };
+        partition@4 {
+                /* 512KB u-boot */
+                reg = &lt;0x07f80000 0x00080000&gt;;
+                label = &quot;uboot&quot;;
+        };
+};
+</pre></div>
+</div>
+<p>Compare this partitioning scheme to the picture in <a class="reference internal" href="uboot_boot_loader.html#nor-flash-memory-layout"><span>NOR Flash Memory Layout</span></a>.</p>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">The region <code class="docutils literal"><span class="pre">label</span></code> properties within the nodes are
+important and must have the names as shown above. The
+ONIE application and operating system installers rely on
+these names.</p>
+</div>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">The <code class="docutils literal"><span class="pre">env_size</span></code> property of the <code class="docutils literal"><span class="pre">uboot-env</span></code> partition
+indicates how much of the sector is used to store U-Boot
+environment variables. This value must match the
+<code class="docutils literal"><span class="pre">CONFIG_ENV_SIZE</span></code> macro defined in the U-Boot source
+file <code class="docutils literal"><span class="pre">include/configs/onie_common_config.h</span></code>. This value
+is used at runtime to facilitate the reading and writing
+of U-Boot environment variables by an operating system
+installer.</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The <code class="docutils literal"><span class="pre">diag</span></code> partition is optional and is intended to be
+used by the hardware vendor to provide a diagnostic image.
+The size of the diagnostic partition is only constrained by
+the total size of the NOR flash.</p>
+</div>
+</div>
+</div>
+<div class="section" id="kconfig-and-makefile">
+<h2>Kconfig and Makefile<a class="headerlink" href="#kconfig-and-makefile" title="Permalink to this headline">¶</a></h2>
+<p>The <code class="docutils literal"><span class="pre">Kconfig</span></code> file must contain an additional stanza for the new
+platform. For example:</p>
+<div class="highlight-python"><div class="highlight"><pre>config VENDOR_MACHINE
+       bool &quot;VENDOR Corporation Model MACHINE&quot;
+       select DEFAULT_UIMAGE
+       help
+         This option enables support for the VENDOR MACHINE networking platform
+</pre></div>
+</div>
+<p>The <code class="docutils literal"><span class="pre">Makefile</span></code> file must contain an additional entry for the new
+platform. For example:</p>
+<div class="highlight-python"><div class="highlight"><pre>obj-$(CONFIG_VENDOR_MACHINE) += vendor_machine.o
+</pre></div>
+</div>
+</div>
+<div class="section" id="platform-support-c-files">
+<span id="platform-support-c-file"></span><h2>Platform Support C Files<a class="headerlink" href="#platform-support-c-files" title="Permalink to this headline">¶</a></h2>
+<p>The platform support C files perform any boot time initialization
+necessary for a particular platform.  Most of these initialization
+codes can be ported from a similar hardware platform.</p>
+<p>Any platform specific drivers are also considered to be &quot;platform
+support&quot; C files.</p>
+<p>The primary responsibilities of the platform support C files in ONIE
+are:</p>
+<ul class="simple">
+<li>return true when the kernel probes for a device tree node whose
+compatible property is &quot;vendor,machine&quot;. If it finds it, the kernel
+now knows what type of machine is running.</li>
+<li>if necessary, implement a platform-specific
+<code class="docutils literal"><span class="pre">vendor_machine_restart()</span></code> function to perform a system reboot.
+This may be necessary for platform that implement a CPLD-based reset
+mechanism, instead of using a standard CPU architecture reset
+mechanism.</li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+            
+  <div class="footer-relations">
+    
+      <div class="pull-left">
+        <a class="btn btn-default" href="uboot_boot_loader.html" title="previous chapter (use the left arrow)">U-Boot Boot Loader</a>
+      </div>
+    
+      <div class="pull-right">
+        <a class="btn btn-default" href="uboot_nos_interface.html" title="next chapter (use the right arrow)">U-Boot Platform NOS Interface Details</a>
+      </div>
+    </div>
+    <div class="clearer"></div>
+  
+        </div>
+        <div class="clearfix"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="uboot_nos_interface.html" title="U-Boot Platform NOS Interface Details"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="uboot_boot_loader.html" title="U-Boot Boot Loader"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Open Network Install Environment  documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="uboot_arch_design.html" >U-Boot Platform Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>
+<script type="text/javascript">
+  $("#mobile-toggle a").click(function () {
+    $("#left-column").toggle();
+  });
+</script>
+<script type="text/javascript" src="../_static/js/bootstrap.js"></script>
+  <div class="footer">
+        &copy; Copyright 2013-2017, <a href="https://cumulusnetworks.com/">Cumulus Networks, Inc.</a>  All Rights Reserved.
+  </div>
+  </body>
+</html>

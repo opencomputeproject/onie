@@ -1,0 +1,638 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+  
+  <!-- Licensed under the Apache 2.0 License -->
+  <link rel="stylesheet" type="text/css" href="../_static/fonts/open-sans/stylesheet.css" />
+  <!-- Licensed under the SIL Open Font License -->
+  <link rel="stylesheet" type="text/css" href="../_static/fonts/source-serif-pro/source-serif-pro.css" />
+  <link rel="stylesheet" type="text/css" href="../_static/css/bootstrap.min.css" />
+  <link rel="stylesheet" type="text/css" href="../_static/css/bootstrap-theme.min.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+    <title>U-Boot Boot Loader &mdash; Open Network Install Environment  documentation</title>
+    
+    <link rel="stylesheet" href="../_static/guzzle.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment  documentation" href="../index.html" />
+    <link rel="up" title="U-Boot Platform Architecture Design" href="uboot_arch_design.html" />
+    <link rel="next" title="U-Boot Platform Linux Kernel and Device Tree Source" href="uboot_kernel.html" />
+    <link rel="prev" title="U-Boot Platform Requirements" href="uboot_hw_requirements.html" />
+  
+   
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="uboot_kernel.html" title="U-Boot Platform Linux Kernel and Device Tree Source"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="uboot_hw_requirements.html" title="U-Boot Platform Requirements"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Open Network Install Environment  documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="uboot_arch_design.html" accesskey="U">U-Boot Platform Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="container-wrapper">
+
+      <div id="mobile-toggle">
+        <a href="#"><span class="glyphicon glyphicon-align-justify" aria-hidden="true"></span></a>
+      </div>
+  <div id="left-column">
+    <div class="sphinxsidebar">
+  <a href="
+      ../index.html" class="logo">
+  
+  <img src="../_static/ONIE-logo-green-160x60.png" class="logo" />
+  </a>
+
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <h2>Table Of Contents</h2>
+  </div>
+  <div class="sidebar-toc">
+    
+    
+      <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview/index.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Design Specification</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="switch_hw_requirements.html">Switch Hardware Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operating_sw_design.html">Operating Software Design</a></li>
+<li class="toctree-l2"><a class="reference internal" href="x86_arch_design.html">x86 CPU Architecture Design</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="uboot_arch_design.html">U-Boot Platform Architecture Design</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../testing-certification/index.html">Testing and Certification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/index.html">Developer Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../faq/index.html">FAQ</a></li>
+</ul>
+
+    
+  </div>
+</div>
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <h2>Contents</h2>
+    <div class="sidebar-localtoc">
+      <ul>
+<li><a class="reference internal" href="#">U-Boot Boot Loader</a><ul>
+<li><a class="reference internal" href="#nor-flash-memory-layout">NOR Flash Memory Layout</a></li>
+<li><a class="reference internal" href="#platform-dependent-hardware-initialization">Platform-Dependent Hardware Initialization</a><ul>
+<li><a class="reference internal" href="#environment-variables-consoledev-oniestart-and-oniesz-b">Environment Variables: <code class="docutils literal"><span class="pre">consoledev,</span> <span class="pre">oniestart</span> <span class="pre">and</span> <span class="pre">oniesz.b</span></code></a></li>
+<li><a class="reference internal" href="#environment-variables-platform-and-vendor-id">Environment Variables: <code class="docutils literal"><span class="pre">platform</span></code> and <code class="docutils literal"><span class="pre">vendor_id</span></code></a></li>
+<li><a class="reference internal" href="#environment-variable-serial">Environment Variable: <code class="docutils literal"><span class="pre">serial#</span></code></a></li>
+<li><a class="reference internal" href="#environment-variable-eth-addr">Environment Variable: <code class="docutils literal"><span class="pre">eth_addr</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#platform-independent-u-boot-features">Platform-Independent U-Boot Features</a><ul>
+<li><a class="reference internal" href="#platform-independent-environment-variables">Platform-Independent Environment Variables</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+    </div>
+  </div>
+</div>
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <div id="main-search">
+      <form class="form-inline" action="../search.html" method="GET" role="form">
+        <div class="input-group">
+          <input name="q" type="text" class="form-control" placeholder="Search...">
+        </div>
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div>
+      
+    </div>
+  </div>
+        <div id="right-column">
+          
+          <div role="navigation" aria-label="breadcrumbs navigation">
+            <ol class="breadcrumb">
+              <li><a href="../index.html">Docs</a></li>
+              
+                <li><a href="index.html">Design Specification</a></li>
+              
+                <li><a href="uboot_arch_design.html">U-Boot Platform Architecture Design</a></li>
+              
+              <li>U-Boot Boot Loader</li>
+            </ol>
+          </div>
+          
+          <div class="document clearer body">
+            
+  <div class="section" id="u-boot-boot-loader">
+<h1>U-Boot Boot Loader<a class="headerlink" href="#u-boot-boot-loader" title="Permalink to this headline">¶</a></h1>
+<p>On U-Boot platforms, the <a class="reference external" href="http://www.denx.de/wiki/U-Boot">U-Boot boot loader</a> provides the startup environment
+for loading and running the ONIE kernel and the network operation
+system (NOS) kernel.</p>
+<p>ONIE uses U-Boot for basic services and builds on top of it.</p>
+<p>The U-Boot functionality consists of platform dependent
+responsibilities as well as platform independent features.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The examples throughout this section reference a
+hypothetical machine, called <em>MACHINE</em>, manufactured by a hypothetical
+hardware manufacturer, called <em>VENDOR</em>.</p>
+</div>
+<div class="section" id="nor-flash-memory-layout">
+<span id="id2"></span><h2>NOR Flash Memory Layout<a class="headerlink" href="#nor-flash-memory-layout" title="Permalink to this headline">¶</a></h2>
+<p>The typical layout of a 32MB NOR flash for an ONIE system looks like this
+(note that this diagram is not to scale):</p>
+<div class="highlight-python"><div class="highlight"><pre>+---------------------------+  High Memory Address
+|   CPU Reset Vector        |
++---------------------------+
+|                           |
+|   U-Boot Binary           |
+|   Size: 512 KB            |
+|                           |
++---------------------------+
+|                           |
+|   U-Boot Environment Vars |
+|   Size: 1 flash sector    |
+|                           |
++---------------------------+
+|                           |
+|   ONIE Kernel + initramfs |
+|   Size: 3 MB              |
+|                           |
++---------------------------+
+|                           |
+|   HW Diagnostic Image     |
+|   Size: xx MB             |
+|                           |
++---------------------------+
+|                           |
+|                           |
+|                           |
+/   Unused, left for OS     /
+/   Size: About 28 MB       /
+|                           |
+|                           |
+|                           |
++---------------------------+  Low Memory Address
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The hardware diagnostic partition is optional.  It is
+intended to be used by hardware vendors to provide a
+diagnostic image.</p>
+</div>
+</div>
+<div class="section" id="platform-dependent-hardware-initialization">
+<h2>Platform-Dependent Hardware Initialization<a class="headerlink" href="#platform-dependent-hardware-initialization" title="Permalink to this headline">¶</a></h2>
+<p>ONIE expects U-Boot to provide a number of services at boot time, including:</p>
+<ul class="simple">
+<li>Platform-specific hardware initialization.</li>
+<li>Provide information (in the form of environment variables) to the boot time scripts.</li>
+</ul>
+<p>U-Boot is responsible for initializing the following devices for the operating system:</p>
+<table class="table table-bordered">
+<colgroup>
+<col width="21%" />
+<col width="79%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Device</th>
+<th class="head">Comments</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>System Fans</td>
+<td>Set system idle fan speed to 100%. The switching ASIC is not running.</td>
+</tr>
+<tr class="row-odd"><td>Ethernet Management</td>
+<td>Initialize the PHY and network devices for possible DHCP/TFTP downloads.</td>
+</tr>
+<tr class="row-even"><td>Front Panel LEDs</td>
+<td>Set front panel system status LEDs to a known state.</td>
+</tr>
+<tr class="row-odd"><td>PCIe root complex</td>
+<td>Initialize PCIe root complex corresponding to the switching ASIC.</td>
+</tr>
+</tbody>
+</table>
+<p>In addition, U-Boot is responsible for setting up a number of environment variables.</p>
+<p>Information that is the same for all machines can be compiled into U-Boot itself. For
+example, the NOR flash offset of where ONIE resides.</p>
+<p>On the other hand, information that is unique for every device, like serial number or MAC
+address, should reside in non-volatile storage, such as an EEPROM or NOR flash.</p>
+<p>See <a class="reference internal" href="switch_hw_requirements.html#non-volatile-board-info"><span>Board EEPROM Information Format</span></a> for more information.</p>
+<p>The following variables must be set by the U-Boot platform:</p>
+<table class="table table-bordered" id="id3">
+<span id="u-boot-platform-vars"></span><caption><span class="caption-text">Platform-Dependent Environment Variables</span><a class="headerlink" href="#id3" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-even"><th class="head">Variable</th>
+<th class="head">Use / Meaning</th>
+<th class="head">Example</th>
+<th class="head">Compiled In or Non-Volatile Storage</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">consoledev</span></code></td>
+<td>The primary serial console port</td>
+<td><code class="docutils literal"><span class="pre">ttyS0</span></code></td>
+<td>compiled in</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">onie_start</span></code></td>
+<td>The starting address</td>
+<td><code class="docutils literal"><span class="pre">0xefb60000</span></code></td>
+<td>compiled in</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">onie_sz.b</span></code></td>
+<td>Size of the ONIE kernel uImage region</td>
+<td><code class="docutils literal"><span class="pre">0x00400000</span></code></td>
+<td>compiled in</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">platform</span></code></td>
+<td>Identifying string of the form &quot;<code class="docutils literal"><span class="pre">&lt;vendor&gt;_&lt;machine&gt;-r&lt;machine_revision&gt;</span></code>&quot;</td>
+<td><code class="docutils literal"><span class="pre">vendor_machine-r0</span></code></td>
+<td>non-volatile storage</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">vendor_id</span></code></td>
+<td>32-bit IANA Private Enterprise Number in decimal</td>
+<td><code class="docutils literal"><span class="pre">12345</span></code></td>
+<td>non-volatile storage</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">serial#</span></code></td>
+<td>Device serial number</td>
+<td><code class="docutils literal"><span class="pre">XZY00123</span></code></td>
+<td>non-volatile storage</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">eth_addr</span></code></td>
+<td>MAC address for Ethernet management port</td>
+<td><code class="docutils literal"><span class="pre">00:11:22:33:44:55</span></code></td>
+<td>non-volatile storage</td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="environment-variables-consoledev-oniestart-and-oniesz-b">
+<h3>Environment Variables: <code class="docutils literal"><span class="pre">consoledev,</span> <span class="pre">oniestart</span> <span class="pre">and</span> <span class="pre">oniesz.b</span></code><a class="headerlink" href="#environment-variables-consoledev-oniestart-and-oniesz-b" title="Permalink to this headline">¶</a></h3>
+<p>These variables are compiled into U-Boot using the platform's U-Boot
+configuration header file <code class="docutils literal"><span class="pre">include/configs/VENDOR_MACHINE.h</span></code>.</p>
+<p>The definition of the CONFIG_PLATFORM_ENV macro would look like:</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#define CONFIG_PLATFORM_ENV       \</span>
+<span class="cp">        &quot;consoledev=ttyS0\0&quot;      \</span>
+<span class="cp">        &quot;onie_start=0xefb60000\0&quot; \</span>
+<span class="cp">        &quot;onie_sz.b=0x00400000\0&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="environment-variables-platform-and-vendor-id">
+<h3>Environment Variables: <code class="docutils literal"><span class="pre">platform</span></code> and <code class="docutils literal"><span class="pre">vendor_id</span></code><a class="headerlink" href="#environment-variables-platform-and-vendor-id" title="Permalink to this headline">¶</a></h3>
+<p>These variables are compiled into U-Boot using the platform's U-Boot
+configuration header file <code class="docutils literal"><span class="pre">include/configs/VENDOR_MACHINE.h</span></code>.</p>
+<p>Calling the <code class="docutils literal"><span class="pre">CONFIG_ONIE_COMMON_UBOOT_ENV</span></code> macro adds these variable
+to the default environment.</p>
+<p>In this example, the <code class="docutils literal"><span class="pre">vendor_id</span></code> is &quot;12345&quot; and the <code class="docutils literal"><span class="pre">platform</span></code> is
+&quot;vendor_model&quot;.  This would look like:</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#define CONFIG_EXTRA_ENV_SETTINGS                  \</span>
+<span class="cp">        CONFIG_PLATFORM_ENV                        \</span>
+<span class="cp">        CONFIG_ONIE_COMMON_UBOOT_ENV(12345,        \</span>
+<span class="cp">                                     vendor_model)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="environment-variable-serial">
+<h3>Environment Variable: <code class="docutils literal"><span class="pre">serial#</span></code><a class="headerlink" href="#environment-variable-serial" title="Permalink to this headline">¶</a></h3>
+<p>The serial number must reside in non-volatile storage, such as an EEPROM or a NOR
+flash sector dedicated to storing manufacturing data. You <strong>must not</strong> store the
+serial number in a U-Boot environment variable as the U-Boot environment is reset
+to defaults during provisioning and re-provisioning.</p>
+<p>The platform must provide an implementation for the
+<code class="docutils literal"><span class="pre">populate_serial_number()</span></code> function , which U-Boot calls during
+board initialization.  This function retrieves the serial number from
+non-volatile storage and sets the U-Boot environment variable <code class="docutils literal"><span class="pre">serial#</span></code>.</p>
+<p>An example implementation looks like:</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/**</span>
+<span class="cm"> * populate_serial_number - read the serial number from EEPROM</span>
+<span class="cm"> *</span>
+<span class="cm"> * This function reads the serial number from the EEPROM and sets the</span>
+<span class="cm"> * appropriate environment variable.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The environment variable is only set if it has not been set</span>
+<span class="cm"> * already.  This ensures that any user-saved variables are never</span>
+<span class="cm"> * overwritten.</span>
+<span class="cm"> *</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="nf">populate_serial_number</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">getenv</span><span class="p">(</span><span class="s">&quot;serial#&quot;</span><span class="p">))</span>
+                <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">read_eeprom</span><span class="p">())</span> <span class="p">{</span>
+                <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Read failed.</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+                <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="n">setenv</span><span class="p">(</span><span class="s">&quot;serial#&quot;</span><span class="p">,</span> <span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">e</span><span class="p">.</span><span class="n">serial_number</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="environment-variable-eth-addr">
+<h3>Environment Variable: <code class="docutils literal"><span class="pre">eth_addr</span></code><a class="headerlink" href="#environment-variable-eth-addr" title="Permalink to this headline">¶</a></h3>
+<p>The MAC address for the Ethernet management interface must reside in
+non-volatile storage, such as an EEPROM or a NOR flash sector
+dedicated to storing manufacturing data.  You <strong>must not</strong>
+store the MAC address in a U-Boot environment variable as the U-Boot
+environment is reset to defaults during provisioning and re-provisioning.</p>
+<p>The platform must provide an implementation for the
+<code class="docutils literal"><span class="pre">mac_read_from_eeprom()</span></code> function , which U-Boot calls during board
+initialization.  This function retrieves the serial number from
+non-volatile storage and sets the U-Boot environment variable
+<code class="docutils literal"><span class="pre">eth_addr</span></code>.</p>
+<p>An example implementation looks like:</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/**</span>
+<span class="cm"> * mac_read_from_eeprom - read the MAC addresses from EEPROM</span>
+<span class="cm"> *</span>
+<span class="cm"> * This function reads the MAC addresses from EEPROM and sets the</span>
+<span class="cm"> * appropriate environment variables for each one read.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The environment variables are only set if they haven&#39;t been set already.</span>
+<span class="cm"> * This ensures that any user-saved variables are never overwritten.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This function must be called after relocation.</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="nf">mac_read_from_eeprom</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+        <span class="n">u32</span> <span class="n">csum</span><span class="p">;</span>
+        <span class="n">u8</span> <span class="o">*</span><span class="n">p</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">ethaddr</span><span class="p">[</span><span class="mi">18</span><span class="p">];</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">read_eeprom</span><span class="p">())</span> <span class="p">{</span>
+                <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Read failed.</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+                <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="n">csum</span> <span class="o">=</span> <span class="n">calc_2s_comp</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">e</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">e</span><span class="p">));</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">csum</span> <span class="o">!=</span> <span class="n">e</span><span class="p">.</span><span class="n">csum</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">printf</span><span class="p">(</span><span class="s">&quot;CRC mismatch (%02X != %02X)</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">csum</span><span class="p">,</span> <span class="n">e</span><span class="p">.</span><span class="n">csum</span><span class="p">);</span>
+                <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">e</span><span class="p">.</span><span class="n">start_mac</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+        <span class="n">sprintf</span><span class="p">(</span><span class="n">ethaddr</span><span class="p">,</span> <span class="s">&quot;%02x:%02x:%02x:%02x:%02x:%02x&quot;</span><span class="p">,</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">p</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">5</span><span class="p">]);</span>
+                <span class="n">ethaddr</span><span class="p">[</span><span class="mi">17</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+        <span class="cm">/* Only initialize environment variables that are blank</span>
+<span class="cm">         * (i.e. have not yet been set)</span>
+<span class="cm">         */</span>
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">getenv</span><span class="p">(</span><span class="s">&quot;ethaddr&quot;</span><span class="p">))</span>
+                <span class="n">setenv</span><span class="p">(</span><span class="s">&quot;ethaddr&quot;</span><span class="p">,</span> <span class="n">ethaddr</span><span class="p">);</span>
+
+  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="platform-independent-u-boot-features">
+<h2>Platform-Independent U-Boot Features<a class="headerlink" href="#platform-independent-u-boot-features" title="Permalink to this headline">¶</a></h2>
+<p>ONIE on U-Boot platforms relies on two fundamental features of U-Boot:</p>
+<ul class="simple">
+<li>Reading and writing the NOR boot flash.</li>
+<li>Reading and writing U-Boot environment variables.</li>
+</ul>
+<p>The ONIE kernel and <code class="docutils literal"><span class="pre">initramfs</span></code> reside in the NOR boot flash, which
+is why ONIE relies on U-Boot's NOR flash I/O.</p>
+<p>What's more interesting is the use of U-Boot environment variables in
+an ONIE-enabled system, as described in the next section.</p>
+<div class="section" id="platform-independent-environment-variables">
+<span id="platform-ind-vars"></span><h3>Platform-Independent Environment Variables<a class="headerlink" href="#platform-independent-environment-variables" title="Permalink to this headline">¶</a></h3>
+<p>ONIE uses a number of different U-Boot variables to manage the system.</p>
+<p>The most important environment variable is <code class="docutils literal"><span class="pre">bootcmd</span></code>, which U-Boot
+executes during every boot.  ONIE is the sole owner of this variable.
+An NOS should <strong>never</strong> use this variable directly in an ONIE-enabled
+system.  ONIE provides other variables an NOS can use to control its
+boot process.</p>
+<p>The second most important variable is <code class="docutils literal"><span class="pre">bootargs</span></code>, which U-Boot adds to
+the kernel command line when booting a kernel.</p>
+<p>ONIE defines and uses the following U-Boot variables:</p>
+<table class="table table-bordered" id="id4">
+<caption><span class="caption-text">Platform-Independent Environment Variables</span><a class="headerlink" href="#id4" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col width="25%" />
+<col width="25%" />
+<col width="50%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-even"><th class="head">Variable Name</th>
+<th class="head">Default Value</th>
+<th class="head">Use / Meaning</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">bootcmd</span></code></td>
+<td><div class="first last highlight-python"><div class="highlight"><pre>run check_boot_reason;
+run nos_bootcmd;
+run onie_bootcmd
+</pre></div>
+</div>
+</td>
+<td>Called by U-Boot every boot. Configured at ONIE compile time and
+never touched again.</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">check_boot_reason</span></code></td>
+<td><div class="first last highlight-python"><div class="highlight"><pre>if test -n $onie_boot_reason; then
+  setenv onie_bootargs boot_reason=$onie_boot_reason;
+  run onie_bootcmd;
+fi;
+</pre></div>
+</div>
+</td>
+<td>Called by <code class="docutils literal"><span class="pre">bootcmd</span></code> every boot. Checks the <code class="docutils literal"><span class="pre">onie_boot_reason</span></code> variable
+and, if set, U-Boot loads the ONIE kernel with the contents of
+<code class="docutils literal"><span class="pre">$onie_boot_reason</span></code> added to the kernel command line arguments.</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">onie_boot_reason</span></code></td>
+<td>[Not Set]</td>
+<td><p class="first">See <code class="docutils literal"><span class="pre">check_boot_reason</span> <span class="pre">above</span></code>. The current reboot commands understood
+by ONIE are:</p>
+<blockquote class="last">
+<div><ol class="arabic simple">
+<li><code class="docutils literal"><span class="pre">install</span></code> – Boot ONIE and rerun the ODE application.</li>
+<li><code class="docutils literal"><span class="pre">uninstall</span></code> – Boot ONIE in uninstall mode, which erases
+everything from the system, except U-Boot and ONIE.</li>
+<li><code class="docutils literal"><span class="pre">rescue</span></code> – Boot ONIE in rescue mode for debug purposes.</li>
+<li><code class="docutils literal"><span class="pre">update</span></code> – Boot ONIE in ONIE self-update mode, which looks for and
+installs a new version of ONIE.</li>
+</ol>
+</div></blockquote>
+</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">nos_bootcmd</span></code></td>
+<td>[Not Set]</td>
+<td>This is the variable an NOS vendor sets
+to control their boot process. When set, it is expected that the NOS
+vendor's init loads an NOS and does not return. If the NOS vendor init
+fails or returns for whatever reason, execution falls through to
+loading ONIE.</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">onie_bootcmd</span></code></td>
+<td><div class="first last highlight-python"><div class="highlight"><pre>echo Loading Open Network Install Environment ...;
+echo Version: $onie_version ;
+cp.b $onie_start $loadaddr ${onie_sz.b} &amp;&amp;
+  run onie_args &amp;&amp; bootm ${loadaddr}#$platform
+</pre></div>
+</div>
+</td>
+<td>Only called by U-Boot when the <code class="docutils literal"><span class="pre">nos_bootcmd</span></code> init script
+returns. This is the case on a bare metal machine fresh from the
+factory.</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">onie_args</span></code></td>
+<td><code class="docutils literal"><span class="pre">run</span> <span class="pre">onie_initargs</span> <span class="pre">onie_platformargs</span></code></td>
+<td>Sets up
+kernel command line arguments when booting into ONIE.</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">onie_initargs</span></code></td>
+<td><code class="docutils literal"><span class="pre">setenv</span> <span class="pre">bootargs</span> <span class="pre">quiet</span> <span class="pre">console=$consoledev,$baudrate</span></code></td>
+<td>Minimal set of kernel command line arguments necessary to boot a kernel.</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">onie_platformargs</span></code></td>
+<td><div class="first last highlight-python"><div class="highlight"><pre>setenv bootargs $bootargs serial_num=${serial#}
+  eth_addr=$ethaddr vendor_id=$vendor_id
+  platform=$platform $onie_bootargs $onie_debugargs
+</pre></div>
+</div>
+</td>
+<td>Appends additional, platform-specific variables to the kernel
+command line when booting ONIE.</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">onie_bootargs</span></code></td>
+<td>[Not Set]</td>
+<td>Used by <code class="docutils literal"><span class="pre">check_boot_reason</span></code> to pass
+additional kernel arguments when booting ONIE.</td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">onie_debugargs</span></code></td>
+<td>[Not Set]</td>
+<td>For development and debug use to pass
+additional kernel arguments when booting ONIE.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+
+          </div>
+            
+  <div class="footer-relations">
+    
+      <div class="pull-left">
+        <a class="btn btn-default" href="uboot_hw_requirements.html" title="previous chapter (use the left arrow)">U-Boot Platform Requirements</a>
+      </div>
+    
+      <div class="pull-right">
+        <a class="btn btn-default" href="uboot_kernel.html" title="next chapter (use the right arrow)">U-Boot Platform Linux Kernel and Device Tree Source</a>
+      </div>
+    </div>
+    <div class="clearer"></div>
+  
+        </div>
+        <div class="clearfix"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="uboot_kernel.html" title="U-Boot Platform Linux Kernel and Device Tree Source"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="uboot_hw_requirements.html" title="U-Boot Platform Requirements"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Open Network Install Environment  documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="uboot_arch_design.html" >U-Boot Platform Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>
+<script type="text/javascript">
+  $("#mobile-toggle a").click(function () {
+    $("#left-column").toggle();
+  });
+</script>
+<script type="text/javascript" src="../_static/js/bootstrap.js"></script>
+  <div class="footer">
+        &copy; Copyright 2013-2017, <a href="https://cumulusnetworks.com/">Cumulus Networks, Inc.</a>  All Rights Reserved.
+  </div>
+  </body>
+</html>

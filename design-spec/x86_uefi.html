@@ -1,0 +1,858 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+  
+  <!-- Licensed under the Apache 2.0 License -->
+  <link rel="stylesheet" type="text/css" href="../_static/fonts/open-sans/stylesheet.css" />
+  <!-- Licensed under the SIL Open Font License -->
+  <link rel="stylesheet" type="text/css" href="../_static/fonts/source-serif-pro/source-serif-pro.css" />
+  <link rel="stylesheet" type="text/css" href="../_static/css/bootstrap.min.css" />
+  <link rel="stylesheet" type="text/css" href="../_static/css/bootstrap-theme.min.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+    <title>x86 UEFI Firmware Support &mdash; Open Network Install Environment  documentation</title>
+    
+    <link rel="stylesheet" href="../_static/guzzle.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Open Network Install Environment  documentation" href="../index.html" />
+    <link rel="up" title="x86 CPU Architecture Design" href="x86_arch_design.html" />
+    <link rel="next" title="x86 Legacy BIOS Boot Loader (GRUB2)" href="x86_boot_loader.html" />
+    <link rel="prev" title="x86 Hardware Requirements" href="x86_hw_requirements.html" />
+  
+   
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="x86_boot_loader.html" title="x86 Legacy BIOS Boot Loader (GRUB2)"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="x86_hw_requirements.html" title="x86 Hardware Requirements"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Open Network Install Environment  documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="x86_arch_design.html" accesskey="U">x86 CPU Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="container-wrapper">
+
+      <div id="mobile-toggle">
+        <a href="#"><span class="glyphicon glyphicon-align-justify" aria-hidden="true"></span></a>
+      </div>
+  <div id="left-column">
+    <div class="sphinxsidebar">
+  <a href="
+      ../index.html" class="logo">
+  
+  <img src="../_static/ONIE-logo-green-160x60.png" class="logo" />
+  </a>
+
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <h2>Table Of Contents</h2>
+  </div>
+  <div class="sidebar-toc">
+    
+    
+      <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../overview/index.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../user-guide/index.html">User Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Design Specification</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="switch_hw_requirements.html">Switch Hardware Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="operating_sw_design.html">Operating Software Design</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="x86_arch_design.html">x86 CPU Architecture Design</a></li>
+<li class="toctree-l2"><a class="reference internal" href="uboot_arch_design.html">U-Boot Platform Architecture Design</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../testing-certification/index.html">Testing and Certification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developers/index.html">Developer Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/index.html">Command Line Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../faq/index.html">FAQ</a></li>
+</ul>
+
+    
+  </div>
+</div>
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <h2>Contents</h2>
+    <div class="sidebar-localtoc">
+      <ul>
+<li><a class="reference internal" href="#">x86 UEFI Firmware Support</a><ul>
+<li><a class="reference internal" href="#acronyms">Acronyms</a></li>
+<li><a class="reference internal" href="#overview">Overview</a></li>
+<li><a class="reference internal" href="#onie-requirements">ONIE Requirements</a></li>
+<li><a class="reference internal" href="#target-uefi-version">Target UEFI Version</a></li>
+<li><a class="reference internal" href="#onie-and-uefi-integration">ONIE and UEFI Integration</a><ul>
+<li><a class="reference internal" href="#linux-kernel-support-for-uefi">Linux Kernel Support for UEFI</a></li>
+<li><a class="reference internal" href="#uefi-user-space-tools">UEFI User Space Tools</a><ul>
+<li><a class="reference internal" href="#efibootmgr-and-efivar"><code class="docutils literal"><span class="pre">efibootmgr</span></code> and <code class="docutils literal"><span class="pre">efivar</span></code></a></li>
+<li><a class="reference internal" href="#fat-file-system-support-and-tools">FAT File System Support and Tools</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#uefi-x86-boot-loader-grub-x86-64-efi">UEFI x86 Boot Loader (GRUB-x86_64-efi)</a><ul>
+<li><a class="reference internal" href="#disk-partition-layout">Disk Partition Layout</a><ul>
+<li><a class="reference internal" href="#partition-table-format">Partition Table Format</a></li>
+<li><a class="reference internal" href="#id4">EFI System Partition (ESP)</a></li>
+<li><a class="reference internal" href="#onie-boot-partition">ONIE-BOOT Partition</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#initial-onie-install">Initial ONIE Install</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#nos-installer">NOS Installer</a></li>
+<li><a class="reference internal" href="#chainloading-onie">Chainloading ONIE</a></li>
+<li><a class="reference internal" href="#uefi-onie-nos-interface">UEFI ONIE NOS Interface</a><ul>
+<li><a class="reference internal" href="#onie-boot-modes">ONIE Boot Modes</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#hardware-diagnostics-operating-system-optional">Hardware Diagnostics Operating System (Optional)</a><ul>
+<li><a class="reference internal" href="#hdos-disk-partitioning">HDOS Disk Partitioning</a></li>
+<li><a class="reference internal" href="#grub-considerations">GRUB Considerations</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#uefi-references">UEFI References</a></li>
+</ul>
+</li>
+</ul>
+
+    </div>
+  </div>
+</div>
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <div id="main-search">
+      <form class="form-inline" action="../search.html" method="GET" role="form">
+        <div class="input-group">
+          <input name="q" type="text" class="form-control" placeholder="Search...">
+        </div>
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div>
+      
+    </div>
+  </div>
+        <div id="right-column">
+          
+          <div role="navigation" aria-label="breadcrumbs navigation">
+            <ol class="breadcrumb">
+              <li><a href="../index.html">Docs</a></li>
+              
+                <li><a href="index.html">Design Specification</a></li>
+              
+                <li><a href="x86_arch_design.html">x86 CPU Architecture Design</a></li>
+              
+              <li>x86 UEFI Firmware Support</li>
+            </ol>
+          </div>
+          
+          <div class="document clearer body">
+            
+  <div class="section" id="x86-uefi-firmware-support">
+<span id="x86-uefi"></span><h1>x86 UEFI Firmware Support<a class="headerlink" href="#x86-uefi-firmware-support" title="Permalink to this headline">¶</a></h1>
+<p>This design specification defines how the Open Network Install
+Environment (ONIE) integrates with x86 based Unified Extensible
+Firmware Interface (<a class="reference external" href="http://en.wikipedia.org/wiki/Unified_Extensible_Firmware_Interface">UEFI</a>)
+systems.</p>
+<div class="section" id="acronyms">
+<h2>Acronyms<a class="headerlink" href="#acronyms" title="Permalink to this headline">¶</a></h2>
+<table class="table table-bordered" id="id8">
+<caption><span class="caption-text">Acronyms related to UEFI</span><a class="headerlink" href="#id8" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col width="20%" />
+<col width="80%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Term</th>
+<th class="head">Definition</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>BIOS</td>
+<td>Basic Input/Output System PC Firmware <a class="reference external" href="http://en.wikipedia.org/wiki/BIOS">BIOS</a></td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>CSM</td>
+<td>UEFI Compatibility Support Module <a class="reference external" href="http://en.wikipedia.org/wiki/Unified_Extensible_Firmware_Interface#CSM_booting">CSM</a></td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>ESP</td>
+<td>EFI System Partition <a class="reference external" href="http://en.wikipedia.org/wiki/EFI_System_partition">ESP</a></td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>FBM</td>
+<td>UEFI Firmware Boot Manager</td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>GPT</td>
+<td>GUID Partition Table <a class="reference external" href="http://en.wikipedia.org/wiki/GUID_Partition_Table">GPT</a></td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>GRUB-x86_64-efi</td>
+<td>GRUB2 compiled for x86_64 CPU with UEFI firmware</td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>GRUB-i386-pc</td>
+<td>GRUB2 compiled for i386/x86_64 CPU with BIOS firmware</td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>HDOS</td>
+<td>Hardware diagnostics operating system</td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>MBR</td>
+<td>Master Boot Record <a class="reference external" href="http://en.wikipedia.org/wiki/Master_boot_record">MBR</a></td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>NOS</td>
+<td>Network Operating System</td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>ONIE</td>
+<td>Open Network Install Environment</td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-even"><td>UEFI</td>
+<td>Unified Extensible Firmware Interface <a class="reference external" href="http://en.wikipedia.org/wiki/Unified_Extensible_Firmware_Interface">UEFI</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Permalink to this headline">¶</a></h2>
+<p>ONIE added support for UEFI in the 2015.08 release.  Previously for
+x86, ONIE only supported legacy <a class="reference external" href="http://en.wikipedia.org/wiki/BIOS">BIOS</a> firmware or a UEFI system
+running in BIOS legacy mode, sometimes called &quot;Compatibility Support
+Module&quot; <a class="reference external" href="http://en.wikipedia.org/wiki/Unified_Extensible_Firmware_Interface#CSM_booting">CSM</a>.</p>
+<p>While this worked, the mechanics of booting from NOS to ONIE and back
+again is non-trivial and prone to implementation errors.</p>
+<p>UEFI simplifies a number of ONIE design points on x86 platforms.
+Among the benefits:</p>
+<ul class="simple">
+<li>UEFI is now a standard for x86 servers.  Requiring ONIE compatible
+systems to support a specific UEFI version, is a very specific
+target for hardware vendors to aim for.</li>
+<li>ONIE and network operating systems (NOS) can interoperate using a
+much less complicated method than the current BIOS based MBR method.</li>
+<li>Easier to support multiple operating systems installed on the same
+machine.</li>
+<li>UEFI is the only way to support future ARM64 platforms.</li>
+</ul>
+</div>
+<div class="section" id="onie-requirements">
+<h2>ONIE Requirements<a class="headerlink" href="#onie-requirements" title="Permalink to this headline">¶</a></h2>
+<p>All the existing x86 requirements from <a class="reference internal" href="x86_hw_requirements.html#x86-hw-requirements"><span>x86 Hardware Requirements</span></a>
+continue to apply to UEFI, plus the following:</p>
+<ul class="simple">
+<li>Provide an &quot;UEFI aware&quot; environment for network operating system
+(NOS) installers to perform the installation task.</li>
+<li>Allow multiple operating system installations to coexist.</li>
+<li>Provide ONIE-NOS interfaces in terms of UEFI primitives.</li>
+</ul>
+</div>
+<div class="section" id="target-uefi-version">
+<h2>Target UEFI Version<a class="headerlink" href="#target-uefi-version" title="Permalink to this headline">¶</a></h2>
+<p>At the time of this writing the current UEFI specification version is
+2.4 (errata B).  <a class="reference external" href="http://www.uefi.org/sites/default/files/resources/2_4_Errata_B.pdf">Download UEFI 2.4b Specification</a>.</p>
+<p>As necessary this specification will reference chapters and section
+numbers from the UEFI specification, version 2.4 (errata B).</p>
+<p>The design described herein targets that UEFI version or later.</p>
+<p>As background, the reader is directed to chapter 3 (Boot Manager) and
+section 12.3 (File System Format) for more on how the UEFI boot
+manager locates and executes UEFI images.  See also
+<a class="reference internal" href="#x86-uefi-references"><span>UEFI References</span></a>.</p>
+</div>
+<div class="section" id="onie-and-uefi-integration">
+<h2>ONIE and UEFI Integration<a class="headerlink" href="#onie-and-uefi-integration" title="Permalink to this headline">¶</a></h2>
+<p>ONIE is primarily concerned with the life cycle of an operation
+system, including:</p>
+<ul class="simple">
+<li>installing an OS</li>
+<li>removing an OS</li>
+<li>scheduling which OS to boot</li>
+</ul>
+<p>On a UEFI system the Firmware Boot Manager (FBM) determines the boot
+order through a number of UEFI global variables, defined in section
+3.2 of the UEFI specification.</p>
+<p>In order for ONIE, which is Linux based, to inter-operate with these
+global variables a number of additional software configurations and
+programs are required.</p>
+<div class="section" id="linux-kernel-support-for-uefi">
+<h3>Linux Kernel Support for UEFI<a class="headerlink" href="#linux-kernel-support-for-uefi" title="Permalink to this headline">¶</a></h3>
+<p>The Linux kernel configuration must enable the following configuration
+options:</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">CONFIG_EFI</span></code></li>
+<li><code class="docutils literal"><span class="pre">CONFIG_EFIVAR_FS</span></code></li>
+</ul>
+<p>The <code class="docutils literal"><span class="pre">CONFIG_EFIVAR_FS</span></code> option exports the UEFI global variables in
+<code class="docutils literal"><span class="pre">/sys/firmware/efi/efivars</span></code>.</p>
+<p>For more about configuring Linux for UEFI see <cite>uefi.txt
+&lt;https://www.kernel.org/doc/Documentation/x86/x86_64/uefi.txt&gt;</cite> in the
+kernel documentation.</p>
+</div>
+<div class="section" id="uefi-user-space-tools">
+<h3>UEFI User Space Tools<a class="headerlink" href="#uefi-user-space-tools" title="Permalink to this headline">¶</a></h3>
+<p>ONIE requires a few additional user space tools to inter-operate in a
+UEFI environment.</p>
+<div class="section" id="efibootmgr-and-efivar">
+<h4><code class="docutils literal"><span class="pre">efibootmgr</span></code> and <code class="docutils literal"><span class="pre">efivar</span></code><a class="headerlink" href="#efibootmgr-and-efivar" title="Permalink to this headline">¶</a></h4>
+<p>The <a class="reference external" href="https://github.com/rhinstaller/efibootmgr">efibootmgr(8)</a>
+utility is used to manipulate the UEFI global variables.  In
+particular the following variables are modified:</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">Boot####</span></code> -- A boot load option.  #### is a printed hex value.</li>
+<li><code class="docutils literal"><span class="pre">BootOrder</span></code> -- The ordered list of Boot#### load options.  The
+firmware attempts to boot each load option in turn, starting with
+the first entry.</li>
+<li><code class="docutils literal"><span class="pre">BootNext</span></code> -- The boot entry to use for the next boot only.  This
+option is used to load a boot option once, then returning to the
+order specified in <code class="docutils literal"><span class="pre">BootOrder</span></code>.</li>
+</ul>
+<p>See section 3.2 of the UEFI specification for more about these
+variables.</p>
+<p>The efibootmgr utility depends on the <a class="reference external" href="https://github.com/rhinstaller/efivar">efivar library</a>, which must also be present
+in the ONIE runtime.</p>
+</div>
+<div class="section" id="fat-file-system-support-and-tools">
+<h4>FAT File System Support and Tools<a class="headerlink" href="#fat-file-system-support-and-tools" title="Permalink to this headline">¶</a></h4>
+<p>The UEFI specification requires the use of the FAT file system for the
+<a class="reference external" href="http://en.wikipedia.org/wiki/EFI_System_partition">EFI System Partition (ESP)</a>.  See section
+12.3 of the UEFI specification for more about the ESP.</p>
+<p>As such the ONIE image requires tools for creating, maintaining and
+mounting FAT file systems.  The following tools are required to be
+present:</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">mkfs.vfat</span></code>  -- create a FAT file system</li>
+<li><code class="docutils literal"><span class="pre">fsck.vfat</span></code>  -- check and repair FAT file systems</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="section" id="uefi-x86-boot-loader-grub-x86-64-efi">
+<h2>UEFI x86 Boot Loader (GRUB-x86_64-efi)<a class="headerlink" href="#uefi-x86-boot-loader-grub-x86-64-efi" title="Permalink to this headline">¶</a></h2>
+<p>For UEFI systems, ONIE will continue to use the <a class="reference external" href="http://www.gnu.org/software/grub/">GRUB2</a> boot loader, albeit in a rather
+different manner than legacy BIOS systems.  For UEFI systems ONIE uses
+GRUB-x86_64-efi, which is GRUB2 compiled for UEFI x86_64 platforms.
+GRUB-x86_64-efi does not install data into the disk MBR, as was the
+case for legacy GRUB-i386-pc.  Rather each OS (ONIE included) installs
+its boot loader into a sub-directory of the EFI System Partition.</p>
+<p>This section describes how ONIE uses GRUB-x86_64-efi and how the hard
+disk is partitioned.  Further mentions of <em>GRUB</em> in this document will
+mean GRUB-x86_64-efi, unless otherwise specified.</p>
+<div class="section" id="disk-partition-layout">
+<h3>Disk Partition Layout<a class="headerlink" href="#disk-partition-layout" title="Permalink to this headline">¶</a></h3>
+<p>The disk partition layout plays a critical role in how ONIE and the
+installed NOS cooperate. This section describes the layout and the
+guidelines by which ONIE and the NOS must abide.</p>
+<p>The Demo OS Installer and Demo OS Runtime that ships with ONIE
+exercise all of the steps described in this section.  See
+<a class="reference internal" href="../developers/demo_os.html#demo-os"><span>Demo OS Installer and OS Runtime</span></a> for more about the Demo OS.</p>
+<div class="section" id="partition-table-format">
+<h4>Partition Table Format<a class="headerlink" href="#partition-table-format" title="Permalink to this headline">¶</a></h4>
+<p>The UEFI specification strongly recommends the use of the <a class="reference external" href="http://en.wikipedia.org/wiki/GUID_Partition_Table">GUID
+Partition Table</a>
+(GPT) partition table format and ONIE will require that
+recommendation.</p>
+<p>GPT is the only partition type supported by ONIE on UEFI.</p>
+</div>
+<div class="section" id="id4">
+<h4>EFI System Partition (ESP)<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h4>
+<p>Traditionally the first partition on a UEFI disk is the EFI System
+Partition (ESP).  The UEFI specification dictates that this partition:</p>
+<ul class="simple">
+<li>Use the GPT partition type GUID <code class="docutils literal"><span class="pre">C12A7328-F81F-11D2-BA4B-00A0C93EC93B</span></code></li>
+<li>Contain a FAT32 file system</li>
+<li>Contain a directory nameed <code class="docutils literal"><span class="pre">EFI</span></code></li>
+</ul>
+<p>In the case of ONIE, the UEFI boot application is GRUB2 and the UEFI
+application path looks like:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">EFI</span><span class="o">/</span><span class="n">onie</span><span class="o">/</span><span class="n">grubx64</span><span class="o">.</span><span class="n">efi</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="onie-boot-partition">
+<h4>ONIE-BOOT Partition<a class="headerlink" href="#onie-boot-partition" title="Permalink to this headline">¶</a></h4>
+<p>Similar to the legacy BIOS ONIE implementation, a separate ONIE-BOOT
+partition contains the ONIE kernel and initramfs.  Just as in the
+legacy BIOS case this partition uses the GPT partition type GUID
+<code class="docutils literal"><span class="pre">7412F7D5-A156-4B13-81DC-867174929325</span></code>.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The ONIE-BOOT partition type GUID,
+<code class="docutils literal"><span class="pre">7412F7D5-A156-4B13-81DC-867174929325</span></code>, is recognized by the
+<code class="docutils literal"><span class="pre">gdisk</span></code> and <code class="docutils literal"><span class="pre">sgdisk</span></code> utilities from the <a class="reference external" href="http://www.rodsbooks.com/gdisk/">GPT fdisk package</a>.</p>
+</div>
+</div>
+</div>
+<div class="section" id="initial-onie-install">
+<h3>Initial ONIE Install<a class="headerlink" href="#initial-onie-install" title="Permalink to this headline">¶</a></h3>
+<p>ONIE is installed in the factory via the network using PXE or via a
+directly attached USB flash drive.  During the installation, the ONIE
+installer reinitializes the primary hard disk, erasing all previous
+partitions and data.</p>
+<p>The following example assumes the hard disk is available as
+<code class="docutils literal"><span class="pre">/dev/sda</span></code> from Linux.</p>
+<p>During the initial disk provisioning, the ONIE installer performs the
+following operations:</p>
+<ol class="arabic simple">
+<li>Creates an empty GPT partition table on the disk</li>
+<li>Creates the ESP with appropriate GPT partition type GUID and FAT32
+file system</li>
+<li>Mounts the ESP on the traditional ESP mount point in Linux:
+<code class="docutils literal"><span class="pre">/boot/efi</span></code></li>
+<li>Creates the required <code class="docutils literal"><span class="pre">EFI</span></code> directory on the ESP,
+i.e. <code class="docutils literal"><span class="pre">/boot/efi/EFI</span></code>.</li>
+<li>Creates the <code class="docutils literal"><span class="pre">ONIE-BOOT</span></code> partition with appropriate GPT partition
+type GUID</li>
+<li>Mounts the ONIE-BOOT partition on <code class="docutils literal"><span class="pre">/mnt/onie-boot</span></code></li>
+<li>Installs the ONIE kernel and initramfs into the <code class="docutils literal"><span class="pre">ONIE-BOOT</span></code>
+partition</li>
+<li>Installs the UEFI version of GRUB into <code class="docutils literal"><span class="pre">/boot/efi/EFI/onie/grubx64.efi</span></code></li>
+<li>Installs the GRUB modules and GRUB configuration files into <code class="docutils literal"><span class="pre">/mnt/onie-boot/grub</span></code></li>
+<li>Creates a new UEFI <code class="docutils literal"><span class="pre">Boot####</span></code> entry for <code class="docutils literal"><span class="pre">/boot/efi/EFI/onie/grubx64.efi</span></code></li>
+<li>Modifies the UEFI <code class="docutils literal"><span class="pre">BootOrder</span></code> variable to boot ONIE first</li>
+</ol>
+<p>After installing ONIE, the disk layout looks like:</p>
+<div class="highlight-python"><div class="highlight"><pre>+========================+
+|                        |
+|  /dev/sda1 ESP         |  &lt;-- EFI System Partition
+|                        |
++========================+
+|                        |
+|  /dev/sda2 ONIE-BOOT   |  &lt;-- ONIE partition.  Installed by ONIE.  Contains
+|                        |      kernel, initramfs and grub configuration.
++========================+
+|                        |
+|                        |
+/  Free Space            /
+|                        |
+|                        |
++========================+
+</pre></div>
+</div>
+<p>and the contents of <code class="docutils literal"><span class="pre">/boot/efi</span></code> looks like:</p>
+<div class="highlight-python"><div class="highlight"><pre>/boot/efi                         &lt;-- mount point
+/boot/efi/EFI                     &lt;-- required UEFI directory
+/boot/efi/EFI/onie                &lt;-- ONIE OS directory
+/boot/efi/EFI/onie/grubx64.efi    &lt;-- ONIE&#39;s GRUB UEFI boot Application
+</pre></div>
+</div>
+<p>The UEFI <code class="docutils literal"><span class="pre">BootOrder</span></code> and <code class="docutils literal"><span class="pre">BootCurrent</span></code> variables contain:</p>
+<div class="highlight-python"><div class="highlight"><pre>BootCurrent: 0003
+BootOrder: 0003,0000,0001,0002
+Boot0000* EFI DVD/CDROM
+Boot0001* EFI Network
+Boot0002* EFI Internal Shell
+Boot0003* ONIE: Open Network Install Environment
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>UEFI firmware locates a boot program from the ESP.  The disk MBR is
+not used in this scheme, as was the case for legacy BIOS systems.</p>
+<p>The philosophy here is that the installed NOS creates whatever
+partitions it needs and installs its UEFI boot loader program into
+<code class="docutils literal"><span class="pre">/boot/efi/EFI/&lt;OS&gt;/</span></code> in the ESP.</p>
+<p>Following that the NOS creates a new UEFI <code class="docutils literal"><span class="pre">Boot####</span></code> entry for the
+NOS.  This allows multiple operating systems to coexist on a single
+hard disk.</p>
+<p class="last">See section 12.3.1.3 of the UEFI specification for more on the
+directory structure of the ESP.</p>
+</div>
+<p>The initial ONIE GRUB menu looks like this:</p>
+<div class="highlight-python"><div class="highlight"><pre>    GNU GRUB  version 2.02~beta2+e4a1fe391
+
++---------------------------------------------+
+|*ONIE: Install OS                            |
+| ONIE: Rescue                                |
+| ONIE: Uninstall OS                          |
+| ONIE: Update ONIE                           |
+| ONIE: Embed ONIE                            |
+|                                             |
+|                                             |
++---------------------------------------------+
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="nos-installer">
+<h2>NOS Installer<a class="headerlink" href="#nos-installer" title="Permalink to this headline">¶</a></h2>
+<p>Continuing the example above, this section examines the
+responsibilities and operations of a NOS installer.  The NOS installer
+operations are very similar to the ONIE installer case, except that
+the ESP already exists at this time.</p>
+<p>A NOS installer performs the following operations:</p>
+<ol class="arabic simple">
+<li>Creates partitions(s) and file systems to contain the NOS runtime
+files.</li>
+<li>Installs the NOS files (kernels, initramfs, etc) into its
+partition(s).</li>
+<li>Installs a UEFI boot loader program into <code class="docutils literal"><span class="pre">/boot/efi/EFI/&lt;NOS&gt;/&lt;NOS</span> <span class="pre">loader</span> <span class="pre">image&gt;</span></code></li>
+<li>Creates a new UEFI <code class="docutils literal"><span class="pre">Boot####</span></code> entry for <code class="docutils literal"><span class="pre">/boot/efi/EFI/&lt;NOS&gt;/&lt;NOS</span> <span class="pre">loader</span> <span class="pre">image&gt;</span></code></li>
+<li>Modifies the UEFI <code class="docutils literal"><span class="pre">BootOrder</span></code> variable to boot the NOS first.</li>
+<li>For GRUB based operating systems, create a <cite>:ref:chainload_onie</cite>
+for ONIE.</li>
+</ol>
+<p>As an example consider the case where the user installs CentOS into
+the remaining free space.</p>
+<p>The disk now looks like:</p>
+<div class="highlight-python"><div class="highlight"><pre>+========================+
+|                        |
+|  /dev/sda1 ESP         |  &lt;-- EFI System Partition
+|                        |
++========================+
+|                        |
+|  /dev/sda2 ONIE-BOOT   |  &lt;-- ONIE partition.  Installed by ONIE.  Contains
+|                        |      kernel and initramfs.
++========================+
+|                        |
+|                        |
+/  /dev/sda3 CentOS      /  &lt;-- CentOS partition.  Installed by CentOS.  Contains
+|                        |      kernel, initramfs and GRUB configuration.
+|                        |
++========================+
+</pre></div>
+</div>
+<p>and the contents of <code class="docutils literal"><span class="pre">/boot/efi</span></code> looks something like:</p>
+<div class="highlight-python"><div class="highlight"><pre>/boot/efi                         &lt;-- mount point
+/boot/efi/EFI                     &lt;-- required UEFI directory
+/boot/efi/EFI/fedora              &lt;-- Fedora OS directory
+/boot/efi/EFI/fedora/grubx64.efi  &lt;-- Fedora&#39;s GRUB UEFI Application
+/boot/efi/EFI/onie                &lt;-- ONIE OS directory
+/boot/efi/EFI/onie/grubx64.efi    &lt;-- ONIE&#39;s GRUB UEFI Application
+</pre></div>
+</div>
+<p>The UEFI BootOrder and BootCurrent variables contain:</p>
+<div class="highlight-python"><div class="highlight"><pre>BootCurrent: 0004
+BootOrder: 0004,0003,0000,0001,0002
+Boot0000* EFI DVD/CDROM
+Boot0001* EFI Network
+Boot0002* EFI Internal Shell
+Boot0003* ONIE: Open Network Install Environment
+Boot0004* CentOS
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">CentOS installed its version of GRUB in /boot/efi/EFI/fedora,
+without disturbing the ONIE partition or files.</p>
+</div>
+</div>
+<div class="section" id="chainloading-onie">
+<span id="chainload-onie"></span><h2>Chainloading ONIE<a class="headerlink" href="#chainloading-onie" title="Permalink to this headline">¶</a></h2>
+<p>A NOS that uses GRUB may find it useful to create a GRUB menu entry
+for ONIE.  This menu entry is useful when the user wants to manually
+select the GRUB menu entry.  This method of using one GRUB menu entry
+to load and boot another boot loader is called <em>chainloading</em>.</p>
+<p>An ONIE implementation <em>must</em> provide a GRUB helper script that
+creates an appropriate ONIE GRUB chainload entry for the NOS GRUB
+configuration.  The ONIE repo provides the script <a class="reference external" href="https://github.com/opencomputeproject/onie/blob/master/installer/x86_64/grub.d/50_onie_grub">50_onie_grub</a>
+for this purpose.</p>
+<p>This script is suitable for placement into the <code class="docutils literal"><span class="pre">/etc/grub.d</span></code> directory
+in the NOS.  The <code class="docutils literal"><span class="pre">update-grub(8)</span></code> command, used by many operating
+system providers, uses the helper script when re-generating the
+<code class="docutils literal"><span class="pre">grub.cfg</span></code> file.</p>
+<p>Continuing the previous example, with the ONIE chainload menu entry in
+place, the GRUB menu for CentOS looks something like this after a
+reboot:</p>
+<div class="highlight-python"><div class="highlight"><pre>   GNU GRUB  version 2.02~beta2+e4a1fe391
+
++-----------------------------------------------+
+|*CentOS 6.5-x86_64                             |
+| ONIE                                          |
+|                                               |
+|                                               |
++-----------------------------------------------+
+</pre></div>
+</div>
+<p>This is an example of what the ONIE chainload GRUB-x86_64-efi menu entry looks
+like:</p>
+<div class="highlight-python"><div class="highlight"><pre># Menu entry to chainload ONIE UEFI
+menuentry ONIE {
+        set root=&#39;(hd0,gpt1)&#39;
+        search --no-floppy --fs-uuid --set=root 9A49-4F6B
+        echo    &#39;Loading ONIE ...&#39;
+        chainloader /EFI/onie/grubx64.efi
+}
+</pre></div>
+</div>
+<p>The Demo OS installer goes through installing GRUB-x86_64-efi and
+creating an initial <code class="docutils literal"><span class="pre">grub.cfg</span></code> file that chainloads ONIE.  See
+<cite>:ref:demo_os</cite> for more about the Demo OS.</p>
+</div>
+<div class="section" id="uefi-onie-nos-interface">
+<h2>UEFI ONIE NOS Interface<a class="headerlink" href="#uefi-onie-nos-interface" title="Permalink to this headline">¶</a></h2>
+<p>The ONIE NOS interface for UEFI is very similar to the existing
+<cite>:ref:x86_nos_interface</cite> for legacy BIOS system, differing only in the
+implementation details.</p>
+<p>To review, the NOS must be able to launch ONIE in following modes:</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">install</span></code></li>
+<li><code class="docutils literal"><span class="pre">uninstall</span></code></li>
+<li><code class="docutils literal"><span class="pre">rescue</span></code></li>
+<li><code class="docutils literal"><span class="pre">update</span></code></li>
+<li><code class="docutils literal"><span class="pre">embed</span></code></li>
+</ul>
+<div class="section" id="onie-boot-modes">
+<h3>ONIE Boot Modes<a class="headerlink" href="#onie-boot-modes" title="Permalink to this headline">¶</a></h3>
+<p>From the NOS, rebooting into a particular ONIE boot mode is a two step
+process:</p>
+<ol class="arabic simple">
+<li>Configure the system to boot into ONIE on the next boot</li>
+<li>Configure the ONIE boot loader to select the request mode</li>
+</ol>
+<p>To facilitate a one-time reboot into ONIE, a UEFI system sets the UEFI
+<code class="docutils literal"><span class="pre">BootNext</span></code> variable to the <code class="docutils literal"><span class="pre">Boot####</span></code> boot entry corresponding to
+ONIE.  When set, this variable causes the UEFI boot manager to boot
+the requested boot option one time only, returning to the order
+specified by <code class="docutils literal"><span class="pre">BootOrder</span></code> for subsequent boots.</p>
+<p>To select the &quot;ONIE mode&quot;, the NOS uses a tool provided by ONIE called
+<code class="docutils literal"><span class="pre">onie-boot-mode</span></code>, just as in the legacy BIOS case. See
+<cite>:ref:cmd_onie_boot_mode</cite> for more about the <code class="docutils literal"><span class="pre">onie-boot-mode</span></code>
+command.</p>
+</div>
+</div>
+<div class="section" id="hardware-diagnostics-operating-system-optional">
+<h2>Hardware Diagnostics Operating System (Optional)<a class="headerlink" href="#hardware-diagnostics-operating-system-optional" title="Permalink to this headline">¶</a></h2>
+<p>A hardware diagnostics operating system (HDOS) is treated much like a
+regular NOS.  The same concepts of creating partitions and updating
+UEFI boot variables apply to a HDOS.</p>
+<p>The primary way HDOS installers differ from regular NOS installers is
+in the creation of the GPT partition.</p>
+<div class="section" id="hdos-disk-partitioning">
+<span id="hdos-disk-partition"></span><h3>HDOS Disk Partitioning<a class="headerlink" href="#hdos-disk-partitioning" title="Permalink to this headline">¶</a></h3>
+<p>A HDOS installer on a UEFI firmware machine must implement the
+following:</p>
+<ul class="simple">
+<li>name the diagnostic GPT partition <code class="docutils literal"><span class="pre">&lt;SOMETHING&gt;-DIAG</span></code>. See the
+<a class="reference external" href="http://www.rodsbooks.com/gdisk/sgdisk.html">sgdisk</a> program and
+the <code class="docutils literal"><span class="pre">--change-name</span></code> option for details. The <code class="docutils literal"><span class="pre">&lt;SOMETHING&gt;</span></code> can be
+any string that makes sense for the hardware vendor.</li>
+<li>set the GPT <code class="docutils literal"><span class="pre">system</span> <span class="pre">partition</span></code> attribute bit (bit 0). See the
+<a class="reference external" href="http://www.rodsbooks.com/gdisk/sgdisk.html">sgdisk</a> program and
+the <code class="docutils literal"><span class="pre">--attributes</span></code> option.</li>
+<li>when creating the file system on the diag partition set the file
+system label to <code class="docutils literal"><span class="pre">&lt;SOMETHING&gt;-DIAG</span></code>, the same string as used for
+the GPT partition label. See the
+<a class="reference external" href="http://linux.die.net/man/8/mkfs.ext4">mkfs.ext4</a> program and the
+<code class="docutils literal"><span class="pre">-L</span></code> option as an example.</li>
+</ul>
+<p>The <code class="docutils literal"><span class="pre">-DIAG</span></code> suffix for the GPT partition name and the GPT <code class="docutils literal"><span class="pre">system</span>
+<span class="pre">partition</span></code> bit announce to ONIE and ONIE compliant NOS installers that
+the partitions are <em>precious</em> and must not be modified.</p>
+<p>The ONIE <code class="docutils literal"><span class="pre">uninstall</span></code> operation must <em>not</em> remove or modify partitions
+that meet the above requirements.</p>
+<p>An ONIE compliant NOS must <em>not</em> remove or modify partitions that meet
+the above requirements.</p>
+</div>
+<div class="section" id="grub-considerations">
+<h3>GRUB Considerations<a class="headerlink" href="#grub-considerations" title="Permalink to this headline">¶</a></h3>
+<p>This section examines the responsibilities and operations of a ONIE
+compliant HDOS installers.  This is very similar to the NOS installer
+operations discussed previously.</p>
+<p>A HDOS installer performs the following operations:</p>
+<ol class="arabic simple">
+<li>Creates a disk partition and file system as described in
+<cite>:ref:hdos_disk_partition</cite>.</li>
+<li>Installs the HDOS files (kernels, initramfs, diagnostic programs,
+etc) into the -DIAG partition</li>
+<li>Installs a UEFI boot loader program into
+<code class="docutils literal"><span class="pre">/boot/efi/EFI/&lt;HDOS&gt;/&lt;HDOS</span> <span class="pre">loader</span> <span class="pre">image&gt;</span></code></li>
+<li>Creates a new UEFI <code class="docutils literal"><span class="pre">Boot####</span></code> entry for
+<code class="docutils literal"><span class="pre">/boot/efi/EFI/&lt;HDOS&gt;/&lt;HDOS</span> <span class="pre">loader</span> <span class="pre">image&gt;</span></code></li>
+<li>Add an ONIE chain load entry to the HDOS's GRUB menu</li>
+</ol>
+<p>As an example consider the case where the hardware manufacture
+installs the HDOS immediately after installing ONIE.</p>
+<p>The disk now looks like:</p>
+<div class="highlight-python"><div class="highlight"><pre>+========================+
+|                        |
+|  /dev/sda1 ESP         |  &lt;-- EFI System Partition
+|                        |
++========================+
+|                        |
+|  /dev/sda2 ONIE-BOOT   |  &lt;-- ONIE partition.  Installed by ONIE.  Contains
+|                        |      kernel and initramfs.
++========================+
+|                        |
+|                        |
+/  /dev/sda3 HDOS-DIAG   /  &lt;-- HDOS partition.  Contains kernel, initramfs,
+|                        |      diagnostic programs and GRUB configuration.
+|                        |
++========================+
+</pre></div>
+</div>
+<p>and the contents of <code class="docutils literal"><span class="pre">/boot/efi</span></code> looks something like:</p>
+<div class="highlight-python"><div class="highlight"><pre>/boot/efi                         &lt;-- mount point
+/boot/efi/EFI                     &lt;-- required UEFI directory
+/boot/efi/EFI/HDOS                &lt;-- HDOS directory
+/boot/efi/EFI/HDOS/grubx64.efi    &lt;-- HDOS&#39;s GRUB UEFI Application
+/boot/efi/EFI/onie                &lt;-- ONIE OS directory
+/boot/efi/EFI/onie/grubx64.efi    &lt;-- ONIE&#39;s GRUB UEFI Application
+</pre></div>
+</div>
+<p>The UEFI BootOrder and BootCurrent variables contain:</p>
+<div class="highlight-python"><div class="highlight"><pre>BootCurrent: 0003
+BootOrder: 0003,0004,0000,0001,0002
+Boot0000* EFI DVD/CDROM
+Boot0001* EFI Network
+Boot0002* EFI Internal Shell
+Boot0003* ONIE: Open Network Install Environment
+Boot0004* HDOS
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The string 'HDOS', as used above in the ESP and BootOrder variable,
+is only an example.  Any string is acceptable as long as the HDOS
+disk partitioning requirements are met.</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">After installing the HDOS, notice that the system is still
+configured to boot ONIE next.  The intention here is that the system
+shipped from the factory is set to boot ONIE in installer mode.</p>
+</div>
+<p>An ONIE compliant HDOS <em>should</em> use the provided GRUB helper script,
+<a class="reference external" href="https://github.com/opencomputeproject/onie/blob/master/installer/x86_64/grub.d/50_onie_grub">50_onie_grub</a>,
+to create the appropriate ONIE GRUB chainload entry for the HDOS GRUB
+configuration.  This adds an <code class="docutils literal"><span class="pre">ONIE</span></code> GRUB menu entry to the HDOS GRUB
+menu <em>and</em> adds a <code class="docutils literal"><span class="pre">DIAG</span></code> GRUB menu to the ONIE GRUB menu.</p>
+<p>Following this the HDOS GRUB menu will look something like:</p>
+<div class="highlight-python"><div class="highlight"><pre>   GNU GRUB  version 2.02~beta2+e4a1fe391
+
++-----------------------------------------------+
+|*Hardware Vendor Diag                          |
+| ONIE                                          |
+|                                               |
+|                                               |
++-----------------------------------------------+
+</pre></div>
+</div>
+<p>and the ONIE GRUB menu will look something like:</p>
+<div class="highlight-python"><div class="highlight"><pre>    GNU GRUB  version 2.02~beta2+e4a1fe391
+
++---------------------------------------------+
+|*ONIE: Install OS                            |
+| ONIE: Rescue                                |
+| ONIE: Uninstall OS                          |
+| ONIE: Update ONIE                           |
+| ONIE: Embed ONIE                            |
+| Hardware Vendor Diag                        |
+|                                             |
++---------------------------------------------+
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="uefi-references">
+<span id="x86-uefi-references"></span><h2>UEFI References<a class="headerlink" href="#uefi-references" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><a class="reference external" href="http://www.uefi.org/">UEFI Home Page</a></li>
+<li><a class="reference external" href="http://en.wikipedia.org/wiki/GUID_Partition_Table">GUID Partition Table</a></li>
+<li><a class="reference external" href="https://www.happyassassin.net/2014/01/25/uefi-boot-how-does-that-actually-work-then/">UEFI boot: how does that actually work, then?</a></li>
+<li><a class="reference external" href="http://www.extremetech.com/computing/96985-demystifying-uefi-the-long-overdue-bios-replacement">Demystifying UEFI, the long-overdue BIOS replacement</a></li>
+<li><a class="reference external" href="http://blog.uncooperative.org/blog/2014/02/06/the-efi-system-partition/">The EFI System Partition and the Default Boot Behavior</a></li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+            
+  <div class="footer-relations">
+    
+      <div class="pull-left">
+        <a class="btn btn-default" href="x86_hw_requirements.html" title="previous chapter (use the left arrow)">x86 Hardware Requirements</a>
+      </div>
+    
+      <div class="pull-right">
+        <a class="btn btn-default" href="x86_boot_loader.html" title="next chapter (use the right arrow)">x86 Legacy BIOS Boot Loader (GRUB2)</a>
+      </div>
+    </div>
+    <div class="clearer"></div>
+  
+        </div>
+        <div class="clearfix"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="x86_boot_loader.html" title="x86 Legacy BIOS Boot Loader (GRUB2)"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="x86_hw_requirements.html" title="x86 Hardware Requirements"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Open Network Install Environment  documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Design Specification</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="x86_arch_design.html" >x86 CPU Architecture Design</a> &raquo;</li> 
+      </ul>
+    </div>
+<script type="text/javascript">
+  $("#mobile-toggle a").click(function () {
+    $("#left-column").toggle();
+  });
+</script>
+<script type="text/javascript" src="../_static/js/bootstrap.js"></script>
+  <div class="footer">
+        &copy; Copyright 2013-2017, <a href="https://cumulusnetworks.com/">Cumulus Networks, Inc.</a>  All Rights Reserved.
+  </div>
+  </body>
+</html>
