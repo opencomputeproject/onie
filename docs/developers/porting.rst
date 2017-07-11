@@ -6,8 +6,9 @@ Porting Guide
 =============
 
 This section describes requirements and general guidelines to follow
-when porting ONIE to a new platform.  Also, the :ref:`testing_guide`
-should be used to validate the ONIE implementation.
+when porting ONIE to a new platform.  Also, the
+:ref:`testing_certification` guide should be used to validate the ONIE
+implementation.
 
 Porting U-Boot
 --------------
@@ -65,3 +66,57 @@ ONIE Kernel
   rescue mode.
 * Verify the ``onie-self-update <ONIE updater URL>`` command works from
   rescue mode.
+
+Machine Configuration: ``machine.make``
+---------------------------------------
+
+The ``machine.make`` Makefile fragment defines a number of aspects
+about the machine.  Some of the configuration parameters are required,
+while others have reasonable defaults.
+
+The required parameters:
+
+.. csv-table:: machine.make required parameters
+  :header: "Parameter", "Meaning"
+  :delim: |
+
+  ONIE_ARCH | CPU architecture for the machine type: x86_64, armv7a, powerpc-softfloat
+  VENDOR_REV | Machine hardware revision. "0" is a good choice for a machine
+  SWITCH_ASIC_VENDOR | used to further differentiate the platform in the ONIE waterfall.  This string should be the stock ticker symbol of the ASIC vendor, in lower case.
+  VENDOR_ID | Vendor ID -- IANA Private Enterprise Number: http://www.iana.org/assignments/enterprise-numbers
+
+Optional Parameters:
+
+.. csv-table:: machine.make optional parameters
+  :header: "Parameter", "Meaning", "Default"
+  :delim: |
+
+  FIRMWARE_UPDATE_ENABLE | Build a vendor supplied firmware update | no
+  CONSOLE_SPEED | Serial console baud rate | 115200
+  SERIAL_CONSOLE_ENABLE | Use serial line for console output, otherwise use VGA | yes
+  CONSOLE_DEV | serial TTY instance to use for console | ttyS0
+  EXTRA_CMDLINE_LINUX | Extra kernel command line parameters to pass to the ONIE Linux kenrel | none
+  RECOVERY_DEFAULT_ENTRY | Default menu option when booting a recovery image (rescue or embed) | rescue
+  SKIP_ETHMGMT_MACS | Should ONIE skip programming the Ethernet management interface MAC addresses? | no
+  VENDOR_VERSION | Optional string to append to the ONIE version string | empty
+
+Optional Utilities and Features to Include:
+
+.. csv-table:: machine.make optional features
+  :header: "Utility / Feature", "Meaning", "Default"
+  :delim: |
+
+  MTDUTILS_ENABLE     | MTD flash utilities | yes, for U-Boot platforms
+  GPT_ENABLE | GUID Partition Table (GPT) disk partitions | yes
+  LVM2_ENABLE | Logical Volume Manager support | yes
+  PARTED_ENABLE | parted disk partitioning tool | yes
+  GRUB_ENABLE | GRUB boot loader support | yes, for x86_64 platforms
+  UEFI_ENABLE     | Build ONIE for a UEFI machine | no
+  I2CTOOLS_ENABLE | I2C peek/poke utilites | yes
+  DMIDECODE_ENABLE | dmidecode (SMBIOS information) utility | yes, for x86_64 platforms
+  ETHTOOL_ENABLE | ethtool utility | yes
+  ACPI_ENABLE | Support for ACPI and related utilities | yes, for x86_64 platforms
+  KEXEC_ENABLE | kexec utility | yes
+  FLASHROM_ENABLE | flashrom BIOS programming utility | yes, for x86_64 platforms
+  IPMITOOL_ENABLE | IPMI utility | no
+

@@ -12,46 +12,44 @@ Open Source Development Process
 
 The description is somewhat informal, but captures the spirit of the
 effort.  It is based on how other projects (Linux kernel and U-Boot,
-for example) manage.
+for example) manage patch submissions.
 
-Please read `The Lifecycle of a Patch
-<http://www.linuxfoundation.org/content/22-lifecycle-patch>`_.
+Here is how git "open source" development works. For nearly everything
+written below, you could replace the word "ONIE" with "Linux kernel".
 
-Here is how git "open source" development works. For nearly everything written
-below, you could replace the word "ONIE" with "Linux kernel".
+#.  There is a public git repo for ONIE.
 
-1.  There is a public git repo for ONIE.
-
-2.  A few people have commit privilege to the repo, also known as
+#.  A few people have commit privilege to the repo, also known as
     "maintainers" or "custodians" -- at the moment for ONIE that's a few
     people from Cumulus Networks and a few people from Big Switch.
 
-3.  The entire world has read privilege to the repo.
+#.  The entire world has read privilege to the repo.
 
-4.  People without commit privilege want to contribute (a hardware
+#.  People without commit privilege want to contribute (a hardware
     vendor for example), called a "contributor".  They open a
     discussion around their problem on the mailing list.
 
-5.  Next the contributor makes a patch and sends it to the mailing
-    list, including a maintainer.
+#.  Next the contributor makes a "pull request" (see below) or creates
+    and sends a patch to the mailing list, including a maintainer.
+    That patch *must* apply cleanly to the master branch.
 
-6.  The maintainer, mailing list and contributor kick the patch
+#.  The maintainer, mailing list and contributor kick the patch
     around, look it over, make some changes, goes through some
     revisions.
 
-7.  Eventually the patch is deemed acceptable and a maintainer applies
+#.  Eventually the patch is deemed acceptable and a maintainer applies
     the patch to the git repo.
 
-8.  The patch contains all the attribution information.  The git
+#.  The patch contains all the attribution information.  The git
     history will show that the contributor made the patch and changes.
     The maintainer merely applied the patch to the repo.
 
 After the patch is applied it will be available in the common ONIE
 code base for everyone.
 
-Step #6 can seem kind of brutal at first -- your code gets beat up in
-public on the mailing list.  But it is not personal.  It is all about
-code quality, sound design and being open.
+This process can seem kind of brutal at first -- your code gets beat
+up in public on the mailing list.  But it is not personal.  It is all
+about code quality, sound design and being open.
 
 General Patching Philosophy
 ---------------------------
@@ -60,31 +58,27 @@ One of the ONIE project goals is to maintain high standards for
 software quality and engineering discipline.  In that spirit, here are
 some general comments regarding patch submission:
 
-1. Each patch should only contain *one* logical change.  A patch
+#. Each patch should only contain *one* logical change.  A patch
    should not contain multiple, unrelated changes.
 
-2. Each patch must have the following:
+#. Each patch must apply cleanly to the master branch.
 
-  - The author must be a real person with a valid email address.  No
-    anonymous github user IDs.
+#. Each patch must have the following:
 
-  - A short one line summary.  When the patch is for a specific
-    machine include the machine name or company as a prefix to the
-    summary, e.g.  "machine_xyz_123: updated installer config".
+   - The author must be a real person with a valid email address.  No
+     anonymous github user IDs.
 
-  - What problem the patch solves (why do we need the patch).
+   - A short one line summary.  When the patch is for a specific
+     machine include the machine name or company as a prefix to the
+     summary, e.g.  "machine_xyz_123: updated installer config".
+  
+   - What problem the patch solves (why do we need the patch).
+  
+   - How you tested the patch.
 
-  - How you tested the patch.
-
-3. To upstream patches, send patches to the mailing list using the
-   output of `git format-patch
-   <https://www.kernel.org/pub/software/scm/git/docs/git-format-patch.html>`_.
-   This ensures the patch is appropriately attributed to you.
-
-4. Alternatively you can use GitHub `git pull requests
-   <https://help.github.com/articles/using-pull-requests>`_ for
-   upstreaming your patches.  The ONIE project is following the *fork
-   and pull* model.
+#. To upstream patches please use GitHub `git pull requests
+   <https://help.github.com/articles/using-pull-requests>`_.  The ONIE
+   project is following the *fork and pull* model.
 
    Note: The author must be a real person with a valid email address.
    No anonymous github user IDs.
@@ -93,10 +87,29 @@ some general comments regarding patch submission:
    should create a topic branch and make a pull request from that branch.
 
    This is described here: `Creating a Pull Request
-   <https://help.github.com/articles/creating-a-pull-request/>`_.
+   <https://help.github.com/articles/creating-a-pull-request/>`_ and
+   `Using Pull Requests
+   <https://help.github.com/articles/using-pull-requests/>`_.
 
    As it says in the article "These changes are proposed in a branch,
    which ensures that the master branch is kept clean and tidy."
+
+#. Alternatively to upstream patches, send patches to the mailing list
+   using the output of `git format-patch
+   <https://www.kernel.org/pub/software/scm/git/docs/git-format-patch.html>`_.
+   This ensures the patch is appropriately attributed to you.
+
+   #. Follow `these guidelines
+      <https://www.kernel.org/doc/Documentation/process/email-clients.rst>`_
+  
+   #. Using ``git send-email`` is *strongly* recommended to avoid
+      encoding problems.
+  
+   #. Inline text patches are preferred as we can comment directly in
+      email replies (avoid attachments)
+    
+   #. Attachments of types other than ``text/plain`` will not be
+      accepted.
 
 Pull requests can be easier to use then sending patches via email, as
 some email client mangle patch attachments.
@@ -195,10 +208,10 @@ Each specific machine also adds one (or more) patches to the end.  The
 machine-specific patch adds machine-specific details like memory
 controller configuration, NOR flash layout, etc.
 
-The machine-specific patch for the Freescale P2020RDB-PCA evaluation
+The machine-specific patch for the NXP P2020RDB-PCA evaluation
 board is here::
 
-  build-04:~/onie$ ls -l machine/fsl_p2020rdbpca/u-boot/
+  build-04:~/onie$ ls -l machine/nxp/nxp_p2020rdbpca/u-boot/
   total 4
   -rw-r--r-- 1 build build 3157 Feb 14 17:50 platform-fsl-p2020rdb-pca.patch
   -rw-r--r-- 1 build build   32 Feb 14 17:50 series
@@ -220,10 +233,10 @@ the ``u-boot-patch`` target does the following:
 
 You can try this out yourself, like this::
 
-  build-04:~/onie/build-config$ make MACHINE=fsl_p2020rdbpca u-boot-patch
+  build-04:~/onie/build-config$ make MACHINEROOT=../machine/nxp MACHINE=nxp_p2020rdbpca u-boot-patch
   ==== Extracting upstream U-Boot ====
   ==== Patching u-boot ====
-  Initialized empty Git repository in /mnt/behemoth1/home/curt/onie-cn/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01/.git/
+  Initialized empty Git repository in /mnt/behemoth1/home/curt/onie-cn/onie/build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01/.git/
   Checking for changes in the working directory ... done
   Importing patch "git-ignore.patch" ... done
   Importing patch "feature-config-repeatable.patch" ... done
@@ -243,12 +256,12 @@ You can try this out yourself, like this::
   Now at patch "platform-fsl-p2020rdb-pca.patch"
 
 After this step the patched U-Boot source is available in
-``build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01``.
+``build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01``.
 
 Now, make your changes to the U-Boot files.
 
 For this example let's say we only wanted to change the board
-name that is printed when the machine boots. The fsl_p2020rdbpca
+name that is printed when the machine boots. The nxp_p2020rdbpca
 board currently prints this::
 
   Board: P2020RDB-PCA CPLD: V4.1 PCBA: V4.0
@@ -257,18 +270,18 @@ Let's change the board name to "ONIE-P2020RDB-PCA".
 
 In the U-Boot source the board name is controlled by the
 ``CONFIG_BOARDNAME`` #define, located in
-``build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01/include/configs/p1_p2_rdb_pc.h``.
+``build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01/include/configs/p1_p2_rdb_pc.h``.
 
 After making the change use the ``stg status`` command to see what is
 happening. You should see something like::
 
-  build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg status
+  build-04:~/onie/build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg status
   M include/configs/p1_p2_rdb_pc.h
 
 Similar to the ``git status`` command, the ``stg status`` command shows
 the modified files.  You can also use ``stg diff`` to see a diff::
 
-  build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg diff
+  build-04:~/onie/build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg diff
   diff --git a/include/configs/p1_p2_rdb_pc.h b/include/configs/p1_p2_rdb_pc.h
   index 55a4299..e1e0ede 100644
   --- a/include/configs/p1_p2_rdb_pc.h
@@ -308,7 +321,7 @@ In this case, we want to add the changes to the
 ``platform-fsl-p2020rdb-pca.patch`` patch, which is already the active
 patch. To do so, run the ``stg refresh`` command, like this::
 
-  build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg refresh
+  build-04:~/onie/build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg refresh
   Now at patch "platform-fsl-p2020rdb-pca.patch"
 
 That will put the "modified" file into the
@@ -324,15 +337,15 @@ That will put the "modified" file into the
 
 Now the ``stg status`` command will show no changes::
 
-  build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg status
+  build-04:~/onie/build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg status
 
-Next we want to "export" the ``platform-fsl-p2020rdb-pca.patch`` back out
-to the ``onie/machine/fsl_p2020rdbpca/u-boot directory``, by way of a temp
-directory, like this::
+Next we want to "export" the ``platform-fsl-p2020rdb-pca.patch`` back
+out to the ``onie/machine/nxp/nxp_p2020rdbpca/u-boot directory``, by
+way of a temp directory, like this::
 
-  build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg export -d /tmp
+  build-04:~/onie/build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ stg export -d /tmp
   Checking for changes in the working directory ... done
-  build-04:~/onie/build/fsl_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ cp /tmp/platform-fsl-p2020rdb-pca.patch ../../../../machine/fsl_p2020rdbpca/u-boot
+  build-04:~/onie/build/nxp_p2020rdbpca-r0/u-boot/u-boot-2013.01.01$ cp /tmp/platform-fsl-p2020rdb-pca.patch ../../../../machine/nxp/nxp_p2020rdbpca/u-boot
 
 Wrapping Up
 ^^^^^^^^^^^
@@ -349,15 +362,15 @@ the top level ``onie`` directory and check the output of ``git status`` and
   #   (use "git add <file>..." to update what will be committed)
   #   (use "git checkout -- <file>..." to discard changes in working directory)
   #
-  #       modified:   machine/fsl_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch
+  #       modified:   machine/nxp/nxp_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch
   #
   no changes added to commit (use "git add" and/or "git commit -a")
 
   build-04:~/onie$ git diff
-  diff --git a/machine/fsl_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch b/machine/fsl_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patc
+  diff --git a/machine/nxp/nxp_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch b/machine/nxp/nxp_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patc
   index 11e1e2d..c0a1dcf 100644
-  --- a/machine/fsl_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch
-  +++ b/machine/fsl_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch
+  --- a/machine/nxp/nxp_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch
+  +++ b/machine/nxp/nxp_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch
   @@ -15,9 +15,18 @@ index e4b0d44..f389720 100644
     P2020RDB-PC_36BIT_NAND       powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT,NAND
     P2020RDB-PC_36BIT_SDCARD     powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT,SDCARD
@@ -380,7 +393,7 @@ the top level ``onie`` directory and check the output of ``git status`` and
     #define CONFIG_BOOTCOMMAND    CONFIG_HDBOOT
 
 The modified
-``machine/fsl_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch`` is what
+``machine/nxp/nxp_p2020rdbpca/u-boot/platform-fsl-p2020rdb-pca.patch`` is what
 you would commit to your local git repo.
 
 Commit these changes to your local git tree.  This is local, not going

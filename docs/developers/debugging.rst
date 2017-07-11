@@ -46,7 +46,7 @@ For example to inspect the PowerPC /usr/bin/dropbearmulti binary from
 your x86_64 build host you would invoke the Makefile 'ldd' target like
 this::
 
-  monster-04:~/onie-cn/onie/build-config$ gmake -j48 MACHINEROOT=../machine MACHINE=fsl_p2020rdbpca ldd LDD_TARGET=usr/bin/dropbearmulti
+  monster-04:~/onie-cn/onie/build-config$ gmake -j48 MACHINEROOT=../machine/nxp MACHINE=nxp_p2020rdbpca ldd LDD_TARGET=usr/bin/dropbearmulti
           libcrypt.so.0 => /lib/libcrypt.so.0 (0xdeadbeef)
           libc.so.0 => /lib/libc.so.0 (0xdeadbeef)
           ld-uClibc.so.0 => /lib/ld-uClibc.so.0 (0xdeadbeef)
