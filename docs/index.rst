@@ -14,6 +14,7 @@ Open Network Install Environment Documentation
    overview/index
    user-guide/index
    design-spec/index
+   testing-certification/index
    developers/index
    demo_os/demo_os
    demo_os/demo_diag
