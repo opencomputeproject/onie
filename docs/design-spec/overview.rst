@@ -1,4 +1,4 @@
-.. Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2013 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -53,20 +53,3 @@ subsequent boots is:
 
 #. The boot loader launches the default OS, which is the NOS.
 #. The NOS boots and executes.
-
-.. _onie_fsm:
-
-ONIE Finite State Machine
-=========================
-
-The following diagram illustrates the ONIE finite state machine.
-
-.. figure:: onie-fsm.png
-  :scale: 75
-  :align: center
-  :alt: ONIE Finite State Machine
-
-Alertnate image formats: :download:`[PDF] <onie-fsm.pdf>` :download:`[SVG] <onie-fsm.svg>`
-
-The states and transitions are thoroughly discussed in subsequent
-sections.
