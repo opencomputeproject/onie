@@ -32,7 +32,7 @@ at the next reboot.
 How this is done depends on the specific CPU architecture.  See these
 sections for the corresponding CPU architectures:
 
-- :ref:`powerpc_nos_intf_installer`
+- :ref:`uboot_nos_intf_installer`
 
 - :ref:`x86_nos_intf_installer`
 
@@ -102,6 +102,9 @@ For details, here is the complete help for ``onie-sysinfo`` follows::
           -t
                   ONIE partition type
    
+          -S
+                  ONIE silicon switch vendor
+  
           -a
                   Dump all information.
 
@@ -119,7 +122,7 @@ How to invoke the install operation depends on the specific CPU
 architecture.  See these sections for the corresponding CPU
 architectures:
 
-- :ref:`powerpc_nos_intf_reinstaller`
+- :ref:`uboot_nos_intf_reinstaller`
 
 - :ref:`x86_nos_intf_reinstaller`
 
@@ -137,7 +140,7 @@ How to invoke the uninstall operation depends on the specific CPU
 architecture.  See these sections for the corresponding CPU
 architectures:
 
-- :ref:`powerpc_nos_intf_uninstall`
+- :ref:`uboot_nos_intf_uninstall`
 
 - :ref:`x86_nos_intf_uninstall`
 
@@ -183,7 +186,7 @@ How to invoke the rescue operation depends on the specific CPU
 architecture.  See these sections for the corresponding CPU
 architectures:
 
-- :ref:`powerpc_nos_intf_rescue`
+- :ref:`uboot_nos_intf_rescue`
 
 - :ref:`x86_nos_intf_rescue`
 
@@ -218,6 +221,6 @@ How to invoke the ``update`` and ``embed`` operations depends on the
 specific CPU architecture.  See these sections for the corresponding
 CPU architectures:
 
-- :ref:`powerpc_nos_intf_update`
+- :ref:`uboot_nos_intf_update`
 
 - :ref:`x86_nos_intf_update`

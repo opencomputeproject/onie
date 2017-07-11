@@ -8,14 +8,14 @@ Operating Software Design
 *************************
 
 .. toctree::
-   :maxdepth: 3
-   :titlesonly:
+   :maxdepth: 2
 
    kernel
    discovery
    nos_interface
    updater
    diag
+   firmware_update
 
 This section describes the runtime ONIE software.  The information
 here applies to all CPU architectures unless otherwise noted.

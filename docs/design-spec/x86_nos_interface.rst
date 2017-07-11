@@ -1,4 +1,5 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
+   Copyright (C) 2016 david_yang <david_yang@accton.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -11,6 +12,7 @@ NOS interface.  See the :ref:`nos_interface` section for more about
 the NOS interface.
 
 .. _cmd_onie_boot_mode:
+.. _x86_nos_interface:
 
 x86 NOS Interface
 -----------------
@@ -31,6 +33,8 @@ the ONIE boot mode to one of:
 
 - ``embed``
 
+- ``diag``
+  
 The complete help for the tool is::
 
   ONIE:/ # onie-boot-mode -h
@@ -49,6 +53,7 @@ The complete help for the tool is::
                   uninstall -- ONIE OS uninstall mode
                   update    -- ONIE self update mode
                   embed     -- ONIE self update mode and embed ONIE
+                  diag      -- Hardware Vendor's Diagnostic
                   none      -- Use system default boot mode
    
                   Some platforms may offer additional modes.  Check with
@@ -246,19 +251,30 @@ following:
   <http://linux.die.net/man/8/mkfs.ext4>`_ program and the ``-L``
   option.
 
-The ``-DIAG`` suffix and the ``system partition`` bit will help a NOS
-installer recognize the partitions as *special* and leave them alone.
-This is how NOS installers can be sure to leave the diag partition
-intact.
+The ``-DIAG`` suffix and the ``system partition`` bit announces to ONIE
+and ONIE compliant NOS installers that the partitions are *precious*
+and should not be modified.
+
+The ONIE ``uninstall`` operation must *not* remove or modify
+partitions that meet the above requirements.
+
+An ONIE compliant NOS must *not* remove or modify partitions that meet
+the above requirements.
 
 MSDOS Partition Table
 =====================
 
 For machines that use the MSDOS partition table, all we can do is use
-the file system label.  When creating the file system on the diag
-partition set the file system label to ``<SOMETHING>-DIAG``.  See the
+the file system label. When creating the file system on the diag
+partition set the file system label to ``<SOMETHING>-DIAG``. See the
 `mkfs.ext4 <http://linux.die.net/man/8/mkfs.ext4>`_ program and the
-``-L`` option.
+``-L`` option as an example.
+
+The ONIE ``uninstall`` operation must *not* remove or modify
+partitions that meet the above requirements.
+
+An ONIE compliant NOS must *not* remove or modify partitions that meet
+the above requirements.
 
 GRUB Considerations
 -------------------
@@ -271,3 +287,23 @@ NOS to *chainload* the diag OS with low friction.
 
 The ``grub.cfg`` for the diag partition must contain all the GRUB menu
 entries the diag OS needs, plus one entry to chainload ONIE.
+
+.. note::
+ 
+  For ONIE versions up to and including 2015.11 the diagnostic image
+  installs GRUB into the MBR.  It is no longer recommended to install
+  GRUB into the MBR for the later versions.
+
+
+If the diagnostic image is installed on versions older than 2015.11,
+it should *only* install GRUB into the diag partition and *not* set
+``ONIE`` to be the default menu entry.  This makes the boot order
+between the GRUBs on ONIE and diag OS be fixed.
+
+If the diagnostic image is installed on versions newer than 2015.11,
+it should *not* install GRUB into both the MBR and diag partition.
+The later versions supports boot command feeded by diag installer.
+This feature makes ONIE share GRUB with diag OS.  i.e., the diag
+partition does not have its own GRUB instance and ``grub.cfg``.  To
+enable the feature, diag installer needs to be revised to meet the
+function.  Please refer to the Demo diag installer in ONIE 2016.02.

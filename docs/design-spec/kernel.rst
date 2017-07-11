@@ -16,7 +16,7 @@ architecture.
 
 For CPU architecture specific details see these sections:
 
-- :ref:`powerpc_kernel`
+- :ref:`uboot_kernel`
 
 - :ref:`x86_kernel`
 

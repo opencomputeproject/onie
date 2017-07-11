@@ -1,17 +1,17 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
-*************************
-PowerPC Interface Details
-*************************
+*************************************
+U-Boot Platform NOS Interface Details
+*************************************
 
-This section describes the PowerPC-specific methods used to implement
+This section describes the U-Boot platform specific methods used to implement
 the NOS interface.  See the :ref:`nos_interface` section for more
 about the NOS interface.
 
-PowerPC Adding Kernel Command Arguments
----------------------------------------
+U-Boot platform Adding Kernel Command Arguments
+-----------------------------------------------
 
 In the case of U-Boot and Linux, the user can set additional kernel
 command line arguments by setting the ``onie_debugargs`` U-Boot
@@ -24,18 +24,18 @@ example::
   => setenv onie_debugargs 'install_url=http://10.0.1.249/nos_installer.bin'
   => run onie_bootcmd
 
-PowerPC NOS Interface
----------------------
+U-Boot platform NOS Interface
+-----------------------------
 
-On PowerPC, ONIE communicates with the NOS via U-Boot environment
-variables.  Both ONIE and the NOS must be able to read and write
-U-Boot environment variables.  See the :ref:`nos_interface` section
-for more about the NOS interface.
+On U-Boot platforms, ONIE communicates with the NOS via U-Boot
+environment variables.  Both ONIE and the NOS must be able to read and
+write U-Boot environment variables.  See the :ref:`nos_interface`
+section for more about the NOS interface.
 
-.. _powerpc_nos_intf_installer:
+.. _uboot_nos_intf_installer:
 
-PowerPC NOS Installer
-=====================
+U-Boot platform NOS Installer
+=============================
 
 The only requirement ONIE has for the NOS installer is that the NOS
 **must** update the ``nos_bootcmd`` U-Boot environment variable
@@ -49,10 +49,10 @@ NOR flash or from an SD card.
 See the :ref:`nos_intf_installer` section for more about the NOS
 installer interface.
 
-.. _powerpc_nos_intf_reinstaller:
+.. _uboot_nos_intf_reinstaller:
 
-PowerPC Reinstalling or Installing a Different NOS
-==================================================
+U-Boot platform Reinstalling or Installing a Different NOS
+==========================================================
 
 To invoke the install operation, the running NOS sets the
 ``onie_boot_reason`` U-Boot environment variable to the value
@@ -70,10 +70,10 @@ system.  When the system starts up again, ONIE will see the
 See the :ref:`nos_intf_reinstaller` section for more about the NOS
 reinstaller interface.
 
-.. _powerpc_nos_intf_uninstall:
+.. _uboot_nos_intf_uninstall:
 
-PowerPC NOS Uninstall
-=====================
+U-Boot platform NOS Uninstall
+=============================
 
 ONIE has an uninstall operation that wipes out the unused portions of
 NOR flash and the attached mass storage device (like an SD card or USB NAND
@@ -99,10 +99,10 @@ discovery and installation phase.
 See the :ref:`nos_intf_uninstall` section for more about the NOS
 uninstall interface.
 
-.. _powerpc_nos_intf_rescue:
+.. _uboot_nos_intf_rescue:
 
-PowerPC Rescue and Recovery
-===========================
+U-Boot platform Rescue and Recovery
+===================================
 
 To invoke the rescue operation, the running NOS sets the ``onie_boot_reason`` 
 U-Boot environment variable to the value ``rescue`` 
@@ -119,14 +119,14 @@ starts up again, ONIE will see the ``onie_boot_reason`` and enter rescue mode.
 See the :ref:`nos_intf_rescue` section for more about the NOS rescue
 interface.
 
-.. _powerpc_nos_intf_update:
+.. _uboot_nos_intf_update:
 
-PowerPC Updating and Embedding ONIE
-===================================
+U-Boot platform Updating and Embedding ONIE
+===========================================
 
-On PowerPC, only the ``update`` operation is supported; there is no ``embed`` 
-command on the PowerPC platform.  The ``update`` operation is **not**
-descructive to the currently installed NOS.
+On U-Boot platforms, only the ``update`` operation is supported; there
+is no ``embed`` command for U-Boot platforms.  The ``update``
+operation is **not** descructive to the currently installed NOS.
 
 The update operation installs a new version of ONIE in the NOR flash,
 including:
@@ -151,14 +151,13 @@ system.  When the system starts up again, ONIE will see the
 See the :ref:`nos_intf_update` section for more about the NOS update
 interface.
 
-.. _powerpc_hw_diag:
+.. _uboot_hw_diag:
 
-*************************************************
-PowerPC Hardware Diagnostics Interface [Optional]
-*************************************************
+U-Boot Platform Hardware Diagnostics Interface [Optional]
+---------------------------------------------------------
 
 This section describes a method for providing a hardware diagnostic
-for PowerPC platforms.  See the :ref:`hw_diag` section for more about
+for U-Boot platforms.  See the :ref:`hw_diag` section for more about
 providing a hardware diagnostic.
 
 The preferred storage location for the hardware diagnostic image is in
