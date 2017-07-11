@@ -95,6 +95,9 @@ about how to install the ONIE binary on a particular platform.
 Source Code Description
 =======================
 
+The ONIE git repository is hosted on GitHub:
+https://github.com/opencomputeproject/onie
+
 Source Code Layout
 ------------------
 
