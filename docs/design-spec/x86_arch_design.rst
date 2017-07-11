@@ -8,10 +8,10 @@ x86 CPU Architecture Design
 ***************************
 
 .. toctree::
-   :maxdepth: 3
-   :titlesonly:
+   :maxdepth: 2
 
    x86_hw_requirements
+   x86_uefi
    x86_boot_loader
    x86_kernel
    x86_nos_interface

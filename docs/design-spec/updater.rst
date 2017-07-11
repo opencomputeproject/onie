@@ -27,6 +27,8 @@ To initiate ONIE self-update mode, follow the steps described in the
 NOS interface :ref:`nos_intf_update` section.  This launches ONIE in 
 self-update mode.
 
+.. _specify_updater_url:
+
 Specifying the Updater URL
 ==========================
 
@@ -57,3 +59,42 @@ option 2, ``Updater URL``, to specify the updater URL.
 Also, as described in :ref:`nos_intf_rescue`, you can use the
 ``onie-self-update`` command to specify an updater URL from rescue
 mode.
+
+.. _update_image_format:
+
+ONIE Update Image Format
+========================
+
+The ONIE update image adheres to the following format:
+
+* The image is a self-extracting shell script archive.
+
+* The image must contain the string ``ONIE-UPDATER-COOKIE``, which
+  identifies the image as an ONIE updater image.
+
+The image itself is executable and supports a number of command line
+options::
+
+  -h
+          Help.  Print this message.
+   
+  -v
+          Be verbose.	 Print what is happening.
+   
+  -q
+          Be quiet.  Do not print what is happening.
+   
+  -x
+          Extract image to a temporary directory.
+   
+  -i
+          Dump image information.
+   
+  -f
+          Force ONIE update opteration, bypassing any safety
+          checks.
+
+Delivering General Firmware Updates using ONIE
+==============================================
+
+For managing firmware updates see :ref:`firmware_updates`.

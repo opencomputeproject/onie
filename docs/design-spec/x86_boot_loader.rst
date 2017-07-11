@@ -1,23 +1,28 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
+   Copyright (C) 2016 david_yang <david_yang@accton.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
 .. _x86_boot_loader:
 
-***********************
-x86 Boot Loader (GRUB2)
-***********************
+***********************************
+x86 Legacy BIOS Boot Loader (GRUB2)
+***********************************
 
-On x86, ONIE uses `GRUB2 <http://www.gnu.org/software/grub/>`_
-as the boot loader.  This section describes how ONIE uses GRUB and how
-the disk is partitioned.
+This section describes how ONIE on legacy BIOS firmware platforms uses
+`GRUB2 <http://www.gnu.org/software/grub/>`_ and how the disk is
+partitioned.
 
 .. note::
 
-  At a high level, the philosophy is that the NOS **owns** the boot
-  loader and the NOS **must** install its own GRUB (or some other boot
-  loader) itself.
+  For UEFI firmware systems see :ref:`x86_uefi`.
 
+.. note::
+
+  For legacy BIOS systems, the philosophy is that the NOS **owns** the
+  boot loader and the NOS **must** install its own GRUB (or some other
+  boot loader) itself.
+  
 The ONIE kernel and ``initramfs`` reside in a single, self-contained
 partition. The installed NOS controls how it manages the MBR and GRUB.
 
@@ -256,3 +261,59 @@ reboot the system into ONIE rescue mode::
   grub-reboot ONIE
   /mnt/onie-boot/onie/tools/bin/onie-boot-mode -q -o rescue
 
+ONIE Boot Commands in GRUB Prompt
+=================================
+
+At the ONIE GRUB prompt several commands exist for booting ONIE in the
+various modes:
+
+- ``onie_install``
+
+- ``onie_rescue``
+
+- ``onie_uninstall``
+
+- ``onie_update``
+
+- ``onie_embed``
+
+- ``diag_bootcmd``
+
+These commands would be handy for automated testing to boot specific target
+directly.
+
+Before performing the command, enter the GRUB prompt by pressing ``c``
+in the GRUB menu page::
+
+                       GNU GRUB  version 2.02~beta2+e4a1fe391
+
+   +----------------------------------------------------------------------------+
+   |*ONIE: Install OS                                                           |
+   | ONIE: Rescue                                                               |
+   | ONIE: Uninstall OS                                                         |
+   | ONIE: Update ONIE                                                          |
+   | ONIE: Embed ONIE                                                           |
+   |                                                                            |
+   |                                                                            |
+   |                                                                            |
+   |                                                                            |
+   |                                                                            |
+   |                                                                            |
+   |                                                                            |
+   +----------------------------------------------------------------------------+
+
+        Use the ^ and v keys to select which entry is highlighted.
+        Press enter to boot the selected OS, `e' to edit the commands
+        before booting or `c' for a command-line.
+
+In the GRUB prompt, type the command to boot desired target. Take ``onie_rescue`` as
+an example::
+
+                       GNU GRUB  version 2.02~beta2+e4a1fe391
+
+     Minimal BASH-like line editing is supported. For the first word, TAB
+     lists possible command completions. Anywhere else TAB lists possible
+     device or file completions. ESC at any time exits.
+
+
+  grub> onie_rescue

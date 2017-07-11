@@ -1,14 +1,15 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
-*******************
-PowerPC Boot Loader
-*******************
+******************
+U-Boot Boot Loader
+******************
 
-On PowerPC platforms, U-Boot provides the startup environment for
-loading and running the ONIE kernel and the network operation system
-(NOS) kernel.
+On U-Boot platforms, the `U-Boot boot loader
+<http://www.denx.de/wiki/U-Boot>`_ provides the startup environment
+for loading and running the ONIE kernel and the network operation
+system (NOS) kernel.
 
 ONIE uses U-Boot for basic services and builds on top of it.
 
@@ -243,7 +244,7 @@ An example implementation looks like:
 Platform-Independent U-Boot Features
 ====================================
 
-ONIE-powerpc relies on two fundamental features of U-Boot:
+ONIE on U-Boot platforms relies on two fundamental features of U-Boot:
 
 * Reading and writing the NOR boot flash.
 * Reading and writing U-Boot environment variables.

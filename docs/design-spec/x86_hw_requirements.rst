@@ -22,9 +22,11 @@ Mass storage 4GB(min), 16GB (rec)     GRUB, the ONIE kernel and the
                                       4GB is the minimum size of this
                                       flash, 16GB is the recommended
                                       size.
-Non-volatile board information        An EEPROM to store board information and
-                                      manufacturing data, like the device
-                                      serial number and network MAC address.
+Non-volatile board information        An EEPROM (or NOR / NAND flash) to store
+                                      board information and
+                                      manufacturing data, like the
+                                      device serial number and network
+                                      MAC address.
 Ethernet management port              Required to download an operating system
                                       installer.
 ====================================  =========================================

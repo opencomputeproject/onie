@@ -1,5 +1,7 @@
 .. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
+   Copyright (C) 2014,2015 Matt Peterson <matt@cumulusnetworks.com>
+   Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
 .. _switch_hw_requirements:
@@ -14,14 +16,18 @@ additional hardware requirements.
 .. note::
   ONIE has no specific CPU architecture requirements -- it is Linux.
 
-  Currently ONIE supports x86 and PowerPC CPU architectures.
+  Currently ONIE supports x86, PowerPC 32/64-bit and ARM 32/64-bit CPU
+  architectures.
 
-This section lists the switch hardware requirements for an ONIE-compatible 
-switching platform.
+PowerPC and ARM CPU architectures both utilize the U-Boot boot loader
+and are called "U-Boot Platforms" throughout this specification.
+
+This section lists the switch hardware requirements for an
+ONIE-compatible switching platform.
 
 For CPU architecture specific details see these sections:
 
-- :ref:`powerpc_hw_requirements`
+- :ref:`uboot_hw_requirements`
 
 - :ref:`x86_hw_requirements`
 
@@ -30,11 +36,21 @@ For CPU architecture specific details see these sections:
 Board EEPROM Information Format
 ===============================
 
-Each ONIE system must include an EEPROM which contains various system parameters
-assigned by the manufacturer.  This EEPROM includes information such as the MAC
-address(es) allocated to the system, the serial number, the date of
-manufacturer, etc.  The name of the EEPROM format specified here is ``TlvInfo``,
-because the information contained in the EEPROM is found in TLVs, or **T**\ ype
+Each ONIE system must include non-volatile storage which contains
+vital product data assigned by the manufacturer.  The non-volatile
+storage could take the form of an EEPROM, a NOR-flash sector, a
+NAND-flash sector or any other non-volatile storage medium.
+
+.. note::
+
+  In this document the term ``EEPROM`` is used to refer to the
+  non-volatile storage medium, but it could be any non-volatile
+  storage.
+
+This EEPROM includes information such as the MAC address(es) allocated
+to the system, the serial number, the date of manufacturer, etc.  The
+name of the EEPROM format specified here is ``TlvInfo``, because the
+information contained in the EEPROM is found in TLVs, or **T**\ ype
 **L**\ ength and **V**\ alue fields.
 
 Definition of the TlvInfo EEPROM Format
@@ -215,6 +231,15 @@ codes is handled by the `ONIE Project <http://www.onie.org/>`_.
 
 .. _fru_labeling:
 
+Serial Console Default Baud Rate
+================================
+
+The default serial console baud rate is 115200.  The end customer is
+free to change this if necessary.
+
+Out of the factory the default serial console baud rate is expected to
+be 115200.
+
 Hardware Face Plate and FRU Numbering
 =====================================
 
@@ -269,15 +294,33 @@ Asset Tracking and Labeling
 The ONIE project recommends the following regarding asset tracking
 labels:
 
-* Human and machine readable barcodes that represent the eth0 base MAC
-  address, serial number, product identification and CPU ID.
+* Human and machine readable barcodes that represent the first usable
+  Ethernet management port (usually eth0) MAC address, system serial
+  number, product family or SKU identification and CPU ID.  Acceptable
+  barcode encoding MUST be: Code 38, Code 128, or QR Code as ASCII
+  text. Such encoding between human and machine-readable should be
+  consistent (for example, a serial number printed as ASCII but
+  encoded as HEX is not acceptable).
 
-* For racked environments these labels should be place on the sides of
-  the switch, **not** on the top or bottom of the switch.
+* For products that will be offered in a 2 or 4 post rack environment,
+  these labels SHOULD be available on the rear or front-panel faces of
+  the switches, not on the top, bottom, or sides of the switch – as to
+  make them readable once racked.  A perfect example would be the
+  “luggage tag” that many server vendors currently use.
 
-* On platforms that support `dmidecode
-  <http://www.nongnu.org/dmidecode/>`_, the stickers should encode the
-  data in the same format as the SMBIOS/DMI standard.
+* Wherever the asset locators are placed on the device there needs to
+  be enough space for an end user to place their own asset locators.
+  An ideal area is a “luggage tag” with enough space for an end user’s
+  asset locator. Such tags that are mounted in a recessed position
+  must have at least 3mm clearance for ease of tag insert or removal,
+  tags MUST NOT recess flush into a switch chassis.
+
+* On platforms that support the SMBIOS/DMI standard, `dmidecode
+  <http://www.nongnu.org/dmidecode/>`_, the serial number and product
+  family / SKU identifier information must be encoded to match
+  human-readable labels. For example, the encoding of the serial
+  number (SMBIOS type 1, offset 07h) field MUST NOT be null or fake
+  (123456789).
 
 Following these recommendations will improve the operational
 experience of the end customer.

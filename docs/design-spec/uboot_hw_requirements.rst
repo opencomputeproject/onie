@@ -1,17 +1,17 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
-.. _powerpc_hw_requirements:
+.. _uboot_hw_requirements:
 
-*****************************
-PowerPC Hardware Requirements
-*****************************
+****************************
+U-Boot Platform Requirements
+****************************
 
 For general switch hardware requirements see the
 :ref:`switch_hw_requirements` section.
 
-The hardware requirements for the PowerPC CPU architecture are:
+The hardware requirements for U-Boot platforms are:
 
 ====================================  =========================================
 Required Hardware                     Purpose

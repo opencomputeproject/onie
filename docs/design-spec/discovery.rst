@@ -1,6 +1,9 @@
-.. Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-   Copyright (C) 2013-2014 Pete Bratach <pete@cumulusnetworks.com>
+.. Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
+   Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
+   Copyright (C) 2013,2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
+
+.. _image_discovery:
 
 *****************************
 Image Discovery and Execution
@@ -18,6 +21,7 @@ For identifying the running platform. ONIE uses the following definitions:
 
 - arch -- The CPU architecture.  The currently supported architectures are:
 
+  - arm
   - powerpc
   - x86_64
 
@@ -28,6 +32,21 @@ For identifying the running platform. ONIE uses the following definitions:
 
 - platform -- A string of the form ``<ARCH>-<MACHINE>-<MACHINE-REVISION>``
 
+- switch-silicon-vendor -- A string of one of the following, used to
+  track ASIC silicon vendor:
+
+==============  ======
+Silicon Vendor  String
+==============  ======
+Broadcom        bcm
+Cavium          cavium
+Centec          centec
+Marvell         mvl
+Mellanox        mlnx
+Nephos          nephos
+Qemu            qemu
+==============  ======
+  
 .. note:: The above definitions place some restrictions on the valid
           characters allowed for the <ARCH>, <VENDOR> and <MODEL>
           strings.
@@ -100,6 +119,7 @@ The default installer file names are searched for in the following order:
 #. ``onie-installer-<arch>-<vendor>_<machine>-r<machine_revision>``
 #. ``onie-installer-<arch>-<vendor>_<machine>``
 #. ``onie-installer-<vendor>_<machine>``
+#. ``onie-installer-<cpu_arch>-<switch_silicon_vendor>``
 #. ``onie-installer-<arch>``
 #. ``onie-installer``
 
@@ -109,9 +129,16 @@ would be::
   onie-installer-x86_64-VENDOR_MACHINE-r0
   onie-installer-x86_64-VENDOR_MACHINE
   onie-installer-VENDOR_MACHINE
+  onie-installer-x86_64-SWITCH_SILICON_VENDOR
   onie-installer-x86_64
   onie-installer
 
+.. note::
+
+  ONIE 2016.05 introduced
+  ``onie-installer-<cpu_arch>-<switch_silicon_vendor>``.  All previous
+  versions will not include this naming item.
+     
 .. note:: In the case of ONIE *self-update mode*, the file name prefix is
           ``onie-updater`` instead of ``onie-installer``.
 
@@ -139,8 +166,35 @@ See :ref:`default_file_name` for more information on the default file names.
 This method is intended for the case where the NOS installer is
 available on a USB memory stick plugged into the front panel.
 
-The supported Linux file system types for the local storage are
-``vfat`` (common on commercially availabe USB sticks) and ``ext2``.
+Two file system types are supported, the popular ``vFAT`` partition type
+(common on commercially availabe USB sticks) and Linux's ``ext2``.
+
+.. note::
+
+  OSX's Disk Utility by default will write out an unsupported partition type.
+  Please use the ``diskutil`` command line tool for formatting::
+
+    # Find USB drive
+     
+    % diskutil list
+    /dev/disk2
+       #:                       TYPE NAME                    SIZE       IDENTIFIER
+       0:     FDisk_partition_scheme                        *8.1 GB     disk2
+       1:               Windows_NTFS ONIE                    8.1 GB     disk2s1
+     
+    # Write out correctly label (wipes all data on drive)
+     
+    % sudo diskutil eraseDisk FAT32 ONIE MBRFormat /dev/disk2
+    Started erase on disk2
+    Unmounting disk
+    Creating the partition map
+    Waiting for the disks to reappear
+    Formatting disk2s1 as MS-DOS (FAT32) with name ONIE
+    512 bytes per physical sector
+    /dev/rdisk2s1: 15697944 sectors in 1962243 FAT32 clusters (4096 bytes/cluster)
+    bps=512 spc=8 res=32 nft=2 mid=0xf8 spt=32 hds=255 hid=2 drv=0x80 bsec=15728638 bspf=15331 rdcl=2 infs=1 bkbs=6
+    Mounting disk
+    Finished erase on disk2
 
 The general algorithm for locating the installer on local storage
 proceeds as follows::
@@ -159,8 +213,8 @@ proceeds as follows::
 
 .. _onie_eth_mgmt_config:
 
-Ethernet Management Console Port Configuration
-----------------------------------------------
+Ethernet Management Port Configuration
+--------------------------------------
 
 In order to perform network based image discovery the Ethernet
 management console must first be configured.  The following
@@ -169,7 +223,7 @@ configuration methods are tried in order:
 #. Static configuration -- Set via the ``ip`` kernel command line argument
 #. DHCPv6 -- Planned, but not yet implemented
 #. DHCPv4
-#. Fall back IPv4 address
+#. Link Local IPv4 address (see `RFC-3927 <https://tools.ietf.org/html/rfc3927>`_)
 
 The static configuration uses the ``ip`` `Linux kernel command line
 argument
@@ -318,7 +372,6 @@ express the **exact** URL of the NOS installer.  When interpreting URLs,
 ONIE accepts the following URI schemes:
 
 - \http://server/path/....
-- \https://server/path/....
 - \ftp://server/path/....
 - \tftp://server/path/....
 
@@ -347,10 +400,10 @@ services.  The application department wants to move quickly and
 prototype their new solution as soon as possible.  In this case,
 waiting for the IT department to make DHCP server changes takes too much time.
 
-To allow for flexibility in the administration of the DHCP server, ONIE
-can find an installer using partial DHCP information.  ONIE uses a
-default sequence of URL paths and default file names in conjunction
-with partial DHCP information to find an installer.
+To allow for flexibility in the administration of the DHCP server,
+ONIE can find an installer using partial DHCP information.  ONIE uses
+a default sequence of URL paths and default installer file names in
+conjunction with partial DHCP information to find an installer.
 
 See :ref:`default_file_name` for more information on the default file
 names and search order.
@@ -363,10 +416,21 @@ conjunction with the default file names:
   :widths: 1, 1, 3
   :delim: |
 
-  67 | TFTP Bootfile | Contents of bootfile [#bootfile_url]_
-  72 | HTTP Server IP | \http://$http_server_ip/${onie_default_installer_names}
-  66 | TFTP Server IP | \http://$tftp_server_ip/${onie_default_installer_names}
-  66 | DHCP Server IP | \http://$dhcp_server_ip/${onie_default_installer_names}
+  67  | TFTP Bootfile | Contents of bootfile [#bootfile_url]_
+  72  | HTTP Server IP | \http://$http_server_ip/${onie_default_installer_names}
+  150 | TFTP Server IP | \http://$tftp_server_ip/${onie_default_installer_names}
+  54  | DHCP Server IP | \http://$dhcp_server_ip/${onie_default_installer_names}
+
+Default ONIE image server name ``onie-server``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If the default ONIE server name ``onie-server`` is resolvable by DNS
+it is included in the search for the default installer file names for
+both ``http`` and ``tftp`` protocols.  The following URLs are
+attempted::
+
+  http://onie-server/${onie_default_installer_names}
+  tftp://onie-server/${onie_default_installer_names}
 
 TFTP Waterfall
 ^^^^^^^^^^^^^^
