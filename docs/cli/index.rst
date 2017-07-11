@@ -324,6 +324,8 @@ For the ``-o`` option the available ONIE mode settings are:
 - embed	    -- ONIE self update mode and embed ONIE
 - none	    -- Use system default boot mode
 
+.. _cli_onie_fwpkg:
+
 ``onie-fwpkg``
 --------------
 
