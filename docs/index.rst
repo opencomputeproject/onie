@@ -8,7 +8,7 @@ Open Network Install Environment Documentation
 
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :titlesonly:
 
    overview/index
@@ -16,9 +16,8 @@ Open Network Install Environment Documentation
    design-spec/index
    testing-certification/index
    developers/index
-   release/index
    glossary/index
    cli/index
    faq/index
 
-This documentation is current for version |release| as of |version|.
+*Documentation updated* |version|

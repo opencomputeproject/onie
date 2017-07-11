@@ -28,13 +28,17 @@ Source Code Release Cycle
 - While this merge window is open, new features can be added to the
   ONIE source tree.
 
-- After the merge window closes, no new features may be added.  This
-  allows for a release candidate phase which is intended to fix bugs
-  and regressions.  During this stabilization period, only patches
-  that contain bug fixes get applied.
+- After the merge window closes, no new features may be added.
 
-- After the merge window, the release cycle allows for about 4 weeks
-  of testing before generating the next release.
+- After the merge window closes, new hardware platforms may be added
+  that do not change the core ONIE code.
+        
+- This allows for a release candidate phase which is intended to fix
+  bugs and regressions.  During this stabilization period, only
+  patches that contain bug fixes get applied.
+
+- After the merge window closes, the release cycle allows for about 4
+  weeks of testing before generating the next release.
 
 .. note:: While we try to adhere to the release schedule, we will not
    hesitate to delay a release for good reasons.  The code will be
@@ -58,9 +62,9 @@ Examples:
   :header: "Version", "Comments"
   :delim: |
 
-  ONIE v2013.11-rc1 | Release candidate 1 for November 2013
-  ONIE v2013.11     | Stable Release for November 2013
-  ONIE v2013.11.01  | Bug fix release 01 for November 2013
+  ONIE 2015.11-rc1 | Release candidate 1 for November 2015
+  ONIE 2015.11     | Stable Release for November 2015
+  ONIE 2015.11.01  | Bug fix release 01 for November 2015
 
 Future Releases
 ---------------
@@ -72,6 +76,7 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  v2014.11 | Wed, Oct 15, 2014 | Wed, Nov 12, 2014
-  v2015.02 | Wed, Jan 14, 2015 | Wed, Feb 11, 2015
-  v2015.05 | Wed, Apr 15, 2015 | Wed, May 13, 2015
+  2017.08 | Wed, Jul 19, 2017 | Wed, Aug 16, 2017
+  2017.11 | Wed, Oct 18, 2017 | Wed, Nov 15, 2017
+  2018.02 | Wed, Jan 17, 2018 | Wed, Feb 14, 2018
+  2018.05 | Wed, Apr 18, 2018 | Wed, May 16, 2018
