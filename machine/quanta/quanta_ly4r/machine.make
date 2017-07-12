@@ -52,11 +52,11 @@ UEFI_ENABLE = yes
 PXE_EFI64_ENABLE = yes
 
 # Set the desired kernel version.
-LINUX_VERSION		= 3.14
-LINUX_MINOR_VERSION	= 27
+LINUX_VERSION		= 4.9
+LINUX_MINOR_VERSION	= 35
 
-# Older GCC required for older 3.14.27 kernel
-GCC_VERSION = 4.9.4
+# Use gcc-6.3.0
+GCC_VERSION = 6.3.0
 
 #
 # Console parameters can be defined here (default values are in
