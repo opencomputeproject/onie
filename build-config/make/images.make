@@ -304,7 +304,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 # This step creates the cpio archive and compresses it
 $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for bootstrap ===="
-	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR) $(SYSROOT_CPIO)
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SYSROOTDIR) $(SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(SYSROOT_CPIO) > $@
 
 $(UPDATER_INITRD) : $(SYSROOT_CPIO_XZ)
@@ -418,7 +418,7 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) mkdir -p $(RECOVERY_DIR)
 	$(Q) cp -a $(SYSROOTDIR) $(RECOVERY_SYSROOT)
 	$(Q) cp $(UPDATER_IMAGE) $(RECOVERY_SYSROOT)/lib/onie/onie-updater
-	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(RECOVERY_CPIO) > $(RECOVERY_INITRD)
 	$(Q) touch $@
 
@@ -464,6 +464,7 @@ $(PXE_EFI64_STAMP): $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
 $(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE) $(MACHINE_IMAGE_COMPLETE_STAMP)
+	$(Q) echo "Created: $(UPDATER_IMAGE)"
 	$(Q) touch $@
 
 MACHINE_CLEAN += image-clean
