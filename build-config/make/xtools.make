@@ -45,32 +45,38 @@ PHONY += xtools xtools-prep xtools-download xtools-config \
 CT_NG_COMPONENTS =	\
 	autoconf-2.69.tar.xz		\
 	automake-1.15.tar.xz		\
-	binutils-2.28.tar.bz2		\
 	duma_2_5_15.tar.gz		\
-	expat-2.2.0.tar.bz2		\
-	gdb-7.12.1.tar.xz		\
 	gettext-0.19.8.1.tar.xz		\
-	gmp-6.1.2.tar.xz		\
 	libelf-0.8.13.tar.gz		\
 	libiconv-1.15.tar.gz		\
 	libtool-2.4.6.tar.xz		\
 	ltrace_0.7.3.orig.tar.bz2	\
 	m4-1.4.18.tar.xz		\
 	make-4.2.1.tar.bz2		\
-	mpc-1.0.3.tar.gz		\
-	mpfr-3.1.5.tar.xz		\
-	ncurses-6.0.tar.gz		\
-	strace-4.16.tar.xz
+	ncurses-6.0.tar.gz
 
 ifeq ($(GCC_VERSION),6.3.0)
 CT_NG_COMPONENTS +=	\
 	gcc-6.3.0.tar.bz2		\
-	isl-0.16.1.tar.xz
-else ifeq ($(GCC_VERSION),4.9.4)
+	binutils-2.28.tar.bz2		\
+	gdb-7.12.1.tar.xz		\
+	gmp-6.1.2.tar.xz		\
+	mpfr-3.1.5.tar.xz		\
+	isl-0.16.1.tar.xz		\
+	mpc-1.0.3.tar.gz		\
+	expat-2.2.0.tar.bz2		\
+	strace-4.16.tar.xz
+else ifeq ($(GCC_VERSION),4.9.2)
 CT_NG_COMPONENTS +=	\
-	cloog-0.18.4.tar.gz		\
-	gcc-4.9.4.tar.bz2		\
-	isl-0.15.tar.xz
+	gcc-4.9.2.tar.bz2		\
+	binutils-2.24.tar.bz2		\
+	gdb-7.11.1.tar.xz		\
+	gmp-6.0.0a.tar.xz		\
+	mpfr-3.1.2.tar.xz		\
+	isl-0.12.2.tar.bz2		\
+	mpc-1.0.2.tar.gz		\
+	expat-2.1.1.tar.bz2		\
+	strace-4.9.tar.xz
 else
   $(error CT_NG_COMPONENTS download: Unsupported GCC version: $(GCC_VERSION))
 endif
