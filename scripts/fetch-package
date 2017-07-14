@@ -1,0 +1,84 @@
+#!/bin/sh
+
+#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Download files if the destination does not already exist.
+# Try a list of base URLs
+
+usage() {
+    cat <<EOF
+$0: Usage
+$0 <download dir> <SHA1 dir> <base file name> <URL1> [[URL2] .. [URLx]]
+
+Download file into download directory using the list of base URLs.
+For example the following URL is attempted:
+
+   \$URL1/\$base_file_name
+
+The <SHA1 dir> contains <base file name>.sha1, which is verified
+after downloading.
+EOF
+}
+
+OUTDIR=$1
+SHA1DIR=$2
+FILE=$3
+
+shift 3
+
+[ -d "$OUTDIR" ] || {
+    echo "Error: Downoad directory does not exist: $OUTDIR"
+    usage
+    exit 1
+}
+
+[ -d "$SHA1DIR" ] || {
+    echo "Error: SHA1 directory does not exist: $SHA1DIR"
+    usage
+    exit 1
+}
+
+[ -n "$FILE" ] || {
+    echo "Error: Base file name not specified"
+    usage
+    exit 1
+}
+
+[ $# -ge 1 ] || {
+    echo "Error: URL list not specified"
+    usage
+    exit 1
+}
+
+if [ -r "${OUTDIR}/${FILE}" ] ; then
+    echo "Using cached ${OUTDIR}/${FILE}"
+else
+    download=no
+    while [ $# -ge 1 ] ; do
+        URL="$1/$FILE"
+        wget --no-verbose --no-check-certificate -O "${OUTDIR}/${FILE}" $URL
+        if [ $? -eq 0 ] ; then
+            # stop
+            download=yes
+            break
+        else
+            rm -f "${OUTDIR}/${FILE}"
+        fi
+        shift
+    done
+    if [ "$download" != "yes" ] ; then
+        echo "ERROR:  Unable to download $FILE"
+        exit 1
+    fi
+fi
+
+# Verify SHA1
+cd $OUTDIR && sha1sum -c ${SHA1DIR}/${FILE}.sha1 || {
+    echo "ERROR: Unable to verify sha1 for ${FILE}"
+    exit 1
+}
+
+exit 0
