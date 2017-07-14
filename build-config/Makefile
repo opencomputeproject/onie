@@ -70,7 +70,6 @@
 #   │        └── zlib
 #   ├── download
 #   ├── x-tools
-#   ├── docs
 #   └── images
 #
 #<
@@ -188,7 +187,7 @@ KNOWN_ASIC_VENDORS = \
   qemu
 
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter onie-release-tag help distclean %build-host doc% %html, $(MAKECMDGOALS)))
+  ifeq (,$(filter onie-release-tag help distclean %build-host, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINEDIR)')
       $(warning You must set the MACHINE= variable when invoking make.)
@@ -405,7 +404,6 @@ ifeq ($(IPMITOOL_ENABLE),yes)
 endif
 include make/images.make
 include make/demo.make
-include make/docs.make
 
 # By default do not enable building firmware updates
 FIRMWARE_UPDATE_ENABLE ?= no
@@ -462,9 +460,6 @@ distclean: download-clean $(DIST_CLEAN)
 		echo " done ===" ; done
 	$(Q) rm -f $(PROJECT_STAMP)
 	$(Q) echo "=== Finished making $@ ==="
-
-PHONY += docs
-docs: html
 
 PHONY += onie-release-tag
 onie-release-tag:
