@@ -117,6 +117,7 @@ $(GRUB_CONFIGURE_I386_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) | $(DEV_SY
 	$(Q) echo "====  Configure grub-i386-pc-$(GRUB_VERSION) ===="
 	$(Q) mkdir -p $(GRUB_I386_DIR)
 	$(Q) cd $(GRUB_I386_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		grub_build_mkfont_excuse="explicitly disabled"	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
 		--host=$(TARGET)				\
 		--with-platform=pc				\
@@ -131,6 +132,7 @@ $(GRUB_CONFIGURE_UEFI_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) | $(DEV_SY
 	$(Q) echo "====  Configure grub-$(ARCH)-efi-$(GRUB_VERSION) ===="
 	$(Q) mkdir -p $(GRUB_UEFI_DIR)
 	$(Q) cd $(GRUB_UEFI_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		grub_build_mkfont_excuse="explicitly disabled"	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
 		--host=$(TARGET)				\
 		--with-platform=efi				\
@@ -284,6 +286,7 @@ $(GRUB_HOST_CONFIGURE_I386_STAMP): $(GRUB_PATCH_STAMP)
 	$(Q) echo "====  Configure grub-host-i386-pc-$(GRUB_VERSION) ===="
 	$(Q) mkdir -p $(GRUB_HOST_I386_DIR)
 	$(Q) cd $(GRUB_HOST_I386_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		grub_build_mkfont_excuse="explicitly disabled"	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
 		--with-platform=pc
 	$(Q) touch $@
@@ -293,6 +296,7 @@ $(GRUB_HOST_CONFIGURE_UEFI_STAMP): $(GRUB_PATCH_STAMP)
 	$(Q) echo "====  Configure grub-host-x86_64-efi-$(GRUB_VERSION) ===="
 	$(Q) mkdir -p $(GRUB_HOST_UEFI_DIR)
 	$(Q) cd $(GRUB_HOST_UEFI_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		grub_build_mkfont_excuse="explicitly disabled"	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
 		--with-platform=efi
 	$(Q) touch $@
