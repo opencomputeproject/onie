@@ -20,7 +20,7 @@ LINUX_RELEASE		= fsl-sdk-v1.5
 LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
 
 # Older GCC required for older fsl-sdk-v1.5 kernel
-GCC_VERSION = 4.9.4
+GCC_VERSION = 4.9.2
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers

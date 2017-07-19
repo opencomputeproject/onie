@@ -1,1 +1,0 @@
-../init.d/mount-devtmpfs.sh

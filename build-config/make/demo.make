@@ -80,7 +80,7 @@ $(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_CPIO_XZ)
 # This step creates the cpio archive and compresses it
 $(DEMO_SYSROOT_CPIO_XZ) : $(DEMO_SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for demo OS ===="
-	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(DEMO_SYSROOTDIR) $(DEMO_SYSROOT_CPIO)
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(DEMO_SYSROOTDIR) $(DEMO_SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(DEMO_SYSROOT_CPIO) > $@
 
 $(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)

@@ -28,7 +28,7 @@ LINUX_RELEASE		= fsl-sdk-v1.5
 LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
 
 # Older GCC required for older fsl-sdk-v1.5 kernel
-GCC_VERSION = 4.9.4
+GCC_VERSION = 4.9.2
 
 UBOOT_MACHINE = AS5710_54X
 KERNEL_DTB = as5710_54x.dtb

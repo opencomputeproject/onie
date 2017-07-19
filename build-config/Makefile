@@ -133,7 +133,6 @@ SCRIPTDIR    = $(realpath ./scripts)
 PROJECTDIR	=  $(abspath ..)
 BUILDDIR	=  $(abspath ../build)
 IMAGEDIR	=  $(BUILDDIR)/images
-TESTDIR		=  $(PROJECTDIR)/test
 DOWNLOADDIR	?= $(BUILDDIR)/download
 export DOWNLOADDIR
 
@@ -480,25 +479,12 @@ DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
 				  realpath gawk libncurses5 libncurses5-dev bc \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
-				  libexpat1-dev fakeroot
+				  libexpat1-dev fakeroot python-sphinx rst2pdf
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update
 	$(Q) sudo apt-get install -y $(DEBIAN_BUILD_HOST_PACKAGES)
-
-PHONY += test-onie
-SITE_CONFIG ?= $(TESTDIR)/site.conf
-DUT_NAME    ?= onie-test-01
-DUT_LOG_DIR ?= /tmp/$(DUT_NAME)
-DUT_LOG     = $(DUT_LOG_DIR)/test-onie-$$(date +%s).log
-
-test-onie:
-	$(Q) mkdir -p $(DUT_LOG_DIR)
-	$(Q) $(TESTDIR)/bin/test-onie.py \
-		--machine-dir=$(MACHINEDIR) --site-config=$(SITE_CONFIG) \
-		--dut-name=$(DUT_NAME) --log-level=INFO \
-		--console-log=$(DUT_LOG)
 
 PHONY += ldd
 

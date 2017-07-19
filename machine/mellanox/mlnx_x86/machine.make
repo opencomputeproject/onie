@@ -37,7 +37,7 @@ LINUX_MINOR_VERSION = 0-54.0.1.el7.x86_64
 LINUX_TARBALL = linux-3.10.0-54.0.1.el7.x86_64.tar.xz
 
 # Older GCC required for older 3.10 kernel
-GCC_VERSION = 4.9.4
+GCC_VERSION = 4.9.2
 
 MELLANOX_PXE_UPDATER_STAMP   = $(STAMPDIR)/mellanox-pxe-updater-stamp
 MELLANOX_NETBOOT_PXE_UPDATER = $(IMAGEDIR)/mellanox_net_boot_label.sh

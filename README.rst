@@ -6,7 +6,7 @@ ONIE is a small operating system, pre-installed on bare
 metal network switches, that provides an environment for automated
 provisioning.
 
-Visit the `ONIE Wiki <https://github.com/opencomputeproject/onie/wiki>`_ for more info.
+Read the `ONIE Documentation <https://opencomputeproject.github.io/onie>`_ for more info.
 
 ******************************
 Mailing List and Collaboration
