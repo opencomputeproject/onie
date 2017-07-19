@@ -1,0 +1,713 @@
+diff --git a/arch/powerpc/boot/dts/ne10x2.dts b/arch/powerpc/boot/dts/ne10x2.dts
+new file mode 100644
+index 0000000..26db3d1
+--- /dev/null
++++ b/arch/powerpc/boot/dts/ne10x2.dts
+@@ -0,0 +1,135 @@
++/*
++ * Lenovo Ne10x2(T) Device Tree Source
++ *
++ */
++
++/include/ "ne10x2.dtsi"
++
++/ {
++	model = "Lenovo,NE10X2";
++	compatible = "Lenovo,NE10X2";
++	#address-cells = <2>;
++	#size-cells = <2>;
++	interrupt-parent = <&mpic>;
++
++	chosen {
++	    name = "chosen";
++
++	    dpaa-extended-args {
++		fman1-extd-args {
++		    cell-index = <0>;
++		    compatible = "fsl,fman-extended-args";
++		    fman1_rx3-extd-args {
++			cell-index = <3>;
++			compatible = "fsl,fman-port-1g-rx-extended-args";
++			ar-tables-sizes = <10 10 10 10 10 10 20 2000>;
++			ar-filters-sizes = <10 20 20>;
++		    };
++		};
++	    };
++	};
++
++	soc: soc@ffe000000 {
++		ranges = <0x00000000 0xf 0xfe000000 0x1000000>;
++		reg = <0xf 0xfe000000 0 0x00001000>;
++
++	        qman: qman@318000 {
++	        };
++	        bman: bman@31a000 {
++	        };
++
++		fman0: fman@400000 {
++			sleep = <&rcpm 0x00000008>;
++			enet0: ethernet@e8000 {
++				phy-handle = <&phy0>;
++				phy-connection-type = "sgmii";
++				sleep = <&rcpm 0x08000000>;
++			};
++			mdio0: mdio@fc000 {
++				phy0: ethernet-phy@01 {
++					reg = <0x01>;
++                                };
++			};
++		};
++
++	};
++
++	/* bp dts definition is borrowed from other USDPAA dts */
++	bp6: buffer-pool@6 {
++		compatible = "fsl,t1040-bpool", "fsl,bpool";
++		fsl,bpid = <6>;
++		fsl,bpool-ethernet-cfg = <0 0 0 1728 0 0xfeedabba>;
++		fsl,bpool-thresholds = <0x100 0x300 0x0 0x0>;
++	};
++
++	fsl,dpaa {
++		compatible = "fsl,t1040-dpaa", "fsl,dpaa";
++		ethernet@0 {
++			compatible = "fsl,t1040-dpa-ethernet", "fsl,dpa-ethernet";
++			fsl,fman-mac = <&enet0>;
++		};
++		/* enable one offline port */
++		dpa-fman0-oh@2 {
++			compatible = "fsl,dpa-oh";
++			/* Define frame queues for the OH port*/
++			/* <OH Rx error, OH Rx default> */
++			fsl,qman-frame-queues-oh = <0x68 1 0x69 1>;
++			fsl,bman-buffer-pools = <&bp6>;
++			fsl,qman-frame-queues-tx = <0x90 8>;
++			fsl,fman-oh-port = <&fman0_oh2>;
++		};
++	};
++
++	qe: qe@ffe139999 {
++		ranges = <0x0 0xf 0xfe140000 0x40000>;
++		reg = <0xf 0xfe140000 0 0x480>;
++		brg-frequency = <0>;
++		bus-frequency = <0>;
++
++		si1: si@700 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			compatible = "fsl,qe-si";
++			reg = <0x700 0x80>;
++		};
++
++		siram1: siram@1000 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "fsl,qe-siram";
++			reg = <0x1000 0x800>;
++		};
++
++		tdma: ucc@2000 {
++			compatible = "fsl,ucc-tdm";
++			rx-clock-name = "clk8";
++			tx-clock-name = "clk9";
++			fsl,rx-sync-clock = "rsync_pin";
++			fsl,tx-sync-clock = "tsync_pin";
++			fsl,tx-timeslot = <0xfffffffe>;
++			fsl,rx-timeslot = <0xfffffffe>;
++			fsl,tdm-framer-type = "e1";
++			fsl,tdm-mode = "normal";
++			fsl,tdm-id = <0>;
++			fsl,siram-entry-id = <0>;
++		};
++
++		ucc@2200 {
++			compatible = "fsl,ucc_hdlc";
++			rx-clock-name = "clk10";
++			tx-clock-name = "clk11";
++			fsl,rx-sync-clock = "rsync_pin";
++			fsl,tx-sync-clock = "tsync_pin";
++			fsl,tx-timeslot = <0xfffffffe>;
++			fsl,rx-timeslot = <0xfffffffe>;
++			fsl,tdm-framer-type = "e1";
++			fsl,tdm-mode = "normal";
++			fsl,tdm-id = <1>;
++			fsl,siram-entry-id = <2>;
++			fsl,tdm-interface;
++		};
++	};
++};
++/include/ "fsl/t1040si-post.dtsi"
++/include/ "fsl/qoriq-dpaa-res3.dtsi"
++
+diff --git a/arch/powerpc/boot/dts/ne10x2.dtsi b/arch/powerpc/boot/dts/ne10x2.dtsi
+new file mode 100644
+index 0000000..1974dc7
+--- /dev/null
++++ b/arch/powerpc/boot/dts/ne10x2.dtsi
+@@ -0,0 +1,268 @@
++/*
++ * Lenovo Ne10x2(T) Device Tree Source
++ *
++ */
++
++/dts-v1/;
++
++/include/ "fsl/e5500_power_isa.dtsi"
++
++/ {
++	compatible = "Lenovo,NE10X2";
++	#address-cells = <2>;
++	#size-cells = <2>;
++	interrupt-parent = <&mpic>;
++
++	aliases {
++		ccsr = &soc;
++		dcsr = &dcsr;
++
++		dma0 = &dma0;
++		dma1 = &dma1;
++		serial0 = &serial0;
++		serial1 = &serial1;
++		serial2 = &serial2;
++		serial3 = &serial3;
++		pci0 = &pci0;
++		pci1 = &pci1;
++		pci2 = &pci2;
++		pci3 = &pci3;
++		usb0 = &usb0;
++		usb1 = &usb1;
++		sdhc = &sdhc;
++
++		crypto = &crypto;
++		pme = &pme;
++		qman = &qman;
++		bman = &bman;
++		fman0 = &fman0;
++		ethernet0 = &enet0;
++	};
++
++	cpus {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		cpu0: PowerPC,e5500@0 {
++			device_type = "cpu";
++			reg = <0>;
++			clocks = <&mux0>;
++			next-level-cache = <&L2_1>;
++			L2_1: l2-cache {
++				next-level-cache = <&cpc>;
++			};
++		};
++		cpu1: PowerPC,e5500@1 {
++			device_type = "cpu";
++			reg = <1>;
++			clocks = <&mux1>;
++			next-level-cache = <&L2_2>;
++			L2_2: l2-cache {
++				next-level-cache = <&cpc>;
++			};
++		};
++		cpu2: PowerPC,e5500@2 {
++			device_type = "cpu";
++			reg = <2>;
++			clocks = <&mux2>;
++			next-level-cache = <&L2_3>;
++			L2_3: l2-cache {
++				next-level-cache = <&cpc>;
++			};
++		};
++		cpu3: PowerPC,e5500@3 {
++			device_type = "cpu";
++			reg = <3>;
++			clocks = <&mux3>;
++			next-level-cache = <&L2_4>;
++			L2_4: l2-cache {
++				next-level-cache = <&cpc>;
++			};
++		};
++	};
++	ifc: localbus@ffe124000 {
++		reg = <0xf 0xfe124000 0 0x2000>;
++		ranges = <0 0 0xf 0xef000000 0x01000000>;  /* Start at ef000000 */
++
++		nor@0,0 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			compatible = "cfi-flash";
++			reg = <0x0 0x0 0x01000000>;  /* 16MB flash */
++			bank-width = <2>;
++			device-width = <1>;
++
++			rcw@00000000 {
++				label = "rcw";
++				reg = <0x00000000 0x20000>; /* 128KB, 0xef000000 */
++			};
++			rsvd0@00020000 {
++				label = "rsvd0";
++				reg = <0x00020000 0x20000>; /* 128KB, 0xef020000 */
++			};
++			uboot-env@00040000 {
++				label = "uboot-env";
++				reg = <0x00040000 0x20000>; /* 128KB, 0xef040000 */
++				env_size = <0x2000>;
++			};
++			rsvd1@00060000 {
++				label = "rsvd1";
++				reg = <0x00060000 0x20000>; /* 128KB, 0xef060000 */
++			};
++			device-tree@00080000 {
++				label = "device-tree";
++				reg = <0x00080000 0x20000>; /* 128KB, 0xef080000 */
++			};
++			linux-kernel@000A0000 {
++				label = "linux-kernel";
++				reg = <0x000A0000 0x500000>; /* 5MB, 0xef0a0000 */
++			};
++			rfs@005A0000 {
++				label ="root filesystem";
++				reg = <0x005A0000 0x500000>; /* 5MB, 0xef5a0000 */
++			};
++			onie@00AA0000 {
++				label ="onie";
++				reg = <0x00AA0000 0x4A0000>; /* 4.6MB, 0xefaa0000 */
++			};
++			u-boot@00F40000 {
++				label = "uboot";
++				reg = <0x00F40000 0xC0000>; /* 768KB, 0xeff40000 */
++			};
++		};
++	};
++
++	memory {
++		device_type = "memory";
++	};
++
++	dcsr: dcsr@f00000000 {
++		ranges = <0x00000000 0xf 0x00000000 0x01072000>;
++	};
++
++	bportals: bman-portals@ff4000000 {
++		ranges = <0x0 0xf 0xf4000000 0x2000000>;
++	};
++
++	qportals: qman-portals@ff6000000 {
++		ranges = <0x0 0xf 0xf6000000 0x2000000>;
++	};
++
++	soc: soc@ffe000000 {
++		ranges = <0x00000000 0xf 0xfe000000 0x1000000>;
++		reg = <0xf 0xfe000000 0 0x00001000>;
++
++		i2c@118000 {
++			tmp75@4a {
++				compatible = "lm75,tmp75";
++				reg = <0x4a>;
++				label = "cpu_tmp75";
++			};
++
++			eeprom@50 {
++				compatible = "at24,24c02";
++				reg = <0x50>;
++				label = "cpu_eeprom";
++			};
++
++			rtc@6f {
++				compatible = "rtc-ds1307,mcp7941x";
++				reg = <0x6f>;
++				label = "rtc";
++			};
++		};
++		i2c@118100 {
++			eeprom@54 {
++				compatible = "at24,24c08";
++				reg = <0x54>;
++				label = "onie_eeprom";
++			};
++
++			cpld@5e {
++				compatible = "at24,24c02";
++				reg = <0x5e>;
++				label = "power_cpld";
++			};
++
++			pca9548@70 {
++				compatible = "philips,pca9548";
++				reg = <0x70>;
++				#address-cells = <1>;
++				#size-cells = <0>;
++				i2c@0 {
++					#address-cells = <0x1>;
++					#size-cells = <0x0>;
++					reg = <0x0>;
++					label = "mb_9548_1";
++
++					eeprom@51 {
++						compatible = "at24,24c128";
++						reg = <0x51>;
++						label = "fru_eeprom";
++					};
++				};
++			};
++		};
++	};
++
++	pci0: pcie@ffe240000 {
++		reg = <0xf 0xfe240000 0 0x10000>;
++		ranges = <0x02000000 0 0xe0000000 0xc 0x00000000 0x0 0x10000000
++			  0x01000000 0 0x00000000 0xf 0xf8000000 0x0 0x00010000>;
++		pcie@0 {
++			ranges = <0x02000000 0 0xe0000000
++				  0x02000000 0 0xe0000000
++				  0 0x10000000
++
++				  0x01000000 0 0x00000000
++				  0x01000000 0 0x00000000
++				  0 0x00010000>;
++		};
++	};
++
++	pci1: pcie@ffe250000 {
++		reg = <0xf 0xfe250000 0 0x10000>;
++		ranges = <0x02000000 0x0 0xe0000000 0xc 0x10000000 0x0 0x10000000
++			  0x01000000 0x0 0x00000000 0xf 0xf8010000 0x0 0x00010000>;
++		pcie@0 {
++			ranges = <0x02000000 0 0xe0000000
++				  0x02000000 0 0xe0000000
++				  0 0x10000000
++
++				  0x01000000 0 0x00000000
++				  0x01000000 0 0x00000000
++				  0 0x00010000>;
++		};
++	};
++
++	pci2: pcie@ffe260000 {
++		reg = <0xf 0xfe260000 0 0x10000>;
++		ranges = <0x02000000 0 0xe0000000 0xc 0x20000000 0 0x10000000
++			  0x01000000 0 0x00000000 0xf 0xf8020000 0 0x00010000>;
++		pcie@0 {
++			ranges = <0x02000000 0 0xe0000000
++				  0x02000000 0 0xe0000000
++				  0 0x10000000
++
++				  0x01000000 0 0x00000000
++				  0x01000000 0 0x00000000
++				  0 0x00010000>;
++		};
++	};
++
++	pci3: pcie@ffe270000 {
++		reg = <0xf 0xfe270000 0 0x10000>;
++		ranges = <0x02000000 0 0xe0000000 0xc 0x30000000 0 0x10000000
++			  0x01000000 0 0x00000000 0xf 0xf8030000 0 0x00010000>;
++		pcie@0 {
++			ranges = <0x02000000 0 0xe0000000
++				  0x02000000 0 0xe0000000
++				  0 0x10000000
++
++				  0x01000000 0 0x00000000
++				  0x01000000 0 0x00000000
++				  0 0x00010000>;
++		};
++	};
++};
++
+diff --git a/arch/powerpc/platforms/85xx/Kconfig b/arch/powerpc/platforms/85xx/Kconfig
+index 0bc51f8..09db6a3 100644
+--- a/arch/powerpc/platforms/85xx/Kconfig
++++ b/arch/powerpc/platforms/85xx/Kconfig
+@@ -288,6 +288,25 @@ config CORENET_GENERIC
+ 	  The following boards are supported for both 32bit and 64bit kernel:
+ 	    P5020 DS, P5040 DS, T104xQDS, T104xRDB, T102xQDS, T102xRDB
+ 
++
++config LENOVO_NE10X2
++	bool "Lenovo NE10X2"
++	select DEFAULT_UIMAGE
++	select E500
++	select PPC_E500MC
++	select PHYS_64BIT
++	select SWIOTLB
++	select ARCH_REQUIRE_GPIOLIB
++	select GPIO_MPC8XXX
++	select HAS_RAPIDIO
++	select PPC_EPAPR_HV_PIC
++	select HAS_FSL_QBMAN
++	select MDIO_BUS_MUX if FSL_DPAA_ETH
++	select MDIO_BUS_MUX_MMIOREG if FSL_DPAA_ETH
++	select MDIO_BUS_MUX_GPIO if FSL_DPAA_ETH
++	help
++		This option enables support for the Lenovo NE10X2 networking platforms.
++
+ endif # FSL_SOC_BOOKE
+ 
+ config TQM85xx
+diff --git a/arch/powerpc/platforms/85xx/Makefile b/arch/powerpc/platforms/85xx/Makefile
+index 46995da..1263ddb 100644
+--- a/arch/powerpc/platforms/85xx/Makefile
++++ b/arch/powerpc/platforms/85xx/Makefile
+@@ -33,3 +33,4 @@ obj-$(CONFIG_XES_MPC85xx) += xes_mpc85xx.o
+ obj-$(CONFIG_GE_IMP3A)	  += ge_imp3a.o
+ obj-$(CONFIG_PPC_QEMU_E500) += qemu_e500.o
+ obj-$(CONFIG_SGY_CTS1000) += sgy_cts1000.o
++obj-$(CONFIG_LENOVO_NE10X2) += lenovo_ne10x2.o
+diff --git a/arch/powerpc/platforms/85xx/lenovo_ne10x2.c b/arch/powerpc/platforms/85xx/lenovo_ne10x2.c
+new file mode 100644
+index 0000000..b43e724
+--- /dev/null
++++ b/arch/powerpc/platforms/85xx/lenovo_ne10x2.c
+@@ -0,0 +1,253 @@
++/*
++ * Lenovo NE10X2 platform setup
++ *
++ * Maintained by Mark Pearson, Pinaki Ranjan Sarker
++ *
++ * Copyright 2016 Lenovo
++ *
++ */
++
++#include <linux/kernel.h>
++#include <linux/pci.h>
++#include <linux/kdev_t.h>
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++
++#include <asm/time.h>
++#include <asm/machdep.h>
++#include <asm/pci-bridge.h>
++#include <asm/ppc-pci.h>
++#include <mm/mmu_decl.h>
++#include <asm/prom.h>
++#include <asm/udbg.h>
++#include <asm/mpic.h>
++#include <asm/ehv_pic.h>
++#include <linux/fsl/qe_ic.h>
++#include <linux/i2c.h>
++
++#include <linux/of_platform.h>
++#include <sysdev/fsl_soc.h>
++#include <sysdev/fsl_pci.h>
++#include <asm/mpc85xx.h>
++#include "smp.h"
++#include "mpc85xx.h"
++
++#include <linux/fsl_usdpaa.h>
++
++void __init lenovo_ne10x2_gen_pic_init(void)
++{
++	struct mpic *mpic;
++	u32 svr = mfspr(SPRN_SVR);
++	unsigned int flags = MPIC_BIG_ENDIAN | MPIC_SINGLE_DEST_CPU |
++		MPIC_NO_RESET;
++
++#ifdef CONFIG_QUICC_ENGINE
++	struct device_node *np;
++#endif
++	/*
++	 * The deep sleep does not wake consistently on T1040 and T1042 with
++	 * the external proxy facility mode of MPIC (MPIC_ENABLE_COREINT),
++	 * so use the mixed mode of MPIC. Set mpic_get_irq to ppc_md.get_irq
++	 * to enable the mixed mode of MPIC.
++	 */
++	if ((SVR_SOC_VER(svr) == SVR_T1040) ||
++		(SVR_SOC_VER(svr) == SVR_T1042)) {
++		/*ppc_md.get_irq = mpic_get_irq;*/
++	}
++
++	if (ppc_md.get_irq == mpic_get_coreint_irq)
++		flags |= MPIC_ENABLE_COREINT;
++
++	mpic = mpic_alloc(NULL, 0, flags, 0, 512, " OpenPIC  ");
++	BUG_ON(mpic == NULL);
++
++	mpic_init(mpic);
++
++#ifdef CONFIG_QUICC_ENGINE
++	np = of_find_compatible_node(NULL, NULL, "fsl,qe-ic");
++	if (np) {
++		qe_ic_init(np, 0, qe_ic_cascade_low_mpic,
++				qe_ic_cascade_high_mpic);
++		of_node_put(np);
++	}
++#endif
++}
++
++/*
++ * Setup the architecture
++ */
++void __init lenovo_ne10x2_gen_setup_arch(void)
++{
++	mpc85xx_smp_init();
++
++#if defined(CONFIG_PCI) && defined(CONFIG_PPC64)
++	pci_devs_phb_init();
++#endif
++
++	fsl_pci_assign_primary();
++
++	swiotlb_detect_4g();
++
++	pr_info("%s board from Lenovo\n", ppc_md.name);
++
++	/*mpc85xx_qe_init();*/
++}
++
++static const struct of_device_id of_device_ids[] = {
++	{
++		.compatible	= "simple-bus"
++	},
++	{
++		.compatible	= "fsl,dpaa",
++	},
++	{
++		.compatible	= "mdio-mux-gpio",
++	},
++	{
++		.compatible	= "fsl,fpga-ngpixis",
++	},
++	{
++		.compatible	= "fsl,fpga-qixis",
++	},
++	{
++		.compatible	= "fsl,srio",
++	},
++	{
++		.compatible	= "fsl,p4080-pcie",
++	},
++	{
++		.compatible	= "fsl,qoriq-pcie-v2.2",
++	},
++	{
++		.compatible	= "fsl,qoriq-pcie-v2.3",
++	},
++	{
++		.compatible	= "fsl,qoriq-pcie-v2.4",
++	},
++	{
++		.compatible	= "fsl,qoriq-pcie-v3.0",
++	},
++#ifdef CONFIG_QUICC_ENGINE
++	{
++		.compatible	= "fsl,qe",
++	},
++#endif
++	/* The following two are for the Freescale hypervisor */
++	{
++		.name		= "hypervisor",
++	},
++	{
++		.name		= "handles",
++	},
++	{}
++};
++
++int __init lenovo_ne10x2_gen_publish_devices(void)
++{
++	return of_platform_bus_probe(NULL, of_device_ids, NULL);
++}
++
++static const char * const boards[] __initconst = {
++	"Lenovo,NE10X2",
++	NULL
++};
++
++/*
++ * Called very early, device-tree isn't unflattened
++ */
++static int __init lenovo_ne10x2_generic_probe(void)
++{
++	unsigned long root = of_get_flat_dt_root();
++
++	if (of_flat_dt_match(root, boards))
++		return 1;
++
++	return 0;
++}
++
++static void lenovo_ne10x2_board_restart(char *cmd)
++{
++    union i2c_smbus_data data;
++
++#define I2C_PWRCPLD_BUS        1
++#define PWRCPLD_RESET_VAL      0x0
++#define I2C_PWRCPLD_ADDR       0xBC
++#define PWRCPLD_RESET_CTRL_REG 0x0A
++
++    struct i2c_adapter *adap = i2c_get_adapter(I2C_PWRCPLD_BUS);
++    int err;
++    if (!adap)
++    {
++        printk(KERN_ERR "Unable to retrieve I2C adapter\n");
++        return;
++    }
++    data.byte = PWRCPLD_RESET_VAL;
++    err = i2c_smbus_xfer(adap, I2C_PWRCPLD_ADDR >> 1, 0, I2C_SMBUS_WRITE,
++			PWRCPLD_RESET_CTRL_REG, I2C_SMBUS_BYTE_DATA, &data);
++    /* Never return. */
++    while (1) ;
++}
++
++/* Early setup is required for large chunks of contiguous (and coarsely-aligned)
++ * memory. The following shoe-horns Q/Bman "init_early" calls into the
++ * platform setup to let them parse their CCSR nodes early on. */
++#ifdef CONFIG_FSL_QMAN_CONFIG
++void __init qman_init_early(void);
++#endif
++#ifdef CONFIG_FSL_BMAN_CONFIG
++void __init bman_init_early(void);
++#endif
++#ifdef CONFIG_FSL_PME2_CTRL
++void __init pme2_init_early(void);
++#endif
++
++static __init void lenovo_ne10x2_ds_init_early(void)
++{
++#ifdef CONFIG_FSL_QMAN_CONFIG
++	qman_init_early();
++#endif
++#ifdef CONFIG_FSL_BMAN_CONFIG
++	bman_init_early();
++#endif
++#ifdef CONFIG_FSL_PME2_CTRL
++	pme2_init_early();
++#endif
++#ifdef CONFIG_FSL_USDPAA
++	fsl_usdpaa_init_early();
++#endif
++}
++
++define_machine(lenovo_ne10x2) {
++	.name			= "Lenovo NE10X2",
++	.probe			= lenovo_ne10x2_generic_probe,
++	.setup_arch		= lenovo_ne10x2_gen_setup_arch,
++	.init_IRQ		= lenovo_ne10x2_gen_pic_init,
++#ifdef CONFIG_PCI
++	.pcibios_fixup_bus	= fsl_pcibios_fixup_bus,
++	/*.pcibios_fixup_phb	= fsl_pcibios_fixup_phb,*/
++#endif
++/*
++ * Core reset may cause issue if using the proxy mode of MPIC.
++ * Use the mixed mode of MPIC if enabling CPU hotplug.
++ */
++#ifdef CONFIG_HOTPLUG_CPU
++	.get_irq		= mpic_get_irq,
++#else
++	.get_irq		= mpic_get_coreint_irq,
++#endif
++	.restart		= lenovo_ne10x2_board_restart,
++	.calibrate_decr	= generic_calibrate_decr,
++	.progress		= udbg_progress,
++#ifdef CONFIG_PPC64
++	.power_save		= book3e_idle,
++#else
++	.power_save		= e500_idle,
++#endif
++	.init_early		= lenovo_ne10x2_ds_init_early,
++};
++
++machine_arch_initcall(lenovo_ne10x2, lenovo_ne10x2_gen_publish_devices);
++
++#ifdef CONFIG_SWIOTLB
++machine_arch_initcall(lenovo_ne10x2, swiotlb_setup_bus_notifier);
++#endif
