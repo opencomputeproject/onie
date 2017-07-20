@@ -376,7 +376,7 @@ ifeq ($(UEFI_ENABLE),yes)
   include make/efivar.make
   include make/efibootmgr.make
 endif
-ifeq ($(I2CTOOLS_ENABLE),yes)
+ifeq ($(I2CTOOLS_SYSEEPROM),yes)
   include make/i2ctools.make
 endif
 ifeq ($(DMIDECODE_ENABLE),yes)
