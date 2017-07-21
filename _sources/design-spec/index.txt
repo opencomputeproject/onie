@@ -8,11 +8,10 @@ Design Specification
 ********************
 
 .. toctree::
-   :maxdepth: 3
-   :titlesonly:
+   :maxdepth: 2
 
    overview
-   switch_hw_requirements
+   hw_requirements
    operating_sw_design
    x86_arch_design
    uboot_arch_design

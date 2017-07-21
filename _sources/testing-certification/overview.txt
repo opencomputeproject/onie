@@ -122,7 +122,7 @@ U-Boot (PowerPC and ARM only)::
   onie_machine=as4600_54t
   onie_machine_rev=0
   onie_platform=powerpc-as4600_54t
-  onie_platformargs=setenv bootargs $bootargs serial_num=${serial#} eth_addr=$ethaddr $onie_bootargs $onie_debugargs
+  onie_platformargs=setenv bootargs $bootargs serial_num=${serial#} eth_addr=$ethaddr $onie_bootargs $onie_testargs
   onie_rescue=setenv onie_boot_reason rescue && boot
   onie_start=0xefB60000
   onie_sz.b=0x00400000
@@ -169,12 +169,24 @@ regardless if there is a NOS installed, the variable
 U-Boot Example::
 
   LOADER=> setenv onie_boot_reason install
-  LOADER=> setenv onie_debugargs install_url=<URL>
+  LOADER=> setenv onie_testargs install_url=<URL>
   LOADER=> boot
 
-GRUB example -- From GRUB menu, choose ``ONIE: Install`` and press
-``e`` to edit the GRUB entry. Add the ``onie_debugargs`` field and
-values and boot.
+``GRUB example``
+
+From the GRUB menu, choose ``ONIE: Install OS`` and press ``e`` to
+edit the GRUB entry. Set the GRUB variable ``onie_debugargs`` to the
+text string ``'onie_testargs install_url=<URL>'``.  Be sure to enclose
+the value in single-quotes, like this::
+
+             GNU GRUB  version 2.02~beta3
+
+  +-------------------------------------------------------------+
+  |setparams 'ONIE: Install OS'                                 |
+  |onie_debugargs='onie_testargs install_url=<URL>'             |
+  |  onie_install                                               |
+
+The type ``ctrl-X`` to boot the entry.
 
 .. important:: PASS Criteria: ONIE installs the specified image. Test 2.
 
@@ -285,16 +297,27 @@ needs to be set.  To ensure ONIE will perform the installation
 regardless if there is a NOS installed, the variable
 ``onie_boot_reason`` needs to be set to ``update``.
 
-(UBoot example)::
+U-Boot Example::
 
   LOADER=> setenv onie_boot_reason update
-  LOADER=> setenv onie_debugargs install_url=<URL>
+  LOADER=> setenv onie_testargs install_url=<URL>
   LOADER=> boot
 
-(GRUB example)
+``GRUB example``
 
-From GRUB menu, choose ``ONIE: Update`` and press ``e`` to edit the
-GRUB entry. Add the ``onie_debugargs`` field and values and boot.
+From the GRUB menu, choose ``ONIE: Update ONIE`` and press ``e`` to
+edit the GRUB entry. Set the GRUB variable ``onie_debugargs`` to the
+text string ``'onie_testargs install_url=<URL>'``.  Be sure to enclose
+the value in single-quotes, like this::
+
+             GNU GRUB  version 2.02~beta3
+
+  +-------------------------------------------------------------+
+  |setparams 'ONIE: Update ONIE'                                |
+  |onie_debugargs='onie_testargs install_url=<URL>'             |
+  |  onie_update                                                |
+
+The type ``ctrl-X`` to boot the entry.
 
 .. important:: PASS Criteria: ONIE updates the specified image. Test 62.
 
