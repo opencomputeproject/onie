@@ -98,24 +98,24 @@ doc-clean:
 html: $(GUZZLE_BUILD_STAMP)
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(DOCBUILDDIR)/html
 	@echo
-	@echo "Build finished. The HTML pages are in $(DOCBUILDDIR)/html."
+	@echo "Build finished. The HTML pages are in $(DOCBUILDDIR)/html"
 
 dirhtml: $(GUZZLE_BUILD_STAMP)
 	$(SPHINXBUILD) -b dirhtml $(ALLSPHINXOPTS) $(DOCBUILDDIR)/dirhtml
 	@echo
-	@echo "Build finished. The HTML pages are in $(DOCBUILDDIR)/dirhtml."
+	@echo "Build finished. The HTML pages are in $(DOCBUILDDIR)/dirhtml"
 
 singlehtml: $(GUZZLE_BUILD_STAMP)
 	$(SPHINXBUILD) -b singlehtml $(ALLSPHINXOPTS) $(DOCBUILDDIR)/singlehtml
 	@echo
-	@echo "Build finished. The HTML page is in $(DOCBUILDDIR)/singlehtml."
+	@echo "Build finished. The HTML page is in $(DOCBUILDDIR)/singlehtml"
 
 pdf: $(GUZZLE_BUILD_STAMP)
 	$(SPHINXBUILD) -b pdf $(ALLSPHINXOPTS) $(DOCBUILDDIR)/pdf
 	@echo
-	@echo "Build finished. The PDF files are in _build/pdf."
+	@echo "Build finished. The PDF files are in _build/pdf"
 
 text: $(GUZZLE_BUILD_STAMP)
 	$(SPHINXBUILD) -b text $(ALLSPHINXOPTS) $(DOCBUILDDIR)/text
 	@echo
-	@echo "Build finished. The text files are in $(DOCBUILDDIR)/text."
+	@echo "Build finished. The text files are in $(DOCBUILDDIR)/text"
