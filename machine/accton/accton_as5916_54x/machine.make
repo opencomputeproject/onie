@@ -39,6 +39,8 @@ CONSOLE_DEV = 0
 LINUX_VERSION = 4.1
 LINUX_MINOR_VERSION = 38
 
+GCC_VERSION = 4.9.2
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
