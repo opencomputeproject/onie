@@ -7,10 +7,14 @@
 Project News
 ************
 
+July 21, 2017
+  Release candidate `2017.08-rc1
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2017-July/001477.html>`_
+
 June 26, 2017
   `Updating toolchain
   <http://lists.opencompute.org/pipermail/opencompute-onie/2017-June/001452.html>`_
-  to gcc-6.30 and uClibc-ng-1.0.22
+  to gcc-6.3.0 and uClibc-ng-1.0.22
 
 May 15, 2017
   Released version `2017.05
