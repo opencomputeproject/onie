@@ -7,7 +7,7 @@ NOS Validation
 **************
 
 NOS validation refers to the idea that a NOS must cooperate in an
-ONIE-enable system in an appropriate manner.  NOS validation verifies
+ONIE-enabled system in an appropriate manner.  NOS validation verifies
 that a NOS respects the ONIE interface, without corrupting the ONIE
 environment for other operating systems.
 

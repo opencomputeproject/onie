@@ -117,27 +117,45 @@ names and search order, which are described in this section.
 The default installer file names are searched for in the following order:
 
 #. ``onie-installer-<arch>-<vendor>_<machine>-r<machine_revision>``
+#. ``onie-installer-<arch>-<vendor>_<machine>-r<machine_revision>.bin`` *
 #. ``onie-installer-<arch>-<vendor>_<machine>``
+#. ``onie-installer-<arch>-<vendor>_<machine>.bin`` *
 #. ``onie-installer-<vendor>_<machine>``
+#. ``onie-installer-<vendor>_<machine>.bin`` *
 #. ``onie-installer-<cpu_arch>-<switch_silicon_vendor>``
+#. ``onie-installer-<cpu_arch>-<switch_silicon_vendor>.bin`` *
 #. ``onie-installer-<arch>``
+#. ``onie-installer-<arch>.bin`` *
 #. ``onie-installer``
+#. ``onie-installer.bin`` *
+
+.. note::
+
+  ONIE 2017.08 added the ``.bin`` extension to all the default file
+  names.  Previous ONIE versions do not look for file names with the
+  ``.bin`` extension.
 
 For a hypothetical x86_64 machine, the default installer file names
 would be::
 
   onie-installer-x86_64-VENDOR_MACHINE-r0
+  onie-installer-x86_64-VENDOR_MACHINE-r0.bin
   onie-installer-x86_64-VENDOR_MACHINE
+  onie-installer-x86_64-VENDOR_MACHINE.bin
   onie-installer-VENDOR_MACHINE
+  onie-installer-VENDOR_MACHINE.bin
   onie-installer-x86_64-SWITCH_SILICON_VENDOR
+  onie-installer-x86_64-SWITCH_SILICON_VENDOR.bin
   onie-installer-x86_64
+  onie-installer-x86_64.bin
   onie-installer
+  onie-installer.bin
 
 .. note::
 
   ONIE 2016.05 introduced
   ``onie-installer-<cpu_arch>-<switch_silicon_vendor>``.  All previous
-  versions will not include this naming item.
+  ONIE versions do not include this naming item.
      
 .. note:: In the case of ONIE *self-update mode*, the file name prefix is
           ``onie-updater`` instead of ``onie-installer``.
