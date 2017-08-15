@@ -23,6 +23,10 @@ Open Network Install Environment
 News
 ====
 
+August 15, 2017
+  Released version `2017.08
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2017-August/001504.html>`_
+
 July 21, 2017
   Release candidate `2017.08-rc1
   <http://lists.opencompute.org/pipermail/opencompute-onie/2017-July/001477.html>`_
