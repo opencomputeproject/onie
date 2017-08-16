@@ -38,7 +38,7 @@ IMAGE			= $(IMAGE_COMPLETE_STAMP)
 
 LSB_RELEASE_FILE = $(MBUILDDIR)/lsb-release
 OS_RELEASE_FILE	 = $(MBUILDDIR)/os-release
-MACHINE_CONF	 = $(MBUILDDIR)/machine.conf
+MACHINE_CONF	 = $(MBUILDDIR)/machine-build.conf
 
 INSTALLER_DIR	= $(abspath ../installer)
 
@@ -234,15 +234,13 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
        endif
 	$(Q) touch $@
 
-# Setting RUNTIME_ONIE_PLATFORM and RUNTIME_ONIE_MACHINE on the
-# command line allows you "fake" a real machine at runtime.  This is
-# particularly useful when MACHINE is the kvm_x86_64 virtual machine.
-# Using these variables you can make the running virtual machine look
-# like a specific real machine.  This is useful when developing an
-# installer for a particular platform.  You can develope the installer
-# using the virtual machine.
-RUNTIME_ONIE_MACHINE	?= $(MACHINE)
-RUNTIME_ONIE_PLATFORM	?= $(ARCH)-$(RUNTIME_ONIE_MACHINE)-r$(MACHINE_REV)
+# Setting ONIE_BUILD_MACHINE on the command line allows you "fake" a
+# real machine at runtime.  This is particularly useful when MACHINE
+# is the kvm_x86_64 virtual machine.  Using these variables you can
+# make the running virtual machine look like a specific real machine.
+# This is useful when developing an installer for a particular
+# platform.  You can develop the installer using the virtual machine.
+ONIE_BUILD_MACHINE	?= $(MACHINE)
 
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
 $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
@@ -282,8 +280,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) rm -f $(MACHINE_CONF)
 	$(Q) echo "onie_version=$(LSB_RELEASE_TAG)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_vendor_id=$(VENDOR_ID)" >> $(MACHINE_CONF)
-	$(Q) echo "onie_platform=$(RUNTIME_ONIE_PLATFORM)" >> $(MACHINE_CONF)
-	$(Q) echo "onie_machine=$(RUNTIME_ONIE_MACHINE)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_build_machine=$(ONIE_BUILD_MACHINE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_machine_rev=$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_config_version=$(ONIE_CONFIG_VERSION)" >> $(MACHINE_CONF)
@@ -298,7 +295,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
        endif
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
-	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
+	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine-build.conf
 	$(Q) touch $@
 
 # This step creates the cpio archive and compresses it
