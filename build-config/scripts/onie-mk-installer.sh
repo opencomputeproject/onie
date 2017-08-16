@@ -135,9 +135,9 @@ echo -n "."
 cp -r $installer_dir/$arch_dir/* $tmp_installdir
 echo -n "."
 
-[ -r $machine_dir/installer/install-platform ] && {
+if [ "$update_type" = "onie" -a -r $machine_dir/installer/install-platform ] ; then
     cp $machine_dir/installer/install-platform $tmp_installdir
-}
+fi
 
 # Massage install-arch
 if [ "$arch_dir" = "u-boot-arch" ] ; then
