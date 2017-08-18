@@ -1,0 +1,54 @@
+add extra PHY support to intel igb driver
+
+Copyright (C) 2016 david_yang <david_yang@accton.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+diff --git a/drivers/net/ethernet/intel/intel-igb/e1000_82575.c b/drivers/net/ethernet/intel/intel-igb/e1000_82575.c
+index b4b973e..9cfc59e 100644
+--- a/drivers/net/ethernet/intel/intel-igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/intel-igb/e1000_82575.c
+@@ -302,6 +302,9 @@ static s32 e1000_init_phy_params_82575(struct e1000_hw *hw)
+ 		phy->ops.set_d3_lplu_state = e1000_set_d3_lplu_state_82580;
+ 		phy->ops.force_speed_duplex = e1000_phy_force_speed_duplex_m88;
+ 		break;
++	case BCM54616S_E_PHY_ID:
++		phy->type		= e1000_phy_bcm54616s;
++		break;
+ 	default:
+ 		ret_val = -E1000_ERR_PHY;
+ 		goto out;
+@@ -1602,6 +1605,9 @@ static s32 e1000_setup_copper_link_82575(struct e1000_hw *hw)
+ 	case e1000_phy_82580:
+ 		ret_val = igb_e1000_copper_link_setup_82577(hw);
+ 		break;
++	case e1000_phy_bcm54616s:
++		ret_val = 0;
++		break;
+ 	default:
+ 		ret_val = -E1000_ERR_PHY;
+ 		break;
+diff --git a/drivers/net/ethernet/intel/intel-igb/e1000_defines.h b/drivers/net/ethernet/intel/intel-igb/e1000_defines.h
+index 6de3988..d54c8d0 100644
+--- a/drivers/net/ethernet/intel/intel-igb/e1000_defines.h
++++ b/drivers/net/ethernet/intel/intel-igb/e1000_defines.h
+@@ -1185,6 +1185,7 @@
+ #define I210_I_PHY_ID		0x01410C00
+ #define IGP04E1000_E_PHY_ID	0x02A80391
+ #define M88_VENDOR		0x0141
++#define BCM54616S_E_PHY_ID	0x03625D10
+ 
+ /* M88E1000 Specific Registers */
+ #define M88E1000_PHY_SPEC_CTRL		0x10  /* PHY Specific Control Reg */
+diff --git a/drivers/net/ethernet/intel/intel-igb/e1000_hw.h b/drivers/net/ethernet/intel/intel-igb/e1000_hw.h
+index 3bcecf1..e92a848 100644
+--- a/drivers/net/ethernet/intel/intel-igb/e1000_hw.h
++++ b/drivers/net/ethernet/intel/intel-igb/e1000_hw.h
+@@ -133,6 +133,7 @@ enum e1000_phy_type {
+ 	e1000_phy_82580,
+ 	e1000_phy_vf,
+ 	e1000_phy_i210,
++	e1000_phy_bcm54616s,
+ };
+ 
+ enum e1000_bus_type {
