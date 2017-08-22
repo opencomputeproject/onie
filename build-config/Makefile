@@ -337,6 +337,7 @@ SECURE_BOOT_ENABLE ?= no
 ifeq ($(SECURE_BOOT_ENABLE),yes)
   PESIGN_ENABLE = yes
   GNU_EFI_ENABLE = yes
+  OPENSSL_ENABLE = yes
 endif
 
 include make/kernel-download.make
@@ -417,6 +418,9 @@ ifeq ($(PESIGN_ENABLE),yes)
 endif
 ifeq ($(GNU_EFI_ENABLE),yes)
   include make/gnu-efi.make
+endif
+ifeq ($(OPENSSL_ENABLE),yes)
+  include make/openssl.make
 endif
 include make/images.make
 include make/demo.make
