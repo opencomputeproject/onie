@@ -76,6 +76,12 @@ some general comments regarding patch submission:
   
    - How you tested the patch.
 
+#. If you add new files, please make sure these files contain your
+   copyright notice and a GPLv2 SPDX-License-Identifier, for example::
+
+     Copyright (C) 2010  Josephine Hacker <jh@hackers.foomatic.com>
+     SPDX-License-Identifier:        GPL-2.0
+
 #. To upstream patches please use GitHub `git pull requests
    <https://help.github.com/articles/using-pull-requests>`_.  The ONIE
    project is following the *fork and pull* model.
