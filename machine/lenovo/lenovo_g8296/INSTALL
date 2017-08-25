@@ -1,0 +1,71 @@
+=========================================
+Installing ONIE on Lenovo G8296
+=========================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/lenovo MACHINE=lenovo_g8296 all"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/lenovo MACHINE=lenovo_g8296 all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r-- 11141120 Jul 18 22:26 onie-lenovo_g8296-r0.bin
+
+Installing the ONIE binaries
+============================ 
+
+A single binary image needs to be installed on the NOR flash.
+
+Image 1 -- ONIE kernel and u-boot.
+  name:  onie-lenovo_g8296-r0.bin
+
+Step 1 -- Put the ONIE file on a TFTP server
+---------------------------------------------
+
+The following directions assume the file is on the root of the TFTP
+server.
+
+Step 2 -- Install image1 (onie-lenovo_g8296-r0.bin)
+-----------------------------------------------
+
+Copying the image down using TFTP and flash to the NOR flash::
+
+  => setenv start 0xef560000
+  => setenv sz.b 0xaa0000
+  => tftp $loadaddr onie-lenovo_g8296-r0.bin
+  => protect off $start +${sz.b} && erase $start +${sz.b}
+  => cp.b $loadaddr $start ${sz.b} && protect on $start +${sz.b}
+
+Step 3 -- Configure Serial Console
+----------------------------------
+
+ONIE defaults the serial console baud rate to 115200.  You may need to
+adjust your terminal settings.
+
+Step 4 -- Restart The System
+----------------------------
+
+You can interrupt the boot process by pressing any key during the
+count down::
+
+  => reset
+
+Step 5 -- Optional
+------------------
+
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this::
+
+  => setenv reboot_cmd rescue
+  => boot
+
