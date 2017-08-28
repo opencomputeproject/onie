@@ -2,6 +2,11 @@
 #Ensure that Lenovo NOS device tree partition along with RFS, kernel, 
 #rsvd0/1 and MMC are erased for complete cleanness
 
+echo ""
+echo ""
+echo "NOS Uninstallation may take upto 10 minutes."
+echo ""
+
 if [ -h /dev/mtd-device-tree ]; then
 	echo "Erasing Lenovo DFT NOR flash region"
 	flash_unlock /dev/mtd-device-tree > /dev/null 2>&1
@@ -34,13 +39,24 @@ fi
 
 if [ -b /dev/mmcblk0 ]; then
 	echo "Erasing Lenovo MMC storage region"
-#	umount /dev/mmcblk0p4 > /dev/null 2>&1
-#	umount /dev/mmcblk0p3 > /dev/null 2>&1
-#	umount /dev/mmcblk0p2 > /dev/null 2>&1
-#	umount /dev/mmcblk0p1 > /dev/null 2>&1
-#	mkfs.ext3 -b 4096 /dev/mmcblk0p1 > /dev/null 2>&1
-#	mkfs.ext3 -b 4096 /dev/mmcblk0p2 > /dev/null 2>&1
-#	mkfs.ext3 -b 4096 /dev/mmcblk0p3 > /dev/null 2>&1
-#	mkfs.ext3 -b 4096 /dev/mmcblk0p4 > /dev/null 2>&1
+
+	if [ -b /dev/mmcblk0p4 ]; then
+		echo "    - Erasing partition 4"
+		dd if=/dev/zero of=/dev/mmcblk0p4 bs=4k conv=noerror conv=sync > /dev/null 2>&1
+	fi
+	if [ -b /dev/mmcblk0p3 ]; then
+		echo "    - Erasing partition 3"
+		dd if=/dev/zero of=/dev/mmcblk0p3 bs=4k conv=noerror conv=sync > /dev/null 2>&1
+	fi
+	if [ -b /dev/mmcblk0p2 ]; then
+		echo "    - Erasing partition 2"
+		dd if=/dev/zero of=/dev/mmcblk0p2 bs=4k conv=noerror conv=sync > /dev/null 2>&1
+	fi
+	if [ -b /dev/mmcblk0p1 ]; then
+		echo "    - Erasing partition 1"
+		dd if=/dev/zero of=/dev/mmcblk0p1 bs=4k conv=noerror conv=sync > /dev/null 2>&1
+	fi
+
+	echo "    - Erasing filesystem"
 	dd if=/dev/zero of=/dev/mmcblk0 bs=512 count=1 > /dev/null 2>&1
 fi
