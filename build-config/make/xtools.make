@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -42,50 +42,47 @@ PHONY += xtools xtools-prep xtools-download xtools-config \
 	 xtools-build xtools-clean xtools-distclean
 
 # List of common packages needed by crosstool-NG
-
-CT_NG_COMPONENTS		=	\
-	make-3.81.tar.bz2		\
-	m4-1.4.13.tar.xz		\
-	autoconf-2.65.tar.xz		\
-	automake-1.11.1.tar.bz2		\
-	libelf-0.8.13.tar.gz		\
+CT_NG_COMPONENTS =	\
+	autoconf-2.69.tar.xz		\
+	automake-1.15.tar.xz		\
 	duma_2_5_15.tar.gz		\
-	libtool-2.4.6.tar.gz
-
-ifeq ($(GCC_VERSION),4.9.2)
-CT_NG_COMPONENTS +=	\
-	cloog-0.18.1.tar.gz		\
-	gmp-6.0.0a.tar.xz		\
-	isl-0.12.2.tar.bz2		\
-	mpfr-3.1.2.tar.xz		\
-	mpc-1.0.2.tar.gz		\
-	binutils-2.25.tar.bz2		\
-	binutils-2.24.tar.bz2		\
-	gcc-4.9.2.tar.bz2		\
-	gdb-7.11.tar.xz			\
+	gettext-0.19.8.1.tar.xz		\
+	libelf-0.8.13.tar.gz		\
+	libiconv-1.15.tar.gz		\
+	libtool-2.4.6.tar.xz		\
 	ltrace_0.7.3.orig.tar.bz2	\
-	strace-4.9.tar.xz		\
-	ncurses-6.0.tar.gz		\
-	libiconv-1.14.tar.gz		\
-	gettext-0.19.6.tar.xz		\
-	expat-2.1.0.tar.gz
-       ifeq ($(XTOOLS_LIBC),glibc)
-	CT_NG_COMPONENTS += glibc-2.24.tar.xz
-       endif
-else ifeq ($(GCC_VERSION),4.7.3)
+	m4-1.4.18.tar.xz		\
+	make-4.2.1.tar.bz2		\
+	ncurses-6.0.tar.gz
+
+ifeq ($(GCC_VERSION),6.3.0)
 CT_NG_COMPONENTS +=	\
-        gmp-4.3.2.tar.bz2               \
-        mpfr-2.4.2.tar.bz2              \
-        ppl-0.11.2.tar.lzma             \
-        cloog-ppl-0.15.10.tar.gz        \
-        mpc-1.0.1.tar.gz                \
-        binutils-2.22.tar.bz2           \
-        gcc-4.7.3.tar.bz2               \
-        gdb-7.4.1.tar.bz2               \
-        ltrace_0.5.3.orig.tar.gz        \
-        strace-4.6.tar.xz
+	gcc-6.3.0.tar.bz2		\
+	binutils-2.28.tar.bz2		\
+	gdb-7.12.1.tar.xz		\
+	gmp-6.1.2.tar.xz		\
+	mpfr-3.1.5.tar.xz		\
+	isl-0.16.1.tar.xz		\
+	mpc-1.0.3.tar.gz		\
+	expat-2.2.0.tar.bz2		\
+	strace-4.16.tar.xz
+else ifeq ($(GCC_VERSION),4.9.2)
+CT_NG_COMPONENTS +=	\
+	gcc-4.9.2.tar.bz2		\
+	binutils-2.24.tar.bz2		\
+	gdb-7.11.1.tar.xz		\
+	gmp-6.0.0a.tar.xz		\
+	mpfr-3.1.2.tar.xz		\
+	isl-0.12.2.tar.bz2		\
+	mpc-1.0.2.tar.gz		\
+	expat-2.1.1.tar.bz2		\
+	strace-4.9.tar.xz
 else
   $(error CT_NG_COMPONENTS download: Unsupported GCC version: $(GCC_VERSION))
+endif
+
+ifeq ($(XTOOLS_LIBC),glibc)
+  CT_NG_COMPONENTS += glibc-$(XTOOLS_LIBC_VERSION).tar.xz
 endif
 
 xtools: $(XTOOLS_STAMP)
@@ -130,13 +127,22 @@ $(XTOOLS_BUILD_STAMP): $(XTOOLS_BUILD_DIR)/.config $(XTOOLS_DOWNLOAD_STAMP) $(CR
 	$(Q) touch $@
 
 xtools-clean:
-	$(Q) ( [ -d $(XTOOLS_DIR) ] && chmod +w -R $(XTOOLS_DIR) ) || true
-	$(Q) rm -rf $(XTOOLS_DIR) 
+	$(Q) if [ -d $(XTOOLS_DIR) ] ; then \
+		echo -n "=== Cleaning $(XTOOLS_VERSION) ..." ; \
+		chmod +w -R $(XTOOLS_DIR) ; \
+		rm -rf $(XTOOLS_DIR) ; \
+		echo " done ===" ; \
+	fi
 	$(Q) echo "=== Finished making $@ ==="
 
 DIST_CLEAN += xtools-distclean
 xtools-distclean:
 	$(Q) ( [ -d $(XTOOLS_ROOT) ] && chmod +w -R $(XTOOLS_ROOT) ) || true
+	$(Q) for d in $(XTOOLS_ROOT)/* ; do \
+		[ -e "$$d" ] || break ; \
+		echo -n "=== Cleaning $$(basename $$d) ... " ; \
+		rm -rf $$d ; \
+		echo " done ===" ; done
 	$(Q) rm -rf $(XTOOLS_ROOT)
 	$(Q) echo "=== Finished making $@ ==="
 

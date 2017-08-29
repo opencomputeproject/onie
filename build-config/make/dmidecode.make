@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -12,14 +12,14 @@
 DMIDECODE_VERSION		= 2.12
 DMIDECODE_TARBALL		= dmidecode-$(DMIDECODE_VERSION).tar.gz
 DMIDECODE_TARBALL_URLS		+= $(ONIE_MIRROR) http://download.savannah.gnu.org/releases/dmidecode/
-DMIDECODE_BUILD_DIR		= $(MBUILDDIR)/dmidecode
+DMIDECODE_BUILD_DIR		= $(USER_BUILDDIR)/dmidecode
 DMIDECODE_DIR			= $(DMIDECODE_BUILD_DIR)/dmidecode-$(DMIDECODE_VERSION)
 
 DMIDECODE_SRCPATCHDIR		= $(PATCHDIR)/dmidecode
 DMIDECODE_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/dmidecode-download
-DMIDECODE_SOURCE_STAMP		= $(STAMPDIR)/dmidecode-source
-DMIDECODE_PATCH_STAMP		= $(STAMPDIR)/dmidecode-patch
-DMIDECODE_BUILD_STAMP		= $(STAMPDIR)/dmidecode-build
+DMIDECODE_SOURCE_STAMP		= $(USER_STAMPDIR)/dmidecode-source
+DMIDECODE_PATCH_STAMP		= $(USER_STAMPDIR)/dmidecode-patch
+DMIDECODE_BUILD_STAMP		= $(USER_STAMPDIR)/dmidecode-build
 DMIDECODE_INSTALL_STAMP		= $(STAMPDIR)/dmidecode-install
 DMIDECODE_STAMP			= $(DMIDECODE_SOURCE_STAMP) \
 				  $(DMIDECODE_PATCH_STAMP) \
@@ -44,7 +44,7 @@ $(DMIDECODE_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(DMIDECODE_SOURCE_STAMP)
 dmidecode-source: $(DMIDECODE_SOURCE_STAMP)
-$(DMIDECODE_SOURCE_STAMP): $(TREE_STAMP) | $(DMIDECODE_DOWNLOAD_STAMP)
+$(DMIDECODE_SOURCE_STAMP): $(USER_TREE_STAMP) | $(DMIDECODE_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream dmidecode ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(DMIDECODE_BUILD_DIR) $(DOWNLOADDIR)/$(DMIDECODE_TARBALL)
@@ -80,7 +80,7 @@ $(DMIDECODE_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(DMIDECODE_BUILD_STAMP)
 	     done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += dmidecode-clean
+USER_CLEAN += dmidecode-clean
 dmidecode-clean:
 	$(Q) rm -rf $(DMIDECODE_BUILD_DIR)
 	$(Q) rm -f $(DMIDECODE_STAMP)

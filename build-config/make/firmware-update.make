@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2016 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -77,7 +77,7 @@ PHONY += firmware-update
 firmware-update: $(FIRMWARE_UPDATE_COMPLETE_STAMP)
 	$(Q) echo "=== Finished making firmware update package $(FIRMWARE_UPDATE_BASE) ==="
 
-CLEAN += firmware-update-clean
+MACHINE_CLEAN += firmware-update-clean
 firmware-update-clean:
 	$(Q) rm -f $(FIRMWARE_UPDATE_COMPLETE_STAMP) $(FIRMWARE_UPDATE_IMAGE)
 	$(Q) rm -rf $(FIRMWARE_DIR) $(FIRMWARE_UPDATE_IMAGE)

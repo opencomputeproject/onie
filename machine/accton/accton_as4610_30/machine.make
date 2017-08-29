@@ -29,11 +29,11 @@ VENDOR_ID = 259
 LINUX_VERSION       = 3.2
 LINUX_MINOR_VERSION = 69
 
+# Older GCC required for older 3.2 kernel
+GCC_VERSION = 4.9.2
+
 KERNEL_LOAD_ADDRESS = 0x61008000
 KERNEL_ENTRY_POINT  = 0x61008000
-
-# Set the desired uClibc version
-UCLIBC_VERSION = 0.9.33.2
 
 # Set the desired U-Boot version
 UBOOT_VERSION = 2012.10

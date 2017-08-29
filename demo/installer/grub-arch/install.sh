@@ -11,6 +11,9 @@ set -e
 cd $(dirname $0)
 . ./machine.conf
 
+lib_dir="/lib/onie"
+. $lib_dir/onie-blkdev-common
+
 echo "Demo Installer: platform: $platform"
 
 # Install demo on same block device as ONIE
@@ -50,7 +53,7 @@ else
 fi
 
 # Creates a new partition for the DEMO OS.
-# 
+#
 # arg $1 -- base block device
 #
 # Returns the created partition number in $demo_part
@@ -76,6 +79,8 @@ create_demo_gpt_partition()
     # check if we have an mmcblk device
     blk_suffix=
     echo ${blk_dev} | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo ${blk_dev} | grep -q nvme && blk_suffix="p"
 
     # Create new partition
     echo "Creating new demo partition ${blk_dev}$blk_suffix$demo_part ..."
@@ -126,7 +131,7 @@ create_demo_msdos_partition()
     demo_part_end=$(( $demo_part_start + ( $demo_part_size * $sectors_per_mb ) - 1 ))
 
     # Create new partition
-    echo "Creating new demo partition ${blk_dev}$demo_part ..."
+    echo "Creating new demo partition ${blk_dev}$blk_suffix$demo_part ..."
     parted -s --align optimal $blk_dev unit s \
       mkpart primary $demo_part_start $demo_part_end set $demo_part boot on || {
         echo "ERROR: Problems creating demo msdos partition $demo_part on: $blk_dev"
@@ -230,9 +235,9 @@ demo_install_uefi_grub()
     local demo_mnt="$1"
     local blk_dev="$2"
 
-	# get running machine from conf file
+    # get running machine from conf file
     [ -r /etc/machine.conf ] && . /etc/machine.conf
-	
+
     # Look for the EFI system partition UUID on the same block device as
     # the ONIE-BOOT partition.
     local uefi_part=0
@@ -296,6 +301,9 @@ demo_install_uefi_grub()
 
 eval $create_demo_partition $blk_dev
 demo_dev=$(echo $blk_dev | sed -e 's/\(mmcblk[0-9]\)/\1p/')$demo_part
+echo $blk_dev | grep -q nvme && {
+    demo_dev=$(echo $blk_dev | sed -e 's/\(nvme[0-9]n[0-9]\)/\1p/')$demo_part
+}
 partprobe
 
 # Create filesystem on demo partition with a label
@@ -320,9 +328,6 @@ cp demo.vmlinuz demo.initrd $demo_mnt
 # store installation log in demo file system
 onie-support $demo_mnt
 
-# The persistent ONIE directory location
-onie_root_dir=/mnt/onie-boot/onie
-
 # Set a few GRUB_xxx environment variables that will be picked up and
 # used by the 50_onie_grub script.  This is similiar to what an OS
 # would specify in /etc/default/grub.
@@ -333,7 +338,9 @@ onie_root_dir=/mnt/onie-boot/onie
 [ -r ./platform.conf ] && . ./platform.conf
 
 # import console config and linux cmdline
-. $onie_root_dir/grub/grub-variables
+if [ -r $onie_root_dir/grub/grub-variables ] ; then
+    . $onie_root_dir/grub/grub-variables
+fi
 
 # If ONIE supports boot command feeding,
 # adds DEMO DIAG bootcmd to ONIE.

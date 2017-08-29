@@ -71,6 +71,8 @@ init_onie_install()
     # check if we have an mmcblk device
     blk_suffix=
     echo $onie_dev | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo $onie_dev | grep -q nvme && blk_suffix="p"
 
     [ -r ./onie-blkdev-common ] || {
         echo "ERROR: Unable to find onie-blkdev-common"
@@ -336,16 +338,28 @@ create_gpt_partition()
         exit 1
     esac
 
-    local sgdisk_log=$(mktemp)
+    local tmp_log=$(mktemp)
     sgdisk --new=$part:$start:+$size \
         --typecode=$part:$gpt_uuid \
         --attributes=$part:=:$attr_bitmask \
-        --change-name=$part:"$label" "$onie_dev" > $sgdisk_log 2>&1 || {
+        --change-name=$part:"$label" "$onie_dev" > $tmp_log 2>&1 || {
         echo "ERROR: Problems creating $label partition $part on: $onie_dev"
-        cat $sgdisk_log && rm -f $sgdisk_log
+        cat $tmp_log && rm -f $tmp_log
         exit 1
     }
-    rm -f $sgdisk_log
+
+    if [ "$p" = "grub_boot" ] ; then
+        # Set "bootable" flag in the protective MBR partition table.
+        # Some buggy UEFI firmwares operating in CSM (legacy BIOS
+        # mode) require this.  See http://www.rodsbooks.com/gdisk/bios.html.
+        parted "$onie_dev" disk_set pmbr_boot on > $tmp_log 2>&1 || {
+            echo "ERROR: Problems setting bootable flag on protected MBR on: $onie_dev"
+            cat $tmp_log && rm -f $tmp_log
+            exit 1
+        }
+    fi
+
+    rm -f $tmp_log
 }
 
 init_gpt_partition_table()
@@ -528,7 +542,9 @@ install_grub_config()
     fi
 
     # import console config and linux cmdline
-    . $boot_dir/onie/grub/grub-variables
+    if [ -r $boot_dir/onie/grub/grub-variables ] ; then
+        . $boot_dir/onie/grub/grub-variables
+    fi
 
     $boot_dir/onie/grub.d/50_onie_grub >> $grub_root_dir/grub.cfg
 }

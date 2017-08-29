@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #  Copyright (C) 2014 Nikolay Shopik <shopik@inblock.ru>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
@@ -23,7 +23,8 @@ BUSYBOX_CONFIG		?= conf/busybox.config
 
 BUSYBOX_SRCPATCHDIR	= $(PATCHDIR)/busybox
 BUSYBOX_PATCHDIR	= $(BUSYBOX_BUILD_DIR)/patch
-MACHINE_BUSYBOX_CONFDIR ?= $(MACHINEDIR)/busybox/conf
+MACHINE_BUSYBOX_DIR	?= $(MACHINEDIR)/busybox
+MACHINE_BUSYBOX_CONFDIR	?= $(MACHINE_BUSYBOX_DIR)/conf
 BUSYBOX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/busybox-$(BUSYBOX_VERSION)-download
 BUSYBOX_SOURCE_STAMP	= $(STAMPDIR)/busybox-source
 BUSYBOX_PATCH_STAMP	= $(STAMPDIR)/busybox-patch
@@ -38,8 +39,8 @@ PHONY += busybox busybox-download busybox-source busybox-config busybox-patch \
 	busybox-build busybox-install busybox-clean busybox-download-clean
 
 MACHINE_BUSYBOX_PATCHDIR = $(shell \
-			   test -d $(MACHINEDIR)/busybox/patches && \
-			   echo "$(MACHINEDIR)/busybox/patches")
+			   test -d $(MACHINE_BUSYBOX_DIR)/patches && \
+			   echo "$(MACHINE_BUSYBOX_DIR)/patches")
 
 ifneq ($(MACHINE_BUSYBOX_PATCHDIR),)
   MACHINE_BUSYBOX_PATCHDIR_FILES = $(MACHINE_BUSYBOX_PATCHDIR)/*
@@ -113,7 +114,7 @@ BUSYBOX_NEW_FILES = $(shell test -d $(BUSYBOX_DIR) && test -f $(BUSYBOX_BUILD_ST
 endif
 
 busybox-build: $(BUSYBOX_BUILD_STAMP)
-$(BUSYBOX_BUILD_STAMP): $(BUSYBOX_DIR)/.config $(BUSYBOX_NEW_FILES) $(UCLIBC_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(BUSYBOX_BUILD_STAMP): $(BUSYBOX_DIR)/.config $(BUSYBOX_NEW_FILES) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building busybox-$(BUSYBOX_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'				\
@@ -140,7 +141,7 @@ $(BUSYBOX_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(BUSYBOX_BUILD_STAMP)
 	$(Q) chmod 4755 $(SYSROOTDIR)/bin/busybox
 	$(Q) touch $@
 
-USERSPACE_CLEAN += busybox-clean
+MACHINE_CLEAN += busybox-clean
 busybox-clean:
 	$(Q) rm -rf $(BUSYBOX_BUILD_DIR)
 	$(Q) rm -f $(BUSYBOX_STAMP)

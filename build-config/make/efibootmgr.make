@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -13,14 +13,14 @@ EFIBOOTMGR_VERSION		= 0.12
 EFIBOOTMGR_TARBALL		= efibootmgr-$(EFIBOOTMGR_VERSION).tar.bz2
 EFIBOOTMGR_TARBALL_URLS		+= $(ONIE_MIRROR) \
 				   https://github.com/rhinstaller/efibootmgr/releases/download/efibootmgr-$(EFIBOOTMGR_VERSION)
-EFIBOOTMGR_BUILD_DIR		= $(MBUILDDIR)/efibootmgr
+EFIBOOTMGR_BUILD_DIR		= $(USER_BUILDDIR)/efibootmgr
 EFIBOOTMGR_DIR			= $(EFIBOOTMGR_BUILD_DIR)/efibootmgr-$(EFIBOOTMGR_VERSION)
 
 EFIBOOTMGR_SRCPATCHDIR		= $(PATCHDIR)/efibootmgr
 EFIBOOTMGR_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/efibootmgr-download
-EFIBOOTMGR_SOURCE_STAMP		= $(STAMPDIR)/efibootmgr-source
-EFIBOOTMGR_PATCH_STAMP		= $(STAMPDIR)/efibootmgr-patch
-EFIBOOTMGR_BUILD_STAMP		= $(STAMPDIR)/efibootmgr-build
+EFIBOOTMGR_SOURCE_STAMP		= $(USER_STAMPDIR)/efibootmgr-source
+EFIBOOTMGR_PATCH_STAMP		= $(USER_STAMPDIR)/efibootmgr-patch
+EFIBOOTMGR_BUILD_STAMP		= $(USER_STAMPDIR)/efibootmgr-build
 EFIBOOTMGR_INSTALL_STAMP	= $(STAMPDIR)/efibootmgr-install
 EFIBOOTMGR_STAMP		= $(EFIBOOTMGR_SOURCE_STAMP) \
 				  $(EFIBOOTMGR_PATCH_STAMP) \
@@ -45,7 +45,7 @@ $(EFIBOOTMGR_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(EFIBOOTMGR_SOURCE_STAMP)
 efibootmgr-source: $(EFIBOOTMGR_SOURCE_STAMP)
-$(EFIBOOTMGR_SOURCE_STAMP): $(TREE_STAMP) $(EFIBOOTMGR_DOWNLOAD_STAMP)
+$(EFIBOOTMGR_SOURCE_STAMP): $(USER_TREE_STAMP) $(EFIBOOTMGR_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream efibootmgr ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(EFIBOOTMGR_BUILD_DIR) $(DOWNLOADDIR)/$(EFIBOOTMGR_TARBALL)
@@ -65,27 +65,29 @@ EFIBOOTMGR_NEW_FILES = $(shell test -d $(EFIBOOTMGR_DIR) && test -f $(EFIBOOTMGR
 endif
 
 efibootmgr-build: $(EFIBOOTMGR_BUILD_STAMP)
-$(EFIBOOTMGR_BUILD_STAMP): $(EFIBOOTMGR_PATCH_STAMP) $(EFIBOOTMGR_NEW_FILES) $(EFIVAR_INSTALL_STAMP) \
-				$(ZLIB_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(EFIBOOTMGR_BUILD_STAMP): $(EFIBOOTMGR_PATCH_STAMP) $(EFIBOOTMGR_NEW_FILES) $(EFIVAR_BUILD_STAMP) \
+				$(ZLIB_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building efibootmgr-$(EFIBOOTMGR_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	\
 		$(MAKE) -C $(EFIBOOTMGR_DIR) CROSS_COMPILE=$(CROSSPREFIX) \
 			EXTRA_CFLAGS=-I$(DEV_SYSROOT)/usr/include/efivar
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	\
+		$(MAKE) -C $(EFIBOOTMGR_DIR) CROSS_COMPILE=$(CROSSPREFIX) \
+			BINDIR=$(DEV_SYSROOT)/usr/sbin install
 	$(Q) touch $@
 
 efibootmgr-install: $(EFIBOOTMGR_INSTALL_STAMP)
-$(EFIBOOTMGR_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(EFIBOOTMGR_BUILD_STAMP)
+$(EFIBOOTMGR_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(EFIBOOTMGR_BUILD_STAMP) $(EFIVAR_INSTALL_STAMP) \
+				$(ZLIB_INSTALL_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing efibootmgr programs in $(SYSROOTDIR) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIBOOTMGR_DIR) CROSS_COMPILE=$(CROSSPREFIX) \
-		BINDIR=$(DEV_SYSROOT)/usr/sbin install
 	$(Q) for file in $(EFIBOOTMGR_PROGRAMS); do \
 		cp -av $(DEV_SYSROOT)/usr/sbin/$$file $(SYSROOTDIR)/usr/sbin ; \
 	     done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += efibootmgr-clean
+USER_CLEAN += efibootmgr-clean
 efibootmgr-clean:
 	$(Q) rm -rf $(EFIBOOTMGR_BUILD_DIR)
 	$(Q) rm -f $(EFIBOOTMGR_STAMP)

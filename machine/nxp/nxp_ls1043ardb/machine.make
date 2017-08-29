@@ -5,6 +5,7 @@
 # SPDX-License-Identifier:     GPL-2.0
 
 ONIE_ARCH ?= armv8a
+SWITCH_ASIC_VENDOR = none
 
 VENDOR_REV ?= ONIE
 
@@ -34,6 +35,10 @@ UBOOT_DTB_ENABLE = yes
 
 # Set the desired U-Boot version
 UBOOT_VERSION = 2015.10
+
+# Specify Linux kernel version -- comment out to use the default
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
 
 #---------------------------------------------------------
 #

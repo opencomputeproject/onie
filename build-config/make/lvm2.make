@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -13,17 +13,18 @@
 LVM2_VERSION		?= 2_02_105
 LVM2_TARBALL		= lvm2-$(LVM2_VERSION).tar.xz
 LVM2_TARBALL_URLS	+= $(ONIE_MIRROR) https://git.fedorahosted.org/cgit/lvm2.git/snapshot/
-LVM2_BUILD_DIR		= $(MBUILDDIR)/lvm2
+LVM2_BUILD_DIR		= $(USER_BUILDDIR)/lvm2
 LVM2_DIR		= $(LVM2_BUILD_DIR)/lvm2-$(LVM2_VERSION)
 
 LVM2_SRCPATCHDIR	= $(PATCHDIR)/lvm2/$(LVM2_VERSION)
 LVM2_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/lvm2-$(LVM2_VERSION)-download
-LVM2_SOURCE_STAMP	= $(STAMPDIR)/lvm2-source
-LVM2_PATCH_STAMP	= $(STAMPDIR)/lvm2-patch
-LVM2_CONFIGURE_STAMP	= $(STAMPDIR)/lvm2-configure
-LVM2_BUILD_STAMP	= $(STAMPDIR)/lvm2-build
+LVM2_SOURCE_STAMP	= $(USER_STAMPDIR)/lvm2-source
+LVM2_PATCH_STAMP	= $(USER_STAMPDIR)/lvm2-patch
+LVM2_CONFIGURE_STAMP	= $(USER_STAMPDIR)/lvm2-configure
+LVM2_BUILD_STAMP	= $(USER_STAMPDIR)/lvm2-build
 LVM2_INSTALL_STAMP	= $(STAMPDIR)/lvm2-install
 LVM2_STAMP		= $(LVM2_SOURCE_STAMP) \
+			  $(LVM2_PATCH_STAMP) \
 			  $(LVM2_CONFIGURE_STAMP) \
 			  $(LVM2_BUILD_STAMP) \
 			  $(LVM2_INSTALL_STAMP)
@@ -94,7 +95,7 @@ $(LVM2_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(LVM2_SOURCE_STAMP)
 lvm2-source: $(LVM2_SOURCE_STAMP)
-$(LVM2_SOURCE_STAMP): $(TREE_STAMP) | $(LVM2_DOWNLOAD_STAMP)
+$(LVM2_SOURCE_STAMP): $(USER_TREE_STAMP) | $(LVM2_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream lvm2 ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(LVM2_BUILD_DIR) $(DOWNLOADDIR)/$(LVM2_TARBALL)
@@ -141,26 +142,26 @@ $(LVM2_CONFIGURE_STAMP): $(LVM2_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) touch $@
 
 lvm2-build: $(LVM2_BUILD_STAMP)
-$(LVM2_BUILD_STAMP): $(LVM2_CONFIGURE_STAMP) $(UTILLINUX_INSTALL_STAMP)
+$(LVM2_BUILD_STAMP): $(LVM2_CONFIGURE_STAMP) $(UTILLINUX_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building lvm2-$(LVM2_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(LVM2_DIR) \
 		CROSS_COMPILE=$(CROSSPREFIX) all
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(LVM2_DIR) \
+		CROSS_COMPILE=$(CROSSPREFIX) install
 	$(Q) touch $@
 
 lvm2-install: $(LVM2_INSTALL_STAMP)
-$(LVM2_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(LVM2_BUILD_STAMP)
+$(LVM2_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(LVM2_BUILD_STAMP) $(UTILLINUX_INSTALL_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing lvm2 programs in $(SYSROOTDIR) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(LVM2_DIR) \
-		CROSS_COMPILE=$(CROSSPREFIX) install
 	$(Q) for file in $(LVM2_PROGS) ; do \
 		cp -afv $(DEV_SYSROOT)/usr/$$file $(SYSROOTDIR)/usr/$$file ; \
 		chmod +w $(SYSROOTDIR)/usr/$$file ; \
 	     done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += lvm2-clean
+USER_CLEAN += lvm2-clean
 lvm2-clean:
 	$(Q) rm -rf $(LVM2_BUILD_DIR)
 	$(Q) rm -f $(LVM2_STAMP)

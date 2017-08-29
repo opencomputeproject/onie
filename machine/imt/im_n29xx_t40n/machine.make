@@ -27,8 +27,8 @@ I2CTOOLS_ENABLE = no
 PARTITION_TYPE = msdos
 
 # Set Linux kernel version
-LINUX_VERSION       = 3.2
-LINUX_MINOR_VERSION = 69
+LINUX_VERSION       = 4.1
+LINUX_MINOR_VERSION = 38
 
 #-------------------------------------------------------------------------------
 #

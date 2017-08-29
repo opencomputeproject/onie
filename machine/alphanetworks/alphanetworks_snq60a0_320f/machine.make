@@ -25,6 +25,7 @@ VENDOR_ID = 31874
 
 # Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
+I2CTOOLS_SYSEEPROM = yes
 
 # Console parameters
 CONSOLE_DEV = 1
@@ -32,6 +33,9 @@ CONSOLE_DEV = 1
 # Set Linux kernel version
 LINUX_VERSION		= 3.2
 LINUX_MINOR_VERSION	= 69
+
+# Older GCC required for older 3.2 kernel
+GCC_VERSION = 4.9.2
 
 #-------------------------------------------------------------------------------
 #

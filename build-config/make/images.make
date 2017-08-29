@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
@@ -130,8 +130,13 @@ CHECKDIR	= $(CHECKROOT)/checkdir
 CHECKFILES	= $(CHECKROOT)/checkfiles.txt
 SYSFILES	= $(CHECKROOT)/sysfiles.txt
 
-ifeq ($(XTOOLS_LIBC),uClibc)
-SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
+ifeq ($(XTOOLS_LIBC),uClibc-ng)
+  SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
+		  ld$(CLIB64)-uClibc.so.1 \
+		  libc.so.0 libuClibc-$(XTOOLS_LIBC_VERSION).so \
+		  libgcc_s.so.1 libgcc_s.so
+else ifeq ($(XTOOLS_LIBC),uClibc)
+  SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
 		  libm.so.0 libm-$(XTOOLS_LIBC_VERSION).so \
 		  libgcc_s.so.1 libgcc_s.so \
 		  libc.so.0 libuClibc-$(XTOOLS_LIBC_VERSION).so \
@@ -166,10 +171,10 @@ endif
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)
   SYSROOT_LIBS += libstdc++.so libstdc++.so.6
-  ifeq ($(GCC_VERSION),4.9.2)
+  ifeq ($(GCC_VERSION),6.3.0)
+    SYSROOT_LIBS += libstdc++.so.6.0.22
+  else ifeq ($(GCC_VERSION),4.9.2)
     SYSROOT_LIBS += libstdc++.so.6.0.20
-  else ifeq ($(GCC_VERSION),4.7.3)
-    SYSROOT_LIBS += libstdc++.so.6.0.17
   else
     $(error C++ support: Unsupported GCC version: $(GCC_VERSION))
   endif
@@ -299,7 +304,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 # This step creates the cpio archive and compresses it
 $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for bootstrap ===="
-	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR) $(SYSROOT_CPIO)
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SYSROOTDIR) $(SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(SYSROOT_CPIO) > $@
 
 $(UPDATER_INITRD) : $(SYSROOT_CPIO_XZ)
@@ -361,6 +366,7 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(UPDATER_IMAGE_PARTS_PL
 	     UPDATER_UBOOT_NAME=$(UPDATER_UBOOT_NAME) \
 	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
 	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
+	     UEFI_BOOT_LOADER=$(GRUB_IMAGE_NAME) \
 	     $(SCRIPTDIR)/onie-mk-installer.sh onie $(ROOTFS_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS) $(UPDATER_IMAGE_PARTS_PLATFORM)
@@ -412,7 +418,7 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) mkdir -p $(RECOVERY_DIR)
 	$(Q) cp -a $(SYSROOTDIR) $(RECOVERY_SYSROOT)
 	$(Q) cp $(UPDATER_IMAGE) $(RECOVERY_SYSROOT)/lib/onie/onie-updater
-	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(RECOVERY_CPIO) > $(RECOVERY_INITRD)
 	$(Q) touch $@
 
@@ -458,9 +464,10 @@ $(PXE_EFI64_STAMP): $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
 $(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE) $(MACHINE_IMAGE_COMPLETE_STAMP)
+	$(Q) echo "Created: $(UPDATER_IMAGE)"
 	$(Q) touch $@
 
-USERSPACE_CLEAN += image-clean
+MACHINE_CLEAN += image-clean
 image-clean:
 	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP) $(KERNEL_VMLINUZ_INSTALL_STAMP)
 	$(Q) rm -rf $(RECOVERY_DIR) $(MACHINE_IMAGE_COMPLETE_STAMP) $(MACHINE_IMAGE_PRODUCTS)

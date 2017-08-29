@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -14,14 +14,22 @@ UTILLINUX_VERSION		= 2.27
 UTILLINUX_TARBALL		= util-linux-$(UTILLINUX_VERSION).tar.xz
 UTILLINUX_TARBALL_URLS		+= $(ONIE_MIRROR) \
 					https://www.kernel.org/pub/linux/utils/util-linux/v$(UTILLINUX_VERSION)/
-UTILLINUX_BUILD_DIR		= $(MBUILDDIR)/util-linux
+
+ifneq ($(filter yes, $(EXT3_4_ENABLE) $(LVM2_ENABLE)),)
+  UTILLINUX_FLAVOR	= util-linux
+else
+  # some legacy machine do not enable ext3/4 or lvm2 due to storage space concerns
+  UTILLINUX_FLAVOR	= util-linux-no-ext3-4
+endif
+
+UTILLINUX_BUILD_DIR		= $(USER_BUILDDIR)/$(UTILLINUX_FLAVOR)
 UTILLINUX_DIR			= $(UTILLINUX_BUILD_DIR)/util-linux-$(UTILLINUX_VERSION)
 
-UTILLINUX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/util-linux-download
-UTILLINUX_SOURCE_STAMP		= $(STAMPDIR)/util-linux-source
-UTILLINUX_CONFIGURE_STAMP	= $(STAMPDIR)/util-linux-configure
-UTILLINUX_BUILD_STAMP		= $(STAMPDIR)/util-linux-build
-UTILLINUX_INSTALL_STAMP		= $(STAMPDIR)/util-linux-install
+UTILLINUX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/$(UTILLINUX_FLAVOR)-download
+UTILLINUX_SOURCE_STAMP		= $(USER_STAMPDIR)/$(UTILLINUX_FLAVOR)-source
+UTILLINUX_CONFIGURE_STAMP	= $(USER_STAMPDIR)/$(UTILLINUX_FLAVOR)-configure
+UTILLINUX_BUILD_STAMP		= $(USER_STAMPDIR)/$(UTILLINUX_FLAVOR)-build
+UTILLINUX_INSTALL_STAMP		= $(STAMPDIR)/$(UTILLINUX_FLAVOR)-install
 UTILLINUX_STAMP			= $(UTILLINUX_SOURCE_STAMP) \
 					$(UTILLINUX_CONFIGURE_STAMP) \
 					$(UTILLINUX_BUILD_STAMP) \
@@ -34,7 +42,8 @@ UTILLINUX_CONFIG	= --enable-libuuid
 UTILLINUX_LIBS		= \
 	libuuid.so    libuuid.so.1    libuuid.so.1.3.0
 
-ifneq ($(filter yes, $(EXT3_4_ENABLE) $(LVM2_ENABLE)),)
+ifeq ($(UTILLINUX_FLAVOR),util-linux)
+# These are needed when ext34 and lvm2 are enabled
 UTILLINUX_CONFIG	+= --enable-libblkid
 UTILLINUX_LIBS		+= \
 	libblkid.so   libblkid.so.1   libblkid.so.1.1.0
@@ -53,7 +62,7 @@ $(UTILLINUX_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(UTILLINUX_SOURCE_STAMP)
 util-linux-source: $(UTILLINUX_SOURCE_STAMP)
-$(UTILLINUX_SOURCE_STAMP): $(TREE_STAMP) | $(UTILLINUX_DOWNLOAD_STAMP)
+$(UTILLINUX_SOURCE_STAMP): $(USER_TREE_STAMP) | $(UTILLINUX_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream util-linux ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(UTILLINUX_BUILD_DIR) $(DOWNLOADDIR)/$(UTILLINUX_TARBALL)
@@ -88,20 +97,19 @@ $(UTILLINUX_BUILD_STAMP): $(UTILLINUX_CONFIGURE_STAMP) $(UTILLINUX_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building util-linux-$(UTILLINUX_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(UTILLINUX_DIR)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UTILLINUX_DIR) install
 	$(Q) touch $@
 
 util-linux-install: $(UTILLINUX_INSTALL_STAMP)
 $(UTILLINUX_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(UTILLINUX_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing util-linux in $(DEV_SYSROOT) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
-		$(MAKE) -C $(UTILLINUX_DIR) install
+	$(Q) echo "==== Installing util-linux in $(SYSROOTDIR) ===="
 	$(Q) for file in $(UTILLINUX_LIBS) ; do \
 		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
 	     done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += util-linux-clean
+USER_CLEAN += util-linux-clean
 util-linux-clean:
 	$(Q) rm -rf $(UTILLINUX_BUILD_DIR)
 	$(Q) rm -f $(UTILLINUX_STAMP)

@@ -24,13 +24,13 @@ VENDOR_ID = 19046
 LINUX_VERSION		= 3.2
 LINUX_MINOR_VERSION	= 69
 
+# Older GCC required for older 3.2 kernel
+GCC_VERSION = 4.9.2
+
 #Disable BRTFS
 BTRFS_PROGS_ENABLE = no
 #Add EXT 3 support
 EXT3_4_ENABLE = yes
-
-# Specify uClibc version
-UCLIBC_VERSION = 0.9.32.1
 
 #-------------------------------------------------------------------------------
 #

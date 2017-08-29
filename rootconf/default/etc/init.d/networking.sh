@@ -59,7 +59,8 @@ config_ethmgmt_dhcp4()
     done
 
     log_info_msg "Trying DHCPv4 on interface: $intf"
-    tmp=$(udhcpc $udhcp_args $udhcp_request_opts $udhcp_user_class -i $intf -s /lib/onie/udhcp4_net)
+    udhcpc $udhcp_args $udhcp_request_opts $udhcp_user_class \
+           -i $intf -s /lib/onie/udhcp4_net > /dev/null 2>&1
     if [ "$?" = "0" ] ; then
         local ipaddr=$(ifconfig $intf |grep 'inet '|sed -e 's/:/ /g'|awk '{ print $3 " / " $7 }')
         log_console_msg "Using DHCPv4 addr: ${intf}: $ipaddr"
@@ -186,10 +187,12 @@ config_ethmgmt()
     return $return_value
 }
 
-# When starting the network at boot time configure the MAC addresses
-# for all the Ethernet management interfaces.
 if [ "$1" = "start" ] ; then
-    # Configure Ethernet management MAC addresses
+    # Bring up the loopback interface
+    cmd_run ip link set dev lo up
+
+    # When starting the network at boot time configure the MAC
+    # addresses for all the Ethernet management interfaces.
     intf_list=$(net_intf)
     intf_counter=0
 

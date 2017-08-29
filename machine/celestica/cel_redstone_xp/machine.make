@@ -20,6 +20,7 @@ endif
 VENDOR_ID = 12244
 # Add the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
+I2CTOOLS_SYSEEPROM = yes
 
 PARTED_ENABLE = yes
 
@@ -28,6 +29,9 @@ PARTITION_TYPE = gpt
 # Set Linux kernel version
 LINUX_VERSION		= 3.2
 LINUX_MINOR_VERSION	= 69
+
+# Older GCC required for older 3.2 kernel
+GCC_VERSION = 4.9.2
 
 #-------------------------------------------------------------------------------
 #

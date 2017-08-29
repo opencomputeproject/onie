@@ -1,6 +1,6 @@
 # QEMU armv7a Virtual Machine
 
-#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -30,6 +30,9 @@ KERNEL_DTB_PATH = dts/$(KERNEL_DTB)
 # string.  HW vendors can use this to appended their own versioning
 # information to the base ONIE version string.
 # VENDOR_VERSION = .12.34
+
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers

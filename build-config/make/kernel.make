@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -135,7 +135,7 @@ $(KERNEL_INSTALL_STAMP): $(KERNEL_INSTALL_DEPS) $(KERNEL_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) touch $@
 
-CLEAN += kernel-clean
+MACHINE_CLEAN += kernel-clean
 kernel-clean:
 	$(Q) rm -rf $(KERNELDIR)
 	$(Q) rm -f $(KERNEL_STAMP)

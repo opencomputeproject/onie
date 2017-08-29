@@ -138,7 +138,7 @@ update_syseeprom()
     if [ -x /usr/bin/onie-syseeprom ] ; then
         local syseeprom_log=$(mktemp)
         onie-syseeprom \
-            -s 0x28="$image_platform",0x29="$image_version" \
+            -s 0x29="$image_version" \
             > $syseeprom_log 2>&1 || {
             echo "ERROR: Problems accessing sys_eeprom"
             cat $syseeprom_log && rm -f $syseeprom_log

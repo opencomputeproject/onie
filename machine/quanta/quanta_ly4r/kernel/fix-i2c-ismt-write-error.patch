@@ -1,0 +1,30 @@
+fix i2c-ismt write error
+
+diff --git a/drivers/i2c/busses/i2c-ismt.c b/drivers/i2c/busses/i2c-ismt.c
+index 6e932d1..dc348fa 100644
+--- a/drivers/i2c/busses/i2c-ismt.c
++++ b/drivers/i2c/busses/i2c-ismt.c
+@@ -675,6 +675,20 @@ static irqreturn_t ismt_do_interrupt(int vec, void *data)
+  */
+ static irqreturn_t ismt_do_msi_interrupt(int vec, void *data)
+ {
++	u32 val;
++	struct ismt_priv *priv = data;
++
++	do {
++		val = readl(priv->smba + ISMT_MSTR_MSTS);
++	} while (val & (ISMT_MSTS_IP));
++
++	writel(val | ISMT_MSTS_MIS | ISMT_MSTS_MEIS,
++	       priv->smba + ISMT_MSTR_MSTS);
++
++	val = readl(priv->smba + ISMT_MSTR_MCTRL);
++	val &= ~ISMT_MCTRL_SS;
++	writel(val, priv->smba + ISMT_MSTR_MCTRL);
++
+ 	return ismt_handle_isr(data);
+ }
+ 
+-- 
+1.7.9.5
+
