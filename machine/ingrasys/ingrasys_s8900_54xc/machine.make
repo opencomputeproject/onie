@@ -33,6 +33,9 @@ I2CTOOLS_ENABLE = yes
 CONSOLE_SPEED = 115200
 CONSOLE_DEV = 1
 
+# Set default I2C ISMT bus speed = 100
+EXTRA_CMDLINE_LINUX = i2c-ismt.bus_speed=100
+
 # Set Linux kernel version
 LINUX_VERSION       = 3.2
 LINUX_MINOR_VERSION = 69
