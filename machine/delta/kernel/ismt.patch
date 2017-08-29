@@ -1,0 +1,70 @@
+--- a/drivers/i2c/busses/i2c-ismt.c	2016-08-14 16:07:51.465407328 +0800
++++ b/drivers/i2c/busses/i2c-ismt.c	2016-09-02 11:15:53.010400955 +0800
+@@ -67,6 +67,8 @@
+ #include <linux/acpi.h>
+ #include <linux/interrupt.h>
+ 
++#include <linux/delay.h>
++
+ #include <asm-generic/io-64-nonatomic-lo-hi.h>
+ 
+ /* PCI Address Constants */
+@@ -192,6 +194,7 @@
+ module_param(bus_speed, uint, S_IRUGO);
+ MODULE_PARM_DESC(bus_speed, "Bus Speed in kHz (0 = BIOS default)");
+ 
++spinlock_t ismt_lock;
+ /**
+  * __ismt_desc_dump() - dump the contents of a specific descriptor
+  */
+@@ -388,6 +391,8 @@
+ 	struct ismt_priv *priv = i2c_get_adapdata(adap);
+ 	struct device *dev = &priv->pci_dev->dev;
+ 
++	unsigned long flagsLock;
++	spin_lock_irqsave(&ismt_lock, flagsLock);
+ 	desc = &priv->hw[priv->head];
+ 
+ 	/* Initialize the DMA buffer */
+@@ -544,6 +549,7 @@
+ 	default:
+ 		dev_err(dev, "Unsupported transaction %d\n",
+ 			size);
++	spin_unlock_irqrestore(&ismt_lock, flagsLock);
+ 		return -EOPNOTSUPP;
+ 	}
+ 
+@@ -563,6 +569,7 @@
+ 		if (dma_mapping_error(dev, dma_addr)) {
+ 			dev_err(dev, "Error in mapping dma buffer %p\n",
+ 				priv->dma_buffer);
++	spin_unlock_irqrestore(&ismt_lock, flagsLock);
+ 			return -EIO;
+ 		}
+ 
+@@ -577,6 +584,7 @@
+ 
+ 	/* Add the descriptor */
+ 	ismt_submit_desc(priv);
++  udelay(1);
+ 
+ 	/* Now we wait for interrupt completion, 1s */
+ 	time_left = wait_for_completion_timeout(&priv->cmp, HZ*1);
+@@ -598,7 +606,8 @@
+ 	/* Update the ring pointer */
+ 	priv->head++;
+ 	priv->head %= ISMT_DESC_ENTRIES;
+-
++  mdelay(6);
++	spin_unlock_irqrestore(&ismt_lock, flagsLock);
+ 	return ret;
+ }
+ 
+@@ -775,6 +784,7 @@
+ 
+ 	priv->head = 0;
+ 	init_completion(&priv->cmp);
++	spin_lock_init(&ismt_lock);
+ 
+ 	return 0;
+ }
