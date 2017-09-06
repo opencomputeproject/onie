@@ -206,7 +206,7 @@ EOF
         $tmp_installdir/grub.d/50_onie_grub
 fi
 
-sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine.conf || exit 1
+sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine-build.conf || exit 1
 echo -n "."
 
 if [ "$update_type" = "firmware" ] ; then
