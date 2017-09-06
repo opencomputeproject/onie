@@ -1,0 +1,48 @@
+diff -Nura a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c	2016-08-12 08:49:00.769304562 +0800
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c	2016-08-14 14:28:56.468267609 +0800
+@@ -30,6 +30,8 @@
+ #include <linux/types.h>
+ #include <linux/if_ether.h>
+ #include <linux/i2c.h>
++#include <linux/phy.h>
++#include <linux/brcmphy.h>
+ 
+ #include "e1000_mac.h"
+ #include "e1000_82575.h"
+@@ -286,11 +288,13 @@
+ 		phy->ops.set_d3_lplu_state = igb_set_d3_lplu_state_82580;
+ 		phy->ops.force_speed_duplex = igb_phy_force_speed_duplex_m88;
+ 		break;
++	case PHY_ID_BCM54616S:
++		phy->type = e1000_phy_bcm54616s;
++		break;
+ 	default:
+ 		ret_val = -E1000_ERR_PHY;
+ 		goto out;
+ 	}
+-
+ out:
+ 	return ret_val;
+ }
+@@ -1593,6 +1597,9 @@
+ 	case e1000_phy_82580:
+ 		ret_val = igb_copper_link_setup_82580(hw);
+ 		break;
++    case e1000_phy_bcm54616s:
++        ret_val = 0;
++        break;
+ 	default:
+ 		ret_val = -E1000_ERR_PHY;
+ 		break;
+diff -Nura a/drivers/net/ethernet/intel/igb/e1000_hw.h b/drivers/net/ethernet/intel/igb/e1000_hw.h
+--- a/drivers/net/ethernet/intel/igb/e1000_hw.h	2016-08-12 08:49:00.769304562 +0800
++++ b/drivers/net/ethernet/intel/igb/e1000_hw.h	2016-08-14 11:52:51.988859742 +0800
+@@ -128,6 +128,7 @@
+ 	e1000_phy_ife,
+ 	e1000_phy_82580,
+ 	e1000_phy_i210,
++    e1000_phy_bcm54616s,
+ };
+ 
+ enum e1000_bus_type {
