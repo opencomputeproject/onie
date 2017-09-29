@@ -13,6 +13,10 @@ VENDOR_REV ?= 0
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),0)
   MACHINE_REV = 0
+else ifeq ($(VENDOR_REV),1)
+  MACHINE_REV = 1
+  CONSOLE_SPEED = 9600
+  GRUB_TIMEOUT = 10
 else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
