@@ -40,6 +40,9 @@ LINUX_MINOR_VERSION	= 38
 #UCLIBC_VERSION = 0.9.32.1
 GCC_VERSION = 4.9.2
 
+#Extra kernel command line
+EXTRA_CMDLINE_LINUX ?= quiet
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
