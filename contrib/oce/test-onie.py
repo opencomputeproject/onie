@@ -407,6 +407,7 @@ def prepare_test_case(test_args):
             dns_server_ip = test_args['host_ipv4_addr']
         test_args['dns_server_ip'] = dns_server_ip
         test_args['dns_server_name'] = 'onie-server'
+        test_args['dhcp_dns_server'] = dns_server_ip
 
     # handle www_server_ip
     if test_num in www_server_cases:
