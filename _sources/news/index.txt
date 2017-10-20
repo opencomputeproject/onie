@@ -7,6 +7,10 @@
 Project News
 ************
 
+October 20, 2017
+  Release candidate `2017.11-rc1
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2017-October/001559.html>`_
+
 August 15, 2017
   Released version `2017.08
   <http://lists.opencompute.org/pipermail/opencompute-onie/2017-August/001504.html>`_
