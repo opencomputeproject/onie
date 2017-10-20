@@ -215,7 +215,7 @@ Use scp to copy the tarball to a remote host::
 
 SYNOPSIS
 --------
-``onie-sysinfo [-sevimrpcfdat]``
+``onie-sysinfo [-hsbSevimrpcfdatP]``
 
 DESCRIPTION
 -----------
@@ -235,9 +235,11 @@ COMMAND LINE OPTIONS
   -a | Dump all information
   -h | Help.  Print a help message.
   -s | Serial Number
+  -P | Part Number
   -e | Management Ethernet MAC address
   -v | ONIE version string
   -i | ONIE vendor ID.  Print the ONIE vendor's IANA enterprise number.
+  -b | ONIE build machine string
   -m | ONIE machine string
   -r | ONIE machine revision string
   -p | ONIE platform string.  This is the default.

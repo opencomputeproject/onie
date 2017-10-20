@@ -15,4 +15,5 @@ For Developers
    porting
    demo_os
    demo_diag
+   multiple_cpu
    release
