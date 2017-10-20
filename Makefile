@@ -7,41 +7,6 @@
 #
 # Builds the Open Network Install Environment documentation
 #
-#   build
-#   ├── <platform>
-#   │   ├── busybox
-#   │   ├── initramfs
-#   │   ├── kernel
-#   │   ├── stamp
-#   │   └── sysroot
-#   ├── user/<toolchain>/
-#   │        ├── btrfs-progs
-#   │        ├── dmidecode
-#   │        ├── dosfstools
-#   │        ├── dropbear
-#   │        ├── e2fsprogs
-#   │        ├── efibootmgr
-#   │        ├── efivar
-#   │        ├── ethtool
-#   │        ├── flashrom
-#   │        ├── gptfdisk
-#   │        ├── grub
-#   │        ├── grub-host
-#   │        ├── kexec-tools
-#   │        ├── lvm2
-#   │        ├── lzo
-#   │        ├── mtd-utils
-#   │        ├── parted
-#   │        ├── pciutils
-#   │        ├── popt
-#   │        ├── stamp
-#   │        ├── util-linux
-#   │        └── zlib
-#   ├── download
-#   ├── x-tools
-#   ├── docs
-#   └── images
-#
 #<
 
 # Don't move this, it must be in FRONT of any included makefiles
