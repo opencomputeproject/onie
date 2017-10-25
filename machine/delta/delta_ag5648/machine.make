@@ -1,4 +1,4 @@
-# Delta ag9032v1
+# Delta ag5648
 
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
