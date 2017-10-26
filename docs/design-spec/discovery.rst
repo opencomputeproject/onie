@@ -247,10 +247,6 @@ The static configuration uses the ``ip`` `Linux kernel command line
 argument
 <https://www.kernel.org/doc/Documentation/filesystems/nfs/nfsroot.txt>`_.
 
-The fall back IPv4 address is ``192.168.3.10`` for the first
-management port, with ``.11``, ``.12``, etc. used for additional
-management ports if necessary.
-
 .. _onie_dhcp_requests:
 
 DHCP Requests and Responses
@@ -502,18 +498,34 @@ names and search order.
 
 .. _discover_neighbors:
 
-HTTP IPv6 Neighbors
-^^^^^^^^^^^^^^^^^^^
+HTTP IPv4 and IPv6 Neighbors
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-ONIE also queries its IPv6 link-local neighbors via HTTP for an
+ONIE queries its IPv4 and IPv6 link-local neighbors via HTTP for an
 installer.  The general algorithm follows:
 
+#. ``ping`` the IPv4 broadcast address, ``255.255.255.255``.
 #. ``ping6`` the "all nodes" link local IPv6 multicast address, ``ff02::1``.
 #. For each responding neighbor, try to download the default file names
-   from the root of the Web server.
+   from the root of the HTTP server.
 
-Here is an example the URLs used by this method::
+Here is an example of the URLs used by this method::
 
+  http://203.0.113.14/onie-installer-x86_64-VENDOR_MACHINE-r0
+  http://203.0.113.14/onie-installer-x86_64-VENDOR_MACHINE
+  http://203.0.113.14/onie-installer-VENDOR_MACHINE
+  http://203.0.113.14/onie-installer-x86_64
+  http://203.0.113.14/onie-installer
+  http://203.0.113.75/onie-installer-x86_64-VENDOR_MACHINE-r0
+  http://203.0.113.75/onie-installer-x86_64-VENDOR_MACHINE
+  http://203.0.113.75/onie-installer-VENDOR_MACHINE
+  http://203.0.113.75/onie-installer-x86_64
+  http://203.0.113.75/onie-installer
+  http://203.0.113.108/onie-installer-x86_64-VENDOR_MACHINE-r0
+  http://203.0.113.108/onie-installer-x86_64-VENDOR_MACHINE
+  http://203.0.113.108/onie-installer-VENDOR_MACHINE
+  http://203.0.113.108/onie-installer-x86_64
+  http://203.0.113.108/onie-installer
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-x86_64-VENDOR_MACHINE-r0
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-x86_64-VENDOR_MACHINE
   http://fe80::4638:39ff:fe00:139e%eth0/onie-installer-VENDOR_MACHINE
