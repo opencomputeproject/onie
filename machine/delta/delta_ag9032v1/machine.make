@@ -26,7 +26,10 @@ VENDOR_ID = 2254
 
 # Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
+<<<<<<< HEAD
 I2CTOOLS_SYSEEPROM = no
+=======
+>>>>>>> 22f59648dc03688e039e195dd662da8e36b1e432
 
 
 # Set Linux kernel version

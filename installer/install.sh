@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013-2014,2016 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2015,2017 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -171,6 +171,7 @@ fi
 [ "$quiet" = "no" ] && echo "$update_label: Machine       : $image_build_machine"
 [ "$quiet" = "no" ] && echo "$update_label: Machine Rev   : $image_machine_rev"
 [ "$quiet" = "no" ] && echo "$update_label: Config Version: $image_config_version"
+[ "$quiet" = "no" ] && echo "$update_label: Build Date    : $image_build_date"
 
 # arch specific install method
 install_image "$@"
