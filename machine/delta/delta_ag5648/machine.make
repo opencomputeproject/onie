@@ -1,4 +1,4 @@
-# Delta ag9032v1
+# Delta ag5648
 
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
@@ -17,7 +17,7 @@ endif
 # The VENDOR_VERSION string is appended to the overal ONIE version
 # string.  HW vendors can use this to appended their own versioning
 # information to the base ONIE version string.
-VENDOR_VERSION = delta_ag9032v1_v1.0
+VENDOR_VERSION = onie_version_1.0
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
@@ -26,10 +26,6 @@ VENDOR_ID = 2254
 
 # Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
-<<<<<<< HEAD
-I2CTOOLS_SYSEEPROM = no
-=======
->>>>>>> 22f59648dc03688e039e195dd662da8e36b1e432
 
 
 # Set Linux kernel version
