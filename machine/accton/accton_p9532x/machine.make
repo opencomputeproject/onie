@@ -23,8 +23,6 @@ endif
 # Accton Technology Corporation IANA number
 VENDOR_ID = 259
 
-I2CTOOLS_SYSEEPROM = no
-
 # Console parameters
 CONSOLE_DEV = 0
 
