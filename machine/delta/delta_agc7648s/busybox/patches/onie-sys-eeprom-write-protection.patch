@@ -1,0 +1,89 @@
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index 3003bd6..11e6a4a 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -1,6 +1,12 @@
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
+ #include <getopt.h>
++#include "stdio.h"
++#include "stdlib.h"
++#include "string.h"
++
++#define REBOOT_VALUE_FILE   "/tmp/reboot_value.txt"
++static void reboot_value_set(void);
+ 
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+ /*
+@@ -36,11 +42,33 @@ cmd_usage()
+ 	"      Set a TLV code to a value.\n"
+ 	"      If no value, TLV is deleted.\n";
+ 
++    reboot_value_set();
+     fprintf(stderr, "%s", usage);
+     exit(1);
+ }
+ 
+ /*
++ * This macro defines the reboot value.
++*/
++static void reboot_value_set()
++{
++    FILE *fPtr;
++    char cmd[64] = {0};
++    char reboot_value[16] = {0};
++
++    fPtr = fopen(REBOOT_VALUE_FILE, "r");
++    if (!fPtr) 
++    {
++        printf("Fail to open reboot_value.txt!");
++        exit(1);
++    }
++    fscanf(fPtr, "%s", reboot_value);
++    fclose(fPtr);
++    sprintf(cmd, "i2cset -y 2 0x31 0x10 %s > /dev/null 2>&1", reboot_value);
++    system(cmd);/* Rewrite the reboot value */
++}
++
++/*
+  *  do_onie_syseeprom
+  *  This function implements the onie_syseeprom command.
+  */
+@@ -53,6 +81,8 @@ int onie_syseeprom_main(int argc, char **argv)
+     char *value, *subopts, *tname;
+     int index, c, i, option_index, tcode;
+     char tlv_value[TLV_DECODE_VALUE_MAX_LEN];
++    char register_i2cmux_cmd[64] = {0};
++    char reboot_value_cmd[64] = {0};
+ 
+     const size_t tlv_code_count = sizeof(tlv_code_list) /
+ 	sizeof(tlv_code_list[0]);
+@@ -74,6 +104,15 @@ int onie_syseeprom_main(int argc, char **argv)
+     }
+     tokens[tlv_code_count] = NULL;
+ 
++    if (access("/sys/bus/i2c/devices/1-0071",0) != 0)
++    {
++        sprintf(register_i2cmux_cmd, "echo \"pca9547 0x71\" > /sys/bus/i2c/devices/i2c-1/new_device");
++        system(register_i2cmux_cmd);/*register i2c mux */
++        sprintf(reboot_value_cmd, "i2cget -y 2 0x31 0x10 > %s",REBOOT_VALUE_FILE);
++        system(reboot_value_cmd);/* Save the reboot value to reboot_value.txt */
++    }
++    system("i2cset -y 2 0x31 0x10 0x00");/* disable the eeprom write protect via CPLD */
++
+     while (TRUE) {
+ 	c = getopt_long(argc, argv, short_options,
+ 			long_options, &option_index);
+@@ -173,9 +212,12 @@ int onie_syseeprom_main(int argc, char **argv)
+         }
+ 	show_eeprom(eeprom);
+     }
++    reboot_value_set();
++
+ syseeprom_err:
+     for (i = 0; i < tlv_code_count; i++) {
+ 	free(tokens[i]);
+     }
++    reboot_value_set();
+     return  (err == 0) ? 0 : 1;
+ }
