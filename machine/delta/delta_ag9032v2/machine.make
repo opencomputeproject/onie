@@ -42,5 +42,4 @@ UEFI_ENABLE = no
 #
 # Local Variables:
 # mode: makefile-gmake
-EXTRA_CMDLINE_LINUX = libata.force=noncq panic=10 hpet=disable 
 # End:
