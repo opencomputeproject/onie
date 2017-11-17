@@ -24,11 +24,11 @@ I2CTOOLS_ENABLE = yes
 I2CTOOLS_SYSEEPROM = no
 
 # Set the desired kernel version.
-LINUX_VERSION		= 3.2
-LINUX_MINOR_VERSION	= 69
+LINUX_VERSION		= 4.9
+LINUX_MINOR_VERSION	= 57
 
-# Older GCC required for older 3.2 kernel
-GCC_VERSION = 4.9.2
+# Use gcc-6.3.0
+GCC_VERSION = 6.3.0
 
 #
 # Console parameters can be defined here 
