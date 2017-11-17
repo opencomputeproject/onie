@@ -1,6 +1,6 @@
 # Makefile fragment for FSL P2020RDB
 
-#  Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -20,6 +20,9 @@ endif
 
 UBOOT_MACHINE = P2020RDB-PC_ONIE_$(MACHINE_REV)
 KERNEL_DTB = p2020rdb.dtb
+
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers

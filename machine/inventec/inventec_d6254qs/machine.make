@@ -22,15 +22,14 @@ VENDOR_ID = 6569
 # Skip the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
 I2CTOOLS_SYSEEPROM = no
+
 # Set the desired kernel version.
 LINUX_VERSION		= 3.2
 LINUX_MINOR_VERSION	= 69
 
-#LINUX_VERSION		= 3.14
-#LINUX_MINOR_VERSION	= 16
+# Older GCC required for older 3.2 kernel
+GCC_VERSION = 4.9.2
 
-# Set the desired uClibc version
-UCLIBC_VERSION = 0.9.33.2
 #
 # Console parameters can be defined here 
 # - default values are in build-config/arch/x86_64.make

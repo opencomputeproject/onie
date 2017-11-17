@@ -26,6 +26,9 @@ LINUX_TARBALL_URLS	= http://git.freescale.com/git/cgit.cgi/ppc/sdk/linux.git/sna
 LINUX_RELEASE		= fsl-sdk-v1.7
 LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
 
+# Older GCC required for older fsl-sdk-v1.7 kernel
+GCC_VERSION = 4.9.2
+
 # Set the desired u-boot version.
 UBOOT_TARBALL_URLS	= http://git.freescale.com/git/cgit.cgi/ppc/sdk/u-boot.git/snapshot
 UBOOT_VERSION		= fsl-sdk-v1.7

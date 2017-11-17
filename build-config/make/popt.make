@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -12,15 +12,15 @@
 POPT_VERSION		= 1.16
 POPT_TARBALL		= popt-$(POPT_VERSION).tar.gz
 POPT_TARBALL_URLS	+= $(ONIE_MIRROR) http://rpm5.org/files/popt/
-POPT_BUILD_DIR		= $(MBUILDDIR)/popt
+POPT_BUILD_DIR		= $(USER_BUILDDIR)/popt
 POPT_DIR		= $(POPT_BUILD_DIR)/popt-$(POPT_VERSION)
 
 POPT_SRCPATCHDIR	= $(PATCHDIR)/popt
 POPT_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/popt-download
-POPT_SOURCE_STAMP	= $(STAMPDIR)/popt-source
-POPT_PATCH_STAMP	= $(STAMPDIR)/popt-patch
-POPT_CONFIGURE_STAMP	= $(STAMPDIR)/popt-configure
-POPT_BUILD_STAMP	= $(STAMPDIR)/popt-build
+POPT_SOURCE_STAMP	= $(USER_STAMPDIR)/popt-source
+POPT_PATCH_STAMP	= $(USER_STAMPDIR)/popt-patch
+POPT_CONFIGURE_STAMP	= $(USER_STAMPDIR)/popt-configure
+POPT_BUILD_STAMP	= $(USER_STAMPDIR)/popt-build
 POPT_INSTALL_STAMP	= $(STAMPDIR)/popt-install
 POPT_STAMP		= $(POPT_SOURCE_STAMP) \
 			  $(POPT_PATCH_STAMP) \
@@ -47,7 +47,7 @@ $(POPT_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(POPT_SOURCE_STAMP)
 popt-source: $(POPT_SOURCE_STAMP)
-$(POPT_SOURCE_STAMP): $(TREE_STAMP) | $(POPT_DOWNLOAD_STAMP)
+$(POPT_SOURCE_STAMP): $(USER_TREE_STAMP) | $(POPT_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream popt ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(POPT_BUILD_DIR) $(DOWNLOADDIR)/$(POPT_TARBALL)
@@ -84,20 +84,19 @@ $(POPT_BUILD_STAMP): $(POPT_CONFIGURE_STAMP) $(POPT_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building popt-$(POPT_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(POPT_DIR)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(POPT_DIR) install
 	$(Q) touch $@
 
 popt-install: $(POPT_INSTALL_STAMP)
 $(POPT_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(POPT_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing popt in $(DEV_SYSROOT) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
-		$(MAKE) -C $(POPT_DIR) install
+	$(Q) echo "==== Installing popt in $(SYSROOTDIR) ===="
 	$(Q) for file in $(POPT_LIBS) ; do \
 		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
 	done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += popt-clean
+USER_CLEAN += popt-clean
 popt-clean:
 	$(Q) rm -rf $(POPT_BUILD_DIR)
 	$(Q) rm -f $(POPT_STAMP)

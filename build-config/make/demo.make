@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -49,10 +49,10 @@ endif
 
 # List of files to remove from base ONIE image for the demo.
 DEMO_TRIM = \
-   etc/rc0.d/K25discover.sh	\
-   etc/rc3.d/S50discover.sh	\
-   etc/rc6.d/K25discover.sh	\
-   etc/rcS.d/S03boot-mode.sh	\
+   etc/rc0.d/K*discover.sh	\
+   etc/rc3.d/S*discover.sh	\
+   etc/rc6.d/K*discover.sh	\
+   etc/rcS.d/S*boot-mode.sh	\
    etc/init.d/discover.sh	\
    etc/init.d/boot-mode.sh	\
    bin/discover			\
@@ -80,7 +80,7 @@ $(DEMO_SYSROOT_COMPLETE_STAMP): $(SYSROOT_CPIO_XZ)
 # This step creates the cpio archive and compresses it
 $(DEMO_SYSROOT_CPIO_XZ) : $(DEMO_SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for demo OS ===="
-	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(DEMO_SYSROOTDIR) $(DEMO_SYSROOT_CPIO)
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(DEMO_SYSROOTDIR) $(DEMO_SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(DEMO_SYSROOT_CPIO) > $@
 
 $(DEMO_UIMAGE_COMPLETE_STAMP): $(KERNEL_INSTALL_STAMP) $(DEMO_SYSROOT_CPIO_XZ)
@@ -123,7 +123,7 @@ demo-image-complete: $(DEMO_IMAGE_COMPLETE_STAMP)
 $(DEMO_IMAGE_COMPLETE_STAMP): $(DEMO_ARCH_BINS)
 	$(Q) touch $@
 
-CLEAN += demo-clean
+MACHINE_CLEAN += demo-clean
 demo-clean:
 	$(Q) rm -rf $(DEMO_SYSROOTDIR)
 	$(Q) rm -f $(MBUILDDIR)/demo-* $(DEMO_IMAGE_PARTS) $(DEMO_OS_BIN) $(DEMO_DIAG_BIN)

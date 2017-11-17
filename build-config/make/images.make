@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Puneet <puneet@cumulusnetworks.com>
 #  Copyright (C) 2015 Carlos Cardenas <carlos@cumulusnetworks.com>
@@ -38,7 +38,7 @@ IMAGE			= $(IMAGE_COMPLETE_STAMP)
 
 LSB_RELEASE_FILE = $(MBUILDDIR)/lsb-release
 OS_RELEASE_FILE	 = $(MBUILDDIR)/os-release
-MACHINE_CONF	 = $(MBUILDDIR)/machine.conf
+MACHINE_CONF	 = $(MBUILDDIR)/machine-build.conf
 
 INSTALLER_DIR	= $(abspath ../installer)
 
@@ -130,8 +130,13 @@ CHECKDIR	= $(CHECKROOT)/checkdir
 CHECKFILES	= $(CHECKROOT)/checkfiles.txt
 SYSFILES	= $(CHECKROOT)/sysfiles.txt
 
-ifeq ($(XTOOLS_LIBC),uClibc)
-SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
+ifeq ($(XTOOLS_LIBC),uClibc-ng)
+  SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
+		  ld$(CLIB64)-uClibc.so.1 \
+		  libc.so.0 libuClibc-$(XTOOLS_LIBC_VERSION).so \
+		  libgcc_s.so.1 libgcc_s.so
+else ifeq ($(XTOOLS_LIBC),uClibc)
+  SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
 		  libm.so.0 libm-$(XTOOLS_LIBC_VERSION).so \
 		  libgcc_s.so.1 libgcc_s.so \
 		  libc.so.0 libuClibc-$(XTOOLS_LIBC_VERSION).so \
@@ -166,10 +171,10 @@ endif
 
 ifeq ($(REQUIRE_CXX_LIBS),yes)
   SYSROOT_LIBS += libstdc++.so libstdc++.so.6
-  ifeq ($(GCC_VERSION),4.9.2)
+  ifeq ($(GCC_VERSION),6.3.0)
+    SYSROOT_LIBS += libstdc++.so.6.0.22
+  else ifeq ($(GCC_VERSION),4.9.2)
     SYSROOT_LIBS += libstdc++.so.6.0.20
-  else ifeq ($(GCC_VERSION),4.7.3)
-    SYSROOT_LIBS += libstdc++.so.6.0.17
   else
     $(error C++ support: Unsupported GCC version: $(GCC_VERSION))
   endif
@@ -229,15 +234,13 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
        endif
 	$(Q) touch $@
 
-# Setting RUNTIME_ONIE_PLATFORM and RUNTIME_ONIE_MACHINE on the
-# command line allows you "fake" a real machine at runtime.  This is
-# particularly useful when MACHINE is the kvm_x86_64 virtual machine.
-# Using these variables you can make the running virtual machine look
-# like a specific real machine.  This is useful when developing an
-# installer for a particular platform.  You can develope the installer
-# using the virtual machine.
-RUNTIME_ONIE_MACHINE	?= $(MACHINE)
-RUNTIME_ONIE_PLATFORM	?= $(ARCH)-$(RUNTIME_ONIE_MACHINE)-r$(MACHINE_REV)
+# Setting ONIE_BUILD_MACHINE on the command line allows you "fake" a
+# real machine at runtime.  This is particularly useful when MACHINE
+# is the kvm_x86_64 virtual machine.  Using these variables you can
+# make the running virtual machine look like a specific real machine.
+# This is useful when developing an installer for a particular
+# platform.  You can develop the installer using the virtual machine.
+ONIE_BUILD_MACHINE	?= $(MACHINE)
 
 sysroot-complete: $(SYSROOT_COMPLETE_STAMP)
 $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
@@ -277,12 +280,11 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) rm -f $(MACHINE_CONF)
 	$(Q) echo "onie_version=$(LSB_RELEASE_TAG)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_vendor_id=$(VENDOR_ID)" >> $(MACHINE_CONF)
-	$(Q) echo "onie_platform=$(RUNTIME_ONIE_PLATFORM)" >> $(MACHINE_CONF)
-	$(Q) echo "onie_machine=$(RUNTIME_ONIE_MACHINE)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_build_machine=$(ONIE_BUILD_MACHINE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_machine_rev=$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_config_version=$(ONIE_CONFIG_VERSION)" >> $(MACHINE_CONF)
-	$(Q) echo "onie_build_date=\"$$(date -Imin)\"" >> $(MACHINE_CONF)
+	$(Q) echo "onie_build_date=\"$(ONIE_BUILD_DATE)\"" >> $(MACHINE_CONF)
 	$(Q) echo "onie_partition_type=$(PARTITION_TYPE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_kernel_version=$(LINUX_RELEASE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_firmware=$(FIRMWARE_TYPE)" >> $(MACHINE_CONF)
@@ -293,13 +295,13 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
        endif
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
-	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine.conf
+	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine-build.conf
 	$(Q) touch $@
 
 # This step creates the cpio archive and compresses it
 $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for bootstrap ===="
-	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(SYSROOTDIR) $(SYSROOT_CPIO)
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SYSROOTDIR) $(SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(SYSROOT_CPIO) > $@
 
 $(UPDATER_INITRD) : $(SYSROOT_CPIO_XZ)
@@ -413,7 +415,7 @@ $(RECOVERY_INITRD_STAMP): $(IMAGE_UPDATER_STAMP)
 	$(Q) mkdir -p $(RECOVERY_DIR)
 	$(Q) cp -a $(SYSROOTDIR) $(RECOVERY_SYSROOT)
 	$(Q) cp $(UPDATER_IMAGE) $(RECOVERY_SYSROOT)/lib/onie/onie-updater
-	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SCRIPTDIR)/make-devices.pl $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
+	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(RECOVERY_SYSROOT) $(RECOVERY_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(RECOVERY_CPIO) > $(RECOVERY_INITRD)
 	$(Q) touch $@
 
@@ -459,9 +461,10 @@ $(PXE_EFI64_STAMP): $(RECOVERY_ISO_STAMP) $(RECOVERY_CONF_DIR)/grub-embed.cfg
 PHONY += image-complete
 image-complete: $(IMAGE_COMPLETE_STAMP)
 $(IMAGE_COMPLETE_STAMP): $(PLATFORM_IMAGE_COMPLETE) $(MACHINE_IMAGE_COMPLETE_STAMP)
+	$(Q) echo "Created: $(UPDATER_IMAGE)"
 	$(Q) touch $@
 
-USERSPACE_CLEAN += image-clean
+MACHINE_CLEAN += image-clean
 image-clean:
 	$(Q) rm -f $(IMAGEDIR)/*$(MACHINE_PREFIX)* $(SYSROOT_CPIO_XZ) $(IMAGE_COMPLETE_STAMP) $(KERNEL_VMLINUZ_INSTALL_STAMP)
 	$(Q) rm -rf $(RECOVERY_DIR) $(MACHINE_IMAGE_COMPLETE_STAMP) $(MACHINE_IMAGE_PRODUCTS)

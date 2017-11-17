@@ -27,6 +27,9 @@ LINUX_TARBALL_URLS	= http://git.freescale.com/git/cgit.cgi/ppc/sdk/linux.git/sna
 LINUX_RELEASE		= fsl-sdk-v1.5
 LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
 
+# Older GCC required for older fsl-sdk-v1.5 kernel
+GCC_VERSION = 4.9.2
+
 UBOOT_MACHINE = AS5710_54X
 KERNEL_DTB = as5710_54x.dtb
 

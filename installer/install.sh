@@ -1,17 +1,17 @@
 #!/bin/sh
 
 #  Copyright (C) 2013-2014,2016 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2015 david_yang <david_yang@accton.com>
+#  Copyright (C) 2015,2017 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
 cd $(dirname $0)
 
-[ -r ./machine.conf ] || {
-    echo "ERROR: machine.conf file is missing."
+[ -r ./machine-build.conf ] || {
+    echo "ERROR: machine-build.conf file is missing."
     exit 1
 }
-. ./machine.conf
+. ./machine-build.conf
 
 # Default implementation is no additional args
 parse_arg_arch()
@@ -43,6 +43,10 @@ true ${onie_machine_rev=0}
 # for backward compatibility if running onie_conf_version is empty
 # assume it is 0.
 true ${onie_config_version=0}
+
+# for backward compatibility, if running onie_build_machine is empty
+# assign the value from onie_machine.
+onie_build_machine=${onie_build_machine:-$onie_machine}
 
 args="hivfqx${args_arch}"
 
@@ -99,7 +103,7 @@ while getopts "$args" a ; do
             ;;
         i)
             # Dump the image information
-            cat ./machine.conf
+            cat ./machine-build.conf
             exit 0
             ;;
         *)
@@ -121,7 +125,7 @@ xz -d -c onie-update.tar.xz | tar -xf -
 
 check_machine_image()
 {
-    if [ "$onie_machine" != "$image_machine" ] ; then
+    if [ "$onie_build_machine" != "$image_build_machine" ] ; then
         fail=yes
     fi
     if [ "$onie_machine_rev" != "$image_machine_rev" ] ; then
@@ -138,7 +142,7 @@ update_syseeprom()
     if [ -x /usr/bin/onie-syseeprom ] ; then
         local syseeprom_log=$(mktemp)
         onie-syseeprom \
-            -s 0x28="$image_platform",0x29="$image_version" \
+            -s 0x29="$image_version" \
             > $syseeprom_log 2>&1 || {
             echo "ERROR: Problems accessing sys_eeprom"
             cat $syseeprom_log && rm -f $syseeprom_log
@@ -156,17 +160,18 @@ check_machine_image
 
 if [ "$fail" = "yes" ] && [ "$force" = "no" ] ; then
     echo "ERROR:$update_label: Machine mismatch"
-    echo "Running machine     : ${onie_arch}-${onie_machine}-${onie_machine_rev}"
-    echo "Update Image machine: ${image_arch}-${image_machine}-${image_machine_rev}"
+    echo "Running platform     : ${onie_arch}-${onie_build_machine}-r${onie_machine_rev}"
+    echo "Update Image platform: ${image_arch}-${image_build_machine}-r${image_machine_rev}"
     echo "Source URL: $onie_exec_url"
     exit 1
 fi
 
 [ "$quiet" = "no" ] && echo "$update_label: Version       : $image_version"
 [ "$quiet" = "no" ] && echo "$update_label: Architecture  : $image_arch"
-[ "$quiet" = "no" ] && echo "$update_label: Machine       : $image_machine"
+[ "$quiet" = "no" ] && echo "$update_label: Machine       : $image_build_machine"
 [ "$quiet" = "no" ] && echo "$update_label: Machine Rev   : $image_machine_rev"
 [ "$quiet" = "no" ] && echo "$update_label: Config Version: $image_config_version"
+[ "$quiet" = "no" ] && echo "$update_label: Build Date    : $image_build_date"
 
 # arch specific install method
 install_image "$@"

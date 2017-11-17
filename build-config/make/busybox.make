@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #  Copyright (C) 2014 Nikolay Shopik <shopik@inblock.ru>
@@ -101,6 +101,13 @@ ifeq ($(DOSFSTOOLS_ENABLE),yes)
 	$(Q) sed -i \
 		-e '/\bCONFIG_MKFS_VFAT\b/c\# CONFIG_MKFS_VFAT is not set' $@
 endif
+ifeq ($(I2CTOOLS_ENABLE),yes)
+	$(Q) sed -i \
+		-e '/\bCONFIG_I2CGET\b/cCONFIG_I2CGET=y' \
+		-e '/\bCONFIG_I2CSET\b/cCONFIG_I2CSET=y' \
+		-e '/\bCONFIG_I2CDUMP\b/cCONFIG_I2CDUMP=y' \
+		-e '/\bCONFIG_I2CDETECT\b/cCONFIG_I2CDETECT=y' $@
+endif
 	$(Q) $(SCRIPTDIR)/apply-config-patch $@ $(MACHINE_BUSYBOX_CONFIG_FILE)
 
 busybox-config: $(BUSYBOX_DIR)/.config
@@ -114,7 +121,7 @@ BUSYBOX_NEW_FILES = $(shell test -d $(BUSYBOX_DIR) && test -f $(BUSYBOX_BUILD_ST
 endif
 
 busybox-build: $(BUSYBOX_BUILD_STAMP)
-$(BUSYBOX_BUILD_STAMP): $(BUSYBOX_DIR)/.config $(BUSYBOX_NEW_FILES) $(UCLIBC_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(BUSYBOX_BUILD_STAMP): $(BUSYBOX_DIR)/.config $(BUSYBOX_NEW_FILES) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building busybox-$(BUSYBOX_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'				\
@@ -141,7 +148,7 @@ $(BUSYBOX_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(BUSYBOX_BUILD_STAMP)
 	$(Q) chmod 4755 $(SYSROOTDIR)/bin/busybox
 	$(Q) touch $@
 
-USERSPACE_CLEAN += busybox-clean
+MACHINE_CLEAN += busybox-clean
 busybox-clean:
 	$(Q) rm -rf $(BUSYBOX_BUILD_DIR)
 	$(Q) rm -f $(BUSYBOX_STAMP)

@@ -25,13 +25,21 @@ endif
 # Accton Technology Corporation IANA number
 VENDOR_ID = 259
 
-I2CTOOLS_ENABLE = yes
+UEFI_ENABLE = yes
+PXE_EFI64_ENABLE = yes
+
 I2CTOOLS_SYSEEPROM = no
 
 MACHINE_BUSYBOX_DIR = $(MACHINEDIR)/busybox/r$(MACHINE_REV)
 
 # Console parameters
 CONSOLE_DEV = 0
+
+# Specify Linux kernel version -- comment out to use the default
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
+
+GCC_VERSION = 4.9.2
 
 #-------------------------------------------------------------------------------
 #

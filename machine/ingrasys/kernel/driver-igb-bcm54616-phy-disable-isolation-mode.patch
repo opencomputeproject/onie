@@ -1,0 +1,83 @@
+From c758f1cc2e0bf2397433745bd87908453d004816 Mon Sep 17 00:00:00 2001
+From: feng <feng@ingrasys>
+Date: Wed, 16 Aug 2017 19:34:50 +0800
+Subject: [PATCH] driver igb bcm54616 phy disable isolation mode
+
+---
+ drivers/net/ethernet/intel/igb/e1000_82575.c   |  3 +++
+ drivers/net/ethernet/intel/igb/e1000_defines.h |  1 +
+ drivers/net/ethernet/intel/igb/e1000_phy.c     | 19 +++++++++++++++++++
+ drivers/net/ethernet/intel/igb/e1000_phy.h     |  1 +
+ 4 files changed, 24 insertions(+)
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+index 833f86f..f5498c2 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c
+@@ -1136,6 +1136,9 @@ static s32 igb_setup_copper_link_82575(struct e1000_hw *hw)
+ 		ret_val = igb_copper_link_setup_82580(hw);
+ 		break;
+ 	case e1000_phy_bcm54616:
++		if (igb_disable_mii_isolate_bcm54616(hw) != 0) {
++			hw_dbg("Disable bcm54616 PHY MII isolate mode failed.\n");
++        }
+ 		ret_val = E1000_SUCCESS;
+ 		break;
+ 	default:
+diff --git a/drivers/net/ethernet/intel/igb/e1000_defines.h b/drivers/net/ethernet/intel/igb/e1000_defines.h
+index 88be58d..45b7f31 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_defines.h
++++ b/drivers/net/ethernet/intel/igb/e1000_defines.h
+@@ -529,6 +529,7 @@
+ /* PHY Control Register */
+ #define MII_CR_FULL_DUPLEX      0x0100  /* FDX =1, half duplex =0 */
+ #define MII_CR_RESTART_AUTO_NEG 0x0200  /* Restart auto negotiation */
++#define MII_CR_ISOLATE          0x0400  /* Isolate PHY from MII */
+ #define MII_CR_POWER_DOWN       0x0800  /* Power down */
+ #define MII_CR_AUTO_NEG_EN      0x1000  /* Auto Neg Enable */
+ #define MII_CR_LOOPBACK         0x4000  /* 0 = normal, 1 = loopback */
+diff --git a/drivers/net/ethernet/intel/igb/e1000_phy.c b/drivers/net/ethernet/intel/igb/e1000_phy.c
+index b17d7c2..8037562 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_phy.c
++++ b/drivers/net/ethernet/intel/igb/e1000_phy.c
+@@ -798,6 +798,25 @@ out:
+ }
+ 
+ /**
++ *  igb_disable_mii_isolate_bcm54616 - diable IGB mii isolation mode
++ *  @hw: pointer to the HW structure
++ **/
++s32 igb_disable_mii_isolate_bcm54616(struct e1000_hw *hw)
++{
++	struct e1000_phy_info *phy = &hw->phy;
++	s32 ret_val;
++	u16 phy_data;
++
++	ret_val = phy->ops.read_reg(hw, PHY_CONTROL, &phy_data);
++	if (ret_val)
++		return ret_val;
++	phy_data &=~(MII_CR_ISOLATE);
++	ret_val = phy->ops.write_reg(hw, PHY_CONTROL, phy_data);
++    
++	return ret_val;
++}
++
++/**
+  *  igb_copper_link_autoneg - Setup/Enable autoneg for copper link
+  *  @hw: pointer to the HW structure
+  *
+diff --git a/drivers/net/ethernet/intel/igb/e1000_phy.h b/drivers/net/ethernet/intel/igb/e1000_phy.h
+index 8510797..63d2f5e 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_phy.h
++++ b/drivers/net/ethernet/intel/igb/e1000_phy.h
+@@ -46,6 +46,7 @@ s32  igb_check_reset_block(struct e1000_hw *hw);
+ s32  igb_copper_link_setup_igp(struct e1000_hw *hw);
+ s32  igb_copper_link_setup_m88(struct e1000_hw *hw);
+ s32  igb_copper_link_setup_m88_gen2(struct e1000_hw *hw);
++s32  igb_disable_mii_isolate_bcm54616(struct e1000_hw *hw);
+ s32  igb_phy_force_speed_duplex_igp(struct e1000_hw *hw);
+ s32  igb_phy_force_speed_duplex_m88(struct e1000_hw *hw);
+ s32  igb_get_cable_length_m88(struct e1000_hw *hw);
+-- 
+2.1.4
+

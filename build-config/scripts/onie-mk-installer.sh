@@ -135,9 +135,9 @@ echo -n "."
 cp -r $installer_dir/$arch_dir/* $tmp_installdir
 echo -n "."
 
-[ -r $machine_dir/installer/install-platform ] && {
+if [ "$update_type" = "onie" -a -r $machine_dir/installer/install-platform ] ; then
     cp $machine_dir/installer/install-platform $tmp_installdir
-}
+fi
 
 # Massage install-arch
 if [ "$arch_dir" = "u-boot-arch" ] ; then
@@ -206,7 +206,7 @@ EOF
         $tmp_installdir/grub.d/50_onie_grub
 fi
 
-sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine.conf || exit 1
+sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine-build.conf || exit 1
 echo -n "."
 
 if [ "$update_type" = "firmware" ] ; then

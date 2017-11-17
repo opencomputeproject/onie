@@ -31,6 +31,12 @@ I2CTOOLS_SYSEEPROM = no
 # Console parameters
 CONSOLE_DEV = 1
 
+# Specify Linux kernel version -- comment out to use the default
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
+
+GCC_VERSION = 4.9.2
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:

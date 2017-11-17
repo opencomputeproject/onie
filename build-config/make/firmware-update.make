@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2016 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -12,7 +12,7 @@
 #
 
 FIRMWARE_DIR		= $(MBUILDDIR)/firmware
-FIRMWARE_CONF		= $(FIRMWARE_DIR)/machine.conf
+FIRMWARE_CONF		= $(FIRMWARE_DIR)/machine-build.conf
 FIRMWARE_UPDATE_BASE	= onie-firmware-$(PLATFORM).bin
 FIRMWARE_UPDATE_IMAGE	= $(IMAGEDIR)/$(FIRMWARE_UPDATE_BASE)
 
@@ -61,8 +61,7 @@ $(FIRMWARE_UPDATE_COMPLETE_STAMP): $(IMAGE_UPDATER_SHARCH) $(MACHINE_FW_INSTALLE
 	$(Q) rm -f $(FIRMWARE_CONF)
 	$(Q) echo "onie_version=$(FW_VERSION)" >> $(FIRMWARE_CONF)
 	$(Q) echo "onie_vendor_id=$(VENDOR_ID)" >> $(FIRMWARE_CONF)
-	$(Q) echo "onie_platform=$(RUNTIME_ONIE_PLATFORM)" >> $(FIRMWARE_CONF)
-	$(Q) echo "onie_machine=$(RUNTIME_ONIE_MACHINE)" >> $(FIRMWARE_CONF)
+	$(Q) echo "onie_build_machine=$(ONIE_BUILD_MACHINE)" >> $(FIRMWARE_CONF)
 	$(Q) echo "onie_machine_rev=$(MACHINE_REV)" >> $(FIRMWARE_CONF)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(FIRMWARE_CONF)
 	$(Q) echo "onie_config_version=$(ONIE_CONFIG_VERSION)" >> $(FIRMWARE_CONF)
@@ -77,7 +76,7 @@ PHONY += firmware-update
 firmware-update: $(FIRMWARE_UPDATE_COMPLETE_STAMP)
 	$(Q) echo "=== Finished making firmware update package $(FIRMWARE_UPDATE_BASE) ==="
 
-CLEAN += firmware-update-clean
+MACHINE_CLEAN += firmware-update-clean
 firmware-update-clean:
 	$(Q) rm -f $(FIRMWARE_UPDATE_COMPLETE_STAMP) $(FIRMWARE_UPDATE_IMAGE)
 	$(Q) rm -rf $(FIRMWARE_DIR) $(FIRMWARE_UPDATE_IMAGE)

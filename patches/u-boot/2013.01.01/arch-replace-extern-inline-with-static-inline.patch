@@ -1,0 +1,804 @@
+powerpc: Back port upstream compiler fixes for inlines
+The original commit message follows:
+
+commit 44d0677a90f82eb2b01dd5150ca8e0115453d7d3
+Author: Måns Rullgård <mans@mansr.com>
+Date:   Fri Nov 6 12:44:01 2015 +0000
+
+    Replace "extern inline" with "static inline"
+
+    A number of headers define functions as "extern inline" which is
+    causing problems with gcc5.  The reason is that starting with
+    version 5.1, gcc defaults to the standard C99 semantics for the
+    inline keyword.
+
+    Under the traditional GNU inline semantics, an "extern inline"
+    function would never create an external definition, the same as
+    inline *without* extern in C99.  In C99, and "extern inline"
+    definition is simply an external definition with an inline hint.
+    In short, the meanings of inline with and without extern are
+    swapped between GNU and C99.
+
+    The upshot is that all these definitions in header files create an
+    external definition wherever those headers are included, resulting
+    in multiple definition errors at link time.
+
+    Changing all these functions to "static inline" fixes the problem
+    since this works as desired in all gcc versions.  Although the
+    semantics are slightly different (a static inline definition may
+    result in an actual function being emitted), it works as intended
+    in practice.
+
+    This patch also removes extern prototype declarations for the
+    changed functions where they existed.
+
+    Signed-off-by: Mans Rullgard <mans@mansr.com>
+
+diff --git a/arch/arm/include/asm/io.h b/arch/arm/include/asm/io.h
+index 1fbc531..5f5f8d0 100644
+--- a/arch/arm/include/asm/io.h
++++ b/arch/arm/include/asm/io.h
+@@ -75,42 +75,42 @@ static inline phys_addr_t virt_to_phys(void * vaddr)
+ #define __arch_putw(v,a)		(*(volatile unsigned short *)(a) = (v))
+ #define __arch_putl(v,a)		(*(volatile unsigned int *)(a) = (v))
+ 
+-extern inline void __raw_writesb(unsigned int addr, const void *data, int bytelen)
++static inline void __raw_writesb(unsigned int addr, const void *data, int bytelen)
+ {
+ 	uint8_t *buf = (uint8_t *)data;
+ 	while(bytelen--)
+ 		__arch_putb(*buf++, addr);
+ }
+ 
+-extern inline void __raw_writesw(unsigned int addr, const void *data, int wordlen)
++static inline void __raw_writesw(unsigned int addr, const void *data, int wordlen)
+ {
+ 	uint16_t *buf = (uint16_t *)data;
+ 	while(wordlen--)
+ 		__arch_putw(*buf++, addr);
+ }
+ 
+-extern inline void __raw_writesl(unsigned int addr, const void *data, int longlen)
++static inline void __raw_writesl(unsigned int addr, const void *data, int longlen)
+ {
+ 	uint32_t *buf = (uint32_t *)data;
+ 	while(longlen--)
+ 		__arch_putl(*buf++, addr);
+ }
+ 
+-extern inline void __raw_readsb(unsigned int addr, void *data, int bytelen)
++static inline void __raw_readsb(unsigned int addr, void *data, int bytelen)
+ {
+ 	uint8_t *buf = (uint8_t *)data;
+ 	while(bytelen--)
+ 		*buf++ = __arch_getb(addr);
+ }
+ 
+-extern inline void __raw_readsw(unsigned int addr, void *data, int wordlen)
++static inline void __raw_readsw(unsigned int addr, void *data, int wordlen)
+ {
+ 	uint16_t *buf = (uint16_t *)data;
+ 	while(wordlen--)
+ 		*buf++ = __arch_getw(addr);
+ }
+ 
+-extern inline void __raw_readsl(unsigned int addr, void *data, int longlen)
++static inline void __raw_readsl(unsigned int addr, void *data, int longlen)
+ {
+ 	uint32_t *buf = (uint32_t *)data;
+ 	while(longlen--)
+diff --git a/arch/powerpc/include/asm/atomic.h b/arch/powerpc/include/asm/atomic.h
+index 23f22df..69954a2 100644
+--- a/arch/powerpc/include/asm/atomic.h
++++ b/arch/powerpc/include/asm/atomic.h
+@@ -21,7 +21,7 @@ typedef struct { int counter; } atomic_t;
+ extern void atomic_clear_mask(unsigned long mask, unsigned long *addr);
+ extern void atomic_set_mask(unsigned long mask, unsigned long *addr);
+ 
+-extern __inline__ int atomic_add_return(int a, atomic_t *v)
++static __inline__ int atomic_add_return(int a, atomic_t *v)
+ {
+ 	int t;
+ 
+@@ -37,7 +37,7 @@ extern __inline__ int atomic_add_return(int a, atomic_t *v)
+ 	return t;
+ }
+ 
+-extern __inline__ int atomic_sub_return(int a, atomic_t *v)
++static __inline__ int atomic_sub_return(int a, atomic_t *v)
+ {
+ 	int t;
+ 
+@@ -53,7 +53,7 @@ extern __inline__ int atomic_sub_return(int a, atomic_t *v)
+ 	return t;
+ }
+ 
+-extern __inline__ int atomic_inc_return(atomic_t *v)
++static __inline__ int atomic_inc_return(atomic_t *v)
+ {
+ 	int t;
+ 
+@@ -69,7 +69,7 @@ extern __inline__ int atomic_inc_return(atomic_t *v)
+ 	return t;
+ }
+ 
+-extern __inline__ int atomic_dec_return(atomic_t *v)
++static __inline__ int atomic_dec_return(atomic_t *v)
+ {
+ 	int t;
+ 
+diff --git a/arch/powerpc/include/asm/bitops.h b/arch/powerpc/include/asm/bitops.h
+index adaf091..8104e04 100644
+--- a/arch/powerpc/include/asm/bitops.h
++++ b/arch/powerpc/include/asm/bitops.h
+@@ -8,13 +8,6 @@
+ #include <linux/config.h>
+ #include <asm/byteorder.h>
+ 
+-extern void set_bit(int nr, volatile void *addr);
+-extern void clear_bit(int nr, volatile void *addr);
+-extern void change_bit(int nr, volatile void *addr);
+-extern int test_and_set_bit(int nr, volatile void *addr);
+-extern int test_and_clear_bit(int nr, volatile void *addr);
+-extern int test_and_change_bit(int nr, volatile void *addr);
+-
+ /*
+  * Arguably these bit operations don't imply any memory barrier or
+  * SMP ordering, but in fact a lot of drivers expect them to imply
+@@ -35,7 +28,7 @@ extern int test_and_change_bit(int nr, volatile void *addr);
+  * These used to be if'd out here because using : "cc" as a constraint
+  * resulted in errors from egcs.  Things may be OK with gcc-2.95.
+  */
+-extern __inline__ void set_bit(int nr, volatile void * addr)
++static __inline__ void set_bit(int nr, volatile void * addr)
+ {
+ 	unsigned long old;
+ 	unsigned long mask = 1 << (nr & 0x1f);
+@@ -52,7 +45,7 @@ extern __inline__ void set_bit(int nr, volatile void * addr)
+ 	: "cc" );
+ }
+ 
+-extern __inline__ void clear_bit(int nr, volatile void *addr)
++static __inline__ void clear_bit(int nr, volatile void *addr)
+ {
+ 	unsigned long old;
+ 	unsigned long mask = 1 << (nr & 0x1f);
+@@ -69,7 +62,7 @@ extern __inline__ void clear_bit(int nr, volatile void *addr)
+ 	: "cc");
+ }
+ 
+-extern __inline__ void change_bit(int nr, volatile void *addr)
++static __inline__ void change_bit(int nr, volatile void *addr)
+ {
+ 	unsigned long old;
+ 	unsigned long mask = 1 << (nr & 0x1f);
+@@ -86,7 +79,7 @@ extern __inline__ void change_bit(int nr, volatile void *addr)
+ 	: "cc");
+ }
+ 
+-extern __inline__ int test_and_set_bit(int nr, volatile void *addr)
++static __inline__ int test_and_set_bit(int nr, volatile void *addr)
+ {
+ 	unsigned int old, t;
+ 	unsigned int mask = 1 << (nr & 0x1f);
+@@ -105,7 +98,7 @@ extern __inline__ int test_and_set_bit(int nr, volatile void *addr)
+ 	return (old & mask) != 0;
+ }
+ 
+-extern __inline__ int test_and_clear_bit(int nr, volatile void *addr)
++static __inline__ int test_and_clear_bit(int nr, volatile void *addr)
+ {
+ 	unsigned int old, t;
+ 	unsigned int mask = 1 << (nr & 0x1f);
+@@ -124,7 +117,7 @@ extern __inline__ int test_and_clear_bit(int nr, volatile void *addr)
+ 	return (old & mask) != 0;
+ }
+ 
+-extern __inline__ int test_and_change_bit(int nr, volatile void *addr)
++static __inline__ int test_and_change_bit(int nr, volatile void *addr)
+ {
+ 	unsigned int old, t;
+ 	unsigned int mask = 1 << (nr & 0x1f);
+@@ -144,7 +137,7 @@ extern __inline__ int test_and_change_bit(int nr, volatile void *addr)
+ }
+ #endif /* __INLINE_BITOPS */
+ 
+-extern __inline__ int test_bit(int nr, __const__ volatile void *addr)
++static __inline__ int test_bit(int nr, __const__ volatile void *addr)
+ {
+ 	__const__ unsigned int *p = (__const__ unsigned int *) addr;
+ 
+@@ -153,7 +146,7 @@ extern __inline__ int test_bit(int nr, __const__ volatile void *addr)
+ 
+ /* Return the bit position of the most significant 1 bit in a word */
+ /* - the result is undefined when x == 0 */
+-extern __inline__ int __ilog2(unsigned int x)
++static __inline__ int __ilog2(unsigned int x)
+ {
+ 	int lz;
+ 
+@@ -161,7 +154,7 @@ extern __inline__ int __ilog2(unsigned int x)
+ 	return 31 - lz;
+ }
+ 
+-extern __inline__ int ffz(unsigned int x)
++static __inline__ int ffz(unsigned int x)
+ {
+ 	if ((x = ~x) == 0)
+ 		return 32;
+@@ -227,7 +220,7 @@ static inline int ffs64(u64 x)
+  * the libc and compiler builtin ffs routines, therefore
+  * differs in spirit from the above ffz (man ffs).
+  */
+-extern __inline__ int ffs(int x)
++static __inline__ int ffs(int x)
+ {
+ 	return __ilog2(x & -x) + 1;
+ }
+@@ -251,7 +244,7 @@ extern __inline__ int ffs(int x)
+ #define find_first_zero_bit(addr, size) \
+ 	find_next_zero_bit((addr), (size), 0)
+ 
+-extern __inline__ unsigned long find_next_zero_bit(void * addr,
++static __inline__ unsigned long find_next_zero_bit(void * addr,
+ 	unsigned long size, unsigned long offset)
+ {
+ 	unsigned int * p = ((unsigned int *) addr) + (offset >> 5);
+@@ -299,7 +292,7 @@ found_middle:
+ #define ext2_clear_bit(nr, addr)	test_and_clear_bit((nr) ^ 0x18, addr)
+ 
+ #else
+-extern __inline__ int ext2_set_bit(int nr, void * addr)
++static __inline__ int ext2_set_bit(int nr, void * addr)
+ {
+ 	int		mask;
+ 	unsigned char	*ADDR = (unsigned char *) addr;
+@@ -312,7 +305,7 @@ extern __inline__ int ext2_set_bit(int nr, void * addr)
+ 	return oldbit;
+ }
+ 
+-extern __inline__ int ext2_clear_bit(int nr, void * addr)
++static __inline__ int ext2_clear_bit(int nr, void * addr)
+ {
+ 	int		mask;
+ 	unsigned char	*ADDR = (unsigned char *) addr;
+@@ -326,7 +319,7 @@ extern __inline__ int ext2_clear_bit(int nr, void * addr)
+ }
+ #endif	/* __KERNEL__ */
+ 
+-extern __inline__ int ext2_test_bit(int nr, __const__ void * addr)
++static __inline__ int ext2_test_bit(int nr, __const__ void * addr)
+ {
+ 	__const__ unsigned char	*ADDR = (__const__ unsigned char *) addr;
+ 
+diff --git a/arch/powerpc/include/asm/byteorder.h b/arch/powerpc/include/asm/byteorder.h
+index 3f5bcf6..f731d18 100644
+--- a/arch/powerpc/include/asm/byteorder.h
++++ b/arch/powerpc/include/asm/byteorder.h
+@@ -5,7 +5,7 @@
+ 
+ #ifdef __GNUC__
+ 
+-extern __inline__ unsigned ld_le16(const volatile unsigned short *addr)
++static __inline__ unsigned ld_le16(const volatile unsigned short *addr)
+ {
+ 	unsigned val;
+ 
+@@ -13,12 +13,12 @@ extern __inline__ unsigned ld_le16(const volatile unsigned short *addr)
+ 	return val;
+ }
+ 
+-extern __inline__ void st_le16(volatile unsigned short *addr, const unsigned val)
++static __inline__ void st_le16(volatile unsigned short *addr, const unsigned val)
+ {
+ 	__asm__ __volatile__ ("sthbrx %1,0,%2" : "=m" (*addr) : "r" (val), "r" (addr));
+ }
+ 
+-extern __inline__ unsigned ld_le32(const volatile unsigned *addr)
++static __inline__ unsigned ld_le32(const volatile unsigned *addr)
+ {
+ 	unsigned val;
+ 
+@@ -26,7 +26,7 @@ extern __inline__ unsigned ld_le32(const volatile unsigned *addr)
+ 	return val;
+ }
+ 
+-extern __inline__ void st_le32(volatile unsigned *addr, const unsigned val)
++static __inline__ void st_le32(volatile unsigned *addr, const unsigned val)
+ {
+ 	__asm__ __volatile__ ("stwbrx %1,0,%2" : "=m" (*addr) : "r" (val), "r" (addr));
+ }
+diff --git a/arch/powerpc/include/asm/io.h b/arch/powerpc/include/asm/io.h
+index 1f12c29..09c7131 100644
+--- a/arch/powerpc/include/asm/io.h
++++ b/arch/powerpc/include/asm/io.h
+@@ -161,7 +161,7 @@ static inline void __raw_writel(unsigned int v, volatile void __iomem *addr)
+  * is actually performed (i.e. the data has come back) before we start
+  * executing any following instructions.
+  */
+-extern inline u8 in_8(const volatile unsigned char __iomem *addr)
++static inline u8 in_8(const volatile unsigned char __iomem *addr)
+ {
+ 	u8 ret;
+ 
+@@ -172,7 +172,7 @@ extern inline u8 in_8(const volatile unsigned char __iomem *addr)
+ 	return ret;
+ }
+ 
+-extern inline void out_8(volatile unsigned char __iomem *addr, u8 val)
++static inline void out_8(volatile unsigned char __iomem *addr, u8 val)
+ {
+ 	__asm__ __volatile__("sync;\n"
+ 			     "stb%U0%X0 %1,%0;\n"
+@@ -180,7 +180,7 @@ extern inline void out_8(volatile unsigned char __iomem *addr, u8 val)
+ 			     : "r" (val));
+ }
+ 
+-extern inline u16 in_le16(const volatile unsigned short __iomem *addr)
++static inline u16 in_le16(const volatile unsigned short __iomem *addr)
+ {
+ 	u16 ret;
+ 
+@@ -191,7 +191,7 @@ extern inline u16 in_le16(const volatile unsigned short __iomem *addr)
+ 	return ret;
+ }
+ 
+-extern inline u16 in_be16(const volatile unsigned short __iomem *addr)
++static inline u16 in_be16(const volatile unsigned short __iomem *addr)
+ {
+ 	u16 ret;
+ 
+@@ -201,18 +201,18 @@ extern inline u16 in_be16(const volatile unsigned short __iomem *addr)
+ 	return ret;
+ }
+ 
+-extern inline void out_le16(volatile unsigned short __iomem *addr, u16 val)
++static inline void out_le16(volatile unsigned short __iomem *addr, u16 val)
+ {
+ 	__asm__ __volatile__("sync; sthbrx %1,0,%2" : "=m" (*addr) :
+ 			      "r" (val), "r" (addr));
+ }
+ 
+-extern inline void out_be16(volatile unsigned short __iomem *addr, u16 val)
++static inline void out_be16(volatile unsigned short __iomem *addr, u16 val)
+ {
+ 	__asm__ __volatile__("sync; sth%U0%X0 %1,%0" : "=m" (*addr) : "r" (val));
+ }
+ 
+-extern inline u32 in_le32(const volatile unsigned __iomem *addr)
++static inline u32 in_le32(const volatile unsigned __iomem *addr)
+ {
+ 	u32 ret;
+ 
+@@ -223,7 +223,7 @@ extern inline u32 in_le32(const volatile unsigned __iomem *addr)
+ 	return ret;
+ }
+ 
+-extern inline u32 in_be32(const volatile unsigned __iomem *addr)
++static inline u32 in_be32(const volatile unsigned __iomem *addr)
+ {
+ 	u32 ret;
+ 
+@@ -233,13 +233,13 @@ extern inline u32 in_be32(const volatile unsigned __iomem *addr)
+ 	return ret;
+ }
+ 
+-extern inline void out_le32(volatile unsigned __iomem *addr, u32 val)
++static inline void out_le32(volatile unsigned __iomem *addr, u32 val)
+ {
+ 	__asm__ __volatile__("sync; stwbrx %1,0,%2" : "=m" (*addr) :
+ 			     "r" (val), "r" (addr));
+ }
+ 
+-extern inline void out_be32(volatile unsigned __iomem *addr, u32 val)
++static inline void out_be32(volatile unsigned __iomem *addr, u32 val)
+ {
+ 	__asm__ __volatile__("sync; stw%U0%X0 %1,%0" : "=m" (*addr) : "r" (val));
+ }
+diff --git a/arch/powerpc/include/asm/iopin_8260.h b/arch/powerpc/include/asm/iopin_8260.h
+index 619f3a8..617584d 100644
+--- a/arch/powerpc/include/asm/iopin_8260.h
++++ b/arch/powerpc/include/asm/iopin_8260.h
+@@ -23,140 +23,140 @@ iopin_t;
+ #define IOPIN_PORTC	2
+ #define IOPIN_PORTD	3
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_high(iopin_t *iopin)
+ {
+     volatile uint *datp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_pdata;
+     datp[iopin->port * 8] |= (1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_low(iopin_t *iopin)
+ {
+     volatile uint *datp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_pdata;
+     datp[iopin->port * 8] &= ~(1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_high(iopin_t *iopin)
+ {
+     volatile uint *datp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_pdata;
+     return (datp[iopin->port * 8] >> (31 - iopin->pin)) & 1;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_low(iopin_t *iopin)
+ {
+     volatile uint *datp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_pdata;
+     return ((datp[iopin->port * 8] >> (31 - iopin->pin)) & 1) ^ 1;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_out(iopin_t *iopin)
+ {
+     volatile uint *dirp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_pdira;
+     dirp[iopin->port * 8] |= (1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_in(iopin_t *iopin)
+ {
+     volatile uint *dirp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_pdira;
+     dirp[iopin->port * 8] &= ~(1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_out(iopin_t *iopin)
+ {
+     volatile uint *dirp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_pdira;
+     return (dirp[iopin->port * 8] >> (31 - iopin->pin)) & 1;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_in(iopin_t *iopin)
+ {
+     volatile uint *dirp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_pdira;
+     return ((dirp[iopin->port * 8] >> (31 - iopin->pin)) & 1) ^ 1;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_odr(iopin_t *iopin)
+ {
+     volatile uint *odrp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_podra;
+     odrp[iopin->port * 8] |= (1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_act(iopin_t *iopin)
+ {
+     volatile uint *odrp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_podra;
+     odrp[iopin->port * 8] &= ~(1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_odr(iopin_t *iopin)
+ {
+     volatile uint *odrp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_podra;
+     return (odrp[iopin->port * 8] >> (31 - iopin->pin)) & 1;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_act(iopin_t *iopin)
+ {
+     volatile uint *odrp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_podra;
+     return ((odrp[iopin->port * 8] >> (31 - iopin->pin)) & 1) ^ 1;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_ded(iopin_t *iopin)
+ {
+     volatile uint *parp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_ppara;
+     parp[iopin->port * 8] |= (1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_gen(iopin_t *iopin)
+ {
+     volatile uint *parp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_ppara;
+     parp[iopin->port * 8] &= ~(1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_ded(iopin_t *iopin)
+ {
+     volatile uint *parp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_ppara;
+     return (parp[iopin->port * 8] >> (31 - iopin->pin)) & 1;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_gen(iopin_t *iopin)
+ {
+     volatile uint *parp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_ppara;
+     return ((parp[iopin->port * 8] >> (31 - iopin->pin)) & 1) ^ 1;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_opt2(iopin_t *iopin)
+ {
+     volatile uint *sorp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_psora;
+     sorp[iopin->port * 8] |= (1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_opt1(iopin_t *iopin)
+ {
+     volatile uint *sorp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_psora;
+     sorp[iopin->port * 8] &= ~(1 << (31 - iopin->pin));
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_opt2(iopin_t *iopin)
+ {
+     volatile uint *sorp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_psora;
+     return (sorp[iopin->port * 8] >> (31 - iopin->pin)) & 1;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_opt1(iopin_t *iopin)
+ {
+     volatile uint *sorp = &((immap_t *)CONFIG_SYS_IMMR)->im_ioport.iop_psora;
+diff --git a/arch/powerpc/include/asm/iopin_8xx.h b/arch/powerpc/include/asm/iopin_8xx.h
+index 3a2a682..7354dcb 100644
+--- a/arch/powerpc/include/asm/iopin_8xx.h
++++ b/arch/powerpc/include/asm/iopin_8xx.h
+@@ -42,7 +42,7 @@ typedef struct {
+ #define IOPIN_PORTC	2
+ #define IOPIN_PORTD	3
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_high(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -60,7 +60,7 @@ iopin_set_high(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_low(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -78,7 +78,7 @@ iopin_set_low(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_high(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -97,7 +97,7 @@ iopin_is_high(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_low(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -116,7 +116,7 @@ iopin_is_low(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_out(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -134,7 +134,7 @@ iopin_set_out(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_in(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -152,7 +152,7 @@ iopin_set_in(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_out(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -171,7 +171,7 @@ iopin_is_out(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_in(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -190,7 +190,7 @@ iopin_is_in(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_odr(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -202,7 +202,7 @@ iopin_set_odr(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_act(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -214,7 +214,7 @@ iopin_set_act(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_odr(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -227,7 +227,7 @@ iopin_is_odr(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_act(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -240,7 +240,7 @@ iopin_is_act(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_ded(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -258,7 +258,7 @@ iopin_set_ded(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_gen(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -276,7 +276,7 @@ iopin_set_gen(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_ded(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -295,7 +295,7 @@ iopin_is_ded(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_gen(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTA) {
+@@ -314,7 +314,7 @@ iopin_is_gen(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_opt2(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTC) {
+@@ -323,7 +323,7 @@ iopin_set_opt2(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_opt1(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTC) {
+@@ -332,7 +332,7 @@ iopin_set_opt1(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_opt2(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTC) {
+@@ -342,7 +342,7 @@ iopin_is_opt2(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_opt1(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTC) {
+@@ -352,7 +352,7 @@ iopin_is_opt1(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_falledge(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTC) {
+@@ -361,7 +361,7 @@ iopin_set_falledge(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ void
++static __inline__ void
+ iopin_set_anyedge(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTC) {
+@@ -370,7 +370,7 @@ iopin_set_anyedge(iopin_t *iopin)
+ 	}
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_falledge(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTC) {
+@@ -380,7 +380,7 @@ iopin_is_falledge(iopin_t *iopin)
+ 	return 0;
+ }
+ 
+-extern __inline__ uint
++static __inline__ uint
+ iopin_is_anyedge(iopin_t *iopin)
+ {
+ 	if (iopin->port == IOPIN_PORTC) {
+diff --git a/include/pci.h b/include/pci.h
+index 15f583f..aad7d23 100644
+--- a/include/pci.h
++++ b/include/pci.h
+@@ -462,7 +462,7 @@ struct pci_region {
+ #define PCI_REGION_SYS_MEMORY	0x00000100	/* System memory */
+ #define PCI_REGION_RO		0x00000200	/* Read-only memory */
+ 
+-extern __inline__ void pci_set_region(struct pci_region *reg,
++static __inline__ void pci_set_region(struct pci_region *reg,
+ 				      pci_addr_t bus_start,
+ 				      phys_addr_t phys_start,
+ 				      pci_size_t size,
+@@ -548,7 +548,7 @@ struct pci_controller {
+ 	void *priv_data;
+ };
+ 
+-extern __inline__ void pci_set_ops(struct pci_controller *hose,
++static __inline__ void pci_set_ops(struct pci_controller *hose,
+ 				   int (*read_byte)(struct pci_controller*,
+ 						    pci_dev_t, int where, u8 *),
+ 				   int (*read_word)(struct pci_controller*,

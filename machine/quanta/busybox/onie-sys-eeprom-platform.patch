@@ -1,0 +1,678 @@
+Add support for onie-syseeprom and mb_detect
+Alias mbdetect from mb_detect for backward compatible
+
+diff --git a/include/applets.src.h b/include/applets.src.h
+index 71b8cbd..736a31b 100644
+--- a/include/applets.src.h
++++ b/include/applets.src.h
+@@ -345,6 +345,8 @@ IF_WHOAMI(APPLET_NOFORK(whoami, whoami, BB_DIR_USR_BIN, BB_SUID_DROP, whoami))
+ IF_YES(APPLET_NOFORK(yes, yes, BB_DIR_USR_BIN, BB_SUID_DROP, yes))
+ IF_ZCIP(APPLET(zcip, BB_DIR_SBIN, BB_SUID_DROP))
+ IF_SYS_EEPROM(APPLET_ODDNAME(onie-syseeprom, onie_syseeprom, BB_DIR_USR_BIN, BB_SUID_DROP, onie_syseeprom))
++APPLET_ODDNAME(mb_detect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
++APPLET_ODDNAME(mbdetect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
+ 
+ #if !defined(PROTOTYPES) && !defined(NAME_MAIN) && !defined(MAKE_USAGE) \
+ 	&& !defined(MAKE_LINKS) && !defined(MAKE_SUID)
+diff --git a/include/i2c-dev.h b/include/i2c-dev.h
+index 23f7c2c..828e198 100644
+--- a/include/i2c-dev.h
++++ b/include/i2c-dev.h
+@@ -326,5 +326,158 @@ static inline __s32 i2c_smbus_block_process_call(int file, __u8 command,
+ 	}
+ }
+ 
++static inline __s32 i2c_dev_smbus_access(__s32 file, __u8 read_write, __u8 command,
++                         __s32 size, union i2c_smbus_data *data)
++{
++    struct i2c_smbus_ioctl_data args;
++
++    args.read_write = read_write;
++    args.command = command;
++    args.size = size;
++    args.data = data;
++    return ioctl(file, I2C_SMBUS, &args);
++}
++
++static inline __s32 i2c_dev_open(__s32 i2cbus)
++{
++    __s32 file;
++    char filename[20] = "";
++
++    sprintf(filename, "/dev/i2c-%d", i2cbus);
++    file = open(filename, O_RDWR);
++
++    if (file < 0)
++        printf("Error: Could not open file %s\n", filename);
++
++    return file;
++}
++
++static inline __s32 i2c_dev_read(__s32 file, __u8 *buffer, __s32 offset, __s32 length)
++{
++    __s32 i;
++    union i2c_smbus_data data;
++
++    for (i = 0; i < length; i++)
++    {
++        if (i2c_dev_smbus_access(file, I2C_SMBUS_READ, (__u8)(i + offset), I2C_SMBUS_BYTE_DATA, &data))
++        {
++            return -1;
++        }
++        else
++        {
++            buffer[i] = 0x0FF & data.byte;
++        }
++        usleep(5000);
++    }
++
++    return 0;
++}
++
++static inline __s32 i2c_dev_write(__s32 file, __u8 *buffer, __s32 offset, __s32 length)
++{
++    __s32 i;
++    union i2c_smbus_data data;
++
++    for (i = 0; i < length; i++)
++    {
++        data.byte = (__u8)buffer[i];
++        if (i2c_dev_smbus_access(file, I2C_SMBUS_WRITE, (__u8)(i + offset), I2C_SMBUS_BYTE_DATA, &data) != 0)
++            return -1;
++        usleep(5000);
++    }
++    return 0;
++}
++
++static inline __s32 i2c_dev_seek(__s32 file, __s32 offset)
++{
++    return i2c_dev_smbus_access(file, I2C_SMBUS_WRITE, offset, I2C_SMBUS_BYTE, NULL);
++}
++
++static inline __s32 i2c_read(__s32 bus, __u8 dev, uint addr, __u8 *data, __s32 length)
++{
++	__s32 fd, ret;
++
++	fd = i2c_dev_open(bus);
++	if(fd < 0) {
++		return -1;
++	}
++
++	ret = ioctl(fd, I2C_SLAVE, dev);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	ret = i2c_dev_read(fd, data, addr, length);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	close(fd);
++	return 0;
++}
++
++static inline __s32 i2c_write(__s32 bus, __u8 dev, uint addr, __s32 alen, __u8 *data, __s32 length)
++{
++	__s32 fd, ret;
++
++	fd = i2c_dev_open(bus);
++	if(fd < 0) {
++		return -1;
++	}
++
++	ret = ioctl(fd, I2C_SLAVE, dev);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	ret = i2c_dev_seek(fd, addr);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	ret = i2c_dev_write(fd, data, alen, length);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	close(fd);
++	return 0;
++}
++
++/**
++ * i2c_mux_select - select channel for i2c mux
++ * 0xff will release i2c mux
++ */
++static inline __s32 i2c_mux_select(__s32 bus, __u8 chip, __u8 channel)
++{
++    __u8 data = 0;
++    if(channel == 0xff)
++    {
++        data = 0;
++    }
++    else if(channel >=0 && channel <8)
++    {
++        data = (0x01 << channel);
++    }
++    else
++    {
++        return -1;
++    }
++
++    return i2c_write(bus, chip, 0, 1, &data, 1);
++}
++
++/**
++ * i2c_mux_release - release channel for i2c mux
++ */
++static inline __s32 i2c_mux_release(__s32 bus, __u8 chip)
++{
++	return i2c_mux_select(bus, chip, 0xff);
++}
+ 
+ #endif /* _LINUX_I2C_DEV_H */
+diff --git a/include/mb_detect.h b/include/mb_detect.h
+new file mode 100644
+index 0000000..f0c6191
+--- /dev/null
++++ b/include/mb_detect.h
+@@ -0,0 +1,57 @@
++#ifndef __MB_DETECT_H
++#define __MB_DETECT_H
++
++typedef __u8 u8;
++typedef __u32 u32;
++typedef __s32 s32;
++
++#define MB_DETECT_I2C_BUS 0
++
++#define MAX_NUM_MB 0x3f
++#define CPU_BOARD_CAPABILITY "ly6,ly8,ly5a,ly2a,ly9,ly9a,ly6f,ix1,ix2"
++enum {
++	MB_LY6 = 0,
++	MB_LY8,
++	MB_LY5A,
++	MB_LY2A,
++	MB_LY9,
++	MB_LY9A,
++	MB_LY6F,
++	MB_IX1,
++	MB_IX2,
++	MB_LAST
++};
++
++#define I2C_DEVICE_PCA9554_LENGTH	1
++#define I2C_DEVICE_PCA9555_LENGTH	2
++typedef const struct {
++	u8 i2c_mux;
++	u8 i2c_mux_channel;
++	u8 i2c_dev;
++	u8 i2c_dev_type_length;
++	u8 i2c_dev_byte;
++	u8 i2c_dev_offset;
++} MBDetectPath;
++
++#define SYS_PRODUCT_NAME_SIZE           15  /* max. product name size */
++#define SYS_MODEL_NAME_SIZE             15  /* max. model name size */
++typedef struct {
++	u8 motherboard_id;
++	u8 projectName[SYS_PRODUCT_NAME_SIZE+1];
++	u8 productName[SYS_PRODUCT_NAME_SIZE+1];
++	u8 modelName[SYS_MODEL_NAME_SIZE+1];
++	u32 softwareVersion;
++} SysBoardInfo;
++
++typedef struct {
++	u8 i2c_mux;
++	u8 i2c_channel;
++	u8 i2c_dev;
++} SysEEPROMPath;
++
++extern u8 mb_id_get(void);
++extern u8 mb_index_get(void);
++extern s32 sys_eeprom_path_get(SysEEPROMPath *ep);
++extern s32 sys_board_info_get(SysBoardInfo *bdinfo);
++
++#endif	/* __MB_DETECT_H */
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index 72ddcd1..7f9c2b4 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -56,3 +56,4 @@ lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
+ lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
++lib-y                     += mb_detect.o
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+new file mode 100644
+index 0000000..d47489e
+--- /dev/null
++++ b/miscutils/mb_detect.c
+@@ -0,0 +1,283 @@
++#include "libbb.h"
++#include <i2c-dev.h>
++#include <getopt.h>
++#include <mb_detect.h>
++
++extern void mbdetect_usage(void);
++
++MBDetectPath mbDetectPath[] = {
++	{ 0x72, 2, 0x23, I2C_DEVICE_PCA9555_LENGTH, 1, 2 },
++	{ 0x77, 0, 0x23, I2C_DEVICE_PCA9555_LENGTH, 1, 2 },
++	{ 0x77, 7, 0x23, I2C_DEVICE_PCA9555_LENGTH, 1, 2 },
++	{ 0x77, 2, 0x23, I2C_DEVICE_PCA9555_LENGTH, 1, 2 },
++};
++
++SysBoardInfo sysBoardInfo[MAX_NUM_MB] = {
++	{ 0x00, "ly6_rangeley", "LY6\0", "LY6-RANGELEY\0", 0x0000f605 },
++	{ 0x01, "ly8_rangeley", "LY8\0", "LY8-RANGELEY\0", 0x0000f805 },
++	{ 0x09, "ly5a_rangeley", "LY5A\0", "LY5A-RANGELEY\0", 0x0000f5a5 },
++	{ 0x08, "ly2a_rangeley", "LY2A\0", "LY2A-RANGELEY\0", 0x0000f2a5 },
++	{ 0x02, "ly9_rangeley",  "LY9\0",  "LY9-RANGELEY\0",  0x0000f905 },
++	{ 0x0e, "ly9a_rangeley",  "LY9A\0",  "LY9A-RANGELEY\0",  0x0000f9a5 },
++	{ 0x05, "ly6f_rangeley",  "LY6F\0",  "LY6F-RANGELEY\0",  0x0000f6f5 },
++	{ 0x0d, "ix1_rangeley",  "IX1\0",  "IX1-RANGELEY\0",   0x0000c105 },
++	{ 0x0f, "ix2_rangeley",  "IX2\0",  "IX2-RANGELEY\0",  0x0000c205 },
++};
++
++SysEEPROMPath sysEEPROMPath[] = {
++	{ 0x72, 2, 0x54},
++	{ 0x72, 3, 0x54},
++	{ 0x77, 2, 0x54},
++};
++
++/*
++ *  This macro defines the mbdetect command line command.
++ */
++//usage:#define mbdetect_trivial_usage
++//usage:       "[-ifpdmbsce]"
++//usage:#define mbdetect_full_usage "\n\n"
++//usage:     "Display Quanta Switch Motherboard detect result.\n"
++//usage:     "\n	-i	Output motherboard id."
++//usage:     "\n	-f	Output motherboard platform."
++//usage:     "\n	-p	Output motherboard project."
++//usage:     "\n	-d	Output motherboard product."
++//usage:     "\n	-m	Output motherboard model."
++//usage:     "\n	-b	Output eeprom i2c bus."
++//usage:     "\n	-s	Output eeprom channel-selector address."
++//usage:     "\n	-c	Output eeprom channel-selector channel."
++//usage:     "\n	-e	Output eeprom slave address."
++
++void mbdetect_usage(void)
++{
++    static const char *usage =
++	"Display Quanta Switch Motherboard detect result.\n"
++	"Usage: mbdetect [-h] [-i] [-f] [-p] [-d] [-m] [-b] [-s] [-c] [-e]\n"
++	"   With no arguments display all motherboard information.\n"
++	"   -h --help\n"
++	"      Display usage\n"
++	"   -i --id\n"
++	"      Output motherboard id.\n"
++	"   -f --platform\n"
++	"      Output motherboard platform name.\n"
++	"   -p --project\n"
++	"      Output motherboard project name.\n"
++	"   -d --product\n"
++	"      Output motherboard product name.\n"
++	"   -m --model\n"
++	"      Output motherboard model name.\n"
++	"   -b --i2c-bus\n"
++	"      Output eeprom i2c bus num.\n"
++	"   -s --chan-select\n"
++	"      Output eeprom i2c channel-selector address.\n"
++	"   -c --chan\n"
++	"      Output eeprom i2c channel-selector channel.\n"
++	"   -e --eeprom-slave\n"
++	"      Output eeprom i2c slave address.\n";
++
++    fprintf(stderr, "%s", usage);
++    exit(1);
++}
++
++/*
++ *  do_mbdetect
++ *  This function implements the mbdetect command.
++ */
++int mbdetect_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
++int mbdetect_main(int argc, char **argv)
++{
++	int count = 0;
++	int c, option_index;
++	__u8 id;
++	SysBoardInfo bdinfo;
++	SysEEPROMPath ep;
++
++	const char *short_options = "hifpdmbsce";
++	const struct option long_options[] = {
++		{"help",        no_argument,          0,    'h'},
++		{"id",          no_argument,          0,    'i'},
++		{"platform",    no_argument,          0,    'f'},
++		{"project",     no_argument,          0,    'p'},
++		{"product",     no_argument,          0,    'd'},
++		{"model",       no_argument,          0,    'm'},
++		{"i2c-bus",     no_argument,          0,    'b'},
++		{"chan-select", no_argument,          0,    's'},
++		{"chan",        no_argument,          0,    'c'},
++		{"eeprom-slave",no_argument,          0,    'e'},
++		{0,                       0,          0,      0},
++    };
++
++	while (TRUE) {
++		c = getopt_long(argc, argv, short_options,
++				long_options, &option_index);
++		if (c == EOF)
++			break;
++
++		count++;
++		switch (c) {
++			case 'h':
++				mbdetect_usage();
++				break;
++
++			case 'i':
++				id = mb_id_get();
++				printf("%d\n", id);
++				break;
++
++			case 'f':
++				if(sys_board_info_get(&bdinfo) == 0) {
++					printf("quanta_%s\n", bdinfo.projectName);
++				}
++				else {
++					printf("No match motherboard detected.\n");
++				}
++				break;
++
++			case 'p':
++				if(sys_board_info_get(&bdinfo) == 0) {
++					printf("%s\n", bdinfo.projectName);
++				}
++				else {
++					printf("No match motherboard detected.\n");
++				}
++				break;
++
++			case 'd':
++				if(sys_board_info_get(&bdinfo) == 0) {
++					printf("%s\n", bdinfo.productName);
++				}
++				else {
++					printf("No match motherboard detected.\n");
++				}
++				break;
++
++			case 'm':
++				if(sys_board_info_get(&bdinfo) == 0) {
++					printf("%s\n", bdinfo.modelName);
++				}
++				else {
++					printf("No match motherboard detected.\n");
++				}
++				break;
++
++			case 'b':
++				printf("0x%02x\n", MB_DETECT_I2C_BUS);
++				break;
++
++			case 's':
++				if(sys_eeprom_path_get(&ep) == 0) {
++					printf("0x%02x\n", ep.i2c_mux);
++				}
++				else {
++					printf("No match motherboard detected.\n");
++				}
++				break;
++
++			case 'c':
++				if(sys_eeprom_path_get(&ep) == 0) {
++					printf("0x%02x\n", (1<<ep.i2c_channel));
++				}
++				else {
++					printf("No match motherboard detected.\n");
++				}
++				break;
++
++			case 'e':
++				if(sys_eeprom_path_get(&ep) == 0) {
++					printf("0x%02x\n", ep.i2c_dev);
++				}
++				else {
++					printf("No match motherboard detected.\n");
++				}
++				break;
++
++			default:
++				mbdetect_usage();
++				break;
++		}
++	}
++
++	return 0;
++}
++
++u8 mb_id_get(void) {
++	static u8 id = MAX_NUM_MB;
++	MBDetectPath *path = mbDetectPath;
++	u8 data[2];
++
++	if(id != MAX_NUM_MB) {
++		return id;
++	}
++
++	for(;path->i2c_mux!=0;path++)
++	{
++#ifdef DEBUG
++		printf("i2c_mux: 0x%02x, i2c_mux_chan: %d, i2c_dev: 0x%02x\n",
++			path->i2c_mux, path->i2c_mux_channel, path->i2c_dev);
++#endif
++		if(i2c_mux_select(MB_DETECT_I2C_BUS, path->i2c_mux, path->i2c_mux_channel) == 0)
++		{
++			if(i2c_read(MB_DETECT_I2C_BUS, path->i2c_dev, 0, data, path->i2c_dev_type_length) == 0)
++			{
++				id = (data[path->i2c_dev_byte] >> path->i2c_dev_offset) & MAX_NUM_MB;
++				i2c_mux_release(MB_DETECT_I2C_BUS, path->i2c_mux);
++				break;
++			}
++		}
++		i2c_mux_release(MB_DETECT_I2C_BUS, path->i2c_mux);
++	}
++
++	return id;
++}
++
++u8 mb_index_get(void) {
++	SysBoardInfo *bdinfo = sysBoardInfo;
++	u8 index;
++	u8 motherboard_id = mb_id_get();
++
++	for(index=0;index<MB_LAST;index++) {
++		if(motherboard_id == bdinfo->motherboard_id) {
++			break;
++		}
++		bdinfo++;
++	}
++
++	return index;
++}
++
++s32 sys_board_info_get(SysBoardInfo *bdinfo) {
++	u8 index = mb_index_get();
++
++	if(index < MB_LAST) {
++		memcpy(bdinfo, &sysBoardInfo[index], sizeof(SysBoardInfo));
++		return 0;
++	}
++
++	bdinfo = NULL;
++	return -1;
++}
++
++s32 sys_eeprom_path_get(SysEEPROMPath *ep) {
++	u8 index = mb_index_get();
++
++	if(index < MB_LAST) {
++		switch(index) {
++			case MB_LY6:
++			case MB_LY8:
++			case MB_LY2A:
++			case MB_LY9:
++			case MB_LY9A:
++			case MB_LY6F:
++				memcpy(ep, &sysEEPROMPath[1], sizeof(SysEEPROMPath));
++				break;
++
++			default:
++				memcpy(ep, &sysEEPROMPath[0], sizeof(SysEEPROMPath));
++				break;
++		}
++
++		return 0;
++	}
++
++	ep = NULL;
++	return -1;
++}
+diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
+index 5cf6463..45af1bd 100644
+--- a/miscutils/onie_tlvinfo.c
++++ b/miscutils/onie_tlvinfo.c
+@@ -260,12 +260,18 @@ static void decode_tlv_value(tlvinfo_tlv_t * tlv, char* value)
+     case TLV_CODE_MANUF_NAME:
+     case TLV_CODE_MANUF_COUNTRY:
+     case TLV_CODE_VENDOR_NAME:
+-    case TLV_CODE_DIAG_VERSION:
+     case TLV_CODE_SERVICE_TAG:
+ 	memcpy(value, tlv->value, tlv->length);
+ 	value[tlv->length] = 0;
+ 	break;
+-    case TLV_CODE_MAC_BASE:
++
++	case TLV_CODE_DIAG_VERSION:
++		sprintf(value, "%d.%d.%d.%d (0x%02x%02x)",
++		  (tlv->value[0] & 0xf0) >> 4, tlv->value[0] & 0x0f, (tlv->value[1] & 0xf0) >> 4, tlv->value[1] & 0x0f,
++		  tlv-> value[2], tlv-> value[3]);
++		break;
++
++   case TLV_CODE_MAC_BASE:
+ 	sprintf(value, "%02X:%02X:%02X:%02X:%02X:%02X",
+ 		tlv->value[0], tlv->value[1], tlv->value[2],
+ 		tlv->value[3], tlv->value[4], tlv->value[5]);
+@@ -638,12 +644,17 @@ bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval)
+     case TLV_CODE_MANUF_NAME:
+     case TLV_CODE_MANUF_COUNTRY:
+     case TLV_CODE_VENDOR_NAME:
+-    case TLV_CODE_DIAG_VERSION:
+     case TLV_CODE_SERVICE_TAG:
+ 	strncpy(data, strval, MAX_TLV_VALUE_LEN);
+ 	new_tlv_len = min(MAX_TLV_VALUE_LEN, strlen(strval));
+ 	break;
+-    case TLV_CODE_DEVICE_VERSION:
++
++	case TLV_CODE_DIAG_VERSION:
++		printf("ERROR: Changing diag. version is not permitted here.\n");
++		return(FALSE);
++		break;
++
++   case TLV_CODE_DEVICE_VERSION:
+ 	value = strtoul(strval, NULL, 0);
+ 	if (value >= 256) {
+ 	    printf("ERROR: Device version must be 255 or less. Value " \
+@@ -664,12 +675,12 @@ bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval)
+ 	data[1] = value & 0xFF;
+ 	new_tlv_len = 2;
+ 	break;
+-    case TLV_CODE_MANUF_DATE:
+-	if (set_date(data, strval) != 0) {
+-	    return(FALSE);
+-	}
+-	new_tlv_len = 19;
++
++	case TLV_CODE_MANUF_DATE:
++		printf("ERROR: Changing manufacturing date is not permitted here.\n");
++		return(FALSE);
+ 	break;
++
+     case TLV_CODE_MAC_BASE:
+ 	if (set_mac(data, strval) != 0) {
+ 	    return(FALSE);
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index 3003bd6..1c92f68 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -1,5 +1,6 @@
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
+ #include <getopt.h>
+ 
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index ed3235b..97a4a4b 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -2,6 +2,8 @@
+ #include "onie_tlvinfo.h"
+ #include "sys_eeprom.h"
+ #include "24cXX.h"
++#include <i2c-dev.h>
++#include <mb_detect.h>
+ 
+ #if SYS_EEPROM_I2C_MEM_ADDR_BITS == 8
+     #define EEPROM_TYPE EEPROM_TYPE_8BIT_ADDR
+@@ -22,6 +24,13 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+     u_int8_t *c;
+     int addr = SYS_EEPROM_OFFSET + offset;
+ 
++	SysEEPROMPath ep;
++	sys_eeprom_path_get(&ep);
++	if(i2c_mux_select(MB_DETECT_I2C_BUS, ep.i2c_mux, ep.i2c_channel) != 0) {
++		printf("ERROR: Cannot select I2C mux for eeprom\n");
++		return -1;
++	}
++
+     c = eeprom_data;
+     if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+ 		    EEPROM_TYPE, &e)) {
+@@ -33,6 +42,9 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ 	c++; addr++;
+     }
+     eeprom_close(&e);
++
++	i2c_mux_release(MB_DETECT_I2C_BUS, ep.i2c_mux);
++
+     return ret;
+ }
+ 
+@@ -47,6 +59,13 @@ int write_sys_eeprom(void *eeprom_data, int len)
+     u_int8_t *c;
+     u_int16_t  addr = SYS_EEPROM_OFFSET;
+ 
++	SysEEPROMPath ep;
++	sys_eeprom_path_get(&ep);
++	if(i2c_mux_select(MB_DETECT_I2C_BUS, ep.i2c_mux, ep.i2c_channel) != 0) {
++		printf("ERROR: Cannot select I2C mux for eeprom\n");
++		return -1;
++	}
++
+     c = eeprom_data;
+     for (i = 0; i < len; i++) {
+ 	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+@@ -55,9 +74,12 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 	    return -1;
+ 	}
+ 	eeprom_write_byte(&e, addr, *c);
++	usleep(5000);
+ 	eeprom_close(&e);
+ 	c++; addr++;
+     }
+ 
++	i2c_mux_release(MB_DETECT_I2C_BUS, ep.i2c_mux);
++
+     return ret;
+ }

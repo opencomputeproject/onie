@@ -23,14 +23,19 @@ endif
 # Accton Technology Corporation IANA number
 VENDOR_ID = 259
 
+UEFI_ENABLE = yes
+PXE_EFI64_ENABLE = yes
+
 I2CTOOLS_SYSEEPROM = no
 
 # Console parameters
 CONSOLE_DEV = 1
 
 # Set Linux kernel version
-LINUX_VERSION		= 3.2
-LINUX_MINOR_VERSION	= 69
+LINUX_VERSION		= 4.1
+LINUX_MINOR_VERSION	= 38
+
+GCC_VERSION = 4.9.2
 
 #-------------------------------------------------------------------------------
 #

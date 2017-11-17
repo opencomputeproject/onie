@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -10,8 +10,8 @@
 # This is a makefile fragment that defines the download of uClibc
 #
 
-UCLIBC_TARBALL		= uClibc-$(XTOOLS_LIBC_VERSION).tar.xz
-UCLIBC_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.uclibc.org/downloads
+UCLIBC_TARBALL		= uClibc-ng-$(XTOOLS_LIBC_VERSION).tar.xz
+UCLIBC_TARBALL_URLS	+= $(ONIE_MIRROR) http://downloads.uclibc-ng.org/releases/$(XTOOLS_LIBC_VERSION)
 UCLIBC_CONFIG		= $(realpath conf)/uclibc/$(XTOOLS_LIBC_VERSION)/uclibc.$(ONIE_ARCH).config
 
 UCLIBC_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/uclibc-$(XTOOLS_LIBC_VERSION)-download

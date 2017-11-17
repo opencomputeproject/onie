@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -13,15 +13,15 @@ KEXEC_VERSION		= 2.0.9
 KEXEC_TARBALL		= kexec-tools-$(KEXEC_VERSION).tar.xz
 KEXEC_TARBALL_URLS	+= $(ONIE_MIRROR) \
 			   https://www.kernel.org/pub/linux/utils/kernel/kexec
-KEXEC_BUILD_DIR		= $(MBUILDDIR)/kexec-tools
+KEXEC_BUILD_DIR		= $(USER_BUILDDIR)/kexec-tools
 KEXEC_DIR		= $(KEXEC_BUILD_DIR)/kexec-tools-$(KEXEC_VERSION)
 
 KEXEC_SRCPATCHDIR	= $(PATCHDIR)/kexec-tools
 KEXEC_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/kexec-tools-download
-KEXEC_SOURCE_STAMP	= $(STAMPDIR)/kexec-tools-source
-KEXEC_PATCH_STAMP	= $(STAMPDIR)/kexec-tools-patch
-KEXEC_CONFIGURE_STAMP	= $(STAMPDIR)/kexec-tools-configure
-KEXEC_BUILD_STAMP	= $(STAMPDIR)/kexec-tools-build
+KEXEC_SOURCE_STAMP	= $(USER_STAMPDIR)/kexec-tools-source
+KEXEC_PATCH_STAMP	= $(USER_STAMPDIR)/kexec-tools-patch
+KEXEC_CONFIGURE_STAMP	= $(USER_STAMPDIR)/kexec-tools-configure
+KEXEC_BUILD_STAMP	= $(USER_STAMPDIR)/kexec-tools-build
 KEXEC_INSTALL_STAMP	= $(STAMPDIR)/kexec-tools-install
 KEXEC_STAMP		= $(KEXEC_SOURCE_STAMP) \
 			  $(KEXEC_PATCH_STAMP) \
@@ -48,7 +48,7 @@ $(KEXEC_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(KEXEC_SOURCE_STAMP)
 kexec-tools-source: $(KEXEC_SOURCE_STAMP)
-$(KEXEC_SOURCE_STAMP): $(TREE_STAMP) | $(KEXEC_DOWNLOAD_STAMP)
+$(KEXEC_SOURCE_STAMP): $(USER_TREE_STAMP) | $(KEXEC_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream kexec-tools ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(KEXEC_BUILD_DIR) $(DOWNLOADDIR)/$(KEXEC_TARBALL)
@@ -65,7 +65,7 @@ $(KEXEC_PATCH_STAMP): $(KEXEC_SOURCE_STAMP)
 powerpc_KEXEC_CONFIG_OPTS = --with-booke
 
 kexec-tools-configure: $(KEXEC_CONFIGURE_STAMP)
-$(KEXEC_CONFIGURE_STAMP): $(ZLIB_INSTALL_STAMP) \
+$(KEXEC_CONFIGURE_STAMP): $(ZLIB_BUILD_STAMP) \
 				$(KEXEC_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure kexec-tools-$(KEXEC_VERSION) ===="
@@ -89,20 +89,19 @@ $(KEXEC_BUILD_STAMP): $(KEXEC_NEW_FILES) $(KEXEC_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building kexec-tools-$(KEXEC_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(KEXEC_DIR)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(KEXEC_DIR) install
 	$(Q) touch $@
 
 kexec-tools-install: $(KEXEC_INSTALL_STAMP)
-$(KEXEC_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(KEXEC_BUILD_STAMP)
+$(KEXEC_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(KEXEC_BUILD_STAMP)  $(ZLIB_INSTALL_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Installing kexec-tools in $(DEV_SYSROOT) ===="
-	PATH='$(CROSSBIN):$(PATH)' \
-		$(MAKE) -C $(KEXEC_DIR) install
+	$(Q) echo "==== Installing kexec-tools in $(SYSROOTDIR) ===="
 	$(Q) for f in $(KEXEC_SBIN) ; do \
 		cp -a $(DEV_SYSROOT)/usr/sbin/$$f $(SYSROOTDIR)/usr/sbin ; \
 	done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += kexec-tools-clean
+USER_CLEAN += kexec-tools-clean
 kexec-tools-clean:
 	$(Q) rm -rf $(KEXEC_BUILD_DIR)
 	$(Q) rm -f $(KEXEC_STAMP)

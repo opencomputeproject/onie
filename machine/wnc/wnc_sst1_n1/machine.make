@@ -40,8 +40,8 @@ I2CTOOLS_SYSEEPROM = no
 LINUX_VERSION		= 3.14
 LINUX_MINOR_VERSION	= 27
 
-# Set the desired uClibc version
-UCLIBC_VERSION = 0.9.33.2
+# Older GCC required for older 3.14.27 kernel
+GCC_VERSION = 4.9.2
 
 #UEFI_ENABLE = yes
 IPMITOOL_ENABLE = yes

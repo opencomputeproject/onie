@@ -1,5 +1,5 @@
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2015-2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2015,2016,2017 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -52,6 +52,8 @@ onie_get_boot_disk()
     disk="${disk%%[0-9]}"
     # remove partition suffix p in case of MMC card
     echo ${disk} | grep -q mmcblk && disk="${disk%%p}"
+    # remove partition suffix p in case of NVMe disk
+    echo ${disk} | grep -q nvme && disk="${disk%%p}"
     [ -n "$disk" ] && echo -n "$disk"
 }
 
@@ -87,6 +89,8 @@ onie_get_uefi_uuid()
     # check if we have an mmcblk device
     local blk_suffix=
     echo ${disk} | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo ${disk} | grep -q nvme && blk_suffix="p"
 
     if [ -n "$disk" -a -n "$uefi_part" ] ; then
         local uefi_uuid=$(blkid "${disk}$blk_suffix$uefi_part" | sed -e 's/^.*UUID="//' -e 's/".*$//')
@@ -200,6 +204,11 @@ uefi_boot_first()
     # Remove trailing '*'
     boot_num=${boot_num%\*}
 
+    if [ -z "$boot_num" ] ; then
+        echo "ERROR: EFI boot variable not found: $os"
+        return 1
+    fi
+
     # Step 2 - Update current BootOrder.  Prepend $boot_num
     # without duplicates.
     local boot_order=$(efibootmgr | grep BootOrder: | awk '{ print $2 }')
@@ -211,7 +220,7 @@ uefi_boot_first()
         boot_order="$boot_num"
     fi
     efibootmgr --quiet --bootorder "$boot_order" || {
-        echo "ERROR: efibootmgr failed to create new boot variable on: $boot_dev"
+        echo "ERROR: efibootmgr failed to set new boot order: $boot_order"
         return 1
     }
 

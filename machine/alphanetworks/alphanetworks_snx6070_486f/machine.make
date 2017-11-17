@@ -24,6 +24,9 @@ VENDOR_ID = 31874
 LINUX_VERSION		= 3.2
 LINUX_MINOR_VERSION	= 69
 
+# Older GCC required for older 3.2 kernel
+GCC_VERSION = 4.9.2
+
 # Exclude ext3/4 file system tools
 EXT3_4_ENABLE = no
 # Exclude btrfs file system tools

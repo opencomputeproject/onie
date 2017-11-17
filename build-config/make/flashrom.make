@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -12,14 +12,14 @@
 FLASHROM_VERSION		= 0.9.8
 FLASHROM_TARBALL		= flashrom-$(FLASHROM_VERSION).tar.bz2
 FLASHROM_TARBALL_URLS		+= $(ONIE_MIRROR) http://download.flashrom.org/releases/
-FLASHROM_BUILD_DIR		= $(MBUILDDIR)/flashrom
+FLASHROM_BUILD_DIR		= $(USER_BUILDDIR)/flashrom
 FLASHROM_DIR			= $(FLASHROM_BUILD_DIR)/flashrom-$(FLASHROM_VERSION)
 
 FLASHROM_SRCPATCHDIR		= $(PATCHDIR)/flashrom
 FLASHROM_DOWNLOAD_STAMP		= $(DOWNLOADDIR)/flashrom-download
-FLASHROM_SOURCE_STAMP		= $(STAMPDIR)/flashrom-source
-FLASHROM_PATCH_STAMP		= $(STAMPDIR)/flashrom-patch
-FLASHROM_BUILD_STAMP		= $(STAMPDIR)/flashrom-build
+FLASHROM_SOURCE_STAMP		= $(USER_STAMPDIR)/flashrom-source
+FLASHROM_PATCH_STAMP		= $(USER_STAMPDIR)/flashrom-patch
+FLASHROM_BUILD_STAMP		= $(USER_STAMPDIR)/flashrom-build
 FLASHROM_INSTALL_STAMP		= $(STAMPDIR)/flashrom-install
 FLASHROM_STAMP			= $(FLASHROM_SOURCE_STAMP) \
 				  $(FLASHROM_PATCH_STAMP) \
@@ -44,7 +44,7 @@ $(FLASHROM_DOWNLOAD_STAMP): $(PROJECT_STAMP)
 
 SOURCE += $(FLASHROM_SOURCE_STAMP)
 flashrom-source: $(FLASHROM_SOURCE_STAMP)
-$(FLASHROM_SOURCE_STAMP): $(TREE_STAMP) $(FLASHROM_DOWNLOAD_STAMP)
+$(FLASHROM_SOURCE_STAMP): $(USER_TREE_STAMP) $(FLASHROM_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream flashrom ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(FLASHROM_BUILD_DIR) $(DOWNLOADDIR)/$(FLASHROM_TARBALL)
@@ -75,26 +75,26 @@ FLASHROM_MAKE_CONFIG = \
 	$(FLASHROM_MAKE_CONFIG_PLATFORM)
 
 flashrom-build: $(FLASHROM_BUILD_STAMP)
-$(FLASHROM_BUILD_STAMP): $(FLASHROM_SOURCE_STAMP) $(PCIUTILS_INSTALL_STAMP) \
+$(FLASHROM_BUILD_STAMP): $(FLASHROM_SOURCE_STAMP) $(PCIUTILS_BUILD_STAMP) \
 				| $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building flashrom-$(FLASHROM_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(FLASHROM_DIR) \
 		$(FLASHROM_MAKE_CONFIG) all
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(FLASHROM_DIR) \
+		$(FLASHROM_MAKE_CONFIG) install
 	$(Q) touch $@
 
 flashrom-install: $(FLASHROM_INSTALL_STAMP)
-$(FLASHROM_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(FLASHROM_BUILD_STAMP)
+$(FLASHROM_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(FLASHROM_BUILD_STAMP) $(PCIUTILS_INSTALL_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing flashrom programs in $(SYSROOTDIR) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(FLASHROM_DIR) \
-		$(FLASHROM_MAKE_CONFIG) install
 	$(Q) for file in $(FLASHROM_PROGRAMS); do \
 		cp -av $(DEV_SYSROOT)/usr/sbin/$$file $(SYSROOTDIR)/usr/sbin ; \
 	     done
 	$(Q) touch $@
 
-USERSPACE_CLEAN += flashrom-clean
+USER_CLEAN += flashrom-clean
 flashrom-clean:
 	$(Q) rm -rf $(FLASHROM_BUILD_DIR)
 	$(Q) rm -f $(FLASHROM_STAMP)
