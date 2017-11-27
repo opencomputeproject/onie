@@ -1,0 +1,59 @@
+From 813486a8008fb519deb2e304692caae3b12b99a2 Mon Sep 17 00:00:00 2001
+From: Calvin Johnson <calvin.johnson@nxp.com>
+Date: Sat, 18 Nov 2017 20:20:26 +0530
+Subject: [PATCH 191/211] drivers: net: pfe_eth: remove unused code under CONFIG_PFE_WARN_WA
+
+Signed-off-by: Calvin Johnson <calvin.johnson@nxp.com>
+---
+ drivers/net/pfe_eth/pfe_cmd.c |   28 +---------------------------
+ 1 files changed, 1 insertions(+), 27 deletions(-)
+
+diff --git a/drivers/net/pfe_eth/pfe_cmd.c b/drivers/net/pfe_eth/pfe_cmd.c
+index 03a2690..559f8f0 100644
+--- a/drivers/net/pfe_eth/pfe_cmd.c
++++ b/drivers/net/pfe_eth/pfe_cmd.c
+@@ -283,11 +283,7 @@ static void pfe_pe_status(int argc, char * const argv[])
+ 	u32 drop;
+ 	char statebuf[5];
+ 	u32 class_debug_reg = 0;
+-#ifdef CONFIG_PFE_WARN_WA
+-	u32 debug_indicator;
+-	u32 debug[16];
+-	int j;
+-#endif
++
+ 	if (argc == 4 && strcmp(argv[3], "clear") == 0)
+ 		do_clear = 1;
+ 
+@@ -337,28 +333,6 @@ static void pfe_pe_status(int argc, char * const argv[])
+ 			       cpu_to_be32(rx), cpu_to_be32(tx),
+ 			       cpu_to_be32(drop));
+ 		}
+-
+-#ifdef CONFIG_PFE_WARN_WA
+-		debug_indicator = pe_dmem_read(id, dmem_addr, 4);
+-		dmem_addr += 4;
+-		if (debug_indicator == cpu_to_be32('DBUG')) {
+-			int last = 0;
+-			for (j = 0; j < 16; j++) {
+-				debug[j] = pe_dmem_read(id, dmem_addr, 4);
+-				if (debug[j]) {
+-					last = j + 1;
+-					if (do_clear)
+-						pe_dmem_write(id, 0,
+-							      dmem_addr, 4);
+-				}
+-				dmem_addr += 4;
+-			}
+-			for (j = 0; j < last; j++)
+-				printf("%08x%s", cpu_to_be32(debug[j]),
+-				       (j & 0x7) == 0x7 || j
+-				       == last - 1 ? "\n" : " ")
+-		}
+-#endif
+ 	}
+ }
+ 
+-- 
+1.7.1
+

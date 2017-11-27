@@ -1,0 +1,42 @@
+From 002dc70bc5c7fc5a38940abfd83415a9d2900de4 Mon Sep 17 00:00:00 2001
+From: Ashish Kumar <Ashish.Kumar@nxp.com>
+Date: Fri, 27 Oct 2017 12:43:49 +0530
+Subject: [PATCH 176/211] driver: net: ldpaa_eth: Add PHY-less SGMII support
+
+In case of PHY-less mode, there is no interaction with PHY
+so auto-neg etc is not required and link will have fixed
+attributes
+
+Signed-off-by: Ashish Kumar <Ashish.Kumar@nxp.com>
+Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+---
+ drivers/net/ldpaa_eth/ldpaa_eth.c |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/ldpaa_eth/ldpaa_eth.c b/drivers/net/ldpaa_eth/ldpaa_eth.c
+index 21be79a..85e7faa 100644
+--- a/drivers/net/ldpaa_eth/ldpaa_eth.c
++++ b/drivers/net/ldpaa_eth/ldpaa_eth.c
+@@ -440,12 +440,17 @@ static int ldpaa_eth_open(struct eth_device *net_dev, bd_t *bd)
+ 	bus = wriop_get_mdio(priv->dpmac_id);
+ 	enet_if = wriop_get_enet_if(priv->dpmac_id);
+ 	if ((bus == NULL) &&
+-	    (enet_if == PHY_INTERFACE_MODE_XGMII)) {
++	   ((enet_if == PHY_INTERFACE_MODE_XGMII) ||
++	   (enet_if == PHY_INTERFACE_MODE_SGMII))) {
+ 		priv->phydev = (struct phy_device *)
+ 				malloc(sizeof(struct phy_device));
+ 		memset(priv->phydev, 0, sizeof(struct phy_device));
+ 
+-		priv->phydev->speed = SPEED_10000;
++		if (enet_if == PHY_INTERFACE_MODE_XGMII)
++			priv->phydev->speed = SPEED_10000;
++		else
++			priv->phydev->speed = SPEED_1000;
++
+ 		priv->phydev->link = 1;
+ 		priv->phydev->duplex = DUPLEX_FULL;
+ 	}
+-- 
+1.7.1
+
