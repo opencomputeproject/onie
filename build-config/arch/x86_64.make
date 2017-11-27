@@ -14,6 +14,7 @@ ARCH        ?= x86_64
 TARGET      ?= $(ARCH)-onie-linux-uclibc
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
+EFI_ARCH    ?= x64
 
 #
 # Console parameters

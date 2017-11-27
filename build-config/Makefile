@@ -152,7 +152,7 @@ MACHINE  ?= kvm_x86_64
 MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
 
 MACHINEROOT ?= $(realpath ../machine)
-MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
+MACHINEDIR   = $(realpath $(MACHINEROOT)/$(MACHINE))
 
 # Do not pass the MACHINE variable to sub-makes or to the environment.
 # Various sub-projects also define and use a variable called MACHINE
@@ -339,6 +339,7 @@ ifeq ($(SECURE_BOOT_ENABLE),yes)
   GNU_EFI_ENABLE = yes
   OPENSSL_ENABLE = yes
   MOKUTIL_ENABLE = yes
+  SHIM_ENABLE = yes
 endif
 
 include make/kernel-download.make
@@ -425,6 +426,9 @@ ifeq ($(OPENSSL_ENABLE),yes)
 endif
 ifeq ($(MOKUTIL_ENABLE),yes)
   include make/mokutil.make
+endif
+ifeq ($(SHIM_ENABLE),yes)
+  include make/shim.make
 endif
 include make/images.make
 include make/demo.make
