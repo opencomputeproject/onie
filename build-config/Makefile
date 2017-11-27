@@ -336,6 +336,7 @@ ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 SECURE_BOOT_ENABLE ?= no
 ifeq ($(SECURE_BOOT_ENABLE),yes)
   PESIGN_ENABLE = yes
+  GNU_EFI_ENABLE = yes
 endif
 
 include make/kernel-download.make
@@ -413,6 +414,9 @@ ifeq ($(IPMITOOL_ENABLE),yes)
 endif
 ifeq ($(PESIGN_ENABLE),yes)
   include make/pesign.make
+endif
+ifeq ($(GNU_EFI_ENABLE),yes)
+  include make/gnu-efi.make
 endif
 include make/images.make
 include make/demo.make

@@ -1,0 +1,42 @@
+update makefile patch
+
+Minor updates to the Makefile to pass in ONIE build environment
+variables.
+
+diff --git a/Make.defaults b/Make.defaults
+index d825397..7c2f7d2 100755
+--- a/Make.defaults
++++ b/Make.defaults
+@@ -75,6 +75,11 @@ ifeq ($(ARCH),amd64)
+   override ARCH := x86_64
+ endif
+ 
++# Seed compiler and linker flags ONIE build environment flags
++CFLAGS = $(ONIE_CFLAGS)
++CPPFLAGS = $(ONIE_CPPFLAGS)
++LDFLAGS = $(ONIE_LDFLAGS)
++
+ #
+ # Where to build the package
+ #
+diff --git a/apps/Makefile b/apps/Makefile
+index cfae62d..3377d2a 100644
+--- a/apps/Makefile
++++ b/apps/Makefile
+@@ -45,14 +45,14 @@ TOPDIR = $(SRCDIR)/..
+ CDIR=$(TOPDIR)/..
+ LINUX_HEADERS	= /usr/src/sys/build
+ CPPFLAGS	+= -D__KERNEL__ -I$(LINUX_HEADERS)/include
+-CRTOBJS		= ../gnuefi/crt0-efi-$(ARCH).o
++CRTOBJS		= ../$(ARCH)/gnuefi/crt0-efi-$(ARCH).o
+ 
+ LDSCRIPT	= $(TOPDIR)/gnuefi/elf_$(ARCH)_efi.lds
+ ifneq (,$(findstring FreeBSD,$(OS)))
+ LDSCRIPT	= $(TOPDIR)/gnuefi/elf_$(ARCH)_fbsd_efi.lds
+ endif
+ 
+-LDFLAGS		+= -shared -Bsymbolic -L../lib -L../gnuefi $(CRTOBJS)
++LDFLAGS		+= -shared -Bsymbolic -L../$(ARCH)/lib -L../$(ARCH)/gnuefi $(CRTOBJS)
+ 
+ LOADLIBES	+= -lefi -lgnuefi
+ LOADLIBES	+= $(LIBGCC)
