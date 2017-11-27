@@ -332,6 +332,12 @@ endif
 # Default mirror for packages needed by ONIE
 ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 
+# By default do not enable secure boot
+SECURE_BOOT_ENABLE ?= no
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+  PESIGN_ENABLE = yes
+endif
+
 include make/kernel-download.make
 ifeq ($(XTOOLS_ENABLE),yes)
   include make/crosstool-ng.make
@@ -405,6 +411,9 @@ endif
 ifeq ($(IPMITOOL_ENABLE),yes)
   include make/ipmitool.make
 endif
+ifeq ($(PESIGN_ENABLE),yes)
+  include make/pesign.make
+endif
 include make/images.make
 include make/demo.make
 
@@ -413,6 +422,7 @@ FIRMWARE_UPDATE_ENABLE ?= no
 ifeq ($(FIRMWARE_UPDATE_ENABLE),yes)
   include make/firmware-update.make
 endif
+
 
 #-------------------------------------------------------------------------------
 #
@@ -482,7 +492,8 @@ DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
 				  realpath gawk libncurses5 libncurses5-dev bc \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
-				  libexpat1-dev fakeroot python-sphinx rst2pdf
+				  libexpat1-dev fakeroot python-sphinx rst2pdf \
+				  libefivar-dev
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
