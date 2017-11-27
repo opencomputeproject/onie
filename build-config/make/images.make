@@ -201,7 +201,6 @@ endif
 # - verifies that we have all the shared libraries required by the
 #   executables in our final sysroot.
 
-
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
