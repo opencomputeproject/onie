@@ -126,9 +126,6 @@ endif
 PHONY += sysroot-check sysroot-complete
 
 CHECKROOT	= $(MBUILDDIR)/check
-CHECKDIR	= $(CHECKROOT)/checkdir
-CHECKFILES	= $(CHECKROOT)/checkfiles.txt
-SYSFILES	= $(CHECKROOT)/sysfiles.txt
 
 ifeq ($(XTOOLS_LIBC),uClibc-ng)
   SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
@@ -219,19 +216,11 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	done
 	$(Q) find $(SYSROOTDIR) -path */lib/grub/* -prune -o \( -type f -print0 \) | xargs -0 file | \
 		grep ELF | awk -F':' '{ print $$1 }' | grep -v "/lib/modules/" | xargs $(CROSSBIN)/$(CROSSPREFIX)strip
+ifeq ($(XTOOLS_ENABLE),yes)
 	$(Q) rm -rf $(CHECKROOT)
-        ifeq ($(XTOOLS_ENABLE),yes)
-	  $(Q) mkdir -p $(CHECKROOT) && \
-	      $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
-		  -s $(SYSROOTDIR) -d $(CHECKDIR) && \
-		  (cd $(SYSROOTDIR) && find . | LC_ALL=C sort > $(SYSFILES)) && \
-		  (cd $(CHECKDIR) && find . | LC_ALL=C sort > $(CHECKFILES)) && \
-		  diff -q $(SYSFILES) $(CHECKFILES) > /dev/null 2>&1 || { \
-			  (echo "ERROR: Missing files in SYSROOTDIR:" && \
-			   diff $(SYSFILES) $(CHECKFILES) ; \
-			   false) \
-		  }
-       endif
+	$(Q) $(SCRIPTDIR)/check-libs $(CROSSBIN)/$(CROSSPREFIX)populate \
+		$(DEV_SYSROOT) $(SYSROOTDIR) $(CHECKROOT)
+endif
 	$(Q) touch $@
 
 # Setting ONIE_BUILD_MACHINE on the command line allows you "fake" a
