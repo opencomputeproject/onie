@@ -32,7 +32,7 @@ GRUB_PATCH_STAMP	= $(USER_STAMPDIR)/grub-patch
 GRUB_CONFIGURE_STAMP	= $(USER_STAMPDIR)/grub-configure
 GRUB_BUILD_STAMP	= $(USER_STAMPDIR)/grub-build
 GRUB_INSTALL_STAMP	= $(STAMPDIR)/grub-install
-ifeq ($(FIRMWARE_TYPE),$(filter $(FIRMWARE_TYPE),auto bios))
+ifeq ($(FIRMWARE_TYPE),$(filter $(FIRMWARE_TYPE),auto bios coreboot))
   GRUB_CONFIGURE_I386_STAMP	= $(USER_STAMPDIR)/grub-configure-i386-pc
   GRUB_BUILD_I386_STAMP		= $(USER_STAMPDIR)/grub-build-i386-pc
   GRUB_INSTALL_I386_STAMP	= $(STAMPDIR)/grub-install-i386-pc
