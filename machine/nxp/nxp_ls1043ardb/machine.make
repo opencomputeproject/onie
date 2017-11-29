@@ -18,7 +18,7 @@ else
 endif
 
 UBOOT_MACHINE = ls1043ardb_ONIE_$(MACHINE_REV)
-KERNEL_DTB = freescale/fsl-ls1043a-rdb.dtb
+KERNEL_DTB = freescale/fsl-ls1043a-rdb-sdk.dtb
 KERNEL_DTB_PATH = dts/$(KERNEL_DTB)
 
 FDT_LOAD_ADDRESS = 0x90000000
@@ -34,11 +34,11 @@ KEXEC_ENABLE = yes
 UBOOT_DTB_ENABLE = yes
 
 # Set the desired U-Boot version
-UBOOT_VERSION = 2015.10
+UBOOT_VERSION = 2017.07
 
 # Specify Linux kernel version -- comment out to use the default
-LINUX_VERSION = 4.1
-LINUX_MINOR_VERSION = 38
+LINUX_VERSION = 4.9
+LINUX_MINOR_VERSION = 79
 
 #---------------------------------------------------------
 #
