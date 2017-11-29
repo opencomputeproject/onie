@@ -146,6 +146,7 @@ $(GRUB_CONFIGURE_I386_COREBOOT_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) |
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure grub-i386-coreboot-$(GRUB_VERSION) ===="
 	$(Q) mkdir -p $(GRUB_I386_COREBOOT_DIR)
+	$(Q) zcat $(GRUB_DIR)/unifont-5.1.20080820.bdf.gz > $(GRUB_I386_COREBOOT_DIR)/unifont.bdf
 	$(Q) cd $(GRUB_I386_COREBOOT_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
 		--host=$(TARGET)				\
