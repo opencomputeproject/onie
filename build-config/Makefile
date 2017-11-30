@@ -338,6 +338,7 @@ ifeq ($(SECURE_BOOT_ENABLE),yes)
   PESIGN_ENABLE = yes
   GNU_EFI_ENABLE = yes
   OPENSSL_ENABLE = yes
+  MOKUTIL_ENABLE = yes
 endif
 
 include make/kernel-download.make
@@ -421,6 +422,9 @@ ifeq ($(GNU_EFI_ENABLE),yes)
 endif
 ifeq ($(OPENSSL_ENABLE),yes)
   include make/openssl.make
+endif
+ifeq ($(MOKUTIL_ENABLE),yes)
+  include make/mokutil.make
 endif
 include make/images.make
 include make/demo.make

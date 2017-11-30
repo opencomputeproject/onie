@@ -1,0 +1,35 @@
+From: Mathieu Trudel-Lapierre <mathieu.trudel-lapierre@canonical.com>
+Subject: Update efi_set_variable() calls to include mode where missing.
+
+efivar (30?) now insists on the mode being specified when calling
+efi_set_variable(); so add it where it's missing. Use the mode
+already specified in a later efi_chmod() call where available.
+
+---
+ src/mokutil.c |    6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+Index: b/src/mokutil.c
+===================================================================
+--- a/src/mokutil.c
++++ b/src/mokutil.c
+@@ -574,7 +574,8 @@ delete_data_from_list (const efi_guid_t
+ 		     | EFI_VARIABLE_BOOTSERVICE_ACCESS
+ 		     | EFI_VARIABLE_RUNTIME_ACCESS;
+ 	ret = efi_set_variable (*var_guid, var_name,
+-				var_data, total, attributes);
++				var_data, total, attributes,
++				S_IRUSR | S_IWUSR);
+ 	if (ret < 0) {
+ 		fprintf (stderr, "Failed to write variable \"%s\": %m\n",
+ 			 var_name);
+@@ -938,7 +939,8 @@ update_request (void *new_list, int list
+ 		data_size = list_len;
+ 
+ 		if (efi_set_variable (efi_guid_shim, req_name,
+-				      data, data_size, attributes) < 0) {
++				      data, data_size, attributes,
++				      S_IRUSR | S_IWUSR) < 0) {
+ 			switch (req) {
+ 			case ENROLL_MOK:
+ 				fprintf (stderr, "Failed to enroll new keys\n");
