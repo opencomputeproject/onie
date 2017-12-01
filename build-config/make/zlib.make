@@ -61,7 +61,7 @@ $(ZLIB_CONFIGURE_STAMP): $(ZLIB_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) echo "====  Configure zlib-$(ZLIB_VERSION) ===="
 	$(Q) cd $(ZLIB_DIR) &&					\
 	    $(ZLIB_DIR)/configure				\
-		--prefix=$(DEV_SYSROOT)/usr
+		--prefix=/usr
 	$(Q) touch $@
 
 zlib-build: $(ZLIB_BUILD_STAMP)
@@ -75,8 +75,9 @@ $(ZLIB_BUILD_STAMP): $(ZLIB_CONFIGURE_STAMP) $(ZLIB_NEW_FILES) | $(DEV_SYSROOT_I
 		RANLIB=$(CROSSPREFIX)ranlib			\
 		CPP=$(CROSSPREFIX)cpp				\
 		LDSHARED="$(CROSSPREFIX)gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map $(ONIE_LDFLAGS)" \
-		CFLAGS="-D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN $(ONIE_CFLAGS)"
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(ZLIB_DIR) install
+		CFLAGS="-D_LARGEFILE64_SOURCE=1 -DHAVE_HIDDEN $(ONIE_CFLAGS)" \
+		DESTDIR=$(DEV_SYSROOT)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(ZLIB_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 zlib-install: $(ZLIB_INSTALL_STAMP)

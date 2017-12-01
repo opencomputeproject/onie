@@ -56,7 +56,7 @@ $(MTREE_CONFIGURE_STAMP): $(MTREE_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) echo "====  Configure mtree-$(MTREE_VERSION) ===="
 	$(Q) cd $(MTREE_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(MTREE_DIR)/configure			\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
@@ -67,8 +67,8 @@ mtree-build: $(MTREE_BUILD_STAMP)
 $(MTREE_BUILD_STAMP): $(MTREE_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building mtree-$(MTREE_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(MTREE_DIR)
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(MTREE_DIR) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(MTREE_DIR) DESTDIR=$(DEV_SYSROOT)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(MTREE_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 mtree-install: $(MTREE_INSTALL_STAMP)
