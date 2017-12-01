@@ -62,7 +62,7 @@ $(LZO_CONFIGURE_STAMP): $(LZO_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) cd $(LZO_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(LZO_DIR)/configure				\
 		--enable-shared					\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"
@@ -72,8 +72,8 @@ lzo-build: $(LZO_BUILD_STAMP)
 $(LZO_BUILD_STAMP): $(LZO_CONFIGURE_STAMP) $(LZO_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building lzo-$(LZO_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(LZO_DIR)
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(LZO_DIR) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(LZO_DIR) DESTDIR=$(DEV_SYSROOT)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(LZO_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 lzo-install: $(LZO_INSTALL_STAMP)

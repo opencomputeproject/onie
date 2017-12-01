@@ -74,7 +74,7 @@ $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_BUILD_STAMP) $(LZO_BUILD_STAMP) \
 	$(Q) cd $(E2FSPROGS_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(E2FSPROGS_DIR)/configure			\
 		--enable-elf-shlibs				\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		--disable-tls					\
 		--disable-defrag				\
@@ -97,17 +97,17 @@ e2fsprogs-build: $(E2FSPROGS_BUILD_STAMP)
 $(E2FSPROGS_BUILD_STAMP): $(E2FSPROGS_NEW_FILES) $(E2FSPROGS_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building e2fsprogs-$(E2FSPROGS_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(E2FSPROGS_DIR)
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(E2FSPROGS_DIR) DESTDIR=$(DEV_SYSROOT)
 	$(Q) for dir in $(E2FSPROGS_LIB_DIRS) ; do \
 		PATH='$(CROSSBIN):$(PATH)' \
-			$(MAKE) -C $(E2FSPROGS_DIR)/lib/$$dir install ; \
+			$(MAKE) -C $(E2FSPROGS_DIR)/lib/$$dir DESTDIR=$(DEV_SYSROOT) install ; \
 	     done
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
-		$(MAKE) -C $(E2FSPROGS_DIR)/misc install
+		$(MAKE) -C $(E2FSPROGS_DIR)/misc DESTDIR=$(DEV_SYSROOT) install
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
-		$(MAKE) -C $(E2FSPROGS_DIR)/e2fsck install
+		$(MAKE) -C $(E2FSPROGS_DIR)/e2fsck DESTDIR=$(DEV_SYSROOT) install
 	$(Q) PATH='$(CROSSBIN):$(PATH)'			\
-		$(MAKE) -C $(E2FSPROGS_DIR)/resize install
+		$(MAKE) -C $(E2FSPROGS_DIR)/resize DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 e2fsprogs-install: $(E2FSPROGS_INSTALL_STAMP)
