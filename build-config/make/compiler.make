@@ -17,7 +17,9 @@ export ONIE_CFLAGS	= -Os $(ONIE_CPPFLAGS)
 export ONIE_CXXFLAGS	= -Os $(ONIE_CPPFLAGS)
 export ONIE_LDFLAGS	= --sysroot=$(DEV_SYSROOT)
 
-export ONIE_PKG_CONFIG	= PKG_CONFIG_LIBDIR=$(DEV_SYSROOT)/usr/lib/pkgconfig
+export ONIE_PKG_CONFIG	= \
+	PKG_CONFIG_SYSROOT_DIR=$(DEV_SYSROOT) \
+	PKG_CONFIG_LIBDIR=$(DEV_SYSROOT)/usr/lib/pkgconfig
 
 #-------------------------------------------------------------------------------
 #
