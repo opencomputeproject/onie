@@ -1,0 +1,116 @@
+From 223207fc06632a6f4166d6a7a1c8fecf84f65d32 Mon Sep 17 00:00:00 2001
+From: Zhao Qiang <qiang.zhao@nxp.com>
+Date: Fri, 1 Dec 2017 11:29:35 +0800
+Subject: [PATCH] platform: ls2088ardb: Add ONIE support
+
+Add ONIE support for Freescale ls2088ardb platform
+
+Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ configs/ls2080ardb_ONIE_0_defconfig | 41 +++++++++++++++++++++++++++++++++++
+ include/configs/ls2080ardb.h        | 43 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 84 insertions(+)
+ create mode 100644 configs/ls2080ardb_ONIE_0_defconfig
+
+diff --git a/configs/ls2080ardb_ONIE_0_defconfig b/configs/ls2080ardb_ONIE_0_defconfig
+new file mode 100644
+index 0000000..67a4fe2
+--- /dev/null
++++ b/configs/ls2080ardb_ONIE_0_defconfig
+@@ -0,0 +1,41 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS2080ARDB=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls2080a-rdb"
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_OF_STDOUT_VIA_ALIAS=y
++CONFIG_SYS_EXTRA_OPTIONS="ONIE,ONIE_PLATFORM_REV=0"
++CONFIG_BOOTDELAY=10
++CONFIG_CMD_GREPENV=y
++CONFIG_CMD_EEPROM=y
++CONFIG_CMD_GPT=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_USB=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_CMD_CACHE=y
++CONFIG_OF_CONTROL=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_FSL_CAAM=y
++CONFIG_MTD_NOR_FLASH=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_DM_PCI_COMPAT=y
++CONFIG_PCIE_LAYERSCAPE=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_FSL_DSPI=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_STORAGE=y
++CONFIG_EFI_LOADER_BOUNCE_BUFFER=y
++CONFIG_DISTRO_DEFAULTS=y
+diff --git a/include/configs/ls2080ardb.h b/include/configs/ls2080ardb.h
+index 8a34990..847cee9 100644
+--- a/include/configs/ls2080ardb.h
++++ b/include/configs/ls2080ardb.h
+@@ -501,4 +501,47 @@ unsigned long get_board_sys_clk(void);
+ 
+ #include <asm/fsl_secure_boot.h>
+ 
++#ifdef CONFIG_ONIE
++/* Undefine those macros which are provided by common_config.h */
++#undef CONFIG_BOOTCOMMAND
++#undef CONFIG_SYS_PBSIZE
++#undef CONFIG_DOS_PARTITION
++#undef CONFIG_CMDLINE_EDITING
++#undef CONFIG_SYS_MAXARGS
++#undef CONFIG_OF_LIBFDT
++#undef CONFIG_OF_BOARD_SETUP
++#undef CONFIG_SYS_BAUDRATE_TABLE
++#undef CONFIG_ENV_SIZE
++#undef CONFIG_FIT
++#undef CONFIG_EXTRA_ENV_SETTINGS
++
++#include "configs/common_config.h"
++
++#undef CONFIG_CMD_IRQ
++#undef CONFIG_CMD_JFFS2
++#undef CONFIG_OF_STDOUT_VIA_ALIAS
++#undef CONFIG_API
++
++/* Platform environment variables needed by the common env infrastructure */
++#define CONFIG_PLATFORM_ENV    \
++	"consoledev=ttyS1\0baudrate=115200\0" \
++	"onie_start=0x581000000\0" \
++	"onie_sz.b=0x1000000\0"  \
++	"hwconfig=fsl_ddr:bank_intlv=auto\0"	\
++	"loadaddr=0xa0000000\0"			\
++	"bootargs=console=ttyS1,115200 root=/dev/ram0 " \
++		"earlycon=uart8250,mmio,0x21c0600 ramdisk_size=0x2000000 " \
++		"default_hugepagesz=2m hugepagesz=2m hugepages=256\0" \
++	"mcinitcmd=fsl_mc start mc 580a00000 580e00000 && " \
++	"fsl_mc apply dpl 0x580d00000\0"	\
++	"mcmemsize=0x70000000\0"		\
++	"fdt_high=0xa0000000\0"		\
++	"initrd_high=0xffffffffffffffff\0"
++
++#define CONFIG_EXTRA_ENV_SETTINGS \
++	CONFIG_PLATFORM_ENV       \
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++#endif /* CONFIG_ONIE */
++
+ #endif /* __LS2_RDB_H */
+-- 
+2.7.4
+
