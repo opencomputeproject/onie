@@ -1,6 +1,7 @@
 # Alpha Networks SNH60A0-320F
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
@@ -24,10 +25,10 @@ VENDOR_ID = 31874
 
 # Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
+I2CTOOLS_SYSEEPROM = yes
 
 # Console parameters
 CONSOLE_DEV = 1
-CONSOLE_FLAG = 1
 
 #-------------------------------------------------------------------------------
 #
@@ -37,3 +38,6 @@ CONSOLE_FLAG = 1
 
 LINUX_VERSION		= 3.14
 LINUX_MINOR_VERSION	= 27
+
+# Older GCC required for older 3.14.27 kernel
+GCC_VERSION = 4.9.2

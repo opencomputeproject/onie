@@ -1,0 +1,145 @@
+Save default env when crc is bad.
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2013 Miles Tseng <miles_tseng@accton.com>
+Copyright (C) 2015,2016,2017 david_yang <david_yang@accton.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+During boot when the environment is read from flash and a CRC is
+calculated and checked.  If the CRC is corrupt then a default
+environment that is compiled in is used instead.
+
+When this situation is detected the compiled in default environment is
+written to the flash, thus making sure the flash contains an
+environment with a valid CRC.
+
+diff --git a/README b/README
+index 5e6a314..bef5c7e 100644
+--- a/README
++++ b/README
+@@ -2895,6 +2895,13 @@ CBFS (Coreboot Filesystem) support
+ 		this is instead controlled by the value of
+ 		/config/load-environment.
+ 
++                CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++
++                During boot up, specifically in board_init_r() after
++                last_stage_init(), the CRC of the non-volatile
++                environment is checked.  If the environment is corrupt
++                then write the default environment with a valid CRC.
++
+ - DataFlash Support:
+ 		CONFIG_HAS_DATAFLASH
+ 
+diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
+index ff49116..d7c5609 100644
+--- a/arch/powerpc/lib/board.c
++++ b/arch/powerpc/lib/board.c
+@@ -951,6 +951,11 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	last_stage_init();
+ #endif
+ 
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++	WATCHDOG_RESET();
++	env_write_default_if_crc_bad();
++#endif
++
+ #if defined(CONFIG_CMD_BEDBUG)
+ 	WATCHDOG_RESET();
+ 	bedbug_init();
+diff --git a/common/board_r.c b/common/board_r.c
+index 602a239..943b1d2 100644
+--- a/common/board_r.c
++++ b/common/board_r.c
+@@ -908,6 +908,10 @@ init_fnc_t init_sequence_r[] = {
+ 	 */
+ 	last_stage_init,
+ #endif
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++	INIT_FUNC_WATCHDOG_RESET
++	env_write_default_if_crc_bad,
++#endif
+ #ifdef CONFIG_CMD_BEDBUG
+ 	INIT_FUNC_WATCHDOG_RESET
+ 	initr_bedbug,
+diff --git a/common/env_common.c b/common/env_common.c
+index cd7b4cd..b50825d 100644
+--- a/common/env_common.c
++++ b/common/env_common.c
+@@ -15,6 +15,7 @@
+ #include <search.h>
+ #include <errno.h>
+ #include <malloc.h>
++#include <spi_flash.h>
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+@@ -301,3 +302,52 @@ int env_complete(char *var, int maxv, char *cmdv[], int bufsz, char *buf)
+ 	return found;
+ }
+ #endif
++
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++#if !defined(CONFIG_CMD_SAVEENV) || !defined(CONFIG_CMD_FLASH)
++#error CONFIG_CMD_SAVEENV and CONFIG_CMD_FLASH must both be enabled when CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD is enabled.
++#endif
++/*
++** Called by board_init_r() after last_stage_init().
++**
++** If the env in flash is corrupt then write the default env with a
++** valid CRC.
++**
++*/
++int env_write_default_if_crc_bad(void)
++{
++#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
++	int ret;
++	struct spi_flash *env_flash = NULL;
++	env_t *env_ptr = (env_t *)malloc(sizeof(env_t));
++	memset(env_ptr, '\0', sizeof(env_t));
++
++	env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
++			CONFIG_ENV_SPI_CS,
++			CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
++	if (!env_flash) {
++		set_default_env("!spi_flash_probe() failed");
++		goto free_and_exit;
++	}
++
++	ret = spi_flash_read(env_flash, CONFIG_ENV_OFFSET, CONFIG_ENV_SIZE, (char *)env_ptr);
++	if (ret) {
++		printf("SPI Read Fail!\n");
++		goto free_and_exit;
++	}
++#else
++	env_t *env_ptr = (env_t *)CONFIG_ENV_ADDR;
++#endif
++
++	if (crc32(0, env_ptr->data, ENV_SIZE) != env_ptr->crc) {
++		puts("Writing default environment\n");
++		saveenv();
++	}
++
++#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
++free_and_exit:
++	free(env_ptr);
++#endif
++	return 0;
++}
++#endif
+diff --git a/include/environment.h b/include/environment.h
+index 08679ae..3aa0fc1 100644
+--- a/include/environment.h
++++ b/include/environment.h
+@@ -214,6 +214,10 @@ int env_import(const char *buf, int check);
+ /* Export from hash table into binary representation */
+ int env_export(env_t *env_out);
+ 
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++int env_write_default_if_crc_bad(void);
++#endif
++
+ #endif /* DO_DEPS_ONLY */
+ 
+ #endif /* _ENVIRONMENT_H_ */

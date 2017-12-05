@@ -1,0 +1,99 @@
+From 6e33b303ad5fe1ac95c7f1e67d702a73dc85f00b Mon Sep 17 00:00:00 2001
+From: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Date: Tue, 24 Mar 2015 17:53:15 +0530
+Subject: [PATCH 099/124] drivers:usb:pm: Fix usb pm support for deep-sleep
+
+Make sure that saving and restoration of usb phy
+registers only happen in case of deep-sleep, and
+not for any other feature like sleep, etc. Also
+export pm_suspend_state() and set_pm_suspend_state()
+
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Change-Id: I2e08208c975ec7aee7ed42e7d424aaa8d14899e3
+Reviewed-on: http://git.am.freescale.net:8181/33384
+Reviewed-by: Nikhil Badola <nikhil.badola@freescale.com>
+Tested-by: Honghua Yin <Hong-Hua.Yin@freescale.com>
+Reviewed-by: Honghua Yin <Hong-Hua.Yin@freescale.com>
+---
+ drivers/usb/host/ehci-fsl.c | 29 +++++++++++++++++++++++------
+ 1 file changed, 23 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/usb/host/ehci-fsl.c b/drivers/usb/host/ehci-fsl.c
+index 6e48992..f06ba9f 100644
+--- a/drivers/usb/host/ehci-fsl.c
++++ b/drivers/usb/host/ehci-fsl.c
+@@ -32,6 +32,11 @@
+ #include <linux/fsl_devices.h>
+ #include <linux/of_platform.h>
+ 
++#ifdef CONFIG_PPC
++#include <asm/fsl_pm.h>
++#include <linux/suspend.h>
++#endif
++
+ #include "ehci-fsl.h"
+ 
+ #define FSL_USB_PHY_ADDR	0xffe214000
+@@ -514,6 +519,7 @@ static int ehci_fsl_setup(struct usb_hcd *hcd)
+ #ifdef CONFIG_PM
+ void __iomem *phy_reg;
+ 
++#ifdef CONFIG_PPC
+ /* save usb registers */
+ static int ehci_fsl_save_context(struct usb_hcd *hcd)
+ {
+@@ -558,6 +564,7 @@ static int ehci_fsl_restore_context(struct usb_hcd *hcd)
+ 	iowrite32be(ehci_fsl->usb_ctrl, non_ehci + FSL_SOC_USB_CTRL);
+ 	return 0;
+ }
++#endif
+ 
+ #ifdef CONFIG_PPC_MPC512x
+ static int ehci_fsl_mpc512x_drv_suspend(struct device *dev)
+@@ -709,13 +716,18 @@ static int ehci_fsl_drv_suspend(struct device *dev)
+ 	struct usb_hcd *hcd = dev_get_drvdata(dev);
+ 	struct ehci_fsl *ehci_fsl = hcd_to_ehci_fsl(hcd);
+ 	void __iomem *non_ehci = hcd->regs;
+-
+-	ehci_fsl_save_context(hcd);
+-
+ #if defined(CONFIG_FSL_USB2_OTG) || defined(CONFIG_FSL_USB2_OTG_MODULE)
+ 	struct usb_bus host = hcd->self;
+ #endif
+ 
++#ifdef CONFIG_PPC
++	suspend_state_t pm_state;
++	pm_state = pm_suspend_state();
++
++	if (pm_state == PM_SUSPEND_MEM)
++		ehci_fsl_save_context(hcd);
++#endif
++
+ 	if (of_device_is_compatible(dev->parent->of_node,
+ 				    "fsl,mpc5121-usb2-dr")) {
+ 		return ehci_fsl_mpc512x_drv_suspend(dev);
+@@ -749,13 +761,18 @@ static int ehci_fsl_drv_resume(struct device *dev)
+ 	struct ehci_fsl *ehci_fsl = hcd_to_ehci_fsl(hcd);
+ 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+ 	void __iomem *non_ehci = hcd->regs;
+-
+-	ehci_fsl_restore_context(hcd);
+-
+ #if defined(CONFIG_FSL_USB2_OTG) || defined(CONFIG_FSL_USB2_OTG_MODULE)
+ 	struct usb_bus host = hcd->self;
+ #endif
+ 
++#ifdef CONFIG_PPC
++	suspend_state_t pm_state;
++	pm_state = pm_suspend_state();
++
++	if (pm_state == PM_SUSPEND_MEM)
++		ehci_fsl_restore_context(hcd);
++#endif
++
+ 	if (of_device_is_compatible(dev->parent->of_node,
+ 				    "fsl,mpc5121-usb2-dr")) {
+ 		return ehci_fsl_mpc512x_drv_resume(dev);
+-- 
+2.1.0.27.g96db324
+

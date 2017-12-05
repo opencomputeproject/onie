@@ -1,0 +1,68 @@
+feature populate serial number env
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+At boot time populate the 'serial#' environment variable if it is not
+already set.  Where the serial number comes from (NOR flash, EEPROM,
+etc.) is board specific.
+
+diff --git a/README b/README
+index cb4e486..1dbcb5f 100644
+--- a/README
++++ b/README
+@@ -3245,6 +3245,11 @@ use the "saveenv" command to store a valid environment.
+ 		space for already greatly restricted images, including but not
+ 		limited to NAND_SPL configurations.
+ 
++- CONFIG_POPULATE_SERIAL_NUMBER
++       At boot time set the 'serial#' environment variable if
++       it is not already set.  Where to find the serial
++       number (EEPROM, NOR flash, etc.) is platform specific.
++
+ Low Level (hardware related) configuration options:
+ ---------------------------------------------------
+ 
+diff --git a/arch/arm/lib/board.c b/arch/arm/lib/board.c
+index c32b692..e413540 100755
+--- a/arch/arm/lib/board.c
++++ b/arch/arm/lib/board.c
+@@ -564,6 +564,10 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	/* initialize environment */
+ 	env_relocate();
+ 
++#ifdef CONFIG_POPULATE_SERIAL_NUMBER
++    populate_serial_number();
++#endif
++
+ #if defined(CONFIG_CMD_PCI) || defined(CONFIG_PCI)
+ 	arm_pci_init();
+ #endif
+diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
+index 7728ab8..d45edf9 100644
+--- a/arch/powerpc/lib/board.c
++++ b/arch/powerpc/lib/board.c
+@@ -862,6 +862,10 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	mac_read_from_eeprom();
+ #endif
+ 
++#ifdef CONFIG_POPULATE_SERIAL_NUMBER
++   populate_serial_number();
++#endif
++
+ #ifdef	CONFIG_HERMES
+ 	if ((gd->board_type >> 16) == 2)
+ 		bd->bi_ethspeed = gd->board_type & 0xFFFF;
+diff --git a/include/common.h b/include/common.h
+index a7fb05e..99b52e0 100644
+--- a/include/common.h
++++ b/include/common.h
+@@ -319,6 +319,7 @@ int	checkdram     (void);
+ int	last_stage_init(void);
+ extern ulong monitor_flash_len;
+ int mac_read_from_eeprom(void);
++int populate_serial_number(void);
+ extern u8 _binary_dt_dtb_start[];	/* embedded device tree blob */
+ int set_cpu_clk_info(void);
+ 

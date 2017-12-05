@@ -14,7 +14,23 @@
 ## Strings of the form %%VAR%% are replaced during construction.
 ##
 
-echo -n "Verifying image checksum ..."
+extract=no
+quiet=no
+args=":xq"
+while getopts "$args" a ; do
+    case $a in
+        x)
+            extract=yes
+            ;;
+        q)
+            quiet=yes
+            ;;
+        *)
+        ;;
+    esac
+done
+
+[ "$quiet" = "no" ] && echo -n "Verifying image checksum ..."
 sha1=$(sed -e '1,/^exit_marker$/d' "$0" | sha1sum | awk '{ print $1 }')
 
 payload_sha1=%%IMAGE_SHA1%%
@@ -27,7 +43,7 @@ if [ "$sha1" != "$payload_sha1" ] ; then
     exit 1
 fi
 
-echo " OK."
+[ "$quiet" = "no" ] && echo " OK."
 
 tmp_dir=
 clean_up() {
@@ -46,22 +62,10 @@ if [ "$(id -u)" = "0" ] ; then
     mount -t tmpfs tmpfs-installer $tmp_dir || clean_up 1
 fi
 cd $tmp_dir
-echo -n "Preparing image archive ..."
+[ "$quiet" = "no" ] && echo -n "Preparing image archive ..."
 sed -e '1,/^exit_marker$/d' $archive_path | tar xf - || clean_up 1
-echo " OK."
+[ "$quiet" = "no" ] && echo " OK."
 cd $cur_wd
-
-extract=no
-args=":x"
-while getopts "$args" a ; do
-    case $a in
-        x)
-            extract=yes
-            ;;
-        *)
-        ;;
-    esac
-done
 
 if [ "$extract" = "yes" ] ; then
     # stop here

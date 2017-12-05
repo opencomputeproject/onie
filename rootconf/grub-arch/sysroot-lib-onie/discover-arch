@@ -1,0 +1,29 @@
+# x86_64 specific discover routine
+
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+. /lib/onie/onie-blkdev-common
+
+skip_parts_arch()
+{
+    # During discovery, do not mount and inspect the ONIE partitions
+    # looking for an installer image.
+    local skip="$onie_boot_label"
+
+    if [ "$(onie_get_running_firmware)" = "uefi" ] ; then
+        # Add the UEFI system partition UUID to the skip list
+        skip="$(onie_get_uefi_uuid) $skip"
+    fi
+
+    # Also skip any DIAG partitions
+    diag_part=$(blkid | egrep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
+
+    echo "$skip $diag_part"
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

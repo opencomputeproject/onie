@@ -1,0 +1,123 @@
+#!/bin/sh
+
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015-2016 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+this_script=$(basename $(realpath $0))
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+
+args="o:lhvq"
+
+usage()
+{
+    echo "usage: $this_script [-o <onie_mode>] [-lhvq]"
+    cat <<EOF
+Get or set the default GRUB boot entry.  The default is to show
+the current default entry.
+
+COMMAND LINE OPTIONS
+
+	-o
+		Set the default GRUB boot entry to a particular "ONIE
+		mode".  Available ONIE modes are:
+
+		install   -- ONIE OS installer mode
+		rescue    -- ONIE rescue mode
+		uninstall -- ONIE OS uninstall mode
+		update    -- ONIE self update mode
+		embed     -- ONIE self update mode and embed ONIE
+		diag      -- Hardware Vendor's Diagnostic
+		none      -- Use system default boot mode
+
+                Some platforms may offer additional modes.  Check with
+                your hardware vendor.
+
+                The 'none' mode will use the first ONIE boot menu entry.
+
+	-l
+		List the current default entry.  This is the default.
+
+	-h
+		Help.  Print this message.
+
+	-q
+		Quiet.  No printing, except for errors.
+
+	-v
+		Be verbose.  Print what is happening.
+EOF
+}
+
+onie_mode=
+list=
+quiet=no
+verbose=no
+cmd_verbose=
+
+while getopts "$args" a ; do
+    case $a in
+        h)
+            usage
+            exit 0
+            ;;
+        v)
+            verbose=yes
+            cmd_verbose=-v
+            ;;
+        l)
+            list=yes
+            ;;
+        o)
+            onie_mode="$OPTARG"
+            ;;
+        q)
+            quiet=yes
+            ;;
+        *)
+            echo "Unknown argument: $a"
+            usage
+            exit 1
+    esac
+done
+
+[ "$verbose" = "yes" ] && quiet=no
+
+[ -r "$lib_dir/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. $lib_dir/onie-blkdev-common
+
+if [ -n "$onie_mode" ] ; then
+    case "$onie_mode" in
+        install|uninstall|rescue|update|embed|diag)
+            [ "$verbose" = "yes" ] && echo "Setting ONIE mode to: $onie_mode"
+            # Set ONIE boot mode in grubenv
+            onie_setenv onie_mode "$onie_mode"
+            ;;
+        none)
+            [ "$verbose" = "yes" ] && echo "Clearing the ONIE mode"
+            # Clear the ONIE boot mode in grubenv
+            onie_setenv onie_mode
+            ;;
+        *)
+            echo "ERROR: Unknown ONIE mode: $onie_mode"
+            exit 1
+    esac
+
+fi
+
+if [ -z "$onie_mode" ] || [ "$list" = "yes" ] ; then
+    # Read ONIE mode from grubenv
+    mode="$(onie_getenv onie_mode)"
+    if [ -n "$mode" ] ; then
+        default="ONIE mode: $mode"
+    else
+        default="ONIE mode: unknown"
+    fi
+    echo "Default boot: $default"
+fi
+
+exit 0

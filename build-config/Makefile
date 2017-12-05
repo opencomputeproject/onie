@@ -1,54 +1,75 @@
 #-------------------------------------------------------------------------------
 #>
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 Carlos Cardenas <cardenas12@gmail.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
+#  Copyright (C) 2014,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
 # Builds the Open Network Install Environment install images
 #
-# The image contains:
+# The install image contains:
 #
-#   u-boot
-#   kernel
-#   initramfs loaded with the ONIE discovery and execution application.
+#   install scripts
+#   Linux kernel
+#   initramfs
+#   boot loader specific binaries, like GRUB or U-Boot
 #
-# THIS MAKEFILE USES SUDO TO EXECUTE VARIOUS OPERATIONS WITH ROOT PRIVILEGES!!!!
+# The configuration for a specific platform is located in
+# ../machine/<vendor>/<platform>
 #
-# The configuration for a specific platform must be located in
-# ../machine/<platform>
+# The build specification is in this directory.  The results of the
+# build process end up in ../build.  The dependencies follow a source,
+# patch, build, install sequence and use stamps to track targets.
 #
-# The build specification is in this directory, and the results of the process end
-# up in ../build.  The dependencies follow a source, patch, build, install
-# sequence and use stamps to track targets.
+# When building multiple machines, common components are only built
+# once per toolchain.
 #
 # Typical usage is to checkout a tree and type:
 #
-#    make MACHINE=<platform> all
+#    make MACHINEROOT=../machine/<vendor> MACHINE=<platform> all demo
 #
-# Note: The directory ../machine/<platform> must exist.
+# Note: The directory ../machine/<vendor>/<platform> must exist.
 #
-# The result of the build creates the following directory tree...
+# The result of the build creates the following directory tree.
+# Platform specific components are in build/<platform>, while common
+# components are in build/user/<toolchain>.
 # 
 #   build
 #   ├── <platform>
 #   │   ├── busybox
-#   |   |-- i2ctools
 #   │   ├── initramfs
 #   │   ├── kernel
 #   │   ├── stamp
-#   │   ├── sysroot
-#   │   ├── u-boot
-#   │   ├── uclibc
-#   │   ├── e2fsprogs
-#   │   ├── zlib
-#   │   ├── lzo
-#   │   ├── mtdutils
-#   │   └── dropbear
-#   ├── docs
+#   │   └── sysroot
+#   ├── user/<toolchain>/
+#   │        ├── btrfs-progs
+#   │        ├── dmidecode
+#   │        ├── dosfstools
+#   │        ├── dropbear
+#   │        ├── e2fsprogs
+#   │        ├── efibootmgr
+#   │        ├── efivar
+#   │        ├── ethtool
+#   │        ├── flashrom
+#   │        ├── gptfdisk
+#   │        ├── grub
+#   │        ├── grub-host
+#   │        ├── kexec-tools
+#   │        ├── lvm2
+#   │        ├── lzo
+#   │        ├── mtd-utils
+#   │        ├── parted
+#   │        ├── pciutils
+#   │        ├── popt
+#   │        ├── stamp
+#   │        ├── util-linux
+#   │        └── zlib
+#   ├── download
+#   ├── x-tools
 #   └── images
 #
 #<
@@ -112,7 +133,6 @@ SCRIPTDIR    = $(realpath ./scripts)
 PROJECTDIR	=  $(abspath ..)
 BUILDDIR	=  $(abspath ../build)
 IMAGEDIR	=  $(BUILDDIR)/images
-TESTDIR		=  $(PROJECTDIR)/test
 DOWNLOADDIR	?= $(BUILDDIR)/download
 export DOWNLOADDIR
 
@@ -134,6 +154,12 @@ MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
 MACHINEROOT ?= $(realpath ../machine)
 MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 
+# Do not pass the MACHINE variable to sub-makes or to the environment.
+# Various sub-projects also define and use a variable called MACHINE
+# for a completely different purpose.
+unexport MACHINE
+MAKEOVERRIDES := $(filter-out MACHINE=%,$(MAKEOVERRIDES))
+
 #-------------------------------------------------------------------------------
 #
 #  machine build tree
@@ -142,14 +168,27 @@ MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
 MBUILDDIR	=  $(BUILDDIR)/$(MACHINE_PREFIX)
 STAMPDIR	=  $(MBUILDDIR)/stamp
 SYSROOTDIR	=  $(MBUILDDIR)/sysroot
-DEV_SYSROOT	=  $(MBUILDDIR)/dev-sysroot
 INITRAMFSDIR	=  $(MBUILDDIR)/initramfs
 
 # These directories are needed per machine
 TREEDIRS     += $(STAMPDIR) $(STAGE_SYSROOT) $(INITRAMFSDIR)
 
+XTOOLS_ENABLE ?= yes
+
+# List of known ASIC vendors -- keep this list in alphabetical order
+KNOWN_ASIC_VENDORS = \
+  bcm    \
+  bft    \
+  cavium \
+  centec \
+  mlnx   \
+  mvl    \
+  nephos \
+  none   \
+  qemu
+
 ifneq (,$(MAKECMDGOALS))
-  ifeq (,$(filter onie-release-tag help distclean %build-host doc% %html %pdf, $(MAKECMDGOALS)))
+  ifeq (,$(filter onie-release-tag help distclean %build-host, $(MAKECMDGOALS)))
     ifeq ($(wildcard $(MACHINEDIR)/*),)
       $(warning Unable to find machine directory '$(MACHINEDIR)')
       $(warning You must set the MACHINE= variable when invoking make.)
@@ -157,6 +196,15 @@ ifneq (,$(MAKECMDGOALS))
       $(error Unable to find valid machine configuration directory.)
     endif
     include $(MACHINEDIR)/machine.make
+
+    # Switch ASIC vendor, should be set in machine.make
+    SWITCH_ASIC_VENDOR ?= unknown
+    ifneq ($(filter-out $(KNOWN_ASIC_VENDORS), $(SWITCH_ASIC_VENDOR)),)
+      $(warning Unsupported switch ASIC vendor: $(SWITCH_ASIC_VENDOR))
+      $(warning Check the setting of SWITCH_ASIC_VENDOR in machine.make)
+      $(error Supported switch ASIC vendors: $(KNOWN_ASIC_VENDORS))
+    endif
+
     ARCHDIR ?= $(realpath ./arch)
     include $(ARCHDIR)/$(ONIE_ARCH).make
   endif
@@ -164,11 +212,25 @@ endif
 
 PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
 
+ifeq ($(UBOOT_ENABLE),yes)
+	ROOTFS_ARCH = u-boot-arch
+else ifeq ($(GRUB_ENABLE),yes)
+	ROOTFS_ARCH = grub-arch
+else
+	ROOTFS_ARCH = $(ONIE_ARCH)
+endif
+
 # Verify partition type
 ifneq ($(filter-out gpt msdos, $(PARTITION_TYPE)),)
   $(warning Unsupported partition type: $(PARTITION_TYPE))
   $(error Supported partition types: gpt, msdos)
 endif
+
+# Should ONIE skip programming the Ethernet management interface MAC
+# addresses?  Can be set to "yes" in machine.make.
+SKIP_ETHMGMT_MACS ?= no
+
+ONIE_BUILD_DATE := $(shell LC_ALL=C date -Imin)
 
 TREE_STAMP  = $(STAMPDIR)/tree
 tree-stamp: $(TREE_STAMP)
@@ -270,14 +332,15 @@ endif
 # Default mirror for packages needed by ONIE
 ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 
-include make/crosstool-ng.make
 include make/kernel-download.make
-include make/uclibc-download.make
-include make/xtools.make
-include make/sysroot.make
-ifeq ($(SYSLINUX_ENABLE),yes)
-include make/syslinux.make
+ifeq ($(XTOOLS_ENABLE),yes)
+  include make/crosstool-ng.make
+  ifneq ($(XTOOLS_LIBC),glibc)
+    include make/uclibc-download.make
+  endif
+  include make/xtools.make
 endif
+include make/sysroot.make
 include make/kernel.make
 ifeq ($(UBOOT_ENABLE),yes)
   include make/u-boot.make
@@ -286,11 +349,14 @@ include make/compiler.make
 include make/busybox.make
 include make/zlib.make
 include make/lzo.make
-include make/e2fsprogs.make
+include make/util-linux.make
 ifeq ($(MTDUTILS_ENABLE),yes)
   include make/mtdutils.make
 endif
 include make/dropbear.make
+ifeq ($(EXT3_4_ENABLE),yes)
+  include make/e2fsprogs.make
+endif
 ifeq ($(GPT_ENABLE),yes)
   include make/popt.make
   include make/gptfdisk.make
@@ -304,7 +370,14 @@ endif
 ifeq ($(GRUB_ENABLE),yes)
   include make/grub.make
 endif
-ifeq ($(I2CTOOLS_ENABLE),yes)
+ifeq ($(BTRFS_PROGS_ENABLE),yes)
+  include make/btrfs-progs.make
+endif
+ifeq ($(UEFI_ENABLE),yes)
+  include make/efivar.make
+  include make/efibootmgr.make
+endif
+ifeq ($(I2CTOOLS_SYSEEPROM),yes)
   include make/i2ctools.make
 endif
 ifeq ($(DMIDECODE_ENABLE),yes)
@@ -313,43 +386,75 @@ endif
 ifeq ($(ETHTOOL_ENABLE),yes)
   include make/ethtool.make
 endif
+ifeq ($(MTREE_ENABLE),yes)
+  include make/mtree.make
+endif
+ifeq ($(ACPI_ENABLE),yes)
+  include make/acpica-tools.make
+endif
+ifeq ($(DOSFSTOOLS_ENABLE),yes)
+  include make/dosfstools.make
+endif
+ifeq ($(KEXEC_ENABLE),yes)
+  include make/kexec-tools.make
+endif
+ifeq ($(FLASHROM_ENABLE),yes)
+  include make/pciutils.make
+  include make/flashrom.make
+endif
+ifeq ($(IPMITOOL_ENABLE),yes)
+  include make/ipmitool.make
+endif
 include make/images.make
 include make/demo.make
-include make/docs.make
+
+# By default do not enable building firmware updates
+FIRMWARE_UPDATE_ENABLE ?= no
+ifeq ($(FIRMWARE_UPDATE_ENABLE),yes)
+  include make/firmware-update.make
+endif
 
 #-------------------------------------------------------------------------------
 #
 # top level targets
 #
 
-PHONY += all source demo clean userspace-clean download download-clean docs
-
+PHONY += source
 source: $(SOURCE)
 	$(Q) echo "=== Finished making $@ ==="
 
+PHONY += download
 download: $(DOWNLOAD)
 	$(Q) echo "=== Finished making $@ ==="
 
+PHONY += all
 all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE)
 	$(Q) echo "=== Finished making onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
 
+PHONY += demo
 demo: $(KERNEL) $(DEMO_IMAGE)
 	$(Q) echo "=== Finished making demo onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
 
-docs: html pdf
-
-userspace-clean: $(USERSPACE_CLEAN)
-	$(Q) echo "=== Finished making $@ ==="
-
-clean: 	$(CLEAN) $(USERSPACE_CLEAN)
+PHONY += machine-clean
+machine-clean: $(MACHINE_CLEAN)
 	$(Q) rm -rf $(BUILDDIR)/images/*$(MACHINE_PREFIX)*
 	$(Q) rm -rf $(MBUILDDIR)
+	$(Q) echo "=== Finished making $@ ==="
+
+PHONY += clean
+clean: 	machine-clean
 	$(Q) echo "=== Finished making $@ for $(PLATFORM) ==="
 
+PHONY += user-clean
+user-clean: machine-clean $(USER_CLEAN)
+	$(Q) echo "=== Finished making $@ ==="
+
+PHONY += download-clean
 download-clean: $(DOWNLOAD_CLEAN)
 	$(Q) rm -rf $(DOWNLOADDIR)/*
 	$(Q) echo "=== Finished making $@ ==="
 
+PHONY += distclean
 distclean: download-clean $(DIST_CLEAN)
 	$(Q) for d in $(BUILDDIR)/* ; do \
 		[ -e "$$d" ] || break ; \
@@ -372,28 +477,17 @@ machine-prefix:
 	$(Q) echo $(MACHINE_PREFIX)
 
 # Install required build packages for a x86_64 debian based build host
-DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools python-sphinx rst2pdf \
-				  gperf device-tree-compiler python-all-dev genisoimage \
-				  autoconf automake bison flex texinfo libtool \
-				  realpath gawk libncurses5 libncurses5-dev bc
+DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
+				  gperf device-tree-compiler python-all-dev xorriso \
+				  autoconf automake bison flex texinfo libtool libtool-bin \
+				  realpath gawk libncurses5 libncurses5-dev bc \
+				  dosfstools mtools pkg-config git wget help2man libexpat1 \
+				  libexpat1-dev fakeroot python-sphinx rst2pdf
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update
-	$(Q) sudo apt-get install $(DEBIAN_BUILD_HOST_PACKAGES)
-
-PHONY += test-onie
-SITE_CONFIG ?= $(TESTDIR)/site.conf
-DUT_NAME    ?= onie-test-01
-DUT_LOG_DIR ?= /tmp/$(DUT_NAME)
-DUT_LOG     = $(DUT_LOG_DIR)/test-onie-$$(date +%s).log
-
-test-onie:
-	$(Q) mkdir -p $(DUT_LOG_DIR)
-	$(Q) $(TESTDIR)/bin/test-onie.py \
-		--machine-dir=$(MACHINEDIR) --site-config=$(SITE_CONFIG) \
-		--dut-name=$(DUT_NAME) --log-level=INFO \
-		--console-log=$(DUT_LOG)
+	$(Q) sudo apt-get install -y $(DEBIAN_BUILD_HOST_PACKAGES)
 
 PHONY += ldd
 

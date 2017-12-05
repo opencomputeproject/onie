@@ -1,0 +1,79 @@
+===========================
+Installing ONIE on Centec E580-48X2Q4Z
+================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make -j12 MACHINEROOT=../machine/centec MACHINE=centec_e580_48x2q4z all"``.
+For example::
+
+  $ cd build-config
+  $ make -j12 MACHINEROOT=../machine/centec  MACHINE=centec_e580_48x2q4z all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r-- 4849664 May  7 12:00 centec_e580_48x2q4z-r0.u-boot
+  -rw-r--r-- 4849664 May  7 12:06 onie-centec_e580_48x2q4z-r0.bin
+
+Installing the ONIE binaries
+============================
+
+A single binary image needs to be installed on the NAND flash.
+
+Image 1 -- ONIE kernel.
+  name:  onie-centec_e580_48x2q4z-r0.bin
+
+Step 1 -- Put the ONIE file on a TFTP server
+---------------------------------------------
+
+The following directions assume the files are on the root of the TFTP
+server.
+
+Step 2 -- Install image1 (onie-centec_e580_48x2q4z-r0.bin)
+-----------------------------------------------
+
+Copying the image down using TFTP and flash to the NOR flash::
+
+  => tftpboot onie-centec_e580_48x2q4z-r0.bin
+  => nand write 0x1000000 onie 0x400000 
+
+Step 3 -- Configure Serial Console
+----------------------------------
+
+ONIE defaults the serial console baud rate to 115200.  You may need to
+adjust your terminal settings.
+
+Step 4 -- Restart The System
+----------------------------
+
+You can interrupt the boot process by pressing any key during the
+count down::
+
+  => reset
+
+Step 5 -- Optional
+------------------
+
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this::
+
+  => setenv reboot_cmd rescue
+  => boot
+
+Step 6 -- Update uboot image (Optional)
+------------------
+You can interrupt the boot process by pressing any key during the
+count down::
+
+ => tftpboot centec_e580_48x2q4z-r0.u-boot
+ => protect off bank 1
+ => erase bank 1
+ => cp.b 0x1000000 0xeff80000 0x80000

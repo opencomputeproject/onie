@@ -1,0 +1,531 @@
+Broadcom iProc (ARM Cortex-A9) Watchdog Timer Driver
+Sourced from Broadcom LDK 3.4.10
+
+diff --git a/drivers/bcmdrivers/wdt/.gitignore b/drivers/bcmdrivers/wdt/.gitignore
+new file mode 100644
+index 0000000..d741861
+--- /dev/null
++++ b/drivers/bcmdrivers/wdt/.gitignore
+@@ -0,0 +1,4 @@
++/.built-in.o.cmd
++/built-in.o
++/modules.builtin
++/modules.order
+diff --git a/drivers/bcmdrivers/wdt/Kconfig b/drivers/bcmdrivers/wdt/Kconfig
+new file mode 100644
+index 0000000..ad0b803
+--- /dev/null
++++ b/drivers/bcmdrivers/wdt/Kconfig
+@@ -0,0 +1,7 @@
++config IPROC_WDT
++	tristate "Watchdog Timer support"
++	select WATCHDOG
++	depends on ARCH_IPROC && MACH_NS
++	help
++	  This selects a driver for the hardware watchdog on Broadcom
++	  iProc chips.
+diff --git a/drivers/bcmdrivers/wdt/Makefile b/drivers/bcmdrivers/wdt/Makefile
+new file mode 100644
+index 0000000..2acc17f
+--- /dev/null
++++ b/drivers/bcmdrivers/wdt/Makefile
+@@ -0,0 +1,2 @@
++
++obj-$(CONFIG_IPROC_WDT) := iproc_wdt.o
+diff --git a/drivers/bcmdrivers/wdt/iproc_wdt.c b/drivers/bcmdrivers/wdt/iproc_wdt.c
+new file mode 100755
+index 0000000..33812fa
+--- /dev/null
++++ b/drivers/bcmdrivers/wdt/iproc_wdt.c
+@@ -0,0 +1,491 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/moduleparam.h>
++#include <linux/miscdevice.h>
++#include <linux/fs.h>
++#include <linux/notifier.h>
++#include <linux/reboot.h>
++#include <linux/platform_device.h>
++#include <linux/watchdog.h>
++#include <linux/uaccess.h>
++#include <linux/io.h>
++#include <linux/spinlock.h>
++#include <linux/slab.h>
++
++#ifdef CONFIG_IPROC_SW_RESET_RECORD
++#include <plat/swreset_rec.h>
++#endif
++
++/* Chip specific */
++#define IPROC_WATCHDOG_CLK_HZ                       125000000UL
++#define IPROC_WATCHDOG_COUNTER_BITS                 (28)
++
++/* Default values */
++#define TIMEOUT_MAX                                 \
++    ((int)((1 << IPROC_WATCHDOG_COUNTER_BITS) - 1) / IPROC_WATCHDOG_CLK_HZ)
++#define TIMEOUT_DEFAULT     (TIMEOUT_MAX > 60? (int)60 : (int)TIMEOUT_MAX)
++
++/* module parameters */
++static int timeout =  TIMEOUT_DEFAULT;
++module_param(timeout, int, 0);
++MODULE_PARM_DESC(timeout,
++        "Timeout value. (default="
++        __MODULE_STRING(TIMEOUT_DEFAULT) ")");
++
++static int nowayout = WATCHDOG_NOWAYOUT;
++module_param(nowayout, int, 0);
++MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
++        __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
++
++/* Watchdog register offsets and field */
++#define IPROC_REG_WDT_INTSTATUS                     0x20
++#define IPROC_FLD_WDT_INTSTATUS_WDT_RESET_MASK      0x80000000
++#define IPROC_REG_WDT_WATCHDOG_COUNTER              0x80
++
++/* Register access macro */
++#define wdt_readl(dev, reg)                         \
++    readl_relaxed((dev)->regs + (reg))
++#define wdt_writel(dev, reg, value)                 \
++    writel_relaxed((value), (dev)->regs + (reg))
++
++/* Driver specific data */
++struct wdt_iproc {
++    volatile void               *regs;
++    spinlock_t                  io_lock;
++    int                         timeout;
++    int                         boot_status;
++    unsigned long               users;
++    struct miscdevice           miscdev;
++#ifdef CONFIG_IPROC_SW_RESET_RECORD
++    SWRR_HANDLE                 swrr;
++#endif
++};
++static struct wdt_iproc *wdt;
++static char expect_release;
++
++/*
++ * Disable the watchdog.
++ */
++static inline void
++iproc_wdt_stop(void)
++{
++    spin_lock(&wdt->io_lock);
++#ifdef CONFIG_IPROC_SW_RESET_RECORD
++    if (wdt->swrr != NULL)
++        swreset_record_set(wdt->swrr, 0);
++#endif
++    wdt_writel(wdt,
++        IPROC_REG_WDT_WATCHDOG_COUNTER,
++        0
++        );
++    spin_unlock(&wdt->io_lock);
++}
++
++/*
++ * Enable and reset the watchdog.
++ */
++static inline void
++iproc_wdt_start(void)
++{
++    spin_lock(&wdt->io_lock);
++#ifdef CONFIG_IPROC_SW_RESET_RECORD
++    if (wdt->swrr != NULL)
++        swreset_record_set(wdt->swrr, 1);
++#endif
++    wdt_writel(wdt,
++        IPROC_REG_WDT_WATCHDOG_COUNTER,
++        wdt->timeout * IPROC_WATCHDOG_CLK_HZ
++        );
++    spin_unlock(&wdt->io_lock);
++}
++
++/*
++ * Pat the watchdog timer.
++ */
++static inline void
++iproc_wdt_pat(void)
++{
++    iproc_wdt_start();
++}
++
++/*
++ * Watchdog device is opened, and watchdog starts running.
++ */
++static int
++iproc_wdt_open(struct inode *inode, struct file *file)
++{
++    if (test_and_set_bit(1, &wdt->users))
++        return -EBUSY;
++
++    iproc_wdt_start();
++    return nonseekable_open(inode, file);
++}
++
++/*
++ * Close the watchdog device.
++ */
++static int
++iproc_wdt_close(struct inode *inode, struct file *file)
++{
++    if (expect_release == 1) {
++        iproc_wdt_stop();
++    } else {
++        dev_dbg(wdt->miscdev.parent,
++            "unexpected close, not stopping watchdog!\n");
++        iproc_wdt_pat();
++    }
++    clear_bit(1, &wdt->users);
++    expect_release = 0;
++    return 0;
++}
++
++/*
++ * Change the watchdog time interval.
++ */
++static int
++iproc_wdt_settimeout(int time)
++{
++    if (time < 0 || time > TIMEOUT_MAX) {
++        return -EINVAL;
++    }
++
++    /*
++     * Set new watchdog time. It will be used when iproc_wdt_start() is
++     * called.
++     */
++    wdt->timeout = time;
++    return 0;
++}
++
++/*
++ * Get the watchdog status.
++ */
++static int
++iproc_wdt_get_status(void)
++{
++    if (wdt_readl(wdt, IPROC_REG_WDT_INTSTATUS) &
++        IPROC_FLD_WDT_INTSTATUS_WDT_RESET_MASK) {
++        return WDIOF_CARDRESET;
++    }
++
++    return 0;
++}
++
++static const struct watchdog_info iproc_wdt_info = {
++    .identity    = "iproc watchdog",
++    .options    = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
++};
++
++/*
++ * Handle commands from user-space.
++ */
++static long
++iproc_wdt_ioctl(struct file *file,
++                unsigned int cmd, unsigned long arg)
++{
++    int ret = -ENOTTY;
++    int time;
++    void __user *argp = (void __user *)arg;
++    int __user *p = argp;
++
++    switch (cmd) {
++    case WDIOC_GETSUPPORT:
++        ret = copy_to_user(argp, &iproc_wdt_info,
++                sizeof(iproc_wdt_info)) ? -EFAULT : 0;
++        break;
++    case WDIOC_GETSTATUS:
++        ret = put_user(0, p);
++        break;
++    case WDIOC_GETBOOTSTATUS:
++        ret = put_user(wdt->boot_status, p);
++        break;
++    case WDIOC_SETOPTIONS:
++        ret = get_user(time, p);
++        if (ret)
++            break;
++        if (time & WDIOS_DISABLECARD)
++            iproc_wdt_stop();
++        if (time & WDIOS_ENABLECARD)
++            iproc_wdt_start();
++        ret = 0;
++        break;
++    case WDIOC_KEEPALIVE:
++        iproc_wdt_pat();
++        ret = 0;
++        break;
++    case WDIOC_SETTIMEOUT:
++        ret = get_user(time, p);
++        if (ret)
++            break;
++        ret = iproc_wdt_settimeout(time);
++        if (ret)
++            break;
++        /* Enable new time value */
++        iproc_wdt_start();
++        /* fall through */
++    case WDIOC_GETTIMEOUT:
++        ret = put_user(wdt->timeout, p);
++        break;
++    }
++
++    return ret;
++}
++
++static ssize_t
++iproc_wdt_write(struct file *file, const char __user *data,
++                size_t len, loff_t *ppos)
++{
++    /* See if we got the magic character 'V' and reload the timer */
++    if (len) {
++        if (!nowayout) {
++            size_t i;
++
++            /*
++             * note: just in case someone wrote the magic
++             * character five months ago...
++             */
++            expect_release = 0;
++
++            /*
++             * scan to see whether or not we got the magic
++             * character
++             */
++            for (i = 0; i != len; i++) {
++                char c;
++                if (get_user(c, data + i))
++                    return -EFAULT;
++                if (c == 'V')
++                    expect_release = 1;
++            }
++        }
++        /* someone wrote to us, we should pat the watchdog */
++        iproc_wdt_pat();
++    }
++    return len;
++}
++
++static int
++iproc_wdt_notify_sys(struct notifier_block *this, unsigned long code, void *unused)
++{
++    if (code == SYS_DOWN || code == SYS_HALT) {
++        /* Turn the watchdog off */
++#ifdef CONFIG_IPROC_SW_RESET_RECORD
++        if (wdt->swrr != NULL) {
++            swreset_record_set(wdt->swrr, 0);
++        }
++#endif
++        iproc_wdt_stop();
++    }
++    return NOTIFY_DONE;
++}
++
++static struct notifier_block iproc_wdt_notifier = {
++    .notifier_call	= iproc_wdt_notify_sys,
++};
++
++static const struct file_operations iproc_wdt_fops = {
++    .owner              = THIS_MODULE,
++    .llseek             = no_llseek,
++    .unlocked_ioctl     = iproc_wdt_ioctl,
++    .open               = iproc_wdt_open,
++    .release            = iproc_wdt_close,
++    .write              = iproc_wdt_write,
++};
++
++static int __init
++iproc_wdt_probe(struct platform_device *pdev)
++{
++    struct resource    *regs;
++    int ret;
++
++    if (wdt) {
++        dev_dbg(&pdev->dev, "only 1 wdt instance supported.\n");
++        return -EBUSY;
++    }
++
++    regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++    if (!regs) {
++        dev_dbg(&pdev->dev, "missing resource 0\n");
++        return -ENXIO;
++    }
++
++    wdt = kzalloc(sizeof(struct wdt_iproc), GFP_KERNEL);
++    if (!wdt) {
++        dev_dbg(&pdev->dev, "no memory for wdt structure\n");
++        return -ENOMEM;
++    }
++
++    wdt->regs = ioremap(regs->start, resource_size(regs));
++    if (!wdt->regs) {
++        ret = -ENOMEM;
++        dev_dbg(&pdev->dev, "could not map I/O memory\n");
++        goto err_free;
++    }
++
++#ifdef CONFIG_IPROC_SW_RESET_RECORD
++    if (swreset_record_get_record_count() == 0) {
++        /* No software reset record support */
++        wdt->swrr = NULL;
++        wdt->boot_status = iproc_wdt_get_status();
++    } else {
++        wdt->swrr = swreset_record_register("iproc_cca_watchdog");
++        if (wdt->swrr == NULL) {
++            /* All software reset records are used (unlikely) */
++            dev_warn(&pdev->dev, "Boot status is not available!\n");
++            /* Still try to use original watchdog reset status */
++            wdt->boot_status = iproc_wdt_get_status();
++        } else {
++            /* Get previous value */
++            swreset_record_get(wdt->swrr, &wdt->boot_status);
++            /* Clear it */
++            swreset_record_set(wdt->swrr, 0);
++        }
++    }
++#else
++    wdt->boot_status = iproc_wdt_get_status();
++#endif
++
++    /* To avoid treating manual reboot as a watchdog reset */
++    ret = register_reboot_notifier(&iproc_wdt_notifier);
++    if (ret) {
++        /* In this case, manual reboot could be mistaken as watchdog reset */
++        dev_dbg(&pdev->dev, "could not register reboot notifier\n");
++    }
++
++    expect_release = 0;
++    spin_lock_init(&wdt->io_lock);
++    wdt->users = 0;
++
++    wdt->miscdev.minor    = WATCHDOG_MINOR;
++    wdt->miscdev.name    = "watchdog";
++    wdt->miscdev.fops    = &iproc_wdt_fops;
++    wdt->miscdev.parent    = &pdev->dev;
++
++    platform_set_drvdata(pdev, wdt);
++
++    if (iproc_wdt_settimeout(timeout)) {
++        iproc_wdt_settimeout(TIMEOUT_DEFAULT);
++        dev_dbg(&pdev->dev,
++            "default timeout invalid, set to %d sec.\n",
++            TIMEOUT_DEFAULT);
++    }
++
++    ret = misc_register(&wdt->miscdev);
++    if (ret) {
++        dev_dbg(&pdev->dev, "failed to register wdt miscdev\n");
++        goto err_register;
++    }
++
++    dev_info(&pdev->dev,
++        "iProc Watchdog Timer - timeout=%d sec, nowayout=%d\n",
++        wdt->timeout, nowayout);
++
++    return 0;
++
++err_register:
++    platform_set_drvdata(pdev, NULL);
++    iounmap(wdt->regs);
++err_free:
++    kfree(wdt);
++    wdt = NULL;
++    return ret;
++}
++
++static int __exit
++iproc_wdt_remove(struct platform_device *pdev)
++{
++    if (wdt && platform_get_drvdata(pdev) == wdt) {
++        /* Stop the timer before we leave */
++        if (!nowayout)
++            iproc_wdt_stop();
++
++#ifdef CONFIG_IPROC_SW_RESET_RECORD
++        if (wdt->swrr != NULL) {
++            swreset_record_set(wdt->swrr, 0);
++            swreset_record_unregister(wdt->swrr);
++            wdt->swrr = NULL;
++        }
++#endif
++        unregister_reboot_notifier(&iproc_wdt_notifier);
++        misc_deregister(&wdt->miscdev);
++        iounmap(wdt->regs);
++        kfree(wdt);
++        wdt = NULL;
++        platform_set_drvdata(pdev, NULL);
++    }
++    return 0;
++}
++
++static void
++iproc_wdt_shutdown(struct platform_device *pdev)
++{
++    iproc_wdt_stop();
++}
++
++#ifdef CONFIG_PM
++static int
++iproc_wdt_suspend(struct platform_device *pdev, pm_message_t message)
++{
++    iproc_wdt_stop();
++    return 0;
++}
++
++static int
++iproc_wdt_resume(struct platform_device *pdev)
++{
++    if (wdt->users)
++        iproc_wdt_start();
++    return 0;
++}
++#else
++#define iproc_wdt_suspend NULL
++#define iproc_wdt_resume NULL
++#endif
++
++/* work with hotplug and coldplug */
++MODULE_ALIAS("platform:iproc_wdt");
++
++static struct platform_driver iproc_wdt_driver = {
++    .remove             = __exit_p(iproc_wdt_remove),
++    .suspend            = iproc_wdt_suspend,
++    .resume             = iproc_wdt_resume,
++    .driver             = {
++        .name           = "iproc_wdt",
++        .owner          = THIS_MODULE,
++    },
++    .shutdown           = iproc_wdt_shutdown,
++};
++
++static int __init
++iproc_wdt_init(void)
++{
++    return platform_driver_probe(&iproc_wdt_driver, iproc_wdt_probe);
++}
++module_init(iproc_wdt_init);
++
++static void __exit
++iproc_wdt_exit(void)
++{
++    platform_driver_unregister(&iproc_wdt_driver);
++}
++module_exit(iproc_wdt_exit);
++
++MODULE_AUTHOR("Broadcom Corporation");
++MODULE_DESCRIPTION("Watchdog driver for Broadcom iProc chips");
++MODULE_LICENSE("GPL");
++MODULE_ALIAS_MISCDEV(WATCHDOG_MINOR);

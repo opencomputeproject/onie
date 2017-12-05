@@ -1,0 +1,130 @@
+Save default env when crc is bad.
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2013 Miles Tseng <miles_tseng@accton.com>
+Copyright (C) 2016,2017 david_yang <david_yang@accton.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+During boot when the environment is read from flash and a CRC is
+calculated and checked.  If the CRC is corrupt then a default
+environment that is compiled in is used instead.
+
+When this situation is detected the compiled in default environment is
+written to the flash, thus making sure the flash contains an
+environment with a valid CRC.
+
+diff --git a/README b/README
+index 13b8fdd..d0ffebc 100644
+--- a/README
++++ b/README
+@@ -2403,6 +2403,13 @@ CBFS (Coreboot Filesystem) support
+ 		this is instead controlled by the value of
+ 		/config/load-environment.
+ 
++                CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++
++                During boot up, specifically in board_init_r() after
++                last_stage_init(), the CRC of the non-volatile
++                environment is checked.  If the environment is corrupt
++                then write the default environment with a valid CRC.
++
+ - DataFlash Support:
+ 		CONFIG_HAS_DATAFLASH
+ 
+diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
+index 6a7bf4b..079c693 100644
+--- a/arch/powerpc/lib/board.c
++++ b/arch/powerpc/lib/board.c
+@@ -1003,6 +1003,11 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	last_stage_init();
+ #endif
+ 
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++	WATCHDOG_RESET();
++	env_write_default_if_crc_bad();
++#endif
++
+ #if defined(CONFIG_CMD_BEDBUG)
+ 	WATCHDOG_RESET();
+ 	bedbug_init();
+diff --git a/common/env_common.c b/common/env_common.c
+index 906b41f..0de1920 100644
+--- a/common/env_common.c
++++ b/common/env_common.c
+@@ -31,6 +31,7 @@
+ #include <search.h>
+ #include <errno.h>
+ #include <malloc.h>
++#include <spi_flash.h>
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+@@ -240,3 +241,52 @@ int env_complete(char *var, int maxv, char *cmdv[], int bufsz, char *buf)
+ 	return found;
+ }
+ #endif
++
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++#if !defined(CONFIG_CMD_SAVEENV) || !defined(CONFIG_CMD_FLASH)
++#error CONFIG_CMD_SAVEENV and CONFIG_CMD_FLASH must both be enabled when CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD is enabled.
++#endif
++/*
++** Called by board_init_r() after last_stage_init().
++**
++** If the env in flash is corrupt then write the default env with a
++** valid CRC.
++**
++*/
++void env_write_default_if_crc_bad(void)
++{
++#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
++	int ret;
++	struct spi_flash *env_flash = NULL;
++	env_t *env_ptr = (env_t *)malloc(sizeof(env_t));
++	memset(env_ptr, '\0', sizeof(env_t));
++
++	env_flash = spi_flash_probe(CONFIG_ENV_SPI_BUS,
++			CONFIG_ENV_SPI_CS,
++			CONFIG_ENV_SPI_MAX_HZ, CONFIG_ENV_SPI_MODE);
++	if (!env_flash) {
++		set_default_env("!spi_flash_probe() failed");
++		goto free_and_exit;
++	}
++
++	ret = spi_flash_read(env_flash, CONFIG_ENV_OFFSET, CONFIG_ENV_SIZE, (char *)env_ptr);
++	if (ret) {
++		printf("SPI Read Fail!\n");
++		goto free_and_exit;
++	}
++#else
++	env_t *env_ptr = (env_t *)CONFIG_ENV_ADDR;
++#endif
++
++	if (crc32(0, env_ptr->data, ENV_SIZE) != env_ptr->crc) {
++		puts("Writing default environment\n");
++		saveenv();
++	}
++
++#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
++free_and_exit:
++	free(env_ptr);
++#endif
++	return;
++}
++#endif
+diff --git a/include/environment.h b/include/environment.h
+index e64b43d..82e1c0d 100644
+--- a/include/environment.h
++++ b/include/environment.h
+@@ -193,6 +193,10 @@ int set_default_vars(int nvars, char * const vars[]);
+ /* Import from binary representation into hash table */
+ int env_import(const char *buf, int check);
+ 
++#ifdef CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++void env_write_default_if_crc_bad(void);
++#endif
++
+ #endif /* DO_DEPS_ONLY */
+ 
+ #endif /* _ENVIRONMENT_H_ */

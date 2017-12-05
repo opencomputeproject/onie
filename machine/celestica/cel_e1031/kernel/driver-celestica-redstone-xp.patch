@@ -1,0 +1,594 @@
+Add Celestica Redstone-xp cpld drivers.Add delay in Intel i2c-ismt driver in case of no status rerurn from smbus controller.
+
+diff --git a/drivers/char/Kconfig b/drivers/char/Kconfig
+index 4364303..8201419 100644
+--- a/drivers/char/Kconfig
++++ b/drivers/char/Kconfig
+@@ -384,6 +384,14 @@ config DS1302
+ 
+ endif # RTC_LIB
+ 
++config CEL_REDSTONE_XP_CPLD
++	tristate "Celestica Redstone XP Platform CPLD Support"
++	depends on X86 && PCI
++	---help---
++	 Enable support for Celestica Redstone XP switching platform.
++	 This platform has a c2000 Atom (Rangeley) CPU module, a Broadcom
++	 Trident2 switch ASIC and 48x10G SFP + 6x40G QSFP ports.
++	 
+ config DTLK
+ 	tristate "Double Talk PC internal speech card support"
+ 	depends on ISA
+diff --git a/drivers/char/Makefile b/drivers/char/Makefile
+index 32762ba..e022e92 100644
+--- a/drivers/char/Makefile
++++ b/drivers/char/Makefile
+@@ -65,3 +65,4 @@ obj-$(CONFIG_JS_RTC)		+= js-rtc.o
+ js-rtc-y = rtc.o
+ 
+ obj-$(CONFIG_TILE_SROM)		+= tile-srom.o
++obj-$(CONFIG_CEL_REDSTONE_XP_CPLD)		+= cel-redstone-xp-cpld.o
+diff --git a/drivers/char/cel-redstone-xp-cpld.c b/drivers/char/cel-redstone-xp-cpld.c
+new file mode 100755
+index 0000000..c702162
+--- /dev/null
++++ b/drivers/char/cel-redstone-xp-cpld.c
+@@ -0,0 +1,499 @@
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/types.h>
++#include <linux/fs.h>
++#include <linux/delay.h>
++#include <linux/cdev.h>
++#include <linux/slab.h>
++#include <linux/mutex.h>
++#include <linux/ioport.h>
++#include <asm/io.h>
++#include <asm/uaccess.h>
++
++#ifdef DEBUG_CLS
++# define DEBUG(fmt, ...) printk(fmt, ##__VA_ARGS__)
++#else
++# define DEBUG(fmt, ...)
++#endif
++
++#define IO_BASE		0x00
++#define CPLD_IO_OFF_1	0x100
++#define CPLD_IO_REGION_1 (0x2f8-0x100)
++#define CPLD_IO_OFF_2	0x300
++#define CPLD_IO_REGION_2	(0x3c0-0x300)
++#define CPLD_IO_OFF_3	0x3e0
++#define CPLD_IO_REGION_3	(0x3f0-0x3e0)
++#define CPLD_MINOR 0
++
++struct cpld_dev
++{
++	uint16_t ioBase;
++	struct cdev cdev;
++	dev_t dev;
++};
++
++typedef struct RegData
++{
++	uint16_t regId;			/*register number*/
++	char val;		    	/*register value*/
++	uint8_t rw;			  	/*0:read 1:write*/
++}RegData_t;
++
++typedef struct SfpData
++{
++	char regId;
++	int portId;
++	char devAddr;
++	char val[256];
++	uint8_t rw;
++	uint8_t len;
++}SfpData_t;
++
++#define CPLD_TYPE														( 0x89 )
++#define IOCTL_READ_REG                      _IOR(CPLD_TYPE,0x05,RegData_t)
++#define IOCTL_WRITE_REG                     _IOW(CPLD_TYPE,0x08,RegData_t)
++#define IOCTL_SFP_READ                      _IOR(CPLD_TYPE,0x0F,RegData_t)
++#define IOCTL_SFP_WRITE                     _IOW(CPLD_TYPE,0x10,RegData_t)
++
++//DEFINE_MUTEX(cpld_mutex);
++static struct mutex cpld_mutex;
++#define CPLD_MAJOR 0
++static int debug = 0;
++module_param(debug, int, 0644);
++
++static int major = 0;
++static int cpld_major = CPLD_MAJOR;
++/* 0 = Dynamic allocation of the major device number */
++
++module_param(major, int, 0644);
++
++static phys_addr_t io_base = IO_BASE;
++static int use_count = 0;
++
++static int sfp_read(int ioBase, int portID, char devAddr, char reg, char *data, int len)
++{
++	int count;
++	char byte;
++	short temp;
++	short portid, opcode, devaddr, cmdbyte0, ssrr, writedata, readdata;
++
++		DEBUG("sfp_read sfp iobase=0x%x\n",ioBase);
++	if ((reg + len) > 256) {
++		printk(KERN_ERR "read data len not larger than 256!\n");
++		return -1;
++	}
++	if ((portID >= 1) && (portID <= 18)) {
++		portid = 0x210;
++		opcode = 0x211;
++		devaddr = 0x212;
++		cmdbyte0 = 0x213;
++		ssrr = 0x216;
++		writedata = 0x220;
++		readdata = 0x230;
++		while ((inb(ioBase + ssrr) & 0x40));
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++	printk(KERN_ERR "I2C master read busy!\n");
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++	} else if ((portID >= 19) && (portID <= 36)) {
++		portid = 0x290;
++		opcode = 0x291;
++		devaddr = 0x292;
++		cmdbyte0 = 0x293;
++		ssrr = 0x296;
++		writedata = 0x2A0;
++		readdata = 0x2B0;
++		while ((inb(ioBase + ssrr) & 0x40));
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++	} else if ((portID >= 37) && (portID <= 48)) {
++		portid = 0x390;
++		opcode = 0x391;
++		devaddr = 0x392;
++		cmdbyte0 = 0x393;
++		ssrr = 0x396;
++		writedata = 0x3A0;
++		readdata = 0x3B0;
++		while ((inb(ioBase + ssrr) & 0x40));
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++	} else if ((portID >= 49) && (portID <= 54)) {
++		portid = 0x310;
++		opcode = 0x311;
++		devaddr = 0x312;
++		cmdbyte0 = 0x313;
++		ssrr = 0x316;
++		writedata = 0x320;
++		readdata = 0x330;
++		while ((inb(ioBase + ssrr) & 0x40));
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++	} else {
++		printk(KERN_ERR "sfp num be sure in 1-54,but input is %d\n", portID);
++		return -1;
++	}
++	DEBUG("Start to read\n");
++	byte = 0x40 + portID;
++	outb(byte, ioBase + portid);
++	outb(reg,ioBase + cmdbyte0);
++	while (len > 0) {
++		count = (len >= 8) ? 8 : len;
++		len -= count;
++		byte = count * 16 + 1;
++		outb(byte, ioBase + opcode);
++		devAddr |= 0x01;
++		outb(devAddr, ioBase + devaddr);
++		while ((inb(ioBase + ssrr) & 0x40))
++		{
++			udelay(100);
++		}
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			printk(KERN_ERR "I2C Master error!\n");
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++		temp = ioBase + readdata;
++		while (count-- > 0) {
++			char read_byte;
++			read_byte = inb(temp);
++			*(data++) = read_byte;
++			printk("read_byte = %x\n",read_byte);
++			temp++;
++		}
++		if (len > 0) {
++			reg += 0x08;
++			outb(reg, ioBase + cmdbyte0);
++		}
++	}
++	DEBUG("sfp_write read\n");
++	return 0;
++}
++
++static int sfp_write(int ioBase, int portID, char devAddr, char reg, char *data, int len)
++{
++	int count;
++	char byte;
++	short temp;
++	short portid, opcode, devaddr, cmdbyte0, ssrr, writedata, readdata;
++	DEBUG("sfp_write sfp iobase=0x%x\n",ioBase);
++	if ((reg + len) > 256) {
++		printk(KERN_ERR "read data len not larger than 256!\n");
++		return -1;
++	}
++	if ((portID >= 1) && (portID <= 18)) {
++		portid = 0x210;
++		opcode = 0x211;
++		devaddr = 0x212;
++		cmdbyte0 = 0x213;
++		ssrr = 0x216;
++		writedata = 0x220;
++		readdata = 0x230;
++		while ((inb(ioBase + ssrr) & 0x40));
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++	} else if ((portID >= 19) && (portID <= 36)) {
++		portid = 0x290;
++		opcode = 0x291;
++		devaddr = 0x292;
++		cmdbyte0 = 0x293;
++		ssrr = 0x296;
++		writedata = 0x2A0;
++		readdata = 0x2B0;
++		while ((inb(ioBase + ssrr) & 0x40));
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++	} else if ((portID >= 37) && (portID <= 48)) {
++		portid = 0x390;
++		opcode = 0x391;
++		devaddr = 0x392;
++		cmdbyte0 = 0x393;
++		ssrr = 0x396;
++		writedata = 0x3A0;
++		readdata = 0x3B0;
++		while ((inb(ioBase + ssrr) & 0x40));
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++	} else if ((portID >= 49) && (portID <= 54)) {
++		portid = 0x310;
++		opcode = 0x311;
++		devaddr = 0x312;
++		cmdbyte0 = 0x313;
++		ssrr = 0x316;
++		writedata = 0x320;
++		readdata = 0x330;
++		while ((inb(ioBase + ssrr) & 0x40));
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++	} else {
++		printk(KERN_ERR "sfp num be sure in 1-54,but input is %d\n", portID);
++		return -1;
++	}
++	byte = 0x40 + portID;
++	outb(byte, ioBase + portid);
++	outb(reg, ioBase + cmdbyte0);
++	while (len > 0) {
++		count = (len >= 8) ? 8 : len;
++		len -= count;
++		byte = (count << 4) + 1;
++		outb(byte, ioBase + opcode);
++		temp = ioBase + writedata;
++		while (count-- > 0) {
++			outb(*(data++), temp);
++			temp += 0x01;
++		}
++		devAddr &= 0xfe;
++		outb(devAddr, ioBase + devaddr);
++		while ((inb(ioBase + ssrr) & 0x40))
++		{
++			udelay(100);
++		}
++		if ((inb(ioBase + ssrr) & 0x80) == 0x80) {
++			printk(KERN_ERR "I2C Master error!\n");
++			outb(0x00, ioBase + ssrr);
++			udelay(3000);
++			outb(0x01, ioBase + ssrr);
++			return -1;
++		}
++		if (len > 0) {
++			reg += 0x08;
++			outb(ioBase + cmdbyte0, reg);
++		}
++	}
++	DEBUG("sfp_write out\n");
++	return 0;
++}
++
++static long cpld_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
++{
++	int err = 0;
++	int retval;
++	RegData_t buffer;
++	SfpData_t data;
++	//struct cpld_dev *dev;
++	uint16_t ioBase = 0;
++	if ( _IOC_TYPE( cmd ) != CPLD_TYPE ) {
++		return( -ENOTTY );
++	}
++	if ( _IOC_DIR( cmd ) & _IOC_READ ) {
++		err = !access_ok( VERIFY_WRITE,( void __user * )arg,_IOC_SIZE( cmd ) );
++	} else if ( _IOC_DIR( cmd ) & _IOC_WRITE ) {
++		err = !access_ok( VERIFY_READ,( void __user * )arg,_IOC_SIZE( cmd ) );
++	}
++	if ( err ) {
++		return( -EFAULT );
++	}
++	//dev = filp->private_data;
++	DEBUG("cpld_ioctl cmd=0x%x\n",cmd);
++	switch (cmd) {
++  	case IOCTL_READ_REG: 
++   	{
++   		retval = copy_from_user(&buffer, (const void *)arg, sizeof(RegData_t));
++   		if(retval)
++   			return -EFAULT;
++   		if(buffer.rw == 0){
++   			mutex_lock(&cpld_mutex);
++   			buffer.val = inb(ioBase+buffer.regId);
++				if(debug == 1)
++   				printk(KERN_DEBUG "reg is %x get data is %x\n", ioBase+buffer.regId, buffer.val);
++   			mutex_unlock(&cpld_mutex);
++   			retval = copy_to_user((void __user *)arg, &buffer, sizeof(RegData_t));
++   		}else{
++   			if(debug == 1)
++   				printk(KERN_DEBUG "IOCTL_READ_REG error param.\n");
++   		}
++   		break;
++   	}
++   	case IOCTL_WRITE_REG:
++   	{
++   		retval = copy_from_user(&buffer, (const void *)arg, sizeof(RegData_t));
++   		if(retval)
++   			return -EFAULT;
++   		if(buffer.rw == 1){
++   			mutex_lock(&cpld_mutex);
++				if(debug == 1)
++   				printk(KERN_DEBUG "reg is %x put data is %x\n", ioBase+buffer.regId, buffer.val);
++   			outb(buffer.val, (ioBase+buffer.regId));
++   			mutex_unlock(&cpld_mutex);
++   		}else{
++   			if(debug == 1)
++   				printk(KERN_DEBUG "IOCTL_READ_REG error param.\n");
++   		}
++   		break;
++   	}
++   	case IOCTL_SFP_READ:
++   	{
++			if(debug == 2)
++				printk(KERN_ERR "entry sfp read ioctl\n");
++   		retval = copy_from_user(&data, (const void *)arg, sizeof(SfpData_t));
++   		if(retval){
++			if(debug == 2)
++				printk(KERN_DEBUG "copy from user fail\n");
++   			return -EFAULT;
++		}
++			if(debug == 2)
++				printk(KERN_DEBUG "port id is %d, dev addr is %x, register id is %x\n", data.portId, data.devAddr, data.regId);
++   		if(data.rw == 0){
++				retval = sfp_read(ioBase, data.portId, data.devAddr, data.regId, data.val, data.len);
++				if(retval == 0)
++				{
++					retval = copy_to_user((void __user *)arg, &data, sizeof(data));
++				}else{
++	   			if(debug == 2)
++   					printk(KERN_DEBUG "Access sfp register fail.\n");
++				}				
++   		}else{
++   			if(debug == 2)
++   				printk(KERN_DEBUG "IOCTL_READ_REG error param.\n");
++   		}
++   		break;
++   	}
++   	case IOCTL_SFP_WRITE:
++   	{
++   		retval = copy_from_user(&data, (const void *)arg, sizeof(SfpData_t));
++   		if(retval)
++   			return -EFAULT;
++   		if(data.rw == 0){
++				retval = sfp_write(ioBase, data.portId, data.devAddr, data.regId, data.val, data.len);
++   		}else{
++   			if(debug == 2)
++   				printk(KERN_DEBUG "IOCTL_READ_REG error param.\n");
++   		}
++   		break;
++   	}
++		default:  /* redundant, as cmd was checked against MAXNR */
++    	return( -ENOTTY );
++    }
++	DEBUG("cpld_ioctl out\n");
++	return retval;
++}
++
++static int cpld_open(struct inode *node, struct file *flip)
++{
++	DEBUG("cpld_open in\n");
++	mutex_lock(&cpld_mutex);
++	if(use_count == 0){
++		use_count += 1;
++		if(!request_region(CPLD_IO_OFF_1, CPLD_IO_REGION_1, "cpld")){
++			use_count = 0;
++			mutex_unlock(&cpld_mutex);
++			return -ENODEV;
++		}
++		if(!request_region(CPLD_IO_OFF_2, CPLD_IO_REGION_2, "cpld")){
++			use_count = 0;
++			release_region(CPLD_IO_OFF_1,CPLD_IO_REGION_1);
++			mutex_unlock(&cpld_mutex);
++			return -ENODEV;
++		}
++		if(!request_region(CPLD_IO_OFF_3, CPLD_IO_REGION_3, "cpld")){
++			use_count = 0;
++			release_region(CPLD_IO_OFF_1, CPLD_IO_REGION_1);
++			release_region(CPLD_IO_OFF_2, CPLD_IO_REGION_2);
++			mutex_unlock(&cpld_mutex);
++			return -ENODEV;
++		}
++		mutex_unlock(&cpld_mutex);
++	}
++	else{
++		use_count += 1;
++		mutex_unlock(&cpld_mutex);
++	}
++	mutex_unlock(&cpld_mutex);
++	DEBUG("cpld_open out\n");	
++	return 0;
++}
++
++static int cpld_release(struct inode *node, struct file *flip)
++{
++	DEBUG("cpld_release in\n");
++	mutex_lock(&cpld_mutex);
++	if(use_count == 0){
++		mutex_unlock(&cpld_mutex);
++		return 0;
++	}	
++	if(--use_count == 0){
++		release_region(CPLD_IO_OFF_1,CPLD_IO_REGION_1);
++		release_region(CPLD_IO_OFF_2,CPLD_IO_REGION_2);
++		release_region(CPLD_IO_OFF_3, CPLD_IO_REGION_3);
++		flip->private_data = NULL;
++	}
++	mutex_unlock(&cpld_mutex);
++	DEBUG("cpld_release out\n");
++	return 0;
++}
++
++
++struct file_operations cpld_ops = 
++{
++	.owner   = THIS_MODULE,
++	.open = cpld_open,
++	.unlocked_ioctl =  cpld_ioctl,
++	.release = cpld_release,
++};
++
++static int __init cpld_init(void)
++{
++	int ret = -1;
++
++	mutex_init(&cpld_mutex);
++
++	cpld_major = register_chrdev(0, "cpld", &cpld_ops);
++	DEBUG("cpld_major = %d\n\n",cpld_major);
++	if(cpld_major<=0) {
++		mutex_destroy(&cpld_mutex);
++		DEBUG("register chrdev error\n");
++		goto error_register_chrdev;
++	}
++
++	return 0;
++error_register_chrdev:
++	mutex_destroy(&cpld_mutex);
++	return ret;	
++}
++
++static void __exit cpld_exit(void)
++{
++	DEBUG("cpld_exit in\n");
++	unregister_chrdev(cpld_major, "cpld");
++	mutex_destroy(&cpld_mutex);
++	DEBUG("cpld_exit out\n");	
++}
++
++module_init(cpld_init);
++module_exit(cpld_exit);
++
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("Celestica Larry Ming<laming@celestica.com>");
++MODULE_DESCRIPTION("CPLD diver");
+diff --git a/drivers/i2c/busses/i2c-ismt.c b/drivers/i2c/busses/i2c-ismt.c
+index 09a3e03..f3ef0ae 100644
+--- a/drivers/i2c/busses/i2c-ismt.c
++++ b/drivers/i2c/busses/i2c-ismt.c
+@@ -70,9 +70,8 @@
+ #include <linux/i2c.h>
+ #include <linux/acpi.h>
+ #include <linux/interrupt.h>
+-
++#include <linux/delay.h>
+ #include <asm-generic/io-64-nonatomic-lo-hi.h>
+-
+ /* PCI Address Constants */
+ #define SMBBAR		0
+ 
+@@ -308,6 +307,8 @@ static void ismt_submit_desc(struct ismt_priv *priv)
+ 	val = readl(priv->smba + ISMT_MSTR_MCTRL);
+ 	writel(val | ISMT_MCTRL_SS,
+ 	       priv->smba + ISMT_MSTR_MCTRL);
++	/* Fix i2c device read/write stability */
++	udelay(100);
+ }
+ 
+ /**
+@@ -569,8 +570,8 @@ static int ismt_access(struct i2c_adapter *adap, u16 addr,
+ 			return -EIO;
+ 		}
+ 
+-		dev_dbg(dev, " dma_addr = 0x%016llX\n",
+-			(unsigned long long)dma_addr);
++		dev_dbg(dev, " dma_addr = 0x%016llX, desc->status=0x%02X\n",
++			(unsigned long long)dma_addr, desc->status);
+ 
+ 		desc->dptr_low = lower_32_bits(dma_addr);
+ 		desc->dptr_high = upper_32_bits(dma_addr);
+@@ -582,7 +583,7 @@ static int ismt_access(struct i2c_adapter *adap, u16 addr,
+ 	ismt_submit_desc(priv);
+ 
+ 	/* Now we wait for interrupt completion, 1s */
+-	ret = wait_for_completion_timeout(&priv->cmp, HZ*1);
++	ret = wait_for_completion_timeout(&priv->cmp, HZ*5);
+ 
+ 	/* unmap the data buffer */
+ 	if (dma_size != 0)
+diff --git a/drivers/i2c/i2c-dev.c b/drivers/i2c/i2c-dev.c
+index 57a45ce..7533ce3 100644
+--- a/drivers/i2c/i2c-dev.c
++++ b/drivers/i2c/i2c-dev.c
+@@ -396,8 +396,8 @@ static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	struct i2c_client *client = file->private_data;
+ 	unsigned long funcs;
+ 
+-	dev_dbg(&client->adapter->dev, "ioctl, cmd=0x%02x, arg=0x%02lx\n",
+-		cmd, arg);
++	//dev_dbg(&client->adapter->dev, "ioctl, cmd=0x%02x, arg=0x%02lx\n",
++	//	cmd, arg);
+ 
+ 	switch (cmd) {
+ 	case I2C_SLAVE:

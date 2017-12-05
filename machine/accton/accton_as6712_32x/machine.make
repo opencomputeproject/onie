@@ -7,6 +7,7 @@
 
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
@@ -28,7 +29,12 @@ I2CTOOLS_SYSEEPROM = no
 
 # Console parameters
 CONSOLE_DEV = 1
-CONSOLE_FLAG = 1
+
+# Set Linux kernel version
+LINUX_VERSION		= 4.1
+LINUX_MINOR_VERSION	= 38
+
+GCC_VERSION = 4.9.2
 
 #-------------------------------------------------------------------------------
 #

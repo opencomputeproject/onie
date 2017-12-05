@@ -1,0 +1,5468 @@
+Broadcom iProc (ARM Cortex-A9) platform-specific files
+Baseline files sourced from Broadcom LDK 3.4.10
+
+diff --git a/arch/arm/plat-iproc/Kconfig b/arch/arm/plat-iproc/Kconfig
+new file mode 100644
+index 0000000..5b8675f
+--- /dev/null
++++ b/arch/arm/plat-iproc/Kconfig
+@@ -0,0 +1,96 @@
++# Kernel configuration for Broadcom iProc based boards
++
++menu	"Broadcom IPROC architecture based implementations"
++	depends on ARCH_IPROC
++
++choice
++	prompt "Broadcom iProc SoC Type"
++	default ARCH_NORTHSTAR
++
++config ARCH_NORTHSTAR
++	bool "BROADCOM Northstar SoC"
++	help
++	  Support for the Broadcom Northstar SoC platform.
++
++config MACH_IPROC
++	bool "BROADCOM Generic IPROC SoC"
++	help
++	  Support for the Broadcom IPROC SoC platform.
++
++endchoice
++
++config IPROC_64K_PAGE
++	bool "64K page support"
++	depends on ARCH_IPROC
++	help
++
++config GP_TIMER_CLOCK_OFF_FIX
++	bool "Enable the fix for general purpose timer clock off issue."
++	depends on ARCH_RHEA || ARCH_SAMOA
++	help
++	  Say Y if you want to enable the general purpose timer clock off fix
++
++config GP_TIMER_COMPARATOR_LOAD_DELAY
++        bool "Enable the delay after loading general purpose timer compare register"
++        depends on ARCH_RHEA || ARCH_ISLAND || ARCH_SAMOA || ARCH_HANA || ARCH_NORTHSTAR || MACH_IPROC
++        default y
++
++config IPROC_DCACHE_INVALIDATION
++	bool "Have Linux invalidate D-Cache"
++        default y
++	help
++	  Say Y if you want Linux to invalidate primary core D-Cache during Linux
++	  decompression and boot.
++
++config IPROC_TIMER_UNIT_TESTS
++	bool "Include iProc Timer unit test code"
++	help
++	  Say Y if you want to test the AON,Peripheral Timer modules using the sysfs interface
++
++config IPROC_SW_RESET_RECORD
++	bool "Include Software Reset Records"
++	help
++	  Say Y if you want to enable interface to access Software Reset Record.
++	  Software Reset Record is a set of variables whose value could be retained
++	  after reset (but will be cleared if powered off).
++
++config BRCM_PROP_MODULES
++	bool "Include Broadcom proprietary modules"
++	default n
++	help
++	  Say Y if you want to include the Broadcom proprietary modules.
++
++config BCM_STM
++	bool "Enable System Trace Module"
++	default n
++	help
++	  Say Y if you want to enable the Broadcom System Trace Module
++
++config DMAC_PL330
++	bool "PL330 DMAC driver support for Kona architecture"
++	depends on ARCH_RHEA
++	select PL330
++	help
++	 Support for PL330 DMA Controller driver for Rhea SOC/KONA architecture
++
++config BCM_ZRELADDR
++	hex "Compressed ZREL address"
++
++config BCM_PARAMS_PHYS
++	hex "Address where tagged parameters are to be found"
++
++config BCM_RAM_BASE
++	hex "RAM base address"
++	help
++	 Set the physical base address of RAM
++
++config BCM_RAM_START_RESERVED_SIZE
++	hex "RAM start reserved memory size in bytes"
++	default 0
++	help
++	 Reserve memory at the start of RAM. This memory
++	 may be used for LCD frame buffer, DSP, modem, etc.
++
++#source "drivers/bcmdrivers/Kconfig"
++
++endmenu
+diff --git a/arch/arm/plat-iproc/Makefile b/arch/arm/plat-iproc/Makefile
+new file mode 100644
+index 0000000..d0cb886
+--- /dev/null
++++ b/arch/arm/plat-iproc/Makefile
+@@ -0,0 +1,17 @@
++
++
++# obj-y := irq.o iproc_timer.o timer.o sysfs.o
++obj-y := irq.o timer-sp.o sysfs.o bcm5301x.o iproc-cache.o headsmp.o shm.o
++obj-$(CONFIG_SMP) += platsmp.o
++
++
++obj-$(CONFIG_LOCAL_TIMERS) += localtimer.o
++obj-$(CONFIG_HOTPLUG_CPU)  += hotplug.o
++obj-$(CONFIG_USB_GADGET_DWC_OTG) += lm.o
++obj-$(CONFIG_HAVE_CLK) += clock.o
++obj-$(CONFIG_ARCH_IPROC) += iproc_cru.o
++obj-$(CONFIG_IPROC_SW_RESET_RECORD) += swreset_rec.o
++
++export DRIVERS_MMC_HOST_DIR := drivers/mmc/host/
++export DRIVERS_MTD_DIR := drivers/mtd/
++#obj-y+=../../../../../bcmdrivers/
+diff --git a/arch/arm/plat-iproc/bcm5301x.c b/arch/arm/plat-iproc/bcm5301x.c
+new file mode 100644
+index 0000000..87ae083
+--- /dev/null
++++ b/arch/arm/plat-iproc/bcm5301x.c
+@@ -0,0 +1,84 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/types.h>
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/io.h>
++#include <linux/ioport.h>
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <asm/signal.h>
++#include <asm/mach/map.h>
++#include <asm/pgtable.h>
++#include <asm/bug.h>
++#include <mach/iproc_regs.h>
++#include <mach/io_map.h>
++#include <mach/memory.h>
++
++void __init iproc_map_io(void)
++{
++	struct map_desc desc ;
++	phys_addr_t base_addr;
++
++	/*
++	 * Cortex A9 Architecture Manual specifies this as a way to get
++	 * MPCORE PERHIPHBASE address at run-time
++	 */
++	asm( "mrc p15,4,%0,c15,c0,0 @ Read Configuration Base Address Register"
++		: "=&r" (base_addr) : : "cc" );
++
++	printk(KERN_INFO "MPCORE found at %p\n", (void *)base_addr);
++
++	/* Fix-map the entire PERIPHBASE 2*4K register block */
++	desc.virtual = IPROC_PERIPH_VA;
++	desc.pfn = __phys_to_pfn(base_addr);
++	desc.length = SZ_8K;
++	desc.type = MT_DEVICE ;
++
++	iotable_init(&desc, 1);
++}
++
++static int iproc_data_abort_handler(unsigned long addr,	unsigned int fsr,
++				struct pt_regs *regs)
++{
++	/*
++	 * These happen for no good reason
++	 */
++//	printk(KERN_WARNING	"Data abort at addr=%#lx, fsr=%#x ignored.\n", addr, fsr);
++	return 0;
++}
++
++void __init iproc_enable_data_prefetch_aborts(void)
++{
++	u32 x;
++
++	/* Install our hook */
++	hook_fault_code(16 + 6, iproc_data_abort_handler, SIGBUS, 0,
++			"imprecise external data abort");
++
++	/* Enable external aborts - clear "A" bit in CPSR */
++
++	/* Read CPSR */
++//	asm("mrs       %0,cpsr": "=&r" (x) : : );
++	asm("mrs       %0,cpsr": "=&r" (x) );
++
++	x &= ~ PSR_A_BIT;
++
++	/* Update CPSR, affect bits 8-15 */
++	asm("msr       cpsr_x,%0; nop; nop": : "r" (x) : "cc");
++
++}
+diff --git a/arch/arm/plat-iproc/clock.c b/arch/arm/plat-iproc/clock.c
+new file mode 100644
+index 0000000..98da8f5
+--- /dev/null
++++ b/arch/arm/plat-iproc/clock.c
+@@ -0,0 +1,165 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/errno.h>
++#include <linux/clk.h>
++#include <linux/mutex.h>
++
++#include <mach/clkdev.h>
++
++int clk_enable(struct clk *clk)
++{
++	int ret ;
++
++	ret = atomic_inc_return(&clk->ena_cnt);
++	if (ret > 1)
++		return 0;
++	/* Continue of count was moved from 0 to 1 - reentrant */
++    if (clk->parent)
++		ret = clk_enable( clk->parent );
++	else
++		ret = 0;
++
++	if (ret == 0) {
++		if (!clk->ops || !clk->ops->enable) {
++			if (clk->rate)
++				ret = 0 ;
++			else {
++				if (clk_get_rate(clk))
++					ret = 0;
++				else
++					ret = -EIO;
++			}
++		} else {
++			ret =  clk->ops->enable(clk);
++		}
++	}
++
++	if (ret != 0)
++		atomic_dec(&clk->ena_cnt);
++
++	return ret ;
++}
++
++EXPORT_SYMBOL(clk_enable);
++
++void clk_disable(struct clk *clk)
++{
++	int ret ;
++
++	ret = atomic_dec_return(&clk->ena_cnt);
++
++	/* Continue if this is the last client to disable - reentrant */
++	if (ret > 0)
++		return ;
++	BUG_ON(ret < 0);
++
++	if (!clk->ops || !clk->ops->disable)
++        return;
++
++	clk->ops->disable(clk);
++
++	if (clk->parent)
++		clk_disable(clk->parent);
++
++	return ;
++}
++
++EXPORT_SYMBOL(clk_disable);
++
++unsigned long clk_get_rate(struct clk *clk)
++{
++#ifndef CONFIG_MACH_CYGNUS
++	/* Recurse to update parent's frequency */
++	if (clk->parent)
++		clk_get_rate(clk->parent);
++
++	/* Read hardware registers if needed */
++	if (clk->ops && clk->ops->status)
++		clk->ops->status(clk);
++#endif
++
++#ifdef CONFIG_MACH_CYGNUS
++	printk(KERN_INFO "INFO-Cygnus:%d:%s() clk->name= %s clk->rate= %d\n", __LINE__, __func__, clk->name, clk->rate);
++#endif
++	return clk->rate;
++
++}
++
++EXPORT_SYMBOL(clk_get_rate);
++
++long clk_round_rate(struct clk *clk, unsigned long rate)
++{
++	long ret = -EIO;
++
++	if (clk->ops && clk->ops->round)
++		ret = clk->ops->round(clk, rate);
++
++	return ret;
++}
++
++EXPORT_SYMBOL(clk_round_rate);
++
++int clk_set_rate(struct clk *clk, unsigned long rate)
++{
++	int ret = -EIO;
++
++	if (rate == clk->rate)
++		return 0;
++
++	if (clk->ops && clk->ops->setrate)
++		ret = clk->ops->setrate(clk, rate);
++
++    return ret;
++}
++
++EXPORT_SYMBOL(clk_set_rate);
++
++/*
++ * clk_get(), clk_put() are implemented in arch/arm/common/clock.c
++ * but it needs these two stub functions for platform-specific operations.
++ * Reeturn 1 on success 0 on failure.
++ */
++
++int __clk_get(struct clk *clk)
++{
++	int ret ;
++
++	ret = atomic_inc_return( &clk->use_cnt );
++	if (ret > 1)
++		return 1;
++
++	if (clk->parent)
++		return __clk_get( clk->parent );
++
++	return 1;
++}
++
++void __clk_put(struct clk *clk)
++{
++    int ret;
++
++	ret = atomic_dec_return( &clk->use_cnt);
++	if (ret > 0)
++		return;
++
++	BUG_ON(ret < 0);
++
++	if (clk->parent)
++		__clk_put(clk->parent);
++}
+diff --git a/arch/arm/plat-iproc/headsmp.S b/arch/arm/plat-iproc/headsmp.S
+new file mode 100644
+index 0000000..4cf0efa
+--- /dev/null
++++ b/arch/arm/plat-iproc/headsmp.S
+@@ -0,0 +1,106 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++/* Based on arch/arm/mach-realview/headsmp.S */
++/*
++ *  linux/arch/arm/mach-realview/headsmp.S
++ *
++ *  Copyright (c) 2003 ARM Limited
++ *  All Rights Reserved
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#include <linux/linkage.h>
++#include <linux/init.h>
++#include <mach/iproc_regs.h>
++#include <asm/system.h>
++#include <asm/assembler.h>
++
++/*
++ * This is called from head.S to fix the u-boot not initializing
++ * MMU and cache the way Linux likes it to be. I have talked to
++ * u-boot developer to fix it in u-boot. This will remain as a
++ * safety. Don't use r1 and r2 as u-boot/CFE may pass some parameters
++ * for the kernel.
++ * When this code completes execution, we expect the following:
++ * MMU = OFF
++ * D-Cache = OFF
++ * I-Cache = Don't Care
++ * regs r0 = 0 r1 = machine id and r2 = atags pointer or 0
++ */
++	__HEAD
++ENTRY(__iproc_head_fixup)
++	mov	r12, lr			@ Save the return address
++	mrc	p15, 0, r8,  c1, c0, 0	@ Read SCTLR
++	mrc	p15, 0, r9,  c1, c0, 1	@ Read ACTLR
++	mrc	p15, 0, r10, c2, c0, 0	@ Read TTBR0
++	mrc	p15, 0, r11, c2, c0, 1	@ Read TTBR1
++	mrc	p15, 0, r7,  c2, c0, 2	@ Read TTBCR
++	mov	r0, r8
++	bic	r0, #CR_C||CR_M
++	mcr	p15, 0, r0, c1, c0, 0	@ Write the control register
++	nop
++	mrc	p15, 0, r0, c1, c0, 0	@ Read the control register
++	bic	r0, #CR_C|CR_A|CR_M|CR_W
++	bic	r0, #CR_I|CR_Z
++	mcr	p15, 0, r0, c1, c0, 0	@ Write the control register
++	nop
++	mov	r0, #0
++	@ L2 cache controller control register
++	ldr	r3, =IPROC_L2CC_REG_BASE
++	str	r0, [r3, #0x100]	@ Disable L2 cache
++	bl	__v7_invalidate_dcache_all
++
++	mov	r0, #0
++	mov	pc, r12			@ Return for regular boot
++	nop
++ENDPROC(__iproc_head_fixup)
++
++/*
++ * iProc specific entry point for secondary CPUs.  This provides
++ * a "holding pen" into which all secondary cores are held until we're
++ * ready for them to initialise.
++ */
++#ifdef CONFIG_SMP
++ENTRY(iproc_secondary_startup)
++#ifdef CONFIG_CPU_ENDIAN_BE8
++	setend	be
++#endif
++	bl	v7_invalidate_l1
++	bl	v7_flush_dcache_all
++	mrc     p15, 0, r0, c0, c0, 5
++	and     r0, r0, #15
++	adr     r4, 1f
++	ldmia   r4, {r5, r6}
++	sub     r4, r4, r5
++        add     r6, r6, r4
++pen:	ldr     r7, [r6]
++	cmp     r7, r0
++	bne     pen
++
++	/*
++	 * we've been released from the holding pen: secondary_stack
++	 * should now contain the SVC stack for this core
++	 */
++	b    secondary_startup
++
++1:	.long   .
++	.long   pen_release
++
++ENDPROC(iproc_secondary_startup)
++#endif
+diff --git a/arch/arm/plat-iproc/hotplug.c b/arch/arm/plat-iproc/hotplug.c
+new file mode 100644
+index 0000000..94dd062
+--- /dev/null
++++ b/arch/arm/plat-iproc/hotplug.c
+@@ -0,0 +1,147 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/kernel.h>
++#include <linux/errno.h>
++#include <linux/smp.h>
++#include <linux/completion.h>
++
++#include <asm/cacheflush.h>
++
++extern volatile int pen_release;
++
++static DECLARE_COMPLETION(cpu_killed);
++
++static inline void cpu_enter_lowpower(void)
++{
++    unsigned int v;
++
++    flush_cache_all();
++    asm volatile(
++    "    mcr    p15, 0, %1, c7, c5, 0\n"
++    "    mcr    p15, 0, %1, c7, c10, 4\n"
++    /*
++     * Turn off coherency
++     */
++    "    mrc    p15, 0, %0, c1, c0, 1\n"
++    "    bic    %0, %0, #0x20\n"
++    "    mcr    p15, 0, %0, c1, c0, 1\n"
++    "    mrc    p15, 0, %0, c1, c0, 0\n"
++    "    bic    %0, %0, #0x04\n"
++    "    mcr    p15, 0, %0, c1, c0, 0\n"
++      : "=&r" (v)
++      : "r" (0)
++      : "cc");
++}
++
++static inline void cpu_leave_lowpower(void)
++{
++    unsigned int v;
++
++    asm volatile(    "mrc    p15, 0, %0, c1, c0, 0\n"
++    "    orr    %0, %0, #0x04\n"
++    "    mcr    p15, 0, %0, c1, c0, 0\n"
++    "    mrc    p15, 0, %0, c1, c0, 1\n"
++    "    orr    %0, %0, #0x20\n"
++    "    mcr    p15, 0, %0, c1, c0, 1\n"
++      : "=&r" (v)
++      :
++      : "cc");
++}
++
++static inline void platform_do_lowpower(unsigned int cpu)
++{
++    /*
++     * there is no power-control hardware on this platform, so all
++     * we can do is put the core into WFI; this is safe as the calling
++     * code will have already disabled interrupts
++     */
++    for (;;) {
++        /*
++         * here's the WFI
++         */
++        asm(".inst    0xe320f003\n"
++            :
++            :
++            : "memory", "cc");
++
++        if (pen_release == cpu) {
++            /*
++             * OK, proper wakeup, we're done
++             */
++            break;
++        }
++
++        /*
++         * getting here, means that we have come out of WFI without
++         * having been woken up - this shouldn't happen
++         *
++         * The trouble is, letting people know about this is not really
++         * possible, since we are currently running incoherently, and
++         * therefore cannot safely call printk() or anything else
++         */
++#ifdef DEBUG
++        printk("CPU%u: spurious wakeup call\n", cpu);
++#endif
++    }
++}
++
++int platform_cpu_kill(unsigned int cpu)
++{
++    return wait_for_completion_timeout(&cpu_killed, 5000);
++}
++
++/*
++ * platform-specific code to shutdown a CPU
++ *
++ * Called with IRQs disabled
++ */
++void platform_cpu_die(unsigned int cpu)
++{
++#ifdef DEBUG
++    unsigned int this_cpu = hard_smp_processor_id();
++
++    if (cpu != this_cpu) {
++        printk(KERN_CRIT "Eek! platform_cpu_die running on %u, should be %u\n",
++               this_cpu, cpu);
++        BUG();
++    }
++#endif
++
++    printk(KERN_NOTICE "CPU%u: shutdown\n", cpu);
++    complete(&cpu_killed);
++
++    /*
++     * we're ready for shutdown now, so do it
++     */
++    cpu_enter_lowpower();
++    platform_do_lowpower(cpu);
++
++    /*
++     * bring this CPU back into the world of cache
++     * coherency, and then restore interrupts
++     */
++    cpu_leave_lowpower();
++}
++
++int platform_cpu_disable(unsigned int cpu)
++{
++    /*
++     * we don't allow CPU 0 to be shutdown (it is still too special
++     * e.g. clock tick interrupts)
++     */
++    return cpu == 0 ? -EPERM : 0;
++}
+diff --git a/arch/arm/plat-iproc/include/mach/brcm_rdb_rng.h b/arch/arm/plat-iproc/include/mach/brcm_rdb_rng.h
+new file mode 100644
+index 0000000..c17e951
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/brcm_rdb_rng.h
+@@ -0,0 +1,64 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef __BRCM_RDB_RNG_H__
++#define __BRCM_RDB_RNG_H__
++
++#define RNG_CTRL_OFFSET                                                   0x00000000
++#define RNG_CTRL_TYPE                                                     UInt32
++#define RNG_CTRL_RESERVED_MASK                                            0xF00000CC
++#define    RNG_CTRL_RNG_COMBLK2_OSC_DIS_SHIFT                             22
++#define    RNG_CTRL_RNG_COMBLK2_OSC_DIS_MASK                              0x0FC00000
++#define    RNG_CTRL_RNG_COMBLK1_OSC_DIS_SHIFT                             16
++#define    RNG_CTRL_RNG_COMBLK1_OSC_DIS_MASK                              0x003F0000
++#define    RNG_CTRL_RNG_JCLK_BYP_DIV_CNT_SHIFT                            8
++#define    RNG_CTRL_RNG_JCLK_BYP_DIV_CNT_MASK                             0x0000FF00
++#define    RNG_CTRL_RNG_JCLK_BYP_SRC_SHIFT                                5
++#define    RNG_CTRL_RNG_JCLK_BYP_SRC_MASK                                 0x00000020
++#define    RNG_CTRL_RNG_JCLK_BYP_SEL_SHIFT                                4
++#define    RNG_CTRL_RNG_JCLK_BYP_SEL_MASK                                 0x00000010
++#define    RNG_CTRL_RNG_RBG2X_SHIFT                                       1
++#define    RNG_CTRL_RNG_RBG2X_MASK                                        0x00000002
++#define    RNG_CTRL_RNG_RBGEN_SHIFT                                       0
++#define    RNG_CTRL_RNG_RBGEN_MASK                                        0x00000001
++
++#define RNG_STATUS_OFFSET                                                 0x00000004
++#define RNG_STATUS_TYPE                                                   UInt32
++#define RNG_STATUS_RESERVED_MASK                                          0x00F00000
++#define    RNG_STATUS_RND_VAL_SHIFT                                       24
++#define    RNG_STATUS_RND_VAL_MASK                                        0xFF000000
++#define    RNG_STATUS_RNG_WARM_CNT_SHIFT                                  0
++#define    RNG_STATUS_RNG_WARM_CNT_MASK                                   0x000FFFFF
++
++#define RNG_DATA_OFFSET                                                   0x00000008
++#define RNG_DATA_TYPE                                                     UInt32
++#define RNG_DATA_RESERVED_MASK                                            0x00000000
++#define    RNG_DATA_RNG_NUM_SHIFT                                         0
++#define    RNG_DATA_RNG_NUM_MASK                                          0xFFFFFFFF
++
++#define RNG_FF_THRES_OFFSET                                               0x0000000C
++#define RNG_FF_THRES_TYPE                                                 UInt32
++#define RNG_FF_THRES_RESERVED_MASK                                        0xFFFFFFE0
++#define    RNG_FF_THRES_RNG_FF_THRESH_SHIFT                               0
++#define    RNG_FF_THRES_RNG_FF_THRESH_MASK                                0x0000001F
++
++#define RNG_INT_MASK_OFFSET                                               0x00000010
++#define RNG_INT_MASK_TYPE                                                 UInt32
++#define RNG_INT_MASK_RESERVED_MASK                                        0xFFFFFFFE
++#define    RNG_INT_MASK_RNG_INT_OFF_SHIFT                                 0
++#define    RNG_INT_MASK_RNG_INT_OFF_MASK                                  0x00000001
++
++#endif /* __BRCM_RDB_RNG_H__ */
+diff --git a/arch/arm/plat-iproc/include/mach/bridge-regs.h b/arch/arm/plat-iproc/include/mach/bridge-regs.h
+new file mode 100644
+index 0000000..1d2299b
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/bridge-regs.h
+@@ -0,0 +1,68 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++/*
++ * Mbus-L to Mbus Bridge Registers
++ *
++ */
++
++#ifndef __ASM_ARCH_BRIDGE_REGS_H
++#define __ASM_ARCH_BRIDGE_REGS_H
++
++#include <mach/iproc.h>
++
++#define CPU_CONFIG		(BRIDGE_VIRT_BASE | 0x0000)
++
++#define CPU_CONTROL		(BRIDGE_VIRT_BASE | 0x0104)
++#define  CPU_CTRL_PCIE0_LINK	0x00000001
++#define  CPU_RESET		0x00000002
++#define  CPU_CTRL_PCIE1_LINK	0x00000008
++
++#define RSTOUTn_MASK		(BRIDGE_VIRT_BASE | 0x0108)
++#define  SOFT_RESET_OUT_EN	0x00000004
++
++#define SYSTEM_SOFT_RESET	(BRIDGE_VIRT_BASE | 0x010c)
++#define  SOFT_RESET		0x00000001
++
++#define BRIDGE_CAUSE		(BRIDGE_VIRT_BASE | 0x0110)
++#define BRIDGE_MASK		(BRIDGE_VIRT_BASE | 0x0114)
++#define  BRIDGE_INT_TIMER0	0x0002
++#define  BRIDGE_INT_TIMER1	0x0004
++#define  BRIDGE_INT_TIMER1_CLR	(~0x0004)
++
++#define IRQ_VIRT_BASE		(BRIDGE_VIRT_BASE | 0x0200)
++#define IRQ_CAUSE_LOW_OFF	0x0000
++#define IRQ_MASK_LOW_OFF	0x0004
++#define FIQ_MASK_LOW_OFF	0x0008
++#define ENDPOINT_MASK_LOW_OFF	0x000c
++#define IRQ_CAUSE_HIGH_OFF	0x0010
++#define IRQ_MASK_HIGH_OFF	0x0014
++#define FIQ_MASK_HIGH_OFF	0x0018
++#define ENDPOINT_MASK_HIGH_OFF	0x001c
++#define PCIE_INTERRUPT_MASK_OFF	0x0020
++
++#define IRQ_MASK_LOW		(IRQ_VIRT_BASE + IRQ_MASK_LOW_OFF)
++#define FIQ_MASK_LOW		(IRQ_VIRT_BASE + FIQ_MASK_LOW_OFF)
++#define ENDPOINT_MASK_LOW	(IRQ_VIRT_BASE + ENDPOINT_MASK_LOW_OFF)
++#define IRQ_MASK_HIGH		(IRQ_VIRT_BASE + IRQ_MASK_HIGH_OFF)
++#define FIQ_MASK_HIGH		(IRQ_VIRT_BASE + FIQ_MASK_HIGH_OFF)
++#define ENDPOINT_MASK_HIGH	(IRQ_VIRT_BASE + ENDPOINT_MASK_HIGH_OFF)
++#define PCIE_INTERRUPT_MASK	(IRQ_VIRT_BASE + PCIE_INTERRUPT_MASK_OFF)
++
++#define POWER_MANAGEMENT	(BRIDGE_VIRT_BASE | 0x011c)
++
++#define TIMER_VIRT_BASE		(BRIDGE_VIRT_BASE | 0x0300)
++
++#endif
+diff --git a/arch/arm/plat-iproc/include/mach/clkdev.h b/arch/arm/plat-iproc/include/mach/clkdev.h
+new file mode 100644
+index 0000000..d77f186
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/clkdev.h
+@@ -0,0 +1,43 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef __MACH_CLKDEV_H
++#define __MACH_CLKDEV_H
++
++#include <asm/atomic.h>
++#include <mach/clock.h>
++
++struct clk {
++	const struct clk_ops 	*ops;
++	const char 		*name;
++	atomic_t		ena_cnt;
++	atomic_t		use_cnt;
++	unsigned long		rate;
++	unsigned		gated :1;
++	unsigned		fixed :1;
++	unsigned		chan  :6;
++	void __iomem 		*regs_base;
++	struct clk 		*parent;
++	/* TBD: could it have multiple parents to select from ? */
++	enum {
++		CLK_XTAL, CLK_GATE, CLK_PLL, CLK_DIV, CLK_PHA
++	} type;
++};
++
++extern int __clk_get(struct clk *);
++extern void __clk_put(struct clk *);
++
++#endif
+diff --git a/arch/arm/plat-iproc/include/mach/clock.h b/arch/arm/plat-iproc/include/mach/clock.h
+new file mode 100644
+index 0000000..3ad8a76
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/clock.h
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef CLOCK_H
++#define CLOCK_H
++
++#include <linux/clk.h>
++
++/*
++ * Operations on clocks -
++ * See <linux/clk.h> for description
++ */
++struct clk_ops {
++	int	(* enable)(struct clk *);
++	void	(* disable)(struct clk *);
++	long	(* round)(struct clk *, unsigned long);
++	int	(* setrate)(struct clk *, unsigned long);
++	/* Update current rate and return running status */
++	int	(* status)(struct clk *);
++};
++
++#endif
+diff --git a/arch/arm/plat-iproc/include/mach/common.h b/arch/arm/plat-iproc/include/mach/common.h
+new file mode 100644
+index 0000000..69f8f95
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/common.h
+@@ -0,0 +1,51 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++/*
++ *
++ * Core functions for Broadcom Northstar SoC Chip
++ */
++
++#ifndef __ARCH_IPROC_COMMON_H
++#define __ARCH_IPROC_COMMON_H
++
++struct mv643xx_eth_platform_data;
++struct mv_sata_platform_data;
++
++extern struct sys_timer IPROC_timer;
++extern struct mbus_dram_target_info iproc_mbus_dram_info;
++
++/*
++ * Basic IPROC init functions used early by machine-setup.
++ */
++void IPROC_map_io(void);
++void IPROC_init(void);
++void IPROC_init_irq(void);
++void IPROC_setup_cpu_mbus(void);
++void IPROC_ge00_init(struct mv643xx_eth_platform_data *eth_data);
++void IPROC_sata_init(struct mv_sata_platform_data *sata_data);
++void IPROC_pcie_init(int init_port0, int init_port1);
++void IPROC_ehci0_init(void);
++void IPROC_ehci1_init(void);
++void IPROC_uart0_init(void);
++void IPROC_uart1_init(void);
++void IPROC_uart2_init(void);
++void IPROC_uart3_init(void);
++void IPROC_spi0_init(void);
++void IPROC_spi1_init(void);
++void IPROC_i2c_init(void);
++
++#endif
+diff --git a/arch/arm/plat-iproc/include/mach/debug-macro.S b/arch/arm/plat-iproc/include/mach/debug-macro.S
+new file mode 100644
+index 0000000..6c963a4
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/debug-macro.S
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++/*
++ * Debugging macro include header
++ */
++#include <mach/io_map.h>
++#include <mach/memory.h>
++#include <asm/pgtable.h>
++
++	.macro addruart,  tmp, tmp2, rx
++	ldr	\tmp, =IPROC_UART_LLDEBUG_PA 		@ MMU off, Physical
++	ldr	\tmp2, =IPROC_UART_LLDEBUG_VA		@ MMU on, Virtual
++	.endm
++
++#chandra:
++#ifdef CONFIG_MACH_CYGNUS
++	#define UART_SHIFT      2       //for synopsysUart has 4 byte addressing
++#else
++	#define UART_SHIFT      0       //for CCA_UART has 1 byte addressing
++#endif
++
++#include <asm/hardware/debug-8250.S>
+diff --git a/arch/arm/plat-iproc/include/mach/entry-macro.S b/arch/arm/plat-iproc/include/mach/entry-macro.S
+new file mode 100644
+index 0000000..d859b49
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/entry-macro.S
+@@ -0,0 +1,99 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#include <asm/hardware/gic.h>
++#include <mach/io_map.h>
++
++	.macro	disable_fiq
++	.endm
++
++	/*
++	 * This is the interrupt handling part of the GIC code -
++	 * the base_va exists in a variable, but here is defined
++	 * at compile time for effeciency (?)
++	 */
++
++	.macro  get_irqnr_preamble, base, tmp
++	ldr	\base, =IPROC_GICCPU_VA
++	.endm
++
++	/*
++	 * Interrupts 0-15 are IPI
++	 * 16-31 are local
++	 * 32-1020 are global
++	 * 1021-1022 are reserved
++	 * 1023 is "spurious" (no interrupt)
++	 *
++	 * Spurious interrupt must be ignored in all events.
++	 * When in SMP mode, then IPI interrupts must be ignored here,
++	 * amd picked up later with the test_for_ipi macro.
++	 * When in SMP mode and local timers are enabled,
++	 * the private timer/watchdog interrupt must be ignored here
++	 * so it can be handled later in test_for_ltirq routine.
++	 *
++	 * A simple read from the controller will tell us the number of the
++	 * highest priority enabled interrupt.  We then just need to check
++	 * whether it is in the range that must be handled.
++	 *
++	 * Upon return, Z=1 tells to ignore this interrupt
++	 */
++
++	.macro	get_irqnr_and_base, irqnr, irqstat, base, tmp
++
++	/* bits 12-10 = src CPU, 9-0 = int # */
++	ldr     \irqstat, [\base, #GIC_CPU_INTACK]
++	ldr	\tmp, =1021
++
++	bic     \irqnr, \irqstat, #0x1c00
++
++	/* Private timers to call do_local_timer() */
++	cmp	\irqnr, #29
++	beq	29f
++
++	/* SPI to call asm_do_IRQ(); IPI to call do_IPI() */
++	cmp	\irqnr, #15
++	cmpcc	\irqnr, \irqnr
++	cmpne	\irqnr, \tmp
++	cmpcs	\irqnr, \irqnr
++
++	/* SPI if NE; IPI (0-15) or private timer (29) if EQ */
++29:
++	.endm
++
++	@code taken from realview/entry-macro.S
++	/* We assume that irqstat (the raw value of the IRQ acknowledge
++	 * register) is preserved from the macro above.
++	 * If there is an IPI, we immediately signal end of interrupt on the
++	 * controller, since this requires the original irqstat value which
++	 * we won't easily be able to recreate later.
++	 */
++	.macro	test_for_ipi, irqnr, irqstat, base, tmp
++	bic	\irqnr, \irqstat, #0x1c00
++	cmp	\irqnr, #16
++	strcc	\irqstat, [\base, #GIC_CPU_EOI]
++	cmpcs	\irqnr, \irqnr
++	.endm
++
++	.macro	test_for_ltirq, irqnr, irqstat, base,tmp
++	bic	\irqnr, \irqstat, #0x1c00
++	mov	\tmp, #0
++	cmp	\irqnr, #29
++	moveq	\tmp, #1
++	streq	\irqstat, [\base, #GIC_CPU_EOI]
++	cmp	\tmp, #0
++	.endm
++
++	.macro  arch_ret_to_user, tmp1, tmp2
++	.endm
+diff --git a/arch/arm/plat-iproc/include/mach/gpio.h b/arch/arm/plat-iproc/include/mach/gpio.h
+new file mode 100644
+index 0000000..326b73c
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/gpio.h
+@@ -0,0 +1,30 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_GPIO_H
++#define __PLAT_GPIO_H
++
++#include <mach/iproc_regs.h>
++#include <mach/irqs.h>
++
++#include <asm-generic/gpio.h>
++
++
++#define gpio_to_irq(gpio)           __gpio_to_irq(gpio)
++//#define gpio_get_value(gpio)		__gpio_get_value(gpio)
++//#define gpio_set_value(gpio,value)  __gpio_set_value(gpio,value)
++//#define gpio_cansleep(gpio)		   __gpio_cansleep(gpio)
++
++#endif
+diff --git a/arch/arm/plat-iproc/include/mach/hardware.h b/arch/arm/plat-iproc/include/mach/hardware.h
+new file mode 100644
+index 0000000..b373b58
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/hardware.h
+@@ -0,0 +1,43 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_IPROC_HARDWARE_H
++#define __PLAT_IPROC_HARDWARE_H
++
++#include <asm/sizes.h>
++#include <mach/memory.h>
++#include <mach/io_map.h>
++
++/* Hardware addresses of major areas.
++ *  *_START is the physical address
++ *  *_SIZE  is the size of the region
++ *  *_BASE  is the virtual address
++ */
++#define RAM_START		PHYS_OFFSET
++
++#define RAM_BASE		PAGE_OFFSET
++
++#define IO_START IO_START_PA
++#define IO_BASE  IO_START_VA
++
++/* In case we use physical addresses */
++#define IO_ADDRESS(x)   (x)
++
++#define pcibios_assign_all_busses() 1
++
++#define PCIBIOS_MIN_IO			0x1000
++#define PCIBIOS_MIN_MEM			0x01000000
++
++#endif /* __PLAT_IPROC_HARDWARE_H */
+diff --git a/arch/arm/plat-iproc/include/mach/io.h b/arch/arm/plat-iproc/include/mach/io.h
+new file mode 100644
+index 0000000..3ca692e
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/io.h
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_IPROC_IO_H
++#define __PLAT_IPROC_IO_H
++
++//#define IO_SPACE_LIMIT		(0xffffffff)
++
++//#define __io(a)			__typesafe_io(a)
++#define __mem_pci(a)		(a)
++
++//#ifdef __ASSEMBLER__
++//#define IOMEM(x)		(x)
++//#else
++//#define IOMEM(x)		((void __force __iomem *)(x))
++//#endif
++
++#define VC_DIRECT_ACCESS_BASE		0xC0000000UL
++#define ARM_VC_PHYS_ADDR_BASE		0x40000000UL
++#define __VC_BUS_TO_ARM_PHYS_ADDR(x)	((x) - (VC_DIRECT_ACCESS_BASE) + \
++                                        (ARM_VC_PHYS_ADDR_BASE))
++
++#endif /*__PLAT_IPROC_IO_H */
+diff --git a/arch/arm/plat-iproc/include/mach/iproc.h b/arch/arm/plat-iproc/include/mach/iproc.h
+new file mode 100644
+index 0000000..bf01f6e
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/iproc.h
+@@ -0,0 +1,26 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_IPROC_H
++#define __PLAT_IPROC_H
++
++#include <asm/mach/time.h>
++
++extern struct sys_timer iproc_timer;
++
++extern void __init iproc_init_irq(void);
++//static void __init gic_dist_init(struct gic_chip_data *gic);
++
++#endif /* __PLAT_IPROC_H */
+diff --git a/arch/arm/plat-iproc/include/mach/iproc_timer.h b/arch/arm/plat-iproc/include/mach/iproc_timer.h
+new file mode 100644
+index 0000000..5809403
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/iproc_timer.h
+@@ -0,0 +1,148 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_IPROC_TIMER_H
++#define __PLAT_IPROC_TIMER_H
++
++/* Timer module specific data structures */
++enum timer_rate {
++    KHZ_32 = 0,
++    MHZ_1,
++    MHZ_19_5,
++};
++
++struct iproc_timer;
++
++/* Channel specific data structures */
++typedef int (*intr_callback)(void *data);
++
++enum timer_mode {
++    MODE_PERIODIC=0,
++    MODE_ONESHOT,
++};
++
++struct timer_ch_cfg {
++    void *arg;
++    enum timer_mode mode;
++    intr_callback cb;
++    unsigned long reload;    /* Holds the reload value in
++                 * case of periodic timers
++                 */
++};
++
++/* Timer Module related APIs */
++
++/*
++ * USAGE OF THIS APIs
++ * ------------------
++ * From the board specific file, the iproc_timer_modules_init will be called
++ * After that it will call the init function of timer.c and will pass the
++ * following information in a platform structure
++ * 1) Timer name to be used as system timer
++ * 2) Frequency to be configured for system timer
++ * 3) The channel of the timer to use as clock source (optional)
++ * 4) The channel of the timer to use as clock event (optional)
++ *
++ * from the init function of timer.c iproc_timer_modules_set_rate will be called
++ * to set the system timer frequency.
++ * Then the appropriate channels would be setup for clock source/event by
++ * calling iproc_timer_request()
++ */
++
++/*
++ *  iproc_timer_modules_init - Initialize the data structures
++ *  that depcits the iProc timer modules
++ */
++void iproc_timer_modules_init (void);
++
++/*
++ * iproc_timer_module_set_rate - Set the speed in which a timer module should count
++ * name - Name of the Timer to configure
++ * rate - Speed
++ */
++int iproc_timer_module_set_rate(char* name, enum timer_rate);
++
++/*
++ * iproc_timer_module_get_rate - Get the speed in which a timer module is running
++ * name - Name of the Timer module
++ */
++int iproc_timer_module_get_rate (char* name);
++
++
++/* Channel/Timer related APIs */
++/*
++ *  iproc_timer_request - Get access to a channel in the given timer
++ *  name - Name of the Timer module
++ *  channel - Channel number requested. If this is -1 then by default
++ *            the next available channel will be returned
++ */
++struct iproc_timer* iproc_timer_request(char* name, int channel);
++
++/*
++ *  iproc_timer_config - Configure the following parameters of the timer
++ *  1) mode of the timer - periodic/one shot
++ *  2) call back function that will be called from the ISR context
++ *  3) context to be passed back in the call back function
++ *
++ *  pit - iProc timer context (returned by iproc_timer_request())
++ *  pcfg - pointer to the configuration structure
++ */
++int iproc_timer_config (struct iproc_timer *pit, struct timer_ch_cfg *pcfg);
++
++/*
++ * iproc_timer_set_match_start - Set the match register for the timer and start
++ * counting
++ *
++ *  pit - iProc timer context (returned by iproc_timer_request())
++ *  load - The load value to be programmed. This function will internally
++ *         add this value to the current counter and program the resultant in the
++ *         match register. Once the timer is started when the counter
++ *         reaches this value an interrupt will be raised
++ */
++int iproc_timer_set_match_start (struct iproc_timer* pit, unsigned int load);
++
++/*
++ * iproc_timer_free - Read the counter register of the timer
++ *
++ * pit - Timer context to be freed.
++ * msw - pointer to the Most Significant Word (32 bits)
++ * lsw - pointer to the Leas Significant Word (32 bits)
++ */
++int iproc_timer_get_counter(struct iproc_timer* pit,
++                            unsigned long *msw, unsigned long *lsw);
++/*
++ * iproc_timer_disable_and_clear - Disable the timer and clear the
++ * interrupt
++ *
++ * pit - Timer context to be freed.
++ */
++int iproc_timer_disable_and_clear(struct iproc_timer *pit);
++
++/*
++ * iproc_timer_stop  - Stop the timer.
++ *
++ * pit - The timer context to be stopped.
++ */
++int iproc_timer_stop (struct iproc_timer* pit);
++
++/*
++ * iproc_timer_free - Release the timer, after this call the timer can be used
++ * again by others.
++ *
++ * pit - Timer context to be freed.
++ */
++int iproc_timer_free (struct iproc_timer* pit);
++
++#endif /* __PLAT_IPROC_TIMER_H */
+diff --git a/arch/arm/plat-iproc/include/mach/irqs.h b/arch/arm/plat-iproc/include/mach/irqs.h
+new file mode 100644
+index 0000000..752ebcf
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/irqs.h
+@@ -0,0 +1,246 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_IPROC_IRQS_H
++#define __PLAT_IPROC_IRQS_H
++
++#define IRQ_LOCALTIMER                  BCM_INT_ID_PPI13
++#define BCM_INT_PRIORITY_MAX  32  /* there are only 32 priority are supported */
++#define BCM_INT_SPI_MAX       128 /* there are 128 shared peripheral interrupt*/
++/*=====================================================================*/
++/* Software Trigger Interrupt IDs                                      */
++/*=====================================================================*/
++#define BCM_INT_ID_STI0                 0
++#define BCM_INT_ID_STI1                 1
++#define BCM_INT_ID_STI2                 2
++#define BCM_INT_ID_STI3                 3
++#define BCM_INT_ID_STI4                 4
++#define BCM_INT_ID_STI5                 5
++#define BCM_INT_ID_STI6                 6
++#define BCM_INT_ID_STI7                 7
++#define BCM_INT_ID_STI8                 8
++#define BCM_INT_ID_STI9                 9
++#define BCM_INT_ID_STI10                10
++#define BCM_INT_ID_STI11                11
++#define BCM_INT_ID_STI12                12
++#define BCM_INT_ID_STI13                13
++#define BCM_INT_ID_STI14                14
++#define BCM_INT_ID_STI15                15
++#define BCM_INT_ID_STI_MAX              16 /* terminating ID */
++
++/*=====================================================================*/
++/* Private Peripheral Interrupt IDs                                    */
++/*=====================================================================*/
++#define BCM_INT_ID_PPI0                 ( 0 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI1                 ( 1 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI2                 ( 2 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI3                 ( 3 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI4                 ( 4 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI5                 ( 5 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI6                 ( 6 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI7                 ( 7 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI8                 ( 8 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI9                 ( 9 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI10                (10 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI11                (11 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI12                (12 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI13                (13 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI14                (14 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI15                (15 + BCM_INT_ID_STI_MAX)
++#define BCM_INT_ID_PPI_MAX              (16 + BCM_INT_ID_STI_MAX) /* terminating ID */
++
++/*=====================================================================*/
++/* iHost Interrupt IDs                                                 */
++/*=====================================================================*/
++#define BCM_INT_ID_IHOST_L2CC           32
++#define BCM_INT_ID_IHOST_PWRWDOG        33
++#define BCM_INT_ID_IHOST_TRAP8          34
++#define BCM_INT_ID_IHOST_TRAP1          35
++#define BCM_INT_ID_IHOST_COMMTX         36
++#define BCM_INT_ID_IHOST_COMMRX         38
++#define BCM_INT_ID_IHOST_PMU            40
++#define BCM_INT_ID_IHOST_CT             42
++#define BCM_INT_ID_IHOST_DEFFLG_CPU0    44
++#define BCM_INT_ID_IHOST_DEFFLG_CPU1    45
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#define BCM_INT_ID_IHOST_CPU0_PAR		46
++#define BCM_INT_ID_IHOST_CPU1_PAR	    47
++#define BCM_INT_ID_IHOST_SCU0_PAR		48
++#define BCM_INT_ID_IHOST_SCU1_PAR	    49
++#define BCM_INT_ID_IHOST_I2_SEC			50
++#define BCM_INT_ID_IHOST_MAX            51 /* terminating ID */
++#else
++#define BCM_INT_ID_IHOST_MAX            46 /* terminating ID */
++#endif
++
++
++/*=====================================================================*/
++/* IDM Interrupt IDs                                                   */
++/*=====================================================================*/
++#define BCM_INT_ID_IHOST_M1             ( 0 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_PCIE0_M0             ( 1 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_PCIE1_M0             ( 2 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_PCIE2_M0             ( 3 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DMA_M0               ( 4 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_AMAC_M0              ( 5 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_AMAC_M1              ( 6 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_AMAC_M2              ( 7 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_AMAC_M3              ( 8 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_USBH_M0              ( 9 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_USBH_M1              (10 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_SDIO_M0              (11 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_I2S_M0               (12 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_A9JTAG_M0            (13 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_INIT_SEQ_M0          (14 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_JTAG_M0              (15 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_IHOST_ACP            (16 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_IHOST_S0             (17 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DDR_S1               (18 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DDR_S2               (19 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_PCIE0_S0             (20 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_PCIE1_S0             (21 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_PCIE2_S0             (22 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_ROM_S0               (23 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_NAND_S0              (24 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_QPSI_S0              (25 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_A9JTAG_S0            (26 + BCM_INT_ID_IHOST_MAX)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#define BCM_INT_ID_SATA_S0				(27 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_SRAM_S0              (28+ BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_APBW					(29 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_APBX					(30 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_APBY					(31 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_APBZ					(32 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_0                 (33 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_1                 (34 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_2                 (35 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_3                 (36 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_4                 (37 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_IDM_MAX              (38 + BCM_INT_ID_IHOST_MAX)
++#elif defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP)
++#define BCM_INT_ID_APBX                 (27 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_0                 (28 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_1                 (29 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_2                 (30 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_3                 (31 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_DS_4                 (32 + BCM_INT_ID_IHOST_MAX)
++#define BCM_INT_ID_IDM_MAX              (33 + BCM_INT_ID_IHOST_MAX)
++#endif
++
++/*=====================================================================*/
++/* DDR Interrupt IDs                                                   */
++/*=====================================================================*/
++#define BCM_INT_ID_DDR_CONT             (0 + BCM_INT_ID_IDM_MAX)
++#define BCM_INT_ID_DDR_MAX              (1 + BCM_INT_ID_IDM_MAX)
++
++/*=====================================================================*/
++/* DMAC Interrupt IDs                                                  */
++/*=====================================================================*/
++#define BCM_INT_ID_DMAC                 (0 + BCM_INT_ID_DDR_MAX)
++#if defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++#define BCM_INT_ID_DMAC_ABORT           (16 + BCM_INT_ID_DDR_MAX)
++#define BCM_INT_ID_DMAC_MAX             (17 + BCM_INT_ID_DDR_MAX)
++#elif defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP)
++#define BCM_INT_ID_DMAC_MAX             (16 + BCM_INT_ID_DDR_MAX)
++#endif
++
++/*=====================================================================*/
++/* NAND Interrupt IDs                                                  */
++/*=====================================================================*/
++#define BCM_INT_ID_NAND2CORE_RD_MISS         ( 0 + BCM_INT_ID_DMAC_MAX)
++#define BCM_INT_ID_NAND2CORE_ER_COMP         ( 1 + BCM_INT_ID_DMAC_MAX)
++#define BCM_INT_ID_NAND2CORE_CB_COMP         ( 2 + BCM_INT_ID_DMAC_MAX)
++#define BCM_INT_ID_NAND2CORE_PP_COMP         ( 3 + BCM_INT_ID_DMAC_MAX)
++#define BCM_INT_ID_NAND2CORE_ROCTL_RDY       ( 4 + BCM_INT_ID_DMAC_MAX)
++#define BCM_INT_ID_NAND2CORE_NAND_RBB        ( 5 + BCM_INT_ID_DMAC_MAX)
++#define BCM_INT_ID_NAND2CORE_ECC_MIPS_UNCOR  ( 6 + BCM_INT_ID_DMAC_MAX)
++#define BCM_INT_ID_NAND2CORE_ECC_MIPS_COR    ( 7 + BCM_INT_ID_DMAC_MAX)
++#define BCM_INT_ID_NAND2CORE_MAX             ( 8 + BCM_INT_ID_DMAC_MAX)
++
++/*=====================================================================*/
++/* QPSI Interrupt IDs                                                  */
++/*=====================================================================*/
++#define BCM_INT_ID_QPSI2CORE_FULL_RCHD        ( 0 + BCM_INT_ID_NAND2CORE_MAX)
++#define BCM_INT_ID_QPSI2CORE_TRUNCATED        ( 1 + BCM_INT_ID_NAND2CORE_MAX)
++#define BCM_INT_ID_QPSI2CORE_IMAPTIENT        ( 2 + BCM_INT_ID_NAND2CORE_MAX)
++#define BCM_INT_ID_QPSI2CORE_SES_DONE         ( 3 + BCM_INT_ID_NAND2CORE_MAX)
++#define BCM_INT_ID_QPSI2CORE_OVERREAD         ( 4 + BCM_INT_ID_NAND2CORE_MAX)
++#define BCM_INT_ID_QPSI2CORE_MPSI_DONE        ( 5 + BCM_INT_ID_NAND2CORE_MAX)
++#define BCM_INT_ID_QPSI2CORE_MPSI_HLT_SET     ( 6 + BCM_INT_ID_NAND2CORE_MAX)
++#define BCM_INT_ID_QPSI2CORE_MAX              ( 7 + BCM_INT_ID_NAND2CORE_MAX)
++
++/*=====================================================================*/
++/* USB2 Host Interrupt IDs                                             */
++/*=====================================================================*/
++#define BCM_INT_ID_USB2H2CORE_USB2_INT  (0 + BCM_INT_ID_QPSI2CORE_MAX)
++#define BCM_INT_ID_USB2H2CORE_MAX       (1 + BCM_INT_ID_QPSI2CORE_MAX)
++
++/*=====================================================================*/
++/* USB3 Host Interrupt IDs                                             */
++/*=====================================================================*/
++#define BCM_INT_ID_USB3H2CORE_USB2_INT0  (0 + BCM_INT_ID_USB2H2CORE_MAX)
++#define BCM_INT_ID_USB3H2CORE_USB2_INT1  (1 + BCM_INT_ID_USB2H2CORE_MAX)
++#define BCM_INT_ID_USB3H2CORE_USB2_INT2  (2 + BCM_INT_ID_USB2H2CORE_MAX)
++#define BCM_INT_ID_USB3H2CORE_USB2_INT3  (3 + BCM_INT_ID_USB2H2CORE_MAX)
++#define BCM_INT_ID_USB3H2CORE_USB2_HSE   (4 + BCM_INT_ID_USB2H2CORE_MAX)
++#define BCM_INT_ID_USB3H2CORE_MAX        (5 + BCM_INT_ID_USB2H2CORE_MAX)
++
++/*=====================================================================*/
++/* CCA Interrupt IDs                                                   */
++/*=====================================================================*/
++#define BCM_INT_ID_CCA_INT   (0 + BCM_INT_ID_USB3H2CORE_MAX)
++#define BCM_INT_ID_CCA_MAX   (1 + BCM_INT_ID_USB3H2CORE_MAX)
++
++/*=====================================================================*/
++/* CCB Interrupt IDs                                                   */
++/*=====================================================================*/
++#define BCM_INT_ID_CCB_UART0       (0 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_GPIO        (1 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_I2S         (2 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_SMBUS       (3 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_TIM0_INT1   (4 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_TIM0_INT2   (5 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_TIM1_INT1   (6 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_TIM1_INT2   (7 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_RNG         (8 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_SW_SOC      (9 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_PCIE_INT0   (10 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_PCIE_INT1   (11 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_PCIE_INT2   (12 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_SDIO2CORE   (13 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_CTF         (14 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_GMAC_INT0   (15 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_GMAC_INT1   (16 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_GMAC_INT2   (17 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_GMAC_INT3   (18 + BCM_INT_ID_CCA_MAX)
++#define BCM_INT_ID_CCB_MAX         (19 + BCM_INT_ID_CCA_MAX)
++
++#define BCM_INT_ID_FA		   178
++
++
++#ifdef CONFIG_ARCH_REQUIRE_GPIOLIB
++#define IPROC_NR_IRQS           (256)
++#define IPROC_IRQ_GPIO_0        (IPROC_NR_IRQS)
++#define IPROC_NR_GPIO_IRQS      (32 + 4)
++#ifdef CONFIG_MACH_CYGNUS
++	#define NR_IRQS                 256
++#else
++#define NR_IRQS                 (IPROC_NR_IRQS + IPROC_NR_GPIO_IRQS)
++#endif
++#else
++#define NR_IRQS               256
++#endif
++
++#endif /* __PLAT_IPROC_IRQS_H */
+diff --git a/arch/arm/plat-iproc/include/mach/lm.h b/arch/arm/plat-iproc/include/mach/lm.h
+new file mode 100644
+index 0000000..5c550a8
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/lm.h
+@@ -0,0 +1,48 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef _LM_DEVICE_H_
++#define _LM_DEVICE_H_
++
++#include <linux/device.h>
++#include <linux/ioport.h>
++
++
++struct lm_device {
++	struct device dev;
++	struct resource resource;
++	unsigned int irq;
++	unsigned int id;
++};
++
++struct lm_driver {
++	struct device_driver drv;
++	int (*probe) (struct lm_device *);
++	void (*remove) (struct lm_device *);
++	int (*suspend) (struct lm_device *, pm_message_t);
++	int (*resume) (struct lm_device *);
++};
++
++int lm_driver_register(struct lm_driver *drv);
++void lm_driver_unregister(struct lm_driver *drv);
++
++int lm_device_register(struct lm_device *dev);
++void lm_device_unregister(struct lm_device *dev);
++
++#define lm_get_drvdata(lm)	dev_get_drvdata(&(lm)->dev)
++#define lm_set_drvdata(lm,d)	dev_set_drvdata(&(lm)->dev, d)
++
++#endif /* _LM_DEVICE_H_ */
+diff --git a/arch/arm/plat-iproc/include/mach/memory.h b/arch/arm/plat-iproc/include/mach/memory.h
+new file mode 100644
+index 0000000..87bee64
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/memory.h
+@@ -0,0 +1,78 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef __PLAT_IPROC_MEMORY_H
++#define __PLAT_IPROC_MEMORY_H
++
++#include <asm/pgtable.h>
++
++//#define PHYS_OFFSET   (CONFIG_BCM_RAM_BASE+CONFIG_BCM_RAM_START_RESERVED_SIZE)
++
++/* BCM5301x Reference Guide (Section 3) defines three regions of IO  memory,
++ * CORE, IDM, and ARMCORE. The CORE and IDM regions are contiguous, so they
++ * are combined into a single region for mapping and translation purposes
++ */
++
++#define IO_CORE_IDM_PA          0x18000000
++#define IO_CORE_IDM_SIZE          0x200000
++#define IO_ARMCORE_PA           0x19000000
++#define IO_ARMCORE_SIZE           0x100000
++#define IO_SMAU_IDM_PA          0xf8100000
++#define IO_SMAU_IDM_SIZE          0x100000
++
++#define IO_TOTAL_SIZE           (IO_CORE_IDM_SIZE   + \
++                                 IO_ARMCORE_SIZE    + \
++                                 IO_SMAU_IDM_SIZE)
++
++/* VA should be in the range of VMALLOC_START ~ VMALLOC_END-1 */
++#define IO_CORE_IDM_VA          (VMALLOC_END - IO_TOTAL_SIZE)
++#define IO_ARMCORE_VA           (IO_CORE_IDM_VA + IO_CORE_IDM_SIZE)
++#define IO_SMAU_IDM_VA          (IO_ARMCORE_VA + IO_ARMCORE_SIZE)
++
++#define IO_CORE_IDM_PV_DELTA    (IO_CORE_IDM_VA - IO_CORE_IDM_PA)
++#define IO_ARMCORE_PV_DELTA     (IO_ARMCORE_VA  - IO_ARMCORE_PA)
++#define IO_SMAU_IDM_PV_DELTA    (IO_SMAU_IDM_VA  - IO_SMAU_IDM_PA)
++
++#define HW_IO_VIRT_TO_PHYS(virt)                        \
++        (((virt) < IO_ARMCORE_VA) ?                     \
++         ((virt) - IO_CORE_IDM_PV_DELTA) :              \
++         (((virt) < IO_SMAU_IDM_VA) ?                   \
++          ((virt) - IO_ARMCORE_PV_DELTA) :              \
++          ((virt) - IO_SMAU_IDM_PV_DELTA)))
++
++/*
++ * HW_IO_PHYS_TO_VIRT used in asm, so the macro that performs this conversion
++ * is written using only simple math so that the assembler's constant folding
++ * can produce the correct result.
++
++        #define HW_IO_PHYS_TO_VIRT(phys)                \
++            (((phys) < IO_ARMCORE_PA) ?                 \
++             ((phys) + IO_CORE_IDM_PV_DELTA) :          \
++             ((phys) + IO_ARMCORE_PV_DELTA))
++ */
++
++#define HW_IO_PHYS_TO_VIRT(phys)                        \
++        (((phys) + IO_CORE_IDM_PV_DELTA) +              \
++         (((phys) >= IO_ARMCORE_PA) * (IO_ARMCORE_PV_DELTA - IO_CORE_IDM_PV_DELTA)) + \
++         (((phys) >= IO_SMAU_IDM_PA) * (IO_SMAU_IDM_PV_DELTA - IO_ARMCORE_PV_DELTA)))
++
++#define CONSISTENT_DMA_SIZE SZ_128M
++
++#ifndef PHYS_RAM_SIZE
++#define PHYS_RAM_SIZE   0x08000000
++#endif
++
++#endif /* __PLAT_IPROC_MEMORY_H */
+diff --git a/arch/arm/plat-iproc/include/mach/sdio_platform.h b/arch/arm/plat-iproc/include/mach/sdio_platform.h
+new file mode 100644
+index 0000000..f8f17e1
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/sdio_platform.h
+@@ -0,0 +1,67 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef _SDIO_PLATFORM_H
++#define _SDIO_PLATFORM_H
++
++/*
++ * SDIO device type
++ */
++enum sdio_devtype {
++	SDIO_DEV_TYPE_SDMMC = 0,
++	SDIO_DEV_TYPE_WIFI,
++	SDIO_DEV_TYPE_EMMC,
++
++	/* used for internal array indexing, DO NOT modify */
++	SDIO_DEV_TYPE_MAX,
++};
++
++/*
++ * SDIO WiFi GPIO configuration
++ */
++struct sdio_wifi_gpio_cfg {
++	int reset;
++	int shutdown;
++	int reg;
++	int host_wake;
++};
++
++struct sdio_platform_cfg {
++	/* specify which SDIO device */
++	unsigned id;
++
++	/*
++	* For boards without the SDIO pullup registers, data_pullup needs to set
++	* to 1
++	*/
++	unsigned int data_pullup;
++
++	/* for devices with 8-bit lines */
++	int is_8bit;
++
++	/* card detection GPIO, required for SD/MMC */
++	int cd_gpio;
++	enum sdio_devtype devtype;
++
++	/* clocks */
++	char *peri_clk_name;
++	char *ahb_clk_name;
++	char *sleep_clk_name;
++	unsigned long peri_clk_rate;
++
++	struct sdio_wifi_gpio_cfg wifi_gpio;
++};
++
++#endif  /* SDIO_PLATFORM_H */
+diff --git a/arch/arm/plat-iproc/include/mach/smp.h b/arch/arm/plat-iproc/include/mach/smp.h
+new file mode 100644
+index 0000000..5a4b1f4
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/smp.h
+@@ -0,0 +1,42 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++/*
++ * derived from arch/arm/mach-realview/include/mach/smp.h
++ */
++
++#ifndef __ASM_ARCH_SMP_H
++#define __ASM_ARCH_SMP_H __FILE__
++
++#include <asm/hardware/gic.h>
++
++/*
++ * set_event() is used to wake up secondary core from wfe using sev. ROM
++ * code puts the second core into wfe(standby).
++ *
++ */
++#define set_event()	__asm__ __volatile__ ("sev" : : : "memory")
++
++extern void iproc_secondary_startup(void);
++
++#define hard_smp_processor_id()			\
++	({						\
++		unsigned int cpunum;			\
++		__asm__("mrc p15, 0, %0, c0, c0, 5"	\
++			: "=r" (cpunum));		\
++		cpunum &= 0x0F;				\
++	})
++
++#endif /* __ASM_ARCH_SMP_H */
+diff --git a/arch/arm/plat-iproc/include/mach/system.h b/arch/arm/plat-iproc/include/mach/system.h
+new file mode 100644
+index 0000000..bdabd06
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/system.h
+@@ -0,0 +1,36 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_IPROC_SYSTEM_H
++#define __PLAT_IPROC_SYSTEM_H
++
++#include <linux/io.h>
++#include <mach/io_map.h>
++
++
++static void arch_idle(void)
++{
++    /*
++     * This should do all the clock switching
++     * and wait for interrupt tricks
++     */
++    cpu_do_idle();
++}
++
++static inline void arch_reset(char mode, const char *cmd)
++{
++}
++
++#endif /*__PLAT_IPROC_SYSTEM_H */
+diff --git a/arch/arm/plat-iproc/include/mach/timer.h b/arch/arm/plat-iproc/include/mach/timer.h
+new file mode 100644
+index 0000000..1b28414
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/timer.h
+@@ -0,0 +1,49 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_TIMER_H
++#define __PLAT_TIMER_H
++
++#ifdef __KERNEL__
++
++typedef unsigned int timer_tick_count_t;
++typedef unsigned int timer_tick_rate_t;
++typedef unsigned int timer_msec_t;
++
++
++enum gp_timer_rate {
++    GPT_KHZ_32 = 0,
++    GPT_MHZ_1,
++};
++
++/**
++ * timer configuration identifying the timer to use
++ * as system timer (GP Timer)
++ */
++ struct gp_timer_setup {
++    char *name;
++    int ch_num;
++    enum gp_timer_rate rate;
++ };
++
++void iproc_timer_init (struct gp_timer_setup *gpt);
++
++timer_tick_count_t timer_get_tick_count(void);
++timer_tick_rate_t timer_get_tick_rate(void);
++timer_msec_t timer_get_msec(void);
++timer_msec_t timer_ticks_to_msec(timer_tick_count_t ticks);
++
++#endif /* __KERNEL__ */
++#endif /* __PLAT_TIMER_H */
+diff --git a/arch/arm/plat-iproc/include/mach/timex.h b/arch/arm/plat-iproc/include/mach/timex.h
+new file mode 100644
+index 0000000..265c48b
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/timex.h
+@@ -0,0 +1,25 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef __PLAT_IPROC_TIMEX_H
++#define __PLAT_IPROC_TIMEX_H
++
++/*
++ * Not very sure what the clock rate is. Revisit later
++*/
++#define CLOCK_TICK_RATE     (351875)
++
++#endif /* __PLAT_IPROC_TIMEX_H */
+diff --git a/arch/arm/plat-iproc/include/mach/uncompress.h b/arch/arm/plat-iproc/include/mach/uncompress.h
+new file mode 100644
+index 0000000..19002a6
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/mach/uncompress.h
+@@ -0,0 +1,54 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef    __ASM_ARCH_UNCOMPRESS_H
++#define __ASM_ARCH_UNCOMPRESS_H
++
++#include <linux/io.h>
++#include <mach/io_map.h>
++
++#define IPROC_UART0_PA           IPROC_CCA_UART0_REG_BASE
++#define UART0_LSR_OFFSET         0x14
++#define UART0_RBR_THR_DLL_OFFSET 0x00
++#define UART0_LSR_THRE_MASK      0x60
++#define UART0_LSR_TEMT_MASK      0x40
++
++static inline void putc(int c)
++{
++    /*
++     * data should be written to THR register only
++     * if THRE (LSR bit5) is set)
++     */
++    while (0 == (__raw_readl(IPROC_UART0_PA +
++                             UART0_LSR_OFFSET) & UART0_LSR_THRE_MASK ))
++    {
++    }
++
++    __raw_writel((unsigned long)c, IPROC_UART0_PA + UART0_RBR_THR_DLL_OFFSET);
++}
++
++static inline void flush(void)
++{
++    /* Wait for the tx fifo to be empty and last char to be sent */
++    while (0 == (__raw_readl(IPROC_UART0_PA +
++                             UART0_LSR_OFFSET) & UART0_LSR_TEMT_MASK ))
++    {
++    }
++}
++
++#define arch_decomp_setup()
++#define arch_decomp_wdog()
++
++#endif /* __ASM_ARCH_UNCOMPRESS_H */
+diff --git a/arch/arm/plat-iproc/include/plat/dma-pl330.h b/arch/arm/plat-iproc/include/plat/dma-pl330.h
+new file mode 100644
+index 0000000..bf45e7b
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/dma-pl330.h
+@@ -0,0 +1,103 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __PLAT_DMA_H
++#define __PLAT_DMA_H
++
++#include <asm/scatterlist.h>
++
++#define MAX_CHAN_NAME_LENGTH	32
++
++/* DMA direction control */
++enum dma_direction {
++	DMA_DIRECTION_MEM_TO_MEM = 0,
++	DMA_DIRECTION_MEM_TO_DEV_FLOW_CTRL_DMAC = 1,
++	DMA_DIRECTION_MEM_TO_DEV_FLOW_CTRL_PERI = 2,
++	DMA_DIRECTION_DEV_TO_MEM_FLOW_CTRL_DMAC = 3,
++	DMA_DIRECTION_DEV_TO_MEM_FLOW_CTRL_PERI = 4,
++	DMA_DIRECTION_DEV_TO_DEV = 5	/* Invalid, unsupported */
++};
++#define DMA_DIRECTION_MASK	0x7
++
++/* Channel configurations definition */
++#define DMA_CFG_SRC_ADDR_FIXED				(0x0 << 0)
++#define DMA_CFG_SRC_ADDR_INCREMENT			(0x1 << 0)
++#define DMA_CFG_DST_ADDR_FIXED				(0x0 << 14)
++#define DMA_CFG_DST_ADDR_INCREMENT			(0x1 << 14)
++
++#define DMA_CFG_BURST_SIZE_MASK         (0x7 << 1)
++#define DMA_CFG_BURST_SIZE_1            (0x0 << 1)
++#define DMA_CFG_BURST_SIZE_2            (0x1 << 1)
++#define DMA_CFG_BURST_SIZE_4            (0x2 << 1)
++#define DMA_CFG_BURST_SIZE_8            (0x3 << 1)
++#define DMA_CFG_BURST_SIZE_16           (0x4 << 1)
++#define DMA_CFG_BURST_SIZE_32           (0x5 << 1)
++#define DMA_CFG_BURST_SIZE_64           (0x6 << 1)
++#define DMA_CFG_BURST_SIZE_128          (0x7 << 1)
++
++#define DMA_CFG_BURST_LENGTH_MASK       (0xF << 4)
++#define DMA_CFG_BURST_LENGTH_1           (0x0 << 4)
++#define DMA_CFG_BURST_LENGTH_2           (0x1 << 4)
++#define DMA_CFG_BURST_LENGTH_3           (0x2 << 4)
++#define DMA_CFG_BURST_LENGTH_4           (0x3 << 4)
++#define DMA_CFG_BURST_LENGTH_5           (0x4 << 4)
++#define DMA_CFG_BURST_LENGTH_6           (0x5 << 4)
++#define DMA_CFG_BURST_LENGTH_7           (0x6 << 4)
++#define DMA_CFG_BURST_LENGTH_8           (0x7 << 4)
++#define DMA_CFG_BURST_LENGTH_9           (0x8 << 4)
++#define DMA_CFG_BURST_LENGTH_10          (0x9 << 4)
++#define DMA_CFG_BURST_LENGTH_11          (0xA << 4)
++#define DMA_CFG_BURST_LENGTH_12          (0xB << 4)
++#define DMA_CFG_BURST_LENGTH_13          (0xC << 4)
++#define DMA_CFG_BURST_LENGTH_14          (0xD << 4)
++#define DMA_CFG_BURST_LENGTH_15          (0xE << 4)
++#define DMA_CFG_BURST_LENGTH_16          (0xF << 4)
++
++#define DMA_CFG_BURST_LEN(x)			(((x - 1) & 0xF) << 4)
++
++/* src and dest burst size and burst length are assumed to be same */
++
++enum pl330_xfer_status {
++	DMA_PL330_XFER_OK,
++	DMA_PL330_XFER_ERR,
++	DMA_PL330_XFER_ABORT,
++};
++
++struct dma_transfer_list {
++	dma_addr_t srcaddr;	/* src address */
++	dma_addr_t dstaddr;	/* dst address */
++	unsigned int xfer_size;	/* In bytes */
++	struct list_head next;	/* Next item */
++};
++
++typedef void (*pl330_xfer_callback_t) (void *private_data,
++				       enum pl330_xfer_status status);
++
++int dma_request_chan(unsigned int *chan, const char *name);
++int dma_free_chan(unsigned int chan);
++int dma_map_peripheral(unsigned int chan, const char *peri_name);
++int dma_unmap_peripheral(unsigned int chan);
++int dma_setup_transfer(unsigned int chan, dma_addr_t s, dma_addr_t d,
++		       unsigned int xfer_size, int ctrl, int cfg);
++int dma_setup_transfer_list(unsigned int chan, struct list_head *head,
++			    int ctrl, int cfg);
++int dma_start_transfer(unsigned int chan);
++int dma_stop_transfer(unsigned int chan);
++int dma_shutdown_all_chan(void);
++int dma_register_callback(unsigned int chan,
++			  pl330_xfer_callback_t cb, void *pri);
++int dma_free_callback(unsigned int chan);
++
++#endif /* __PLAT_DMA_H */
+diff --git a/arch/arm/plat-iproc/include/plat/dma_drv.h b/arch/arm/plat-iproc/include/plat/dma_drv.h
+new file mode 100644
+index 0000000..a7f8631
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/dma_drv.h
+@@ -0,0 +1,603 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++/**
++*
++*   @file   dma_drv.h
++*
++*   @brief  DMA device driver defines and prototypes.
++*
++****************************************************************************/
++/**
++*
++* @defgroup DMAGroup Direct Memory Access
++* @ingroup CSLGroup
++* @brief This group defines the APIs for DMA driver
++
++Click here to navigate back to the Chip Support Library Overview page: \ref CSLOverview. \n
++*****************************************************************************/
++#ifndef _DMA_DRV_H_
++#define _DMA_DRV_H_
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @addtogroup DMAGroup
++ * @{
++ */
++
++/**
++*
++*  DMA driver status definition
++*
++*****************************************************************************/
++#define   DMADRV_STATUS_t              DMADRV_STATUS
++typedef enum
++{
++	DMADRV_STATUS_CLOSED,
++	DMADRV_STATUS_OPEN,
++	DMADRV_STATUS_OK,
++	DMADRV_STATUS_FAIL
++}DMADRV_STATUS_t;
++
++/**
++*
++*  DMA driver callback status definition
++*
++*****************************************************************************/
++#define   DMADRV_CALLBACK_STATUS_t     DMADRV_CALLBACK_STATUS
++typedef enum
++{
++    DMADRV_CALLBACK_OK = 0,
++    DMADRV_CALLBACK_FAIL
++} DMADRV_CALLBACK_STATUS_t;
++
++/**
++*
++*  DMA driver channel descriptor definition
++*
++*****************************************************************************/
++typedef struct
++{
++	UInt32  src;
++	UInt32  dest;
++	UInt32  next;
++	UInt32  control;
++	UInt32  size;
++    UInt32  owner;
++} Dma_Chan_Desc;
++
++/**
++*
++*  DMA driver data buffer feature definition
++*
++*****************************************************************************/
++typedef struct
++{
++    UInt32 srcAddr;
++    UInt32 destAddr;
++    UInt32 length;
++    UInt32 bRepeat;
++    UInt32 interrupt;
++} Dma_Buffer;
++
++/**
++*
++*  DMA driver data buffer definition
++*
++*****************************************************************************/
++typedef struct
++{
++    Dma_Buffer       buffers[1];
++} Dma_Buffer_List;
++
++/**
++*
++*  DMA driver data buffer list definition
++*
++*****************************************************************************/
++typedef struct
++{
++    UInt32           numBuffer;
++    Dma_Buffer_List *pBufList;
++}   Dma_Data;
++
++
++/**
++*
++*  DMA data transfer width definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_DATA_SIZE_8BIT  = 0x00,
++    DMA_DATA_SIZE_16BIT = 0x01,
++    DMA_DATA_SIZE_32BIT = 0x02
++} DMA_DWIDTH;
++
++/**
++*
++*  DMA data transfer type definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_FCTRL_MEM_TO_MEM                         = 0,
++    DMA_FCTRL_MEM_TO_PERI                        = 1,
++    DMA_FCTRL_PERI_TO_MEM                        = 2,
++    DMA_FCTRL_SRCPERI_TO_DESTPERI                = 3,
++    DMA_FCTRL_SRCPERI_TO_DESTPERI_CTRL_DESTPERI  = 4,
++    DMA_FCTRL_MEM_TO_PERI_CTRL_PERI              = 5,
++    DMA_FCTRL_PERI_TO_MEM_CTRL_PERI              = 6,
++    DMA_FCTRL_SRCPERI_TO_DESTPERI_CTRL_SRCPERI   = 7
++} DMA_CHAN_TYPE;
++
++/**
++*
++*  DMA burst length definition
++*
++*****************************************************************************/
++#if (defined(_HERA_) || defined(_RHEA_) || defined(_SAMOA_))
++typedef enum {
++    DMA_BURST_LEN_1  = 0x00,             ///<
++    DMA_BURST_LEN_2  = 0x01,             ///<
++    DMA_BURST_LEN_3  = 0x02,             ///<
++    DMA_BURST_LEN_4  = 0x03,             ///<
++    DMA_BURST_LEN_5  = 0x04,             ///<
++    DMA_BURST_LEN_6  = 0x05,             ///<
++    DMA_BURST_LEN_7  = 0x06,             ///<
++    DMA_BURST_LEN_8  = 0x07,             ///<
++    DMA_BURST_LEN_9  = 0x08,             ///<
++    DMA_BURST_LEN_10 = 0x09,             ///<
++    DMA_BURST_LEN_11 = 0x0A,             ///<
++    DMA_BURST_LEN_12 = 0x0B,             ///<
++    DMA_BURST_LEN_13 = 0x0C,             ///<
++    DMA_BURST_LEN_14 = 0x0D,             ///<
++    DMA_BURST_LEN_15 = 0x0E,             ///<
++    DMA_BURST_LEN_16 = 0x0F              ///<
++} DMADRV_BLENGTH;
++
++typedef enum
++{
++    DMA_BURST_SIZE_1    = 0x00,
++    DMA_BURST_SIZE_2    = 0x01,
++    DMA_BURST_SIZE_4    = 0x02,
++    DMA_BURST_SIZE_8    = 0x03,
++    DMA_BURST_SIZE_16   = 0x04,
++    DMA_BURST_SIZE_32   = 0x05,
++    DMA_BURST_SIZE_64  = 0x06,
++    DMA_BURST_SIZE_128  = 0x07
++} DMA_BSIZE;
++
++#else
++/**
++*
++*  DMA burst size definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_BURST_SIZE_1    = 0x00,
++    DMA_BURST_SIZE_4    = 0x01,
++    DMA_BURST_SIZE_8    = 0x02,
++    DMA_BURST_SIZE_16   = 0x03,
++    DMA_BURST_SIZE_32   = 0x04,
++    DMA_BURST_SIZE_64   = 0x05,
++    DMA_BURST_SIZE_128  = 0x06,
++    DMA_BURST_SIZE_256  = 0x07
++} DMA_BSIZE;
++#endif
++
++/**
++*
++*  DMA alignment definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_ALIGNMENT_8	    = 8,
++    DMA_ALIGNMENT_16	= 16,
++    DMA_ALIGNMENT_32	= 32
++} DMA_ALIGN;
++
++/**
++*
++*  DMA data transfer incremnet definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_INC_MODE_NONE = 0,
++    DMA_INC_MODE_SRC,
++    DMA_INC_MODE_DST,
++    DMA_INC_MODE_BOTH,
++} DMA_INC_MODE;
++
++/**
++*
++*  DMA driver client type definition
++*
++*****************************************************************************/
++#if (defined(_HERA_) || defined(_RHEA_) || defined(_SAMOA_))
++typedef enum {
++    DMA_CLIENT_EP_INVALID      = 0xff,
++    DMA_CLIENT_EP_UARTB_A      = 8,
++    DMA_CLIENT_EP_UARTB_B      = 9,
++    DMA_CLIENT_EP_UARTB2_A     = 10,
++    DMA_CLIENT_EP_UARTB2_B     = 11,
++    DMA_CLIENT_EP_UARTB3_A     = 12,
++    DMA_CLIENT_EP_UARTB3_B     = 13,
++    DMA_CLIENT_EP_SSP_0A_RX0   = 16,
++    DMA_CLIENT_EP_SSP_0B_TX0   = 17,
++    DMA_CLIENT_EP_SSP_0C_RX1   = 18,
++    DMA_CLIENT_EP_SSP_0D_TX1   = 19,
++    DMA_CLIENT_EP_SSP_1A_RX0   = 20,
++    DMA_CLIENT_EP_SSP_1B_TX0   = 21,
++    DMA_CLIENT_EP_SSP_1C_RX1   = 22,
++    DMA_CLIENT_EP_SSP_1D_TX1   = 23,
++    DMA_CLIENT_EP_HSIA         = 32,
++    DMA_CLIENT_EP_HSIB         = 33,
++    DMA_CLIENT_EP_HSIC         = 34,
++    DMA_CLIENT_EP_HSID         = 35,
++    DMA_CLIENT_EP_EANC         = 40,
++    DMA_CLIENT_EP_STEREO       = 41,
++    DMA_CLIENT_EP_NVIN         = 42,
++    DMA_CLIENT_EP_VIN          = 43,
++    DMA_CLIENT_EP_VIBRA        = 44,
++    DMA_CLIENT_EP_IHF_0        = 45,
++    DMA_CLIENT_EP_VOUT         = 46,
++    DMA_CLIENT_EP_SLIMA        = 47,
++    DMA_CLIENT_EP_SLIMB        = 48,
++    DMA_CLIENT_EP_SLIMC        = 49,
++    DMA_CLIENT_EP_SLIMD        = 50,
++    DMA_CLIENT_EP_SIM_A        = 51,
++    DMA_CLIENT_EP_SIM_B        = 52,
++    DMA_CLIENT_EP_SIM2_A       = 53,
++    DMA_CLIENT_EP_SIM2_B       = 54,
++    DMA_CLIENT_EP_IHF_1        = 55,
++#if defined(_RHEA_)
++    DMA_CLIENT_EP_SSP_3A_RX0   = 56,
++    DMA_CLIENT_EP_SSP_3B_TX0   = 57,
++    DMA_CLIENT_EP_SSP_3C_RX1   = 58,
++    DMA_CLIENT_EP_SSP_3D_TX1   = 59,
++#else
++    DMA_CLIENT_EP_SSP_2A_RX0   = 56,
++    DMA_CLIENT_EP_SSP_2B_TX0   = 57,
++    DMA_CLIENT_EP_SSP_2C_RX1   = 58,
++    DMA_CLIENT_EP_SSP_2D_TX1   = 59,
++#endif
++    DMA_CLIENT_EP_SPUM_SecureA = 65,
++    DMA_CLIENT_EP_SPUM_SecureB = 66,
++    DMA_CLIENT_EP_SPUM_OpenA   = 67,
++    DMA_CLIENT_EP_SPUM_OpenB   = 68,
++    DMA_CLIENT_MEMORY          = 69,
++#if defined(_RHEA_)
++    DMA_CLIENT_EP_SSP_4A_RX0   = 76,
++    DMA_CLIENT_EP_SSP_4B_TX0   = 77,
++    DMA_CLIENT_EP_SSP_4C_RX1   = 78,
++    DMA_CLIENT_EP_SSP_4D_TX1   = 79,
++#endif
++    DMA_CLIENT_TOTAL
++} DMA_CLIENT;
++#else
++typedef enum
++{
++    DMA_CLIENT_BULK_CRYPT_OUT             = 0,
++    DMA_CLIENT_CAM                        = 1,
++    DMA_CLIENT_I2S_TX                     = 2,
++    DMA_CLIENT_I2S_RX                     = 3,
++    DMA_CLIENT_SIM_RX                     = 4,
++    DMA_CLIENT_SIM_TX                     = 4,
++    DMA_CLIENT_CRC                        = 5,
++    DMA_CLIENT_SPI_RX                     = 6,
++    DMA_CLIENT_SPI_TX                     = 7,
++    DMA_CLIENT_UARTA_RX                   = 8,
++    DMA_CLIENT_UARTA_TX                   = 9,
++    DMA_CLIENT_UARTB_RX                   = 10,
++    DMA_CLIENT_UARTB_TX                   = 11,
++    DMA_CLIENT_DES_IN                     = 12,
++    DMA_CLIENT_DES_OUT                    = 13,
++    DMA_CLIENT_USB_RX                     = 14,
++    DMA_CLIENT_USB_TX                     = 15,
++    DMA_CLIENT_UARTC_RX                   = 16,
++    DMA_CLIENT_UARTC_TX                   = 17,
++    DMA_CLIENT_BULK_CRYPT_IN              = 18,
++    DMA_CLIENT_LCD                        = 19,
++    DMA_CLIENT_MSPRO                      = 20,
++    DMA_CLIENT_DSI_CM                     = 21,
++    DMA_CLIENT_DSI_VM                     = 22,
++    DMA_CLIENT_TVENC1                     = 23,
++    DMA_CLIENT_TVENC2                     = 24,
++#if defined(_ATHENA_)
++    DMA_CLIENT_AUDIO_IN_FIFO              = 25,
++    DMA_CLIENT_AUDIO_OUT_FIFO             = 26,
++    DMA_CLIENT_POLYRING_OUT_FIFO          = 27,
++    DMA_CLIENT_AUDIO_WB_MIXERTAP          = 28,
++    DMA_CLIENT_MEMORY                     = 29,
++#else
++    DMA_CLIENT_MEMORY                     = 25,
++#endif
++    DMA_CLIENT_TOTAL
++} DMA_CLIENT;
++#endif
++
++/**
++*
++*  DMA driver channel definition
++*
++*****************************************************************************/
++typedef enum
++{
++    DMA_CHANNEL_INVALID = 0xFF,
++    DMA_CHANNEL_0 = 0,
++    DMA_CHANNEL_1 = 1,
++    DMA_CHANNEL_2 = 2,
++    DMA_CHANNEL_3 = 3,
++#if !defined(_SAMOA_)
++    DMA_CHANNEL_4 = 4,
++    DMA_CHANNEL_5 = 5,
++    DMA_CHANNEL_6 = 6,
++    DMA_CHANNEL_7 = 7,
++#if defined(_ATHENA_)
++    DMA_CHANNEL_8 = 8,     //used for DMA_CLIENT_AUDIO_OUT_FIFO
++    DMA_CHANNEL_9 = 9,     //used for DMA_CLIENT_POLYRING_OUT_FIFO
++    DMA_CHANNEL_10 = 10,   //used for DMA_CLIENT_AUDIO_WB_MIXERTAP
++    DMA_CHANNEL_11 = 11,   //used for DMA_CLIENT_AUDIO_IN_FIFO
++#endif
++#endif
++    TOTAL_DMA_CHANNELS
++} DMA_CHANNEL;
++
++/**
++*
++*  DMA driver callback function definition
++*
++*****************************************************************************/
++#define   DMADRV_CALLBACK_t            DmaDrv_Callback
++typedef void (*DMADRV_CALLBACK_t)(DMADRV_CALLBACK_STATUS_t Err);
++
++/**
++*
++*  DMA driver channel info structure definition
++*
++*****************************************************************************/
++typedef struct
++{
++    DMA_CLIENT        srcID;
++    DMA_CLIENT        dstID;
++    DMA_CHAN_TYPE     type;
++    DMA_ALIGN         alignment;
++    DMA_BSIZE         srcBstSize;
++    DMA_BSIZE         dstBstSize;
++    DMA_DWIDTH        srcDataWidth;
++    DMA_DWIDTH        dstDataWidth;
++    UInt32            priority;
++    UInt32            chanNumber;
++    UInt32            dmaCfgReg;
++    UInt32            incMode;
++    DmaDrv_Callback   xferCompleteCb;
++    UInt32            prot;
++    UInt32            dstMaster;
++    UInt32            srcMaster;
++    UInt32            dstIncrement;
++    UInt32            srcIncrement;
++#if (defined(_HERA_) || defined(_RHEA_) || defined(_SAMOA_))
++    DMADRV_BLENGTH    srcBstLength;
++    DMADRV_BLENGTH    dstBstLength;
++#endif
++    Boolean           freeChan;
++    Boolean           bCircular;
++} Dma_Chan_Info,      *pChanInfo;
++
++/**
++*
++*  DMA driver LLI structure definition
++*
++*****************************************************************************/
++typedef void *DMADRV_LLI_T;
++
++/**
++*
++*  This function initialize dma driver
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Init(void);
++
++/**
++*
++*  This function deinitialize dma driver
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_DeInit(void);
++
++/**
++*
++*  This function allocates dma channel
++*
++*  @param		srcID (in) source identification
++*  @param       dstID (in) destination identification
++*  @param       chanID (in) buffer to store channel number
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Obtain_Channel(
++    DMA_CLIENT srcID,
++    DMA_CLIENT dstID,
++    DMA_CHANNEL *chanID
++);
++
++/**
++*
++*  This function release dma channel
++*
++*  @param		chanID (in) channel identification
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Release_Channel(DMA_CHANNEL chanID);
++
++/**
++*
++*  This function configure dma channel
++*
++*  @param       chanID       (in) channel number
++*  @param       pChanInfo    (in) pointer to dma channe info structure
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Config_Channel(
++    DMA_CHANNEL chanID,
++    Dma_Chan_Info *pChanInfo
++);
++
++/**
++*
++*  This function bind data buffer for the DMA channel
++*
++*  @param		chanID    (in) channel to bind data
++*  @param       pData     (in) pointer to dma channel data buffer
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Bind_Data(DMA_CHANNEL chanID, Dma_Data *pData);
++
++/**
++*
++*  This function start dma channel transfer
++*
++*  @param		chanID (in) channel identification
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Start_Transfer(DMA_CHANNEL chanID);
++
++/**
++*
++*  This function bind data buffer for the DMA channel
++*
++*  @param		chanID    (in) channel to bind data
++*  @param       pData     (in) pointer to dma channel data buffer
++*  @param       pLLI      (in) buffer to store returned LLI table
++*                              identification info
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Bind_Data_Ex(
++    DMA_CHANNEL chanID,
++    Dma_Data *pData,
++    DMADRV_LLI_T *pLLI
++);
++
++/**
++*
++*  This function start dma channel transfer
++*
++*  @param		chanID (in) channel identification
++*  @param       pLLI   (in) one of the LLI tables needs to be used for DMA
++*                           transfer
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Start_Transfer_Ex(
++    DMA_CHANNEL chanID,
++    DMADRV_LLI_T pLLI
++);
++
++/**
++*
++*  This function stop dma channel trnasfer
++*
++*  @param		chanID (in) channel identification
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Stop_Transfer(DMA_CHANNEL chanID);
++
++/**
++*
++*  This function stop dma channel trnasfer and lose all data in FIFO
++*
++*  @param		chanID (in) channel identification
++*
++*  @return	    DMA driver return status
++*
++*****************************************************************************/
++DMADRV_STATUS DMADRV_Force_Shutdown_Channel(DMA_CHANNEL chanID);
++
++/**
++*
++*  This function register hisr for client usage
++*
++*  @param		client (in) client identification
++*  @param       hisr   (in) registered hisr
++*
++*  @return	    void
++*
++*****************************************************************************/
++void DMADRV_Register_HISR(DMA_CLIENT client, void *hisr);
++
++/**
++*
++*  This function unregister hisr from client usage
++*
++*  @param		client (in) client identification
++*
++*  @return	    void
++*
++*****************************************************************************/
++void DMADRV_UnRegister_HISR(DMA_CLIENT client);
++
++/**
++*
++*  This function get hisr for client usage
++*
++*  @param		client (in) client identification
++*
++*  @return	    hisr   (out) return registered client's hisr
++*
++*****************************************************************************/
++void *DMADRV_Get_HISR(DMA_CLIENT client);
++
++/**
++*
++*  This function get DMA driver version number
++*
++*  @return	    driver version number
++*
++*****************************************************************************/
++UInt32 DMADRV_Get_Version(void);
++
++/** @} */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _DMA_DRV_H_ */
+diff --git a/arch/arm/plat-iproc/include/plat/dmux.h b/arch/arm/plat-iproc/include/plat/dmux.h
+new file mode 100644
+index 0000000..575f783
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/dmux.h
+@@ -0,0 +1,76 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef __MACH_DMUX_H
++#define __MACH_DMUX_H
++
++enum dmac_mux {
++	KONA_DMUX_UARTB_A = 8,
++	KONA_DMUX_UARTB_B = 9,
++	KONA_DMUX_UARTB2_A = 10,
++	KONA_DMUX_UARTB2_B = 11,
++	KONA_DMUX_UARTB3_A = 12,
++	KONA_DMUX_UARTB3_B = 13,
++	KONA_DMUX_SSP_0A_RX0 = 16,
++	KONA_DMUX_SSP_0B_TX0 = 17,
++	KONA_DMUX_SSP_0C_RX1 = 18,
++	KONA_DMUX_SSP_0D_TX1 = 19,
++	KONA_DMUX_SSP_1A_RX0 = 20,
++	KONA_DMUX_SSP_1B_TX0 = 21,
++	KONA_DMUX_SSP_1C_RX1 = 22,
++	KONA_DMUX_SSP_1D_TX1 = 23,
++	KONA_DMUX_HSIA = 32,
++	KONA_DMUX_HSIB = 33,
++	KONA_DMUX_HSIC = 34,
++	KONA_DMUX_HSID = 35,
++	KONA_DMUX_EANC = 40,
++	KONA_DMUX_STEREO = 41,
++	KONA_DMUX_NVIN = 42,
++	KONA_DMUX_VIN = 43,
++	KONA_DMUX_VIBRA = 44,
++	KONA_DMUX_IHF_0 = 45,
++	KONA_DMUX_VOUT = 46,
++	KONA_DMUX_SLIMA = 47,
++	KONA_DMUX_SLIMB = 48,
++	KONA_DMUX_SLIMC = 49,
++	KONA_DMUX_SLIMD = 50,
++	KONA_DMUX_SIM_A = 51,
++	KONA_DMUX_SIM_B = 52,
++	KONA_DMUX_SIM2_A = 53,
++	KONA_DMUX_SIM2_B = 54,
++	KONA_DMUX_IHF_1 = 55,
++	KONA_DMUX_SSP_2A_RX0 = 56,
++	KONA_DMUX_SSP_2B_TX0 = 57,
++	KONA_DMUX_SSP_2C_RX1 = 58,
++	KONA_DMUX_SSP_2D_TX1 = 59,
++	KONA_DMUX_SPUM_SecureA = 65,
++	KONA_DMUX_SPUM_SecureB = 66,
++	KONA_DMUX_SPUM_OpenA = 67,
++	KONA_DMUX_SPUM_OpenB = 68,
++	KONA_DMUX_INVALID = 0x7f,
++};
++
++enum dma_peri dmux_name_to_id(const char *name);
++int dmux_id_to_name(enum dma_peri peri, char *pname);
++int dmux_sema_protect(void);
++int dmux_sema_unprotect(void);
++int dmux_alloc_channel(u32 * pchan);
++int dmux_release_channel(u32 channel);
++int dmux_alloc_peripheral(u32 channel, enum dma_peri peri, u8 * peri_req_id);
++int dmux_alloc_multi_peripheral(u32 channel, enum dma_peri a, enum dma_peri b,
++				u8 * src_id, u8 * dst_id);
++int dmux_dealloc_peripheral(u32 channel);
++
++#endif /* __MACH_DMUX_H */
+diff --git a/arch/arm/plat-iproc/include/plat/osdal_os.h b/arch/arm/plat-iproc/include/plat/osdal_os.h
+new file mode 100644
+index 0000000..76e61a6
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/osdal_os.h
+@@ -0,0 +1,60 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef _OSDAL_OS_H_
++#define _OSDAL_OS_H_
++
++#include <linux/kernel.h>
++#include "asm/posix_types.h"
++#include "asm/string.h"
++/* Heap memory */
++#define OSDAL_ALLOCHEAPMEM(s)	kzalloc((s), GFP_KERNEL)
++
++#define OSDAL_FREEHEAPMEM(a)	kfree((a))
++
++
++/* IRQ */
++#define OSDAL_IRQ_Enable(irq)    enable_irq((irq))
++#define OSDAL_IRQ_Disable(irq)   disable_irq((irq))
++#define OSDAL_IRQ_Clear(irq)
++#define OSDAL_IRQ_IsEnabled(irq)
++
++
++/*  Synchronization */
++#define OSDAL_SENDEVENT(e) complete((struct completion *)&(e))
++
++#define OSDAL_WAITEVENT(e)	\
++wait_for_completion((struct completion *)&(e))
++
++#define OSDAL_WAITEVENT_TIMEOUT(e, t) \
++wait_for_completion_timeout((struct completion *)&(e), (t))
++
++#define OSDAL_CLEAREVENT(e)
++
++
++/* Time stamp in ms */
++#define  OSDAL_TIMEVAL()
++
++
++/* Delays */
++#define OSDAL_MDELAY(x)	mdelay(x)
++
++#define OSDAL_UDELAY(x)	udelay(x)
++
++/* Debug Print */
++//#define dprintf(prio, format, args...)	pr_info("%s:%s"" format", __FILE__, __FUNCTION__)
++#define dprintf(prio, fmt, ...) printk(KERN_ERR pr_fmt(fmt), ##__VA_ARGS__)
++
++#endif /*_OSDAL_OS_H_*/
+diff --git a/arch/arm/plat-iproc/include/plat/shm.h b/arch/arm/plat-iproc/include/plat/shm.h
+new file mode 100644
+index 0000000..59fcb83
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/shm.h
+@@ -0,0 +1,44 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++/*
++ * Header for declaring shim layer exports.
++ */
++
++#ifndef __SHM_DOT_H_INCLUDED__
++#define __SHM_DOT_H_INCLUDED__
++
++#include <linux/module.h>
++#include <linux/platform_device.h>
++
++extern int iproc_platform_get_irq(struct platform_device *dev, unsigned int num);
++extern struct resource *
++iproc_platform_get_resource_byname(struct platform_device *dev, unsigned int type, const char *name);
++extern struct resource *
++iproc_platform_get_resource(struct platform_device *dev, unsigned int type,
++		      unsigned int num);
++extern int iproc_platform_device_register(struct platform_device * pdev);
++extern void iproc_platform_device_unregister(struct platform_device * pdev);
++extern int iproc_platform_driver_register(struct platform_driver *drv);
++extern void iproc_platform_driver_unregister(struct platform_driver *drv);
++
++extern struct platform_device *iproc_platform_device_alloc(const char *name, int id);
++extern int iproc_platform_device_add(struct platform_device *pdev);
++extern void iproc_platform_device_put(struct platform_device *pdev);
++
++extern int iproc_sysfs_create_group(struct kobject *kobj, const struct attribute_group *grp);
++extern void iproc_sysfs_remove_group(struct kobject *kobj, const struct attribute_group *grp);
++
++#endif /*#ifndef __SHM_DOT_H_INCLUDED__*/
+diff --git a/arch/arm/plat-iproc/include/plat/spi_iproc.h b/arch/arm/plat-iproc/include/plat/spi_iproc.h
+new file mode 100644
+index 0000000..3258d69
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/spi_iproc.h
+@@ -0,0 +1,27 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++/*
++ * Broadcom IPROC SSPI based SPI master controller
++ */
++#ifndef __ARCH_PLAT_SPI_IPROC_H__
++#define __ARCH_PLAT_SPI_IPROC_H__
++
++struct spi_iproc_platform_data {
++	u8 enable_dma;
++	u8 cs_line;
++	u8 mode;
++};
++#endif /* __ARCH_PLAT_SPI_IPROC_H__ */
+diff --git a/arch/arm/plat-iproc/include/plat/swreset_rec.h b/arch/arm/plat-iproc/include/plat/swreset_rec.h
+new file mode 100644
+index 0000000..924fa5a
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/swreset_rec.h
+@@ -0,0 +1,40 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef _SWRESET_REC_H_
++#define _SWRESET_REC_H_
++
++/* Handle to access Software Record Record */
++typedef void *SWRR_HANDLE;
++
++/* Get number of software reset records for the SoC; 0 if not suppprted */
++extern unsigned int swreset_record_get_record_count(void);
++
++/* Get number of bits per software reset record for the SoC */
++extern unsigned int swreset_record_get_record_width(void);
++
++/* Register to use one software reset record; return NULL if used out */
++extern SWRR_HANDLE swreset_record_register(const char *name);
++
++/* Unregister to return the record */
++extern void swreset_record_unregister(SWRR_HANDLE handle);
++
++/* Set value of the software reset record */
++extern int swreset_record_set(SWRR_HANDLE handle, int value);
++
++/* Get value of the software reset record */
++extern int swreset_record_get(SWRR_HANDLE handle, int *value);
++
++#endif /* _SWRESET_REC_H_ */
+diff --git a/arch/arm/plat-iproc/include/plat/timer-sp.h b/arch/arm/plat-iproc/include/plat/timer-sp.h
+new file mode 100644
+index 0000000..b73ef9a
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/timer-sp.h
+@@ -0,0 +1,18 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++void iproc_clocksource_init(void __iomem *);
++void iproc_clockevents_init(void __iomem *, unsigned int);
+diff --git a/arch/arm/plat-iproc/include/plat/types.h b/arch/arm/plat-iproc/include/plat/types.h
+new file mode 100644
+index 0000000..d03df1e
+--- /dev/null
++++ b/arch/arm/plat-iproc/include/plat/types.h
+@@ -0,0 +1,20 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef _TYPES_H_
++#define _TYPES_H_
++
++#include <linux/types.h>
++#endif
+diff --git a/arch/arm/plat-iproc/iproc-cache.S b/arch/arm/plat-iproc/iproc-cache.S
+new file mode 100644
+index 0000000..2a5e37d
+--- /dev/null
++++ b/arch/arm/plat-iproc/iproc-cache.S
+@@ -0,0 +1,120 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#include <linux/linkage.h>
++#include <linux/init.h>
++
++	__INIT
++
++/*
++ *   The secondary kernel init calls v7_flush_dcache_all before it enables
++ *   the L1; however, the L1 comes out of reset in an undefined state, so
++ *   the clean + invalidate performed by v7_flush_dcache_all causes a bunch
++ *   of cache lines with uninitialized data and uninitialized tags to get
++ *   written out to memory, which does really unpleasant things to the main
++ *   processor.  We fix this by performing an invalidate, rather than a
++ *   clean + invalidate, before jumping into the kernel.
++ */
++
++ENTRY(v7_invalidate_l1)
++	mov     r0, #0
++	mcr     p15, 2, r0, c0, c0, 0
++	mrc     p15, 1, r0, c0, c0, 0
++
++	ldr     r1, =0x7fff
++	and     r2, r1, r0, lsr #13
++
++	ldr     r1, =0x3ff
++
++	and     r3, r1, r0, lsr #3	@ NumWays - 1
++	add     r2, r2, #1		@ NumSets
++
++	and     r0, r0, #0x7
++	add     r0, r0, #4		@ SetShift
++
++	clz     r1, r3			@ WayShift
++	add     r4, r3, #1		@ NumWays
++1:	sub     r2, r2, #1		@ NumSets--
++	mov     r3, r4			@ Temp = NumWays
++2:	subs    r3, r3, #1		@ Temp--
++	mov     r5, r3, lsl r1
++	mov     r6, r2, lsl r0
++	orr     r5, r5, r6		@ Reg = (Temp<<WayShift)|(NumSets<<SetShift)
++	mcr     p15, 0, r5, c7, c6, 2
++	bgt     2b
++	cmp     r2, #0
++	bgt     1b
++	dsb
++	isb
++	mov     pc, lr
++ENDPROC(v7_invalidate_l1)
++
++/*
++ * Invalidate the cache without flushing the contents of all
++ * cache levels. This code is copied from v7_flush_dcache_all
++ * from cache-v7.S
++ */
++ENTRY(__v7_invalidate_dcache_all)
++	dmb					@ ensure ordering with previous memory accesses
++	mov	r8, r1				@ Save machine ID
++	mov	r13, r2				@ Save atags pointer
++	mrc     p15, 1, r0, c0, c0, 1		@ read clidr
++	ands    r3, r0, #0x7000000		@ extract loc from clidr
++	mov     r3, r3, lsr #23			@ left align loc bit field
++	beq     finished			@ if loc is 0, then no need to clean
++	mov     r10, #0				@ start clean at cache level 0
++	loop1:
++	add     r2, r10, r10, lsr #1		@ work out 3x current cache level
++	mov     r1, r0, lsr r2			@ extract cache type bits from clidr
++	and     r1, r1, #7			@ mask of the bits for current cache only
++	cmp     r1, #2				@ see what cache we have at this level
++	blt     skip				@ skip if no cache, or just i-cache
++	mcr     p15, 2, r10, c0, c0, 0		@ select current cache level in cssr
++	isb					@ isb to sych the new cssr&csidr
++	mrc     p15, 1, r1, c0, c0, 0		@ read the new csidr
++	and     r2, r1, #7			@ extract the length of the cache lines
++	add     r2, r2, #4			@ add 4 (line length offset)
++	ldr     r4, =0x3ff
++	ands    r4, r4, r1, lsr #3		@ find maximum number on the way size
++	clz     r5, r4				@ find bit position of way size increment
++	ldr     r7, =0x7fff
++	ands    r7, r7, r1, lsr #13		@ extract max number of the index size
++loop2:
++	mov     r9, r4				@ create working copy of max way size
++loop3:
++ ARM(   orr     r11, r10, r9, lsl r5    )	@ factor way and cache number into r11
++ THUMB( lsl     r6, r9, r5              )
++ THUMB( orr     r11, r10, r6            )	@ factor way and cache number into r11
++ ARM(   orr     r11, r11, r7, lsl r2    )	@ factor index number into r11
++ THUMB( lsl     r6, r7, r2              )
++ THUMB( orr     r11, r11, r6            )	@ factor index number into r11
++	mcr     p15, 0, r11, c7, c6, 2		@ invalidate line
++	subs    r9, r9, #1			@ decrement the way
++	bge     loop3
++	subs    r7, r7, #1			@ decrement the index
++	bge     loop2
++skip:
++	add     r10, r10, #2			@ increment cache number
++	cmp     r3, r10
++	bgt     loop1
++finished:
++	mov     r10, #0				@ swith back to cache level 0
++	mcr     p15, 2, r10, c0, c0, 0		@ select current cache level in cssr
++	dsb
++	isb
++	mov	r1, r8				@ restore machine ID
++	mov	r2, r13				@ restore atags pointer
++	mov     pc, lr				@ return
++ENDPROC(__v7_invalidate_dcache_all)
+diff --git a/arch/arm/plat-iproc/iproc_cru.c b/arch/arm/plat-iproc/iproc_cru.c
+new file mode 100644
+index 0000000..e3f0af1
+--- /dev/null
++++ b/arch/arm/plat-iproc/iproc_cru.c
+@@ -0,0 +1,560 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++/*
++ * iProc Clock Control Unit
++ * The software model repsresents the hardware clock hierarchy
++ *
++ */
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/errno.h>
++#include <linux/err.h>
++#include <linux/clk.h>
++#include <linux/io.h>
++#include <linux/ioport.h>
++#include <linux/clkdev.h>
++
++#include <mach/clkdev.h>
++#include <mach/iproc_regs.h>
++#include <mach/io_map.h>
++#include <mach/memory.h>
++
++#include <asm/clkdev.h>
++#include <asm/pgtable.h>
++
++static struct resource ccu_regs = {
++	.name  = "cru_regs",
++	.start = IPROC_ROOT_CLK_VA,
++	.end   = ((IPROC_ROOT_CLK_VA) + 0x0fff),
++        .flags = IORESOURCE_MEM,
++};
++
++/*
++ * Clock management scheme is a provisional implementation
++ * only intended to retreive the pre-set frequencies for each
++ * of the clocks.
++ */
++
++/*
++ * Get PLL running status and update output frequency
++ * for ARMPLL channel 0
++ */
++static int a9pll0_status (struct clk * clk)
++{
++	u32 regA;
++	u32 regB;
++	u32 regC;
++	u32 pdiv;
++	u32 ndiv_int;
++	u32 ndiv_frac;
++	u32 mdiv;
++	u64 x;
++
++	printk(KERN_DEBUG "a9pll0_status: clk 0x%x\n", (unsigned int)clk);
++	if (clk->type != CLK_PLL)
++		return -EINVAL;
++
++	BUG_ON (!clk->regs_base);
++	BUG_ON (!clk->parent);
++
++	/* read status register */
++	regA = readl(clk->regs_base + 0x0c00);/* IHOST_PROC_CLK_PLLARMA */
++	regB = readl(clk->regs_base + 0x0c04);/* IHOST_PROC_CLK_PLLARMB */
++	regC = readl(clk->regs_base + 0x0c08);/* IHOST_PROC_CLK_PLLARMB */
++
++	/* reg C bit 8 is bypass mode - input frequency to output */
++	if ((regC & (1 << 8)) == 1) {
++		clk->rate = clk->parent->rate;
++		return 0;
++	}
++
++	/* reg A bit 28 is "lock" signal, has to be "1" for proper operation */
++	if ((regA & (1 << 28)) == 0 ) {
++#if defined(CONFIG_MACH_IPROC_P7) && defined(CONFIG_MACH_IPROC_EMULATION)
++		printk(KERN_WARNING "a9pll0_status: ARM PLL not locked\n");
++#else
++		clk->rate = 0;
++		return -EIO;
++#endif
++	}
++
++	/* Update PLL frequency */
++
++
++	/* pdiv in bits 24..27 (4 bits) */
++	// pdiv = (regA >> 24 ) & 0xf; pavan 05092012
++	pdiv = (regA >> 24 ) & 0x7;
++	if (pdiv == 0)
++		pdiv = 0x10;
++
++	/* feedback divider (int)  in bits 8..17 (10 bits) */
++	ndiv_int = (regA >> 8) & ((1<<10) - 1);
++	if (ndiv_int == 0)
++		ndiv_int = 1 << 10;
++
++	/* feedback divider fraction in reg B, bits 0..19 */
++	ndiv_frac = regB & ((1<<20) - 1);
++
++	x = ((u64) ndiv_int << 20) | ndiv_frac;
++	printk(KERN_DEBUG "parent rate %lu\n", clk->parent->rate);
++	x = (x * clk->parent->rate) >> 20;
++	(void) do_div(x, pdiv);
++
++	/* post-divider is in reg C bits 0..7 */
++	mdiv = regC & 0xff ;
++	if (mdiv == 0)
++		mdiv = 0x100;
++
++	/*
++	 * Here we need to divide the resulting clock by mdiv which we
++	 * are not doing now?
++	 */
++	clk->rate = (u32)(x);
++
++	return 0;
++}
++
++
++/*
++ * Get PLL running status and update output frequency
++ * for ARMPLL channel 1
++ */
++static int a9pll1_status(struct clk * clk)
++{
++	u32 regA;
++	u32 regB;
++	u32 regC;
++	u32 regD;
++	unsigned pdiv;
++	unsigned ndiv_int;
++	unsigned ndiv_frac;
++	unsigned mdiv;
++	u64 x;
++
++	if (clk->type != CLK_PLL)
++		return -EINVAL;
++
++	BUG_ON(!clk->regs_base);
++	BUG_ON(!clk->parent);
++
++	/* read status register */
++	regA = readl(clk->regs_base+0xc00);/* IHOST_PROC_CLK_PLLARMB */
++	regB = readl(clk->regs_base+0xc04);/* IHOST_PROC_CLK_PLLARMB */
++	regC = readl(clk->regs_base+0xc20);/* IHOST_PROC_CLK_PLLARMCTRL5 */
++	regD = readl(clk->regs_base+0xc24);/* IHOST_PROC_CLK_PLLARM_OFFSET*/
++
++	/* reg C bit 8 is bypass mode - input frequency to output */
++	if ((regC & (1 << 8)) == 1) {
++		clk->rate = clk->parent->rate;
++		return 0;
++	}
++
++	/* reg A bit 28 is "lock" signal, has to be "1" for proper operation */
++	if ((regA & (1 << 28)) == 0) {
++#if defined(CONFIG_MACH_IPROC_P7) && defined(CONFIG_MACH_IPROC_EMULATION)
++		printk(KERN_WARNING "a9pll1_status: ARM PLL not locked\n");
++#else
++		clk->rate = 0;
++		return -EIO;
++#endif
++	}
++
++	/* Update PLL frequency */
++
++
++	/* pdiv in bits 24..27 (4 bits) */
++	pdiv = (regA >> 24 ) & 0xf;
++	if (pdiv == 0)
++		pdiv = 0x10;
++
++	/* Check if offset mode is active */
++	if (regD & (1 << 29)) {
++		/* pllarm_ndiv_int_offset bits 27:20 */
++		ndiv_int = (regD >> 20 ) & 0xff;
++		if (ndiv_int == 0)
++			ndiv_int = 1 << 8;
++
++		/* pllarm_ndiv_frac_offset bits 19:0 */
++		ndiv_frac = regD & ((1 << 20) - 1);
++	} else {
++		/* If offset not active, channel 0 parameters are used */
++		/* feedback divider (int)  in bits 8..17 (10 bits) */
++		ndiv_int = (regA >> 8) & ((1 << 10) - 1);
++		if (ndiv_int == 0)
++			ndiv_int = 1 << 10;
++
++		/* feedback divider fraction in reg B, bits 0..19 */
++		ndiv_frac = regB & ((1 << 20) - 1);
++	}
++
++	x = ((u64) ndiv_int << 20) | ndiv_frac;
++	x = (x * clk->parent->rate) >> 20;
++	(void) do_div(x, pdiv);
++
++	/* post-divider is in reg C bits 0..7 */
++	mdiv = regC & 0xff ;
++	if (mdiv == 0)
++		mdiv = 0x100;
++
++	(void) do_div(x, mdiv);
++	clk->rate = (u32)(x);
++
++	return 0;
++}
++
++
++static const struct clk_ops a9pll0_ops = {
++	.status = a9pll0_status,
++};
++
++static const struct clk_ops a9pll1_ops = {
++	.status = a9pll1_status,
++};
++
++
++/*
++ * iProc A9 PLL
++ * could be used as source for generated clocks
++ */
++static struct clk clk_a9pll[2] = {
++	{
++		.ops 	= &a9pll0_ops,
++		.name 	= "A9_PLL",
++		.type	= CLK_PLL,
++		.chan	= 0xa,
++	},
++	{
++		.ops 	= &a9pll1_ops,
++		.name 	= "A9_PLL",
++		.type	= CLK_PLL,
++		.chan	= 0xb,
++	},
++};
++
++/*
++ * Decode the Frequency ID setting for arm_clk
++ */
++static int iproc_cru_arm_freq_id(void * __iomem regs_base)
++{
++	u32 reg_f, reg;
++	unsigned policy;
++	unsigned fid;
++	unsigned i;
++	u8 arm_clk_policy_mask = 0;
++	u8 apb0_clk_policy_mask = 0;
++
++	/*
++	 * bits 0..2 freq# for policy0, 8..10 for policy1,
++	 * 16..18 policy2, 24..26 policy 3
++	 */
++	reg_f = readl(regs_base + 0x008);/*IHOST_PROC_CLK_POLICY_FREQ*/
++
++	for(i = 0; i < 4; i++) {
++		/*
++		 * Reg IHOST_PROC_CLK_POLICY<i>_MASK
++		 * bit 20 arm policy mask, bit 21 apb0 policy mask
++		 */
++		reg = readl(regs_base + 0x010 + i*4);
++		arm_clk_policy_mask |= (1 & ( reg >> 20)) << i;
++		apb0_clk_policy_mask |=  (1 & ( reg >> 21)) << i;
++	}
++
++	/* How to obtain hardware policy setting ? */
++	policy = 0;
++
++	/* Check for PLL policy software override */
++	reg = readl(regs_base + 0xe00);/* IHOST_PROC_CLK_ARM_DIV */
++	if (reg & (1 << 4 ))
++		policy = reg & 0xf;
++
++	fid = (reg_f >> (8 * policy)) & 0xf;
++
++	/* Verify freq_id from debug register */
++	reg = readl( regs_base+0xec0 );/* IHOST_PROC_CLK_POLICY_DBG */
++	/* Bits 12..14 contain active frequency_id */
++	i = 0x7 & (reg >> 12);
++
++	if (fid != i) {
++		printk(KERN_WARNING
++			"IPROC CRU clock frequency id override %d->%d\n",
++			fid, i);
++		fid = i;
++	}
++
++	printk(KERN_DEBUG "Active frequency ID %d\n", fid);
++
++	return fid;
++}
++
++/*
++ * Get status of any of the ARMPLL output channels
++ */
++static int a9pll_chan_status(struct clk * clk)
++{
++	u32 reg;
++	unsigned div;
++	unsigned freq_id;
++
++	if(clk->type != CLK_DIV)
++		return -EINVAL;
++
++	BUG_ON(!clk->regs_base);
++
++	reg = readl(clk->regs_base + 0xe00); /* IHOST_PROC_CLK_ARM_DIV */
++
++	/* arm_pll_select 3:0 */
++	printk(KERN_DEBUG "Clock Div = %#x\n", reg);
++
++	freq_id = iproc_cru_arm_freq_id(clk->regs_base);
++
++	/* clk->parent = & clk_a9pll[0]; */
++
++	switch (clk->chan) {
++		case 0x0a:
++			/* apb0_free_div bits 10:8 */
++			div = (reg >> 8) & 0x7;
++			if (div == 0)
++				div = 8;
++			break;
++
++		case 0x0b:
++			/* arm_switch_div bits 6:5 */
++			div = (reg >> 5) & 0x3;
++			if (div == 0)
++				div = 4;
++			break;
++
++		case 0x1a:
++			/* IHOST_PROC_CLK_APB_DIV apb_clk_div bits 1:0 */
++			reg = readl(clk->regs_base + 0xa10);
++			div = reg & 0x3;
++			if(div == 0)
++				div = 4;
++			break;
++
++		case 0x3a:      /* arm_clk */
++			if( freq_id == 7 ) {
++				//clk->parent = &clk_a9pll[1]; /* arm_clk_h */
++				clk->parent = &clk_a9pll[0]; /* arm_clk_h */
++				div = 2;
++			} else if( freq_id == 6 ) {
++				clk->parent = &clk_a9pll[0]; /* arm_clk */
++				div = 4;
++			} else if( freq_id == 2 ) {
++				clk->parent = &clk_a9pll[0]; /* arm_clk */
++				div = 4;
++			} else if (freq_id == 0) {
++				clk->parent = &clk_a9pll[0];
++				div = 1;
++			} else if (freq_id == 1) {
++				struct clk * clk_lcpll_200;
++				clk_lcpll_200 =
++				clk_get_sys( NULL, "sdio_clk");
++				BUG_ON( ! clk_lcpll_200 );
++				clk->parent = clk_lcpll_200;
++				div = 1;
++			} else {
++				clk->parent = &clk_a9pll[0];
++				div = 2;
++			}
++			/* Parent may have changed, refresh it */
++			if(clk->parent->ops && clk->parent->ops->status)
++				clk->parent->ops->status( clk->parent);
++			break;
++
++                case 0x0f:      /* periph_clk */
++                        div = 2;
++                        break;
++
++		default:
++			return -EINVAL;
++
++	}
++
++	BUG_ON(!clk->parent);
++	printk(KERN_DEBUG "Clock divisor %d\n", div);
++	// clk->rate = clk->parent->rate / div ;
++	clk->rate = clk->parent->rate / div ;
++	printk(KERN_DEBUG "Clock rate %lu\n", clk->rate);
++
++	return 0;
++}
++
++
++static const struct clk_ops a9pll_chan_ops = {
++	.status = a9pll_chan_status,
++};
++
++/*
++ * iProc A9 PLL output clocks
++ */
++#ifdef CONFIG_MACH_CYGNUS_EMULATION  //chandra:emul
++	static struct clk clk_a9chan[] = {
++		{
++			.ops = NULL,
++			.type = CLK_DIV,
++			.parent = NULL,
++			.rate = CONFIG_CYGNUS_EMULATION_ARM_CLK,
++			.name = "arm_clk",
++			.chan = 0x3a
++		},
++		{
++			.ops = NULL,
++			.type = CLK_DIV,
++			.parent = NULL,
++			.rate = CONFIG_CYGNUS_EMULATION_PCLK,
++			.name = "periph_clk",
++			.chan = 0x0f
++		},
++		{
++			.ops = NULL,
++			.type = CLK_DIV,
++			.parent = NULL,
++			.rate = CONFIG_CYGNUS_EMULATION_PCLK,
++			.name = "apb0_free",
++			.chan = 0x0a
++		},
++		{
++			.ops = NULL,
++			.type = CLK_DIV,
++			.parent = NULL,
++			.rate = CONFIG_CYGNUS_EMULATION_ARM_CLK,
++			.name = "arm_switch",
++			.chan = 0x0b
++		},
++		{
++			.ops = NULL,
++			.type = CLK_DIV,
++			.parent = NULL,
++			.rate = CONFIG_CYGNUS_EMULATION_PCLK,
++			.name = "apb_clk",
++			.chan = 0x1a
++		},
++	};
++#else
++static struct clk clk_a9chan[] = {
++	{
++		.ops = &a9pll_chan_ops,
++		.type = CLK_DIV,
++		.parent = &clk_a9chan[0],
++		.name = "arm_clk",
++		.chan = 0x3a
++	},
++	{
++		.ops = &a9pll_chan_ops,
++		.type = CLK_DIV,
++		.parent = &clk_a9chan[0],
++		.name = "periph_clk",
++		.chan = 0x0f
++	},
++	{
++		.ops = &a9pll_chan_ops,
++		.type = CLK_DIV,
++		.parent = &clk_a9chan[0],
++		.name = "apb0_free",
++		.chan = 0x0a
++	},
++	{
++		.ops = &a9pll_chan_ops,
++		.type = CLK_DIV,
++		.parent = &clk_a9chan[0],
++		.name = "arm_switch",
++		.chan = 0x0b
++	},
++	{
++		.ops = &a9pll_chan_ops,
++		.type = CLK_DIV,
++		.parent = &clk_a9chan[0],
++		.name = "apb_clk",
++		.chan = 0x1a
++	},
++};
++#endif /* End of CONFIG_MACH_CYGNUS */
++
++static struct clk_lookup cru_clk_lookups[] = {
++	{
++		.con_id= "a9pll0",
++		.clk= &clk_a9pll[0],
++	},
++	{
++		.con_id= "a9pll1",
++		.clk= &clk_a9pll[1],
++	},
++	{
++		.con_id= "arm_clk",
++		.clk= &clk_a9chan[0],
++	},
++	{
++		.con_id= "periph_clk",
++		.clk= &clk_a9chan[1],
++	},
++	{
++		.con_id= "apb0_free",
++		.clk= &clk_a9chan[2],
++	},
++	{
++		.con_id= "axi_clk",
++		.clk= &clk_a9chan[3],
++	},
++	{
++		.con_id= "apb_clk",
++		.clk= &clk_a9chan[4],
++	},
++};
++
++void __init iproc_cru_init(struct clk * src_clk)
++{
++	void * __iomem reg_base;
++	unsigned i;
++
++	BUG_ON(request_resource( &iomem_resource, &ccu_regs));
++
++	reg_base = IOMEM(ccu_regs.start);
++
++	BUG_ON(IS_ERR_OR_NULL(reg_base));
++
++	/* Initialize clocks */
++
++	for (i = 0; i < ARRAY_SIZE(clk_a9pll); i++) {
++		clk_a9pll[i].regs_base = reg_base ;
++		clk_a9pll[i].parent = src_clk ;
++	}
++
++	clk_a9chan[0].parent = src_clk ;	/* tentative */
++	for (i = 0; i < ARRAY_SIZE(clk_a9chan); i++) {
++		clk_a9chan[i].regs_base = reg_base ;
++	}
++
++	/* Install clock sources into the lookup table */
++	clkdev_add_table(cru_clk_lookups,
++			ARRAY_SIZE(cru_clk_lookups));
++}
++
++void cru_clocks_show(void)
++{
++	unsigned i;
++
++	printk( "CRU Clocks:\n" );
++	for (i = 0; i < ARRAY_SIZE( cru_clk_lookups); i++) {
++		printk( "%s: (%s) %lu\n",
++			cru_clk_lookups[i].con_id,
++			cru_clk_lookups[i].clk->name,
++			clk_get_rate( cru_clk_lookups[i].clk));
++	}
++	printk( "CRU Clocks# %u\n", i );
++
++}
+diff --git a/arch/arm/plat-iproc/irq.c b/arch/arm/plat-iproc/irq.c
+new file mode 100644
+index 0000000..6d6bda2
+--- /dev/null
++++ b/arch/arm/plat-iproc/irq.c
+@@ -0,0 +1,45 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/cpumask.h>
++
++#include <asm/io.h>
++#include <asm/mach/map.h>
++#include <asm/hardware/gic.h>
++#include <asm/system.h>
++#include <asm/pgtable.h>
++
++#include <mach/hardware.h>
++#include <mach/irqs.h>
++#include <mach/io_map.h>
++#include <mach/iproc.h>
++
++
++void __init iproc_init_irq(void)
++{
++	unsigned int cr;
++
++	cr = get_cr();
++	cr |= CR_VE;
++	set_cr(cr);
++
++    /* start with GLBTIMER */
++
++	gic_init(0, BCM_INT_ID_PPI0,
++		 IOMEM(IPROC_PERIPH_INT_DISTR_REG_VA),
++		 IOMEM(IPROC_GICCPU_VA));
++}
+diff --git a/arch/arm/plat-iproc/lm.c b/arch/arm/plat-iproc/lm.c
+new file mode 100644
+index 0000000..a6ac191
+--- /dev/null
++++ b/arch/arm/plat-iproc/lm.c
+@@ -0,0 +1,138 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#include <linux/module.h>
++#include <linux/init.h>
++#include <linux/device.h>
++#include <linux/slab.h>
++
++#include <mach/lm.h>
++
++#define to_lm_device(d) container_of(d, struct lm_device, dev)
++#define to_lm_driver(d) container_of(d, struct lm_driver, drv)
++
++static int
++lm_match(struct device *dev, struct device_driver *drv)
++{
++    printk(KERN_INFO "lm_match()\n");
++    return 1;
++}
++
++static int
++lm_bus_probe(struct device *dev)
++{
++    struct lm_device *lmdev = to_lm_device(dev);
++    struct lm_driver *lmdrv = to_lm_driver(dev->driver);
++
++    printk(KERN_INFO "lm_bus_probe()\n");
++    return lmdrv->probe(lmdev);
++}
++
++static int
++lm_bus_remove(struct device *dev)
++{
++    struct lm_device *lmdev = to_lm_device(dev);
++    struct lm_driver *lmdrv = to_lm_driver(dev->driver);
++
++    printk(KERN_INFO "lm_bus_remove()\n");
++    if (lmdrv->remove)
++        lmdrv->remove(lmdev);
++    return 0;
++}
++
++static struct bus_type lm_bustype =
++{
++    .name    = "logicmodule",
++    .match   = lm_match,
++    .probe   = lm_bus_probe,
++    .remove  = lm_bus_remove,
++    /* .suspend = lm_bus_suspend, */
++    /* .resume  = lm_bus_resume, */
++};
++
++static int __init
++lm_init(void)
++{
++    printk(KERN_INFO "lm_init()\n");
++    return bus_register(&lm_bustype);
++}
++
++postcore_initcall(lm_init);
++
++int
++lm_driver_register(struct lm_driver *drv)
++{
++    printk(KERN_INFO "lm_driver_register(): name=%s\n", drv->drv.name);
++    drv->drv.bus = &lm_bustype;
++    return driver_register(&drv->drv);
++}
++
++void
++lm_driver_unregister(struct lm_driver *drv)
++{
++    printk(KERN_INFO "lm_driver_unregister()\n");
++    driver_unregister(&drv->drv);
++}
++
++static void
++lm_device_release(struct device *dev)
++{
++    struct lm_device *lmdev = to_lm_device(dev);
++
++    printk(KERN_INFO "lm_device_release()\n");
++    release_resource(&lmdev->resource);
++    kfree(lmdev);
++}
++
++int
++lm_device_register(struct lm_device *lmdev)
++{
++    int ret;
++
++    printk(KERN_INFO "lm_device_register(): id=%d irq=%d start=0x%08x end=0x%08x\n", lmdev->id, lmdev->irq, lmdev->resource.start, lmdev->resource.end);
++
++    lmdev->dev.release = lm_device_release;
++    lmdev->dev.bus = &lm_bustype;
++    dev_set_name (&lmdev->dev, "lm%d", lmdev->id);
++    lmdev->resource.name = dev_name (&lmdev->dev);
++
++    ret = request_resource(&iomem_resource, &lmdev->resource);
++    if (ret == 0) {
++        ret = device_register(&lmdev->dev);
++        if (ret)
++        {
++            printk(KERN_ERR "lm_device_register(): device_register() failed, rc=%d\n", ret );
++            release_resource(&lmdev->resource);
++        }
++    }
++    else
++        printk(KERN_ERR "lm_device_register(): request_resource() failed, rc=%d\n", ret );
++
++    return ret;
++}
++
++void
++lm_device_unregister(struct lm_device *lmdev)
++{
++    printk(KERN_INFO "lm_device_unregister()\n");
++    device_unregister(&lmdev->dev);
++}
++
++
++EXPORT_SYMBOL(lm_device_register);
++EXPORT_SYMBOL(lm_device_unregister);
++
++EXPORT_SYMBOL(lm_driver_register);
++EXPORT_SYMBOL(lm_driver_unregister);
+diff --git a/arch/arm/plat-iproc/localtimer.c b/arch/arm/plat-iproc/localtimer.c
+new file mode 100644
+index 0000000..ca13311
+--- /dev/null
++++ b/arch/arm/plat-iproc/localtimer.c
+@@ -0,0 +1,36 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#include <linux/init.h>
++#include <linux/smp.h>
++#include <linux/clockchips.h>
++
++#include <asm/irq.h>
++#include <asm/smp_twd.h>
++#include <asm/pgtable.h>
++#include <asm/localtimer.h>
++
++#include <mach/io_map.h>
++#include <mach/hardware.h>
++
++#define IRQ_LOCALTIMER BCM_INT_ID_PPI13
++/*
++ * Setup the local clock events for a CPU.
++ */
++
++void iproc_local_timer_init(void)
++{
++    twd_base = IO_ADDRESS(IPROC_PERIPH_PVT_TIM_REG_VA);
++}
+diff --git a/arch/arm/plat-iproc/platsmp.c b/arch/arm/plat-iproc/platsmp.c
+new file mode 100644
+index 0000000..932847d
+--- /dev/null
++++ b/arch/arm/plat-iproc/platsmp.c
+@@ -0,0 +1,264 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/init.h>
++#include <linux/cpumask.h>
++#include <linux/smp.h>
++#include <linux/spinlock.h>
++#include <linux/jiffies.h>
++#include <linux/delay.h>
++
++#include <mach/io_map.h>
++#include <mach/memory.h>
++#include <mach/smp.h>
++
++#include <asm/cacheflush.h>
++#include <asm/smp_scu.h>
++#include <asm/localtimer.h>
++#include <asm/io.h>
++
++/* Lookup table phys addr and offset */
++#define SOC_ROM_BASE_PA    0xFFFF0000
++#ifdef CONFIG_MACH_NS
++#define SOC_ROM_LUT_OFF    0x400
++#elif defined(CONFIG_MACH_HX4)
++#define SOC_ROM_LUT_OFF    0x42c
++#elif defined(CONFIG_MACH_HR2)
++#define SOC_ROM_LUT_OFF    0x400
++#elif defined(CONFIG_MACH_NSP)
++#define SOC_ROM_LUT_OFF    0x42c
++#elif defined(CONFIG_MACH_CYGNUS)
++#define SOC_ROM_LUT_OFF    0x400
++#elif defined(CONFIG_MACH_KT2)
++#define SOC_ROM_LUT_OFF    0x42c
++#else
++#error "SOC_ROM_LUT_OFF is not defined"
++#endif
++
++/*
++ * control for which core is the next to come out of the secondary
++ * boot "holding pen"
++ */
++volatile int pen_release = -1;
++
++/* SCU base address */
++static void __iomem *scu_base = (void __iomem *)(IPROC_PERIPH_SCU_REG_VA);
++
++/*
++ * Use SCU config register to count number of cores
++ */
++static inline unsigned int get_core_count(void)
++{
++	if (scu_base)
++		return scu_get_core_count(scu_base);
++	return 1;
++}
++
++/*
++ * Initialise the CPU possible map early - this describes the CPUs
++ * which may be present or become present in the system.
++ */
++void __init smp_init_cpus(void)
++{
++unsigned int i, ncores = get_core_count();
++
++	printk(KERN_DEBUG "smp_init_cpus: Enter ncores %d\n", ncores);
++
++	for (i = 0; i < ncores; i++)
++		set_cpu_possible(i, true);
++
++	set_smp_cross_call(gic_raise_softirq);
++
++	printk(KERN_DEBUG "smp_init_cpus: Leave ncores %d\n", ncores);
++}
++
++static DEFINE_SPINLOCK(boot_lock);
++
++
++
++#ifdef CONFIG_BCM_IPROC_CA9_PREFETCH
++
++static void enable_a9_features(void) {
++    unsigned int a9_aux=0, a9_aux_m=0, a9_sys=0;
++
++    // Read a9_aux Register
++    asm volatile ("MRC p15, 0, %0, c1, c0, 1\t\n": "=r"(a9_aux));
++
++    // Write a9_aux Register; L1/L2 prefetch enable & Fill line zero
++    asm volatile ("mcr p15, 0, %0, c1, c0, 1\t\n" : : "r"(a9_aux | (0x7 << 1)));
++
++    // Read a9_aux Register again
++    asm volatile ("MRC p15, 0, %0, c1, c0, 1\t\n": "=r"(a9_aux_m));
++
++    //System Control Register
++    asm volatile ("MRC p15, 0, %0, c1, c0, 0\t\n": "=r"(a9_sys));
++
++    printk(KERN_INFO "\n<%s> CUP_ID %d a9_aux = 0x%x; a9_aux_m = 0x%x; a9_sys = 0x%x\n", \
++            __FUNCTION__,  smp_processor_id(), a9_aux, a9_aux_m, a9_sys);
++}
++
++#endif
++
++
++void __cpuinit platform_secondary_init(unsigned int cpu)
++{
++	printk(KERN_DEBUG "platform_secondary_init: Enter cpu %d\n", cpu);
++
++
++	/*
++	 * If any interrupts are already enabled for the primary
++	 * core (e.g. timer irq), then they will not have been enabled
++	 * for us: do so
++	 */
++
++	// modelled after omap-smp.c:platform_secondary_init() changes
++	// between 2.6.37.6 and 2.6.38.1.
++	gic_secondary_init(0);
++
++	/*
++	 * let the primary processor know we're out of the
++	 * pen, then head off into the C entry point
++	 */
++	pen_release = -1;
++
++
++#ifdef CONFIG_BCM_IPROC_CA9_PREFETCH
++    enable_a9_features();
++    smp_call_function((void (*)(void))enable_a9_features, NULL, 0);
++#endif
++
++
++	smp_wmb();
++
++	/*
++	 * Synchronise with the boot thread.
++	 */
++	spin_lock(&boot_lock);
++	spin_unlock(&boot_lock);
++
++	printk(KERN_DEBUG "platform_secondary_init: Leave pen_release %d\n", pen_release);
++}
++
++int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
++{
++	unsigned long timeout;
++
++	printk(KERN_DEBUG "boot_secondary: Enter CPU%d\n", cpu);
++
++	/*
++	 * Set synchronisation state between this boot processor
++	 * and the secondary one
++	 */
++	spin_lock(&boot_lock);
++
++	/*
++	 * The secondary processor is waiting to be released from
++	 * the holding pen - release it, then wait for it to flag
++	 * that it has been released by resetting pen_release.
++	 *
++	 * Note that "pen_release" is the hardware CPU ID, whereas
++	 * "cpu" is Linux's internal ID.
++	 */
++	pen_release = cpu;
++	clean_dcache_area( (void *) &pen_release, sizeof(pen_release));
++	outer_clean_range(__pa(&pen_release),
++			  __pa(&pen_release + sizeof(pen_release)));
++	// flush_cache_all();
++
++	/*
++	 * Now the secondary CPU must start marching on its
++	 * own.
++	 */
++	dsb_sev();
++
++	/* wait at most 1 second for the secondary to wake up */
++
++	timeout = jiffies + (1 * HZ);
++	while (time_before(jiffies, timeout)) {
++		smp_rmb();
++		if (pen_release == -1)
++			break;
++
++       udelay(10);
++		clean_dcache_area( (void *) &pen_release, sizeof(pen_release));
++	}
++
++	/*
++	 * Now the secondary core is starting up let it run its
++	 * calibrations, then wait for it to finish
++	 */
++	spin_unlock(&boot_lock);
++
++	printk(KERN_DEBUG "boot_secondary: Leave pen-release %d\n", pen_release);
++
++	return pen_release != -1 ? -ENOSYS : 0;
++}
++
++
++static void __init wakeup_secondary(unsigned cpu, void (* _sec_entry_va)(void))
++{
++	void __iomem * rombase = NULL;
++	phys_addr_t lut_pa;
++	u32 offset;
++	u32 mask;
++	u32 val;
++
++	printk(KERN_DEBUG "wakeup_secondary: Enter cpu %d\n", cpu);
++
++	mask = (1UL << PAGE_SHIFT) -1;
++
++	lut_pa = SOC_ROM_BASE_PA & ~mask;
++	offset = SOC_ROM_BASE_PA &  mask;
++	offset += SOC_ROM_LUT_OFF;
++
++	rombase = ioremap(lut_pa, PAGE_SIZE);
++	if(rombase == NULL)
++		return;
++	val = virt_to_phys(_sec_entry_va);
++
++	writel(val, rombase + offset);
++
++        smp_wmb();      /* probably not needed - io regs are not cached */
++
++#ifdef  CONFIG_SMP
++        dsb_sev();      /* Exit WFI */
++#endif
++	mb();
++
++	iounmap(rombase);
++
++	printk(KERN_DEBUG "wakeup_secondary: Leave cpu %d\n", cpu);
++}
++
++
++void __init platform_smp_prepare_cpus(unsigned int max_cpus)
++{
++	int i;
++
++	/*
++	 * Initialise the present map, which describes the set of CPUs
++	 * actually populated at the present time.
++	 */
++	for (i = 0; i < max_cpus; i++)
++		set_cpu_present(i, true);
++
++	/*
++	 * Initialise the SCU and wake up the secondary core using
++	 * wakeup_secondary().
++	 */
++	scu_enable(scu_base);
++	wakeup_secondary(max_cpus, iproc_secondary_startup);
++}
+diff --git a/arch/arm/plat-iproc/shm.c b/arch/arm/plat-iproc/shm.c
+new file mode 100644
+index 0000000..2c59270
+--- /dev/null
++++ b/arch/arm/plat-iproc/shm.c
+@@ -0,0 +1,171 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include "include/plat/shm.h"
++/**
++ * iproc_platform_get_irq - get an IRQ for a device
++ *           wrapper function for platform_get_irq
++ * @dev: platform device
++ * @num: IRQ number index
++ */
++int iproc_platform_get_irq(struct platform_device *dev, unsigned int num)
++{
++	return platform_get_irq(dev, num);
++}
++EXPORT_SYMBOL(iproc_platform_get_irq);
++
++
++/**
++ *	iproc_platform_get_resource_byname -
++ *           wrapper function for platform_get_resource_byname
++ * @dev: platform device
++ * @type: resource type
++ * @name: resource name
++ */
++struct resource *
++iproc_platform_get_resource_byname(struct platform_device *dev,
++					      unsigned int type,
++					      const char *name)
++{
++	return platform_get_resource_byname(dev, type, name);
++}
++EXPORT_SYMBOL(iproc_platform_get_resource_byname);
++
++
++/**
++ *	iproc_platform_get_resource -
++ *           wrapper function for platform_get_resource
++ *	@dev: platform device
++ *	@type: resource type
++ *	@num: resource index
++ */
++struct resource *
++iproc_platform_get_resource(struct platform_device *dev, unsigned int type,
++		      unsigned int num)
++{
++	return platform_get_resource(dev, type, num);
++}
++EXPORT_SYMBOL(iproc_platform_get_resource);
++
++
++/**
++ *	iproc_platform_driver_register -
++ *           wrapper function for platform_driver_register
++ *	@drv: platform driver structure
++ */
++int iproc_platform_driver_register(struct platform_driver *drv)
++{
++	return platform_driver_register(drv);
++}
++EXPORT_SYMBOL(iproc_platform_driver_register);
++
++
++/**
++ *	iproc_platform_driver_unregister
++ *           wrapper function for platform_driver_unregister
++ *	@drv: platform driver structure
++ */
++void iproc_platform_driver_unregister(struct platform_driver *drv)
++{
++	return platform_driver_unregister(drv);
++}
++EXPORT_SYMBOL(iproc_platform_driver_unregister);
++
++
++/**
++ *      iproc_platform_device_register - add a platform-level device
++ *          wrapper function for platform_device_register
++ *      @pdev:  platform device we're adding
++ *
++ */
++int iproc_platform_device_register(struct platform_device * pdev)
++{
++        return platform_device_register(pdev);
++}
++EXPORT_SYMBOL(iproc_platform_device_register);
++
++
++/**
++ *	iproc_platform_device_unregister -
++ *          wrapper function for platform_device_unregister
++ *	@pdev:	platform device we're unregistering
++ */
++void iproc_platform_device_unregister(struct platform_device * pdev)
++{
++	return platform_device_unregister(pdev);
++}
++EXPORT_SYMBOL(iproc_platform_device_unregister);
++
++
++/**
++ *	iproc_platform_device_alloc -
++ *          wrapper function for platform_device_alloc
++ *    @name: base name of the device we're adding
++ *    @id: instance id
++ */
++struct platform_device *iproc_platform_device_alloc(const char *name, int id)
++{
++	return platform_device_alloc(name, id);
++}
++EXPORT_SYMBOL(iproc_platform_device_alloc);
++
++/**
++ *	iproc_platform_device_add -
++ *			wrapper function for platform_device_add
++ *	@pdev:	platform device we're adding
++ */
++int iproc_platform_device_add(struct platform_device *pdev)
++{
++	return platform_device_add(pdev);
++}
++EXPORT_SYMBOL(iproc_platform_device_add);
++
++/**
++ *	iproc_platform_device_put -
++ *			wrapper function for platform_device_put
++ *	@pdev:	platform device to free
++ */
++void iproc_platform_device_put(struct platform_device *pdev)
++{
++	platform_device_put(pdev);
++}
++EXPORT_SYMBOL(iproc_platform_device_put);
++
++
++/**
++ *	iproc_platform_device_put -
++ *			wrapper function for sysfs_create_group
++ *    @kobj:	The kobject to create the group on
++ *    @grp:	The attribute group to create
++ */
++int iproc_sysfs_create_group(struct kobject *kobj, const struct attribute_group *grp)
++{
++	return sysfs_create_group(kobj, grp);
++}
++EXPORT_SYMBOL(iproc_sysfs_create_group);
++
++
++/**
++ *	iproc_sysfs_remove_group -
++ *			wrapper function for sysfs_remove_group
++ *    @kobj:	The kobject which the group is on
++ *    @grp:	The attribute group to remove
++ */
++void iproc_sysfs_remove_group(struct kobject * kobj, const struct attribute_group * grp)
++{
++	sysfs_remove_group(kobj, grp);
++}
++EXPORT_SYMBOL(iproc_sysfs_remove_group);
+diff --git a/arch/arm/plat-iproc/swreset_rec.c b/arch/arm/plat-iproc/swreset_rec.c
+new file mode 100644
+index 0000000..aaa0d61
+--- /dev/null
++++ b/arch/arm/plat-iproc/swreset_rec.c
+@@ -0,0 +1,175 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <asm/io.h>
++#include <linux/init.h>
++#include <linux/device.h>
++#include <mach/io_map.h>
++#include <mach/reg_utils.h>
++#include <plat/swreset_rec.h>
++
++#define MAX_SWRESET_RECORD_COUNT        (4)
++
++struct swreset_record {
++    int position;
++};
++
++struct swreset_record records[MAX_SWRESET_RECORD_COUNT];
++static unsigned int record_count;
++static unsigned int record_width;
++static DEFINE_SPINLOCK(swrr_lock);
++
++unsigned int
++swreset_record_get_record_width(void)
++{
++    return record_width;
++}
++
++unsigned int
++swreset_record_get_record_count(void)
++{
++    return record_count;
++}
++
++SWRR_HANDLE
++swreset_record_register(const char *name)
++{
++    int i;
++    int j;
++
++    if (record_count == 0) {
++        return NULL;
++    }
++
++    /* Use the name as a hash value to try to avoid race condition */
++    j = 0;
++    while(*name != 0) {
++        j += *name;
++        if (j > 0xff)
++            j = (j & 0xff) + 1;
++        name++;
++    }
++
++    for(i=0; i<record_count; i++, j++) {
++        j = j % record_count;
++        if (records[j].position == -1) {
++            records[j].position = j;
++            return (SWRR_HANDLE)&records[j];
++        }
++    }
++
++    return NULL;
++}
++
++void
++swreset_record_unregister(SWRR_HANDLE handle)
++{
++    struct swreset_record *swrr = (struct swreset_record *)handle;
++    if (handle == NULL)
++        return;
++    if (swrr->position < 0 || swrr->position >= record_count)
++        return;
++    swrr->position = -1;
++}
++
++int
++swreset_record_set(SWRR_HANDLE handle, int value)
++{
++    struct swreset_record *swrr = (struct swreset_record *)handle;
++    void __iomem *reg;
++    unsigned long rval;
++    unsigned long flags;
++
++    if (handle == NULL)
++        return -1;
++    if (swrr->position < 0 || swrr->position >= record_count)
++        return -1;
++    if (value & ~((1 << record_width) - 1))
++        return -1;
++
++    /* This requires atomic operation */
++    spin_lock_irqsave(&swrr_lock, flags);
++
++    /* CoStar specific; could require modification for newer chips */
++    reg = IOMEM(IPROC_DMU_BASE_VA + IPROC_DMU_CLKSET_KEY_OFFSET);
++    writel(0xea68, reg); /* magic number */
++    reg = IOMEM(IPROC_DMU_BASE_VA + IPROC_DMU_GENPLL_CONTROL5_OFFSET);
++    writel(readl(reg) | (1 << IPROC_DMU_GENPLL_CONTROL5__SEL_SW_SETTING), reg);
++    reg = IOMEM(IPROC_DMU_BASE_VA + IPROC_DMU_GENPLL_CONTROL7_OFFSET);
++    rval = readl(reg) & ~(1 << (IPROC_DMU_GENPLL_CONTROL7__SW_RESET_REC + swrr->position));
++    rval |= value << (IPROC_DMU_GENPLL_CONTROL7__SW_RESET_REC + swrr->position);
++    writel(rval, reg);
++
++    spin_unlock_irqrestore(&swrr_lock, flags);
++    return 0;
++}
++
++int
++swreset_record_get(SWRR_HANDLE handle, int *value)
++{
++    struct swreset_record *swrr = (struct swreset_record *)handle;
++    void __iomem *reg;
++    unsigned long flags;
++
++    if (handle == NULL)
++        return -1;
++    if (swrr->position < 0 || swrr->position >= record_count)
++        return -1;
++    if (value == NULL)
++        return 0;
++
++    /* This requires atomic operation */
++    spin_lock_irqsave(&swrr_lock, flags);
++
++    /* CoStar specific; could require modification for newer chips */
++    reg = IOMEM(IPROC_DMU_BASE_VA + IPROC_DMU_CLKSET_KEY_OFFSET);
++    writel(0xea68, reg); /* magic number */
++    reg = IOMEM(IPROC_DMU_BASE_VA + IPROC_DMU_GENPLL_CONTROL5_OFFSET);
++    writel(readl(reg) | (1 << IPROC_DMU_GENPLL_CONTROL5__SEL_SW_SETTING), reg);
++    reg = IOMEM(IPROC_DMU_BASE_VA + IPROC_DMU_GENPLL_CONTROL7_OFFSET);
++    *value = readl(reg) >> IPROC_DMU_GENPLL_CONTROL7__SW_RESET_REC;
++    *value = (*value >> swrr->position) & 1;
++
++    spin_unlock_irqrestore(&swrr_lock, flags);
++    return 0;
++}
++
++int __init
++init_swreset_records(void)
++{
++    int i;
++    for(i=0; i<MAX_SWRESET_RECORD_COUNT; i++) {
++        records[i].position = -1;
++    }
++
++    /* Currently it's only supported on CoStar */
++    if ((readl(IOMEM(IPROC_CCA_CORE_REG_VA)) & 0xffff) == 0xcf1a) {
++        record_count = IPROC_DMU_GENPLL_CONTROL7__SW_RESET_REC_WIDTH;
++        record_width = 1;   /* 1 bit per record */
++    } else {
++        record_count = 0;
++        record_width = 0;
++    }
++    return 0;
++}
++
++early_initcall(init_swreset_records);
++EXPORT_SYMBOL(swreset_record_get_record_count);
++EXPORT_SYMBOL(swreset_record_get_record_width);
++EXPORT_SYMBOL(swreset_record_register);
++EXPORT_SYMBOL(swreset_record_unregister);
++EXPORT_SYMBOL(swreset_record_set);
++EXPORT_SYMBOL(swreset_record_get);
+diff --git a/arch/arm/plat-iproc/sysfs.c b/arch/arm/plat-iproc/sysfs.c
+new file mode 100644
+index 0000000..145f6cd
+--- /dev/null
++++ b/arch/arm/plat-iproc/sysfs.c
+@@ -0,0 +1,216 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++/*
++ * SYSFS infrastructure specific Broadcom SoCs
++ */
++#include <linux/device.h>
++#include <linux/kernel.h>
++#include <linux/io.h>
++#include <linux/sysfs.h>
++#include <linux/types.h>
++#include <linux/sched.h>
++#include <linux/delay.h>
++
++struct kobject *bcm_kobj;
++
++static ssize_t
++mem_store(struct device *dev, struct device_attribute *attr,
++      const char *buf, size_t n)
++{
++    uint32_t addr, val, count = 0, loop = 0;
++    void __iomem *vaddr;
++    char rw;
++
++    if (sscanf(buf, "%c %x %x", &rw, &addr, &val) == 3) {
++        pr_info("\n");
++        vaddr = ioremap(addr, PAGE_SIZE);
++        if (rw == 'W' || rw == 'w') {
++            writel(val, vaddr);
++            count = 4;
++        } else if (rw == 'R' || rw == 'r') {
++            count = val;    /* count read in val for simplicity */
++            if (count & 0x3)    /* Align to 4 */
++                count += (4 - (count & 0x3));
++        }
++        for (; loop < count; loop += 4) {
++            val = readl(vaddr + loop);
++            pr_info("[0x%08x] = 0x%08x\n", addr + loop, val);
++        }
++        iounmap(vaddr);
++        return n;
++    }
++    pr_info("\nUsage: echo <R - Read/W - write> <Physical Address>"
++        "<Value(Write)/Count(Read) > /sys/bcm/mem\n"
++        "E.g. echo R 0x88CE000 0x40 > /sys/bcm/mem\n"
++        "     echo w 0x88CE000 0xDEADBEAF > /sys/bcm/mem\n");
++    return -EINVAL;
++}
++
++#ifdef CONFIG_IPROC_TIMER_UNIT_TESTS
++static ssize_t
++iproc_timer_module_cfg(struct device *dev, struct device_attribute *attr,
++      const char *buf, size_t n)
++{
++    char         name[255];
++    unsigned int rate;
++
++    if (sscanf(buf, "%s %d", name, &rate) == 2) {
++
++        pr_info("timer name:%s rate(0-32KHz, 1-1MHz, 2-19.5MHz):%d \r\n",
++                name, rate);
++
++        /*
++         * Assuming that iproc_timer_modules_init has happend already (this is
++         * safe because this function is called during system timer init
++         * itself
++         */
++        if ( iproc_timer_module_set_rate(name,rate) < 0) {
++            pr_err("iproc_timer_module_cfg: Unable to set the said rate \r\n");
++            return n;
++        }
++
++        pr_info("iproc_timer_module_cfg: Configured the module with"
++        "rate %d \r\n", rate);
++
++        return n;
++    }
++
++    pr_info("\r\nusage: echo [timer_name(aon-timer/slave-timer)]"
++    "[rate (0-32KHz, 1-1MHz, 2-19.5MHz)] > /sys/bcm/timer_module_cfg \r\n");
++
++    return -EINVAL;
++}
++
++struct iproc_timer *kt;
++struct timer_ch_cfg cfg;
++int timer_callback (void *p);
++
++/* Note that this is called back from ISR context */
++int timer_callback (void *p)
++{
++    pr_info("timer callback \r\n");
++    return 0;
++}
++
++static ssize_t
++iproc_timer_start_test(struct device *dev, struct device_attribute *attr,
++      const char *buf, size_t n)
++{
++    unsigned int ch_num, mode, count;
++    char name[255];
++
++    if (sscanf(buf, "%s %d %d %d", name, &ch_num, &mode, &count) == 4) {
++
++        pr_info("channel_num:%d mode(0-periodic 1-oneshot):%d count:%d \r\n",
++                ch_num, mode, count);
++
++        if ( (kt=iproc_timer_request (name, ch_num)) < 0) {
++            pr_err("iproc_timer_request returned error \r\n");
++            goto out;
++        }
++
++        cfg.mode = mode;
++        cfg.arg  = kt;
++        cfg.cb     = timer_callback;
++        cfg.reload = count;
++
++        if ( iproc_timer_config(kt,&cfg) < 0) {
++            pr_err("iproc_timer_config returned error \r\n");
++            goto out;
++        }
++
++        if (iproc_timer_set_match_start(kt,count) < 0) {
++            pr_err("iproc_timer_set_match_start returned error \r\n");
++            goto out;
++        }
++        pr_info("Timer test started \r\n");
++out:
++        return n;
++    }
++
++    pr_info("\r\nusage: echo [name (aon-timer/slave-timer)] "
++            "[channel num (0-3)] [mode(0-periodic"
++            "1-oneshot)] [count value] > /sys/bcm/timer_start_test\r\n");
++    return -EINVAL;
++}
++
++static ssize_t
++iproc_timer_stop_test(struct device *dev, struct device_attribute *attr,
++      const char *buf, size_t n)
++{
++    unsigned int ch_num;
++
++    if (sscanf(buf, "%d", &ch_num) == 1) {
++        pr_info("channel_num:%d    \r\n", ch_num);
++        if (iproc_timer_stop(kt) < 0) {
++            pr_err("Unable to stop the timer iproc_timer_stop "
++                   "returned error \r\n");
++            goto out;
++        }
++
++        if (iproc_timer_free(kt) < 0) {
++            pr_err("Unable to free the timer \r\n");
++            goto out;
++        }
++        pr_info("Stopped and freed the timer \r\n");
++out:
++        return n;
++    }
++
++    pr_info("\r\nusage: echo [channel num (0-3)] > "
++            "/sys/bcm/timer_stop_test\r\n");
++    return -EINVAL;
++}
++#endif
++
++static DEVICE_ATTR(mem, 0644, NULL, mem_store);
++
++#ifdef CONFIG_IPROC_TIMER_UNIT_TESTS
++static DEVICE_ATTR(timer_module_cfg, 0666, NULL, iproc_timer_module_cfg);
++static DEVICE_ATTR(timer_start_test, 0666, NULL, iproc_timer_start_test);
++static DEVICE_ATTR(timer_stop_test, 0666, NULL, iproc);
++#endif
++
++static struct attribute *bcm_attrs[] = {
++    &dev_attr_mem.attr,
++#ifdef CONFIG_IPROC_TIMER_UNIT_TESTS
++    &dev_attr_timer_module_cfg.attr,
++    &dev_attr_timer_start_test.attr,
++    &dev_attr_timer_stop_test.attr,
++#endif
++    NULL,
++};
++
++static struct attribute_group bcm_attr_group = {
++    .attrs = bcm_attrs,
++};
++
++static int __init bcm_sysfs_init(void)
++{
++    bcm_kobj = kobject_create_and_add("bcm", NULL);
++    if (!bcm_kobj)
++        return -ENOMEM;
++    return sysfs_create_group(bcm_kobj, &bcm_attr_group);
++}
++
++static void __exit bcm_sysfs_exit(void)
++{
++    sysfs_remove_group(bcm_kobj, &bcm_attr_group);
++}
++
++module_init(bcm_sysfs_init);
++module_exit(bcm_sysfs_exit);
+diff --git a/arch/arm/plat-iproc/timer-sp.c b/arch/arm/plat-iproc/timer-sp.c
+new file mode 100644
+index 0000000..7773e1c
+--- /dev/null
++++ b/arch/arm/plat-iproc/timer-sp.c
+@@ -0,0 +1,250 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++
++#include <linux/clocksource.h>
++#include <linux/clockchips.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/io.h>
++#include <linux/errno.h>
++#include <linux/err.h>
++#include <linux/clk.h>
++#include <mach/io_map.h>
++
++#include <asm/clkdev.h>
++//#include <mach/clkdev.h>
++#include <asm/hardware/arm_timer.h>
++
++#include <plat/timer-sp.h>
++
++/*
++ * These timers are currently setup to be clocked at 50MHz.
++ */
++#define ONE_MHZ			(1000000)
++#define TIMER_FREQ_HZ		(ONE_MHZ * 500)
++#define TIMER_FREQ_KHZ		(TIMER_FREQ_HZ/1000)
++#define TIMER_MIN_RANGE		4
++
++#define TIM_COUNT_LO		0x00            /* ACVR rw */
++#define TIM_COUNT_HI		0x04            /* ACVR ro */
++#define TIMER_CTRL		0x08            /* ACVR rw */
++#define TIMER_INT_STAT		0x0C
++#define TIMER_COMP_LO		0x10
++#define TIMER_COMP_HI		0x14
++#define TIMER_RELOAD		0x18
++#define TIMER_CTRL_PRESC_SHFT   (8)             /* ACVR */
++
++#define TIMER_ENABLE		(1 << 0)        /* ACVR */
++#define TIMER_CMP		(1 << 1)
++#define TIMER_IRQ		(1 << 2)
++#define TIMER_AUTO		(1 << 3)
++
++extern unsigned long clk_get_rate(struct clk *clk);
++
++static void __iomem *clksrc_base;
++static u32 ticks_per_jiffy;
++static u32 timer_ints = 0;
++static unsigned long cpu_clk_freq = 0;
++
++static cycle_t iproc_read(struct clocksource *cs)
++{
++	u32 hi;
++	u32 lo;
++	u32 ho;
++	u64 count;
++
++	/*
++	 * Read the upper half to detect a roll-over count
++	 */
++	do {
++		hi = readl(clksrc_base + TIM_COUNT_HI);
++		lo = readl(clksrc_base + TIM_COUNT_LO);
++		ho = readl(clksrc_base + TIM_COUNT_HI);
++	} while(hi != ho);
++
++	count = (u64) hi << 32 | lo;
++	return count;
++
++}
++static void iproc_set_mode(enum clock_event_mode mode,
++        struct clock_event_device *evt);
++
++static int iproc_set_next_event(unsigned long next,
++        struct clock_event_device *evt);
++static struct clock_event_device iproc_clockevent = {
++        .name           = "iproc_gtimer",
++        .shift          = 20,
++        .features       = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT,
++        .set_mode       = iproc_set_mode,
++        .set_next_event = iproc_set_next_event,
++        .rating         = 300,
++        .cpumask        = cpu_all_mask,
++};
++
++
++static struct clocksource clocksource_iproc = {
++	.name		= "iproc_gtimer",
++	.rating		= 300,
++	.read		= iproc_read,
++	.mask		= CLOCKSOURCE_MASK(64),
++	.shift		= 20,
++	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
++};
++extern void setup_sched_clock(u32 (*read)(void), int bits, unsigned long rate);
++
++void __init iproc_clocksource_init(void __iomem *base)
++{
++	struct clocksource *cs = &clocksource_iproc;
++	struct clk *clk;
++
++	clksrc_base = base;
++
++        /*
++	 * setup global CPU timer as free-running clocksource
++	 * obtain CPU clock frequency from clock module configuration
++	 */
++	clk = clk_get_sys(NULL, "periph_clk");
++	BUG_ON(IS_ERR_OR_NULL(clk));
++        clk_prepare(clk);
++        clk_enable(clk);
++	cpu_clk_freq = clk_get_rate(clk);
++	BUG_ON(!cpu_clk_freq);
++
++
++	printk(KERN_DEBUG
++		"iproc_clocksource_init: CPU global timer freq %lu\n",
++		cpu_clk_freq);
++
++	/* ref - arch/arcm/mach-u300/timer.c (2.6.37 vs 2.6.38) */
++	clocksource_register_hz(cs, cpu_clk_freq);
++}
++
++
++static void __iomem *clkevt_base;
++
++/*
++ * IRQ handler for the timer
++ */
++ irqreturn_t iproc_timer_interrupt(int irq, void *dev_id)
++{
++       struct clock_event_device *evt = &iproc_clockevent;
++#warning "iproc_timer_interrupt: Fix this code to receive clock_event handler correctly"
++
++	/* clear the interrupt */
++	writel(1, clkevt_base + TIMER_INT_STAT);
++
++	timer_ints++;
++	evt->event_handler(evt);
++
++	return IRQ_HANDLED;
++}
++
++static void iproc_set_mode(enum clock_event_mode mode,
++	struct clock_event_device *evt)
++{
++	u32 ctrl;
++	u32 period;
++	u64 count;
++
++	ctrl = readl(clkevt_base + TIMER_CTRL);
++
++	/* Clear mode bits */
++	ctrl &= ~(TIMER_CMP | TIMER_IRQ | TIMER_AUTO);
++
++	switch (mode) {
++	case CLOCK_EVT_MODE_PERIODIC:
++		writel(ctrl, clkevt_base + TIMER_CTRL);
++		period = ticks_per_jiffy;
++		count = iproc_read(NULL);
++		count += period;
++		writel(ctrl, clkevt_base + TIMER_CTRL);
++		writel(period, clkevt_base + TIMER_RELOAD);
++		ctrl =  (TIMER_CMP  |
++			 TIMER_IRQ  |
++			 TIMER_AUTO |
++			 TIMER_ENABLE);
++		break;
++
++	case CLOCK_EVT_MODE_ONESHOT:
++		/* period set, and timer enabled in 'next_event' hook */
++		break;
++
++	case CLOCK_EVT_MODE_UNUSED:
++	case CLOCK_EVT_MODE_SHUTDOWN:
++		break;
++	default:
++		break;
++	}
++
++	writel(ctrl, clkevt_base + TIMER_CTRL);
++}
++
++static int iproc_set_next_event(unsigned long next,
++	struct clock_event_device *evt)
++{
++	u64 count = iproc_read(NULL);
++	u32 ctrl  = readl(clkevt_base + TIMER_CTRL);
++
++	ctrl &= ~TIMER_CMP;
++	writel(ctrl, clkevt_base + TIMER_CTRL);
++
++	count += next;
++	writel(count & 0xffffffffUL,    clkevt_base + TIMER_COMP_LO);
++	//writel(count, clkevt_base + TIM_COUNT_LO);
++	writel(count >> 32, clkevt_base + TIMER_COMP_HI);
++
++	ctrl |= (TIMER_CMP | TIMER_IRQ);
++	writel(ctrl, clkevt_base + TIMER_CTRL);
++
++	return 0;
++}
++
++static struct irqaction iproc_timer_irq = {
++	.name		= "iproc_gtimer",
++	.flags		= IRQF_DISABLED | IRQF_TIMER | IRQF_PERCPU,
++	.handler	= iproc_timer_interrupt,
++	.dev_id		= &iproc_clockevent,
++        .irq = BCM_INT_ID_PPI11,
++};
++
++void __init iproc_clockevents_init(void __iomem *base, unsigned int timer_irq)
++{
++        int ret;
++	clkevt_base = base;
++	ticks_per_jiffy = (cpu_clk_freq/HZ);
++
++        clockevents_calc_mult_shift(&iproc_clockevent, cpu_clk_freq, TIMER_MIN_RANGE);
++        iproc_clockevent.max_delta_ns =
++                clockevent_delta2ns(0x1fffffff, &iproc_clockevent);
++        iproc_clockevent.min_delta_ns =
++                clockevent_delta2ns(0xf, &iproc_clockevent);
++        iproc_clockevent.cpumask = cpumask_of(0);
++        iproc_clockevent.irq = timer_irq;
++        clockevents_register_device(&iproc_clockevent);
++#warning "iproc_clockevents_init: Fix this code to enable timer irq and pass clock_event handler correctly"
++        ret = setup_percpu_irq(timer_irq, &iproc_timer_irq);
++        if (ret) {
++                printk(KERN_ERR "Failed to register timer IRQ: %d\n", ret);
++                BUG();
++        }
++
++        printk(KERN_DEBUG "cpu_clk_freq: %lu\n", cpu_clk_freq);
++        printk(KERN_DEBUG "HZ: %d, ticks_per_jiffy: %u\n", HZ, ticks_per_jiffy);
++
++        enable_percpu_irq(timer_irq, 0);
++
++}
+diff --git a/arch/arm/plat-iproc/timer.c b/arch/arm/plat-iproc/timer.c
+new file mode 100644
+index 0000000..f92e244
+--- /dev/null
++++ b/arch/arm/plat-iproc/timer.c
+@@ -0,0 +1,280 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/init.h>
++#include <linux/irq.h>
++#include <linux/interrupt.h>
++#include <linux/jiffies.h>
++#include <linux/clockchips.h>
++#include <linux/types.h>
++
++#include <asm/smp_twd.h>
++#include <asm/mach/time.h>
++#include <mach/io.h>
++#include <mach/io_map.h>
++#include <mach/iproc_timer.h>
++#include <mach/timer.h>
++#include <mach/iproc_regs.h>
++
++#ifdef CONFIG_LOCAL_TIMERS
++#include <asm/smp_twd.h>
++#endif
++
++static struct iproc_timer *gpt_evt = NULL;
++static struct iproc_timer *gpt_src = NULL;
++static void __iomem*    proftmr_regbase = IOMEM(IPROC_CCU_PROF_CTL_REG_VA);
++
++static int gptimer_set_next_event(unsigned long clc,
++        struct clock_event_device *unused)
++{
++    /* gptimer (0) is disabled by the timer interrupt already
++     * so, here we reload the next event value and re-enable
++     * the timer
++     *
++     * This way, we are potentially losing the time between
++     * timer-interrupt->set_next_event. CPU local timers, when
++     * they come in should get rid of skew
++     */
++    iproc_timer_set_match_start(gpt_evt,clc);
++    return 0;
++}
++
++static void gptimer_set_mode(enum clock_event_mode mode,
++                   struct clock_event_device *unused)
++{
++    switch (mode) {
++    case CLOCK_EVT_MODE_ONESHOT:
++        /* by default mode is one shot don't do any thing */
++        break;
++    case CLOCK_EVT_MODE_UNUSED:
++    case CLOCK_EVT_MODE_SHUTDOWN:
++    default:
++        iproc_timer_disable_and_clear(gpt_evt);
++    }
++}
++
++static cycle_t gptimer_clksrc_read (struct clocksource *cs)
++{
++    unsigned long msw, lsw;
++    cycle_t    count = 0;
++
++    iproc_timer_get_counter (gpt_src, &msw, &lsw);
++    count = ((cycle_t)msw << 32) | (cycle_t)lsw;
++    return count;
++}
++
++static struct clock_event_device clockevent_gptimer = {
++    .name            = "gpt_event_1",
++    .features        = CLOCK_EVT_FEAT_ONESHOT,
++    .shift           = 32,
++    .set_next_event  = gptimer_set_next_event,
++    .set_mode        = gptimer_set_mode
++};
++
++static struct clocksource clksrc_gptimer = {
++    .name    = "gpt_source_2",
++    .rating  = 200,
++    .read    = gptimer_clksrc_read,
++    .mask    = CLOCKSOURCE_MASK(64),
++    .shift   = 16,
++    .flags   = CLOCK_SOURCE_IS_CONTINUOUS,
++};
++
++static void __init gptimer_clockevents_init(void)
++{
++    clockevent_gptimer.mult = div_sc(CLOCK_TICK_RATE, NSEC_PER_SEC,
++                        clockevent_gptimer.shift);
++
++    clockevent_gptimer.max_delta_ns =
++        clockevent_delta2ns(0xffffffff, &clockevent_gptimer);
++
++    clockevent_gptimer.min_delta_ns =
++        clockevent_delta2ns(6, &clockevent_gptimer);
++
++    clockevent_gptimer.cpumask = cpumask_of(0);
++    clockevents_register_device(&clockevent_gptimer);
++}
++
++static void __init gptimer_clocksource_init(void)
++{
++    clksrc_gptimer.mult = clocksource_hz2mult(CLOCK_TICK_RATE,
++        clksrc_gptimer.shift);
++    clocksource_register(&clksrc_gptimer);
++    return;
++}
++
++static int gptimer_interrupt_cb(void *dev)
++{
++    struct clock_event_device *evt = (struct clock_event_device *)dev;
++    evt->event_handler(evt);
++    return 0;
++}
++
++static void profile_timer_init(void __iomem *base)
++{
++    uint32_t reg;
++
++    /* Reset profile/global timer */
++    writel(0, base + IPROC_GTIM_GLB_CTL);
++
++    /* Clear pending interrupts */
++    reg = readl(base + IPROC_GTIM_GLB_STS);
++    reg &= ~(IPROC_GLB_TIM_CTRL_PRESC_MASK);
++    reg |= (1 << GLBTMR_GLOB_STATUS_EVENT_G_SHIFT);
++    writel(reg, base + IPROC_GTIM_GLB_STS);
++
++    /* Enable profile timer now with
++     * prescaler = 0, so timer freq = A9 PERIPHCLK
++     * IRQ disabled
++     * Comapre disabled
++     */
++
++    reg = readl(base + IPROC_GTIM_GLB_CTL);
++    reg &= ~(IPROC_GLB_TIM_CTRL_PRESC_MASK);
++    reg |= (1 << GLBTMR_GLOB_CTRL_TIMER_EN_G_SHIFT);
++    writel(reg, base + IPROC_GTIM_GLB_CTL);
++}
++
++static void
++profile_timer_get_counter(void __iomem *base, uint32_t *msw, uint32_t *lsw)
++{
++    /* Read 64-bit free running counter
++     * 1. Read hi-word
++     * 2. Read low-word
++     * 3. Read hi-word again
++     * 4.1
++     *     if new hi-word is not equal to previously read hi-word, then
++     *     start from #1
++     * 4.2
++     *     if new hi-word is equal to previously read hi-word then stop.
++     */
++
++    while (1) {
++        *msw = readl(base + IPROC_GTIM_GLB_HI);
++        *lsw = readl(base + IPROC_GTIM_GLB_LO);
++        if (*msw == readl(base + IPROC_GTIM_GLB_HI))
++            break;
++    }
++
++    return;
++}
++
++static void __init timers_init(struct gp_timer_setup *gpt_setup)
++{
++    struct timer_ch_cfg evt_tm_cfg;
++
++    iproc_timer_modules_init ();
++    iproc_timer_module_set_rate(gpt_setup->name, gpt_setup->rate);
++
++    /* Initialize Event timer */
++    gpt_evt = iproc_timer_request(gpt_setup->name, gpt_setup->ch_num);
++    if (gpt_evt == NULL) {
++        pr_err("timers_init: Unable to get GPT timer for event\r\n");
++    }
++
++    pr_info("timers_init: === SYSTEM TIMER NAME: %s CHANNEL NUMBER %d \
++    RATE (0-32KHz, 1-1MHz) %d \r\n",gpt_setup->name,
++    gpt_setup->ch_num, gpt_setup->rate);
++
++    evt_tm_cfg.mode =  MODE_PERIODIC;
++    evt_tm_cfg.arg = &clockevent_gptimer;
++    evt_tm_cfg.cb = gptimer_interrupt_cb;
++
++    iproc_timer_config(gpt_evt, &evt_tm_cfg);
++
++    gptimer_set_next_event((CLOCK_TICK_RATE / HZ), NULL);
++
++    /*
++     * IMPORTANT
++     * Note that we don't want to waste a channel for clock source. In iProc
++     * timer module by default there is a counter that keeps counting
++     * irrespective of the channels. So instead of implementing a periodic
++     * timer using a channel (which in the HW is not peridoic) we can
++     * simply read the counters of the timer that is used for event and
++     * send it for source. The only catch is that this timer should not be
++     * stopped by PM or any other sub-systems.
++     */
++     gpt_src = gpt_evt;
++
++    /* Initialize the profile timer */
++
++    return ;
++}
++
++void __init iproc_timer_init(struct gp_timer_setup *gpt_setup)
++{
++    timers_init(gpt_setup);
++    gptimer_clocksource_init();
++    gptimer_clockevents_init();
++    gptimer_set_next_event((CLOCK_TICK_RATE / HZ), NULL);
++#ifdef CONFIG_LOCAL_TIMERS
++        twd_base = IOMEM(IPROC_PERIPH_PVT_TIM_REG_VA);
++#endif
++
++}
++
++
++/* Profile timer implementations */
++
++/*
++ * TODO: The below profile timer code is retained as it is.
++ * The clock manager is not up yet, once its ready read the
++ * correct frequency from it.
++ *
++ * Right now Global timer runs at 5000000 on FPGA (A9 PERIPHCLK)
++ * Ideally, this should be derived by timer.prof_clk and
++ * prescaler.
++ */
++
++#define GLOBAL_TIMER_FREQ_HZ    (351875) /* For FPGA only, (temp)*/
++//#define GLOBAL_TIMER_FREQ_HZ    (500000) /* For FPGA only, (temp)*/
++timer_tick_rate_t timer_get_tick_rate(void)
++{
++    uint32_t prescaler;
++
++    prescaler = readl(IPROC_PERIPH_GLB_TIM_REG_BASE);
++    prescaler &= IPROC_GLB_TIM_CTRL_PRESC_MASK;
++    //prescaler >>= IPROC_GLB_TIM_CTRL_PRESC_SHIFT;
++
++    return (GLOBAL_TIMER_FREQ_HZ / (1 + prescaler));
++}
++
++timer_tick_count_t timer_get_tick_count(void)
++{
++    uint32_t msw, lsw;
++    uint64_t tick;
++
++    profile_timer_get_counter(proftmr_regbase, &msw, &lsw);
++
++    tick = (((uint64_t)msw << 32) | ((uint64_t)lsw));
++
++    return (*(uint32_t *)(&tick));
++}
++
++timer_msec_t timer_ticks_to_msec(timer_tick_count_t ticks)
++{
++    return (ticks / (timer_get_tick_rate() / 1000));
++}
++
++timer_msec_t timer_get_msec(void)
++{
++    return timer_ticks_to_msec(timer_get_tick_count());
++}
++
++EXPORT_SYMBOL(timer_get_tick_count);
++EXPORT_SYMBOL(timer_ticks_to_msec);
++EXPORT_SYMBOL(timer_get_tick_rate);
++EXPORT_SYMBOL(timer_get_msec);

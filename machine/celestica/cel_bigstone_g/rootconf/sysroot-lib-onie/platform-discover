@@ -1,0 +1,23 @@
+#
+#	Detect which type of card to which the Celestica Bigstone_G COM-E is
+#	connected. The format of the return value (in the $platform variable)
+#	is:
+#		{Part Number}[_{Label Revision}]
+#	where:
+#		{Part Number} is the Part Number field (0x22) from the EEPROM
+#		{Label Revision} is the Label Revision field (0x27) from the
+#			EEPROM. This field is not present for fabric cards.
+#
+bigstone_g_card_detect()
+{
+	local PART_NUM
+	PART_NUM=$(/usr/bin/onie-syseeprom -g 0x22) || PART_NUM=""
+	local LABEL_REV
+	if [ -n "${PART_NUM}" ] ; then
+		LABEL_REV="_"$(/usr/bin/onie-syseeprom -g 0x27) || LABEL_REV=""
+	fi
+	platform=$(/bin/echo ${PART_NUM}${LABEL_REV} |
+		   /bin/sed s/-/_/g |
+		   /usr/bin/awk '{print tolower($0)}')
+}
+

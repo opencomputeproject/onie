@@ -1,0 +1,165 @@
+Broadcom iProc (ARM Cortex-A9) driver support (top level files)
+Baseline files sourced from Broadcom LDK 3.4.10
+
+diff --git a/arch/arm/plat-iproc/Makefile b/arch/arm/plat-iproc/Makefile
+index d0cb886..2474a9d 100644
+--- a/arch/arm/plat-iproc/Makefile
++++ b/arch/arm/plat-iproc/Makefile
+@@ -14,4 +14,4 @@ obj-$(CONFIG_IPROC_SW_RESET_RECORD) += swreset_rec.o
+ 
+ export DRIVERS_MMC_HOST_DIR := drivers/mmc/host/
+ export DRIVERS_MTD_DIR := drivers/mtd/
+-#obj-y+=../../../../../bcmdrivers/
++# obj-y+=../../../../../bcmdrivers/
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index b5e6f24..2f897af 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -136,4 +136,6 @@ source "drivers/hv/Kconfig"
+ 
+ source "drivers/devfreq/Kconfig"
+ 
++source "drivers/bcmdrivers/Kconfig"
++
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index 1b31421..9352f86 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -132,3 +132,4 @@ obj-$(CONFIG_VIRT_DRIVERS)	+= virt/
+ obj-$(CONFIG_HYPERV)		+= hv/
+ 
+ obj-$(CONFIG_PM_DEVFREQ)	+= devfreq/
++obj-y				+= bcmdrivers/
+diff --git a/drivers/bcmdrivers/Kconfig b/drivers/bcmdrivers/Kconfig
+new file mode 100755
+index 0000000..c56772d
+--- /dev/null
++++ b/drivers/bcmdrivers/Kconfig
+@@ -0,0 +1,85 @@
++menu "Broadcom iProc Drivers"
++	depends on ARCH_IPROC
++
++source "drivers/bcmdrivers/timer/Kconfig"
++source "drivers/bcmdrivers/mdio/Kconfig"
++source "drivers/bcmdrivers/dma/Kconfig"
++source "drivers/bcmdrivers/gpio/Kconfig"
++source "drivers/bcmdrivers/qspi/Kconfig"
++source "drivers/bcmdrivers/nand/Kconfig"
++source "drivers/bcmdrivers/pwm/Kconfig"
++source "drivers/bcmdrivers/wdt/Kconfig"
++source "drivers/bcmdrivers/usb2h/Kconfig"
++source "drivers/bcmdrivers/pcie/Kconfig"
++source "drivers/bcmdrivers/gmac/et/Kconfig"
++source "drivers/bcmdrivers/gmac/hnd/Kconfig"
++source "drivers/bcmdrivers/smbus/Kconfig"
++source "drivers/bcmdrivers/pmu/Kconfig"
++
++config BCM_IPROC_CA9_PREFETCH
++	tristate "CortexA9 cache auto-prefetching support"
++	depends on ARCH_IPROC
++	default n
++	help
++	  Enable iProc CortexA9 L1/L2 cache auto-prefetching support
++
++	  If unsure, say N.
++
++config BCM_BARRIER_PERFORMANCE
++	bool "Linux memory barrier performance improvement"
++	depends on ARCH_IPROC
++	default n
++	help
++	  Enable linux memory barrier performance improvements
++
++	  If unsure, say N.
++
++config BCM_MEM_OPTIMIZATION
++	bool "ARM Memory library optimization"
++	depends on ARCH_IPROC
++	default n
++	help
++	  Enable ARM memory library optimization
++
++	  If unsure, say N.
++
++config BROADCOM_CUSTOM_SENDFILE
++	bool "Custom Sendfile optimization"
++	depends on ARCH_IPROC
++	default n
++	help
++	  Enable Broadcom Custom Sendfile optimization
++
++	  If unsure, say N.
++
++config BCM_CUSTOM_RECVFILE
++	bool "Custom Receivefile optimization"
++	depends on ARCH_IPROC
++	default n
++	help
++	  Enable Broadcom Custom Receivefile optimization
++
++	  If unsure, say N.
++
++config BCM_CUSTOM_RECVFILE_MAX_PERF
++# Enabling BCM_CUSTOM_RECVFILE_MAX_PERF gives maximum write performance
++# at the risk of filesystem errors (due to skipping cache invalidation
++# on writes) and exposure to A0 hardware errata for lazy interrupts.
++	bool "Custom Receivefile Max Performance optimization"
++	depends on ARCH_IPROC && BCM_CUSTOM_RECVFILE
++	default n
++	help
++	  Enable Broadcom Custom Receivefile Maximum Performance optimization
++
++	  If unsure, say N.
++
++config BCM_GRO_ENABLE
++	bool "Broadcom GRO Enable"
++	depends on ARCH_IPROC && (ET_NAPI_POLL || ET_NAPI2_POLL)
++	default n
++	help
++	  Enable Broadcom Generic Receive Offload
++
++	  If unsure, say N.
++
++endmenu
+diff --git a/drivers/bcmdrivers/Makefile b/drivers/bcmdrivers/Makefile
+new file mode 100755
+index 0000000..bbafe05
+--- /dev/null
++++ b/drivers/bcmdrivers/Makefile
+@@ -0,0 +1,28 @@
++# File: bcmdrivers/Makefile
++#
++# Makefile for the Linux kernel modules.
++#
++
++export BCMDRIVERS_DIR:=$(src)
++export DRIVERS_MMC_HOST_DIR := drivers/mmc/host/
++export DRIVERS_MTD_DIR := drivers/mtd/
++
++# The following must have config defined for each driver
++
++obj-y += timer/
++obj-y += mdio/
++obj-y += dma/
++obj-y += qspi/
++obj-y += nand/
++obj-y += pwm/
++obj-y += gpio/
++obj-y += wdt/
++obj-y += usb2h/
++obj-y += pcie/
++obj-$(CONFIG_ET) += gmac/et/
++obj-y += gmac/hnd/
++obj-y += smbus/
++
++obj-y += pmu/
++
++clean:
+diff --git a/drivers/bcmdrivers/include/Readme.txt b/drivers/bcmdrivers/include/Readme.txt
+new file mode 100644
+index 0000000..41eb87c
+--- /dev/null
++++ b/drivers/bcmdrivers/include/Readme.txt
+@@ -0,0 +1 @@
++Only shared api's or exported api's common files

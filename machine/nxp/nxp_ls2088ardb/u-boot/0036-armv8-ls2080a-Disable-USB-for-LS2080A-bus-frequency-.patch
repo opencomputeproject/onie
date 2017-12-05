@@ -1,0 +1,81 @@
+From f96ed6ff8032acaace3c050e8ad8cd3be71debd9 Mon Sep 17 00:00:00 2001
+From: Sriram Dash <sriram.dash@nxp.com>
+Date: Fri, 22 Apr 2016 14:37:14 +0800
+Subject: [PATCH 36/74] armv8/ls2080a: Disable USB for LS2080A bus frequency
+ 533 MHz
+
+commit d13d989a76735f3d795d32c4aadfaca799e27c6d
+[context adjustment]
+
+USB is unstable at 533 MHz for LS2080. Hence, disabling usb in linux
+if the bus frequency is 533 MHz.
+
+Signed-off-by: Sriram Dash <sriram.dash@nxp.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/fdt.c        | 30 ++++++++++++++++++++++++++
+ arch/arm/include/asm/arch-fsl-layerscape/fdt.h |  4 ++++
+ 2 files changed, 34 insertions(+)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/fdt.c b/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
+index fe451a6..ef4dc36 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
+@@ -21,6 +21,12 @@
+ #include <asm/arch/mp.h>
+ #endif
+ 
++#if defined(CONFIG_TARGET_LS2080ARDB) || defined(CONFIG_TARGET_LS2080AQDS)
++#include <asm/arch-fsl-layerscape/immap_lsch3.h>
++#include <asm/arch/speed.h>
++#define SYS_CLK_FREQ_533MHZ    533
++#endif
++
+ int fdt_fixup_phy_connection(void *blob, int offset, phy_interface_t phyc)
+ {
+ 	return fdt_setprop_string(blob, offset, "phy-connection-type",
+@@ -208,4 +214,28 @@ void ft_cpu_setup(void *blob, bd_t *bd)
+ #ifdef CONFIG_SYS_DPAA_FMAN
+ 	fdt_fixup_fman_firmware(blob);
+ #endif
++#if defined(CONFIG_TARGET_LS2080ARDB) || defined(CONFIG_TARGET_LS2080AQDS)
++	fdt_fixup_usb(blob);
++#endif
++
+ }
++
++#if defined(CONFIG_TARGET_LS2080ARDB) || defined(CONFIG_TARGET_LS2080AQDS)
++void fdt_fixup_usb(void *blob)
++{
++	int off;
++	uint sys_clk;
++	struct sys_info sysinfo;
++
++	get_sys_info(&sysinfo);
++	sys_clk = sysinfo.freq_systembus / 1000000;
++	if (SYS_CLK_FREQ_533MHZ == sys_clk) {
++		off = fdt_node_offset_by_compatible(blob, -1, "snps,dwc3");
++		while (off != -FDT_ERR_NOTFOUND) {
++			fdt_status_disabled(blob, off);
++			off = fdt_node_offset_by_compatible(blob, off,
++							    "snps,dwc3");
++		}
++	}
++}
++#endif
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/fdt.h b/arch/arm/include/asm/arch-fsl-layerscape/fdt.h
+index 4da73ab..0c79e35 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/fdt.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/fdt.h
+@@ -11,4 +11,8 @@ void alloc_stream_ids(int start_id, int count, u32 *stream_ids, int max_cnt);
+ void append_mmu_masters(void *blob, const char *smmu_path,
+ 			const char *master_name, u32 *stream_ids, int count);
+ void fdt_fixup_smmu_pcie(void *blob);
++#if defined(CONFIG_TARGET_LS2080ARDB) || defined(CONFIG_TARGET_LS2080AQDS)
++void fdt_fixup_usb(void *blob);
++#endif
++
+ #endif	/* _ASM_ARMV8_FSL_LAYERSCAPE_FDT_H_ */
+-- 
+2.1.0.27.g96db324
+

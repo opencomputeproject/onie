@@ -1,0 +1,627 @@
+From 203585145301445760561bb22929bcb8ad0bd36d Mon Sep 17 00:00:00 2001
+From: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+Date: Thu, 8 Sep 2016 15:26:05 +0800
+Subject: [PATCH 003/124] fsl/ls2088a: Add DTS support for FSL's LS2088A QDS
+ and RDB SoC
+
+commit 374ceb4591f227f5e835e67f0dd0cf3e42e2507f
+[context adjustment]
+
+This patch adds the device tree support for FSL LS2088A SoC based on
+ARMv8 architecture.
+
+Following levels of DTS files have been created for the LS2088A
+SoC family:
+
+     - fsl-ls2088a-qds.dts:
+            DTS file for FSL LS2088A QDS model.
+
+     - fsl-ls2088a-rdb.dts:
+            DTS file for FSL LS2088A RDB model.
+
+Signed-off-by: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+Integrated-by: Li Jingyu <jingyu.li@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/Makefile            |   3 +-
+ arch/arm64/boot/dts/freescale/fsl-ls2088a-qds.dts | 241 ++++++++++++++++++++++
+ arch/arm64/boot/dts/freescale/fsl-ls2088a-rdb.dts | 203 ++++++++++++++++++
+ kernel2088a-qds.its                               |  55 +++++
+ kernel2088a-rdb.its                               |  55 +++++
+ 5 files changed, 556 insertions(+), 1 deletion(-)
+ create mode 100644 arch/arm64/boot/dts/freescale/fsl-ls2088a-qds.dts
+ create mode 100644 arch/arm64/boot/dts/freescale/fsl-ls2088a-rdb.dts
+ create mode 100644 kernel2088a-qds.its
+ create mode 100644 kernel2088a-rdb.its
+
+diff --git a/arch/arm64/boot/dts/freescale/Makefile b/arch/arm64/boot/dts/freescale/Makefile
+index 7fa9216..af15b2c 100644
+--- a/arch/arm64/boot/dts/freescale/Makefile
++++ b/arch/arm64/boot/dts/freescale/Makefile
+@@ -1,4 +1,5 @@
+-dtb-$(CONFIG_ARCH_LAYERSCAPE) += fsl-ls2085a-simu.dtb fsl-ls2088a-emu.dtb fsl-ls2088a-simu.dtb
++dtb-$(CONFIG_ARCH_LAYERSCAPE) += fsl-ls2085a-simu.dtb fsl-ls2088a-emu.dtb fsl-ls2088a-simu.dtb \
++				fsl-ls2088a-qds.dtb fsl-ls2088a-rdb.dtb
+  
+ always		:= $(dtb-y)
+ subdir-y	:= $(dts-dirs)
+diff --git a/arch/arm64/boot/dts/freescale/fsl-ls2088a-qds.dts b/arch/arm64/boot/dts/freescale/fsl-ls2088a-qds.dts
+new file mode 100644
+index 0000000..f2c0cb1
+--- /dev/null
++++ b/arch/arm64/boot/dts/freescale/fsl-ls2088a-qds.dts
+@@ -0,0 +1,241 @@
++/*
++ * Device Tree file for Freescale LS2080a QDS Board
++ *
++ * Copyright (C) 2016, Freescale Semiconductor
++ *
++ * Abhimanyu Saini <abhimanyu.saini@nxp.com>
++ *
++ * This file is licensed under the terms of the GNU General Public
++ * License version 2.  This program is licensed "as is" without any
++ * warranty of any kind, whether express or implied.
++ */
++
++/dts-v1/;
++
++/include/ "fsl-ls2088a.dtsi"
++
++/ {
++	model = "Freescale Layerscape 2088a QDS Board";
++	compatible = "fsl,ls2088a-qds", "fsl,ls2088a";
++};
++
++&esdhc {
++	status = "okay";
++};
++
++&ifc {
++	status = "okay";
++	#address-cells = <2>;
++	#size-cells = <1>;
++	ranges = <0x0 0x0 0x5 0x80000000 0x08000000
++		  0x2 0x0 0x5 0x30000000 0x00010000
++		  0x3 0x0 0x5 0x20000000 0x00010000>;
++
++	nor@0,0 {
++	     #address-cells = <1>;
++	     #size-cells = <1>;
++	     compatible = "cfi-flash";
++	     reg = <0x0 0x0 0x8000000>;
++	     bank-width = <2>;
++	     device-width = <1>;
++	};
++
++	nand@2,0 {
++	     compatible = "fsl,ifc-nand";
++	     reg = <0x2 0x0 0x10000>;
++	};
++
++	cpld@3,0 {
++	     reg = <0x3 0x0 0x10000>;
++	     compatible = "fsl,ls2088a-qds-qixis", "fsl,ls2080a-qds-qixis",
++			  "fsl,fpga-qixis";
++	};
++};
++
++&ftm0 {
++	status = "okay";
++};
++
++&i2c0 {
++	status = "okay";
++	pca9547@77 {
++		compatible = "nxp,pca9547";
++		reg = <0x77>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++		i2c@0 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x00>;
++			rtc@68 {
++				compatible = "dallas,ds3232";
++				reg = <0x68>;
++			};
++		};
++
++		i2c@2 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x02>;
++
++			ina220@40 {
++				compatible = "ti,ina220";
++				reg = <0x40>;
++				shunt-resistor = <500>;
++			};
++			ina220@41 {
++				compatible = "ti,ina220";
++				reg = <0x41>;
++				shunt-resistor = <1000>;
++			};
++		};
++
++		i2c@3 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x3>;
++
++			adt7481@4c {
++				compatible = "adi,adt7461";
++				reg = <0x4c>;
++			};
++		};
++	};
++};
++
++&i2c1 {
++	status = "disabled";
++};
++
++&i2c2 {
++	status = "disabled";
++};
++
++&i2c3 {
++	status = "disabled";
++};
++
++&dspi {
++	status = "okay";
++	dflash0: n25q128a {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "st,m25p80";
++		spi-max-frequency = <3000000>;
++		reg = <0>;
++	};
++	dflash1: sst25wf040b {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "st,m25p80";
++		spi-max-frequency = <3000000>;
++		reg = <1>;
++	};
++	dflash2: en25s64 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "st,m25p80";
++		spi-max-frequency = <3000000>;
++		reg = <2>;
++	};
++};
++
++&qspi {
++	status = "okay";
++	qflash0: s25fs256s1@0 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "st,m25p80";
++		spi-max-frequency = <20000000>;
++		m25p,fast-read;
++		reg = <0>;
++	};
++
++	qflash2: s25fs256s1@2 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "st,m25p80";
++		spi-max-frequency = <20000000>;
++		m25p,fast-read;
++		reg = <2>;
++	};
++};
++
++&sata0 {
++	status = "okay";
++};
++
++&sata1 {
++	status = "okay";
++};
++
++&usb0 {
++	status = "okay";
++};
++
++&usb1 {
++	status = "okay";
++};
++
++&ifc {
++	boardctrl: board-control@3,0 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "fsl,tetra-fpga", "fsl,fpga-qixis", "simple-bus";
++		reg = <3 0 0x300>;		/* TODO check address */
++		ranges = <0 3 0 0x300>;
++
++		mdio_mux_emi1 {
++			compatible = "mdio-mux-mmioreg", "mdio-mux";
++			mdio-parent-bus = <&emdio1>;
++			reg = <0x54 1>;		/* BRDCFG4 */
++			mux-mask = <0xe0>;	/* EMI1_MDIO */
++
++			#address-cells=<1>;
++			#size-cells = <0>;
++
++			/* Child MDIO buses, one for each riser card:
++			   reg = 0x0, 0x20, 0x40, 0x60, 0x80, 0xa0.
++
++			   VSC8234 PHYs on the riser cards.
++			 */
++
++			mdio_mux3: mdio@60 {
++				reg = <0x60>;
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				mdio0_phy12: mdio_phy0@1c {
++					reg = <0x1c>;
++					phy-connection-type = "sgmii";
++				};
++				mdio0_phy13: mdio_phy1@1d {
++					reg = <0x1d>;
++					phy-connection-type = "sgmii";
++				};
++				mdio0_phy14: mdio_phy2@1e {
++					reg = <0x1e>;
++					phy-connection-type = "sgmii";
++				};
++				mdio0_phy15: mdio_phy3@1f {
++					reg = <0x1f>;
++					phy-connection-type = "sgmii";
++				};
++			};
++		};
++	};
++};
++
++/* Update DPMAC connections to external PHYs, under SerDes 0x2a_0x49. */
++&dpmac9 {
++	phy-handle = <&mdio0_phy12>;
++};
++&dpmac10 {
++	phy-handle = <&mdio0_phy13>;
++};
++&dpmac11 {
++	phy-handle = <&mdio0_phy14>;
++};
++&dpmac12 {
++	phy-handle = <&mdio0_phy15>;
++};
+diff --git a/arch/arm64/boot/dts/freescale/fsl-ls2088a-rdb.dts b/arch/arm64/boot/dts/freescale/fsl-ls2088a-rdb.dts
+new file mode 100644
+index 0000000..1994024
+--- /dev/null
++++ b/arch/arm64/boot/dts/freescale/fsl-ls2088a-rdb.dts
+@@ -0,0 +1,203 @@
++/*
++ * Device Tree file for Freescale LS2080a RDB board
++ *
++ * Copyright (C) 2015, Freescale Semiconductor
++ *
++ * Abhimanyu Saini <abhimanyu.saini@nxp.com>
++ *
++ * This file is licensed under the terms of the GNU General Public
++ * License version 2.  This program is licensed "as is" without any
++ * warranty of any kind, whether express or implied.
++ */
++
++/dts-v1/;
++
++/include/ "fsl-ls2088a.dtsi"
++
++/ {
++	model = "Freescale Layerscape 2088a RDB Board";
++	compatible = "fsl,ls2088a-rdb", "fsl,ls2088a";
++};
++
++&esdhc {
++	status = "okay";
++};
++
++&ifc {
++	status = "okay";
++	#address-cells = <2>;
++	#size-cells = <1>;
++	ranges = <0x0 0x0 0x5 0x80000000 0x08000000
++		  0x2 0x0 0x5 0x30000000 0x00010000
++		  0x3 0x0 0x5 0x20000000 0x00010000>;
++
++	nor@0,0 {
++	     #address-cells = <1>;
++	     #size-cells = <1>;
++	     compatible = "cfi-flash";
++	     reg = <0x0 0x0 0x8000000>;
++	     bank-width = <2>;
++	     device-width = <1>;
++	};
++
++	nand@2,0 {
++	     compatible = "fsl,ifc-nand";
++	     reg = <0x2 0x0 0x10000>;
++	};
++
++	cpld@3,0 {
++	     reg = <0x3 0x0 0x10000>;
++	     compatible = "fsl,ls2088a-qds-qixis", "fsl,ls2080a-qds-qixis",
++			  "fsl,fpga-qixis";
++	};
++};
++
++&ftm0 {
++	status = "okay";
++};
++
++&i2c0 {
++	status = "okay";
++	pca9547@75 {
++		compatible = "nxp,pca9547";
++		reg = <0x75>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++		i2c-mux-never-disable;
++		i2c@1 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x01>;
++			rtc@68 {
++				compatible = "dallas,ds3232";
++				reg = <0x68>;
++			};
++		};
++
++		i2c@3 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++			reg = <0x3>;
++
++			adt7481@4c {
++				compatible = "adi,adt7461";
++				reg = <0x4c>;
++			};
++		};
++	};
++};
++
++&i2c1 {
++	status = "disabled";
++};
++
++&i2c2 {
++	status = "disabled";
++};
++
++&i2c3 {
++	status = "disabled";
++};
++
++&dspi {
++	status = "okay";
++	dflash0: n25q512a {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "st,m25p80";
++		spi-max-frequency = <3000000>;
++		reg = <0>;
++	};
++};
++
++&qspi {
++	status = "disabled";
++};
++
++&sata0 {
++	status = "okay";
++};
++
++&sata1 {
++	status = "okay";
++};
++
++&usb0 {
++	status = "okay";
++};
++
++&usb1 {
++	status = "okay";
++};
++
++&emdio1 {
++	/* CS4340 PHYs */
++	mdio1_phy1: emdio1_phy@1 {
++		reg = <0x10>;
++		phy-connection-type = "xfi";
++	};
++	mdio1_phy2: emdio1_phy@2 {
++		reg = <0x11>;
++		phy-connection-type = "xfi";
++	};
++	mdio1_phy3: emdio1_phy@3 {
++		reg = <0x12>;
++		phy-connection-type = "xfi";
++	};
++	mdio1_phy4: emdio1_phy@4 {
++		reg = <0x13>;
++		phy-connection-type = "xfi";
++	};
++};
++
++&emdio2 {
++	/* AQR405 PHYs */
++	mdio2_phy1: emdio2_phy@1 {
++		compatible = "ethernet-phy-ieee802.3-c45";
++		reg = <0x0>;
++		phy-connection-type = "xfi";
++	};
++	mdio2_phy2: emdio2_phy@2 {
++		compatible = "ethernet-phy-ieee802.3-c45";
++		reg = <0x1>;
++		phy-connection-type = "xfi";
++	};
++	mdio2_phy3: emdio2_phy@3 {
++		compatible = "ethernet-phy-ieee802.3-c45";
++		reg = <0x2>;
++		phy-connection-type = "xfi";
++	};
++	mdio2_phy4: emdio2_phy@4 {
++		compatible = "ethernet-phy-ieee802.3-c45";
++		reg = <0x3>;
++		phy-connection-type = "xfi";
++	};
++};
++
++/* Update DPMAC connections to external PHYs, under the assumption of
++ * SerDes 0x2a_0x41. This is currently the only SerDes supported on the board.
++ */
++&dpmac1 {
++	phy-handle = <&mdio1_phy1>;
++};
++&dpmac2 {
++	phy-handle = <&mdio1_phy2>;
++};
++&dpmac3 {
++	phy-handle = <&mdio1_phy3>;
++};
++&dpmac4 {
++	phy-handle = <&mdio1_phy4>;
++};
++&dpmac5 {
++	phy-handle = <&mdio2_phy1>;
++};
++&dpmac6 {
++	phy-handle = <&mdio2_phy2>;
++};
++&dpmac7 {
++	phy-handle = <&mdio2_phy3>;
++};
++&dpmac8 {
++	phy-handle = <&mdio2_phy4>;
++};
+diff --git a/kernel2088a-qds.its b/kernel2088a-qds.its
+new file mode 100644
+index 0000000..4732954
+--- /dev/null
++++ b/kernel2088a-qds.its
+@@ -0,0 +1,55 @@
++/*
++ * Copyright (C) 2016, Freescale Semiconductor
++ *
++ * Abhimanyu Saini <abhimanyu.saini@nxp.com>
++ *
++ * This file is licensed under the terms of the GNU General Public
++ * License version 2.  This program is licensed "as is" without any
++ * warranty of any kind, whether express or implied.
++ */
++
++/dts-v1/;
++
++/ {
++	description = "QDS Image file for the LS2080A Linux Kernel";
++	#address-cells = <1>;
++
++	images {
++		kernel@1 {
++			description = "ARM64 Linux kernel";
++			data = /incbin/("./arch/arm64/boot/Image.gz");
++			type = "kernel";
++			arch = "arm64";
++			os = "linux";
++			compression = "gzip";
++			load = <0x80080000>;
++			entry = <0x80080000>;
++		};
++		fdt@1 {
++			description = "Flattened Device Tree blob";
++			data = /incbin/("./arch/arm64/boot/dts/freescale/fsl-ls2088a-qds.dtb");
++			type = "flat_dt";
++			arch = "arm64";
++			compression = "none";
++			load = <0x90000000>;
++		};
++		ramdisk@1 {
++			description = "LS2 Ramdisk";
++			data = /incbin/("./fsl-image-core-ls2088aqds.ext2.gz");
++			type = "ramdisk";
++			arch = "arm64";
++			os = "linux";
++			compression = "none";
++		};
++	};
++
++	configurations {
++		default = "config@1";
++		config@1 {
++			description = "Boot Linux kernel";
++			kernel = "kernel@1";
++			fdt = "fdt@1";
++			ramdisk = "ramdisk@1";
++		};
++	};
++};
+diff --git a/kernel2088a-rdb.its b/kernel2088a-rdb.its
+new file mode 100644
+index 0000000..151241f
+--- /dev/null
++++ b/kernel2088a-rdb.its
+@@ -0,0 +1,55 @@
++/*
++ * Copyright (C) 2016, Freescale Semiconductor
++ *
++ * Abhimanyu Saini <abhimanyu.saini@nxp.com>
++ *
++ * This file is licensed under the terms of the GNU General Public
++ * License version 2.  This program is licensed "as is" without any
++ * warranty of any kind, whether express or implied.
++ */
++
++/dts-v1/;
++
++/ {
++	description = "RDB Image file for the LS2080A Linux Kernel";
++	#address-cells = <1>;
++
++	images {
++		kernel@1 {
++			description = "ARM64 Linux kernel";
++			data = /incbin/("./arch/arm64/boot/Image.gz");
++			type = "kernel";
++			arch = "arm64";
++			os = "linux";
++			compression = "gzip";
++			load = <0x80080000>;
++			entry = <0x80080000>;
++		};
++		fdt@1 {
++			description = "Flattened Device Tree blob";
++			data = /incbin/("./arch/arm64/boot/dts/freescale/fsl-ls2088a-rdb.dtb");
++			type = "flat_dt";
++			arch = "arm64";
++			compression = "none";
++			load = <0x90000000>;
++		};
++		ramdisk@1 {
++			description = "LS2 Ramdisk";
++			data = /incbin/("./fsl-image-core-ls2088ardb.ext2.gz");
++			type = "ramdisk";
++			arch = "arm64";
++			os = "linux";
++			compression = "none";
++		};
++	};
++
++	configurations {
++		default = "config@1";
++		config@1 {
++			description = "Boot Linux kernel";
++			kernel = "kernel@1";
++			fdt = "fdt@1";
++			ramdisk = "ramdisk@1";
++		};
++	};
++};
+-- 
+2.1.0.27.g96db324
+

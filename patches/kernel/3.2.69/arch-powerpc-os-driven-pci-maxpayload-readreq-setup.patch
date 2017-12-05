@@ -1,0 +1,128 @@
+Have the OS set up all PCI device maxpayload and maxreadrequest on the PCIe bus
+
+Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+This version of the linux kernel doesn't do anything regarding the PCIe max
+payload size or read request size, but rather rely on BIOS to take care of
+things.  Upcoming versions of the kernel patch core PCI code in cool and useful
+ways, but there is a lot of flux, every version I've looked at has a different
+take on this.
+
+Rather than patching PCI core code, I've chosen to patch this in an arch
+dependent manner (powerpc only) that will not conflict with any work at the PCI
+core (redundant, but no functional or merge conflicts).  We can remove this
+patch once the PCI core code settles down.
+
+The patch works by walking the bus underneath each PCIe controller, querying
+PCI_EXP_DEVCAP_PAYLOAD, and finding the minimum value underneath each
+controller.  Then we walk though the same set of devices setting
+PCI_EXP_DEVCTL_PAYLOAD and PCI_EXP_DEVCTL_READRQ to this value.  The payloads
+are powers of 2 starting at 128...
+
+0 -> 128
+1 -> 256
+...
+7 -> 16,384
+
+diff --git a/arch/powerpc/kernel/pci-common.c b/arch/powerpc/kernel/pci-common.c
+index 6ce6a23..63c2ab1 100644
+--- a/arch/powerpc/kernel/pci-common.c
++++ b/arch/powerpc/kernel/pci-common.c
+@@ -1696,6 +1696,62 @@ struct device_node *pcibios_get_phb_of_node(struct pci_bus *bus)
+ 	return of_node_get(hose->dn);
+ }
+ 
++/*
++ * scan and set the PCIe bus payload and read request sizes.
++ */
++static int __devinit __fixup_pcie_scan_payload(struct pci_dev * pdev,
++						void * data)
++{
++	int * payload_size = data;
++	int rval, cap, payload_cap;
++	uint32_t devcap;
++
++	cap = pci_find_capability(pdev, PCI_CAP_ID_EXP);
++	if (cap == 0) {
++		return -ENODEV;
++	}
++
++	rval = pci_read_config_dword(pdev, cap + PCI_EXP_DEVCAP, &devcap);
++	if (rval) {
++		return rval;
++	}
++	payload_cap = devcap & PCI_EXP_DEVCAP_PAYLOAD;
++	if (payload_cap < *payload_size) {
++		*payload_size = payload_cap;
++	}
++	return 0;
++}
++
++static int __devinit __fixup_pcie_set_payload(struct pci_dev * pdev,
++					       void * data)
++{
++	int * payload_size = data;
++	int rval, cap;
++	uint16_t devctl;
++
++	cap = pci_find_capability(pdev, PCI_CAP_ID_EXP);
++	if (cap == 0) {
++		return -ENODEV;
++	}
++
++	rval = pci_read_config_word(pdev, cap + PCI_EXP_DEVCTL, &devctl);
++	if (rval) {
++		return rval;
++	}
++
++	devctl &= ~PCI_EXP_DEVCTL_PAYLOAD;
++	devctl |= *payload_size << 5;
++
++	devctl &= ~PCI_EXP_DEVCTL_READRQ;
++	devctl |= *payload_size << 12;
++
++	rval = pci_write_config_word(pdev, cap + PCI_EXP_DEVCTL, devctl);
++	if (rval) {
++		return rval;
++	}
++	return 0;
++}
++
+ /**
+  * pci_scan_phb - Given a pci_controller, setup and scan the PCI bus
+  * @hose: Pointer to the PCI host controller instance structure
+@@ -1705,6 +1761,7 @@ void __devinit pcibios_scan_phb(struct pci_controller *hose)
+ 	struct pci_bus *bus;
+ 	struct device_node *node = hose->dn;
+ 	int mode;
++	int payload_size;
+ 
+ 	pr_debug("PCI: Scanning PHB %s\n",
+ 		 node ? node->full_name : "<NO NAME>");
+@@ -1738,6 +1795,24 @@ void __devinit pcibios_scan_phb(struct pci_controller *hose)
+ 	if (mode == PCI_PROBE_NORMAL)
+ 		hose->last_busno = bus->subordinate = pci_scan_child_bus(bus);
+ 
++	/* Set the payload size for all devices on the bus */
++        payload_size = PCI_EXP_DEVCAP_PAYLOAD;
++	pci_walk_bus(hose->bus, __fixup_pcie_scan_payload, &payload_size);
++	if (payload_size < PCI_EXP_DEVCAP_PAYLOAD) {
++		pci_walk_bus(hose->bus, __fixup_pcie_set_payload, &payload_size);
++		dev_info(&hose->bus->dev,
++			 "Set PCIe payload and read request to %d\n",
++			 (payload_size == 0) ?    128 :
++			 (payload_size == 1) ?    256 :
++			 (payload_size == 2) ?    512 :
++			 (payload_size == 3) ?   1024 :
++			 (payload_size == 4) ?   2048 :
++			 (payload_size == 5) ?   4096 :
++			 (payload_size == 6) ?   8192 :
++						16384
++			);
++	}
++
+ 	/* Configure PCI Express settings */
+ 	if (bus && !pci_has_flag(PCI_PROBE_ONLY)) {
+ 		struct pci_bus *child;

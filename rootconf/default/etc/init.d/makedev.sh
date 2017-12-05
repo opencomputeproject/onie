@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -11,14 +11,15 @@
 PATH=/usr/bin:/usr/sbin:/bin:/sbin
 
 mount -t proc -o nodev,noexec,nosuid proc /proc
+mount -t devtmpfs devtmpfs /dev
 
 [ -e /dev/console ] || mknod -m 0600 /dev/console c 5 1
 [ -e /dev/null ] || mknod -m 0666 /dev/null c 1 3
 
 . /lib/onie/functions
 
-# Set console logging to show KERN_NOTICE and above
-echo "6 4 1 6" > /proc/sys/kernel/printk
+# Set console logging to show KERN_WARNING and above
+echo "5 4 1 5" > /proc/sys/kernel/printk
 
 ##
 ## Mount kernel virtual file systems, ala debian init script of the
@@ -89,26 +90,5 @@ for x in $mtds ; do
         ln -sf $dev /dev/mtd-$name
     fi
 done
-
-# create virtio block devices
-# Use the devices found in /sys/block
-vdevs=$(ls -d /sys/block/vd[a-z] 2&> /dev/null) && {
-    for d in $vdevs ; do
-        dev=$(basename $d)
-        major=$(sed -e 's/:.*$//' $d/dev)
-        rm -f /dev/$dev
-        mknod /dev/$dev b $major 0 || {
-            log_failure_msg "Problems creating /dev/$dev block device."
-            continue
-        }
-        for minor in $(seq 8) ; do
-            rm -f /dev/${dev}$minor
-            mknod /dev/${dev}$minor b $major $minor || {
-                log_failure_msg "Problems creating /dev/$dev block device."
-                continue
-            }
-        done
-    done
-}
 
 mkdir -p $ONIE_RUN_DIR

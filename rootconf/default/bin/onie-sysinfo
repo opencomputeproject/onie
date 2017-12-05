@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -65,19 +65,23 @@ get_part_num()
 
 get_ethaddr()
 {
-    
+
    if [ -n "$onie_eth_addr" ] ; then
        eth_addr="$onie_eth_addr"
-   fi
-   if [ -z "$eth_addr" ] ; then
-        if type get_ethaddr_platform | grep -q 'shell function' > /dev/null 2>&1 ; then
-            eth_addr=$(get_ethaddr_platform)
-        elif type get_ethaddr_arch | grep -q 'shell function' > /dev/null 2>&1 ; then
-            eth_addr=$(get_ethaddr_arch)
-        elif [ -r /sys/class/net/eth0/address ] ; then
-            # Print Ethernet address from eth0 interface
-            eth_addr=$(cat /sys/class/net/eth0/address)
-        fi
+   else
+       if [ "$onie_skip_ethmgmt_macs" = "no" ] ; then
+           if type get_ethaddr_platform | grep -q 'shell function' > /dev/null 2>&1 ; then
+               eth_addr=$(get_ethaddr_platform)
+           elif type get_ethaddr_arch | grep -q 'shell function' > /dev/null 2>&1 ; then
+               eth_addr=$(get_ethaddr_arch)
+           fi
+       fi
+       if [ -z "$eth_addr" ] ; then
+           if [ -r /sys/class/net/eth0/address ] ; then
+               # Print Ethernet address from eth0 interface
+               eth_addr=$(cat /sys/class/net/eth0/address)
+           fi
+       fi
     fi
 
     if [ -n "$eth_addr" ] ; then
@@ -91,7 +95,7 @@ get_ethaddr()
 [ -r $lib_dir/sysinfo-arch ]     && . $lib_dir/sysinfo-arch
 [ -r $lib_dir/sysinfo-platform ] && . $lib_dir/sysinfo-platform
 
-args="hsevimrpcfdatP"
+args="hsbSevimrpcfdatP"
 
 usage()
 {
@@ -121,6 +125,9 @@ COMMAND LINE OPTIONS
 	-i
 		ONIE vendor ID.  Print the ONIE vendor's IANA enterprise number.
 
+	-b
+		ONIE build machine string
+
 	-m
 		ONIE machine string
 
@@ -142,6 +149,9 @@ COMMAND LINE OPTIONS
 	-t
 		ONIE partition type
 
+	-S
+		ONIE silicon switch vendor
+
 	-a
 		Dump all information.
 EOF
@@ -151,6 +161,7 @@ sn=no
 mac=no
 version=no
 vendor_id=no
+build_machine=no
 machine=no
 machine_rev=no
 platform=no
@@ -159,6 +170,7 @@ arch=no
 config_version=no
 build_date=no
 partition_type=no
+switch_asic=no
 all=no
 
 [ $# -eq 0 ] && platform=yes
@@ -172,6 +184,9 @@ while getopts "$args" a ; do
         s)
             sn=yes
             ;;
+        S)
+            switch_asic=yes
+            ;;
         e)
             mac=yes
             ;;
@@ -180,6 +195,9 @@ while getopts "$args" a ; do
             ;;
         i)
             vendor_id=yes
+            ;;
+        b)
+            build_machine=yes
             ;;
         m)
             machine=yes
@@ -244,7 +262,9 @@ if [ "$mac" = "yes" ] || [ "$all" = "yes" ] ; then
     print_val $val
 fi
 
-for v in version vendor_id machine machine_rev platform arch config_version partition_type build_date ; do
+for v in version vendor_id build_machine machine \
+         machine_rev platform arch config_version \
+         partition_type build_date switch_asic ; do
     eval dump='$'$v
     if [ "$dump" = "yes" ] || [ "$all" = "yes" ] ; then
         eval val='$onie'_$v

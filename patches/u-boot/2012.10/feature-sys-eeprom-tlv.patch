@@ -1,0 +1,50 @@
+Add the 'hwinfo' command which read/writes board information from/to
+persistent storage (EEPROM or NOR flash) using a TLV format.
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2014 Srideep <srideep_devireddy@dell.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+diff --git a/arch/arm/lib/board.c b/arch/arm/lib/board.c
+index e413540..a3fd46f 100755
+--- a/arch/arm/lib/board.c
++++ b/arch/arm/lib/board.c
+@@ -564,6 +564,11 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	/* initialize environment */
+ 	env_relocate();
+ 
++#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET) || \
++    defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
++    mac_read_from_eeprom();
++#endif
++
+ #ifdef CONFIG_POPULATE_SERIAL_NUMBER
+     populate_serial_number();
+ #endif
+diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
+index d45edf9..5a5ae81 100644
+--- a/arch/powerpc/lib/board.c
++++ b/arch/powerpc/lib/board.c
+@@ -858,7 +858,8 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	sc3_read_eeprom();
+ #endif
+ 
+-#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET)
++#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET) || \
++    defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
+ 	mac_read_from_eeprom();
+ #endif
+ 
+diff --git a/common/Makefile b/common/Makefile
+index 973f05a..041aeb5 100644
+--- a/common/Makefile
++++ b/common/Makefile
+@@ -105,6 +105,7 @@ COBJS-$(CONFIG_CMD_FPGA) += cmd_fpga.o
+ endif
+ COBJS-$(CONFIG_CMD_GPIO) += cmd_gpio.o
+ COBJS-$(CONFIG_CMD_I2C) += cmd_i2c.o
++COBJS-$(CONFIG_CMD_SYS_EEPROM) += cmd_sys_eeprom.o
+ COBJS-$(CONFIG_CMD_IDE) += cmd_ide.o
+ COBJS-$(CONFIG_CMD_IMMAP) += cmd_immap.o
+ COBJS-$(CONFIG_CMD_INI) += cmd_ini.o

@@ -1,7 +1,7 @@
 ##
 ## Useful functions and variables for boot time.
 
-#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -9,9 +9,9 @@
 ## This assumes the shell is ash/dash.
 ##
 
-. /etc/machine.conf
+[ -r /etc/machine.conf ] && . /etc/machine.conf
 
-export onie_installer="/installer"
+export onie_installer="/var/tmp/installer"
 
 ONIE_RUN_DIR="/var/run/onie"
 
@@ -31,9 +31,32 @@ onie_default_filenames="\
 $onie_default_filename
 ${filename_prefix}-${onie_arch}-${onie_machine}
 ${filename_prefix}-${onie_machine}
+${filename_prefix}-${onie_arch}-${onie_switch_asic}
 ${filename_prefix}-${onie_arch}
 ${filename_prefix}
 "
+
+# Possible image suffixes.  A space separated list of suffixes to
+# append to the default file names during image discovery.
+onie_image_suffixes=".bin"
+
+# get_default_filenames() - function returning a space separated list
+# of default image file names, with the most specific file name first.
+get_default_filenames() {
+    local f
+    local s
+    local paths
+    for f in $onie_default_filenames ; do
+        paths="$paths $f"
+        for s in $onie_image_suffixes ; do
+            paths="$paths ${f}$s"
+        done
+    done
+    echo -n "$paths"
+}
+
+# Default ONIE server name
+onie_server_name="onie-server"
 
 syslog_onie="local0"
 syslog_tag="onie"
@@ -430,6 +453,39 @@ mac_add()
     done
     echo $b | cut -b 1-17
     return 0
+}
+
+# Magic cookie required to be present in the header of all ONIE update
+# images.
+onie_updater_cookie="ONIE-UPDATER-COOKIE"
+
+# ONIE image types
+onie_image_type_update="update"
+onie_image_type_nos="nos"
+
+# Return the type of installer image, either a firmware update or NOS
+# installer.
+get_image_type()
+{
+    # ONIE updater images *must* contain the string
+    # "ONIE-UPDATER-COOKIE" within the first 100 lines of the image.
+    if head -n 100 $1 | grep -q "$onie_updater_cookie" ; then
+        echo -n $onie_image_type_update
+    else
+        echo -n $onie_image_type_nos
+    fi
+}
+
+# Prompt the user for a yes/no confirmation question
+prompt_yes_no()
+{
+    msg_str="$1"
+    echo -n "$msg_str (y/N)? "
+    read ans
+    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+	return 0
+    fi
+    return 1
 }
 
 # Local Variables:

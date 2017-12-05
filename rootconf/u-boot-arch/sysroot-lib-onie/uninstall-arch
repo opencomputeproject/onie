@@ -1,0 +1,47 @@
+# U-Boot specific uninstall routine
+
+#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+[ -r "$lib_dir/onie-uninstaller-common" ] || {
+    echo "ERROR: Unable to find onie-uninstaller-common"
+    exit 1
+}
+. $lib_dir/onie-uninstaller-common
+
+uninstall_system()
+{
+
+    # erase open NOR flash region
+    if [ -h /dev/mtd-open ] ; then
+        printf "${log_pre}Erasing unused NOR flash region\n"
+        if [ "$onie_testing" != "y" ] ; then
+            flash_unlock /dev/mtd-open > /dev/null 2>&1
+            flash_erase /dev/mtd-open 0 0
+        fi
+    fi
+
+    # erase u-boot env NOR flash region
+    # do this even during testing
+    if [ -h /dev/mtd-uboot-env ] ; then
+        printf "${log_pre}Erasing u-boot environment NOR flash region\n"
+        flash_unlock /dev/mtd-uboot-env > /dev/null 2>&1
+        flash_erase /dev/mtd-uboot-env 0 0
+    fi
+
+    # erase fixed mass storage device
+    dt_prop="/proc/device-tree/mass_storage/device"
+    if [ -f "$dt_prop" ] ; then
+        device=$(cat "$dt_prop")
+	erase_mass_storage $device
+    fi
+
+    return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

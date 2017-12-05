@@ -1,0 +1,107 @@
+# Installer helpers for x86_64 architectures
+
+#  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+. /lib/onie/onie-blkdev-common
+
+# Log file for firmware updates
+max_log_lines=1000
+
+# Maximum number of attempts to install a firmware update.
+max_fw_attempts=5
+
+log_fw_update()
+{
+    ts=$(date +"%Y-%m-%d %T")
+    printf "ONIE: $@ \n" > /dev/console
+    # Keep log file below $max_log_lines
+    if [ -r "$onie_update_log" ] ; then
+        line_count="$(wc -l $onie_update_log | awk '{print $1}')"
+        if [ $line_count -gt $max_log_lines ] ; then
+            # keep half of $max_log_lines
+            tail -n "$(( $max_log_lines / 2 ))" ${onie_update_log} > ${onie_update_log}.tmp
+            mv ${onie_update_log}.tmp ${onie_update_log}
+        fi
+    fi
+    printf "$ts ONIE: $@ \n" >> $onie_update_log
+}
+
+#  After the update is complete, create a log of the update status
+#  result for later viewing.
+finish_update_install()
+{
+    local result="$1"
+    local URL="$2"
+    local update_image="$3"
+
+    local fw_update=no
+    if [ -r "$URL" ] ; then
+        # The update is a local file.
+        if [ "$(dirname $URL)" = "$onie_update_pending_dir" ] ; then
+            # Processing firmware update from pending directory
+            fw_update=yes
+        fi
+    fi
+
+    local update_name="$(basename $URL)"
+    local results_file="${onie_update_results_dir}/$update_name"
+    local attempts_file="${onie_update_attempts_dir}/$update_name"
+    local image_version="$(sh $update_image -qi | grep 'image_version=' | sed -e 's/image_version=//')"
+
+    # Dump information about the update process into the results file.
+    (cat <<EOF
+onie_update_status_code=$result
+onie_update_image_url=$URL
+$(sh $update_image -qi)
+EOF
+) > $results_file
+
+    if [ $result -eq 0 ] ; then
+        log_fw_update "Success: Firmware update URL: $URL"
+        log_fw_update "Success: Firmware update version: $image_version"
+        if [ "$fw_update" = "yes" ] ; then
+            # remove the pending update image and any past attempt file
+            rm -f $URL $attempts_file
+            # do not automatically reboot as there be more pending updates
+            return 0
+        else
+            # Legacy / ordinary post update handling
+            if [ -x /tmp/reboot-cmd ] ; then
+                log_console_msg "Calling update supplied reboot-cmd..."
+                /tmp/reboot-cmd
+                sleep 10
+            else
+                log_console_msg "Rebooting..."
+                reboot && return 0
+            fi
+        fi
+    else
+        log_fw_update "ERROR: Firmware update URL: $URL"
+        log_fw_update "ERROR: Firmware update version: $image_version"
+        if [ "$fw_update" = "yes" ] ; then
+            # Increment retry count
+            if [ -r "$attempts_file" ] ; then
+                attempts="$(cat $attempts_file)"
+            else
+                attempts=0
+            fi
+            attempts=$(( $attempts + 1 ))
+            if [ $attempts -ge $max_fw_attempts ] ; then
+                # remove the pending update to prevent further
+                # update attempts.
+                log_fw_update "ERROR: Firmware update failed $attempts attempts, removing update."
+                rm -f $URL $attempts_file
+            else
+                echo $attempts > $attempts_file
+            fi
+        fi
+    fi
+    return 1
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

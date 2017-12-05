@@ -2,6 +2,7 @@
 # MSX1400: CPU Module: Intel Core i7-3612QE
 
 ONIE_ARCH ?= x86_64
+SWITCH_ASIC_VENDOR = mlnx
 
 VENDOR_REV ?= 0
 
@@ -18,7 +19,9 @@ endif
 # Mellanox IANA number
 VENDOR_ID = 33049
 
+# Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
+I2CTOOLS_SYSEEPROM = yes
 
 export EXTRA_CMDLINE_LINUX := acpi_enforce_resources=no nmi_watchdog=0 $(EXTRA_CMDLINE_LINUX)
 
@@ -35,7 +38,8 @@ LINUX_MINOR_VERSION = 0-54.0.1.el7.x86_64
 
 LINUX_TARBALL = linux-3.10.0-54.0.1.el7.x86_64.tar.xz
 
-LINUX_CONFIG = conf/linux.x86_64.mellanox.config
+# Older GCC required for older 3.10 kernel
+GCC_VERSION = 4.9.2
 
 MELLANOX_PXE_UPDATER_STAMP   = $(STAMPDIR)/mellanox-pxe-updater-stamp
 MELLANOX_NETBOOT_PXE_UPDATER = $(IMAGEDIR)/mellanox_net_boot_label.sh

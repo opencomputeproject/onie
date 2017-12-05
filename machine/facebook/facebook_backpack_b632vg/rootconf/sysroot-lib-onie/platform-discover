@@ -1,0 +1,26 @@
+#
+#	Detect which type of card the Facebook Backpack COM-E is connected to.
+#	Possible return values in the platform variable are:
+#		xxxx = Unknown
+#		lc1l = Left half of a line card
+#		lc1r = Right half of a line card
+#		fab1 = Fabric card
+#
+backpack_card_detect()
+{
+	platform="xxxx"
+	local PART_NUM=$(/usr/bin/onie-syseeprom -g 0x22)
+	# Line card?
+	if [ "${PART_NUM}" = "20-001532" ] ; then
+		local FB_SIDE=$(/usr/bin/onie-syseeprom -g 0x27)
+		if [ "${FB_SIDE}" = "LEFT" ] ; then
+			platform="lc1l"
+		elif [ "${FB_SIDE}" = "RIGHT" ] ; then
+			platform="lc1r"
+		fi
+	# Fabric card?
+	elif [ "${PART_NUM}" = "20-001533" ] ; then
+		platform="fab1"
+	fi
+}
+

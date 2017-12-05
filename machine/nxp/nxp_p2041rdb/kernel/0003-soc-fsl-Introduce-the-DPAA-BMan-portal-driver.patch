@@ -1,0 +1,3310 @@
+From 4a22e9f52b9faf994afb9946eae7b11bb3ba05ff Mon Sep 17 00:00:00 2001
+From: Geoff Thorpe <Geoff.Thorpe@freescale.com>
+Date: Wed, 13 Mar 2013 04:08:11 -0500
+Subject: [PATCH 03/53] soc/fsl: Introduce the DPAA BMan portal driver
+
+Add support for Freescale DPAA 1.0 Buffer Manager portals. These portals
+allow software drivers for accelerators connected to the datapath to
+manage the hardware buffer pools.
+
+Signed-off-by: Geoff Thorpe <Geoff.Thorpe@freescale.com>
+Signed-off-by: Emil Medve <Emilian.Medve@Freescale.com>
+Signed-off-by: Roy Pledge <Roy.Pledge@freescale.com>
+---
+ drivers/soc/fsl/qbman/Kconfig         |    6 +
+ drivers/soc/fsl/qbman/Makefile        |    6 +
+ drivers/soc/fsl/qbman/bman.c          |    5 +-
+ drivers/soc/fsl/qbman/bman.h          |  542 +++++++++++++++++
+ drivers/soc/fsl/qbman/bman_api.c      | 1049 +++++++++++++++++++++++++++++++++
+ drivers/soc/fsl/qbman/bman_portal.c   |  351 +++++++++++
+ drivers/soc/fsl/qbman/bman_priv.h     |   81 +++
+ drivers/soc/fsl/qbman/bman_utils.c    |   72 +++
+ drivers/soc/fsl/qbman/dpaa_resource.c |  356 +++++++++++
+ drivers/soc/fsl/qbman/dpaa_sys.h      |  173 +++++-
+ include/soc/fsl/bman.h                |  518 ++++++++++++++++
+ 11 files changed, 3149 insertions(+), 10 deletions(-)
+ create mode 100644 drivers/soc/fsl/qbman/bman.h
+ create mode 100644 drivers/soc/fsl/qbman/bman_api.c
+ create mode 100644 drivers/soc/fsl/qbman/bman_portal.c
+ create mode 100644 drivers/soc/fsl/qbman/bman_utils.c
+ create mode 100644 drivers/soc/fsl/qbman/dpaa_resource.c
+ create mode 100644 include/soc/fsl/bman.h
+
+diff --git a/drivers/soc/fsl/qbman/Kconfig b/drivers/soc/fsl/qbman/Kconfig
+index be4ae01..9829b6f 100644
+--- a/drivers/soc/fsl/qbman/Kconfig
++++ b/drivers/soc/fsl/qbman/Kconfig
+@@ -22,4 +22,10 @@ config FSL_BMAN
+ 	help
+ 		FSL DPAA BMan driver
+ 
++config FSL_BMAN_PORTAL
++	tristate "BMan portal(s)"
++	default n
++	help
++		FSL BMan portal driver
++
+ endif # FSL_DPA
+diff --git a/drivers/soc/fsl/qbman/Makefile b/drivers/soc/fsl/qbman/Makefile
+index 02014d9..d5a595d 100644
+--- a/drivers/soc/fsl/qbman/Makefile
++++ b/drivers/soc/fsl/qbman/Makefile
+@@ -1 +1,7 @@
++# Common
++obj-$(CONFIG_FSL_DPA)				+= dpaa_resource.o
++
+ obj-$(CONFIG_FSL_BMAN)				+= bman.o
++obj-$(CONFIG_FSL_BMAN_PORTAL)			+= bman-portal.o
++bman-portal-y					 = bman_portal.o bman_api.o	\
++						   bman_utils.o
+diff --git a/drivers/soc/fsl/qbman/bman.c b/drivers/soc/fsl/qbman/bman.c
+index 9a500ce..d6e2204 100644
+--- a/drivers/soc/fsl/qbman/bman.c
++++ b/drivers/soc/fsl/qbman/bman.c
+@@ -165,11 +165,11 @@ static struct bman *bm_create(void *regs)
+ 
+ static inline u32 __bm_in(struct bman *bm, u32 offset)
+ {
+-	return in_be32((void *)bm + offset);
++	return ioread32be((void *)bm + offset);
+ }
+ static inline void __bm_out(struct bman *bm, u32 offset, u32 val)
+ {
+-	out_be32((void *)bm + offset, val);
++	iowrite32be(val, (void*) bm + offset);
+ }
+ #define bm_in(reg)		__bm_in(bm, REG_##reg)
+ #define bm_out(reg, val)	__bm_out(bm, REG_##reg, val)
+@@ -341,6 +341,7 @@ u32 bm_pool_free_buffers(u32 bpid)
+ {
+ 	return bm_in(POOL_CONTENT(bpid));
+ }
++EXPORT_SYMBOL(bm_pool_free_buffers);
+ 
+ static ssize_t show_fbpr_fpc(struct device *dev,
+ 	struct device_attribute *dev_attr, char *buf)
+diff --git a/drivers/soc/fsl/qbman/bman.h b/drivers/soc/fsl/qbman/bman.h
+new file mode 100644
+index 0000000..c987938
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/bman.h
+@@ -0,0 +1,542 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "bman_priv.h"
++
++extern u16 bman_pool_max;
++
++/***************************/
++/* Portal register assists */
++/***************************/
++
++/* Cache-inhibited register offsets */
++#define BM_REG_RCR_PI_CINH	0x0000
++#define BM_REG_RCR_CI_CINH	0x0004
++#define BM_REG_RCR_ITR		0x0008
++#define BM_REG_CFG		0x0100
++#define BM_REG_SCN(n)		(0x0200 + ((n) << 2))
++#define BM_REG_ISR		0x0e00
++#define BM_REG_IIR		0x0e0c
++
++/* Cache-enabled register offsets */
++#define BM_CL_CR		0x0000
++#define BM_CL_RR0		0x0100
++#define BM_CL_RR1		0x0140
++#define BM_CL_RCR		0x1000
++#define BM_CL_RCR_PI_CENA	0x3000
++#define BM_CL_RCR_CI_CENA	0x3100
++
++/* BTW, the drivers (and h/w programming model) already obtain the required
++ * synchronisation for portal accesses via lwsync(), hwsync(), and
++ * data-dependencies. Use of barrier()s or other order-preserving primitives
++ * simply degrade performance. Hence the use of the __raw_*() interfaces, which
++ * simply ensure that the compiler treats the portal registers as volatile (ie.
++ * non-coherent). */
++
++/* Cache-inhibited register access. */
++#define __bm_in(bm, o)		__raw_readl((bm)->addr_ci + (o))
++#define __bm_out(bm, o, val)	__raw_writel((val), (bm)->addr_ci + (o))
++#define bm_in(reg)		__bm_in(&portal->addr, BM_REG_##reg)
++#define bm_out(reg, val)	__bm_out(&portal->addr, BM_REG_##reg, val)
++
++/* Cache-enabled (index) register access */
++#define __bm_cl_touch_ro(bm, o) dcbt_ro((bm)->addr_ce + (o))
++#define __bm_cl_touch_rw(bm, o) dcbt_rw((bm)->addr_ce + (o))
++#define __bm_cl_in(bm, o)	__raw_readl((bm)->addr_ce + (o))
++#define __bm_cl_out(bm, o, val) \
++	do { \
++		u32 *__tmpclout = (bm)->addr_ce + (o); \
++		__raw_writel((val), __tmpclout); \
++		dcbf(__tmpclout); \
++	} while (0)
++#define __bm_cl_invalidate(bm, o) dcbi((bm)->addr_ce + (o))
++#define bm_cl_touch_ro(reg) __bm_cl_touch_ro(&portal->addr, BM_CL_##reg##_CENA)
++#define bm_cl_touch_rw(reg) __bm_cl_touch_rw(&portal->addr, BM_CL_##reg##_CENA)
++#define bm_cl_in(reg)	    __bm_cl_in(&portal->addr, BM_CL_##reg##_CENA)
++#define bm_cl_out(reg, val) __bm_cl_out(&portal->addr, BM_CL_##reg##_CENA, val)
++#define bm_cl_invalidate(reg)\
++	__bm_cl_invalidate(&portal->addr, BM_CL_##reg##_CENA)
++
++/* Cyclic helper for rings. FIXME: once we are able to do fine-grain perf
++ * analysis, look at using the "extra" bit in the ring index registers to avoid
++ * cyclic issues. */
++static inline u8 bm_cyc_diff(u8 ringsize, u8 first, u8 last)
++{
++	/* 'first' is included, 'last' is excluded */
++	if (first <= last)
++		return last - first;
++	return ringsize + last - first;
++}
++
++/* Portal modes.
++ *   Enum types;
++ *     pmode == production mode
++ *     cmode == consumption mode,
++ *   Enum values use 3 letter codes. First letter matches the portal mode,
++ *   remaining two letters indicate;
++ *     ci == cache-inhibited portal register
++ *     ce == cache-enabled portal register
++ *     vb == in-band valid-bit (cache-enabled)
++ */
++enum bm_rcr_pmode {		/* matches BCSP_CFG::RPM */
++	bm_rcr_pci = 0,		/* PI index, cache-inhibited */
++	bm_rcr_pce = 1,		/* PI index, cache-enabled */
++	bm_rcr_pvb = 2		/* valid-bit */
++};
++enum bm_rcr_cmode {		/* s/w-only */
++	bm_rcr_cci,		/* CI index, cache-inhibited */
++	bm_rcr_cce		/* CI index, cache-enabled */
++};
++
++
++/* --- Portal structures --- */
++
++#define BM_RCR_SIZE		8
++
++struct bm_rcr {
++	struct bm_rcr_entry *ring, *cursor;
++	u8 ci, available, ithresh, vbit;
++#ifdef CONFIG_FSL_DPA_CHECKING
++	u32 busy;
++	enum bm_rcr_pmode pmode;
++	enum bm_rcr_cmode cmode;
++#endif
++};
++
++struct bm_mc {
++	struct bm_mc_command *cr;
++	struct bm_mc_result *rr;
++	u8 rridx, vbit;
++#ifdef CONFIG_FSL_DPA_CHECKING
++	enum {
++		/* Can only be _mc_start()ed */
++		mc_idle,
++		/* Can only be _mc_commit()ed or _mc_abort()ed */
++		mc_user,
++		/* Can only be _mc_retry()ed */
++		mc_hw
++	} state;
++#endif
++};
++
++struct bm_addr {
++	void __iomem *addr_ce;	/* cache-enabled */
++	void __iomem *addr_ci;	/* cache-inhibited */
++};
++
++struct bm_portal {
++	struct bm_addr addr;
++	struct bm_rcr rcr;
++	struct bm_mc mc;
++	struct bm_portal_config config;
++} ____cacheline_aligned;
++
++/* --- RCR API --- */
++
++/* Bit-wise logic to wrap a ring pointer by clearing the "carry bit" */
++#define RCR_CARRYCLEAR(p) \
++	(void *)((unsigned long)(p) & (~(unsigned long)(BM_RCR_SIZE << 6)))
++
++/* Bit-wise logic to convert a ring pointer to a ring index */
++static inline u8 RCR_PTR2IDX(struct bm_rcr_entry *e)
++{
++	return ((uintptr_t)e >> 6) & (BM_RCR_SIZE - 1);
++}
++
++/* Increment the 'cursor' ring pointer, taking 'vbit' into account */
++static inline void RCR_INC(struct bm_rcr *rcr)
++{
++	/* NB: this is odd-looking, but experiments show that it generates
++	 * fast code with essentially no branching overheads. We increment to
++	 * the next RCR pointer and handle overflow and 'vbit'. */
++	struct bm_rcr_entry *partial = rcr->cursor + 1;
++
++	rcr->cursor = RCR_CARRYCLEAR(partial);
++	if (partial != rcr->cursor)
++		rcr->vbit ^= BM_RCR_VERB_VBIT;
++}
++
++static inline int bm_rcr_init(struct bm_portal *portal, enum bm_rcr_pmode pmode,
++		__maybe_unused enum bm_rcr_cmode cmode)
++{
++	/* This use of 'register', as well as all other occurrences, is because
++	 * it has been observed to generate much faster code with gcc than is
++	 * otherwise the case. */
++	register struct bm_rcr *rcr = &portal->rcr;
++	u32 cfg;
++	u8 pi;
++
++	rcr->ring = portal->addr.addr_ce + BM_CL_RCR;
++	rcr->ci = bm_in(RCR_CI_CINH) & (BM_RCR_SIZE - 1);
++	pi = bm_in(RCR_PI_CINH) & (BM_RCR_SIZE - 1);
++	rcr->cursor = rcr->ring + pi;
++	rcr->vbit = (bm_in(RCR_PI_CINH) & BM_RCR_SIZE) ?  BM_RCR_VERB_VBIT : 0;
++	rcr->available = BM_RCR_SIZE - 1
++		- bm_cyc_diff(BM_RCR_SIZE, rcr->ci, pi);
++	rcr->ithresh = bm_in(RCR_ITR);
++#ifdef CONFIG_FSL_DPA_CHECKING
++	rcr->busy = 0;
++	rcr->pmode = pmode;
++	rcr->cmode = cmode;
++#endif
++	cfg = (bm_in(CFG) & 0xffffffe0) | (pmode & 0x3); /* BCSP_CFG::RPM */
++	bm_out(CFG, cfg);
++	return 0;
++}
++
++static inline void bm_rcr_finish(struct bm_portal *portal)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++	u8 pi = bm_in(RCR_PI_CINH) & (BM_RCR_SIZE - 1);
++	u8 ci = bm_in(RCR_CI_CINH) & (BM_RCR_SIZE - 1);
++
++	DPA_ASSERT(!rcr->busy);
++	if (pi != RCR_PTR2IDX(rcr->cursor))
++		pr_crit("losing uncommited RCR entries\n");
++	if (ci != rcr->ci)
++		pr_crit("missing existing RCR completions\n");
++	if (rcr->ci != RCR_PTR2IDX(rcr->cursor))
++		pr_crit("RCR destroyed unquiesced\n");
++}
++
++static inline struct bm_rcr_entry *bm_rcr_start(struct bm_portal *portal)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++
++	DPA_ASSERT(!rcr->busy);
++	if (!rcr->available)
++		return NULL;
++#ifdef CONFIG_FSL_DPA_CHECKING
++	rcr->busy = 1;
++#endif
++	dcbz_64(rcr->cursor);
++	return rcr->cursor;
++}
++
++static inline void bm_rcr_abort(struct bm_portal *portal)
++{
++	__maybe_unused register struct bm_rcr *rcr = &portal->rcr;
++
++	DPA_ASSERT(rcr->busy);
++#ifdef CONFIG_FSL_DPA_CHECKING
++	rcr->busy = 0;
++#endif
++}
++
++static inline struct bm_rcr_entry *bm_rcr_pend_and_next(
++					struct bm_portal *portal, u8 myverb)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++
++	DPA_ASSERT(rcr->busy);
++	DPA_ASSERT(rcr->pmode != bm_rcr_pvb);
++	if (rcr->available == 1)
++		return NULL;
++	rcr->cursor->__dont_write_directly__verb = myverb | rcr->vbit;
++	dcbf_64(rcr->cursor);
++	RCR_INC(rcr);
++	rcr->available--;
++	dcbz_64(rcr->cursor);
++	return rcr->cursor;
++}
++
++static inline void bm_rcr_pci_commit(struct bm_portal *portal, u8 myverb)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++
++	DPA_ASSERT(rcr->busy);
++	DPA_ASSERT(rcr->pmode == bm_rcr_pci);
++	rcr->cursor->__dont_write_directly__verb = myverb | rcr->vbit;
++	RCR_INC(rcr);
++	rcr->available--;
++	hwsync();
++	bm_out(RCR_PI_CINH, RCR_PTR2IDX(rcr->cursor));
++#ifdef CONFIG_FSL_DPA_CHECKING
++	rcr->busy = 0;
++#endif
++}
++
++static inline void bm_rcr_pce_prefetch(struct bm_portal *portal)
++{
++	__maybe_unused register struct bm_rcr *rcr = &portal->rcr;
++
++	DPA_ASSERT(rcr->pmode == bm_rcr_pce);
++	bm_cl_invalidate(RCR_PI);
++	bm_cl_touch_rw(RCR_PI);
++}
++
++static inline void bm_rcr_pce_commit(struct bm_portal *portal, u8 myverb)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++
++	DPA_ASSERT(rcr->busy);
++	DPA_ASSERT(rcr->pmode == bm_rcr_pce);
++	rcr->cursor->__dont_write_directly__verb = myverb | rcr->vbit;
++	RCR_INC(rcr);
++	rcr->available--;
++	lwsync();
++	bm_cl_out(RCR_PI, RCR_PTR2IDX(rcr->cursor));
++#ifdef CONFIG_FSL_DPA_CHECKING
++	rcr->busy = 0;
++#endif
++}
++
++static inline void bm_rcr_pvb_commit(struct bm_portal *portal, u8 myverb)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++	struct bm_rcr_entry *rcursor;
++
++	DPA_ASSERT(rcr->busy);
++	DPA_ASSERT(rcr->pmode == bm_rcr_pvb);
++	lwsync();
++	rcursor = rcr->cursor;
++	rcursor->__dont_write_directly__verb = myverb | rcr->vbit;
++	dcbf_64(rcursor);
++	RCR_INC(rcr);
++	rcr->available--;
++#ifdef CONFIG_FSL_DPA_CHECKING
++	rcr->busy = 0;
++#endif
++}
++
++static inline u8 bm_rcr_cci_update(struct bm_portal *portal)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++	u8 diff, old_ci = rcr->ci;
++
++	DPA_ASSERT(rcr->cmode == bm_rcr_cci);
++	rcr->ci = bm_in(RCR_CI_CINH) & (BM_RCR_SIZE - 1);
++	diff = bm_cyc_diff(BM_RCR_SIZE, old_ci, rcr->ci);
++	rcr->available += diff;
++	return diff;
++}
++
++static inline void bm_rcr_cce_prefetch(struct bm_portal *portal)
++{
++	__maybe_unused register struct bm_rcr *rcr = &portal->rcr;
++
++	DPA_ASSERT(rcr->cmode == bm_rcr_cce);
++	bm_cl_touch_ro(RCR_CI);
++}
++
++static inline u8 bm_rcr_cce_update(struct bm_portal *portal)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++	u8 diff, old_ci = rcr->ci;
++
++	DPA_ASSERT(rcr->cmode == bm_rcr_cce);
++	rcr->ci = bm_cl_in(RCR_CI) & (BM_RCR_SIZE - 1);
++	bm_cl_invalidate(RCR_CI);
++	diff = bm_cyc_diff(BM_RCR_SIZE, old_ci, rcr->ci);
++	rcr->available += diff;
++	return diff;
++}
++
++static inline u8 bm_rcr_get_ithresh(struct bm_portal *portal)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++
++	return rcr->ithresh;
++}
++
++static inline void bm_rcr_set_ithresh(struct bm_portal *portal, u8 ithresh)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++
++	rcr->ithresh = ithresh;
++	bm_out(RCR_ITR, ithresh);
++}
++
++static inline u8 bm_rcr_get_avail(struct bm_portal *portal)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++
++	return rcr->available;
++}
++
++static inline u8 bm_rcr_get_fill(struct bm_portal *portal)
++{
++	register struct bm_rcr *rcr = &portal->rcr;
++
++	return BM_RCR_SIZE - 1 - rcr->available;
++}
++
++/* --- Management command API --- */
++
++static inline int bm_mc_init(struct bm_portal *portal)
++{
++	register struct bm_mc *mc = &portal->mc;
++
++	mc->cr = portal->addr.addr_ce + BM_CL_CR;
++	mc->rr = portal->addr.addr_ce + BM_CL_RR0;
++	mc->rridx = (__raw_readb(&mc->cr->__dont_write_directly__verb) &
++			BM_MCC_VERB_VBIT) ?  0 : 1;
++	mc->vbit = mc->rridx ? BM_MCC_VERB_VBIT : 0;
++#ifdef CONFIG_FSL_DPA_CHECKING
++	mc->state = mc_idle;
++#endif
++	return 0;
++}
++
++static inline void bm_mc_finish(struct bm_portal *portal)
++{
++	__maybe_unused register struct bm_mc *mc = &portal->mc;
++
++	DPA_ASSERT(mc->state == mc_idle);
++#ifdef CONFIG_FSL_DPA_CHECKING
++	if (mc->state != mc_idle)
++		pr_crit("Losing incomplete MC command\n");
++#endif
++}
++
++static inline struct bm_mc_command *bm_mc_start(struct bm_portal *portal)
++{
++	register struct bm_mc *mc = &portal->mc;
++
++	DPA_ASSERT(mc->state == mc_idle);
++#ifdef CONFIG_FSL_DPA_CHECKING
++	mc->state = mc_user;
++#endif
++	dcbz_64(mc->cr);
++	return mc->cr;
++}
++
++static inline void bm_mc_abort(struct bm_portal *portal)
++{
++	__maybe_unused register struct bm_mc *mc = &portal->mc;
++
++	DPA_ASSERT(mc->state == mc_user);
++#ifdef CONFIG_FSL_DPA_CHECKING
++	mc->state = mc_idle;
++#endif
++}
++
++static inline void bm_mc_commit(struct bm_portal *portal, u8 myverb)
++{
++	register struct bm_mc *mc = &portal->mc;
++	struct bm_mc_result *rr = mc->rr + mc->rridx;
++
++	DPA_ASSERT(mc->state == mc_user);
++	lwsync();
++	mc->cr->__dont_write_directly__verb = myverb | mc->vbit;
++	dcbf(mc->cr);
++	dcbit_ro(rr);
++#ifdef CONFIG_FSL_DPA_CHECKING
++	mc->state = mc_hw;
++#endif
++}
++
++static inline struct bm_mc_result *bm_mc_result(struct bm_portal *portal)
++{
++	register struct bm_mc *mc = &portal->mc;
++	struct bm_mc_result *rr = mc->rr + mc->rridx;
++
++	DPA_ASSERT(mc->state == mc_hw);
++	/* The inactive response register's verb byte always returns zero until
++	 * its command is submitted and completed. This includes the valid-bit,
++	 * in case you were wondering... */
++	if (!__raw_readb(&rr->verb)) {
++		dcbit_ro(rr);
++		return NULL;
++	}
++	mc->rridx ^= 1;
++	mc->vbit ^= BM_MCC_VERB_VBIT;
++#ifdef CONFIG_FSL_DPA_CHECKING
++	mc->state = mc_idle;
++#endif
++	return rr;
++}
++
++/* --- Portal interrupt register API --- */
++
++static inline int bm_isr_init(__always_unused struct bm_portal *portal)
++{
++	return 0;
++}
++
++static inline void bm_isr_finish(__always_unused struct bm_portal *portal)
++{
++}
++
++#define SCN_REG(bpid) BM_REG_SCN((bpid) / 32)
++#define SCN_BIT(bpid) (0x80000000 >> (bpid & 31))
++static inline void bm_isr_bscn_mask(struct bm_portal *portal, u8 bpid,
++					int enable)
++{
++	u32 val;
++
++	DPA_ASSERT(bpid < bman_pool_max);
++
++	/* REG_SCN for bpid=0..31, REG_SCN+4 for bpid=32..63 */
++	val = __bm_in(&portal->addr, SCN_REG(bpid));
++	if (enable)
++		val |= SCN_BIT(bpid);
++	else
++		val &= ~SCN_BIT(bpid);
++	__bm_out(&portal->addr, SCN_REG(bpid), val);
++}
++
++static inline u32 __bm_isr_read(struct bm_portal *portal, enum bm_isr_reg n)
++{
++	return __bm_in(&portal->addr, BM_REG_ISR + (n << 2));
++}
++
++static inline void __bm_isr_write(struct bm_portal *portal, enum bm_isr_reg n,
++					u32 val)
++{
++	__bm_out(&portal->addr, BM_REG_ISR + (n << 2), val);
++}
++
++/* Buffer Pool Cleanup */
++static inline int bm_shutdown_pool(struct bm_portal *p, u32 bpid)
++{
++	struct bm_mc_command *bm_cmd;
++	struct bm_mc_result *bm_res;
++	int aq_count = 0;
++	bool stop = false;
++
++	while (!stop) {
++		/* Acquire buffers until empty */
++		bm_cmd = bm_mc_start(p);
++		bm_cmd->acquire.bpid = bpid;
++		bm_mc_commit(p, BM_MCC_VERB_CMD_ACQUIRE |  1);
++		while (!(bm_res = bm_mc_result(p)))
++			cpu_relax();
++		if (!(bm_res->verb & BM_MCR_VERB_ACQUIRE_BUFCOUNT)) {
++			/* Pool is empty */
++			/* TBD : Should we do a few extra iterations in
++			   case some other some blocks keep buffers 'on deck',
++			   which may also be problematic */
++			stop = true;
++		} else
++			++aq_count;
++	}
++	return 0;
++}
+diff --git a/drivers/soc/fsl/qbman/bman_api.c b/drivers/soc/fsl/qbman/bman_api.c
+new file mode 100644
+index 0000000..7b84e26
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/bman_api.c
+@@ -0,0 +1,1049 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "bman.h"
++
++/* Compilation constants */
++#define RCR_THRESH	2	/* reread h/w CI when running out of space */
++#define IRQNAME		"BMan portal %d"
++#define MAX_IRQNAME	16	/* big enough for "BMan portal %d" */
++#define FSL_DPA_PORTAL_SHARE 1  /* Allow portals to be shared */
++
++struct bman_portal {
++	struct bm_portal p;
++	/* 2-element array. pools[0] is mask, pools[1] is snapshot. */
++	struct bman_depletion *pools;
++	int thresh_set;
++	unsigned long irq_sources;
++	u32 slowpoll;	/* only used when interrupts are off */
++#ifdef FSL_DPA_CAN_WAIT_SYNC
++	struct bman_pool *rcri_owned; /* only 1 release WAIT_SYNC at a time */
++#endif
++#ifdef FSL_DPA_PORTAL_SHARE
++	raw_spinlock_t sharing_lock; /* only used if is_shared */
++	int is_shared;
++	struct bman_portal *sharing_redirect;
++#endif
++	/* When the cpu-affine portal is activated, this is non-NULL */
++	const struct bm_portal_config *config;
++	/* 64-entry hash-table of pool objects that are tracking depletion
++	 * entry/exit (ie. BMAN_POOL_FLAG_DEPLETION). This isn't fast-path, so
++	 * we're not fussy about cache-misses and so forth - whereas the above
++	 * members should all fit in one cacheline.
++	 * BTW, with 64 entries in the hash table and 64 buffer pools to track,
++	 * you'll never guess the hash-function ... */
++	struct bman_pool *cb[64];
++	char irqname[MAX_IRQNAME];
++	/* Track if the portal was alloced by the driver */
++	u8 alloced;
++};
++
++#ifdef FSL_DPA_PORTAL_SHARE
++#define PORTAL_IRQ_LOCK(p, irqflags) \
++	do { \
++		if ((p)->is_shared) \
++			raw_spin_lock_irqsave(&(p)->sharing_lock, irqflags); \
++		else \
++			local_irq_save(irqflags); \
++	} while (0)
++#define PORTAL_IRQ_UNLOCK(p, irqflags) \
++	do { \
++		if ((p)->is_shared) \
++			raw_spin_unlock_irqrestore(&(p)->sharing_lock, \
++						   irqflags); \
++		else \
++			local_irq_restore(irqflags); \
++	} while (0)
++#else
++#define PORTAL_IRQ_LOCK(p, irqflags) local_irq_save(irqflags)
++#define PORTAL_IRQ_UNLOCK(p, irqflags) local_irq_restore(irqflags)
++#endif
++
++static cpumask_t affine_mask;
++static DEFINE_SPINLOCK(affine_mask_lock);
++static DEFINE_PER_CPU(struct bman_portal, bman_affine_portal);
++static inline struct bman_portal *get_raw_affine_portal(void)
++{
++	return &get_cpu_var(bman_affine_portal);
++}
++#ifdef FSL_DPA_PORTAL_SHARE
++static inline struct bman_portal *get_affine_portal(void)
++{
++	struct bman_portal *p = get_raw_affine_portal();
++
++	if (p->sharing_redirect)
++		return p->sharing_redirect;
++	return p;
++}
++#else
++#define get_affine_portal() get_raw_affine_portal()
++#endif
++static inline void put_affine_portal(void)
++{
++	put_cpu_var(bman_affine_portal);
++}
++static inline struct bman_portal *get_poll_portal(void)
++{
++	return this_cpu_ptr(&bman_affine_portal);
++}
++#define put_poll_portal()
++
++/* GOTCHA: this object type refers to a pool, it isn't *the* pool. There may be
++ * more than one such object per BMan buffer pool, eg. if different users of the
++ * pool are operating via different portals. */
++struct bman_pool {
++	struct bman_pool_params params;
++	/* Used for hash-table admin when using depletion notifications. */
++	struct bman_portal *portal;
++	struct bman_pool *next;
++	/* stockpile state - NULL unless BMAN_POOL_FLAG_STOCKPILE is set */
++	struct bm_buffer *sp;
++	unsigned int sp_fill;
++#ifdef CONFIG_FSL_DPA_CHECKING
++	atomic_t in_use;
++#endif
++};
++
++/* (De)Registration of depletion notification callbacks */
++static void depletion_link(struct bman_portal *portal, struct bman_pool *pool)
++{
++	__maybe_unused unsigned long irqflags;
++
++	pool->portal = portal;
++	PORTAL_IRQ_LOCK(portal, irqflags);
++	pool->next = portal->cb[pool->params.bpid];
++	portal->cb[pool->params.bpid] = pool;
++	if (!pool->next)
++		/* First object for that bpid on this portal, enable the BSCN
++		 * mask bit. */
++		bm_isr_bscn_mask(&portal->p, pool->params.bpid, 1);
++	PORTAL_IRQ_UNLOCK(portal, irqflags);
++}
++static void depletion_unlink(struct bman_pool *pool)
++{
++	struct bman_pool *it, *last = NULL;
++	struct bman_pool **base = &pool->portal->cb[pool->params.bpid];
++	__maybe_unused unsigned long irqflags;
++
++	PORTAL_IRQ_LOCK(pool->portal, irqflags);
++	it = *base;	/* <-- gotcha, don't do this prior to the irq_save */
++	while (it != pool) {
++		last = it;
++		it = it->next;
++	}
++	if (!last)
++		*base = pool->next;
++	else
++		last->next = pool->next;
++	if (!last && !pool->next) {
++		/* Last object for that bpid on this portal, disable the BSCN
++		 * mask bit. */
++		bm_isr_bscn_mask(&pool->portal->p, pool->params.bpid, 0);
++		/* And "forget" that we last saw this pool as depleted */
++		bman_depletion_unset(&pool->portal->pools[1],
++					pool->params.bpid);
++	}
++	PORTAL_IRQ_UNLOCK(pool->portal, irqflags);
++}
++
++/* In the case that the application's core loop calls
++ * bman_poll(), we ought to balance how often we incur the overheads of the
++ * slow-path poll. We'll use two decrementer sources. The idle decrementer
++ * constant is used when the last slow-poll detected no work to do, and the busy
++ * decrementer constant when the last slow-poll had work to do. */
++#define SLOW_POLL_IDLE 1000
++#define SLOW_POLL_BUSY 10
++static u32 __poll_portal_slow(struct bman_portal *p, u32 is);
++
++/* Portal interrupt handler */
++static irqreturn_t portal_isr(__always_unused int irq, void *ptr)
++{
++	struct bman_portal *p = ptr;
++	u32 clear = p->irq_sources;
++	u32 is = bm_isr_status_read(&p->p) & p->irq_sources;
++
++	clear |= __poll_portal_slow(p, is);
++	bm_isr_status_clear(&p->p, clear);
++	return IRQ_HANDLED;
++}
++
++
++struct bman_portal *bman_create_portal(
++				       struct bman_portal *portal,
++				       const struct bm_portal_config *config)
++{
++	struct bm_portal *__p;
++	const struct bman_depletion *pools = &config->public_cfg.mask;
++	int ret;
++	u8 bpid = 0;
++
++	if (!portal) {
++		portal = kmalloc(sizeof(*portal), GFP_KERNEL);
++		if (!portal)
++			return portal;
++		portal->alloced = 1;
++	} else
++		portal->alloced = 0;
++
++	__p = &portal->p;
++
++	/* prep the low-level portal struct with the mapped addresses from the
++	 * config, everything that follows depends on it and "config" is more
++	 * for (de)reference... */
++	__p->addr.addr_ce = config->addr_virt[DPA_PORTAL_CE];
++	__p->addr.addr_ci = config->addr_virt[DPA_PORTAL_CI];
++	if (bm_rcr_init(__p, bm_rcr_pvb, bm_rcr_cce)) {
++		pr_err("RCR initialisation failed\n");
++		goto fail_rcr;
++	}
++	if (bm_mc_init(__p)) {
++		pr_err("MC initialisation failed\n");
++		goto fail_mc;
++	}
++	if (bm_isr_init(__p)) {
++		pr_err("ISR initialisation failed\n");
++		goto fail_isr;
++	}
++	portal->pools = kmalloc(2 * sizeof(*pools), GFP_KERNEL);
++	if (!portal->pools)
++		goto fail_pools;
++	portal->pools[0] = *pools;
++	bman_depletion_init(portal->pools + 1);
++	while (bpid < bman_pool_max) {
++		/* Default to all BPIDs disabled, we enable as required at
++		 * run-time. */
++		bm_isr_bscn_mask(__p, bpid, 0);
++		bpid++;
++	}
++	portal->slowpoll = 0;
++#ifdef FSL_DPA_CAN_WAIT_SYNC
++	portal->rcri_owned = NULL;
++#endif
++#ifdef FSL_DPA_PORTAL_SHARE
++	raw_spin_lock_init(&portal->sharing_lock);
++	portal->is_shared = config->public_cfg.is_shared;
++	portal->sharing_redirect = NULL;
++#endif
++	memset(&portal->cb, 0, sizeof(portal->cb));
++	/* Write-to-clear any stale interrupt status bits */
++	bm_isr_disable_write(__p, 0xffffffff);
++	portal->irq_sources = 0;
++	bm_isr_enable_write(__p, portal->irq_sources);
++	bm_isr_status_clear(__p, 0xffffffff);
++	snprintf(portal->irqname, MAX_IRQNAME, IRQNAME, config->public_cfg.cpu);
++	if (request_irq(config->public_cfg.irq, portal_isr, 0, portal->irqname,
++			portal)) {
++		pr_err("request_irq() failed\n");
++		goto fail_irq;
++	}
++	if ((config->public_cfg.cpu != -1) &&
++			irq_can_set_affinity(config->public_cfg.irq) &&
++			irq_set_affinity(config->public_cfg.irq,
++				cpumask_of(config->public_cfg.cpu))) {
++		pr_err("irq_set_affinity() failed\n");
++		goto fail_affinity;
++	}
++
++	/* Need RCR to be empty before continuing */
++	ret = bm_rcr_get_fill(__p);
++	if (ret) {
++		pr_err("RCR unclean\n");
++		goto fail_rcr_empty;
++	}
++	/* Success */
++	portal->config = config;
++
++	bm_isr_disable_write(__p, 0);
++	bm_isr_uninhibit(__p);
++	return portal;
++fail_rcr_empty:
++fail_affinity:
++	free_irq(config->public_cfg.irq, portal);
++fail_irq:
++	kfree(portal->pools);
++fail_pools:
++	bm_isr_finish(__p);
++fail_isr:
++	bm_mc_finish(__p);
++fail_mc:
++	bm_rcr_finish(__p);
++fail_rcr:
++	if (portal->alloced)
++		kfree(portal);
++	return NULL;
++}
++
++struct bman_portal *bman_create_affine_portal(
++			const struct bm_portal_config *config)
++{
++	struct bman_portal *portal;
++
++	portal = &per_cpu(bman_affine_portal, config->public_cfg.cpu);
++	portal = bman_create_portal(portal, config);
++	if (portal) {
++		spin_lock(&affine_mask_lock);
++		cpumask_set_cpu(config->public_cfg.cpu, &affine_mask);
++		spin_unlock(&affine_mask_lock);
++	}
++	return portal;
++}
++
++
++struct bman_portal *bman_create_affine_slave(struct bman_portal *redirect,
++								int cpu)
++{
++#ifdef FSL_DPA_PORTAL_SHARE
++	struct bman_portal *p = &per_cpu(bman_affine_portal, cpu);
++
++	BUG_ON(p->config);
++	BUG_ON(p->is_shared);
++	BUG_ON(!redirect->config->public_cfg.is_shared);
++	p->irq_sources = 0;
++	p->sharing_redirect = redirect;
++	put_affine_portal();
++	return p;
++#else
++	BUG();
++	return NULL;
++#endif
++}
++
++void bman_destroy_portal(struct bman_portal *bm)
++{
++	const struct bm_portal_config *pcfg = bm->config;
++
++	bm_rcr_cce_update(&bm->p);
++	bm_rcr_cce_update(&bm->p);
++
++	free_irq(pcfg->public_cfg.irq, bm);
++
++	kfree(bm->pools);
++	bm_isr_finish(&bm->p);
++	bm_mc_finish(&bm->p);
++	bm_rcr_finish(&bm->p);
++	bm->config = NULL;
++	if (bm->alloced)
++		kfree(bm);
++}
++
++const struct bm_portal_config *bman_destroy_affine_portal(void)
++{
++	struct bman_portal *bm = get_raw_affine_portal();
++	const struct bm_portal_config *pcfg;
++
++#ifdef FSL_DPA_PORTAL_SHARE
++	if (bm->sharing_redirect) {
++		bm->sharing_redirect = NULL;
++		put_affine_portal();
++		return NULL;
++	}
++	bm->is_shared = 0;
++#endif
++	pcfg = bm->config;
++	bman_destroy_portal(bm);
++	spin_lock(&affine_mask_lock);
++	cpumask_clear_cpu(pcfg->public_cfg.cpu, &affine_mask);
++	spin_unlock(&affine_mask_lock);
++	put_affine_portal();
++	return pcfg;
++}
++
++/* When release logic waits on available RCR space, we need a global waitqueue
++ * in the case of "affine" use (as the waits wake on different cpus which means
++ * different portals - so we can't wait on any per-portal waitqueue). */
++static DECLARE_WAIT_QUEUE_HEAD(affine_queue);
++
++static u32 __poll_portal_slow(struct bman_portal *p, u32 is)
++{
++	struct bman_depletion tmp;
++	u32 ret = is;
++
++	/* There is a gotcha to be aware of. If we do the query before clearing
++	 * the status register, we may miss state changes that occur between the
++	 * two. If we write to clear the status register before the query, the
++	 * cache-enabled query command may overtake the status register write
++	 * unless we use a heavyweight sync (which we don't want). Instead, we
++	 * write-to-clear the status register then *read it back* before doing
++	 * the query, hence the odd while loop with the 'is' accumulation. */
++	if (is & BM_PIRQ_BSCN) {
++		struct bm_mc_result *mcr;
++		__maybe_unused unsigned long irqflags;
++		unsigned int i, j;
++		u32 __is;
++
++		bm_isr_status_clear(&p->p, BM_PIRQ_BSCN);
++		while ((__is = bm_isr_status_read(&p->p)) & BM_PIRQ_BSCN) {
++			is |= __is;
++			bm_isr_status_clear(&p->p, BM_PIRQ_BSCN);
++		}
++		is &= ~BM_PIRQ_BSCN;
++		PORTAL_IRQ_LOCK(p, irqflags);
++		bm_mc_start(&p->p);
++		bm_mc_commit(&p->p, BM_MCC_VERB_CMD_QUERY);
++		while (!(mcr = bm_mc_result(&p->p)))
++			cpu_relax();
++		tmp = mcr->query.ds.state;
++		PORTAL_IRQ_UNLOCK(p, irqflags);
++		for (i = 0; i < 2; i++) {
++			int idx = i * 32;
++			/* tmp is a mask of currently-depleted pools.
++			 * pools[0] is mask of those we care about.
++			 * pools[1] is our previous view (we only want to
++			 * be told about changes). */
++			tmp.__state[i] &= p->pools[0].__state[i];
++			if (tmp.__state[i] == p->pools[1].__state[i])
++				/* fast-path, nothing to see, move along */
++				continue;
++			for (j = 0; j <= 31; j++, idx++) {
++				struct bman_pool *pool = p->cb[idx];
++				int b4 = bman_depletion_get(&p->pools[1], idx);
++				int af = bman_depletion_get(&tmp, idx);
++
++				if (b4 == af)
++					continue;
++				while (pool) {
++					pool->params.cb(p, pool,
++						pool->params.cb_ctx, af);
++					pool = pool->next;
++				}
++			}
++		}
++		p->pools[1] = tmp;
++	}
++
++	if (is & BM_PIRQ_RCRI) {
++		__maybe_unused unsigned long irqflags;
++
++		PORTAL_IRQ_LOCK(p, irqflags);
++		bm_rcr_cce_update(&p->p);
++#ifdef FSL_DPA_CAN_WAIT_SYNC
++		/* If waiting for sync, we only cancel the interrupt threshold
++		 * when the ring utilisation hits zero. */
++		if (p->rcri_owned) {
++			if (!bm_rcr_get_fill(&p->p)) {
++				p->rcri_owned = NULL;
++				bm_rcr_set_ithresh(&p->p, 0);
++			}
++		} else
++#endif
++		bm_rcr_set_ithresh(&p->p, 0);
++		PORTAL_IRQ_UNLOCK(p, irqflags);
++		wake_up(&affine_queue);
++		bm_isr_status_clear(&p->p, BM_PIRQ_RCRI);
++		is &= ~BM_PIRQ_RCRI;
++	}
++
++	/* There should be no status register bits left undefined */
++	DPA_ASSERT(!is);
++	return ret;
++}
++
++const struct bman_portal_config *bman_get_portal_config(void)
++{
++	struct bman_portal *p = get_affine_portal();
++	const struct bman_portal_config *ret = &p->config->public_cfg;
++
++	put_affine_portal();
++	return ret;
++}
++EXPORT_SYMBOL(bman_get_portal_config);
++
++u32 bman_irqsource_get(void)
++{
++	struct bman_portal *p = get_raw_affine_portal();
++	u32 ret = p->irq_sources & BM_PIRQ_VISIBLE;
++
++	put_affine_portal();
++	return ret;
++}
++EXPORT_SYMBOL(bman_irqsource_get);
++
++int bman_p_irqsource_add(struct bman_portal *p, __maybe_unused u32 bits)
++{
++	__maybe_unused unsigned long irqflags;
++
++#ifdef FSL_DPA_PORTAL_SHARE
++	if (p->sharing_redirect)
++		return -EINVAL;
++#endif
++	PORTAL_IRQ_LOCK(p, irqflags);
++	set_bits(bits & BM_PIRQ_VISIBLE, &p->irq_sources);
++	bm_isr_enable_write(&p->p, p->irq_sources);
++	PORTAL_IRQ_UNLOCK(p, irqflags);
++	return 0;
++}
++EXPORT_SYMBOL(bman_p_irqsource_add);
++
++int bman_irqsource_add(__maybe_unused u32 bits)
++{
++	struct bman_portal *p = get_raw_affine_portal();
++	int ret = bman_p_irqsource_add(p, bits);
++
++	put_affine_portal();
++	return ret;
++}
++EXPORT_SYMBOL(bman_irqsource_add);
++
++int bman_irqsource_remove(u32 bits)
++{
++	struct bman_portal *p = get_raw_affine_portal();
++	__maybe_unused unsigned long irqflags;
++	u32 ier;
++
++#ifdef FSL_DPA_PORTAL_SHARE
++	if (p->sharing_redirect) {
++		put_affine_portal();
++		return -EINVAL;
++	}
++#endif
++	/* Our interrupt handler only processes+clears status register bits that
++	 * are in p->irq_sources. As we're trimming that mask, if one of them
++	 * were to assert in the status register just before we remove it from
++	 * the enable register, there would be an interrupt-storm when we
++	 * release the IRQ lock. So we wait for the enable register update to
++	 * take effect in h/w (by reading it back) and then clear all other bits
++	 * in the status register. Ie. we clear them from ISR once it's certain
++	 * IER won't allow them to reassert. */
++	PORTAL_IRQ_LOCK(p, irqflags);
++	bits &= BM_PIRQ_VISIBLE;
++	clear_bits(bits, &p->irq_sources);
++	bm_isr_enable_write(&p->p, p->irq_sources);
++	ier = bm_isr_enable_read(&p->p);
++	/* Using "~ier" (rather than "bits" or "~p->irq_sources") creates a
++	 * data-dependency, ie. to protect against re-ordering. */
++	bm_isr_status_clear(&p->p, ~ier);
++	PORTAL_IRQ_UNLOCK(p, irqflags);
++	put_affine_portal();
++	return 0;
++}
++EXPORT_SYMBOL(bman_irqsource_remove);
++
++const cpumask_t *bman_affine_cpus(void)
++{
++	return &affine_mask;
++}
++EXPORT_SYMBOL(bman_affine_cpus);
++
++u32 bman_poll_slow(void)
++{
++	struct bman_portal *p = get_poll_portal();
++	u32 ret;
++
++#ifdef FSL_DPA_PORTAL_SHARE
++	if (unlikely(p->sharing_redirect))
++		ret = (u32)-1;
++	else
++#endif
++	{
++		u32 is = bm_isr_status_read(&p->p) & ~p->irq_sources;
++
++		ret = __poll_portal_slow(p, is);
++		bm_isr_status_clear(&p->p, ret);
++	}
++	put_poll_portal();
++	return ret;
++}
++EXPORT_SYMBOL(bman_poll_slow);
++
++/* Legacy wrapper */
++void bman_poll(void)
++{
++	struct bman_portal *p = get_poll_portal();
++
++#ifdef FSL_DPA_PORTAL_SHARE
++	if (unlikely(p->sharing_redirect))
++		goto done;
++#endif
++	if (!(p->slowpoll--)) {
++		u32 is = bm_isr_status_read(&p->p) & ~p->irq_sources;
++		u32 active = __poll_portal_slow(p, is);
++
++		if (active)
++			p->slowpoll = SLOW_POLL_BUSY;
++		else
++			p->slowpoll = SLOW_POLL_IDLE;
++	}
++#ifdef FSL_DPA_PORTAL_SHARE
++done:
++#endif
++	put_poll_portal();
++}
++EXPORT_SYMBOL(bman_poll);
++
++static const u32 zero_thresholds[4] = {0, 0, 0, 0};
++
++struct bman_pool *bman_new_pool(const struct bman_pool_params *params)
++{
++	struct bman_pool *pool = NULL;
++	u32 bpid;
++
++	if (params->flags & BMAN_POOL_FLAG_DYNAMIC_BPID) {
++		if (bman_alloc_bpid(&bpid))
++			return NULL;
++	} else {
++		if (params->bpid >= bman_pool_max)
++			return NULL;
++		bpid = params->bpid;
++	}
++#ifdef CONFIG_FSL_BMAN
++	if (params->flags & BMAN_POOL_FLAG_THRESH) {
++		if (bm_pool_set(bpid, params->thresholds))
++			goto err;
++	}
++#else
++	if (params->flags & BMAN_POOL_FLAG_THRESH)
++		goto err;
++#endif
++	pool = kmalloc(sizeof(*pool), GFP_KERNEL);
++	if (!pool)
++		goto err;
++	pool->sp = NULL;
++	pool->sp_fill = 0;
++	pool->params = *params;
++#ifdef CONFIG_FSL_DPA_CHECKING
++	atomic_set(&pool->in_use, 1);
++#endif
++	if (params->flags & BMAN_POOL_FLAG_DYNAMIC_BPID)
++		pool->params.bpid = bpid;
++	if (params->flags & BMAN_POOL_FLAG_STOCKPILE) {
++		pool->sp = kmalloc(sizeof(struct bm_buffer) * BMAN_STOCKPILE_SZ,
++					GFP_KERNEL);
++		if (!pool->sp)
++			goto err;
++	}
++	if (pool->params.flags & BMAN_POOL_FLAG_DEPLETION) {
++		struct bman_portal *p = get_affine_portal();
++
++		if (!p->pools || !bman_depletion_get(&p->pools[0], bpid)) {
++			pr_err("Depletion events disabled for bpid %d\n", bpid);
++			goto err;
++		}
++		depletion_link(p, pool);
++		put_affine_portal();
++	}
++	return pool;
++err:
++#ifdef CONFIG_FSL_BMAN
++	if (params->flags & BMAN_POOL_FLAG_THRESH)
++		bm_pool_set(bpid, zero_thresholds);
++#endif
++	if (params->flags & BMAN_POOL_FLAG_DYNAMIC_BPID)
++		bman_release_bpid(bpid);
++	if (pool) {
++		kfree(pool->sp);
++		kfree(pool);
++	}
++	return NULL;
++}
++EXPORT_SYMBOL(bman_new_pool);
++
++void bman_free_pool(struct bman_pool *pool)
++{
++#ifdef CONFIG_FSL_BMAN
++	if (pool->params.flags & BMAN_POOL_FLAG_THRESH)
++		bm_pool_set(pool->params.bpid, zero_thresholds);
++#endif
++	if (pool->params.flags & BMAN_POOL_FLAG_DEPLETION)
++		depletion_unlink(pool);
++	if (pool->params.flags & BMAN_POOL_FLAG_STOCKPILE) {
++		if (pool->sp_fill)
++			pr_err("Stockpile not flushed, has %u in bpid %u.\n",
++				pool->sp_fill, pool->params.bpid);
++		kfree(pool->sp);
++		pool->sp = NULL;
++		pool->params.flags ^= BMAN_POOL_FLAG_STOCKPILE;
++	}
++	if (pool->params.flags & BMAN_POOL_FLAG_DYNAMIC_BPID)
++		bman_release_bpid(pool->params.bpid);
++	kfree(pool);
++}
++EXPORT_SYMBOL(bman_free_pool);
++
++const struct bman_pool_params *bman_get_params(const struct bman_pool *pool)
++{
++	return &pool->params;
++}
++EXPORT_SYMBOL(bman_get_params);
++
++static noinline void update_rcr_ci(struct bman_portal *p, u8 avail)
++{
++	if (avail)
++		bm_rcr_cce_prefetch(&p->p);
++	else
++		bm_rcr_cce_update(&p->p);
++}
++
++int bman_rcr_is_empty(void)
++{
++	__maybe_unused unsigned long irqflags;
++	struct bman_portal *p = get_affine_portal();
++	u8 avail;
++
++	PORTAL_IRQ_LOCK(p, irqflags);
++	update_rcr_ci(p, 0);
++	avail = bm_rcr_get_fill(&p->p);
++	PORTAL_IRQ_UNLOCK(p, irqflags);
++	put_affine_portal();
++	return avail == 0;
++}
++EXPORT_SYMBOL(bman_rcr_is_empty);
++
++static inline struct bm_rcr_entry *try_rel_start(struct bman_portal **p,
++#ifdef FSL_DPA_CAN_WAIT
++					__maybe_unused struct bman_pool *pool,
++#endif
++					__maybe_unused unsigned long *irqflags,
++					__maybe_unused u32 flags)
++{
++	struct bm_rcr_entry *r;
++	u8 avail;
++
++	*p = get_affine_portal();
++	PORTAL_IRQ_LOCK(*p, (*irqflags));
++#ifdef FSL_DPA_CAN_WAIT_SYNC
++	if (unlikely((flags & BMAN_RELEASE_FLAG_WAIT) &&
++			(flags & BMAN_RELEASE_FLAG_WAIT_SYNC))) {
++		if ((*p)->rcri_owned) {
++			PORTAL_IRQ_UNLOCK(*p, (*irqflags));
++			put_affine_portal();
++			return NULL;
++		}
++		(*p)->rcri_owned = pool;
++	}
++#endif
++	avail = bm_rcr_get_avail(&(*p)->p);
++	if (avail < 2)
++		update_rcr_ci(*p, avail);
++	r = bm_rcr_start(&(*p)->p);
++	if (unlikely(!r)) {
++#ifdef FSL_DPA_CAN_WAIT_SYNC
++		if (unlikely((flags & BMAN_RELEASE_FLAG_WAIT) &&
++				(flags & BMAN_RELEASE_FLAG_WAIT_SYNC)))
++			(*p)->rcri_owned = NULL;
++#endif
++		PORTAL_IRQ_UNLOCK(*p, (*irqflags));
++		put_affine_portal();
++	}
++	return r;
++}
++
++#ifdef FSL_DPA_CAN_WAIT
++static noinline struct bm_rcr_entry *__wait_rel_start(struct bman_portal **p,
++					struct bman_pool *pool,
++					__maybe_unused unsigned long *irqflags,
++					u32 flags)
++{
++	struct bm_rcr_entry *rcr = try_rel_start(p, pool, irqflags, flags);
++
++	if (!rcr)
++		bm_rcr_set_ithresh(&(*p)->p, 1);
++	return rcr;
++}
++
++static noinline struct bm_rcr_entry *wait_rel_start(struct bman_portal **p,
++					struct bman_pool *pool,
++					__maybe_unused unsigned long *irqflags,
++					u32 flags)
++{
++	struct bm_rcr_entry *rcr;
++#ifndef FSL_DPA_CAN_WAIT_SYNC
++	pool = NULL;
++#endif
++	if (flags & BMAN_RELEASE_FLAG_WAIT_INT)
++		wait_event_interruptible(affine_queue,
++			(rcr = __wait_rel_start(p, pool, irqflags, flags)));
++	else
++		wait_event(affine_queue,
++			(rcr = __wait_rel_start(p, pool, irqflags, flags)));
++	return rcr;
++}
++#endif
++
++/* to facilitate better copying of bufs into the ring without either (a) copying
++ * noise into the first byte (prematurely triggering the command), nor (b) being
++ * very inefficient by copying small fields using read-modify-write */
++struct overlay_bm_buffer {
++	u32 first;
++	u32 second;
++};
++
++static inline int __bman_release(struct bman_pool *pool,
++			const struct bm_buffer *bufs, u8 num, u32 flags)
++{
++	struct bman_portal *p;
++	struct bm_rcr_entry *r;
++	struct overlay_bm_buffer *o_dest;
++	struct overlay_bm_buffer *o_src = (struct overlay_bm_buffer *)&bufs[0];
++	__maybe_unused unsigned long irqflags;
++	u32 i = num - 1;
++
++#ifdef FSL_DPA_CAN_WAIT
++	if (flags & BMAN_RELEASE_FLAG_WAIT)
++		r = wait_rel_start(&p, pool, &irqflags, flags);
++	else
++		r = try_rel_start(&p, pool, &irqflags, flags);
++#else
++	r = try_rel_start(&p, &irqflags, flags);
++#endif
++	if (!r)
++		return -EBUSY;
++	/* We can copy all but the first entry, as this can trigger badness
++	 * with the valid-bit. Use the overlay to mask the verb byte. */
++	o_dest = (struct overlay_bm_buffer *)&r->bufs[0];
++	o_dest->first = (o_src->first & 0x0000ffff) |
++		(((u32)pool->params.bpid << 16) & 0x00ff0000);
++	o_dest->second = o_src->second;
++	if (i)
++		copy_words(&r->bufs[1], &bufs[1], i * sizeof(bufs[0]));
++	bm_rcr_pvb_commit(&p->p, BM_RCR_VERB_CMD_BPID_SINGLE |
++			(num & BM_RCR_VERB_BUFCOUNT_MASK));
++#ifdef FSL_DPA_CAN_WAIT_SYNC
++	/* if we wish to sync we need to set the threshold after h/w sees the
++	 * new ring entry. As we're mixing cache-enabled and cache-inhibited
++	 * accesses, this requires a heavy-weight sync. */
++	if (unlikely((flags & BMAN_RELEASE_FLAG_WAIT) &&
++			(flags & BMAN_RELEASE_FLAG_WAIT_SYNC))) {
++		hwsync();
++		bm_rcr_set_ithresh(&p->p, 1);
++	}
++#endif
++	PORTAL_IRQ_UNLOCK(p, irqflags);
++	put_affine_portal();
++#ifdef FSL_DPA_CAN_WAIT_SYNC
++	if (unlikely((flags & BMAN_RELEASE_FLAG_WAIT) &&
++			(flags & BMAN_RELEASE_FLAG_WAIT_SYNC))) {
++		if (flags & BMAN_RELEASE_FLAG_WAIT_INT)
++			wait_event_interruptible(affine_queue,
++					(p->rcri_owned != pool));
++		else
++			wait_event(affine_queue, (p->rcri_owned != pool));
++	}
++#endif
++	return 0;
++}
++
++int bman_release(struct bman_pool *pool, const struct bm_buffer *bufs, u8 num,
++			u32 flags)
++{
++	int ret = 0;
++
++#ifdef CONFIG_FSL_DPA_CHECKING
++	if (!num || (num > 8))
++		return -EINVAL;
++	if (pool->params.flags & BMAN_POOL_FLAG_NO_RELEASE)
++		return -EINVAL;
++#endif
++	/* Without stockpile, this API is a pass-through to the h/w operation */
++	if (!(pool->params.flags & BMAN_POOL_FLAG_STOCKPILE))
++		return __bman_release(pool, bufs, num, flags);
++#ifdef CONFIG_FSL_DPA_CHECKING
++	if (!atomic_dec_and_test(&pool->in_use)) {
++		pr_crit("Parallel attempts to enter bman_released() detected.");
++		panic("only one instance of bman_released/acquired allowed");
++	}
++#endif
++	/* This needs some explanation. Adding the given buffers may take the
++	 * stockpile over the threshold, but in fact the stockpile may already
++	 * *be* over the threshold if a previous release-to-hw attempt had
++	 * failed. So we have 3 cases to cover;
++	 *   1. we add to the stockpile and don't hit the threshold,
++	 *   2. we add to the stockpile, hit the threshold and release-to-hw,
++	 *   3. we have to release-to-hw before adding to the stockpile
++	 *	(not enough room in the stockpile for case 2).
++	 * Our constraints on thresholds guarantee that in case 3, there must be
++	 * at least 8 bufs already in the stockpile, so all release-to-hw ops
++	 * are for 8 bufs. Despite all this, the API must indicate whether the
++	 * given buffers were taken off the caller's hands, irrespective of
++	 * whether a release-to-hw was attempted. */
++	while (num) {
++		/* Add buffers to stockpile if they fit */
++		if ((pool->sp_fill + num) < BMAN_STOCKPILE_SZ) {
++			copy_words(pool->sp + pool->sp_fill, bufs,
++				sizeof(struct bm_buffer) * num);
++			pool->sp_fill += num;
++			num = 0; /* --> will return success no matter what */
++		}
++		/* Do hw op if hitting the high-water threshold */
++		if ((pool->sp_fill + num) >= BMAN_STOCKPILE_HIGH) {
++			ret = __bman_release(pool,
++				pool->sp + (pool->sp_fill - 8), 8, flags);
++			if (ret) {
++				ret = (num ? ret : 0);
++				goto release_done;
++			}
++			pool->sp_fill -= 8;
++		}
++	}
++release_done:
++#ifdef CONFIG_FSL_DPA_CHECKING
++	atomic_inc(&pool->in_use);
++#endif
++	return ret;
++}
++EXPORT_SYMBOL(bman_release);
++
++static inline int __bman_acquire(struct bman_pool *pool, struct bm_buffer *bufs,
++					u8 num)
++{
++	struct bman_portal *p = get_affine_portal();
++	struct bm_mc_command *mcc;
++	struct bm_mc_result *mcr;
++	__maybe_unused unsigned long irqflags;
++	int ret;
++
++	PORTAL_IRQ_LOCK(p, irqflags);
++	mcc = bm_mc_start(&p->p);
++	mcc->acquire.bpid = pool->params.bpid;
++	bm_mc_commit(&p->p, BM_MCC_VERB_CMD_ACQUIRE |
++			(num & BM_MCC_VERB_ACQUIRE_BUFCOUNT));
++	while (!(mcr = bm_mc_result(&p->p)))
++		cpu_relax();
++	ret = mcr->verb & BM_MCR_VERB_ACQUIRE_BUFCOUNT;
++	if (bufs)
++		copy_words(&bufs[0], &mcr->acquire.bufs[0],
++				num * sizeof(bufs[0]));
++	PORTAL_IRQ_UNLOCK(p, irqflags);
++	put_affine_portal();
++	if (ret != num)
++		ret = -ENOMEM;
++	return ret;
++}
++
++int bman_acquire(struct bman_pool *pool, struct bm_buffer *bufs, u8 num,
++			u32 flags)
++{
++	int ret = 0;
++
++#ifdef CONFIG_FSL_DPA_CHECKING
++	if (!num || (num > 8))
++		return -EINVAL;
++	if (pool->params.flags & BMAN_POOL_FLAG_ONLY_RELEASE)
++		return -EINVAL;
++#endif
++	/* Without stockpile, this API is a pass-through to the h/w operation */
++	if (!(pool->params.flags & BMAN_POOL_FLAG_STOCKPILE))
++		return __bman_acquire(pool, bufs, num);
++#ifdef CONFIG_FSL_DPA_CHECKING
++	if (!atomic_dec_and_test(&pool->in_use)) {
++		pr_crit("Parallel attempts to enter bman_acquire() detected.");
++		panic("only one instance of bman_released/acquired allowed");
++	}
++#endif
++	/* Only need a h/w op if we'll hit the low-water thresh */
++	if (!(flags & BMAN_ACQUIRE_FLAG_STOCKPILE) &&
++			(pool->sp_fill <= (BMAN_STOCKPILE_LOW + num))) {
++		/* refill stockpile with max amount, but if max amount
++		 * isn't available, try amount the user wants */
++		int bufcount = 8;
++
++		ret = __bman_acquire(pool, pool->sp + pool->sp_fill, bufcount);
++		if (ret < 0 && bufcount != num) {
++			bufcount = num;
++			/* Maybe buffer pool has less than 8 */
++			ret = __bman_acquire(pool, pool->sp + pool->sp_fill,
++						bufcount);
++		}
++		if (ret < 0)
++			goto hw_starved;
++		DPA_ASSERT(ret == bufcount);
++		pool->sp_fill += bufcount;
++	} else {
++hw_starved:
++		if (pool->sp_fill < num) {
++			ret = -ENOMEM;
++			goto acquire_done;
++		}
++	}
++	copy_words(bufs, pool->sp + (pool->sp_fill - num),
++		sizeof(struct bm_buffer) * num);
++	pool->sp_fill -= num;
++	ret = num;
++acquire_done:
++#ifdef CONFIG_FSL_DPA_CHECKING
++	atomic_inc(&pool->in_use);
++#endif
++	return ret;
++}
++EXPORT_SYMBOL(bman_acquire);
++
++int bman_flush_stockpile(struct bman_pool *pool, u32 flags)
++{
++	u8 num;
++	int ret;
++
++	while (pool->sp_fill) {
++		num = ((pool->sp_fill > 8) ? 8 : pool->sp_fill);
++		ret = __bman_release(pool, pool->sp + (pool->sp_fill - num),
++				     num, flags);
++		if (ret)
++			return ret;
++		pool->sp_fill -= num;
++	}
++	return 0;
++}
++EXPORT_SYMBOL(bman_flush_stockpile);
++
++#ifdef CONFIG_FSL_BMAN
++u32 bman_query_free_buffers(struct bman_pool *pool)
++{
++	return bm_pool_free_buffers(pool->params.bpid);
++}
++EXPORT_SYMBOL(bman_query_free_buffers);
++
++int bman_update_pool_thresholds(struct bman_pool *pool, const u32 *thresholds)
++{
++	u32 bpid;
++
++	bpid = bman_get_params(pool)->bpid;
++
++	return bm_pool_set(bpid, thresholds);
++}
++EXPORT_SYMBOL(bman_update_pool_thresholds);
++#endif
++
++int bman_shutdown_pool(u32 bpid)
++{
++	struct bman_portal *p = get_affine_portal();
++	__maybe_unused unsigned long irqflags;
++	int ret;
++
++	PORTAL_IRQ_LOCK(p, irqflags);
++	ret = bm_shutdown_pool(&p->p, bpid);
++	PORTAL_IRQ_UNLOCK(p, irqflags);
++	put_affine_portal();
++	return ret;
++}
++EXPORT_SYMBOL(bman_shutdown_pool);
++
++const struct bm_portal_config *
++bman_get_bm_portal_config(const struct bman_portal *portal)
++{
++	return portal->sharing_redirect ? NULL : portal->config;
++}
+diff --git a/drivers/soc/fsl/qbman/bman_portal.c b/drivers/soc/fsl/qbman/bman_portal.c
+new file mode 100644
+index 0000000..62d8f64
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/bman_portal.c
+@@ -0,0 +1,351 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "bman_priv.h"
++
++/*
++ * Global variables of the max portal/pool number this BMan version supported
++ */
++u16 bman_ip_rev;
++EXPORT_SYMBOL(bman_ip_rev);
++
++u16 bman_pool_max;
++EXPORT_SYMBOL(bman_pool_max);
++
++/* After initialising cpus that own shared portal configs, we cache the
++ * resulting portals (ie. not just the configs) in this array. Then we
++ * initialise slave cpus that don't have their own portals, redirecting them to
++ * portals from this cache in a round-robin assignment. */
++static struct bman_portal *shared_portals[NR_CPUS] __initdata;
++static int num_shared_portals __initdata;
++static int shared_portals_idx __initdata;
++
++static LIST_HEAD(unused_pcfgs);
++static void *affine_bportals[NR_CPUS];
++
++static const int flags[] = {0, _PAGE_GUARDED | _PAGE_NO_CACHE};
++
++static struct bm_portal_config * __init get_pcfg(struct list_head *list)
++{
++	struct bm_portal_config *pcfg;
++
++	if (list_empty(list))
++		return NULL;
++	pcfg = list_entry(list->prev, struct bm_portal_config, list);
++	list_del(&pcfg->list);
++
++	return pcfg;
++}
++
++static struct bman_portal * __init init_pcfg(struct bm_portal_config *pcfg)
++{
++	struct bman_portal *p = bman_create_affine_portal(pcfg);
++
++	if (p) {
++#ifdef CONFIG_FSL_DPA_PIRQ_SLOW
++		bman_p_irqsource_add(p, BM_PIRQ_RCRI | BM_PIRQ_BSCN);
++#endif
++		pr_info("Portal %sinitialised, cpu %d\n",
++			pcfg->public_cfg.is_shared ? "(shared) " : "",
++			pcfg->public_cfg.cpu);
++		affine_bportals[pcfg->public_cfg.cpu] = p;
++	} else
++		pr_crit("Portal failure on cpu %d\n", pcfg->public_cfg.cpu);
++
++	return p;
++}
++
++static void __init init_slave(int cpu)
++{
++	struct bman_portal *p;
++
++	p = bman_create_affine_slave(shared_portals[shared_portals_idx++], cpu);
++	if (!p)
++		pr_err("Slave portal failure on cpu %d\n", cpu);
++	else
++		pr_info("Portal %s initialised, cpu %d\n", "(slave) ", cpu);
++	if (shared_portals_idx >= num_shared_portals)
++		shared_portals_idx = 0;
++	affine_bportals[cpu] = p;
++}
++
++/* Bootarg "bportals=[...]" has the same syntax as "qportals=", and so the
++ * parsing is in dpaa_sys.h. The syntax is a comma-separated list of indexes
++ * and/or ranges of indexes, with each being optionally prefixed by "s" to
++ * explicitly mark it or them for sharing.
++ *    Eg;
++ *	  bportals=s0,1-3,s4
++ * means that cpus 1,2,3 get "unshared" portals, cpus 0 and 4 get "shared"
++ * portals, and any remaining cpus share the portals that are assigned to cpus 0
++ * or 4, selected in a round-robin fashion. (In this example, cpu 5 would share
++ * cpu 0's portal, cpu 6 would share cpu4's portal, and cpu 7 would share cpu
++ * 0's portal.) */
++static struct cpumask want_unshared __initdata; /* cpus requested without "s" */
++static struct cpumask want_shared __initdata; /* cpus requested with "s" */
++
++static int __init parse_bportals(char *str)
++{
++	return parse_portals_bootarg(str, &want_shared, &want_unshared,
++				     "bportals");
++}
++__setup("bportals=", parse_bportals);
++
++static void __cold bman_offline_cpu(unsigned int cpu)
++{
++	struct bman_portal *p = (struct bman_portal *)affine_bportals[cpu];
++	const struct bm_portal_config *pcfg;
++
++	if (p) {
++		pcfg = bman_get_bm_portal_config(p);
++		if (pcfg)
++			irq_set_affinity(pcfg->public_cfg.irq, cpumask_of(0));
++	}
++}
++
++static int __cold bman_portal_probe(struct platform_device *of_dev)
++{
++	struct device *dev = &of_dev->dev;
++	struct device_node *node = dev->of_node;
++	struct bm_portal_config *pcfg;
++	int i, irq, ret;
++
++	if (!of_device_is_available(node))
++		return -ENODEV;
++
++	if (of_device_is_compatible(node, "fsl,bman-portal-1.0") ||
++		of_device_is_compatible(node, "fsl,bman-portal-1.0.0")) {
++		bman_ip_rev = BMAN_REV10;
++		bman_pool_max = 64;
++	} else if (of_device_is_compatible(node, "fsl,bman-portal-2.0") ||
++		of_device_is_compatible(node, "fsl,bman-portal-2.0.8")) {
++		bman_ip_rev = BMAN_REV20;
++		bman_pool_max = 8;
++	} else if (of_device_is_compatible(node, "fsl,bman-portal-2.1.0") ||
++		   of_device_is_compatible(node, "fsl,bman-portal-2.1.1") ||
++		   of_device_is_compatible(node, "fsl,bman-portal-2.1.2") ||
++		   of_device_is_compatible(node, "fsl,bman-portal-2.1.3")) {
++		bman_ip_rev = BMAN_REV21;
++		bman_pool_max = 64;
++	}
++
++	pcfg = devm_kmalloc(dev, sizeof(*pcfg), GFP_KERNEL);
++	if (!pcfg) {
++		dev_err(dev, "Can't allocate portal config\n");
++		return -ENOMEM;
++	}
++
++	for (i = DPA_PORTAL_CE; i <= DPA_PORTAL_CI; i++) {
++		ret = of_address_to_resource(node, i, pcfg->addr_phys + i);
++		if (ret < 0) {
++			dev_err(dev, "Can't get %s property 'reg::%d'\n",
++				node->full_name, i);
++			return ret;
++		}
++		ret = devm_request_resource(dev, &iomem_resource,
++					    pcfg->addr_phys + i);
++		if (ret < 0)
++			return ret;
++		pcfg->addr_virt[i] = devm_ioremap_prot(dev,
++					pcfg->addr_phys[i].start,
++					resource_size(pcfg->addr_phys + i),
++					flags[i]);
++		if (!pcfg->addr_virt[i])
++			return -ENXIO;
++	}
++
++	pcfg->public_cfg.cpu = -1;
++
++	irq = irq_of_parse_and_map(node, 0);
++	if (irq == NO_IRQ) {
++		dev_err(dev, "Can't get %s property 'interrupts'\n",
++			node->full_name);
++		return -ENXIO;
++	}
++	pcfg->public_cfg.irq = irq;
++
++	bman_depletion_fill(&pcfg->public_cfg.mask);
++
++	list_add_tail(&pcfg->list, &unused_pcfgs);
++
++	return 0;
++};
++
++static int __cold bman_portal_remove(struct platform_device *of_dev)
++{
++	return 0;
++};
++
++static const struct of_device_id bman_portal_ids[] = {
++	{
++		.compatible = "fsl,bman-portal",
++	},
++	{}
++};
++MODULE_DEVICE_TABLE(of, bman_portal_ids);
++
++static struct platform_driver bman_portal_driver = {
++	.driver = {
++		.name = KBUILD_MODNAME,
++		.of_match_table = bman_portal_ids,
++	},
++	.probe = bman_portal_probe,
++	.remove = bman_portal_remove,
++};
++
++static int __init bman_portal_driver_register(struct platform_driver *drv)
++{
++	int _errno;
++	struct cpumask slave_cpus;
++	struct cpumask unshared_cpus = *cpu_none_mask;
++	struct cpumask shared_cpus = *cpu_none_mask;
++	LIST_HEAD(unshared_pcfgs);
++	LIST_HEAD(shared_pcfgs);
++	struct bm_portal_config *pcfg;
++	struct bman_portal *p;
++	int cpu;
++	struct cpumask offline_cpus;
++
++	_errno = platform_driver_register(drv);
++	if (_errno < 0)
++		return _errno;
++
++/* Initialise the BMan driver. The meat of this function deals with portals. The
++ * following describes the flow of portal-handling, the code "steps" refer to
++ * this description;
++ * 1. Portal configs are parsed from the device-tree into 'unused_pcfgs', with
++ *    ::cpu==-1. Regions and interrupts are mapped (but interrupts are not
++ *    bound).
++ * 2. The "want_shared" and "want_unshared" lists (as filled by the
++ *    "bportals=[...]" bootarg) are processed, allocating portals and assigning
++ *    them to cpus, placing them in the relevant list and setting ::cpu as
++ *    appropriate. If no "bportals" bootarg was present, the defaut is to try to
++ *    assign portals to all online cpus at the time of driver initialisation.
++ *    Any failure to allocate portals (when parsing the "want" lists or when
++ *    using default behaviour) will be silently tolerated (the "fixup" logic in
++ *    step 3 will determine what happens in this case).
++ * 3. Do fixups relative to cpu_online_mask(). If no portals are marked for
++ *    sharing and sharing is required (because not all cpus have been assigned
++ *    portals), then one portal will marked for sharing. Conversely if no
++ *    sharing is required, any portals marked for sharing will not be shared. It
++ *    may be that sharing occurs when it wasn't expected, if portal allocation
++ *    failed to honour all the requested assignments (including the default
++ *    assignments if no bootarg is present).
++ * 4. Unshared portals are initialised on their respective cpus.
++ * 5. Shared portals are initialised on their respective cpus.
++ * 6. Each remaining cpu is initialised to slave to one of the shared portals,
++ *    which are selected in a round-robin fashion.
++ */
++	/* Step 2. */
++	for_each_possible_cpu(cpu) {
++		if (cpumask_test_cpu(cpu, &want_shared)) {
++			pcfg = get_pcfg(&unused_pcfgs);
++			if (!pcfg)
++				break;
++			pcfg->public_cfg.cpu = cpu;
++			list_add_tail(&pcfg->list, &shared_pcfgs);
++			cpumask_set_cpu(cpu, &shared_cpus);
++		}
++		if (cpumask_test_cpu(cpu, &want_unshared)) {
++			if (cpumask_test_cpu(cpu, &shared_cpus))
++				continue;
++			pcfg = get_pcfg(&unused_pcfgs);
++			if (!pcfg)
++				break;
++			pcfg->public_cfg.cpu = cpu;
++			list_add_tail(&pcfg->list, &unshared_pcfgs);
++			cpumask_set_cpu(cpu, &unshared_cpus);
++		}
++	}
++	if (list_empty(&shared_pcfgs) && list_empty(&unshared_pcfgs)) {
++		/* Default, give an unshared portal to each online cpu */
++		for_each_possible_cpu(cpu) {
++			pcfg = get_pcfg(&unused_pcfgs);
++			if (!pcfg)
++				break;
++			pcfg->public_cfg.cpu = cpu;
++			list_add_tail(&pcfg->list, &unshared_pcfgs);
++			cpumask_set_cpu(cpu, &unshared_cpus);
++		}
++	}
++	/* Step 3. */
++	cpumask_andnot(&slave_cpus, cpu_possible_mask, &shared_cpus);
++	cpumask_andnot(&slave_cpus, &slave_cpus, &unshared_cpus);
++	if (cpumask_empty(&slave_cpus)) {
++		/* No sharing required */
++		if (!list_empty(&shared_pcfgs)) {
++			/* Migrate "shared" to "unshared" */
++			cpumask_or(&unshared_cpus, &unshared_cpus,
++				   &shared_cpus);
++			cpumask_clear(&shared_cpus);
++			list_splice_tail(&shared_pcfgs, &unshared_pcfgs);
++			INIT_LIST_HEAD(&shared_pcfgs);
++		}
++	} else {
++		/* Sharing required */
++		if (list_empty(&shared_pcfgs)) {
++			/* Migrate one "unshared" to "shared" */
++			pcfg = get_pcfg(&unshared_pcfgs);
++			if (!pcfg) {
++				pr_crit("No portals available!\n");
++				return 0;
++			}
++			cpumask_clear_cpu(pcfg->public_cfg.cpu, &unshared_cpus);
++			cpumask_set_cpu(pcfg->public_cfg.cpu, &shared_cpus);
++			list_add_tail(&pcfg->list, &shared_pcfgs);
++		}
++	}
++	/* Step 4. */
++	list_for_each_entry(pcfg, &unshared_pcfgs, list) {
++		pcfg->public_cfg.is_shared = 0;
++		p = init_pcfg(pcfg);
++	}
++	/* Step 5. */
++	list_for_each_entry(pcfg, &shared_pcfgs, list) {
++		pcfg->public_cfg.is_shared = 1;
++		p = init_pcfg(pcfg);
++		if (p)
++			shared_portals[num_shared_portals++] = p;
++	}
++	/* Step 6. */
++	if (!cpumask_empty(&slave_cpus))
++		for_each_cpu(cpu, &slave_cpus)
++			init_slave(cpu);
++	pr_info("Portals initialised\n");
++	cpumask_andnot(&offline_cpus, cpu_possible_mask, cpu_online_mask);
++	for_each_cpu(cpu, &offline_cpus)
++		bman_offline_cpu(cpu);
++
++	bman_seed_bpid_range(0, bman_pool_max);
++
++	return 0;
++}
++
++module_driver(bman_portal_driver,
++	      bman_portal_driver_register, platform_driver_unregister);
+diff --git a/drivers/soc/fsl/qbman/bman_priv.h b/drivers/soc/fsl/qbman/bman_priv.h
+index 702e469..ebe4c1b 100644
+--- a/drivers/soc/fsl/qbman/bman_priv.h
++++ b/drivers/soc/fsl/qbman/bman_priv.h
+@@ -32,6 +32,8 @@
+ 
+ #include "dpaa_sys.h"
+ 
++#include <soc/fsl/bman.h>
++
+ /* used by CCSR and portal interrupt code */
+ enum bm_isr_reg {
+ 	bm_isr_status = 0,
+@@ -40,6 +42,7 @@ enum bm_isr_reg {
+ 	bm_isr_inhibit = 3
+ };
+ 
++#ifdef CONFIG_FSL_BMAN
+ /* Set depletion thresholds associated with a buffer pool. Requires that the
+  * operating system have access to BMan CCSR (ie. compiled in support and
+  * run-time access courtesy of the device-tree). */
+@@ -51,3 +54,81 @@ int bm_pool_set(u32 bpid, const u32 *thresholds);
+ 
+ /* Read the free buffer count for a given buffer */
+ u32 bm_pool_free_buffers(u32 bpid);
++
++#endif /* CONFIG_FSL_BMAN */
++
++#if defined(CONFIG_FSL_BMAN_PORTAL) || defined(CONFIG_FSL_BMAN_PORTAL_MODULE)
++/* Revision info (for errata and feature handling) */
++#define BMAN_REV10 0x0100
++#define BMAN_REV20 0x0200
++#define BMAN_REV21 0x0201
++extern u16 bman_ip_rev;	/* 0 if uninitialised, otherwise BMAN_REVx */
++
++struct bm_portal_config {
++	/* Corenet portal addresses;
++	 * [0]==cache-enabled, [1]==cache-inhibited. */
++	__iomem void *addr_virt[2];
++	struct resource addr_phys[2];
++	/* Allow these to be joined in lists */
++	struct list_head list;
++	/* User-visible portal configuration settings */
++	struct bman_portal_config public_cfg;
++};
++
++/* Hooks from bman_driver.c in to bman_high.c */
++struct bman_portal *bman_create_portal(
++				       struct bman_portal *portal,
++				       const struct bm_portal_config *config);
++struct bman_portal *bman_create_affine_portal(
++			const struct bm_portal_config *config);
++struct bman_portal *bman_create_affine_slave(struct bman_portal *redirect,
++								int cpu);
++void bman_destroy_portal(struct bman_portal *bm);
++
++const struct bm_portal_config *bman_destroy_affine_portal(void);
++
++/* Stockpile build constants. The _LOW value: when bman_acquire() is called and
++ * the stockpile fill-level is <= _LOW, an acquire is attempted from h/w but it
++ * might fail (if the buffer pool is depleted). So this value provides some
++ * "stagger" in that the bman_acquire() function will only fail if lots of bufs
++ * are requested at once or if h/w has been tested a couple of times without
++ * luck. The _HIGH value: when bman_release() is called and the stockpile
++ * fill-level is >= _HIGH, a release is attempted to h/w but it might fail (if
++ * the release ring is full). So this value provides some "stagger" so that
++ * ring-access is retried a couple of times prior to the API returning a
++ * failure. The following *must* be true;
++ *   BMAN_STOCKPILE_HIGH-BMAN_STOCKPILE_LOW > 8
++ *     (to avoid thrashing)
++ *   BMAN_STOCKPILE_SZ >= 16
++ *     (as the release logic expects to either send 8 buffers to hw prior to
++ *     adding the given buffers to the stockpile or add the buffers to the
++ *     stockpile before sending 8 to hw, as the API must be an all-or-nothing
++ *     success/fail.)
++ */
++#define BMAN_STOCKPILE_SZ   16u /* number of bufs in per-pool cache */
++#define BMAN_STOCKPILE_LOW  2u	/* when fill is <= this, acquire from hw */
++#define BMAN_STOCKPILE_HIGH 14u /* when fill is >= this, release to hw */
++
++/*************************************************/
++/*   BMan s/w corenet portal, low-level i/face	 */
++/*************************************************/
++
++/* Used by all portal interrupt registers except 'inhibit'
++ * This mask contains all the "irqsource" bits visible to API users
++ */
++#define BM_PIRQ_VISIBLE	(BM_PIRQ_RCRI | BM_PIRQ_BSCN)
++
++/* These are bm_<reg>_<verb>(). So for example, bm_disable_write() means "write
++ * the disable register" rather than "disable the ability to write". */
++#define bm_isr_status_read(bm)		__bm_isr_read(bm, bm_isr_status)
++#define bm_isr_status_clear(bm, m)	__bm_isr_write(bm, bm_isr_status, m)
++#define bm_isr_enable_read(bm)		__bm_isr_read(bm, bm_isr_enable)
++#define bm_isr_enable_write(bm, v)	__bm_isr_write(bm, bm_isr_enable, v)
++#define bm_isr_disable_read(bm)		__bm_isr_read(bm, bm_isr_disable)
++#define bm_isr_disable_write(bm, v)	__bm_isr_write(bm, bm_isr_disable, v)
++#define bm_isr_inhibit(bm)		__bm_isr_write(bm, bm_isr_inhibit, 1)
++#define bm_isr_uninhibit(bm)		__bm_isr_write(bm, bm_isr_inhibit, 0)
++
++const struct bm_portal_config *
++bman_get_bm_portal_config(const struct bman_portal *portal);
++#endif	/* CONFIG_FSL_BMAN_PORTAL* */
+diff --git a/drivers/soc/fsl/qbman/bman_utils.c b/drivers/soc/fsl/qbman/bman_utils.c
+new file mode 100644
+index 0000000..5298f1c
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/bman_utils.c
+@@ -0,0 +1,72 @@
++/* Copyright 2009 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "dpaa_sys.h"
++
++#include <soc/fsl/bman.h>
++
++/* BMan APIs are front-ends to the common code */
++
++static DECLARE_DPAA_RESOURCE(bpalloc); /* BPID allocator */
++
++/* BPID allocator front-end */
++
++int bman_alloc_bpid_range(u32 *result, u32 count, u32 align, int partial)
++{
++	return dpaa_resource_new(&bpalloc, result, count, align, partial);
++}
++EXPORT_SYMBOL(bman_alloc_bpid_range);
++
++static int bp_cleanup(u32 bpid)
++{
++	return bman_shutdown_pool(bpid) == 0;
++}
++void bman_release_bpid_range(u32 bpid, u32 count)
++{
++	u32 total_invalid = dpaa_resource_release(&bpalloc,
++						  bpid, count, bp_cleanup);
++
++	if (total_invalid)
++		pr_err("BPID range [%d..%d] (%d) had %d leaks\n",
++			bpid, bpid + count - 1, count, total_invalid);
++}
++EXPORT_SYMBOL(bman_release_bpid_range);
++
++void bman_seed_bpid_range(u32 bpid, u32 count)
++{
++	dpaa_resource_seed(&bpalloc, bpid, count);
++}
++EXPORT_SYMBOL(bman_seed_bpid_range);
++
++int bman_reserve_bpid_range(u32 bpid, u32 count)
++{
++	return dpaa_resource_reserve(&bpalloc, bpid, count);
++}
++EXPORT_SYMBOL(bman_reserve_bpid_range);
+diff --git a/drivers/soc/fsl/qbman/dpaa_resource.c b/drivers/soc/fsl/qbman/dpaa_resource.c
+new file mode 100644
+index 0000000..80d2394
+--- /dev/null
++++ b/drivers/soc/fsl/qbman/dpaa_resource.c
+@@ -0,0 +1,356 @@
++/* Copyright 2009 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#if defined(CONFIG_FSL_BMAN_PORTAL) || defined(CONFIG_FSL_BMAN_PORTAL_MODULE)
++#include "dpaa_sys.h"
++
++/* The allocator is a (possibly-empty) list of these */
++struct dpaa_resource_node {
++	struct list_head list;
++	u32 base;
++	u32 num;
++	/* refcount and is_alloced are only set
++	   when the node is in the used list */
++	unsigned int refcount;
++	int is_alloced;
++};
++
++#ifdef DPAA_RESOURCE_DEBUG
++#define DPRINT pr_info
++static void DUMP(struct dpaa_resource *alloc)
++{
++	int off = 0;
++	char buf[256];
++	struct dpaa_resource_node *p;
++
++	pr_info("Free Nodes\n");
++	list_for_each_entry(p, &alloc->free, list) {
++		if (off < 255)
++			off += snprintf(buf + off, 255-off, "{%d,%d}",
++				p->base, p->base + p->num - 1);
++	}
++	pr_info("%s\n", buf);
++
++	off = 0;
++	pr_info("Used Nodes\n");
++	list_for_each_entry(p, &alloc->used, list) {
++		if (off < 255)
++			off += snprintf(buf + off, 255-off, "{%d,%d}",
++				p->base, p->base + p->num - 1);
++	}
++	pr_info("%s\n", buf);
++}
++#else
++#define DPRINT(x...)
++#define DUMP(a)
++#endif
++
++int dpaa_resource_new(struct dpaa_resource *alloc, u32 *result,
++		      u32 count, u32 align, int partial)
++{
++	struct dpaa_resource_node *i = NULL, *next_best = NULL,
++		*used_node = NULL;
++	u32 base, next_best_base = 0, num = 0, next_best_num = 0;
++	struct dpaa_resource_node *margin_left, *margin_right;
++
++	*result = (u32)-1;
++	DPRINT("alloc_range(%d,%d,%d)\n", count, align, partial);
++	DUMP(alloc);
++	/* If 'align' is 0, it should behave as though it was 1 */
++	if (!align)
++		align = 1;
++	margin_left = kmalloc(sizeof(*margin_left), GFP_KERNEL);
++	if (!margin_left)
++		goto err;
++	margin_right = kmalloc(sizeof(*margin_right), GFP_KERNEL);
++	if (!margin_right) {
++		kfree(margin_left);
++		goto err;
++	}
++	spin_lock_irq(&alloc->lock);
++	list_for_each_entry(i, &alloc->free, list) {
++		base = (i->base + align - 1) / align;
++		base *= align;
++		if ((base - i->base) >= i->num)
++			/* alignment is impossible, regardless of count */
++			continue;
++		num = i->num - (base - i->base);
++		if (num >= count) {
++			/* this one will do nicely */
++			num = count;
++			goto done;
++		}
++		if (num > next_best_num) {
++			next_best = i;
++			next_best_base = base;
++			next_best_num = num;
++		}
++	}
++	if (partial && next_best) {
++		i = next_best;
++		base = next_best_base;
++		num = next_best_num;
++	} else
++		i = NULL;
++done:
++	if (i) {
++		if (base != i->base) {
++			margin_left->base = i->base;
++			margin_left->num = base - i->base;
++			list_add_tail(&margin_left->list, &i->list);
++		} else
++			kfree(margin_left);
++		if ((base + num) < (i->base + i->num)) {
++			margin_right->base = base + num;
++			margin_right->num = (i->base + i->num) -
++						(base + num);
++			list_add(&margin_right->list, &i->list);
++		} else
++			kfree(margin_right);
++		list_del(&i->list);
++		kfree(i);
++		*result = base;
++	}
++	spin_unlock_irq(&alloc->lock);
++err:
++	DPRINT("returning %d\n", i ? num : -ENOMEM);
++	DUMP(alloc);
++	if (!i)
++		return -ENOMEM;
++
++	/* Add the allocation to the used list with a refcount of 1 */
++	used_node = kmalloc(sizeof(*used_node), GFP_KERNEL);
++	if (!used_node)
++		return -ENOMEM;
++	used_node->base = *result;
++	used_node->num = num;
++	used_node->refcount = 1;
++	used_node->is_alloced = 1;
++	list_add_tail(&used_node->list, &alloc->used);
++	return (int)num;
++}
++EXPORT_SYMBOL(dpaa_resource_new);
++
++/* Allocate the list node using GFP_ATOMIC, because we *really* want to avoid
++ * forcing error-handling on to users in the deallocation path. */
++static void _dpaa_resource_free(struct dpaa_resource *alloc, u32 base_id,
++				u32 count)
++{
++	struct dpaa_resource_node *i,
++		*node = kmalloc(sizeof(*node), GFP_ATOMIC);
++
++	BUG_ON(!node);
++	DPRINT("release_range(%d,%d)\n", base_id, count);
++	DUMP(alloc);
++	BUG_ON(!count);
++	spin_lock_irq(&alloc->lock);
++
++	node->base = base_id;
++	node->num = count;
++	list_for_each_entry(i, &alloc->free, list) {
++		if (i->base >= node->base) {
++			/* BUG_ON(any overlapping) */
++			BUG_ON(i->base < (node->base + node->num));
++			list_add_tail(&node->list, &i->list);
++			goto done;
++		}
++	}
++	list_add_tail(&node->list, &alloc->free);
++done:
++	/* Merge to the left */
++	i = list_entry(node->list.prev, struct dpaa_resource_node, list);
++	if (node->list.prev != &alloc->free) {
++		BUG_ON((i->base + i->num) > node->base);
++		if ((i->base + i->num) == node->base) {
++			node->base = i->base;
++			node->num += i->num;
++			list_del(&i->list);
++			kfree(i);
++		}
++	}
++	/* Merge to the right */
++	i = list_entry(node->list.next, struct dpaa_resource_node, list);
++	if (node->list.next != &alloc->free) {
++		BUG_ON((node->base + node->num) > i->base);
++		if ((node->base + node->num) == i->base) {
++			node->num += i->num;
++			list_del(&i->list);
++			kfree(i);
++		}
++	}
++	spin_unlock_irq(&alloc->lock);
++	DUMP(alloc);
++}
++
++static void dpaa_resource_free(struct dpaa_resource *alloc, u32 base_id,
++			       u32 count)
++{
++	struct dpaa_resource_node *i = NULL;
++
++	spin_lock_irq(&alloc->lock);
++
++	/* First find the node in the used list and decrement its ref count */
++	list_for_each_entry(i, &alloc->used, list) {
++		if (i->base == base_id && i->num == count) {
++			--i->refcount;
++			if (i->refcount == 0) {
++				list_del(&i->list);
++				spin_unlock_irq(&alloc->lock);
++				if (i->is_alloced)
++					_dpaa_resource_free(alloc, base_id,
++							    count);
++				kfree(i);
++				return;
++			}
++			spin_unlock_irq(&alloc->lock);
++			return;
++		}
++	}
++	/* Couldn't find the allocation */
++	pr_err("Attempt to free ID 0x%x COUNT %d that wasn't alloc'd or reserved\n",
++	       base_id, count);
++	spin_unlock_irq(&alloc->lock);
++}
++
++/* Same as free but no previous allocation checking is needed */
++void dpaa_resource_seed(struct dpaa_resource *alloc, u32 base_id, u32 count)
++{
++	_dpaa_resource_free(alloc, base_id, count);
++}
++EXPORT_SYMBOL(dpaa_resource_seed);
++
++/* Like 'new' but specifies the desired range, returns -ENOMEM if the entire
++ * desired range is not available, or 0 for success
++ */
++int dpaa_resource_reserve(struct dpaa_resource *alloc, u32 base, u32 num)
++{
++	struct dpaa_resource_node *i = NULL, *used_node;
++
++	DPRINT("alloc_reserve(%d,%d)\n", base, num);
++	DUMP(alloc);
++
++	spin_lock_irq(&alloc->lock);
++
++	/* Check for the node in the used list.
++	   If found, increase it's refcount */
++	list_for_each_entry(i, &alloc->used, list) {
++		if ((i->base == base) && (i->num == num)) {
++			++i->refcount;
++			spin_unlock_irq(&alloc->lock);
++			return 0;
++		}
++		if ((base >= i->base) && (base < (i->base + i->num))) {
++			/* This is an attempt to reserve a region that was
++			   already reserved or alloced with a different
++			   base or num */
++			pr_err("Cannot reserve %d - %d, it overlaps with"
++			       " existing reservation from %d - %d\n",
++			       base, base + num - 1, i->base,
++			       i->base + i->num - 1);
++			spin_unlock_irq(&alloc->lock);
++			return -1;
++		}
++	}
++	/* Check to make sure this ID isn't in the free list */
++	list_for_each_entry(i, &alloc->free, list) {
++		if ((base >= i->base) && (base < (i->base + i->num))) {
++			/* yep, the reservation is within this node */
++			pr_err("Cannot reserve %d - %d, it overlaps with"
++			       " free range %d - %d and must be alloced\n",
++			       base, base + num - 1,
++			       i->base, i->base + i->num - 1);
++			spin_unlock_irq(&alloc->lock);
++			return -1;
++		}
++	}
++	/* Add the allocation to the used list with a refcount of 1 */
++	used_node = kmalloc(sizeof(*used_node), GFP_KERNEL);
++	if (!used_node) {
++		spin_unlock_irq(&alloc->lock);
++		return -ENOMEM;
++
++	}
++	used_node->base = base;
++	used_node->num = num;
++	used_node->refcount = 1;
++	used_node->is_alloced = 0;
++	list_add_tail(&used_node->list, &alloc->used);
++	spin_unlock_irq(&alloc->lock);
++	return 0;
++}
++EXPORT_SYMBOL(dpaa_resource_reserve);
++
++/* This is a sort-of-conditional dpaa_resource_free() routine. Eg. when
++ * releasing FQIDs (probably from user-space), it can filter out those
++ * that aren't in the OOS state (better to leak a h/w resource than to
++ * crash). This function returns the number of invalid IDs that were not
++ * released.
++*/
++u32 dpaa_resource_release(struct dpaa_resource *alloc,
++			  u32 id, u32 count, int (*is_valid)(u32 id))
++{
++	int valid_mode = 0;
++	u32 loop = id, total_invalid = 0;
++
++	while (loop < (id + count)) {
++		int isvalid = is_valid ? is_valid(loop) : 1;
++
++		if (!valid_mode) {
++			/* We're looking for a valid ID to terminate an invalid
++			 * range */
++			if (isvalid) {
++				/* We finished a range of invalid IDs, a valid
++				 * range is now underway */
++				valid_mode = 1;
++				count -= (loop - id);
++				id = loop;
++			} else
++				total_invalid++;
++		} else {
++			/* We're looking for an invalid ID to terminate a
++			 * valid range */
++			if (!isvalid) {
++				/* Release the range of valid IDs, an unvalid
++				 * range is now underway */
++				if (loop > id)
++					dpaa_resource_free(alloc, id,
++							   loop - id);
++				valid_mode = 0;
++			}
++		}
++		loop++;
++	}
++	/* Release any unterminated range of valid IDs */
++	if (valid_mode && count)
++		dpaa_resource_free(alloc, id, count);
++	return total_invalid;
++}
++EXPORT_SYMBOL(dpaa_resource_release);
++#endif	/* CONFIG_FSL_BMAN_PORTAL* */
+diff --git a/drivers/soc/fsl/qbman/dpaa_sys.h b/drivers/soc/fsl/qbman/dpaa_sys.h
+index cdaf3f7..6bf870a 100644
+--- a/drivers/soc/fsl/qbman/dpaa_sys.h
++++ b/drivers/soc/fsl/qbman/dpaa_sys.h
+@@ -31,25 +31,182 @@
+ #ifndef __DPAA_SYS_H
+ #define __DPAA_SYS_H
+ 
++#include <linux/slab.h>
+ #include <linux/module.h>
+ #include <linux/interrupt.h>
+ #include <linux/of_address.h>
+ #include <linux/of_irq.h>
+ #include <linux/of_reserved_mem.h>
+ #include <linux/platform_device.h>
++#include <linux/ctype.h>
+ 
+-#ifdef CONFIG_FSL_DPA_CHECKING
+-#define DPA_ASSERT(x) \
++#include <asm/pgtable.h>
++
++struct dpaa_resource {
++	struct list_head free;
++	spinlock_t lock;
++	struct list_head used;
++};
++
++#define DECLARE_DPAA_RESOURCE(name)			\
++struct dpaa_resource name = {				\
++	.free = {					\
++		.prev = &name.free,			\
++		.next = &name.free			\
++	},						\
++	.lock = __SPIN_LOCK_UNLOCKED(name.lock),	\
++	.used = {					\
++		 .prev = &name.used,			\
++		 .next = &name.used			\
++	}						\
++}
++
++int dpaa_resource_new(struct dpaa_resource *alloc, u32 *result,
++		      u32 count, u32 align, int partial);
++u32 dpaa_resource_release(struct dpaa_resource *alloc,
++			  u32 id, u32 count, int (*is_valid)(u32 id));
++void dpaa_resource_seed(struct dpaa_resource *alloc, u32 base_id, u32 count);
++int dpaa_resource_reserve(struct dpaa_resource *alloc, u32 base, u32 num);
++
++/* When copying aligned words or shorts, try to avoid memcpy() */
++#define CONFIG_TRY_BETTER_MEMCPY
++
++/* For 2-element tables related to cache-inhibited and cache-enabled mappings */
++#define DPA_PORTAL_CE 0
++#define DPA_PORTAL_CI 1
++
++/***********************/
++/* Misc inline assists */
++/***********************/
++
++/* TODO: NB, we currently assume that hwsync() and lwsync() imply compiler
++ * barriers and that dcb*() won't fall victim to compiler or execution
++ * reordering with respect to other code/instructions that manipulate the same
++ * cacheline. */
++#define hwsync() __asm__ __volatile__ ("sync" : : : "memory")
++#define lwsync() __asm__ __volatile__ (stringify_in_c(LWSYNC) : : : "memory")
++#define dcbf(p) __asm__ __volatile__ ("dcbf 0,%0" : : "r" (p) : "memory")
++#define dcbt_ro(p) __asm__ __volatile__ ("dcbt 0,%0" : : "r" (p))
++#define dcbt_rw(p) __asm__ __volatile__ ("dcbtst 0,%0" : : "r" (p))
++#define dcbi(p) dcbf(p)
++#ifdef CONFIG_PPC_E500MC
++#define dcbzl(p) __asm__ __volatile__ ("dcbzl 0,%0" : : "r" (p))
++#define dcbz_64(p) dcbzl(p)
++#define dcbf_64(p) dcbf(p)
++/* Commonly used combo */
++#define dcbit_ro(p) \
+ 	do { \
+-		if (!(x)) { \
+-			pr_crit("ASSERT: (%s:%d) %s\n", __FILE__, __LINE__, \
+-				__stringify_1(x)); \
+-			dump_stack(); \
+-			panic("assertion failure"); \
+-		} \
++		dcbi(p); \
++		dcbt_ro(p); \
+ 	} while (0)
+ #else
++#define dcbz(p) __asm__ __volatile__ ("dcbz 0,%0" : : "r" (p))
++#define dcbz_64(p) \
++	do { \
++		dcbz((u32)p + 32);	\
++		dcbz(p);	\
++	} while (0)
++#define dcbf_64(p) \
++	do { \
++		dcbf((u32)p + 32); \
++		dcbf(p); \
++	} while (0)
++/* Commonly used combo */
++#define dcbit_ro(p) \
++	do { \
++		dcbi(p); \
++		dcbi((u32)p + 32); \
++		dcbt_ro(p); \
++		dcbt_ro((u32)p + 32); \
++	} while (0)
++#endif /* CONFIG_PPC_E500MC */
++
++static inline u64 mfatb(void)
++{
++	u32 hi, lo, chk;
++
++	do {
++		hi = mfspr(SPRN_ATBU);
++		lo = mfspr(SPRN_ATBL);
++		chk = mfspr(SPRN_ATBU);
++	} while (unlikely(hi != chk));
++	return ((u64)hi << 32) | (u64)lo;
++}
++
++#ifdef CONFIG_FSL_DPA_CHECKING
++#define DPA_ASSERT(x) WARN_ON(!(x))
++#else
+ #define DPA_ASSERT(x)
+ #endif
+ 
++#ifdef CONFIG_TRY_BETTER_MEMCPY
++static inline void copy_words(void *dest, const void *src, size_t sz)
++{
++	u32 *__dest = dest;
++	const u32 *__src = src;
++	size_t __sz = sz >> 2;
++
++	BUG_ON((unsigned long)dest & 0x3);
++	BUG_ON((unsigned long)src & 0x3);
++	BUG_ON(sz & 0x3);
++	while (__sz--)
++		*(__dest++) = *(__src++);
++}
++#else
++#define copy_words memcpy
++#endif
++
++/************/
++/* Bootargs */
++/************/
++
++/* BMan has "bportals=", they use the same syntax
++ * though; a comma-separated list of items, each item being a cpu index and/or a
++ * range of cpu indices, and each item optionally be prefixed by "s" to indicate
++ * that the portal associated with that cpu should be shared. See bman_driver.c
++ * for more specifics. */
++static int __parse_portals_cpu(const char **s, unsigned int *cpu)
++{
++	*cpu = 0;
++	if (!isdigit(**s))
++		return -EINVAL;
++	while (isdigit(**s))
++		*cpu = *cpu * 10 + (*((*s)++) - '0');
++	return 0;
++}
++static inline int parse_portals_bootarg(char *str, struct cpumask *want_shared,
++					struct cpumask *want_unshared,
++					const char *argname)
++{
++	const char *s = str;
++	unsigned int shared, cpu1, cpu2, loop;
++
++keep_going:
++	if (*s == 's') {
++		shared = 1;
++		s++;
++	} else
++		shared = 0;
++	if (__parse_portals_cpu(&s, &cpu1))
++		goto err;
++	if (*s == '-') {
++		s++;
++		if (__parse_portals_cpu(&s, &cpu2))
++			goto err;
++		if (cpu2 < cpu1)
++			goto err;
++	} else
++		cpu2 = cpu1;
++	for (loop = cpu1; loop <= cpu2; loop++)
++		cpumask_set_cpu(loop, shared ? want_shared : want_unshared);
++	if (*s == ',') {
++		s++;
++		goto keep_going;
++	} else if ((*s == '\0') || isspace(*s))
++		return 0;
++err:
++	pr_crit("Malformed %s argument: %s, offset: %lu\n", argname, str,
++		(unsigned long)s - (unsigned long)str);
++	return -EINVAL;
++}
+ #endif	/* __DPAA_SYS_H */
+diff --git a/include/soc/fsl/bman.h b/include/soc/fsl/bman.h
+new file mode 100644
+index 0000000..1d3d416
+--- /dev/null
++++ b/include/soc/fsl/bman.h
+@@ -0,0 +1,518 @@
++/* Copyright 2008 - 2015 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef __FSL_BMAN_H
++#define __FSL_BMAN_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Enable blocking waits */
++#define FSL_DPA_CAN_WAIT       1
++#define FSL_DPA_CAN_WAIT_SYNC  1
++
++/* Last updated for v00.79 of the BG */
++
++/* Portal processing (interrupt) sources */
++#define BM_PIRQ_RCRI	0x00000002	/* RCR Ring (below threshold) */
++#define BM_PIRQ_BSCN	0x00000001	/* Buffer depletion State Change */
++
++/* This wrapper represents a bit-array for the depletion state of the 64 BMan
++ * buffer pools. */
++struct bman_depletion {
++	u32 __state[2];
++};
++#define BMAN_DEPLETION_EMPTY { { 0x00000000, 0x00000000 } }
++#define BMAN_DEPLETION_FULL { { 0xffffffff, 0xffffffff } }
++#define __bmdep_word(x) ((x) >> 5)
++#define __bmdep_shift(x) ((x) & 0x1f)
++#define __bmdep_bit(x) (0x80000000 >> __bmdep_shift(x))
++static inline void bman_depletion_init(struct bman_depletion *c)
++{
++	c->__state[0] = c->__state[1] = 0;
++}
++static inline void bman_depletion_fill(struct bman_depletion *c)
++{
++	c->__state[0] = c->__state[1] = ~0;
++}
++static inline int bman_depletion_get(const struct bman_depletion *c, u8 bpid)
++{
++	return c->__state[__bmdep_word(bpid)] & __bmdep_bit(bpid);
++}
++static inline void bman_depletion_set(struct bman_depletion *c, u8 bpid)
++{
++	c->__state[__bmdep_word(bpid)] |= __bmdep_bit(bpid);
++}
++static inline void bman_depletion_unset(struct bman_depletion *c, u8 bpid)
++{
++	c->__state[__bmdep_word(bpid)] &= ~__bmdep_bit(bpid);
++}
++
++/* --- BMan data structures (and associated constants) --- */
++
++/* Represents s/w corenet portal mapped data structures */
++struct bm_rcr_entry;	/* RCR (Release Command Ring) entries */
++struct bm_mc_command;	/* MC (Management Command) command */
++struct bm_mc_result;	/* MC result */
++
++/* Code-reduction, define a wrapper for 48-bit buffers. In cases where a buffer
++ * pool id specific to this buffer is needed (BM_RCR_VERB_CMD_BPID_MULTI,
++ * BM_MCC_VERB_ACQUIRE), the 'bpid' field is used. */
++struct bm_buffer {
++	union {
++		struct {
++			u8 __reserved1;
++			u8 bpid;
++			u16 hi; /* High 16-bits of 48-bit address */
++			u32 lo; /* Low 32-bits of 48-bit address */
++		};
++		struct {
++			u64 __notaddress:16;
++			u64 addr:48;
++		};
++	};
++} __aligned(8);
++static inline u64 bm_buffer_get64(const struct bm_buffer *buf)
++{
++	return buf->addr;
++}
++static inline dma_addr_t bm_buf_addr(const struct bm_buffer *buf)
++{
++	return (dma_addr_t)buf->addr;
++}
++/* Macro, so we compile better if 'v' isn't always 64-bit */
++#define bm_buffer_set64(buf, v) \
++	do { \
++		struct bm_buffer *__buf931 = (buf); \
++		__buf931->hi = upper_32_bits(v); \
++		__buf931->lo = lower_32_bits(v); \
++	} while (0)
++
++/* See 1.5.3.5.4: "Release Command" */
++struct bm_rcr_entry {
++	union {
++		struct {
++			u8 __dont_write_directly__verb;
++			u8 bpid; /* used with BM_RCR_VERB_CMD_BPID_SINGLE */
++			u8 __reserved1[62];
++		};
++		struct bm_buffer bufs[8];
++	};
++} __packed;
++#define BM_RCR_VERB_VBIT		0x80
++#define BM_RCR_VERB_CMD_MASK		0x70	/* one of two values; */
++#define BM_RCR_VERB_CMD_BPID_SINGLE	0x20
++#define BM_RCR_VERB_CMD_BPID_MULTI	0x30
++#define BM_RCR_VERB_BUFCOUNT_MASK	0x0f	/* values 1..8 */
++
++/* See 1.5.3.1: "Acquire Command" */
++/* See 1.5.3.2: "Query Command" */
++struct bm_mcc_acquire {
++	u8 bpid;
++	u8 __reserved1[62];
++} __packed;
++struct bm_mcc_query {
++	u8 __reserved2[63];
++} __packed;
++struct bm_mc_command {
++	u8 __dont_write_directly__verb;
++	union {
++		struct bm_mcc_acquire acquire;
++		struct bm_mcc_query query;
++	};
++} __packed;
++#define BM_MCC_VERB_VBIT		0x80
++#define BM_MCC_VERB_CMD_MASK		0x70	/* where the verb contains; */
++#define BM_MCC_VERB_CMD_ACQUIRE		0x10
++#define BM_MCC_VERB_CMD_QUERY		0x40
++#define BM_MCC_VERB_ACQUIRE_BUFCOUNT	0x0f	/* values 1..8 go here */
++
++/* See 1.5.3.3: "Acquire Response" */
++/* See 1.5.3.4: "Query Response" */
++struct bm_pool_state {
++	u8 __reserved1[32];
++	/* "availability state" and "depletion state" */
++	struct {
++		u8 __reserved1[8];
++		/* Access using bman_depletion_***() */
++		struct bman_depletion state;
++	} as, ds;
++};
++struct bm_mc_result {
++	union {
++		struct {
++			u8 verb;
++			u8 __reserved1[63];
++		};
++		union {
++			struct {
++				u8 __reserved1;
++				u8 bpid;
++				u8 __reserved2[62];
++			};
++			struct bm_buffer bufs[8];
++		} acquire;
++		struct bm_pool_state query;
++	};
++} __packed;
++#define BM_MCR_VERB_VBIT		0x80
++#define BM_MCR_VERB_CMD_MASK		BM_MCC_VERB_CMD_MASK
++#define BM_MCR_VERB_CMD_ACQUIRE		BM_MCC_VERB_CMD_ACQUIRE
++#define BM_MCR_VERB_CMD_QUERY		BM_MCC_VERB_CMD_QUERY
++#define BM_MCR_VERB_CMD_ERR_INVALID	0x60
++#define BM_MCR_VERB_CMD_ERR_ECC		0x70
++#define BM_MCR_VERB_ACQUIRE_BUFCOUNT	BM_MCC_VERB_ACQUIRE_BUFCOUNT /* 0..8 */
++/* Determine the "availability state" of pool 'p' from a query result 'r' */
++#define BM_MCR_QUERY_AVAILABILITY(r, p)	\
++		bman_depletion_get(&r->query.as.state, p)
++/* Determine the "depletion state" of pool 'p' from a query result 'r' */
++#define BM_MCR_QUERY_DEPLETION(r, p)	\
++		bman_depletion_get(&r->query.ds.state, p)
++
++/* Managed (aka "shared" or "mux/demux") portal, high-level i/face */
++
++/* Portal and Buffer Pools */
++
++/* Represents a managed portal */
++struct bman_portal;
++
++/* This object type represents BMan buffer pools. */
++struct bman_pool;
++
++struct bman_portal_config {
++	/* This is used for any "core-affine" portals, ie. default portals
++	 * associated to the corresponding cpu. -1 implies that there is no core
++	 * affinity configured. */
++	int cpu;
++	/* portal interrupt line */
++	int irq;
++	/* Is this portal shared? (If so, it has coarser locking and demuxes
++	 * processing on behalf of other CPUs.) */
++	int is_shared;
++	/* These are the buffer pool IDs that may be used via this portal. */
++	struct bman_depletion mask;
++};
++
++/* This callback type is used when handling pool depletion entry/exit. The
++ * 'cb_ctx' value is the opaque value associated with the pool object in
++ * bman_new_pool(). 'depleted' is non-zero on depletion-entry, and zero on
++ * depletion-exit. */
++typedef void (*bman_cb_depletion)(struct bman_portal *bm,
++			struct bman_pool *pool, void *cb_ctx, int depleted);
++
++/* This struct specifies parameters for a bman_pool object. */
++struct bman_pool_params {
++	/* index of the buffer pool to encapsulate (0-63), ignored if
++	 * BMAN_POOL_FLAG_DYNAMIC_BPID is set. */
++	u32 bpid;
++	/* bit-mask of BMAN_POOL_FLAG_*** options */
++	u32 flags;
++	/* depletion-entry/exit callback, if BMAN_POOL_FLAG_DEPLETION is set */
++	bman_cb_depletion cb;
++	/* opaque user value passed as a parameter to 'cb' */
++	void *cb_ctx;
++	/* depletion-entry/exit thresholds, if BMAN_POOL_FLAG_THRESH is set. NB:
++	 * this is only allowed if BMAN_POOL_FLAG_DYNAMIC_BPID is used *and*
++	 * when run in the control plane (which controls BMan CCSR). This array
++	 * matches the definition of bm_pool_set(). */
++	u32 thresholds[4];
++};
++
++/* Flags to bman_new_pool() */
++#define BMAN_POOL_FLAG_NO_RELEASE    0x00000001 /* can't release to pool */
++#define BMAN_POOL_FLAG_ONLY_RELEASE  0x00000002 /* can only release to pool */
++#define BMAN_POOL_FLAG_DEPLETION     0x00000004 /* track depletion entry/exit */
++#define BMAN_POOL_FLAG_DYNAMIC_BPID  0x00000008 /* (de)allocate bpid */
++#define BMAN_POOL_FLAG_THRESH	     0x00000010 /* set depletion thresholds */
++#define BMAN_POOL_FLAG_STOCKPILE     0x00000020 /* stockpile to reduce hw ops */
++
++/* Flags to bman_release() */
++#ifdef FSL_DPA_CAN_WAIT
++#define BMAN_RELEASE_FLAG_WAIT	     0x00000001 /* wait if RCR is full */
++#define BMAN_RELEASE_FLAG_WAIT_INT   0x00000002 /* if we wait, interruptible? */
++#ifdef FSL_DPA_CAN_WAIT_SYNC
++#define BMAN_RELEASE_FLAG_WAIT_SYNC  0x00000004 /* if wait, until consumed? */
++#endif
++#endif
++#define BMAN_RELEASE_FLAG_NOW	     0x00000008 /* issue immediate release */
++
++/* Flags to bman_acquire() */
++#define BMAN_ACQUIRE_FLAG_STOCKPILE  0x00000001 /* no hw op, stockpile only */
++
++/* Portal Management */
++
++/**
++ * bman_get_portal_config - get portal configuration settings
++ *
++ * This returns a read-only view of the current cpu's affine portal settings.
++ */
++const struct bman_portal_config *bman_get_portal_config(void);
++
++/**
++ * bman_irqsource_get - return the portal work that is interrupt-driven
++ *
++ * Returns a bitmask of BM_PIRQ_**I processing sources that are currently
++ * enabled for interrupt handling on the current cpu's affine portal. These
++ * sources will trigger the portal interrupt and the interrupt handler (or a
++ * tasklet/bottom-half it defers to) will perform the corresponding processing
++ * work. The bman_poll_***() functions will only process sources that are not in
++ * this bitmask. If the current CPU is sharing a portal hosted on another CPU,
++ * this always returns zero.
++ */
++u32 bman_irqsource_get(void);
++
++/**
++ * bman_irqsource_add - add processing sources to be interrupt-driven
++ * @bits: bitmask of BM_PIRQ_**I processing sources
++ *
++ * Adds processing sources that should be interrupt-driven (rather than
++ * processed via bman_poll_***() functions). Returns zero for success, or
++ * -EINVAL if the current CPU is sharing a portal hosted on another CPU. */
++int bman_irqsource_add(u32 bits);
++
++/**
++ * bman_irqsource_remove - remove processing sources from being interrupt-driven
++ * @bits: bitmask of BM_PIRQ_**I processing sources
++ *
++ * Removes processing sources from being interrupt-driven, so that they will
++ * instead be processed via bman_poll_***() functions. Returns zero for success,
++ * or -EINVAL if the current CPU is sharing a portal hosted on another CPU. */
++int bman_irqsource_remove(u32 bits);
++
++/**
++ * bman_affine_cpus - return a mask of cpus that have affine portals
++ */
++const cpumask_t *bman_affine_cpus(void);
++
++/**
++ * bman_poll_slow - process anything that isn't interrupt-driven.
++ *
++ * This function does any portal processing that isn't interrupt-driven. If the
++ * current CPU is sharing a portal hosted on another CPU, this function will
++ * return -EINVAL, otherwise the return value is a bitmask of BM_PIRQ_* sources
++ * indicating what interrupt sources were actually processed by the call.
++ *
++ * NB, unlike the legacy wrapper bman_poll(), this function will
++ * deterministically check for the presence of portal processing work and do it,
++ * which implies some latency even if there's nothing to do. The bman_poll()
++ * wrapper on the other hand (like the qman_poll() wrapper) attenuates this by
++ * checking for (and doing) portal processing infrequently. Ie. such that
++ * qman_poll() and bman_poll() can be called from core-processing loops. Use
++ * bman_poll_slow() when you yourself are deciding when to incur the overhead of
++ * processing.
++ */
++u32 bman_poll_slow(void);
++
++/**
++ * bman_poll - process anything that isn't interrupt-driven.
++ *
++ * Dispatcher logic on a cpu can use this to trigger any maintenance of the
++ * affine portal. This function does whatever processing is not triggered by
++ * interrupts. This is a legacy wrapper that can be used in core-processing
++ * loops but mitigates the performance overhead of portal processing by
++ * adaptively bypassing true portal processing most of the time. (Processing is
++ * done once every 10 calls if the previous processing revealed that work needed
++ * to be done, or once very 1000 calls if the previous processing revealed no
++ * work needed doing.) If you wish to control this yourself, call
++ * bman_poll_slow() instead, which always checks for portal processing work.
++ */
++void bman_poll(void);
++
++/**
++ * bman_rcr_is_empty - Determine if portal's RCR is empty
++ *
++ * For use in situations where a cpu-affine caller needs to determine when all
++ * releases for the local portal have been processed by BMan but can't use the
++ * BMAN_RELEASE_FLAG_WAIT_SYNC flag to do this from the final bman_release().
++ * The function forces tracking of RCR consumption (which normally doesn't
++ * happen until release processing needs to find space to put new release
++ * commands), and returns zero if the ring still has unprocessed entries,
++ * non-zero if it is empty.
++ */
++int bman_rcr_is_empty(void);
++
++/**
++ * bman_alloc_bpid_range - Allocate a contiguous range of BPIDs
++ * @result: is set by the API to the base BPID of the allocated range
++ * @count: the number of BPIDs required
++ * @align: required alignment of the allocated range
++ * @partial: non-zero if the API can return fewer than @count BPIDs
++ *
++ * Returns the number of buffer pools allocated, or a negative error code. If
++ * @partial is non zero, the allocation request may return a smaller range of
++ * BPs than requested (though alignment will be as requested). If @partial is
++ * zero, the return value will either be 'count' or negative.
++ */
++int bman_alloc_bpid_range(u32 *result, u32 count, u32 align, int partial);
++static inline int bman_alloc_bpid(u32 *result)
++{
++	int ret = bman_alloc_bpid_range(result, 1, 0, 0);
++
++	return (ret > 0) ? 0 : ret;
++}
++
++/**
++ * bman_release_bpid_range - Release the specified range of buffer pool IDs
++ * @bpid: the base BPID of the range to deallocate
++ * @count: the number of BPIDs in the range
++ *
++ * This function can also be used to seed the allocator with ranges of BPIDs
++ * that it can subsequently allocate from.
++ */
++void bman_release_bpid_range(u32 bpid, unsigned int count);
++static inline void bman_release_bpid(u32 bpid)
++{
++	bman_release_bpid_range(bpid, 1);
++}
++
++int bman_reserve_bpid_range(u32 bpid, unsigned int count);
++static inline int bman_reserve_bpid(u32 bpid)
++{
++	return bman_reserve_bpid_range(bpid, 1);
++}
++
++void bman_seed_bpid_range(u32 bpid, unsigned int count);
++
++
++int bman_shutdown_pool(u32 bpid);
++
++/* Pool management */
++
++/**
++ * bman_new_pool - Allocates a Buffer Pool object
++ * @params: parameters specifying the buffer pool ID and behaviour
++ *
++ * Creates a pool object for the given @params. A portal and the depletion
++ * callback field of @params are only used if the BMAN_POOL_FLAG_DEPLETION flag
++ * is set. NB, the fields from @params are copied into the new pool object, so
++ * the structure provided by the caller can be released or reused after the
++ * function returns.
++ */
++struct bman_pool *bman_new_pool(const struct bman_pool_params *params);
++
++/**
++ * bman_free_pool - Deallocates a Buffer Pool object
++ * @pool: the pool object to release
++ *
++ */
++void bman_free_pool(struct bman_pool *pool);
++
++/**
++ * bman_get_params - Returns a pool object's parameters.
++ * @pool: the pool object
++ *
++ * The returned pointer refers to state within the pool object so must not be
++ * modified and can no longer be read once the pool object is destroyed.
++ */
++const struct bman_pool_params *bman_get_params(const struct bman_pool *pool);
++
++/**
++ * bman_release - Release buffer(s) to the buffer pool
++ * @pool: the buffer pool object to release to
++ * @bufs: an array of buffers to release
++ * @num: the number of buffers in @bufs (1-8)
++ * @flags: bit-mask of BMAN_RELEASE_FLAG_*** options
++ *
++ * Adds the given buffers to RCR entries. If the portal @p was created with the
++ * "COMPACT" flag, then it will be using a compaction algorithm to improve
++ * utilisation of RCR. As such, these buffers may join an existing ring entry
++ * and/or it may not be issued right away so as to allow future releases to join
++ * the same ring entry. Use the BMAN_RELEASE_FLAG_NOW flag to override this
++ * behaviour by committing the RCR entry (or entries) right away. If the RCR
++ * ring is full, the function will return -EBUSY unless BMAN_RELEASE_FLAG_WAIT
++ * is selected, in which case it will sleep waiting for space to become
++ * available in RCR. If the function receives a signal before such time (and
++ * BMAN_RELEASE_FLAG_WAIT_INT is set), the function returns -EINTR. Otherwise,
++ * it returns zero.
++ */
++int bman_release(struct bman_pool *pool, const struct bm_buffer *bufs, u8 num,
++			u32 flags);
++
++/**
++ * bman_acquire - Acquire buffer(s) from a buffer pool
++ * @pool: the buffer pool object to acquire from
++ * @bufs: array for storing the acquired buffers
++ * @num: the number of buffers desired (@bufs is at least this big)
++ *
++ * Issues an "Acquire" command via the portal's management command interface.
++ * The return value will be the number of buffers obtained from the pool, or a
++ * negative error code if a h/w error or pool starvation was encountered. In
++ * the latter case, the content of @bufs is undefined.
++ */
++int bman_acquire(struct bman_pool *pool, struct bm_buffer *bufs, u8 num,
++			u32 flags);
++
++/**
++ * bman_flush_stockpile - Flush stockpile buffer(s) to the buffer pool
++ * @pool: the buffer pool object the stockpile belongs
++ * @flags: bit-mask of BMAN_RELEASE_FLAG_*** options
++ *
++ * Adds stockpile buffers to RCR entries until the stockpile is empty.
++ * The return value will be a negative error code if a h/w error occurred.
++ * If BMAN_RELEASE_FLAG_NOW flag is passed and RCR ring is full,
++ * -EAGAIN will be returned.
++ */
++int bman_flush_stockpile(struct bman_pool *pool, u32 flags);
++
++/**
++ * bman_query_pools - Query all buffer pool states
++ * @state: storage for the queried availability and depletion states
++ */
++int bman_query_pools(struct bm_pool_state *state);
++
++#ifdef CONFIG_FSL_BMAN
++/**
++ * bman_query_free_buffers - Query how many free buffers are in buffer pool
++ * @pool: the buffer pool object to query
++ *
++ * Return the number of the free buffers
++ */
++u32 bman_query_free_buffers(struct bman_pool *pool);
++
++/**
++ * bman_update_pool_thresholds - Change the buffer pool's depletion thresholds
++ * @pool: the buffer pool object to which the thresholds will be set
++ * @thresholds: the new thresholds
++ */
++int bman_update_pool_thresholds(struct bman_pool *pool, const u32 *thresholds);
++#endif
++
++/**
++ * The below bman_p_***() variant might be called in a situation that the cpu
++ * which the portal affine to is not online yet.
++ * @bman_portal specifies which portal the API will use.
++*/
++int bman_p_irqsource_add(struct bman_portal *p, __maybe_unused u32 bits);
++#ifdef __cplusplus
++}
++#endif
++
++#endif	/* __FSL_BMAN_H */
+-- 
+2.1.0.27.g96db324
+

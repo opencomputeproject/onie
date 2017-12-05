@@ -1,9 +1,10 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #  Copyright (C) 2014 Nikolay Shopik <shopik@inblock.ru>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -13,17 +14,18 @@
 # This is a makefile fragment that defines the build of busybox
 #
 
-BUSYBOX_VERSION		= 1.20.2
+BUSYBOX_VERSION		= 1.25.1
 BUSYBOX_TARBALL		= busybox-$(BUSYBOX_VERSION).tar.bz2
-BUSYBOX_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.busybox.net/downloads
+BUSYBOX_TARBALL_URLS	+= $(ONIE_MIRROR) https://www.busybox.net/downloads
 BUSYBOX_BUILD_DIR	= $(MBUILDDIR)/busybox
 BUSYBOX_DIR		= $(BUSYBOX_BUILD_DIR)/busybox-$(BUSYBOX_VERSION)
-BUSYBOX_CONFIG		= conf/busybox.config
+BUSYBOX_CONFIG		?= conf/busybox.config
 
 BUSYBOX_SRCPATCHDIR	= $(PATCHDIR)/busybox
 BUSYBOX_PATCHDIR	= $(BUSYBOX_BUILD_DIR)/patch
-MACHINE_BUSYBOX_CONFDIR ?= $(MACHINEDIR)/busybox/conf
-BUSYBOX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/busybox-download
+MACHINE_BUSYBOX_DIR	?= $(MACHINEDIR)/busybox
+MACHINE_BUSYBOX_CONFDIR	?= $(MACHINE_BUSYBOX_DIR)/conf
+BUSYBOX_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/busybox-$(BUSYBOX_VERSION)-download
 BUSYBOX_SOURCE_STAMP	= $(STAMPDIR)/busybox-source
 BUSYBOX_PATCH_STAMP	= $(STAMPDIR)/busybox-patch
 BUSYBOX_BUILD_STAMP	= $(STAMPDIR)/busybox-build
@@ -37,8 +39,8 @@ PHONY += busybox busybox-download busybox-source busybox-config busybox-patch \
 	busybox-build busybox-install busybox-clean busybox-download-clean
 
 MACHINE_BUSYBOX_PATCHDIR = $(shell \
-			   test -d $(MACHINEDIR)/busybox/patches && \
-			   echo "$(MACHINEDIR)/busybox/patches")
+			   test -d $(MACHINE_BUSYBOX_DIR)/patches && \
+			   echo "$(MACHINE_BUSYBOX_DIR)/patches")
 
 ifneq ($(MACHINE_BUSYBOX_PATCHDIR),)
   MACHINE_BUSYBOX_PATCHDIR_FILES = $(MACHINE_BUSYBOX_PATCHDIR)/*
@@ -87,6 +89,25 @@ endif
 $(BUSYBOX_DIR)/.config: $(BUSYBOX_CONFIG) $(MACHINE_BUSYBOX_CONFIG_FILE) $(BUSYBOX_PATCH_STAMP)
 	$(Q) echo "==== Copying $(BUSYBOX_CONFIG) to $(BUSYBOX_DIR)/.config ===="
 	$(Q) cp -v $< $@
+ifeq ($(EXT3_4_ENABLE),yes)
+	$(Q) sed -i \
+		-e '/\bCONFIG_CHATTR\b/c\# CONFIG_CHATTR is not set' \
+		-e '/\bCONFIG_LSATTR\b/c\# CONFIG_LSATTR is not set' \
+		-e '/\bCONFIG_FSCK\b/c\# CONFIG_FSCK is not set' \
+		-e '/\bCONFIG_TUNE2FS\b/c\# CONFIG_TUNE2FS is not set' \
+		-e '/\bCONFIG_MKFS_EXT2\b/c\# CONFIG_MKFS_EXT2 is not set' $@
+endif
+ifeq ($(DOSFSTOOLS_ENABLE),yes)
+	$(Q) sed -i \
+		-e '/\bCONFIG_MKFS_VFAT\b/c\# CONFIG_MKFS_VFAT is not set' $@
+endif
+ifeq ($(I2CTOOLS_ENABLE),yes)
+	$(Q) sed -i \
+		-e '/\bCONFIG_I2CGET\b/cCONFIG_I2CGET=y' \
+		-e '/\bCONFIG_I2CSET\b/cCONFIG_I2CSET=y' \
+		-e '/\bCONFIG_I2CDUMP\b/cCONFIG_I2CDUMP=y' \
+		-e '/\bCONFIG_I2CDETECT\b/cCONFIG_I2CDETECT=y' $@
+endif
 	$(Q) $(SCRIPTDIR)/apply-config-patch $@ $(MACHINE_BUSYBOX_CONFIG_FILE)
 
 busybox-config: $(BUSYBOX_DIR)/.config
@@ -100,7 +121,7 @@ BUSYBOX_NEW_FILES = $(shell test -d $(BUSYBOX_DIR) && test -f $(BUSYBOX_BUILD_ST
 endif
 
 busybox-build: $(BUSYBOX_BUILD_STAMP)
-$(BUSYBOX_BUILD_STAMP): $(BUSYBOX_DIR)/.config $(BUSYBOX_NEW_FILES) $(UCLIBC_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(BUSYBOX_BUILD_STAMP): $(BUSYBOX_DIR)/.config $(BUSYBOX_NEW_FILES) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building busybox-$(BUSYBOX_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'				\
@@ -127,7 +148,7 @@ $(BUSYBOX_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(BUSYBOX_BUILD_STAMP)
 	$(Q) chmod 4755 $(SYSROOTDIR)/bin/busybox
 	$(Q) touch $@
 
-USERSPACE_CLEAN += busybox-clean
+MACHINE_CLEAN += busybox-clean
 busybox-clean:
 	$(Q) rm -rf $(BUSYBOX_BUILD_DIR)
 	$(Q) rm -f $(BUSYBOX_STAMP)

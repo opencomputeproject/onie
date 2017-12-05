@@ -1,0 +1,1687 @@
+Broadcom iProc (ARM Cortex-A9) GPIO driver
+Sourced from Broadcom LDK 3.4.10
+
+diff --git a/drivers/bcmdrivers/gpio/.gitignore b/drivers/bcmdrivers/gpio/.gitignore
+new file mode 100644
+index 0000000..9463d48
+--- /dev/null
++++ b/drivers/bcmdrivers/gpio/.gitignore
+@@ -0,0 +1,12 @@
++/.built-in.o.cmd
++/.gpio_cfg.o.cmd
++/.gpio.o.cmd
++/.gpiolib.o.cmd
++/.iproc_gpio.o.cmd
++/built-in.o
++/gpio_cfg.o
++/gpio.o
++/gpiolib.o
++/iproc_gpio.o
++/modules.builtin
++/modules.order
+diff --git a/drivers/bcmdrivers/gpio/Kconfig b/drivers/bcmdrivers/gpio/Kconfig
+new file mode 100644
+index 0000000..0bcd76f
+--- /dev/null
++++ b/drivers/bcmdrivers/gpio/Kconfig
+@@ -0,0 +1,11 @@
++config IPROC_GPIO
++	tristate "GPIO support"
++	select GENERIC_GPIO
++	select ARCH_REQUIRE_GPIOLIB
++	select GPIOLIB
++	depends on ARCH_IPROC
++	default y
++	help
++	  Add GPIO support
++
++	  If unsure, say N.
+diff --git a/drivers/bcmdrivers/gpio/Makefile b/drivers/bcmdrivers/gpio/Makefile
+new file mode 100644
+index 0000000..2890510
+--- /dev/null
++++ b/drivers/bcmdrivers/gpio/Makefile
+@@ -0,0 +1,3 @@
++
++obj-$(CONFIG_IPROC_GPIO) := iproc_gpio.o
++iproc_gpio-objs := gpio.o gpio_cfg.o gpiolib.o
+diff --git a/drivers/bcmdrivers/gpio/gpio.c b/drivers/bcmdrivers/gpio/gpio.c
+new file mode 100644
+index 0000000..585c9b4
+--- /dev/null
++++ b/drivers/bcmdrivers/gpio/gpio.c
+@@ -0,0 +1,742 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/irq.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/ioport.h>
++#include <linux/version.h>
++
++#include <mach/iproc_regs.h>
++
++
++#include "gpio.h"
++
++
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
++#define irq_get_chip_data get_irq_chip_data
++#define irq_set_chip_data set_irq_chip_data
++#define  irq_set_chip set_irq_chip
++#define irq_set_handler set_irq_handler
++#define status_use_accessors status
++#endif
++
++
++static struct iproc_gpio_chip *iproc_gpio_dev[MAX_NS_GPIO] = {};
++static int dev = 0;
++
++static unsigned int _iproc_gpio_readl(struct iproc_gpio_chip *chip, int reg)
++{
++    return readl(chip->ioaddr + reg);
++}
++
++static void _iproc_gpio_writel(struct iproc_gpio_chip *chip, unsigned int val, int reg)
++{
++	writel(val, chip->ioaddr + reg);
++}
++
++
++/*
++@ pin : the actual pin number of the gpiochip
++*/
++static int iproc_gpio_to_irq(struct iproc_gpio_chip *chip, unsigned int pin) {
++    return (chip->irq_base + pin - chip->pin_offset);
++}
++
++/*
++returns the actual pin number of the gpiochip
++*/
++static int iproc_irq_to_gpio(struct iproc_gpio_chip *chip, unsigned int irq) {
++    return (irq - chip->irq_base + chip->pin_offset);
++}
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 5)
++static void iproc_gpio_irq_ack(unsigned int irq)
++{
++#else
++static void iproc_gpio_irq_ack(struct irq_data *d)
++{
++    unsigned int irq = d->irq;
++#endif
++    struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++
++    if (ourchip) {
++       struct iproc_gpio_irqcfg *irqcfg = ourchip->irqcfg;
++	if (irqcfg && irqcfg->ack)
++	    irqcfg->ack(irq);
++
++    }
++}
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 5)
++static void iproc_gpio_irq_unmask(unsigned int irq)
++{
++#else
++static void iproc_gpio_irq_unmask(struct irq_data *d)
++{
++    unsigned int irq = d->irq;
++#endif
++    struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++
++    if (ourchip) {
++       struct iproc_gpio_irqcfg *irqcfg = ourchip->irqcfg;
++	if (irqcfg && irqcfg->unmask)
++	    irqcfg->unmask(irq);
++    }
++}
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 5)
++static void iproc_gpio_irq_mask(unsigned int irq)
++{
++#else
++static void iproc_gpio_irq_mask(struct irq_data *d)
++{
++    unsigned int irq = d->irq;
++#endif
++    struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++
++    if (ourchip) {
++       struct iproc_gpio_irqcfg *irqcfg = ourchip->irqcfg;
++	if (irqcfg && irqcfg->mask)
++	    irqcfg->mask(irq);
++    }
++}
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 5)
++static int iproc_gpio_irq_set_type(unsigned int irq, unsigned int type)
++{
++#else
++static int iproc_gpio_irq_set_type(struct irq_data *d, unsigned int type)
++{
++    unsigned int irq = d->irq;
++#endif
++    struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++
++    if (ourchip) {
++       struct iproc_gpio_irqcfg *irqcfg = ourchip->irqcfg;
++	if (irqcfg && irqcfg->set_type)
++	    return irqcfg->set_type(irq, type);
++    }
++    return -EINVAL;
++}
++
++#if defined(IPROC_GPIO_CCA)
++static irqreturn_t
++iproc_gpio_irq_handler_cca(int irq, void *dev)
++
++{
++    unsigned int  val, irq_type;
++    unsigned int  int_mask, int_pol, in;
++    unsigned int  event_mask, event, event_pol, tmp = 0;
++    int iter, g_irq, max_pin;
++    struct iproc_gpio_chip *ourchip = dev;
++
++
++    val = readl(ourchip->intr_ioaddr + IPROC_CCA_INT_STS);
++
++    if (val & IPROC_CCA_INT_F_GPIOINT) {
++        int_mask = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_LEVEL_MASK);
++        int_pol = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_LEVEL);
++        in = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_DIN);
++        event_mask = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_EVENT_MASK);
++        event = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_EVENT);
++        event_pol = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_EDGE);
++
++		max_pin = ourchip->pin_offset + ourchip->chip.ngpio;
++        for (iter = ourchip->pin_offset; iter < max_pin; iter ++) {
++            g_irq = iproc_gpio_to_irq(ourchip, iter);
++            irq_type = irq_desc[g_irq].status_use_accessors & IRQ_TYPE_SENSE_MASK;
++            switch(irq_type) {
++                case IRQ_TYPE_EDGE_RISING:
++                    tmp = event_mask;
++                    tmp &= event;
++                    tmp &= ~event_pol;
++                    if (tmp & (1 << iter)) {
++                        generic_handle_irq(g_irq);
++                    }
++                    break;
++                case IRQ_TYPE_EDGE_FALLING:
++                    tmp = event_mask;
++                    tmp &= event;
++                    tmp &= event_pol;
++                    if (tmp & (1 << iter)) {
++                        generic_handle_irq(g_irq);
++                    }
++                    break;
++                case IRQ_TYPE_LEVEL_LOW:
++                    tmp = in ^ int_pol;
++                    tmp &= int_mask;
++                    tmp &= int_pol;
++                    if (tmp & (1 << iter)) {
++                        generic_handle_irq(g_irq);
++                    }
++                    break;
++                case IRQ_TYPE_LEVEL_HIGH:
++                    tmp = in ^ int_pol;
++                    tmp &= int_mask;
++                    tmp &= ~int_pol;
++                    if (tmp & (1 << iter)) {
++                        generic_handle_irq(g_irq);
++                    }
++                    break;
++                default:
++                    break;
++            }
++        }
++    }else {
++        return IRQ_NONE;
++    }
++
++    return IRQ_HANDLED;
++}
++
++static void iproc_gpio_irq_ack_cca(unsigned int irq)
++{
++	struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++	int pin;
++
++	pin = iproc_irq_to_gpio(ourchip, irq);
++
++	if (ourchip->id == IPROC_GPIO_CCA_ID) {
++	    unsigned int  event_status, irq_type;
++
++	    event_status = 0;
++	    irq_type = irq_desc[irq].status_use_accessors & IRQ_TYPE_SENSE_MASK;
++	    if (irq_type & IRQ_TYPE_EDGE_BOTH)
++	    {
++		event_status |= (1 << pin);
++		_iproc_gpio_writel(ourchip, event_status,
++		    IPROC_GPIO_CCA_INT_EVENT);
++	    }
++
++	}
++}
++
++static void iproc_gpio_irq_unmask_cca(unsigned int irq)
++{
++	struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++	int pin;
++	unsigned int int_mask, irq_type;
++
++	pin = iproc_irq_to_gpio(ourchip, irq);
++	irq_type = irq_desc[irq].status_use_accessors & IRQ_TYPE_SENSE_MASK;
++
++	if (ourchip->id == IPROC_GPIO_CCA_ID) {
++	    unsigned int  event_mask;
++
++	    event_mask = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_EVENT_MASK);
++	    int_mask = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_LEVEL_MASK);
++
++	    if (irq_type & IRQ_TYPE_EDGE_BOTH) {
++		event_mask |= 1 << pin;
++		_iproc_gpio_writel(ourchip, event_mask,
++		    IPROC_GPIO_CCA_INT_EVENT_MASK);
++	    } else {
++		int_mask |= 1 << pin;
++		_iproc_gpio_writel(ourchip, int_mask,
++		    IPROC_GPIO_CCA_INT_LEVEL_MASK);
++	    }
++	}
++
++}
++
++static void iproc_gpio_irq_mask_cca(unsigned int irq)
++{
++	struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++	int pin;
++	unsigned int irq_type, int_mask;
++
++	pin = iproc_irq_to_gpio(ourchip, irq);
++	irq_type = irq_desc[irq].status_use_accessors & IRQ_TYPE_SENSE_MASK;
++
++	if (ourchip->id == IPROC_GPIO_CCA_ID) {
++	    unsigned int  event_mask;
++
++	    event_mask = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_EVENT_MASK);
++	    int_mask = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_LEVEL_MASK);
++
++	    if (irq_type & IRQ_TYPE_EDGE_BOTH) {
++		event_mask &= ~(1 << pin);
++		_iproc_gpio_writel(ourchip, event_mask,
++		    IPROC_GPIO_CCA_INT_EVENT_MASK);
++	    } else {
++		int_mask &= ~(1 << pin);
++		_iproc_gpio_writel(ourchip, int_mask,
++		    IPROC_GPIO_CCA_INT_LEVEL_MASK);
++	    }
++	}
++}
++
++static int iproc_gpio_irq_set_type_cca(unsigned int irq, unsigned int type)
++{
++	struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++	int pin;
++
++
++	pin = iproc_irq_to_gpio(ourchip, irq);
++
++	if (ourchip->id == IPROC_GPIO_CCA_ID) {
++	    unsigned int  event_pol, int_pol;
++
++	    switch (type & IRQ_TYPE_SENSE_MASK) {
++	    case IRQ_TYPE_EDGE_RISING:
++		event_pol = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_EDGE);
++		event_pol &= ~(1 << pin);
++		_iproc_gpio_writel(ourchip, event_pol, IPROC_GPIO_CCA_INT_EDGE);
++		break;
++	    case IRQ_TYPE_EDGE_FALLING:
++		event_pol = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_EDGE);
++		event_pol |= (1 << pin);
++		_iproc_gpio_writel(ourchip, event_pol, IPROC_GPIO_CCA_INT_EDGE);
++		break;
++	    case IRQ_TYPE_LEVEL_HIGH:
++		int_pol = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCA_INT_LEVEL);
++		int_pol &= ~(1 << pin);
++		_iproc_gpio_writel(ourchip, int_pol, IPROC_GPIO_CCA_INT_LEVEL);
++		break;
++	    case IRQ_TYPE_LEVEL_LOW:
++		int_pol = _iproc_gpio_readl(ourchip,IPROC_GPIO_CCA_INT_LEVEL);
++		int_pol |= (1 << pin);
++		_iproc_gpio_writel(ourchip, int_pol, IPROC_GPIO_CCA_INT_LEVEL);
++		break;
++	    default:
++		printk(KERN_ERR "unsupport irq type !\n");
++		return -EINVAL;
++	    }
++	}
++
++	return 0;
++}
++
++struct iproc_gpio_irqcfg cca_gpio_irqcfg = {
++        .flags = IRQF_NO_SUSPEND|IRQF_SHARED,
++	.handler = iproc_gpio_irq_handler_cca,
++	.ack = iproc_gpio_irq_ack_cca,
++	.mask = iproc_gpio_irq_mask_cca,
++	.unmask = iproc_gpio_irq_unmask_cca,
++	.set_type = iproc_gpio_irq_set_type_cca,
++};
++#endif /* IPROC_GPIO_CCA */
++
++#if defined(IPROC_GPIO_CCB) || defined(IPROC_GPIO_CCG)
++static irqreturn_t
++iproc_gpio_irq_handler_ccb(int irq, void *dev)
++{
++    struct iproc_gpio_chip *ourchip = dev;
++    int iter, max_pin;
++    unsigned int  val;
++
++    val = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCB_INT_MSTAT);
++    if(!val){
++        return IRQ_NONE;
++    }
++
++	max_pin = ourchip->pin_offset + ourchip->chip.ngpio;
++    for (iter = ourchip->pin_offset; iter < max_pin; iter ++) {
++        if (val & (1 << iter)) {
++            generic_handle_irq(iproc_gpio_to_irq(ourchip, iter));
++        }
++    }
++
++    return IRQ_HANDLED;
++}
++
++static void iproc_gpio_irq_ack_ccb(unsigned int irq)
++{
++	struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++	int pin;
++
++	pin = iproc_irq_to_gpio(ourchip, irq);
++
++	if ((ourchip->id == IPROC_GPIO_CCB_ID) ||
++		(ourchip->id == IPROC_GPIO_CCG_ID)) {
++	    unsigned int int_clear = 0;
++
++	    int_clear |= (1 << pin);
++	    _iproc_gpio_writel(ourchip, int_clear, IPROC_GPIO_CCB_INT_CLR);
++
++	}
++}
++
++static void iproc_gpio_irq_unmask_ccb(unsigned int irq)
++{
++	struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++	int pin;
++	unsigned int int_mask;
++
++	pin = iproc_irq_to_gpio(ourchip, irq);
++
++	if ((ourchip->id == IPROC_GPIO_CCB_ID) ||
++		(ourchip->id == IPROC_GPIO_CCG_ID)) {
++	    int_mask = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCB_INT_MASK);
++	    int_mask |= (1 << pin);
++	    _iproc_gpio_writel(ourchip, int_mask, IPROC_GPIO_CCB_INT_MASK);
++	}
++
++}
++
++static void iproc_gpio_irq_mask_ccb(unsigned int irq)
++{
++	struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++	int pin;
++	unsigned int int_mask;
++
++	pin = iproc_irq_to_gpio(ourchip, irq);
++
++	if ((ourchip->id == IPROC_GPIO_CCB_ID) ||
++		(ourchip->id == IPROC_GPIO_CCG_ID)) {
++	    int_mask = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCB_INT_MASK);
++	    int_mask &= ~(1 << pin);
++	    _iproc_gpio_writel(ourchip, int_mask,IPROC_GPIO_CCB_INT_MASK);
++	}
++}
++
++static int iproc_gpio_irq_set_type_ccb(unsigned int irq, unsigned int type)
++{
++	struct iproc_gpio_chip *ourchip = irq_get_chip_data(irq);
++	int pin;
++
++
++	pin = iproc_irq_to_gpio(ourchip, irq);
++
++	if ((ourchip->id == IPROC_GPIO_CCB_ID) ||
++		(ourchip->id == IPROC_GPIO_CCG_ID)) {
++	    unsigned int  int_type, int_de, int_edge;
++	    int_type = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCB_INT_TYPE);
++	    int_edge = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCB_INT_EDGE);
++	    switch (type) {
++		case IRQ_TYPE_EDGE_BOTH:
++		    int_type &= ~(1 << pin);
++		    int_de = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCB_INT_DE);
++		    int_de |= (1 << pin);
++		    _iproc_gpio_writel(ourchip, int_de, IPROC_GPIO_CCB_INT_DE);
++		    break;
++		case IRQ_TYPE_EDGE_RISING:
++		    int_type &= ~(1 << pin);
++		    int_edge |= (1 << pin);
++
++		    int_de = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCB_INT_DE);
++		    int_de  &= ~(1 << pin);
++		    _iproc_gpio_writel(ourchip, int_de, IPROC_GPIO_CCB_INT_DE);
++		    break;
++		case IRQ_TYPE_EDGE_FALLING:
++		    int_type &= ~(1 << pin);
++		    int_edge &= ~(1 << pin);
++
++		    int_de = _iproc_gpio_readl(ourchip, IPROC_GPIO_CCB_INT_DE);
++		    int_de  &= ~(1 << pin);
++		    _iproc_gpio_writel(ourchip, int_de, IPROC_GPIO_CCB_INT_DE);
++		    break;
++		case IRQ_TYPE_LEVEL_HIGH:
++		    int_type |= (1 << pin);
++		    int_edge |= (1 << pin);
++		    break;
++		case IRQ_TYPE_LEVEL_LOW:
++		    int_type |= (1 << pin);
++		    int_edge &= ~(1 << pin);
++		    break;
++		default:
++		    printk(KERN_ERR "unsupport irq type !\n");
++		    return -EINVAL;
++	    }
++	    _iproc_gpio_writel(ourchip, int_type, IPROC_GPIO_CCB_INT_TYPE);
++	    _iproc_gpio_writel(ourchip, int_edge, IPROC_GPIO_CCB_INT_EDGE);
++	}
++
++	return 0;
++}
++
++struct iproc_gpio_irqcfg ccb_gpio_irqcfg = {
++        .flags = IRQF_NO_SUSPEND,
++	.handler = iproc_gpio_irq_handler_ccb,
++	.ack = iproc_gpio_irq_ack_ccb,
++	.mask = iproc_gpio_irq_mask_ccb,
++	.unmask = iproc_gpio_irq_unmask_ccb,
++	.set_type = iproc_gpio_irq_set_type_ccb,
++};
++#endif /* IPROC_GPIO_CCB || IPROC_GPIO_CCG*/
++
++
++static struct irq_chip iproc_gpio_irq_chip = {
++    .name         = "IPROC-GPIO",
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 5)
++    .ack      = (void *) iproc_gpio_irq_ack,
++    .mask     = (void *) iproc_gpio_irq_mask,
++    .unmask   = (void *) iproc_gpio_irq_unmask,
++    .set_type = (void *) iproc_gpio_irq_set_type,
++#else
++    .irq_ack      = (void *) iproc_gpio_irq_ack,
++    .irq_mask     = (void *) iproc_gpio_irq_mask,
++    .irq_unmask   = (void *) iproc_gpio_irq_unmask,
++    .irq_set_type = (void *) iproc_gpio_irq_set_type,
++#endif
++};
++
++struct iproc_gpio_chip *iproc_gpios[IPROC_GPIO_END];
++
++static __init void iproc_gpiolib_track(struct iproc_gpio_chip *chip)
++{
++    unsigned int gpn;
++    int i;
++
++    gpn = chip->chip.base;
++    for (i = 0; i < chip->chip.ngpio; i++, gpn++) {
++        BUG_ON(gpn >= ARRAY_SIZE(iproc_gpios));
++        iproc_gpios[gpn] = chip;
++    }
++}
++
++static int iproc_gpiolib_input(struct gpio_chip *chip, unsigned gpio)
++{
++    struct iproc_gpio_chip *ourchip = to_iproc_gpio(chip);
++    unsigned long flags;
++    unsigned int  val;
++    unsigned int pin_offset = gpio + ourchip->pin_offset;
++    unsigned int  nBitMask = 1 << pin_offset;
++
++
++    iproc_gpio_lock(ourchip, flags);
++
++    val = _iproc_gpio_readl(ourchip, REGOFFSET_GPIO_EN);
++    val &= ~nBitMask;
++    _iproc_gpio_writel(ourchip, val, REGOFFSET_GPIO_EN);
++
++    iproc_gpio_unlock(ourchip, flags);
++    return 0;
++}
++
++static int iproc_gpiolib_output(struct gpio_chip *chip,
++			      unsigned gpio, int value)
++{
++    struct iproc_gpio_chip *ourchip = to_iproc_gpio(chip);
++    unsigned long flags;
++    unsigned long val;
++    unsigned int pin_offset = gpio + ourchip->pin_offset;
++    unsigned int  nBitMask = 1 << pin_offset;
++
++    iproc_gpio_lock(ourchip, flags);
++
++    val = _iproc_gpio_readl(ourchip, REGOFFSET_GPIO_EN);
++    val |= nBitMask;
++    _iproc_gpio_writel(ourchip, val, REGOFFSET_GPIO_EN);
++
++    iproc_gpio_unlock(ourchip, flags);
++    return 0;
++}
++
++static void iproc_gpiolib_set(struct gpio_chip *chip,
++			    unsigned gpio, int value)
++{
++    struct iproc_gpio_chip *ourchip = to_iproc_gpio(chip);
++    unsigned long flags;
++    unsigned long val;
++    unsigned int pin_offset = gpio + ourchip->pin_offset;
++    unsigned int  nBitMask = 1 << pin_offset;
++
++    iproc_gpio_lock(ourchip, flags);
++
++
++    /* determine the GPIO pin direction
++     */
++    val = _iproc_gpio_readl(ourchip, REGOFFSET_GPIO_EN);
++    val &= nBitMask;
++
++    /* this function only applies to output pin
++     */
++    if (!val)
++        return;
++
++    val = _iproc_gpio_readl(ourchip, REGOFFSET_GPIO_DOUT);
++
++    if ( value == 0 ){
++        /* Set the pin to zero */
++        val &= ~nBitMask;
++    }else{
++        /* Set the pin to 1 */
++        val |= nBitMask;
++    }
++    _iproc_gpio_writel(ourchip, val, REGOFFSET_GPIO_DOUT);
++
++    iproc_gpio_unlock(ourchip, flags);
++
++}
++
++
++static int iproc_gpiolib_get(struct gpio_chip *chip, unsigned gpio)
++{
++    struct iproc_gpio_chip *ourchip = to_iproc_gpio(chip);
++    unsigned long flags;
++    unsigned int val, offset;
++    unsigned int pin_offset = gpio + ourchip->pin_offset;
++    unsigned int  nBitMask = 1 << pin_offset;
++
++    iproc_gpio_lock(ourchip, flags);
++    /* determine the GPIO pin direction
++     */
++    offset = _iproc_gpio_readl(ourchip, REGOFFSET_GPIO_EN);
++    offset &= nBitMask;
++
++    if (offset){
++        val = _iproc_gpio_readl(ourchip, REGOFFSET_GPIO_DOUT);
++    } else {
++        val = _iproc_gpio_readl(ourchip, REGOFFSET_GPIO_DIN);
++    }
++    val >>= pin_offset;
++    val &= 1;
++    iproc_gpio_unlock(ourchip, flags);
++
++    return val;
++}
++
++/*
++@offset : the gpio pin index number from gpiolib view (minus gpio base only)
++*/
++static int iproc_gpiolib_to_irq(struct gpio_chip *chip,
++                unsigned offset)
++{
++    struct iproc_gpio_chip *ourchip = to_iproc_gpio(chip);
++    return iproc_gpio_to_irq(ourchip, offset + ourchip->pin_offset);
++}
++void __init  iproc_gpiolib_add(struct iproc_gpio_chip *chip)
++{
++    struct resource *res;
++    struct gpio_chip *gc = &chip->chip;
++    int ret, i;
++
++    BUG_ON(!gc->label);
++    BUG_ON(!gc->ngpio);
++
++    spin_lock_init(&chip->lock);
++
++    if (!gc->direction_input)
++        gc->direction_input = iproc_gpiolib_input;
++    if (!gc->direction_output)
++        gc->direction_output = iproc_gpiolib_output;
++    if (!gc->set)
++        gc->set = iproc_gpiolib_set;
++    if (!gc->get)
++        gc->get = iproc_gpiolib_get;
++    if (!gc->to_irq)
++        gc->to_irq = iproc_gpiolib_to_irq;
++
++    /* gpiochip_add() prints own failure message on error. */
++    ret = gpiochip_add(gc);
++    if (ret >= 0)
++        iproc_gpiolib_track(chip);
++
++    printk(KERN_INFO "iproc gpiochip add %s\n", gc->label);
++    /* io remap */
++    res = chip->resource;
++
++    chip->ioaddr = ioremap_nocache(res->start, (res->end - res->start) + 1);
++    printk(KERN_INFO "%s:ioaddr %p \n", gc->label, chip->ioaddr);
++    chip->intr_ioaddr = NULL;
++    chip->dmu_ioaddr = NULL;
++    if(res->child){
++        for (i=0; i< 2; i++){
++            if (!strcmp("intr", res->child[i].name)){
++                chip->intr_ioaddr =
++                    ioremap_nocache(res->child[i].start,
++                    (res->child[i].end - res->child[i].start) + 1);
++            }
++            if (!strcmp("dmu", res->child[i].name)){
++                chip->dmu_ioaddr =
++                    ioremap_nocache(res->child[i].start,
++                    (res->child[i].end - res->child[i].start) + 1);
++            }
++        }
++        printk(KERN_INFO "%s:intr_ioaddr %p dmu_ioaddr %p\n",
++            gc->label, chip->intr_ioaddr,chip->dmu_ioaddr);
++    }
++
++
++    if (chip->irq_base) {
++        for (i = chip->irq_base; i < (chip->irq_base + gc->ngpio); i++) {
++            irq_set_chip(i, &iproc_gpio_irq_chip);
++            irq_set_chip_data(i,chip);
++            irq_set_handler(i, handle_level_irq);
++            set_irq_flags(i, IRQF_VALID);
++
++        }
++#if defined(IPROC_GPIO_CCA)
++        if (chip->id == IPROC_GPIO_CCA_ID ){
++            unsigned int val;
++            /* enable the GPIO in CCA interrupt mask */
++            val = readl(chip->intr_ioaddr + IPROC_CCA_INT_MASK);
++            val |= IPROC_CCA_INT_F_GPIOINT;
++            writel(val, chip->intr_ioaddr + IPROC_CCA_INT_MASK);
++        }
++#endif
++	if (chip->irqcfg) {
++	    struct iproc_gpio_irqcfg *irqcfg = chip->irqcfg;
++	    if (irqcfg->handler) {
++                ret = request_irq(chip->irq, irqcfg->handler, irqcfg->flags,
++		    gc->label, chip);
++	        if (ret)
++		    printk(KERN_ERR "Unable to request IRQ%d: %d\n",
++		        chip->irq, ret);
++	    }
++	    else
++           printk(KERN_ERR "%s is added without isr!\n", chip->chip.label);
++	}
++    }
++    iproc_gpio_dev[dev] = chip;
++    dev++;
++}
++
++static int __init gpio_init(void)
++{
++    iproc_gpiolib_init();
++
++    return 0;
++}
++static void __exit gpio_exit(void)
++{
++    int i=0;
++
++    for (i = 0 ; i < MAX_NS_GPIO; i++) {
++        if(iproc_gpio_dev[i]){
++            if(iproc_gpio_dev[i]->ioaddr){
++                iounmap(iproc_gpio_dev[i]->ioaddr);
++            }
++            if(iproc_gpio_dev[i]->intr_ioaddr){
++#if defined(IPROC_GPIO_CCA)
++                if (iproc_gpio_dev[i]->id == IPROC_GPIO_CCA_ID ){
++                  unsigned int val;
++                  val = readl(iproc_gpio_dev[i]->intr_ioaddr + IPROC_CCA_INT_MASK);
++                  val &= ~(IPROC_CCA_INT_F_GPIOINT);
++                  writel(val, iproc_gpio_dev[i]->intr_ioaddr + IPROC_CCA_INT_MASK);
++                }
++#endif
++                iounmap(iproc_gpio_dev[i]->intr_ioaddr);
++            }
++            if(iproc_gpio_dev[i]->dmu_ioaddr){
++                iounmap(iproc_gpio_dev[i]->dmu_ioaddr);
++            }
++            if(iproc_gpio_dev[i]->irq_base) {
++                free_irq(iproc_gpio_dev[i]->irq,iproc_gpio_dev[i]);
++            }
++
++            gpiochip_remove(&iproc_gpio_dev[i]->chip);
++            iproc_gpio_dev[i] = NULL;
++        }
++    }
++}
++
++MODULE_DESCRIPTION("IPROC GPIO driver");
++MODULE_LICENSE("GPL");
++
++module_init(gpio_init);
++module_exit(gpio_exit);
+diff --git a/drivers/bcmdrivers/gpio/gpio.h b/drivers/bcmdrivers/gpio/gpio.h
+new file mode 100644
+index 0000000..bfc44f7
+--- /dev/null
++++ b/drivers/bcmdrivers/gpio/gpio.h
+@@ -0,0 +1,101 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef __IPROC_PLAT_GPIO_H
++#define __IPROC_PLAT_GPIO_H
++
++#include <mach/gpio.h>
++
++#if defined(CONFIG_MACH_IPROC_P7)
++#define IPROC_GPIO_CCG
++#else
++#define IPROC_GPIO_CCA
++#define IPROC_GPIO_CCB
++#endif
++
++#define IPROC_GPIO_REG_SIZE     (0x50)
++
++
++
++
++
++#define REGOFFSET_GPIO_DIN          0x000 /* GPIO Data in register */
++#define REGOFFSET_GPIO_DOUT         0x004 /* GPIO Data out register */
++#define REGOFFSET_GPIO_EN           0x008 /* GPIO driver enable register */
++
++
++#define IPROC_GPIO_CCA_ID   (0)
++#define IPROC_GPIO_CCB_ID   (1)
++#define IPROC_GPIO_CCG_ID   (2)
++
++#define IPROC_GPIO_CCA_IRQ_BASE     (IPROC_IRQ_GPIO_0)
++#define IPROC_GPIO_CCB_IRQ_BASE     (IPROC_IRQ_GPIO_0 + 32)
++#define IPROC_GPIO_CCG_IRQ_BASE     (IPROC_IRQ_GPIO_0)
++
++
++
++
++#define IPROC_CCA_INT_F_GPIOINT     (1)
++
++struct iproc_gpio_irqcfg {
++    unsigned long flags;
++    irqreturn_t (*handler)(int irq, void *dev);
++    void (*ack)(unsigned int irq);
++    void (*unmask)(unsigned int irq);
++    void (*mask)(unsigned int irq);
++    int (*set_type)(unsigned int irq, unsigned int type);
++};
++
++struct iproc_gpio_chip {
++    int id;
++    struct gpio_chip	chip;
++    struct iproc_gpio_cfg	*config;
++    void __iomem		*ioaddr;
++    void __iomem		*intr_ioaddr;
++    void __iomem		*dmu_ioaddr;
++    spinlock_t		 lock;
++    int irq_base;
++	struct resource	* resource;
++	int irq;
++    struct iproc_gpio_irqcfg	*irqcfg;
++    int pin_offset;
++};
++
++
++static inline struct iproc_gpio_chip *to_iproc_gpio(struct gpio_chip *gpc)
++{
++	return container_of(gpc, struct iproc_gpio_chip, chip);
++}
++
++#define IPROC_GPIO_END  (32 + 4)
++
++extern struct iproc_gpio_chip *iproc_gpios[IPROC_GPIO_END];
++
++static inline struct iproc_gpio_chip *iproc_gpiolib_getchip(unsigned int chip)
++{
++	return (chip < IPROC_GPIO_END) ? iproc_gpios[chip] : NULL;
++}
++
++/* locking wrappers to deal with multiple access to the same gpio bank */
++#define iproc_gpio_lock(_oc, _fl) spin_lock_irqsave(&(_oc)->lock, _fl)
++#define iproc_gpio_unlock(_oc, _fl) spin_unlock_irqrestore(&(_oc)->lock, _fl)
++
++extern void iproc_gpiolib_add(struct iproc_gpio_chip *chip);
++extern int iproc_gpiolib_init(void);
++
++#define MAX_NS_GPIO 2
++
++#endif
+diff --git a/drivers/bcmdrivers/gpio/gpio_cfg.c b/drivers/bcmdrivers/gpio/gpio_cfg.c
+new file mode 100644
+index 0000000..2bd1a74
+--- /dev/null
++++ b/drivers/bcmdrivers/gpio/gpio_cfg.c
+@@ -0,0 +1,402 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/irq.h>
++#include <linux/io.h>
++
++#include "gpio.h"
++#include "gpio_cfg.h"
++
++#if defined(IPROC_GPIO_CCA)
++#if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
++int iproc_gpio_set_config_cca(struct iproc_gpio_chip *chip,
++			      unsigned int off, unsigned int cfg)
++{
++    unsigned long aux_sel;
++    unsigned int aux_sel_reg;
++    unsigned int base, pin;
++
++    base = 0;
++    pin = 0;
++    if (chip->id == IPROC_GPIO_CCA_ID) {
++        aux_sel_reg = IPROC_GPIO_CCA_CTRL0;
++        base = (unsigned int)chip->dmu_ioaddr;
++        if(off <= 17){
++            pin = 1 << off;
++        } else if (off >= 21){
++            pin = 1 << (off - 3);
++        } else {
++            if (cfg == IPROC_GPIO_AUX_FUN)
++                return -EINVAL;
++            else
++                return 0;
++        }
++    }
++    aux_sel = readl_relaxed(base + aux_sel_reg);
++
++    switch (cfg) {
++        case IPROC_GPIO_GENERAL:
++            aux_sel |= pin;
++            break;
++        case IPROC_GPIO_AUX_FUN:
++            aux_sel &= ~(pin);
++            break;
++        default:
++            return -EINVAL;
++    }
++    writel_relaxed(aux_sel, base + aux_sel_reg);
++
++    return 0;
++}
++
++
++unsigned iproc_gpio_get_config_cca(struct iproc_gpio_chip *chip,
++				   unsigned int off)
++{
++    unsigned long aux_sel;
++    unsigned int aux_sel_reg;
++    unsigned int base, pin;
++
++    base = 0;
++    pin = 0;
++    if (chip->id == IPROC_GPIO_CCA_ID) {
++
++        aux_sel_reg = IPROC_GPIO_CCA_CTRL0;
++        base = (unsigned int)chip->dmu_ioaddr;
++        if(off <= 17){
++            pin = 1 << off;
++        } else if (off >= 21){
++            pin = 1 << (off - 3);
++        } else {
++            return IPROC_GPIO_GENERAL;
++        }
++    }
++
++    aux_sel = readl_relaxed(base + aux_sel_reg);
++
++    if (aux_sel & pin) {
++        return IPROC_GPIO_GENERAL;
++    } else {
++        return IPROC_GPIO_AUX_FUN;
++    }
++}
++
++
++int iproc_gpio_setpull_updown_cca(struct iproc_gpio_chip *chip,
++			    unsigned int off, iproc_gpio_pull_t pull)
++{
++    unsigned int base;
++    base = 0;
++
++    if (chip->id == IPROC_GPIO_CCA_ID) {
++        unsigned long pull_up, pull_down;
++
++        base = (unsigned int)chip->dmu_ioaddr;
++
++        pull_up = readl_relaxed(base + IPROC_GPIO_CCA_PULL_UP);
++        pull_down = readl_relaxed(base + IPROC_GPIO_CCA_PULL_DOWN);
++
++        switch (pull) {
++            case IPROC_GPIO_PULL_UP:
++                pull_up |= (1 << off);
++                pull_down &= ~(1 << off);
++                break;
++            case IPROC_GPIO_PULL_DOWN:
++                pull_up &= ~(1 << off);
++                pull_down |= (1 << off);
++                break;
++            case IPROC_GPIO_PULL_NONE:
++                pull_up &= ~(1 << off);
++                pull_down &= ~(1 << off);
++                break;
++            default:
++                return -EINVAL;
++        }
++        writel_relaxed(pull_up, base + IPROC_GPIO_CCA_PULL_UP);
++        writel_relaxed(pull_down, base + IPROC_GPIO_CCA_PULL_DOWN);
++    }
++
++    return 0;
++}
++
++
++iproc_gpio_pull_t iproc_gpio_getpull_updown_cca(struct iproc_gpio_chip *chip,
++					unsigned int off)
++{
++
++    unsigned int base;
++    base = 0;
++
++    if (chip->id == IPROC_GPIO_CCA_ID) {
++        unsigned long pull_up, pull_down;
++
++        base = (unsigned int)chip->dmu_ioaddr;
++
++        pull_up = readl_relaxed(base + IPROC_GPIO_CCA_PULL_UP);
++        pull_down = readl_relaxed(base + IPROC_GPIO_CCA_PULL_DOWN);
++        pull_up &= 1 << off;
++        pull_down &= 1 << off;
++
++        if (pull_up ^ pull_down) {
++            if (pull_up) {
++                return IPROC_GPIO_PULL_UP;
++            } else {
++                return IPROC_GPIO_PULL_DOWN;
++            }
++        } else if(!pull_up) {
++            return IPROC_GPIO_PULL_NONE;
++        }
++    }
++
++    return IPROC_GPIO_PULL_NONE;
++}
++struct iproc_gpio_cfg cca_gpio_cfg = {
++    .get_pull = iproc_gpio_getpull_updown_cca,
++    .set_pull = iproc_gpio_setpull_updown_cca,
++    .get_config = iproc_gpio_get_config_cca,
++    .set_config = iproc_gpio_set_config_cca,
++};
++#endif
++#endif /* IPROC_GPIO_CCA */
++
++#if defined(IPROC_GPIO_CCB) || defined(IPROC_GPIO_CCG)
++int iproc_gpio_set_config_ccb(struct iproc_gpio_chip *chip,
++			      unsigned int off, unsigned int cfg)
++{
++    unsigned long aux_sel;
++    unsigned int aux_sel_reg;
++    unsigned int base, pin;
++
++    base = 0;
++    pin = 0;
++
++    if ((chip->id == IPROC_GPIO_CCB_ID) || (chip->id == IPROC_GPIO_CCG_ID)) {
++        aux_sel_reg = IPROC_GPIO_CCB_AUX_SEL;
++        base = (unsigned int)chip->ioaddr;
++        pin = 1 << off;
++    }
++    aux_sel = readl_relaxed(base + aux_sel_reg);
++
++    switch (cfg) {
++        case IPROC_GPIO_GENERAL:
++            aux_sel &= ~(pin);
++            break;
++        case IPROC_GPIO_AUX_FUN:
++            aux_sel |= (pin);
++            break;
++        default:
++            return -EINVAL;
++    }
++    writel_relaxed(aux_sel, base + aux_sel_reg);
++
++    return 0;
++}
++
++
++unsigned iproc_gpio_get_config_ccb(struct iproc_gpio_chip *chip,
++				   unsigned int off)
++{
++    unsigned long aux_sel;
++    unsigned int aux_sel_reg;
++    unsigned int base, pin;
++
++    base = 0;
++    pin = 0;
++
++    if ((chip->id == IPROC_GPIO_CCB_ID) || (chip->id == IPROC_GPIO_CCG_ID)) {
++        aux_sel_reg = IPROC_GPIO_CCB_AUX_SEL;
++        base = (unsigned int)chip->ioaddr;
++        pin = 1 << off;
++    }
++
++    aux_sel = readl_relaxed(base + aux_sel_reg);
++
++    if (aux_sel & pin) {
++        return IPROC_GPIO_AUX_FUN;
++    } else {
++        return IPROC_GPIO_GENERAL;
++    }
++}
++
++
++int iproc_gpio_setpull_updown_ccb(struct iproc_gpio_chip *chip,
++			    unsigned int off, iproc_gpio_pull_t pull)
++{
++    unsigned int base;
++    base = 0;
++
++    if ((chip->id == IPROC_GPIO_CCB_ID) || (chip->id == IPROC_GPIO_CCG_ID)) {
++        unsigned long pad_res, res_en;
++
++        base = (unsigned int)chip->ioaddr;
++
++        pad_res = readl_relaxed(base + IPROC_GPIO_CCB_PAD_RES);
++        res_en = readl_relaxed(base + IPROC_GPIO_CCB_RES_EN);
++        switch (pull) {
++            case IPROC_GPIO_PULL_UP:
++                pad_res |= (1 << off);
++                res_en |= (1 << off);
++                break;
++            case IPROC_GPIO_PULL_DOWN:
++                pad_res &= ~(1 << off);
++                res_en |= (1 << off);
++                break;
++            case IPROC_GPIO_PULL_NONE:
++                res_en &= ~(1 << off);
++                break;
++            default:
++                return -EINVAL;
++        }
++        writel_relaxed(pad_res, base + IPROC_GPIO_CCB_PAD_RES);
++        writel_relaxed(res_en, base + IPROC_GPIO_CCB_RES_EN);
++    }
++    return 0;
++}
++
++
++iproc_gpio_pull_t iproc_gpio_getpull_updown_ccb(struct iproc_gpio_chip *chip,
++					unsigned int off)
++{
++
++    unsigned int base;
++    base = 0;
++
++    if ((chip->id == IPROC_GPIO_CCB_ID) || (chip->id == IPROC_GPIO_CCG_ID)) {
++        unsigned long pad_res, res_en;
++
++        base = (unsigned int)chip->ioaddr;
++
++        pad_res = readl_relaxed(base + IPROC_GPIO_CCB_PAD_RES);
++        res_en = readl_relaxed(base + IPROC_GPIO_CCB_RES_EN);
++        pad_res &= 1 << off;
++        res_en &= 1 << off;
++
++        if (res_en) {
++            if (pad_res) {
++                return IPROC_GPIO_PULL_UP;
++            } else {
++                return IPROC_GPIO_PULL_DOWN;
++            }
++        } else {
++            return IPROC_GPIO_PULL_NONE;
++        }
++    }
++    return IPROC_GPIO_PULL_NONE;
++}
++
++struct iproc_gpio_cfg ccb_gpio_cfg = {
++    .get_pull = iproc_gpio_getpull_updown_ccb,
++    .set_pull = iproc_gpio_setpull_updown_ccb,
++    .get_config = iproc_gpio_get_config_ccb,
++    .set_config = iproc_gpio_set_config_ccb,
++};
++#endif /* IPROC_GPIO_CCB || IPROC_GPIO_CCG */
++
++iproc_gpio_pull_t iproc_gpio_getpull(unsigned int pin)
++{
++	struct iproc_gpio_chip *chip = iproc_gpiolib_getchip(pin);
++	unsigned long flags;
++	int offset, ret = -EINVAL;
++
++	if (!chip)
++		return -EINVAL;
++
++	offset = pin - chip->chip.base;
++	offset += chip->pin_offset;
++
++	iproc_gpio_lock(chip, flags);
++    if (chip->config){
++	    ret = (chip->config->get_pull)(chip, offset);
++    }
++	iproc_gpio_unlock(chip, flags);
++
++	return ret;
++
++}
++EXPORT_SYMBOL(iproc_gpio_getpull);
++
++
++int iproc_gpio_setpull(unsigned int pin, iproc_gpio_pull_t pull)
++{
++	struct iproc_gpio_chip *chip = iproc_gpiolib_getchip(pin);
++	unsigned long flags;
++	int offset, ret = -EINVAL;
++
++	if (!chip)
++		return -EINVAL;
++
++	offset = pin - chip->chip.base;
++	offset += chip->pin_offset;
++
++	iproc_gpio_lock(chip, flags);
++    if (chip->config){
++	    ret = (chip->config->set_pull)(chip, offset, pull);
++    }
++	iproc_gpio_unlock(chip, flags);
++
++	return ret;
++
++}
++EXPORT_SYMBOL(iproc_gpio_setpull);
++
++unsigned iproc_gpio_getcfg(unsigned int pin)
++{
++    struct iproc_gpio_chip *chip = iproc_gpiolib_getchip(pin);
++    unsigned long flags;
++    int offset;
++	unsigned ret = 0;
++
++	if (!chip)
++		return -EINVAL;
++
++    offset = pin - chip->chip.base;
++    offset += chip->pin_offset;
++    iproc_gpio_lock(chip, flags);
++    if (chip->config){
++        ret = (chip->config->get_config)(chip, offset);
++    }
++    iproc_gpio_unlock(chip, flags);
++
++    return ret;
++}
++
++EXPORT_SYMBOL(iproc_gpio_getcfg);
++
++int iproc_gpio_cfgpin(unsigned int pin, unsigned int config)
++{
++	struct iproc_gpio_chip *chip = iproc_gpiolib_getchip(pin);
++	unsigned long flags;
++	int offset;
++	int ret = 0;
++
++	if (!chip)
++		return -EINVAL;
++
++	offset = pin - chip->chip.base;
++	offset += chip->pin_offset;
++	iproc_gpio_lock(chip, flags);
++    if (chip->config){
++        (chip->config->set_config)(chip, offset, config);
++    }
++	iproc_gpio_unlock(chip, flags);
++
++	return ret;
++
++
++}
++EXPORT_SYMBOL(iproc_gpio_cfgpin);
+diff --git a/drivers/bcmdrivers/gpio/gpio_cfg.h b/drivers/bcmdrivers/gpio/gpio_cfg.h
+new file mode 100644
+index 0000000..126a7fb
+--- /dev/null
++++ b/drivers/bcmdrivers/gpio/gpio_cfg.h
+@@ -0,0 +1,107 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++
++#ifndef __PLAT_GPIO_CFG_H
++#define __PLAT_GPIO_CFG_H
++
++typedef unsigned int __bitwise__ iproc_gpio_pull_t;
++typedef unsigned int __bitwise__ iproc_gpio_drvstr_t;
++
++struct iproc_gpio_chip;
++
++struct iproc_gpio_cfg {
++	iproc_gpio_pull_t	(*get_pull)(struct iproc_gpio_chip *chip, unsigned int offs);
++	int		(*set_pull)(struct iproc_gpio_chip *chip, unsigned int offs,
++				    iproc_gpio_pull_t pull);
++	unsigned (*get_config)(struct iproc_gpio_chip *chip, unsigned int offs);
++	int	 (*set_config)(struct iproc_gpio_chip *chip, unsigned int offs,
++			       unsigned int config);
++};
++
++
++/**
++ * iproc_gpio_cfgpin() - Change the GPIO function of a pin.
++ * @pin pin The pin number to configure.
++ * @to to The configuration (IPROC_GPIO_GENERAL/ IPROC_GPIO_AUX_FUN) for the pin's function.
++ *
++ */
++
++extern int iproc_gpio_cfgpin(unsigned int pin, unsigned int to);
++
++
++/**
++ * iproc_gpio_getcfg - Read the current function for a GPIO pin
++ * @pin: The pin to read the configuration value for.
++ *
++ * Read the configuration state of the given @pin, returning a value that
++ * could be passed back to iproc_gpio_cfgpin().
++ *
++ *
++ */
++extern unsigned iproc_gpio_getcfg(unsigned int pin);
++
++#define IPROC_GPIO_GENERAL  0
++#define IPROC_GPIO_AUX_FUN  1
++
++
++/* Define values for the pull-{up,down} available for each gpio pin.
++ *
++ * These values control the state of the weak pull-{up,down} resistors.
++ */
++#define IPROC_GPIO_PULL_NONE	((__force iproc_gpio_pull_t)0x00)
++#define IPROC_GPIO_PULL_DOWN	((__force iproc_gpio_pull_t)0x01)
++#define IPROC_GPIO_PULL_UP	((__force iproc_gpio_pull_t)0x02)
++
++
++
++
++/**
++ * iproc_gpio_setpull() - set the state of a gpio pin pull resistor
++ * @pin: The pin number to configure the pull resistor.
++ * @pull: The configuration for the pull resistor.
++ *
++ * This function sets the state of the pull-{up,down} resistor for the
++ * specified pin. It will return 0 if successfull, or a negative error
++ * code if the pin cannot support the requested pull setting.
++ *
++ * @pull is one of IPROC_GPIO_PULL_NONE, IPROC_GPIO_PULL_DOWN or IPROC_GPIO_PULL_UP.
++*/
++extern int iproc_gpio_setpull(unsigned int pin, iproc_gpio_pull_t pull);
++
++
++/**
++ * iproc_gpio_getpull() - get the pull resistor state of a gpio pin
++ * @pin: The pin number to get the settings for
++ *
++ * Read the pull resistor value for the specified pin.
++*/
++extern iproc_gpio_pull_t iproc_gpio_getpull(unsigned int pin);
++
++/* internal gpio functions */
++extern int iproc_gpio_setpull_updown(struct iproc_gpio_chip *chip,
++			    unsigned int off, iproc_gpio_pull_t pull);
++
++extern iproc_gpio_pull_t iproc_gpio_getpull_updown(struct iproc_gpio_chip *chip,
++					unsigned int off);
++
++extern int iproc_gpio_set_config(struct iproc_gpio_chip *chip,
++			      unsigned int off, unsigned int cfg);
++
++unsigned iproc_gpio_get_config(struct iproc_gpio_chip *chip,
++				   unsigned int off);
++
++#endif
+diff --git a/drivers/bcmdrivers/gpio/gpiolib.c b/drivers/bcmdrivers/gpio/gpiolib.c
+new file mode 100644
+index 0000000..e7a1a66
+--- /dev/null
++++ b/drivers/bcmdrivers/gpio/gpiolib.c
+@@ -0,0 +1,258 @@
++/*
++ * Copyright (C) 2013, Broadcom Corporation. All Rights Reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
++ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
++ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/spinlock.h>
++#include <linux/ioport.h>
++#include <linux/interrupt.h>
++
++#include <mach/io_map.h>
++#include <mach/reg_utils.h>
++#include <mach/memory.h>
++
++#include <asm/pgtable.h>
++
++#include "gpio.h"
++#include "gpio_cfg.h"
++
++
++#if defined(IPROC_GPIO_CCA)
++
++extern struct iproc_gpio_irqcfg cca_gpio_irqcfg;
++
++#if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
++
++extern struct iproc_gpio_cfg cca_gpio_cfg;
++
++#endif /*CONFIG_MACH_NS || CONFIG_MACH_NSP */
++
++static struct resource iproc_gpio_cca_config_resource[] = {
++    [0] = {
++		.start	= IPROC_CCA_BASE,
++		.end	= IPROC_CCA_BASE + IPROC_GPIO_REG_SIZE - 1,
++		.flags	= IORESOURCE_MEM,
++		.name   = "intr",
++    },
++#if (defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP))
++    [1] = {
++		.start	= IPROC_DMU_BASE,
++		.end	= IPROC_DMU_BASE + 0x200 - 1,
++		.flags	= IORESOURCE_MEM,
++		.name   = "dmu",
++    },
++#else
++    [1] = {.name = "",},
++#endif
++};
++
++#endif /* IPROC_GPIO_CCA */
++
++
++#if defined(IPROC_GPIO_CCB) || defined(IPROC_GPIO_CCG)
++
++extern struct iproc_gpio_irqcfg ccb_gpio_irqcfg;
++extern struct iproc_gpio_cfg ccb_gpio_cfg;
++
++#endif /* IPROC_GPIO_CCB || IPROC_GPIO_CCG */
++
++
++#if defined(IPROC_GPIO_CCG)
++static struct resource iproc_gpio_resources[] = {
++	[0] = {
++		.start	= IPROC_GPIO_CCG_BASE,
++		.end	= IPROC_GPIO_CCG_BASE + IPROC_GPIO_REG_SIZE -1,
++		.flags	= IORESOURCE_MEM,
++	},
++};
++#else
++static struct resource iproc_gpio_resources[] = {
++	[0] = {
++		.start	= IPROC_GPIO_CCA_BASE,
++		.end	= IPROC_GPIO_CCA_BASE + IPROC_GPIO_REG_SIZE - 1,
++		.flags	= IORESOURCE_MEM,
++		.child = iproc_gpio_cca_config_resource,
++	},
++	[1] = {
++		.start	= IPROC_GPIO_CCB_BASE,
++		.end	= IPROC_GPIO_CCB_BASE + IPROC_GPIO_REG_SIZE -1,
++		.flags	= IORESOURCE_MEM,
++	}
++};
++#endif
++
++#if defined(CONFIG_MACH_NS) || defined(CONFIG_MACH_NSP)
++
++struct iproc_gpio_chip iproc_gpios_config[] = {
++    [0] = {
++        .id   = IPROC_GPIO_CCA_ID,
++        .config = &cca_gpio_cfg,
++        .chip   = {
++            .base           = 0,
++            .label          = "GPIOA",
++            .ngpio          = 24,
++        },
++        .irq_base = IPROC_GPIO_CCA_IRQ_BASE,
++        .resource = &iproc_gpio_resources[0],
++        .irq = IPROC_GPIO_CCA_INT,
++        .irqcfg = &cca_gpio_irqcfg,
++        .pin_offset = 0,
++    },
++};
++/* CONFIG_MACH_NS */
++#elif defined(CONFIG_MACH_HX4) || defined(CONFIG_MACH_KT2)
++/*
++ * Chip level GPIO 0-3 from CMICD,
++ * GPIO 4-11 from ChipcommonA gpio pin 0 - 7
++ * Hence the base is 4 and the number is 8.
++ */
++struct iproc_gpio_chip iproc_gpios_config[] = {
++    [0] = {
++        .id   = IPROC_GPIO_CCA_ID,
++        .chip   = {
++            .base           = 4,
++            .label          = "GPIOA",
++            .ngpio          = 8,
++        },
++        .irq_base = IPROC_GPIO_CCA_IRQ_BASE,
++        .resource = &iproc_gpio_resources[0],
++        .irq = IPROC_GPIO_CCA_INT,
++        .irqcfg = &cca_gpio_irqcfg,
++        .pin_offset = 0,
++    },
++};
++#elif defined(CONFIG_MACH_HR2)
++/*
++ * Chip level GPIO 0-3 from CMICD,
++ * GPIO 4-15 are from ChipcommonA gpio pin 0 - 11
++ * where GPIO 8-15 are shared with MII or LED depends on strap pin
++ * Hence the base is 4 and the number is 12.
++ */
++struct iproc_gpio_chip iproc_gpios_config[] = {
++    [0] = {
++        .id   = IPROC_GPIO_CCA_ID,
++        .chip   = {
++            .base           = 4,
++            .label          = "GPIOA",
++            .ngpio          = 12,
++        },
++        .irq_base = IPROC_GPIO_CCA_IRQ_BASE,
++        .resource = &iproc_gpio_resources[0],
++        .irq = IPROC_GPIO_CCA_INT,
++        .irqcfg = &cca_gpio_irqcfg,
++        .pin_offset = 0,
++    },
++};
++#elif defined(CONFIG_MACH_GH)
++/*
++* Chip level GPIO 0-3 from CMICD,
++* GPIO 4-15 are from ChipcommonG gpio pin 4 - 15
++*/
++struct iproc_gpio_chip iproc_gpios_config[] = {
++    [0] = {
++        .id = IPROC_GPIO_CCG_ID,
++	.config = &ccb_gpio_cfg,
++        .chip = {
++            .base           = 4,
++            .label          = "GPIOG",
++            .ngpio          = 12,
++           },
++           .irq_base = IPROC_GPIO_CCG_IRQ_BASE,
++           .resource = &iproc_gpio_resources[0],
++           .irq = IPROC_GPIO_CCG_INT,
++           .irqcfg = &ccb_gpio_irqcfg,
++           .pin_offset = 4,
++    },
++};
++#else
++struct iproc_gpio_chip iproc_gpios_config[] = {
++    [0] = {
++        .id   = IPROC_GPIO_CCA_ID,
++        .chip   = {
++            .base           = 0,
++            .label          = "GPIOA",
++            .ngpio          = 32,
++        },
++        .irq_base = IPROC_GPIO_CCA_IRQ_BASE,
++        .resource = &iproc_gpio_resources[0],
++        .irq = IPROC_GPIO_CCA_INT,
++        .irqcfg = &cca_gpio_irqcfg,
++        .pin_offset = 0,
++    },
++    [1] = {
++        .id   = IPROC_GPIO_CCB_ID,
++        .chip   = {
++            .base           = -EINVAL,
++            .label          = "GPIOB",
++            .ngpio          = 4,
++        },
++        .irq_base = IPROC_GPIO_CCB_IRQ_BASE,
++        .resource = &iproc_gpio_resources[1],
++        .irq = IPROC_GPIO_CCB_INT,
++        .irqcfg = &ccb_gpio_irqcfg,
++        .pin_offset = 0,
++    },
++};
++#endif
++
++int iproc_gpiolib_init(void)
++{
++    struct iproc_gpio_chip *chip = iproc_gpios_config;
++    int gpn;
++    int temp_base;
++
++#if defined(CONFIG_MACH_NS)
++    /* bcm53012 support 24 gpios; bcm53010/53011 support 16 gpios */
++    if ((__REG32(IPROC_IDM_REGISTER_VA + 0xd500) & 0xc) != 0x0) {
++        iproc_gpios_config[0].chip.ngpio = 16;
++    }
++#endif
++#if defined(CONFIG_MACH_NSP)
++        /* bcm53025 support 32 gpios; bcm53022/53023 support 24 gpios */
++        reg32_write((volatile uint32_t *)(IPROC_PCIE_AXIB0_REG_VA + PAXB_0_CONFIG_IND_ADDR_BASE), 0);
++
++/*
++	the mechanism to get the chip number does not work, always reads 22K.
++	OTP must be programmed and then need to look at OTP
++	for now assume 25K chip
++
++        if ((__REG32(IPROC_PCIE_AXIB0_REG_VA + PAXB_0_CONFIG_IND_DATA_BASE)
++            & 0xffff0000) == 0x80250000) {
++*/
++        if (1) {
++            iproc_gpios_config[0].chip.ngpio = 32;
++        }
++#endif
++
++
++    temp_base = 0;
++    for (gpn = 0; gpn < ARRAY_SIZE(iproc_gpios_config); gpn++, chip++) {
++        if (gpn >= MAX_NS_GPIO){
++            printk("Unavailabe to add gpiolib\n");
++            return -EINVAL;
++        }
++
++        if (chip->chip.base == -EINVAL) {
++            chip->chip.base = temp_base;
++        }
++
++        iproc_gpiolib_add(chip);
++        temp_base = chip->chip.base + chip->chip.ngpio;
++	}
++
++	return 0;
++}

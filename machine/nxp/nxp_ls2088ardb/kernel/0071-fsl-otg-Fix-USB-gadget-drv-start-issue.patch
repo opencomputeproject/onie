@@ -1,0 +1,95 @@
+From e8f6ca0608e6ef2f03e31ceb3d97b72d31efc5f2 Mon Sep 17 00:00:00 2001
+From: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Date: Thu, 16 May 2013 15:39:02 +0530
+Subject: [PATCH 071/124] fsl/otg: Fix USB gadget drv start issue
+
+Move synchronization delay b/w host and gadget drv from
+fsl_udc_resume() to fsl_otg_start_gadget() to prevent
+msleep() getting called from inside interrupt context.
+Gadget resume always gets called from inside interrupt
+context except during ID change.
+
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Change-Id: I8b9705546ef13d560d8b898f8be4fb8e1b986582
+Reviewed-on: http://git.am.freescale.net:8181/2548
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Aggrwal Poonam-B10812 <Poonam.Aggrwal@freescale.com>
+Reviewed-by: Fleming Andrew-AFLEMING <AFLEMING@freescale.com>
+---
+ drivers/usb/gadget/udc/fsl_udc_core.c | 16 ----------------
+ drivers/usb/gadget/udc/fsl_usb2_udc.h |  1 -
+ drivers/usb/phy/phy-fsl-usb.c         | 11 ++++++++++-
+ 3 files changed, 10 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/usb/gadget/udc/fsl_udc_core.c b/drivers/usb/gadget/udc/fsl_udc_core.c
+index d9cfe6b..1fcea09 100644
+--- a/drivers/usb/gadget/udc/fsl_udc_core.c
++++ b/drivers/usb/gadget/udc/fsl_udc_core.c
+@@ -1765,7 +1765,6 @@ static void suspend_irq(struct fsl_udc *udc)
+ 
+ static void bus_resume(struct fsl_udc *udc)
+ {
+-	udc->last_state = udc->usb_state;
+ 	udc->usb_state = udc->resume_state;
+ 	udc->resume_state = 0;
+ 
+@@ -2587,21 +2586,6 @@ static int fsl_udc_suspend(struct platform_device *pdev, pm_message_t state)
+  *-----------------------------------------------------------------*/
+ static int fsl_udc_resume(struct platform_device *pdev)
+ {
+-#if defined(CONFIG_FSL_USB2_OTG) || defined(CONFIG_FSL_USB2_OTG_MODULE)
+-	/* Add delay to synchronize between host and gadget drivers
+-	 * Upon role-reversal host drv is shutdown by kernel worker
+-	 * thread. By the time host drv shuts down, dr controller
+-	 * gets programmed for gadget role. Shutting host drv after this
+-	 * results in controller getting reset, and it stops responding
+-	 * to otg events
+-	 *
+-	 * This delay can be added only if this function call is not in
+-	 * interrupt context which happens only when USB device is not
+-	 * coming out of SUSPEND state
+-	 */
+-	if (udc_controller->last_state != USB_STATE_SUSPENDED)
+-		msleep(1000);
+-#endif
+ 	/* Enable DR irq reg and set controller Run */
+ 	if (udc_controller->stopped) {
+ 		dr_controller_setup(udc_controller);
+diff --git a/drivers/usb/gadget/udc/fsl_usb2_udc.h b/drivers/usb/gadget/udc/fsl_usb2_udc.h
+index d92ea5a..8471562 100644
+--- a/drivers/usb/gadget/udc/fsl_usb2_udc.h
++++ b/drivers/usb/gadget/udc/fsl_usb2_udc.h
+@@ -503,7 +503,6 @@ struct fsl_udc {
+ 	u32 max_pipes;          /* Device max pipes */
+ 	u32 bus_reset;		/* Device is bus resetting */
+ 	u32 resume_state;	/* USB state to resume */
+-	u32 last_state;		/* previous USB state */
+ 	u32 usb_state;		/* USB current state */
+ 	u32 ep0_state;		/* Endpoint zero state */
+ 	u32 ep0_dir;		/* Endpoint zero direction: can be
+diff --git a/drivers/usb/phy/phy-fsl-usb.c b/drivers/usb/phy/phy-fsl-usb.c
+index a224336..bf81527 100644
+--- a/drivers/usb/phy/phy-fsl-usb.c
++++ b/drivers/usb/phy/phy-fsl-usb.c
+@@ -544,8 +544,17 @@ int fsl_otg_start_gadget(struct otg_fsm *fsm, int on)
+ 	dev = otg->gadget->dev.parent;
+ 
+ 	if (on) {
+-		if (dev->driver->resume)
++		/* Delay gadget resume to synchronize between host and gadget
++		 * drivers. Upon role-reversal host drv is shutdown by kernel
++		 * worker thread. By the time host drv shuts down, controller
++		 * gets programmed for gadget role. Shutting host drv after
++		 * this results in controller getting reset, and it stops
++		 * responding to otg events
++		 */
++		if (dev->driver->resume) {
++			msleep(1000);
+ 			dev->driver->resume(dev);
++		}
+ 	} else {
+ 		if (dev->driver->suspend)
+ 			dev->driver->suspend(dev, otg_suspend_state);
+-- 
+2.1.0.27.g96db324
+

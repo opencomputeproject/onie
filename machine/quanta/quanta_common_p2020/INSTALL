@@ -1,0 +1,160 @@
+Add support for QuantaMesh Common P2020 CPU board
+
+================================================================================
+  QuantaMesh Common P2020 CPU board
+================================================================================
+
+  QuantaMesh switch which supports modularized CPU board design, have a
+non-programmable H/W component for mother board detection. For motherboard
+detection, please refer to ``u-boot/board/quanta/quanta_common_p2020/mb_detect.c``
+
+  Supported Platforms
+=======================
+ - T5032-LY6  (cpu module)
+   32x40GbE QSFP+ ports
+
+ - T3048-LY8  (cpu module)
+   48x1/10GbE SFP+ ports,
+   front 4x40GbE QSFP+ ports, and rear 2x40GbE QSFP+ ports
+
+ - T3048-LY9  (cpu module)
+   48x100/1000/10GBASE-T,
+   front 4x40GbE QSFP+ ports, and rear 2x40GbE QSFP+ ports
+
+ - T3048-LY9A (cpu module)
+   48x100/1000/10GBASE-T and 6x40GbE QSFP+ ports
+
+ - T5032-LY6F (cpu module)
+   32x40GbE QSFP+ ports
+
+ - T3024-P05  (cpu on board)
+   24x1/10GbE SFP+ ports and 2x40GbE QSFP+ ports
+
+ - For more detail product information, please refer to
+   https://qct.io/
+
+  Specification
+===============
+ - Modularized CPU board design
+ - 1 RJ-45 out-of-band management port (10/100/1000M)
+ - 1 RJ-45 console port
+ - 1 micro SD card
+ - 1 USB 2.0 port
+
+  Special Feature
+=================
+ - ONIE recovery mechanism
+   Please refer to ``Recovering ONIE back to factory default``
+
+================================================
+Installing ONIE on Quanta Common P2020 CPU board
+================================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/quanta/ MACHINE=quanta_common_p2020 all"``.
+For example:
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/quanta/ MACHINE=quanta_common_p2020 all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r-- 4849664 Aug 12 15:39 onie-quanta_common_p2020-r0.bin
+
+Or, change directories to ``machine/quanta/quanta_common_p2020`` to compile ONIE,
+use ``build.sh`` to compile ONIE. For example:
+
+  $ cd machine/quanta/quanta_common_p2020
+  $ ./build.sh all
+
+To compile demo installer.
+
+  $ cd machine/quanta/quanta_common_p2020
+  $ ./build.sh demo
+
+Installing the ONIE binaries
+============================
+
+A single binary image needs to be installed on the NOR flash.
+
+Image 1 -- ONIE kernel and u-boot.
+  name:  onie-quanta_common_p2020-r0.bin
+
+Step 1 -- Put the ONIE file on a TFTP server
+---------------------------------------------
+
+The following directions assume the files are on the root of the TFTP
+server.
+
+Step 2 -- Install image1 (onie-quanta_common_p2020-r0.bin)
+-----------------------------------------------
+
+Copying the image down using TFTP and flash to the NOR flash::
+
+  => setenv start 0xefb60000
+  => setenv sz.b 0x4a0000
+  => tftp onie-quanta_common_p2020-r0.bin
+  => protect off $start +${sz.b} && erase $start +${sz.b}
+  => cp.b $fileaddr $start ${sz.b} && protect on $start +${sz.b}
+
+Step 3 -- Configure Serial Console
+----------------------------------
+
+ONIE defaults the serial console baud rate to 115200.  You may need to
+adjust your terminal settings.
+
+Step 4 -- Restart The System
+----------------------------
+
+You can interrupt the boot process by pressing any key during the
+count down::
+
+  => reset
+
+Step 5 -- Optional
+------------------
+
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this::
+
+  => setenv reboot_cmd rescue
+  => boot
+
+Or, in another way
+
+  => run onie_rescue
+
+
+Updating the ONIE binaries
+==========================
+
+An easier way to update ONIE within u-boot
+
+  => setenv ipaddr 192.168.2.1
+  => copy -o tftp://192.168.2.101/onie-quanta_common_p2020-r0.bin
+
+Recovering ONIE back to factory default
+=======================================
+
+BMS crashes frequently while updating ONIE or u-boot
+This design offers a easy way to recover factory default ONIE
+
+While seeing something like this, press <CTRL+R>
+Follow the instructions, factory default ONIE will get back to normal
+without touching u-boot env
+
+*******************************************************************
+SPI U-Boot 2010.12 (Nov 19 2014 - 10:45:29)
+Press Ctrl+D to enter diagnostic program ...
+*******************************************************************
+
+

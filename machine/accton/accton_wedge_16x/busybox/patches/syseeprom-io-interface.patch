@@ -1,0 +1,211 @@
+implement syseeprom IO interface for the machine
+
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index d1cb4d9..c7ce23c 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -52,7 +52,7 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
+ lib-$(CONFIG_VOLNAME)     += volname.o
+ lib-$(CONFIG_WATCHDOG)    += watchdog.o
+ lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
+-lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
++lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c_alt.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
+ lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
+diff --git a/miscutils/sys_eeprom_i2c_alt.c b/miscutils/sys_eeprom_i2c_alt.c
+new file mode 100644
+index 0000000..54876a2
+--- /dev/null
++++ b/miscutils/sys_eeprom_i2c_alt.c
+@@ -0,0 +1,190 @@
++#include "libbb.h"
++#include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
++
++#define TTY_DEVICE                      "/dev/ttyACM0"
++#define TTY_PROMPT                      "@bmc:"
++#define TTY_BASE_TIMEOUT                500000
++#define TTY_I2C_TIMEOUT                 60000
++#define MAXIMUM_TTY_BUFFER_LENGTH       (512 + SYS_EEPROM_SIZE * 3)
++#define MAXIMUM_TTY_STRING_LENGTH       (MAXIMUM_TTY_BUFFER_LENGTH - 1)
++
++static int tty_fd = -1;
++static char tty_buf[MAXIMUM_TTY_BUFFER_LENGTH];
++
++static int tty_open(void)
++{
++    int i = 20;
++    struct termios attr;
++
++    if (tty_fd > -1)
++        return 0;
++
++    do
++    {
++        if ((tty_fd = open(TTY_DEVICE, O_RDWR | O_NOCTTY | O_NDELAY)) > -1)
++        {
++            tcgetattr(tty_fd, &attr);
++            attr.c_cflag = B57600 | CS8 | CLOCAL | CREAD;
++            attr.c_iflag = IGNPAR;
++            attr.c_oflag = 0;
++            attr.c_lflag = 0;
++            attr.c_cc[VMIN] = (unsigned char)
++                ((MAXIMUM_TTY_STRING_LENGTH > 0xFF) ?  0xFF : MAXIMUM_TTY_STRING_LENGTH);
++            attr.c_cc[VTIME] = 0;
++            cfsetospeed(&attr, B57600);
++            cfsetispeed(&attr, B57600);
++            tcsetattr(tty_fd, TCSANOW, &attr);
++            return 0;
++        }
++        i--;
++        usleep(100000);
++    } while (i > 0);
++    return -1;
++}
++
++static int tty_close(void)
++{
++    close(tty_fd);
++    tty_fd = -1;
++    return 0;
++}
++
++static int tty_exec_buf(unsigned long udelay, const char *str)
++{
++    if (tty_fd < 0)
++        return -1;
++    write(tty_fd, tty_buf, strlen(tty_buf)+1);
++    usleep(TTY_BASE_TIMEOUT + udelay);
++    read(tty_fd, tty_buf, MAXIMUM_TTY_BUFFER_LENGTH);
++    return (strstr(tty_buf, str) != NULL) ? 0 : -1;
++}
++
++static int tty_login(void)
++{
++    int i = 10;
++    do
++    {
++        snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "\r\r");
++        if (!tty_exec_buf(0, TTY_PROMPT))
++            return 0;
++        if (strstr(tty_buf, "bmc login:") != NULL)
++        {
++            snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "root\r");
++            if (!tty_exec_buf(0, "Password:"))
++            {
++                snprintf(tty_buf, MAXIMUM_TTY_BUFFER_LENGTH, "0penBmc\r");
++                if (!tty_exec_buf(0, TTY_PROMPT))
++                {
++                    return 0;
++                }
++            }
++        }
++        i--;
++        usleep(50000);
++    } while (i > 0);
++    return -1;
++}
++
++/*
++ * read_sys_eeprom - read the hwinfo from i2c EEPROM
++ */
++int read_sys_eeprom(void *eeprom_data, int offset, int len)
++{
++    int ret = 0;
++    int i = 0;
++    int addr = SYS_EEPROM_OFFSET + offset;
++    int offset_msb, offset_lsb;
++    int str_len;
++    char *b;
++    u_int8_t *c;
++
++    if (tty_open() != 0)
++    {
++        printf("ERROR: Cannot open TTY device\n");
++        return -1;
++    }
++    if (tty_login() != 0)
++    {
++        printf("ERROR: Cannot login TTY device\n");
++        tty_close();
++        return -1;
++    }
++
++    offset_msb = addr / 256;
++    offset_lsb = addr % 256;
++    snprintf(tty_buf, MAXIMUM_TTY_STRING_LENGTH,
++            "i2cset -f -y %d 0x%x 0x%x 0x%x",
++            atoi(SYS_EEPROM_I2C_DEVICE),
++            SYS_EEPROM_I2C_ADDR,
++            offset_msb,
++            offset_lsb);
++    str_len = strlen(tty_buf);
++    snprintf(tty_buf + str_len, MAXIMUM_TTY_STRING_LENGTH - str_len,
++            "&&for i in $(seq 1 %d);do i2cget -f -y %d 0x%x|sed -e 's/0x//';done\r",
++            len,
++            atoi(SYS_EEPROM_I2C_DEVICE),
++            SYS_EEPROM_I2C_ADDR);
++
++    ret = tty_exec_buf(TTY_I2C_TIMEOUT * len, TTY_PROMPT);
++    tty_close();
++    if (ret != 0)
++    {
++        printf("ERROR: Reading EEPROM timed out\n");
++        return -1;
++    }
++
++    c = eeprom_data;
++    b = strstr(tty_buf, "\r\n") + 2;
++    for (i = 0; i < len && b != NULL; i++) {
++        *c = strtoul(b, NULL, 16);
++        b = strstr(b, "\r\n") + 2;
++        c++;
++    }
++    return ret;
++}
++
++/*
++ * write_sys_eeprom - write the hwinfo to i2c EEPROM
++ */
++int write_sys_eeprom(void *eeprom_data, int len)
++{
++    int ret = 0;
++    int i = 0;
++    int str_len = 0;
++    int addr = SYS_EEPROM_OFFSET;
++    u_int8_t *c;
++
++    if (tty_open() != 0)
++    {
++        printf("ERROR: Cannot open TTY device\n");
++        return -1;
++    }
++    if (tty_login() != 0)
++    {
++        printf("ERROR: Cannot login TTY device\n");
++        tty_close();
++        return -1;
++    }
++
++    c = eeprom_data;
++    snprintf(tty_buf, MAXIMUM_TTY_STRING_LENGTH, "i=%u;for b in", addr);
++    str_len = strlen(tty_buf);
++    for (i = 0; i < len; i++) {
++        snprintf(tty_buf + str_len, MAXIMUM_TTY_BUFFER_LENGTH - str_len, " %x", *c);
++        str_len = strlen(tty_buf);
++        c++;
++    }
++    snprintf(tty_buf + str_len, MAXIMUM_TTY_STRING_LENGTH - str_len,
++            ";do i2cset -f -y %d 0x%x $(printf '0x%%x 0x%%x' $(($i/256)) $(($i%%256))) 0x$b i;i=$(($i+1));done\r",
++            atoi(SYS_EEPROM_I2C_DEVICE),
++            SYS_EEPROM_I2C_ADDR);
++
++    ret = tty_exec_buf(TTY_I2C_TIMEOUT * len, TTY_PROMPT);
++    tty_close();
++    if (ret != 0)
++    {
++        printf("ERROR: Writing EEPROM timed out\n");
++    }
++    return ret;
++}

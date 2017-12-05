@@ -1,0 +1,298 @@
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 Alex Belits <alexb@interfacemasters.com>
+#  Copyright (C) 2016 Vitaliy Ivanov <vitaliyi@interfacemasters.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+common_boot_mnt="/boot"
+
+onie_boot_mnt="${common_boot_mnt}"
+onie_root_dir="${common_boot_mnt}/onie"
+onie_config_dir_orig="${common_boot_mnt}/onie-config"
+onie_config_ramdisk_dir="/onie-config-ramdisk"
+
+# Determine current location of onie root
+# and configuration directories, create them if necessary
+if [ -d "${common_boot_mnt}" ] ; then
+    if [ ! -d "${onie_root_dir}" ] ; then
+        mkdir -p "${onie_root_dir}"
+    fi
+    onie_config_dir="${onie_config_dir_orig}"
+    if [ ! -d "${onie_config_dir}" ] ; then
+        mkdir -p "${onie_config_dir}"
+        if [ ! -d "${onie_config_dir}" ] ; then
+            onie_config_dir="${onie_config_ramdisk_dir}"
+        fi
+    fi
+else
+    onie_config_dir="${onie_config_ramdisk_dir}"
+fi
+
+if [ ! -d "${onie_config_dir}" ] ; then
+    mkdir -p "${onie_config_dir}"
+fi
+
+grub_root_dir="${common_boot_mnt}/grub"
+grub_env_file="${grub_root_dir}/grubenv"
+diag_bootcmd_file="${onie_root_dir}/grub/diag-bootcmd.cfg"
+
+onie_update_dir="${onie_root_dir}/update"
+onie_update_pending_dir="${onie_update_dir}/pending"
+onie_update_attempts_dir="${onie_update_dir}/attempts"
+onie_update_results_dir="${onie_update_dir}/results"
+onie_update_log="$onie_update_dir/update.log"
+
+common_boot_fs_type="ext2"
+onie_boot_fs_type="${common_boot_fs_type}"
+
+onie_boot_label="ONIE-BOOT"
+
+# Presence of this file indicates successful fsck
+fsck_flag_file="/boot-fs-checked"
+
+# Flag for callers that may use custom mounting procedure
+use_onie_mount_partitions=1
+
+# Return the /dev device that should be mounted as
+# /boot if it exists.
+onie_get_boot_dev()
+{
+    blkid_output=$(blkid)
+    device=$(echo "${blkid_output}" | \
+        grep ' LABEL="'"${onie_boot_label}"'" ' | sed -e 's/:.*$//')
+    if [ -n "${device}" ] ; then
+        echo -n "${device}"
+    fi
+}
+
+# Return the /dev disk corresponding to $onie_boot_label if it exists.
+onie_get_boot_disk()
+{
+    local disk=$(onie_get_boot_dev)
+    # Strip off the numbers
+    disk="${disk%%[0-9]*}"
+    [ -n "$disk" ] && echo -n "$disk"
+}
+
+# Return the label for /boot device
+onie_get_boot_label()
+{
+    blkid_output=$(blkid)
+    device=$(echo "${blkid_output}" | \
+        grep ' LABEL="'"${onie_boot_label}"'" ' | sed -e 's/:.*$//')
+    if [ -n "${device}" ] ; then
+        echo -n "${onie_boot_label}"
+    fi
+}
+
+# Determine running firmware environment.
+# Assume running environment is BIOS-MBR based.
+onie_get_running_firmware()
+{
+    echo -n "bios"
+}
+
+#
+# FSCK the given partition with retries.
+#
+run_fsck()
+{
+    DEV="$1"
+
+    if grep -s -w -i "forcefsck" /proc/cmdline >& /dev/null ; then
+        force="-f"
+    else
+        force=""
+    fi
+
+    if [ "$FSCKFIX" = yes ] ; then
+        fix="-y"
+    else
+        fix="-p"
+    fi
+
+    FSCK=/usr/sbin/fsck
+    if [ "$verbose" = "yes" ] ; then
+        echo "Running fsck on $DEV ..."
+        $FSCK $force $fix $DEV
+        retval=$?
+    else
+        $FSCK $force $fix $DEV > /dev/null 2>&1
+        retval=$?
+    fi
+
+    if [ $retval -gt 3 ]; then
+        echo "ERROR  : fsck encountered fatal errors"
+        echo "WARNING: Retrying fsck with -y option on $DEV"
+        $FSCK -f -y $DEV
+        retval=$?
+        if [ $retval -gt 2 ]; then
+            echo \
+                "ERROR: RUN fsck MANUALLY on $DEV without -y or -p options"
+            return 1
+        fi
+    elif [ $retval -eq 2 ]; then
+        echo "ERROR: fsck corrected errors, reboot requested."
+    elif [ $retval -eq 1 ]; then
+        echo "ERROR: fsck corrected errors."
+    fi
+
+    return 0
+}
+
+# Set ONIE environment variables.  The underlying store uses grubenv.
+#
+# arg $1 - variable name
+# arg $2 - variable value [optional]
+#
+# If the variable value is not specified the effect is to delete the
+# named variable.
+onie_setenv()
+{
+    var="$1"
+    val="$2"
+    if [ -n "$val" ] ; then
+        grub-editenv "${grub_env_file}" set "$var"="$val"
+    else
+        # delete $var
+        grub-editenv "${grub_env_file}" unset "$var"
+    fi
+}
+
+# Get an ONIE environment variable.  The underlying store uses
+# grubenv.
+#
+# arg $1 - variable name
+#
+# If the variable name is not found the empty string "" is returned.
+onie_getenv()
+{
+    var="$1"
+    val=$(grub-editenv "${grub_env_file}" list | grep "${var}=")
+    val=${val#*=}
+    echo -n "${val}"
+}
+
+
+# Unmount the ONIE partitions
+onie_umount_partitions()
+{
+    rc=0
+
+    [ -d "${common_boot_mnt}" ] && {
+        umount "${common_boot_mnt}" > /dev/null 2>&1
+        rmdir "${common_boot_mnt}" || {
+            echo -e "ERROR: Can\x27t unmount ${common_boot_mnt}"
+            rc=$(( $rc + 1 ))
+        }
+    }
+
+    return $rc
+}
+
+# Mount the ONIE partitions.
+#
+# Parameters:
+#   "keep_mounted" -- Keep partitions mounted after exit from the script.
+#   "write" -- Mount partitions read-write.
+#
+# When this function returns success the ONIE partitions are mounted
+# and onie_config_dir is updated to point to the ONIE configuration
+# directory.
+onie_mount_partitions()
+{
+    [ "$1" = "keep_mounted" -o "$2" = "keep_mounted" ] || \
+    trap onie_umount_partitions EXIT
+
+    writeopt="ro"
+    [ "$1" = "write" -o "$2" = "write" ] && writeopt="rw"
+
+    label=$(onie_get_boot_label)
+
+    [ -n "${label}" ] || rm -f "${fsck_flag_file}"
+
+    [ -n "${label}" ] && {
+        cut -d' ' -f2 < /proc/mounts | \
+            grep "${common_boot_mnt}" > /dev/null && \
+            umount "${common_boot_mnt}"
+            [ -f "${fsck_flag_file}" ] || {
+                run_fsck $(onie_get_boot_dev) && \
+                    touch "${fsck_flag_file}"
+            }
+    }
+
+    [ -f "${fsck_flag_file}" ] && {
+        mkdir -p "${common_boot_mnt}"
+            mount -o "defaults,${writeopt},errors=remount-ro" \
+            -t "${common_boot_fs_type}" "LABEL=${label}" \
+            "${common_boot_mnt}" || {
+                rm -f "${fsck_flag_file}"
+                    rmdir "${common_boot_mnt}"
+                    echo -e \
+                    "WARNING: Can\x27t mount $label filesystem on $common_boot_mnt"
+            }
+    }
+
+    [ -f "${fsck_flag_file}" ] || {
+        onie_config_dir="${onie_config_ramdisk_dir}"
+            mkdir -p "${onie_config_dir}"
+    }
+
+    [ -f "${fsck_flag_file}" ] && {
+        onie_config_dir="${onie_config_dir_orig}"
+            [ -d "${onie_config_dir}" -o "$writeopt" = "ro" ] || {
+                [ -d "${onie_config_ramdisk_dir}" ] && {
+                    mv "${onie_config_ramdisk_dir}" "${onie_config_dir}"
+                } || mkdir -p "${onie_config_dir}"
+            }
+        rmdir "${onie_config_ramdisk_dir}" > /dev/null 2>&1
+    }
+
+    return 0
+}
+
+# Re-install ONIE GRUB in the MBR
+bios_boot_onie_install() {
+
+onie_dev=$(onie_get_boot_dev)
+boot_dev=$(onie_get_boot_disk)
+
+# Install ONIE GRUB in MBR and ONIE partition
+core_img="$onie_boot_mnt/grub/i386-pc/core.img"
+[ -f "$core_img" ] && chattr -i $core_img
+grub-install --boot-directory="$onie_boot_mnt" --recheck "$boot_dev" || {
+    echo "ERROR: grub-install failed on: $boot_dev"
+    exit 1
+}
+grub_install_log=$(mktemp)
+grub-install --force --boot-directory="$onie_boot_mnt" \
+    --recheck "$onie_dev" > /$grub_install_log 2>&1 || {
+    echo "ERROR: grub-install failed on: $onie_dev"
+    cat $grub_install_log && rm -f $grub_install_log
+    exit 1
+}
+rm -f $grub_install_log
+[ -f "$core_img" ] && chattr +i $core_img
+
+# If there is a diag partition add a chainload entry for it.
+diag_label=$(blkid | grep -- '-DIAG"' | sed -e 's/^.*LABEL="//' -e 's/".*$//')
+if [ -n "$diag_label" ] ; then
+    cat <<EOF >> $grub_root_dir/grub.cfg
+menuentry '$diag_label $onie_platform' {
+    search --no-floppy --label --set=root $diag_label
+    echo    'Loading $diag_label $onie_platform ...'
+    chainloader +1
+}
+EOF
+fi
+
+# Return to install mode on the next boot
+onie-boot-mode -q -o install
+
+return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

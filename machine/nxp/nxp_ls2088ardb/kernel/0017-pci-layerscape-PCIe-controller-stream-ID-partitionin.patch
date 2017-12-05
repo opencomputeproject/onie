@@ -1,0 +1,155 @@
+From de6ff054bc193c3c1bd963a24fd8d25acf12e232 Mon Sep 17 00:00:00 2001
+From: Varun Sethi <Varun.Sethi@freescale.com>
+Date: Thu, 18 Jun 2015 17:20:43 +0530
+Subject: [PATCH 017/124] pci/layerscape: PCIe controller stream ID
+ partitioning patch.
+
+U-boot sets up the device Id to stream ID translation table. The SMMU
+driver while creating the IOMMU group programs the hardware table with
+these values.
+
+Signed-off-by: Varun Sethi <Varun.Sethi@freescale.com>
+[Stuart: split the pci part from the smmu driver part]
+Signed-off-by: Stuart Yoder <stuart.yoder@freescale.com>
+
+Signed-off-by: Stuart Yoder <stuart.yoder@freescale.com>
+---
+ drivers/pci/host/pci-layerscape.c | 52 ++++++++++++++++++++++++++++++---------
+ drivers/pci/host/pci-layerscape.h | 32 ++++++++++++++++++++++++
+ 2 files changed, 72 insertions(+), 12 deletions(-)
+ create mode 100644 drivers/pci/host/pci-layerscape.h
+
+diff --git a/drivers/pci/host/pci-layerscape.c b/drivers/pci/host/pci-layerscape.c
+index e866563..ece1337 100644
+--- a/drivers/pci/host/pci-layerscape.c
++++ b/drivers/pci/host/pci-layerscape.c
+@@ -21,18 +21,7 @@
+ #include <linux/resource.h>
+ 
+ #include "pcie-designware-base.h"
+-
+-/* PEX1/2 Misc Ports Status Register */
+-#define SCFG_PEXMSCPORTSR(pex_idx)	(0x94 + (pex_idx) * 4)
+-#define LTSSM_STATE_SHIFT	20
+-#define LTSSM_STATE_MASK	0x3f
+-#define LTSSM_PCIE_L0		0x11 /* L0 state */
+-
+-/* PEX LUT registers */
+-#define PCIE_LUT_BASE		0x80000
+-#define PCIE_LUT_DBG		0x7FC /* PEX LUT Debug register */
+-
+-#define PCIE_ATU_NUM		6
++#include "pci-layerscape.h"
+ 
+ struct ls_pcie {
+ 	struct dw_pcie_port	pp;
+@@ -40,10 +29,31 @@ struct ls_pcie {
+ 	void __iomem		*lut;
+ 	struct regmap		*scfg;
+ 	int			index;
++	const u32 *avail_streamids;
++	int streamid_index;
+ };
+ 
++
+ #define to_ls_pcie(x)	container_of(x, struct ls_pcie, pp)
+ 
++u32 set_pcie_streamid_translation(struct pci_dev *pdev, u32 devid)
++{
++	u32 index, streamid;
++	struct dw_pcie_port *pp = pdev->bus->sysdata;
++	struct ls_pcie *pcie = to_ls_pcie(pp);
++
++	if (!pcie->avail_streamids || !pcie->streamid_index)
++		return ~(u32)0;
++
++	index = --pcie->streamid_index;
++	/* mask is set as all zeroes, want to match all bits */
++	iowrite32((devid << 16), pcie->lut + PCIE_LUT_UDR(index));
++	streamid = be32_to_cpup(&pcie->avail_streamids[index]);
++	iowrite32(streamid | PCIE_LUT_ENABLE, pcie->lut + PCIE_LUT_LDR(index));
++
++	return streamid;
++}
++
+ static int ls1_pcie_link_up(struct dw_pcie_port *pp)
+ {
+ 	struct ls_pcie *pcie = to_ls_pcie(pp);
+@@ -126,6 +136,8 @@ static int ls2_pcie_host_init(struct dw_pcie_port *pp)
+ 	u32 val;
+ 
+ 	pcie->lut = pp->dbi + PCIE_LUT_BASE;
++	/* Disable LDR zero */
++	iowrite32(0, pcie->lut + PCIE_LUT_LDR(0));
+ 
+ 	dw_pcie_dbi_write(pp, 1, PCIE_DBI_RO_WR_EN);
+ 	/* Fix class value */
+@@ -179,11 +191,27 @@ static int __init ls_pcie_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	pcie->lut = pcie->regs + PCIE_LUT_BASE;
++	/* Disable LDR zero */
++	iowrite32(0, pcie->lut + PCIE_LUT_LDR(0));
+ 	pcie->pp.dev = &pdev->dev;
+ 	pcie->pp.dbi = pcie->regs;
+ 	pcie->pp.dw_ops = (struct dw_host_ops *)match->data;
+ 	pcie->pp.atu_num = PCIE_ATU_NUM;
+ 
++	if (of_device_is_compatible(pdev->dev.of_node, "fsl,ls2085a-pcie")) {
++		int len;
++		const u32 *prop;
++		struct device_node *np;
++
++		np = pdev->dev.of_node;
++		prop = (u32 *)of_get_property(np, "available-stream-ids", &len);
++		if (prop) {
++			pcie->avail_streamids = prop;
++			pcie->streamid_index = len/sizeof(u32);
++		} else
++			dev_err(&pdev->dev, "PCIe endpoint partitioning not possible\n");
++	}
++
+ 	ret = dw_pcie_port_init(&pcie->pp);
+ 	if (ret < 0)
+ 		return ret;
+diff --git a/drivers/pci/host/pci-layerscape.h b/drivers/pci/host/pci-layerscape.h
+new file mode 100644
+index 0000000..8c0642a
+--- /dev/null
++++ b/drivers/pci/host/pci-layerscape.h
+@@ -0,0 +1,32 @@
++/*
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ */
++
++#ifndef _PCI_LAYERSCAPE_H
++#define _PCI_LAYERSCAPE_H
++
++/* PEX1/2 Misc Ports Status Register */
++#define SCFG_PEXMSCPORTSR(pex_idx)	(0x94 + (pex_idx) * 4)
++#define LTSSM_STATE_SHIFT	20
++#define LTSSM_STATE_MASK	0x3f
++#define LTSSM_PCIE_L0		0x11 /* L0 state */
++
++/* PEX LUT registers */
++#define PCIE_LUT_BASE		0x80000
++#define PCIE_LUT_PEXLSR		0x020 /* PEX LUT Status Register */
++#define PCIE_LUT_PEXLCR		0x024 /* PEX LUT Control Register */
++#define PCIE_LUT_DBG		0x7FC /* PEX LUT Debug register */
++#define PCIE_LUT_UDR(n)		(0x800 + (n) * 8)
++#define PCIE_LUT_LDR(n)		(0x804 + (n) * 8)
++#define PCIE_LUT_MASK_ALL	0xffff
++#define PCIE_LUT_DR_NUM		32
++#define PCIE_LUT_ENABLE		(1 << 31)
++
++/* function for setting up stream id to device id translation */
++u32 set_pcie_streamid_translation(struct pci_dev *pdev, u32 devid);
++
++#define PCIE_ATU_NUM		6
++
++#endif /* _PCI_LAYERSCAPE_H */
+-- 
+2.1.0.27.g96db324
+

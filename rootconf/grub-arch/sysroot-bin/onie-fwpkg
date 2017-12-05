@@ -1,0 +1,604 @@
+#!/bin/sh
+
+#  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Allow callers to "rebrand" the output of this script.
+this_script=${ONIE_FWPKG_PROGRAM_NAME:-$(basename $(realpath $0))}
+
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+
+args="hvfq"
+
+usage()
+{
+    cat <<EOF
+usage:
+
+  $this_script [-hvf] add <package file_name> | remove <package_name> |
+                      purge | show-pending [name] | show-results [name] |
+                      show [name] | show-log
+
+Command line tool for managing ONIE firmware update packages.  The
+default is to show any currently pending firmware update packages.
+
+This tool accepts one of the following commands. If no command is
+specified the default command is 'show-pending'.
+
+
+  add <file name>
+
+    The 'add' command takes a required file name argument.  The file
+    name must specify a valid ONIE firmware update package.
+
+    The command stages the firmware update package for processing
+    during the next ONIE-update sequence.
+
+    It is an error to attempt to add an already existing firmware
+    update package.
+
+
+  remove <package name>
+
+    The 'remove' command takes a required ONIE firmware update package
+    name argument.  The package name refers to a previously staged firmware
+    update package.
+
+    The command unstages the firmware update package and any
+    associated state files.  This includes any previous install
+    failure attempts and results.
+
+    For a list of pending firmware updates use the 'show-pending'
+    command described below.
+
+  purge
+
+    The 'purge' command removes *all* pending firmware update packages
+    and associated state.  Think of this as "rm *" for all firmware
+    update packages and associated state.
+
+
+  show-pending [name]
+
+    The 'show-pending' command takes an optional firmware update
+    [name].
+
+    If the name is not specified the command lists all pending
+    firmware update packages and any associated install attempt state.
+
+    Install attempt state includes any previous install failure
+    attempts.
+
+    If [name] is specified the 'show-pending' command dumps all
+    available information about the firmware update package.
+
+
+  show-results [name]
+
+    The 'show-results' command takes an optional firmware update
+    [name].
+
+    If firmware update [name] is not specified the command lists all
+    available result files.
+
+    If firmware update [name] is specified the command output all
+    available result information for the firmware update.
+
+
+  show [name] -- this is the default command
+
+    The 'show' command takes an optional firmware update [name].
+
+    This command combines the output of the 'show-pending' and
+    'show-results' command.
+
+
+  show-log
+
+    The 'show-log' command dumps the entire contents of the ONIE
+    firmware update log to stdout.
+
+
+COMMAND LINE OPTIONS
+
+	-h
+		Help.  Print this message.
+
+	-v
+		Be verbose.  Print what is happening.
+
+	-q
+		Be quiet.  Supress informational printing.
+
+	-f
+		Force the operation.  Automatically answer 'yes' to
+		any confirmation questions.
+EOF
+}
+
+verbose=no
+quiet=no
+cmd_verbose=
+force=no
+while getopts "$args" a ; do
+    case $a in
+        h)
+            usage
+            exit 0
+            ;;
+        v)
+            verbose=yes
+            cmd_verbose=-v
+            quiet=no
+            ;;
+        q)
+            quiet=yes
+            verbose=no
+            cmd_verbose=
+            ;;
+        f)
+            force=yes
+            ;;
+        *)
+            echo "Unknown argument: $a"
+            usage
+            exit 1
+    esac
+done
+shift $(( $OPTIND - 1 ))
+
+[ -r "$lib_dir/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. $lib_dir/onie-blkdev-common
+
+[ -r "$lib_dir/functions" ] || {
+    echo "ERROR: Unable to find functions shell script library"
+    exit 1
+}
+. $lib_dir/functions
+
+# Command handlers begin here
+
+# Helper routine to clean out all files associated with an update
+remove_update()
+{
+    local name="$1"
+    local warn_exists="$2"
+
+    local exists=no
+
+    # Removing any files related to the firmware update package
+    [ -f "${onie_update_pending_dir}/$name" ] && {
+        [ "$quiet" != "yes" ] && echo "Removing pending firmware update: $name"
+        rm -f $cmd_verbose "${onie_update_pending_dir}/$name"
+        exists=yes
+    }
+
+    [ -f "${onie_update_attempts_dir}/$name" ] && {
+        [ "$quiet" != "yes" ] && echo "Removing firmware update attempts status: $name"
+        rm -f $cmd_verbose "${onie_update_attempts_dir}/$name"
+        exists=yes
+    }
+
+    [ -f "${onie_update_results_dir}/$name" ] && {
+        [ "$quiet" != "yes" ] && echo "Removing firmware update results: $name"
+        rm -f $cmd_verbose "${onie_update_results_dir}/$name"
+        exists=yes
+    }
+
+    if [ "$warn_exists" = "yes" ] ; then
+        if [ "$exists" = "no" ] ; then
+            [ "$quiet" != "yes" ] && echo "Warning: No files exist for update: $name"
+        fi
+    fi
+
+}
+
+# The 'add' command handler.
+# $1 - filename of firmware update [required].
+#
+# The command stages the firmware update package for processing during
+cmd_add()
+{
+    local file="$1"
+
+    # Sanity checking:
+    # 1. does file exist ?
+    # 2. does file contain $onie_updater_cookie ?
+    # 3. does destination file already exist ?
+
+    [ -r "$file" ] || {
+        echo "ERROR: Unable to read input file: $file"
+        exit 1
+    }
+
+    local image_type=$(get_image_type $file)
+    [ "$image_type" = "$onie_image_type_update" ] || {
+        echo "ERROR: Input file is not an ONIE firmware update package: $file"
+        exit 1
+    }
+
+    local name=$(basename "$file")
+    local pending="${onie_update_pending_dir}/$name"
+
+    [ -f "$pending" ] && {
+        echo "ERROR: Firmware update package '$name' is already staged."
+        echo "For more info on the currently staged firmware update run:"
+        echo "  $this_script show-pending $name"
+        echo "To remove the currently staged firmware update run:"
+        echo "  $this_script remove $name"
+        exit 1
+    }
+
+    # OK to stage the update.
+
+    # Removing any old attempts and results files.
+    remove_update "$name" "no"
+
+    # Stage the update
+    [ "$quiet" != "yes" ] && echo "Staging firmware update: $file"
+    cp $cmd_verbose $file $pending && return 0
+
+    return 1
+}
+
+# The 'remove' command handler.
+# $1 - name of firmware update to remove [required].
+#
+# The command unstages the firmware update package and any associated
+# state files.
+cmd_remove()
+{
+    local name="$1"
+
+    local pending="${onie_update_pending_dir}/$name"
+
+    # Remove any associated files.
+    remove_update "$name" "yes" && return 0
+
+    return 1
+}
+
+# The 'purge' command handler.
+#
+# The command unstages all pending firmware update packages and any
+# associated state files.
+cmd_purge()
+{
+
+    if [ "$force" != "yes" ] ; then
+        prompt_yes_no "Removing all pending firmware updates" || {
+            echo "Skipping purge."
+            return 1
+        }
+    fi
+
+    [ "$quiet" != "yes" ] && echo "Purging all pending firmware updates."
+    for d in $onie_update_pending_dir $onie_update_attempts_dir $onie_update_results_dir ; do
+        for f in $(ls $d) ; do
+            cmd_remove "$f"
+        done
+    done
+
+    return 0
+}
+
+# default to length of header columns
+pending_col1=4
+pending_col2=7
+pending_col3=10
+pending_col4=14
+pending_col5=20
+
+__gather_pending_col_widths()
+{
+    # Find max column widths for 'name' and 'version'.
+    local name=$1
+
+    if [ ${#name} -gt $pending_col1 ] ; then
+        pending_col1=${#name}
+    fi
+    local version="$(sh ${onie_update_pending_dir}/$name -qi | grep 'image_version=' | sed -e 's/image_version=//')"
+    if [ ${#version} -gt $pending_col2 ] ; then
+        pending_col2=${#version}
+    fi
+}
+
+__finalize_pending_col_widths()
+{
+    # column 1 needs 1 extra space. all others need 2
+    pending_col1=$(( $pending_col1 + 1 ))
+    pending_col2=$(( $pending_col2 + 2 ))
+}
+
+__print_pending_tbl_sep()
+{
+    printf "%${pending_col1}s+" | sed -e 's/ /=/g'
+    printf "%${pending_col2}s+" | sed -e 's/ /=/g'
+    printf "%${pending_col3}s+" | sed -e 's/ /=/g'
+    printf "%${pending_col4}s+" | sed -e 's/ /=/g'
+    printf "%${pending_col5}s\n" | sed -e 's/ /=/g'
+}
+
+__print_pending_tbl_header()
+{
+    printf "%-${pending_col1}s|%-${pending_col2}s|%-${pending_col3}s|%-${pending_col4}s|%s\n" "Name " " Version " " Attempts " "Size (Bytes)" " Date"
+    __print_pending_tbl_sep
+}
+
+__print_pending_tbl_footer()
+{
+    __print_pending_tbl_sep
+}
+
+__print_pending_tbl_row()
+{
+    local name=$1
+    local size=$(stat -c "%s" "${onie_update_pending_dir}/$name")
+    local ds="$(stat -c '%y' ${onie_update_pending_dir}/$name | head -c 19)"
+    local version="$(sh ${onie_update_pending_dir}/$name -qi | grep 'image_version=' | sed -e 's/image_version=//')"
+    if [ -r "${onie_update_attempts_dir}/$name" ] ; then
+        local attempts=$(cat "${onie_update_attempts_dir}/$name")
+    else
+        local attempts=0
+    fi
+    printf "%-${pending_col1}s|%-${pending_col2}s|%+${pending_col3}s|%+${pending_col4}s|%s\n" "$name " " $version " " $attempts " "$size " " $ds"
+}
+
+# default to length of header columns
+result_col1=4
+result_col2=7
+result_col3=10
+result_col4=20
+
+__gather_results_col_widths()
+{
+    # Find max column widths for 'name' and 'version'.
+    local name=$1
+
+    if [ ${#name} -gt $result_col1 ] ; then
+        result_col1=${#name}
+    fi
+
+    local version=$(grep image_version "${onie_update_results_dir}/$name")
+    version=${version##*=}
+    [ -n "$version" ] || version="Unknown"
+    if [ ${#version} -gt $result_col2 ] ; then
+        result_col2=${#version}
+    fi
+}
+
+__finalize_results_col_widths()
+{
+    # column 1 needs 1 extra space. all others need 2
+    result_col1=$(( $result_col1 + 1 ))
+    result_col2=$(( $result_col2 + 2 ))
+}
+
+__print_results_tbl_sep()
+{
+    printf "%${result_col1}s+" | sed -e 's/ /=/g'
+    printf "%${result_col2}s+" | sed -e 's/ /=/g'
+    printf "%${result_col3}s+" | sed -e 's/ /=/g'
+    printf "%${result_col4}s\n" | sed -e 's/ /=/g'
+}
+
+__print_results_tbl_header()
+{
+    printf "%-${result_col1}s|%-${result_col2}s|%-${result_col3}s|%s\n" "Name " " Version " " Result " " Date"
+    __print_results_tbl_sep
+}
+
+__print_results_tbl_footer()
+{
+    __print_results_tbl_sep
+}
+
+__print_results_tbl_row()
+{
+    local name=$1
+
+    local status=$(grep onie_update_status_code "${onie_update_results_dir}/$name")
+    status=${status##*=}
+    [ -z "$status" ] && status=1
+    if [ $status -eq 0 ] ; then
+        status="Success"
+    else
+        status="Fail"
+    fi
+
+    local version=$(grep image_version "${onie_update_results_dir}/$name")
+    version=${version##*=}
+    [ -n "$version" ] || version="Unknown"
+
+    local ds="$(stat -c '%y' ${onie_update_results_dir}/$name | head -c 19)"
+    printf "%-${result_col1}s|%-${result_col2}s|%-${result_col3}s|%s\n" "$name " " $version " " $status " " $ds"
+}
+
+# The 'show-pending' command handler.
+# $1 - name of firmware update to display [optional].
+#
+# The command displays information about pending firmware updates.
+cmd_show_pending()
+{
+    local name="$1"
+
+    [ "$quiet" != "yes" ] && echo "** Pending firmware update information:"
+    if [ -n "$name" ] ; then
+        # dump detailed information about this update
+        local pending="${onie_update_pending_dir}/$name"
+        [ -r "$pending" ] || {
+            echo "No pending firmware update '$name' found.  Skipping..."
+            return 0
+        }
+        __gather_pending_col_widths $name
+        __finalize_pending_col_widths
+        __print_pending_tbl_header
+        __print_pending_tbl_row $name
+        __print_pending_tbl_footer
+
+        echo
+        echo "Additional image information:"
+        # Dump information contained in the update image
+        /bin/sh "$pending" -qi
+    else
+        # dump summary information about all pending updates
+        local pending="$(ls $onie_update_pending_dir)"
+        if [ -n "$pending" ] ; then
+            for f in $(ls $onie_update_pending_dir) ; do
+                __gather_pending_col_widths $f
+            done
+            __finalize_pending_col_widths
+            __print_pending_tbl_header
+            for f in $(ls $onie_update_pending_dir) ; do
+                __print_pending_tbl_row $f
+            done
+            __print_pending_tbl_footer
+            [ "$quiet" != "yes" ] && {
+                echo
+                echo "For more detailed information run: $this_script show-pending <update_name>"
+            }
+        else
+            [ "$quiet" != "yes" ] && echo "No pending firmware updates present."
+        fi
+    fi
+
+    return 0
+}
+
+# The 'show-results' command handler.
+# $1 - name of firmware update results to display [optional].
+#
+# The command displays results for completed firmware updates.
+cmd_show_results()
+{
+    local name="$1"
+
+    [ "$quiet" != "yes" ] && echo "** Firmware update results information:"
+    if [ -n "$name" ] ; then
+        # dump detailed results for this update
+        local results="${onie_update_results_dir}/$name"
+        [ -r "$results" ] || {
+            echo "No results for firmware update '$name' found.  Skipping..."
+            return 0
+        }
+        __gather_results_col_widths $name
+        __finalize_results_col_widths
+        __print_results_tbl_header
+        __print_results_tbl_row "$name"
+        __print_results_tbl_footer
+
+        echo
+        echo "Additional firmware update results information:"
+        # Dump information contained in the results file
+        cat $results
+    else
+        # dump summary results information
+        local results="$(ls $onie_update_results_dir)"
+        if [ -n "$results" ] ; then
+            for f in $(ls $onie_update_results_dir) ; do
+                __gather_results_col_widths $f
+            done
+            __finalize_results_col_widths
+            __print_results_tbl_header
+            for f in $(ls $onie_update_results_dir) ; do
+                __print_results_tbl_row "$f"
+            done
+            __print_results_tbl_footer
+            [ "$quiet" != "yes" ] && {
+                echo
+                echo "For more detailed information run: $this_script show-results <update_name>"
+            }
+        else
+            [ "$quiet" != "yes" ] && echo "No firmware update results present."
+        fi
+    fi
+
+    return 0
+}
+
+# The 'show' command handler.
+# $1 - name of firmware update to display [optional].
+#
+# The command displays information about firmware update packages.
+cmd_show()
+{
+    local name="$1"
+
+    cmd_show_pending $name
+    [ "$quiet" != "yes" ] && echo
+    cmd_show_results $name
+
+    return 0
+}
+
+# The 'show-log' command handler.
+#
+# The command dumps the entire contents of the ONIE firmware update
+# log to stdout.
+cmd_show_log()
+{
+    if [ -r "$onie_update_log" ] ; then
+        cat "$onie_update_log"
+    else
+        echo "Firmware update log unavailable."
+    fi
+
+    return 0
+}
+
+
+# Process command arguments
+cmd=$1
+# optional argument
+name="$2"
+
+if [ -z "$cmd" ] ; then
+    # Default to 'show' if no command is specified.
+    cmd_show
+    exit 0
+fi
+
+case "$cmd" in
+    add)
+        [ -z "$name" ] && {
+            echo "ERROR: This command requires a firmware update file name."
+            echo "Run '$this_script -h' for complete details."
+            exit 1
+        }
+        cmd_add "$name"
+        ;;
+    remove)
+        [ -z "$name" ] && {
+            echo "ERROR: This command requires a firmware update file name."
+            echo "Run '$this_script -h' for complete details."
+            exit 1
+        }
+        cmd_remove "$name"
+        ;;
+    purge)
+        cmd_purge
+        ;;
+    show)
+        cmd_show "$name"
+        ;;
+    show-pending)
+        cmd_show_pending "$name"
+        ;;
+    show-results)
+        cmd_show_results "$name"
+        ;;
+    show-log)
+        cmd_show_log
+        ;;
+    *)
+        echo "Unknown command: $cmd"
+        usage
+        exit 1
+
+esac
+
+exit 0

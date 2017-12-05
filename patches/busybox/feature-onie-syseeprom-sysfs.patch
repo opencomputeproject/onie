@@ -1,0 +1,142 @@
+Support for reading and writing sysfs based eeprom entries
+
+diff --git a/include/onie_tlvinfo.h b/include/onie_tlvinfo.h
+index b602736..2713b86 100644
+--- a/include/onie_tlvinfo.h
++++ b/include/onie_tlvinfo.h
+@@ -143,6 +143,7 @@ static inline const char* tlv_type2name(u_int8_t type)
+ #define SYS_EEPROM_I2C_ADDR          CONFIG_SYS_EEPROM_I2C_ADDR
+ #define SYS_EEPROM_I2C_MEM_ADDR_BITS CONFIG_SYS_EEPROM_I2C_MEM_ADDR_BITS
+ #define SYS_EEPROM_MTD_DEVICE        CONFIG_SYS_EEPROM_MTD_DEVICE
++#define SYS_EEPROM_SYSFS_FILE_PATH   CONFIG_SYS_EEPROM_SYSFS_FILE_PATH
+ #define SYS_EEPROM_MAX_SIZE          CONFIG_SYS_EEPROM_MAX_SIZE
+ #define SYS_EEPROM_OFFSET            CONFIG_SYS_EEPROM_OFFSET
+ 
+diff --git a/miscutils/Config.src b/miscutils/Config.src
+index 290046a..e97b0c3 100644
+--- a/miscutils/Config.src
++++ b/miscutils/Config.src
+@@ -571,6 +571,9 @@ config SYS_EEPROM_DEVICE_MTD
+ config SYS_EEPROM_DEVICE_DISK
+ 	bool "disk (not recommended)"
+ 
++config SYS_EEPROM_SYSFS_FILE
++	bool "sysfs file"
++
+ endchoice
+ 
+ config SYS_EEPROM_I2C_DEVICE
+@@ -634,6 +637,13 @@ config SYS_EEPROM_DISK_DEVICE
+ 	help
+ 	  device name of the on-disk "eeprom". e.g., /dev/sda.
+ 
++config SYS_EEPROM_SYSFS_FILE_PATH
++	string "Path for sysfs eeprom file"
++	depends on SYS_EEPROM_SYSFS_FILE
++	help
++	  sysfs file path of the eeprom.
++	  e.g., /sys/bus/i2c/devices/1-0050/eeprom
++
+ config SYS_EEPROM_OFFSET
+ 	int "offset"
+ 	range 0 0 if SYS_EEPROM_DEVICE_DISK
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index 8ff4e98..72ddcd1 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -55,3 +55,4 @@ lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
++lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
+diff --git a/miscutils/sys_eeprom_sysfs_file.c b/miscutils/sys_eeprom_sysfs_file.c
+new file mode 100644
+index 0000000..68f33c9
+--- /dev/null
++++ b/miscutils/sys_eeprom_sysfs_file.c
+@@ -0,0 +1,85 @@
++#include "libbb.h"
++#include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
++#include <mtd/mtd-user.h>
++
++/*
++ * read_sys_eeprom - read the hwinfo from MTD EEPROM
++ */
++int read_sys_eeprom(void *eeprom_data, int offset, int len)
++{
++	int rc;
++	int ret = 0;
++	int fd;
++	u_int8_t *c;
++
++	c = eeprom_data;
++
++	fd = open(SYS_EEPROM_SYSFS_FILE_PATH, O_RDONLY);
++	if (fd < 0) {
++		fprintf (stderr, "Can't open %s: %s\n",
++			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++		return -1;
++	}
++
++	if (lseek (fd, offset + SYS_EEPROM_OFFSET, SEEK_SET) == -1) {
++		fprintf (stderr, "Seek error on %s: %s\n",
++			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++		return -1;
++	}
++
++	rc = read (fd, c, len);
++	if (rc != len) {
++		fprintf (stderr, "Read error on %s: %s\n",
++			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++		return -1;
++	}
++
++	if (close (fd)) {
++		fprintf (stderr, "I/O error on %s: %s\n",
++			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++		return -1;
++	}
++	return ret;
++}
++
++/*
++ * write_sys_eeprom - write the hwinfo to MTD EEPROM
++ */
++int write_sys_eeprom(void *eeprom_data, int len)
++{
++	int rc;
++	int ret = 0;
++	int fd;
++	u_int8_t *c;
++
++	c = eeprom_data;
++
++	fd = open(SYS_EEPROM_SYSFS_FILE_PATH, O_RDWR);
++	if (fd < 0) {
++		fprintf (stderr, "Can't open %s: %s\n",
++			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++		return -1;
++	}
++
++	if (lseek (fd, SYS_EEPROM_OFFSET, SEEK_SET) == -1) {
++		fprintf (stderr, "Seek error on %s: %s\n",
++			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++		return -1;
++	}
++
++	rc = write (fd, c, len);
++	if (rc != len) {
++		fprintf (stderr, "Write error on %s: %s\n",
++			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++		return -1;
++	}
++
++	if (close (fd)) {
++		fprintf (stderr, "I/O error on %s: %s\n",
++			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++		return -1;
++	}
++
++	return ret;
++}

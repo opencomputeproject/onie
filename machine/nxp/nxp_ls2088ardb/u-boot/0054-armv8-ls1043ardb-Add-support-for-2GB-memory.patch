@@ -1,0 +1,100 @@
+From d2185bb83123403c4e99507038fef1a7f765cda3 Mon Sep 17 00:00:00 2001
+From: Shaohui Xie <Shaohui.Xie@freescale.com>
+Date: Mon, 23 Nov 2015 15:23:48 +0800
+Subject: [PATCH 54/74] armv8/ls1043ardb: Add support for >2GB memory
+
+This patch also expose the complete DDR region(s) to Linux.
+
+Signed-off-by: Shaohui Xie <Shaohui.Xie@freescale.com>
+Signed-off-by: Mingkai Hu <Mingkai.Hu@freescale.com>
+Reviewed-by: York Sun <yorksun@freescale.com>
+---
+ arch/arm/include/asm/arch-fsl-layerscape/config.h |  4 ++--
+ board/freescale/ls1043ardb/ddr.c                  |  9 ++++++++-
+ board/freescale/ls1043ardb/ls1043ardb.c           | 10 ++++++++++
+ include/configs/ls1043a_common.h                  |  1 +
+ include/configs/ls1043ardb.h                      |  2 +-
+ 5 files changed, 22 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/config.h b/arch/arm/include/asm/arch-fsl-layerscape/config.h
+index 505a390..bdb5bd0 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/config.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/config.h
+@@ -104,8 +104,8 @@
+ #define CONFIG_SYS_FSL_OCRAM_BASE		0x10000000 /* initial RAM */
+ #define CONFIG_SYS_FSL_OCRAM_SIZE		0x200000 /* 2 MiB */
+ #define CONFIG_SYS_FSL_DDR_BE
+-#define CONFIG_SYS_LS1_DDR_BLOCK1_SIZE  ((phys_size_t)2 << 30)
+-#define CONFIG_MAX_MEM_MAPPED           CONFIG_SYS_LS1_DDR_BLOCK1_SIZE
++#define CONFIG_SYS_DDR_BLOCK1_SIZE		((phys_size_t)2 << 30)
++#define CONFIG_MAX_MEM_MAPPED			CONFIG_SYS_DDR_BLOCK1_SIZE
+ 
+ #define CONFIG_SYS_FSL_CCSR_GUR_BE
+ #define CONFIG_SYS_FSL_CCSR_SCFG_BE
+diff --git a/board/freescale/ls1043ardb/ddr.c b/board/freescale/ls1043ardb/ddr.c
+index b181579..249d056 100644
+--- a/board/freescale/ls1043ardb/ddr.c
++++ b/board/freescale/ls1043ardb/ddr.c
+@@ -187,5 +187,12 @@ phys_size_t initdram(int board_type)
+ void dram_init_banksize(void)
+ {
+ 	gd->bd->bi_dram[0].start = CONFIG_SYS_SDRAM_BASE;
+-	gd->bd->bi_dram[0].size = gd->ram_size;
++	if (gd->ram_size > CONFIG_SYS_DDR_BLOCK1_SIZE) {
++		gd->bd->bi_dram[0].size = CONFIG_SYS_DDR_BLOCK1_SIZE;
++		gd->bd->bi_dram[1].start = CONFIG_SYS_DDR_BLOCK2_BASE;
++		gd->bd->bi_dram[1].size = gd->ram_size -
++					  CONFIG_SYS_DDR_BLOCK1_SIZE;
++	} else {
++		gd->bd->bi_dram[0].size = gd->ram_size;
++	}
+ }
+diff --git a/board/freescale/ls1043ardb/ls1043ardb.c b/board/freescale/ls1043ardb/ls1043ardb.c
+index 39a417f..1cda4d7 100644
+--- a/board/freescale/ls1043ardb/ls1043ardb.c
++++ b/board/freescale/ls1043ardb/ls1043ardb.c
+@@ -124,6 +124,16 @@ int misc_init_r(void)
+ 
+ int ft_board_setup(void *blob, bd_t *bd)
+ {
++	u64 base[CONFIG_NR_DRAM_BANKS];
++	u64 size[CONFIG_NR_DRAM_BANKS];
++
++	/* fixup DT for the two DDR banks */
++	base[0] = gd->bd->bi_dram[0].start;
++	size[0] = gd->bd->bi_dram[0].size;
++	base[1] = gd->bd->bi_dram[1].start;
++	size[1] = gd->bd->bi_dram[1].size;
++
++	fdt_fixup_memory_banks(blob, base, size, 2);
+ 	ft_cpu_setup(blob, bd);
+ 
+ #ifdef CONFIG_SYS_DPAA_FMAN
+diff --git a/include/configs/ls1043a_common.h b/include/configs/ls1043a_common.h
+index 14fe451..50067b4 100644
+--- a/include/configs/ls1043a_common.h
++++ b/include/configs/ls1043a_common.h
+@@ -44,6 +44,7 @@
+ #define CONFIG_SYS_DDR_SDRAM_BASE	0x80000000
+ #define CONFIG_SYS_FSL_DDR_SDRAM_BASE_PHY	0
+ #define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
++#define CONFIG_SYS_DDR_BLOCK2_BASE      0x880000000ULL
+ 
+ #define CPU_RELEASE_ADDR               secondary_boot_func
+ 
+diff --git a/include/configs/ls1043ardb.h b/include/configs/ls1043ardb.h
+index 67cd54f..7edd8fc 100644
+--- a/include/configs/ls1043ardb.h
++++ b/include/configs/ls1043ardb.h
+@@ -23,7 +23,7 @@
+ #define CONFIG_DIMM_SLOTS_PER_CTLR	1
+ /* Physical Memory Map */
+ #define CONFIG_CHIP_SELECTS_PER_CTRL	4
+-#define CONFIG_NR_DRAM_BANKS		1
++#define CONFIG_NR_DRAM_BANKS		2
+ 
+ #define CONFIG_SYS_SPD_BUS_NUM		0
+ 
+-- 
+2.1.0.27.g96db324
+

@@ -1,0 +1,40 @@
+Plexxi changes to support i2c EEPROM.
+
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index ed3235b..3e1d085 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -1,3 +1,4 @@
++#include <unistd.h>        
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
+ #include "sys_eeprom.h"
+@@ -48,16 +49,21 @@ int write_sys_eeprom(void *eeprom_data, int len)
+     u_int16_t  addr = SYS_EEPROM_OFFSET;
+ 
+     c = eeprom_data;
++    if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++                    EEPROM_TYPE, &e)) {
++        printf("ERROR: Cannot open I2C device\n");
++        return -1;
++    }
+     for (i = 0; i < len; i++) {
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-			EEPROM_TYPE, &e)) {
+-	    printf("ERROR: Cannot open I2C device\n");
+-	    return -1;
+-	}
+-	eeprom_write_byte(&e, addr, *c);
+-	eeprom_close(&e);
++	if (eeprom_write_byte(&e, addr, *c)) {
++            printf("ERROR: writing EEPROM data\n");
++            ret = -1;
++            break;
++        }
+ 	c++; addr++;
++        usleep(5000);
+     }
++    eeprom_close(&e);
+ 
+     return ret;
+ }

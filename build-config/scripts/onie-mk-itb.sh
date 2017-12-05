@@ -1,6 +1,7 @@
 #!/bin/sh
 
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -20,17 +21,69 @@ MACHINE_PREFIX="$2"
     exit 1
 }
 
-SYSROOT="$3"
-[ -r "$SYSROOT" ] || {
-    echo "Error: SYSROOT file is not readable: $(realpath $SYSROOT)"
+ARCH="$3"
+if [ "$ARCH" != "ppc" ] &&
+   [ "$ARCH" != "arm" ] &&
+   [ "$ARCH" != "arm64" ] ; then
+    echo "Error: Unsupported architecture: $ARCH"
+    exit 1
+fi
+
+KERNEL_LOAD="$4"
+[ -n "$KERNEL_LOAD" ] || {
+    echo "Error: KERNEL_LOAD was not specified"
     exit 1
 }
 
-OUTFILE="$4"
+KERNEL_ENTRY="$5"
+[ -n "$KERNEL_ENTRY" ] || {
+    echo "Error: KERNEL_ENTRY was not specified"
+    exit 1
+}
+
+FDT_LOAD="$6"
+[ -n "$FDT_LOAD" ] || {
+    echo "Error: FDT_LOAD was not specified"
+    exit 1
+}
+if [ "$FDT_LOAD" != "no" ] ; then
+    FDT_LOAD_TEXT="load = <$FDT_LOAD>;"
+else
+    FDT_LOAD_TEXT=""
+fi
+
+KERNEL_COMPRESSION="gzip"
+INITRD_LOAD="0x00000000"
+FDT="fdt = \"dtb\";"
+
+KERNEL="$7"
+[ -r "$KERNEL" ] || {
+    echo "Error: KERNEL file is not readable: $KERNEL"
+    exit 1
+}
+
+DTB="$8"
+[ -r "$DTB" ] || {
+    echo "Error: DTB file is not readable: $DTB"
+    exit 1
+}
+
+SYSROOT="$9"
+[ -r "$SYSROOT" ] || {
+    echo "Error: SYSROOT file is not readable: $SYSROOT"
+    exit 1
+}
+
+OUTFILE="${10}"
 [ -n "$OUTFILE" ] || {
     echo "Error: output .itb file not specified"
     exit 1
 }
+touch $OUTFILE || {
+    echo "Error: unable to write to output file: $OUTFILE"
+    exit 1
+}
+rm -f $OUTFILE
 
 clean_tmp() {
     rm "$1"
@@ -40,12 +93,12 @@ its_file="$(mktemp)"
 trap "clean_tmp $its_file" EXIT
 
 set -e
-KERNEL="$(realpath ../${MACHINE_PREFIX}/kernel/linux/vmlinux.bin.gz)"
+KERNEL="$(realpath $KERNEL)"
 SYSROOT="$(realpath $SYSROOT)"
-DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
+DTB="$(realpath $DTB)"
 
 # Create a .its file for this machine type on the fly
-(cat <<EOF
+cat <<EOF > $its_file
 /*
 *
 * U-boot uImage source file with a kernel, ramdisk and FDT
@@ -59,19 +112,19 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 /dts-v1/;
 
 / {
-	description = "PowerPC kernel, initramfs and FDT blob";
+	description = "$ARCH kernel, initramfs and FDT blob";
 	#address-cells = <1>;
 
 	images {
 		kernel {
-			description = "${MACHINE_PREFIX} PowerPC Kernel";
+			description = "${MACHINE_PREFIX} $ARCH Kernel";
 			data = /incbin/("$KERNEL");
 			type = "kernel";
-			arch = "ppc";
+			arch = "$ARCH";
 			os = "linux";
-			compression = "gzip";
-			load = <00000000>;
-			entry = <00000000>;
+			compression = "$KERNEL_COMPRESSION";
+			load = <$KERNEL_LOAD>;
+			entry = <$KERNEL_ENTRY>;
 			hash@1 {
 				algo = "crc32";
 			};
@@ -81,10 +134,11 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 			description = "initramfs";
 			data = /incbin/("$SYSROOT");
 			type = "ramdisk";
-			arch = "ppc";
+			arch = "$ARCH";
 			os = "linux";
 			compression = "none";
-			load = <00000000>;
+			load = <$INITRD_LOAD>;
+			entry = <$INITRD_LOAD>;
 			hash@1 {
 				algo = "crc32";
 			};
@@ -94,9 +148,10 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 			description = "${MACHINE_PREFIX}.dtb";
 			data = /incbin/("$DTB");
 			type = "flat_dt";
-			arch = "ppc";
+			arch = "$ARCH";
 			os = "linux";
 			compression = "none";
+			$FDT_LOAD_TEXT
 			hash@1 {
 				algo = "crc32";
 			};
@@ -110,12 +165,18 @@ DTB="$(realpath ${MACHINE_PREFIX}.dtb)"
 			description = "${MACHINE_PREFIX}";
 			kernel = "kernel";
 			ramdisk = "initramfs";
-			fdt = "dtb";
+			$FDT
 		};
 	};
 };
 
 EOF
-) > $its_file
+
+if [ "$V" != "0" ] ; then
+    echo "=========================================="
+    echo "DEBUG: Dumping FIT image its file contents"
+    echo "=========================================="
+    cat $its_file
+fi
 
 mkimage -f $its_file "$OUTFILE"

@@ -1,0 +1,282 @@
+platform qemu_armv7a-r0
+
+Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+Add support for running the ca9x4_ct_vxp machine under QEMU.
+
+diff --git a/board/armltd/vexpress/ca9x4_ct_vxp.c b/board/armltd/vexpress/ca9x4_ct_vxp.c
+index d5e109e..fc40912 100644
+--- a/board/armltd/vexpress/ca9x4_ct_vxp.c
++++ b/board/armltd/vexpress/ca9x4_ct_vxp.c
+@@ -176,8 +176,29 @@ static void vexpress_timer_init(void)
+ /* Use the ARM Watchdog System to cause reset */
+ void reset_cpu(ulong addr)
+ {
++#ifdef CONFIG_ARCH_VEXPRESS_ONIE_QEMU
++	/*
++	 * QEMU does not implement the watchdog.  Activate site 0,
++	 * func 9 in the VE_SYSREGS SYS_CFGCTRL register.
++	 *
++	 * Following #defines borrowed from Linux kernel
++	 * drivers/mfd/vexpress-sysreg.c
++	 */
++
++#define SYS_CFGCTRL		0x0a4
++#define SYSREG_BASE		0x10000000
++#define SYS_CFGCTRL_START	(1 << 31)
++#define SYS_CFGCTRL_WRITE	(1 << 30)
++#define SYS_CFGCTRL_FUNC(n)	(((n) & 0x3f) << 20)
++#define SYS_CFGCTRL_SITE(n)	(((n) & 0x3) << 16)
++
++	u32 reboot_cmd = SYS_CFGCTRL_START | SYS_CFGCTRL_WRITE |
++		SYS_CFGCTRL_FUNC(9) | SYS_CFGCTRL_SITE(0);
++	writel(reboot_cmd, SYSREG_BASE + SYS_CFGCTRL);
++#else
+ 	writeb(WDT_EN, &wdt_base->wdogcontrol);
+ 	writel(WDT_RESET_LOAD, &wdt_base->wdogload);
++#endif
+ 	while (1)
+ 		;
+ }
+@@ -255,3 +276,23 @@ ulong get_tbclk (void)
+ {
+ 	return (ulong)CONFIG_SYS_HZ;
+ }
++
++#ifdef CONFIG_ARCH_VEXPRESS_ONIE_QEMU
++
++#include <environment.h>
++
++int misc_init_r (void)
++{
++	/* If the env is corrupt, write the default env to flash. */
++	env_write_default_if_crc_bad();
++
++	/* Populate the ethaddr env variable from the EEPROM data */
++	mac_read_from_eeprom();
++
++	/* Populate the serial# env variable from the EEPROM data */
++	populate_serial_number();
++
++	return 0;
++}
++
++#endif /* CONFIG_ARCH_VEXPRESS_ONIE_QEMU */
+diff --git a/boards.cfg b/boards.cfg
+index e4b0d44..537fc97 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -230,6 +230,7 @@ versatileqemu                arm         arm926ejs   versatile           armltd
+ integratorap_cm946es         arm         arm946es    integrator          armltd         -               integratorap:CM946ES
+ integratorcp_cm946es         arm         arm946es    integrator          armltd         -               integratorcp:CM946ES
+ ca9x4_ct_vxp                 arm         armv7       vexpress            armltd
++ca9x4_ct_vxp_onie_qemu       arm         armv7       vexpress            armltd         -           ca9x4_ct_vxp:ARCH_VEXPRESS_ONIE_QEMU
+ am335x_evm                   arm         armv7       am335x              ti             am33xx      am335x_evm:SERIAL1,CONS_INDEX=1
+ am335x_evm_uart1             arm         armv7       am335x              ti             am33xx      am335x_evm:SERIAL2,CONS_INDEX=2
+ am335x_evm_uart2             arm         armv7       am335x              ti             am33xx      am335x_evm:SERIAL3,CONS_INDEX=3
+diff --git a/include/configs/ca9x4_ct_vxp.h b/include/configs/ca9x4_ct_vxp.h
+index a7cd1d4..c75ea0d 100644
+--- a/include/configs/ca9x4_ct_vxp.h
++++ b/include/configs/ca9x4_ct_vxp.h
+@@ -30,7 +30,15 @@
+ /* Board info register */
+ #define SYS_ID				0x10000000
+ #define CONFIG_REVISION_TAG		1
+-#define CONFIG_SYS_TEXT_BASE		0x60800000
++#ifdef CONFIG_ARCH_VEXPRESS_ONIE_QEMU
++/*
++ * Use CONFIG_SYS_TEXT_BASE = 0x60010000 when running qemu with -kernel option.
++ * Use CONFIG_SYS_TEXT_BASE = 0x00000000 when running qemu with -bios option.
++ */
++#  define CONFIG_SYS_TEXT_BASE		0x00000000
++#else
++#  define CONFIG_SYS_TEXT_BASE		0x60800000
++#endif
+ 
+ #define CONFIG_SYS_MEMTEST_START	0x60000000
+ #define CONFIG_SYS_MEMTEST_END		0x20000000
+@@ -44,7 +52,11 @@
+ #define CONFIG_OF_LIBFDT		1
+ 
+ /* Size of malloc() pool */
++#ifdef CONFIG_ARCH_VEXPRESS_ONIE_QEMU
++#define CONFIG_SYS_MALLOC_LEN		(CONFIG_ENV_SECT_SIZE + 128 * 1024)
++#else
+ #define CONFIG_SYS_MALLOC_LEN		(CONFIG_ENV_SIZE + 128 * 1024)
++#endif
+ 
+ #define SCTL_BASE			0x10001000
+ #define VEXPRESS_FLASHPROG_FLVPPEN	(1 << 0)
+@@ -61,7 +73,7 @@
+ 					 (void *)CONFIG_SYS_SERIAL1}
+ #define CONFIG_CONS_INDEX		0
+ 
+-#define CONFIG_BAUDRATE			38400
++#define CONFIG_BAUDRATE			115200
+ #define CONFIG_SYS_SERIAL0		0x10009000
+ #define CONFIG_SYS_SERIAL1		0x1000A000
+ 
+@@ -103,7 +115,7 @@
+ #undef	CONFIG_SYS_CLKS_IN_HZ
+ #define CONFIG_SYS_LOAD_ADDR		0x60008000	/* load address */
+ #define LINUX_BOOT_PARAM_ADDR		0x60000200
+-#define CONFIG_BOOTDELAY		2
++#define CONFIG_BOOTDELAY		10
+ 
+ /* Physical Memory Map */
+ #define CONFIG_NR_DRAM_BANKS		2
+@@ -120,27 +132,88 @@
+ 					 GENERATED_GBL_DATA_SIZE)
+ #define CONFIG_SYS_INIT_SP_ADDR		CONFIG_SYS_GBL_DATA_OFFSET
+ 
+-/* Basic environment settings */
+-#define CONFIG_BOOTCOMMAND		"run bootflash;"
+-#define CONFIG_EXTRA_ENV_SETTINGS \
+-		"loadaddr=0x80008000\0" \
+-		"ramdisk_addr_r=0x61000000\0" \
+-		"kernel_addr=0x44100000\0" \
+-		"ramdisk_addr=0x44800000\0" \
+-		"maxramdisk=0x1800000\0" \
+-		"pxefile_addr_r=0x88000000\0" \
+-		"kernel_addr_r=0x80008000\0" \
+-		"console=ttyAMA0,38400n8\0" \
+-		"dram=1024M\0" \
+-		"root=/dev/sda1 rw\0" \
+-		"mtd=armflash:1M@0x800000(uboot),7M@0x1000000(kernel)," \
+-			"24M@0x2000000(initrd)\0" \
+-		"flashargs=setenv bootargs root=${root} console=${console} " \
+-			"mem=${dram} mtdparts=${mtd} mmci.fmax=190000 " \
+-			"devtmpfs.mount=0  vmalloc=256M\0" \
+-		"bootflash=run flashargs; " \
+-			"cp ${ramdisk_addr} ${ramdisk_addr_r} ${maxramdisk}; " \
+-			"bootm ${kernel_addr} ${ramdisk_addr_r}\0"
++#ifdef CONFIG_ARCH_VEXPRESS_ONIE_QEMU
++
++#define CONFIG_MISC_INIT_R      1               /* enable platform specific init */
++
++/*
++ * Board hardware information (EEPROM), stored in flash.
++ */
++#define CONFIG_CMD_SYS_EEPROM
++#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
++#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	1
++
++#define CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO
++/* HWINFO comes right after u-boot environment */
++#define CONFIG_SYS_FLASH_HWINFO_ADDR		(CONFIG_ENV_ADDR + CONFIG_ENV_SECT_SIZE)
++/* one sector for HWINFO */
++#define CONFIG_SYS_FLASH_HWINFO_SECT_SIZE	FLASH_MAX_SECTOR_SIZE
++#define CONFIG_SYS_EEPROM_MAX_SIZE		CONFIG_SYS_FLASH_HWINFO_SECT_SIZE
++
++/* Undefine a few things provided by common_config.h */
++#undef CONFIG_BAUDRATE
++#undef CONFIG_OF_LIBFDT
++#undef CONFIG_FIT
++#undef CONFIG_SYS_BAUDRATE_TABLE
++#undef CONFIG_EXTRA_ENV_SETTINGS
++
++#include "configs/common_config.h"
++
++/* Disable commands/support for hardware that QEMU does not support */
++#undef CONFIG_CMD_PCI
++#undef CONFIG_CMD_PXE
++#undef CONFIG_CMD_IRQ
++#undef CONFIG_CMD_I2C
++#undef CONFIG_OF_BOARD_SETUP
++#undef CONFIG_OF_STDOUT_VIA_ALIAS
++
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#define CONFIG_PLATFORM_ENV		\
++	"consoledev=ttyAMA0\0"		\
++	"onie_start=0x00100000\0"	\
++	"onie_sz.b=0x00800000\0"	\
++	"loadaddr=0x80008000\0"		\
++
++#define	CONFIG_EXTRA_ENV_SETTINGS		\
++	CONFIG_PLATFORM_ENV			\
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++/* FLASH and environment organization */
++#define PHYS_FLASH_SIZE			0x04000000	/* 64MB */
++#define CONFIG_SYS_FLASH_CFI		1
++#define CONFIG_FLASH_CFI_DRIVER		1
++#define CONFIG_SYS_FLASH_SIZE		0x04000000
++#define CONFIG_SYS_MAX_FLASH_BANKS	2
++#define CONFIG_SYS_FLASH_BASE0		0x40000000
++#define CONFIG_SYS_FLASH_BASE1		0x44000000
++#define CONFIG_SYS_MONITOR_BASE		CONFIG_SYS_FLASH_BASE0
++
++/* Timeout values in ticks */
++#define CONFIG_SYS_FLASH_ERASE_TOUT	(2 * CONFIG_SYS_HZ) /* Erase Timeout */
++#define CONFIG_SYS_FLASH_WRITE_TOUT	(2 * CONFIG_SYS_HZ) /* Write Timeout */
++
++#define CONFIG_SYS_MAX_FLASH_SECT	256		/* Max sectors */
++#define FLASH_MAX_SECTOR_SIZE		0x00040000	/* 256 KB sectors */
++
++#define CONFIG_SYS_FLASH_USE_BUFFER_WRITE /* use buffered writes */
++
++#define CONFIG_ENV_SECT_SIZE		FLASH_MAX_SECTOR_SIZE
++
++/* Store environment just after u-boot image in NOR0 */
++#define CONFIG_ENV_IS_IN_FLASH		1
++#define CONFIG_ENV_OFFSET		(512 * 1024)
++#define CONFIG_ENV_ADDR			(CONFIG_SYS_FLASH_BASE0 + \
++					 CONFIG_ENV_OFFSET)
++
++#define CONFIG_SYS_FLASH_PROTECTION	/* The devices have real protection */
++#define CONFIG_SYS_FLASH_EMPTY_INFO	/* flinfo indicates empty blocks */
++#define CONFIG_SYS_FLASH_BANKS_LIST	{ CONFIG_SYS_FLASH_BASE0, \
++					  CONFIG_SYS_FLASH_BASE1 }
++#else /* !CONFIG_ARCH_VEXPRESS_ONIE_QEMU */
+ 
+ /* FLASH and environment organization */
+ #define PHYS_FLASH_SIZE			0x04000000	/* 64MB */
+@@ -184,7 +257,35 @@
+ #define CONFIG_SYS_FLASH_BANKS_LIST	{ CONFIG_SYS_FLASH_BASE0, \
+ 					  CONFIG_SYS_FLASH_BASE1 }
+ 
++/* Basic environment settings */
++#define CONFIG_BOOTCOMMAND		"run bootflash;"
++#define CONFIG_EXTRA_ENV_SETTINGS \
++		"loadaddr=0x80008000\0" \
++		"ramdisk_addr_r=0x61000000\0" \
++		"kernel_addr=0x44100000\0" \
++		"ramdisk_addr=0x44800000\0" \
++		"maxramdisk=0x1800000\0" \
++		"pxefile_addr_r=0x88000000\0" \
++		"kernel_addr_r=0x80008000\0" \
++		"console=ttyAMA0,38400n8\0" \
++		"dram=1024M\0" \
++		"root=/dev/sda1 rw\0" \
++		"mtd=armflash:1M@0x800000(uboot),7M@0x1000000(kernel)," \
++			"24M@0x2000000(initrd)\0" \
++		"flashargs=setenv bootargs root=${root} console=${console} " \
++			"mem=${dram} mtdparts=${mtd} mmci.fmax=190000 " \
++			"devtmpfs.mount=0  vmalloc=256M\0" \
++		"bootflash=run flashargs; " \
++			"cp ${ramdisk_addr} ${ramdisk_addr_r} ${maxramdisk}; " \
++			"bootm ${kernel_addr} ${ramdisk_addr_r}\0"
++
++
++#endif /* CONFIG_ARCH_VEXPRESS_ONIE_QEMU */
++
+ /* Monitor Command Prompt */
++#ifdef CONFIG_ARCH_VEXPRESS_ONIE_QEMU
++#define CONFIG_SYS_PROMPT		"VExpress-ONIE# "
++#else
+ #define CONFIG_SYS_CBSIZE		512	/* Console I/O Buffer Size */
+ #define CONFIG_SYS_PROMPT		"VExpress# "
+ #define CONFIG_SYS_PBSIZE		(CONFIG_SYS_CBSIZE + \
+@@ -194,5 +295,6 @@
+ #define CONFIG_SYS_LONGHELP
+ #define CONFIG_CMDLINE_EDITING		1
+ #define CONFIG_SYS_MAXARGS		16	/* max command args */
++#endif /* CONFIG_ARCH_VEXPRESS_ONIE_QEMU */
+ 
+ #endif

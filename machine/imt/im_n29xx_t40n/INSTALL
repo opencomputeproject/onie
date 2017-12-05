@@ -1,0 +1,202 @@
+=======================================================
+Installing ONIE on Interface Masters Niagara 2XXX Series
+=======================================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/imt MACHINE=im_n29xx_t40n all"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/imt MACHINE=im_n29xx_t40n all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-rw-r-- 1 5510820  Jan 28 14:30 im_n29xx_t40n-r0.initrd
+-rw-rw-r-- 1 3356624  Jan 28 14:29 im_n29xx_t40n-r0.vmlinuz
+-rw-rw-r-- 1 20381696 Jan 28 14:30 onie-recovery-x86_64-im_n29xx_t40n-r0.iso
+-rw-rw-r-- 1 8910711  Jan 28 14:30 onie-updater-x86_64-im_n29xx_t40n-r0
+
+im_n29xx_t40n-r0.initrd -- This is the ONIE initramfs (filesystem).
+
+im_n29xx_t40n-r0.vmlinuz -- This is the ONIE kernel image.
+
+onie-recovery-x86_64-im_n29xx_t40n-r0.iso -- This is the ONIE recovery
+ISO image. This image can be used to create a bootable USB memory stick
+for installing/recovery ONIE.
+
+onie-updater-x86_64-im_n29xx_t40n-r0 -- This is the ONIE self-update
+image. This image is a self-extracting archive used for installing ONIE.
+
+
+Note on ONIE id for Interface Masters Niagara 2XXX Series
+=========================================================
+
+ONIE machine id 'im_n29xx_t40n' historically includes part for
+Congatec conga-BAF/T40N CPU board. This is left intentionally to
+support backward compatibility with older ONIE versions.
+Now machine id 'im_n29xx_t40n' is used on Interface Masters Niagara
+2xxx family devices. More detailed list for supported hardware you
+can find below.
+
+
+Interface Masters Niagara 2XXX Series Supported Hardware
+========================================================
+
+Broadcom XGS silicon family based:
+
+Device               Ports               CPU             Forwarding                      Modular I/O configurations
+==================   =================   =============   =============================   =========================
+Niagara 2948X12XLm   48x10G  +  12x40G   Intel/AMD x86   Broadcom BCM56850  (Trident2)   Yes
+Niagara 2960X6XLm    60x10G  +   6x40G   Intel/AMD x86   Broadcom BCM56850  (Trident2)   Yes
+Niagara 2972Xm       72x10G              Intel/AMD x86   Broadcom BCM56850  (Trident2)   Yes
+Niagara 2932XL       32x40G              Intel/AMD x86   Broadcom BCM56850  (Trident2)   No
+Niagara 2948X6XL     48x10G  +   6x40G   Intel/AMD x86   Broadcom BCM56850  (Trident2)   No
+Niagara 28XX    Nx100M,1G,10G,40G,100G   Intel/AMD x86   Broadcom BCM56860 (Trident2+)   Yes
+Niagara 2532          2x10G  + 32x100G   Intel/AMD x86   Broadcom BCM56960  (Tomahawk)   No
+Niagara 2732          2x10G  + 32x100G   Intel/AMD x86   Broadcom BCM56870  (Trident3)   No
+
+Broadcom DNX silicon family based:
+
+Device               Ports               CPU             Forwarding                      Modular I/O configurations
+==================   =================   =============   =============================   =========================
+Niagara 2648X-4C     48x10G  +  4x100G   Intel/AMD x86   Broadcom BCM88375  (QumranMX)   No
+
+
+Installing the ONIE binaries
+============================
+
+Installation is possible through 2 different methods:
+1. Installation using bootable USB stick on platforms that have USB port.
+2. Installation using PXE (Preboot Execution Environment) on all platforms.
+
+
+Installation through USB bootable stick.
+----------------------------------------
+
+Use ``dd`` to copy the .iso image to a USB stick and boot from that::
+
+  dd if=onie-recovery-x86_64-im_n29xx_t40n-r0.iso of=/dev/sdX bs=10M
+
+You can find the correct ``/dev/sdX`` by inspecting the ``dmesg`` 
+output or ``fdisk -l`` command after inserting the USB stick into your work station.
+
+Booting from USB stick
+----------------------
+
+To enable booting from USB in the BIOS:
+1. Insert the USB stick
+2. Power on the switch and enter the BIOS configuration
+3. Set the hard drive boot order:
+
+  In "Boot Option #1" select the device that corresponds to your
+  device::
+
+    Boot-->Boot Option Priorities-->Boot Option #1
+
+  If the device name is not listed in "Boot Option #1", please
+  check the priorities in the hard drive boot order::
+
+    Boot-->Hard Drive BBS Priorities-->Boot Option #1
+
+  Taking ``UFD 2.0 Silicon-Power 16GB`` as an example, the boot
+  order will look like following::
+
+    Device Based Boot Priority
+    Boot Option #1          [UFD 2.0 Silicon-Po...]
+    Boot Option #2          [P0: SanDisk SD8SFA...]
+    Boot Option #3          [Realtek Boot Agent]
+
+4. Save and Exit the BIOS configuration
+5. After several seconds, you should see:
+
+                     GNU GRUB  version 2.02~beta2+e4a1fe391
+
+ +----------------------------------------------------------------------------+
+ |*ONIE: Rescue                                                               |
+ | ONIE: Embed ONIE                                                           |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line.
+
+  - Choose ``ONIE: Embed ONIE`` for creating a fresh partition layout and
+    installing ONIE automatically.  All data on the mass storage will be
+    erased.
+  - Choose ``ONIE: Rescue`` for entering ONIE recovery command-line shell.
+
+
+Installation through PXE (Preboot Execution Environment).
+---------------------------------------------------------
+
+For that you need to set network boot and related options in Niagara Switch BIOS:
+
+    Advanced:
+        PCI ROM Priority = Legacy ROM
+        Launch PXE Option ROM = Enabled
+        Launch Storage Option = Enabled
+        Onboard LAN = Enabled
+        Launch Onboard LAN PX = Enabled
+    Boot:
+        Quiet Boot = Disabled
+        1st Boot Device = Sata 0 Drive
+        2nd Boot Device = Onboard LAN
+        3rd-..-8th = Disabled
+
+DHCP Server configuration should include the following options:
+
+    allow booting;
+    allow bootp;
+
+    subnet 192.168.157.0 netmask 255.255.255.0 {
+        range dynamic-bootp 192.168.157.157 192.168.157.167;
+        option subnet-mask 255.255.255.0;
+        option broadcast-address 192.168.157.255;
+        option domain-name-servers 8.8.8.8;
+        option routers 192.168.157.98;
+        next-server 192.168.157.98;
+        filename "pxelinux.0";
+    }
+
+Now on tftp server you should have the following files:
+
+    $cd /tftpboot
+    $ ls -1R
+        im_n29xx_t40n-r0.initrd
+        im_n29xx_t40n-r0.vmlinuz
+        onie-updater-x86_64-im_n29xx_t40n-r0
+        pxelinux.0
+        ./pxelinux.cfg:
+            default
+
+PXE Linux configuration is the following:
+
+    $ cat pxelinux.cfg/default
+        SERIAL 0 115200 0
+        DEFAULT linux
+        LABEL linux
+          SAY Now booting the kernel from SYSLINUX...
+          KERNEL im_n29xx_t40n-r0.vmlinuz
+          APPEND ro console=tty0 console=ttyS0,115200n8 boot_reason=embed
+          INITRD im_n29xx_t40n-r0.initrd
+
+Once you configure this correctly on switch boot PXE installation would start and ONIE would be installed to /dev/sda1 partition.
+
+To force PXE installation you can erase MBR record on Niagara Switch (BE SURE YOU UNDERSTAND WHAT YOU DO):
+
+    $ dd if=/dev/zero of=/dev/sda bs=512 count=1

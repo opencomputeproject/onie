@@ -1,0 +1,50 @@
+platform qemu_armv7a patch
+
+Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+
+Kernel modifications to support ONIE on the VEXPRESS ARM board.
+
+diff --git a/arch/arm/boot/dts/vexpress-v2m.dtsi b/arch/arm/boot/dts/vexpress-v2m.dtsi
+index cb3090f..15a08ed 100644
+--- a/arch/arm/boot/dts/vexpress-v2m.dtsi
++++ b/arch/arm/boot/dts/vexpress-v2m.dtsi
+@@ -28,10 +28,38 @@
+ 		ranges;
+ 
+ 		flash@0,00000000 {
++			#address-cells = <0x1>;
++			#size-cells = <0x1>;
+ 			compatible = "arm,vexpress-flash", "cfi-flash";
+ 			reg = <0 0x00000000 0x04000000>,
+ 			      <1 0x00000000 0x04000000>;
+-			bank-width = <4>;
++			bank-width = <2>;
++			partition@0 {
++				/* 512KB u-boot, 2 sectors */
++				reg = <0x00000000 0x00080000>;
++				label = "uboot";
++			};
++			partition@1 {
++				/* 256KB, 1 sector */
++				reg = <0x00080000 0x00040000>;
++				label = "uboot-env";
++				env_size = <0x2000>;
++			};
++			partition@2 {
++				/* 256KB, 1 sector */
++				reg = <0x000c0000 0x00040000>;
++				label = "board_eeprom";
++			};
++			partition@3 {
++				/* 6MB onie */
++				reg = <0x00100000 0x00800000>;
++				label = "onie";
++			};
++			partition@4 {
++				/* Entire flash minus (u-boot + info + onie) */
++				reg = <0x00900000 0x07700000>;
++				label = "open";
++			};
+ 		};
+ 
+ 		psram@2,00000000 {

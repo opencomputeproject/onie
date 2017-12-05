@@ -1,0 +1,46 @@
+Add configuration option to disable repeating of prior command
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+Prior to history and an editable command line, u-boot had a "feature" that
+allowed users to type CR at the prompt and repeat the last command (some
+commands even auto-increment addresses).
+
+There are emails on the mailing list suggesting that the fucntion be limited to
+"useful" cases; however, it is clear that this "repeat" leads to unexpected
+behavior as it differs from almost every standard command parser.
+
+This patch allows users to completely disable the repeat to be completely
+disabled by defining "CONFIG_SYS_NO_REPEATABLE.
+
+diff --git a/common/hush.c b/common/hush.c
+index 4c84c2f..2b8c119 100644
+--- a/common/hush.c
++++ b/common/hush.c
+@@ -1040,6 +1040,9 @@ static void get_user_input(struct in_str *i)
+ 	if (had_ctrlc()) flag_repeat = 0;
+ 	clear_ctrlc();
+ 	do_repeat = 0;
++#ifdef CONFIG_SYS_NO_REPEATABLE
++	flag_repeat = 0;
++#endif
+ 	if (i->promptmode == 1) {
+ 		if (console_buffer[0] == '\n'&& flag_repeat == 0) {
+ 			strcpy(the_command,console_buffer);
+diff --git a/common/main.c b/common/main.c
+index 9507cec..1cd5cb7 100644
+--- a/common/main.c
++++ b/common/main.c
+@@ -1346,7 +1346,9 @@ static int builtin_run_command(const char *cmd, int flag)
+ 
+ 		if (cmd_process(flag, argc, argv, &repeatable))
+ 			rc = -1;
+-
++#ifdef CONFIG_SYS_NO_REPEATABLE
++		repeatable = 0;
++#endif
+ 		/* Did the user stop this? */
+ 		if (had_ctrlc ())
+ 			return -1;	/* if stopped then not repeatable */

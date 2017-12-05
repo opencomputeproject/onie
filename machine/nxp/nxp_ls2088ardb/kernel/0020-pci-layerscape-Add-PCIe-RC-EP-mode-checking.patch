@@ -1,0 +1,48 @@
+From e8f50c788c42797e52e1743bbced10e3c304174c Mon Sep 17 00:00:00 2001
+From: Minghuan Lian <Minghuan.Lian@freescale.com>
+Date: Tue, 17 Nov 2015 17:07:50 +0800
+Subject: [PATCH 020/124] pci/layerscape: Add PCIe RC/EP mode checking
+
+The patch will check PCIe controller work mode, if it is in
+EP mode, directly return "-ENODEV". This allows the EP driver
+to probe it again.
+
+Signed-off-by: Minghuan Lian <Minghuan.Lian@freescale.com>
+---
+ drivers/pci/host/pci-layerscape.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/drivers/pci/host/pci-layerscape.c b/drivers/pci/host/pci-layerscape.c
+index f25c25b..87997a1 100644
+--- a/drivers/pci/host/pci-layerscape.c
++++ b/drivers/pci/host/pci-layerscape.c
+@@ -54,6 +54,16 @@ u32 set_pcie_streamid_translation(struct pci_dev *pdev, u32 devid)
+ 	return streamid;
+ }
+ 
++static bool ls_pcie_is_bridge(struct ls_pcie *pcie)
++{
++	u32 header_type;
++
++	header_type = ioread32(pcie->regs + (PCI_HEADER_TYPE & ~0x3));
++	header_type = (header_type >> (8 * (PCI_HEADER_TYPE & 0x3))) & 0x7f;
++
++	return header_type == PCI_HEADER_TYPE_BRIDGE;
++}
++
+ static int ls1_pcie_link_up(struct dw_pcie_port *pp)
+ {
+ 	struct ls_pcie *pcie = to_ls_pcie(pp);
+@@ -214,6 +224,9 @@ static int __init ls_pcie_probe(struct platform_device *pdev)
+ 			dev_err(&pdev->dev, "PCIe endpoint partitioning not possible\n");
+ 	}
+ 
++	if (!ls_pcie_is_bridge(pcie))
++		return -ENODEV;
++
+ 	ret = dw_pcie_port_init(&pcie->pp);
+ 	if (ret < 0)
+ 		return ret;
+-- 
+2.1.0.27.g96db324
+

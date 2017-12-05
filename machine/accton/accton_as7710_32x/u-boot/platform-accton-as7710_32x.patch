@@ -1,0 +1,2431 @@
+Platform support for the Accton AS7710_32X
+
+diff --git a/arch/powerpc/cpu/mpc85xx/cpu.c b/arch/powerpc/cpu/mpc85xx/cpu.c
+index 684d400..9744dab 100644
+--- a/arch/powerpc/cpu/mpc85xx/cpu.c
++++ b/arch/powerpc/cpu/mpc85xx/cpu.c
+@@ -36,6 +36,23 @@ __board_reset(void)
+ }
+ void board_reset(void) __attribute__((weak, alias("__board_reset")));
+ 
++#define strmhz strmhz_1
++char *strmhz_1 (char *buf, unsigned long hz)
++{
++	long l, n;
++	long m;
++
++	n = DIV_ROUND(hz, 1000) / 1000L;
++	l = sprintf (buf, "%ld", n);
++
++	hz -= n * 1000000L;
++	m = DIV_ROUND(hz, 1000L);
++	if (m != 0)
++		sprintf (buf + l, ".%03ld", m);
++	return (buf);
++}
++
++
+ int checkcpu (void)
+ {
+ 	sys_info_t sysinfo;
+diff --git a/arch/powerpc/cpu/mpc85xx/speed.c b/arch/powerpc/cpu/mpc85xx/speed.c
+index 603834b..12dd1c3 100644
+--- a/arch/powerpc/cpu/mpc85xx/speed.c
++++ b/arch/powerpc/cpu/mpc85xx/speed.c
+@@ -458,7 +458,7 @@ void get_sys_info(sys_info_t *sys_info)
+ 
+ #if defined(CONFIG_FSL_IFC)
+ 	ccr = in_be32(&ifc_regs->ifc_ccr);
+-	ccr = ((ccr & IFC_CCR_CLK_DIV_MASK) >> IFC_CCR_CLK_DIV_SHIFT) + 1;
++	ccr = ((ccr & IFC_CCR_CLK_DIV_MASK) >> IFC_CCR_CLK_DIV_SHIFT) + 3;/* susan modify, for IFC Clock  */
+ 
+ 	sys_info->freq_localbus = sys_info->freq_systembus / ccr;
+ #endif
+diff --git a/board/accton/as7710_32x/Makefile b/board/accton/as7710_32x/Makefile
+new file mode 100644
+index 0000000..3aa9241
+--- /dev/null
++++ b/board/accton/as7710_32x/Makefile
+@@ -0,0 +1,18 @@
++#
++# Copyright 2014 Freescale Semiconductor, Inc.
++#
++# SPDX-License-Identifier:      GPL-2.0+
++#
++
++ifdef CONFIG_SPL_BUILD
++obj-y += spl.o
++else
++obj-$(CONFIG_AS7710_32X) += as7710_32x.o
++obj-$(CONFIG_AS7710_32X) += eth_as7710_32x.o
++obj-$(CONFIG_AS7710_32X) += cpld.o
++obj-$(CONFIG_PCI)      += pci.o
++endif
++
++obj-y   += ddr.o
++obj-y   += law.o
++obj-y   += tlb.o
+diff --git a/board/accton/as7710_32x/README b/board/accton/as7710_32x/README
+new file mode 100644
+index 0000000..24484cd
+--- /dev/null
++++ b/board/accton/as7710_32x/README
+@@ -0,0 +1,264 @@
++T2080PCIe-RDB is a Freescale Reference Design Board that hosts the T2080 SoC.
++It can work in two mode: standalone mode and PCIe endpoint mode.
++
++T2080 SoC Overview
++------------------
++The T2080 QorIQ multicore processor combines four dual-threaded e6500 Power
++Architecture processor cores with high-performance datapath acceleration
++logic and network and peripheral bus interfaces required for networking,
++telecom/datacom, wireless infrastructure, and mil/aerospace applications.
++
++T2080 includes the following functions and features:
++ - Four dual-threads 64-bit Power architecture e6500 cores, up to 1.8GHz
++ - 2MB L2 cache and 512KB CoreNet platform cache (CPC)
++ - Hierarchical interconnect fabric
++ - One 32-/64-bit DDR3/3L SDRAM memory controllers with ECC and interleaving
++ - Data Path Acceleration Architecture (DPAA) incorporating acceleration
++ - 16 SerDes lanes up to 10.3125 GHz
++ - 8 Ethernet interfaces, supporting combinations of the following:
++   - Up to four 10 Gbps Ethernet MACs
++   - Up to eight 1 Gbps Ethernet MACs
++   - Up to four 2.5 Gbps Ethernet MACs
++ - High-speed peripheral interfaces
++   - Four PCI Express controllers (two PCIe 2.0 and two PCIe 3.0 with SR-IOV)
++   - Two Serial RapidIO 2.0 controllers/ports running at up to 5 GHz
++ - Additional peripheral interfaces
++   - Two serial ATA (SATA 2.0) controllers
++   - Two high-speed USB 2.0 controllers with integrated PHY
++   - Enhanced secure digital host controller (SD/SDHC/SDXC/eMMC)
++   - Enhanced serial peripheral interface (eSPI)
++   - Four I2C controllers
++   - Four 2-pin UARTs or two 4-pin UARTs
++   - Integrated Flash Controller supporting NAND and NOR flash
++ - Three eight-channel DMA engines
++ - Support for hardware virtualization and partitioning enforcement
++ - QorIQ Platform's Trust Architecture 2.0
++
++Differences between T2080 and T2081
++-----------------------------------
++  Feature		T2080	 T2081
++  1G Ethernet numbers:  8	 6
++  10G Ethernet numbers: 4	 2
++  SerDes lanes:		16	 8
++  Serial RapidIO,RMan:  2	 no
++  SATA Controller:	2	 no
++  Aurora:		yes	 no
++  SoC Package:		896-pins 780-pins
++
++
++T2080PCIe-RDB board Overview
++----------------------------
++ - SERDES Configuration
++     - SerDes-1 Lane A-B: to two 10G XFI fiber (MAC9 & MAC10)
++     - SerDes-1 Lane C-D: to two 10G Base-T (MAC1 & MAC2)
++     - SerDes-1 Lane E-H: to PCIe Goldfinger (PCIe4 x4, Gen3)
++     - SerDes-2 Lane A-D: to PCIe Slot (PCIe1 x4, Gen2)
++     - SerDes-2 Lane E-F: to C293 secure co-processor (PCIe2 x2)
++     - SerDes-2 Lane G-H: to SATA1 & SATA2
++ - Ethernet
++     - Two on-board 10M/100M/1G RGMII ethernet ports
++     - Two on-board 10Gbps XFI fiber ports
++     - Two on-board 10Gbps Base-T copper ports
++ - DDR Memory
++     - Supports 72bit 4GB DDR3-LP SODIMM
++ - PCIe
++     - One PCIe x4 gold-finger
++     - One PCIe x4 connector
++     - One PCIe x2 end-point device (C293 Crypto co-processor)
++ - IFC/Local Bus
++     - NOR:  128MB 16-bit NOR Flash
++     - NAND: 1GB 8-bit NAND flash
++     - CPLD: for system controlling with programable header on-board
++ - SATA
++     - Two SATA 2.0 onnectors on-board
++ - USB
++     - Supports two USB 2.0 ports with integrated PHYs
++     - Two type A ports with 5V@1.5A per port.
++ - SDHC
++     - one TF-card connector on-board
++ - SPI
++     -  On-board 64MB SPI flash
++ - Other
++     - Two Serial ports
++     - Four I2C ports
++
++
++System Memory map
++-----------------
++Start Address  End Address      Description			Size
++0xF_FFDF_0000  0xF_FFDF_0FFF    IFC - CPLD			4KB
++0xF_FF80_0000  0xF_FF80_FFFF    IFC - NAND Flash		64KB
++0xF_FE00_0000  0xF_FEFF_FFFF    CCSRBAR				16MB
++0xF_F803_0000  0xF_F803_FFFF    PCI Express 4 I/O Space		64KB
++0xF_F802_0000  0xF_F802_FFFF    PCI Express 3 I/O Space		64KB
++0xF_F801_0000  0xF_F801_FFFF    PCI Express 2 I/O Space		64KB
++0xF_F800_0000  0xF_F800_FFFF    PCI Express 1 I/O Space		64KB
++0xF_F600_0000  0xF_F7FF_FFFF    Queue manager software portal	32MB
++0xF_F400_0000  0xF_F5FF_FFFF    Buffer manager software portal	32MB
++0xF_E800_0000  0xF_EFFF_FFFF    IFC - NOR Flash			128MB
++0xF_0000_0000  0xF_003F_FFFF    DCSR				4MB
++0xC_4000_0000  0xC_4FFF_FFFF    PCI Express 4 Mem Space		256MB
++0xC_3000_0000  0xC_3FFF_FFFF    PCI Express 3 Mem Space		256MB
++0xC_2000_0000  0xC_2FFF_FFFF    PCI Express 2 Mem Space		256MB
++0xC_0000_0000  0xC_1FFF_FFFF    PCI Express 1 Mem Space		512MB
++0x0_0000_0000  0x0_ffff_ffff    DDR				4GB
++
++
++128M NOR Flash memory Map
++-------------------------
++Start Address   End Address	Definition			Max size
++0xEFF40000	0xEFFFFFFF	u-boot (current bank)		768KB
++0xEFF20000	0xEFF3FFFF	u-boot env (current bank)	128KB
++0xEFF00000	0xEFF1FFFF	FMAN Ucode (current bank)	128KB
++0xEFE00000	0xEFE3FFFF	PHY CS4315 firmware		256KB
++0xED300000	0xEFEFFFFF	rootfs (alt bank)		44MB
++0xEC800000	0xEC8FFFFF	Hardware device tree (alt bank)	1MB
++0xEC020000	0xEC7FFFFF	Linux.uImage (alt bank)		7MB + 875KB
++0xEC000000	0xEC01FFFF	RCW (alt bank)			128KB
++0xEBF40000	0xEBFFFFFF	u-boot (alt bank)		768KB
++0xEBF20000	0xEBF3FFFF	u-boot env (alt bank)		128KB
++0xEBF00000	0xEBF1FFFF	FMAN ucode (alt bank)		128KB
++0xEBE00000	0xEBE3FFFF	PHY CS4315 firmware (alt bank)	256KB
++0xE9300000	0xEBEFFFFF	rootfs (current bank)		44MB
++0xE8800000	0xE88FFFFF	Hardware device tree (cur bank)	1MB
++0xE8020000	0xE86FFFFF	Linux.uImage (current bank)	7MB + 875KB
++0xE8000000	0xE801FFFF	RCW (current bank)		128KB
++
++
++T2080PCIe-RDB Ethernet Port Map
++-------------------------------
++Label    In Uboot      In Linux     FMan Address   Comments    PHY
++ETH0     FM1@GTEC1     fm1-mac9     0xfe4f0000     10G SFP+   (CS4315)
++ETH1     FM1@GTEC2     fm1-mac10    0xfe4f2000     10G SFP+   (CS4315)
++ETH2     FM1@GTEC3     fm1-mac1     0xfe4e0000     10G Base-T (AQ1202)
++ETH3     FM1@GTEC4     fm1-mac2     0xfe4e2000     10G Base-T (AQ1202)
++ETH4     FM1@DTSEC3    fm1-mac3     0xfe4e4000     1G  RGMII  (RTL8211E)
++ETH5     FM1@DTSEC4    fm1-mac4     0xfe4e6000     1G  RGMII  (RTL8211E)
++
++
++T2080PCIe-RDB Default DIP-Switch setting
++----------------------------------------
++SW1[1:8] = '00010011'
++SW2[1:8] = '10111111'
++SW3[1:8] = '11100001'
++
++Software configurations and board settings
++------------------------------------------
++1. NOR boot:
++   a. build NOR boot image
++	$ make T2080RDB_config
++	$ make
++   b. program u-boot.bin image to NOR flash
++	=> tftp 1000000 u-boot.bin
++	=> pro off all;era eff40000 efffffff;cp.b 1000000 eff40000 $filesize
++	set SW1[1:8] = '00010011', SW2[1] = '1', SW3[4] = '0' for NOR boot
++
++   Switching between default bank and alternate bank on NOR flash
++   To change boot source to vbank4:
++	via software:   run command 'cpld reset altbank' in u-boot.
++	via DIP-switch: set SW3[5:7] = '100'
++
++   To change boot source to vbank0:
++	via software:   run command 'cpld reset' in u-boot.
++	via DIP-Switch: set SW3[5:7] = '000'
++
++2. NAND Boot:
++   a. build PBL image for NAND boot
++	$ make T2080RDB_NAND_config
++	$ make
++   b. program u-boot-with-spl-pbl.bin to NAND flash
++	=> tftp 1000000 u-boot-with-spl-pbl.bin
++	=> nand erase 0 d0000
++	=> nand write 1000000 0 $filesize
++	set SW1[1:8] = '10000010', SW2[1] = '1', SW3[4] = '1' for NAND boot
++
++3. SPI Boot:
++   a. build PBL image for SPI boot
++	$ make T2080RDB_SPIFLASH_config
++	$ make
++   b. program u-boot-with-spl-pbl.bin to SPI flash
++	=> tftp 1000000 u-boot-with-spl-pbl.bin
++	=> sf probe 0
++	=> sf erase 0 d0000
++	=> sf write 1000000 0 $filesize
++	set SW1[1:8] = '00100010', SW2[1] ='1' for SPI boot
++
++4. SD Boot:
++   a. build PBL image for SD boot
++	$ make T2080RDB_SDCARD_config
++	$ make
++   b. program u-boot-with-spl-pbl.bin to micro-SD/TF card
++	=> tftp 1000000 u-boot-with-spl-pbl.bin
++	=> mmc write 1000000 8 0x800
++	set SW1[1:8] = '00100000', SW2[1] = '0' for SD boot
++
++
++2-stage NAND/SPI/SD boot loader
++-------------------------------
++PBL initializes the internal CPC-SRAM and copy SPL(160K) to SRAM.
++SPL further initializes DDR using SPD and environment variables
++and copy u-boot(768 KB) from NAND/SPI/SD device to DDR.
++Finally SPL transers control to u-boot for futher booting.
++
++SPL has following features:
++ - Executes within 256K
++ - No relocation required
++
++Run time view of SPL framework
++-------------------------------------------------
++|Area		   | Address			|
++-------------------------------------------------
++|SecureBoot header | 0xFFFC0000 (32KB)		|
++-------------------------------------------------
++|GD, BD		   | 0xFFFC8000 (4KB)		|
++-------------------------------------------------
++|ENV		   | 0xFFFC9000 (8KB)		|
++-------------------------------------------------
++|HEAP		   | 0xFFFCB000 (50KB)		|
++-------------------------------------------------
++|STACK		   | 0xFFFD8000 (22KB)		|
++-------------------------------------------------
++|U-boot SPL	   | 0xFFFD8000 (160KB)		|
++-------------------------------------------------
++
++NAND Flash memory Map on T2080RDB
++--------------------------------------------------------------
++Start		End		Definition	Size
++0x000000	0x0FFFFF	u-boot img	1MB  (2 blocks)
++0x100000	0x17FFFF	u-boot env	512KB (1 block)
++0x180000	0x1FFFFF	FMAN ucode	512KB (1 block)
++0x200000	0x27FFFF	CS4315 ucode	512KB (1 block)
++
++
++Micro SD Card memory Map on T2080RDB
++----------------------------------------------------
++Block		#blocks		Definition	Size
++0x008		2048		u-boot img	1MB
++0x800		0016		u-boot env	8KB
++0x820		0128		FMAN ucode	64KB
++0x8a0		0512		CS4315 ucode	256KB
++
++
++SPI Flash memory Map on T2080RDB
++----------------------------------------------------
++Start		End		Definition	Size
++0x000000	0x0FFFFF	u-boot img	1MB
++0x100000	0x101FFF	u-boot env	8KB
++0x110000	0x11FFFF	FMAN ucode	64KB
++0x120000        0x15FFFF        CS4315 ucode	256KB
++
++
++How to update the ucode of Cortina CS4315/CS4340 10G PHY
++--------------------------------------------------------
++=> tftp 1000000 CS4315-CS4340-PHY-ucode.txt
++=> pro off all;era 0xefe00000 0xefefffff;cp.b 1000000 0xefe00000 $filesize
++
++
++How to update the ucode of Freescale FMAN
++-----------------------------------------
++=> tftp 1000000 fsl_fman_ucode_t2080_r1.0.bin
++=> pro off all;erase 0xeff00000 0xeff1ffff;cp 1000000 0xeff00000 $filesize
++
++
++For more details, please refer to T2080PCIe-RDB User Guide and access
++website www.freescale.com and Freescale QorIQ SDK Infocenter document.
+diff --git a/board/accton/as7710_32x/as7710_32x.c b/board/accton/as7710_32x/as7710_32x.c
+new file mode 100644
+index 0000000..be77af0
+--- /dev/null
++++ b/board/accton/as7710_32x/as7710_32x.c
+@@ -0,0 +1,238 @@
++/*
++ * Copyright 2009-2013 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:     GPL-2.0+
++ */
++
++#include <common.h>
++#include <command.h>
++#include <i2c.h>
++#include <netdev.h>
++#include <linux/compiler.h>
++#include <asm/mmu.h>
++#include <asm/processor.h>
++#include <asm/immap_85xx.h>
++#include <asm/fsl_law.h>
++#include <asm/fsl_serdes.h>
++#include <asm/fsl_portals.h>
++#include <asm/fsl_liodn.h>
++#include <fm_eth.h>
++#include <miiphy.h>
++#include "as7710_32x.h"
++#include "cpld.h"
++
++DECLARE_GLOBAL_DATA_PTR;
++
++int checkboard(void)
++{
++	static const char *freq[3] = {"100.00MHZ", "125.00MHz", "156.25MHZ"};
++
++	printf("Board: %s, ", CONFIG_BOARDNAME);
++	printf("Board rev: 0x%02x CPLD ver: 0x%02x, boot from ",
++	       CPLD_READ(hw_ver), CPLD_READ(sw_ver));
++
++#ifdef CONFIG_SDCARD
++	puts("SD/MMC\n");
++#elif CONFIG_SPIFLASH
++	puts("SPI\n");
++#else
++	u8 reg;
++
++	reg = CPLD_READ(flash_csr);
++
++	if (reg & CPLD_BOOT_SEL) {
++		puts("NAND\n");
++	} else {
++		reg = ((reg & CPLD_LBMAP_MASK) >> CPLD_LBMAP_SHIFT);
++		printf("NOR vBank%d\n", reg);
++	}
++#endif
++
++	puts("SERDES Reference Clocks:\n");
++	printf("SD1_CLK1=%s, SD1_CLK2=%s\n", freq[2], freq[0]);
++	printf("SD2_CLK1=%s, SD2_CLK2=%s\n", freq[0], freq[0]);
++
++	return 0;
++}
++
++int board_early_init_r(void)
++{
++	const unsigned int flashbase = CONFIG_SYS_FLASH_BASE;
++	const u8 flash_esel = find_tlb_idx((void *)flashbase, 1);
++	/*
++	 * Remap Boot flash + PROMJET region to caching-inhibited
++	 * so that flash can be erased properly.
++	 */
++
++	/* Flush d-cache and invalidate i-cache of any FLASH data */
++	flush_dcache();
++	invalidate_icache();
++
++	/* invalidate existing TLB entry for flash + promjet */
++	disable_tlb(flash_esel);
++
++	set_tlb(1, flashbase, CONFIG_SYS_FLASH_BASE_PHYS,
++		MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		0, flash_esel, BOOKE_PAGESZ_256M, 1);
++
++	set_liodns();
++#ifdef CONFIG_SYS_DPAA_QBMAN
++	setup_portals();
++#endif
++
++	return 0;
++}
++
++unsigned long get_board_sys_clk(void)
++{
++	return CONFIG_SYS_CLK_FREQ;
++}
++
++unsigned long get_board_ddr_clk(void)
++{
++	return CONFIG_DDR_CLK_FREQ;
++}
++
++int misc_init_r(void)
++{
++	return 0;
++}
++
++void ft_board_setup(void *blob, bd_t *bd)
++{
++	phys_addr_t base;
++	phys_size_t size;
++
++	ft_cpu_setup(blob, bd);
++
++	base = getenv_bootm_low();
++	size = getenv_bootm_size();
++
++	fdt_fixup_memory(blob, (u64)base, (u64)size);
++
++#ifdef CONFIG_PCI
++	pci_of_setup(blob, bd);
++#endif
++
++	fdt_fixup_liodn(blob);
++	fdt_fixup_dr_usb(blob, bd);
++
++#ifdef CONFIG_SYS_DPAA_FMAN
++	fdt_fixup_fman_ethernet(blob);
++	fdt_fixup_board_enet(blob);
++#endif
++}
++
++void set_mgmt_port_link_capability(unsigned char addr)
++{
++    const char *curr_devname;
++    unsigned char reg;
++    unsigned short data;
++
++    curr_devname = miiphy_get_current_dev();
++    if(NULL==curr_devname)
++    {
++        printf("miiphy_get_current_dev() return NULL\n");
++        return;
++    }
++
++    /* 1G F/H capability */
++    reg = 0x9;
++    data = 0x300;
++    if(0 != miiphy_write(curr_devname, addr, reg, data))
++    {
++        printf("Error writing to the PHY addr=%02x reg=%02x\n", addr, reg);
++        return;
++    }
++
++    /* 100M/10M F/H capability */
++    reg = 0x4;
++    data = 0x1e1;
++    if(0 != miiphy_write(curr_devname, addr, reg, data))
++    {
++        printf("Error writing to the PHY addr=%02x reg=%02x\n", addr, reg);
++        return;
++    }
++
++    /*disable auto-nego*/
++    reg = 0x0;
++    data = 0x0;
++    if(0 != miiphy_write(curr_devname, addr, reg, data))
++    {
++        printf("Error writing to the PHY addr=%02x reg=%02x\n", addr, reg);
++        return;
++    }
++
++    /*enable auto-nego*/
++    reg = 0x0;
++    data = 0x1040;
++    if(0 != miiphy_write(curr_devname, addr, reg, data))
++    {
++        printf("Error writing to the PHY addr=%02x reg=%02x\n", addr, reg);
++        return;
++    }
++
++    return;
++}
++
++int last_stage_init(void){
++
++    unsigned char addr;
++
++    addr = (unsigned char)0x1f;
++    set_mgmt_port_link_capability(addr);
++
++    return 0;
++}
++
++static int do_usbiddev(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
++{
++    int devno;
++    int target = -1;
++    block_dev_desc_t *blk_dev;
++    char val[2];
++
++    /*
++     * The internal USB NAND flash drive is connected to the
++     * internal hub such that the NAND device always appears as
++     * the *last* mass storage device.
++     *
++     * Sure this is dependent on the depth-first USB topology
++     * enumeration strategy, but that is not going to change.
++     */
++    for (devno = 0; ; ++devno) {
++        blk_dev = usb_stor_get_dev(devno);
++        if (blk_dev == NULL)
++            break;
++        if ( (blk_dev->if_type == IF_TYPE_USB) &&
++             !blk_dev->removable &&
++             ((blk_dev->type & 0x1F) == DEV_TYPE_HARDDISK) ) {
++            target = devno;
++        }
++    }
++
++    if (target == -1) {
++        printf("Error: Unable to detect internal USB flash device.\n");
++        printf("Perhaps you forgot to run 'usb start' ?\n");
++        return 1;
++    }
++
++    if (target > 9) {
++        printf("Error: Unexpectedly large device number: %d.\n", target);
++        return 1;
++    }
++
++    val[0] = '0' + target;
++    val[1] = 0;
++
++    setenv("usbdev", val);
++
++    return 0;
++}
++
++U_BOOT_CMD(
++    usbiddev,   3,  1,  do_usbiddev,
++    "Identify internal USB NAND flash device number and set\n"
++    "environment variable 'usbdev' to that number.",
++    ""
++);
+diff --git a/board/accton/as7710_32x/as7710_32x.h b/board/accton/as7710_32x/as7710_32x.h
+new file mode 100644
+index 0000000..13380d0
+--- /dev/null
++++ b/board/accton/as7710_32x/as7710_32x.h
+@@ -0,0 +1,13 @@
++/*
++ * Copyright 2014 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __CORENET_DS_H__
++#define __CORENET_DS_H__
++
++void fdt_fixup_board_enet(void *blob);
++void pci_of_setup(void *blob, bd_t *bd);
++
++#endif
+diff --git a/board/accton/as7710_32x/as7710_32x_pbi.cfg b/board/accton/as7710_32x/as7710_32x_pbi.cfg
+new file mode 100644
+index 0000000..e200d92
+--- /dev/null
++++ b/board/accton/as7710_32x/as7710_32x_pbi.cfg
+@@ -0,0 +1,41 @@
++#
++# Copyright 2013 Freescale Semiconductor, Inc.
++#
++# SPDX-License-Identifier:      GPL-2.0+
++#
++# Refer doc/README.pblimage for more details about how-to configure
++# and create PBL boot image
++#
++
++#PBI commands
++#Initialize CPC1
++09010000 00200400
++09138000 00000000
++091380c0 00000100
++#512KB SRAM
++09010100 00000000
++09010104 fff80009
++09010f00 08000000
++#enable CPC1
++09010000 80000000
++#Configure LAW for CPC1
++09000d00 00000000
++09000d04 fff80000
++09000d08 81000012
++#Initialize eSPI controller, default configuration is slow for eSPI to
++#load data, this configuration comes from u-boot eSPI driver.
++09110000 80000403
++09110020 2d170008
++09110024 00100008
++09110028 00100008
++0911002c 00100008
++#Errata for slowing down the MDC clock to make it <= 2.5 MHZ
++094fc030 00008148
++094fd030 00008148
++#Configure alternate space
++09000010 00000000
++09000014 ff000000
++09000018 81000000
++#Flush PBL data
++09138000 00000000
++091380c0 00000000
+diff --git a/board/accton/as7710_32x/as7710_32x_rcw.cfg b/board/accton/as7710_32x/as7710_32x_rcw.cfg
+new file mode 100644
+index 0000000..799a130
+--- /dev/null
++++ b/board/accton/as7710_32x/as7710_32x_rcw.cfg
+@@ -0,0 +1,16 @@
++#PBL preamble and RCW header
++aa55aa55 010e0100
++
++#For T2080 v1.0
++#SerDes=0x66_0x16, Core=1533MHz, DDR=1600MT/s
++#120c0017 15000000 00000000 00000000
++#66150002 00008400 ec104000 c1000000
++#00000000 00000000 00000000 000307fc
++#00000000 00000000 00000000 00000004
++
++#For T2080 v1.1
++#SerDes=0x66_0x15, Core:1800MHz, DDR:1600MT/s
++0c060012 12000000 00000000 00000000
++6c160002 00004200 ec104000 a1000000
++00080000 00000001 00000000 00022002
++00000000 50000009 00000000 00000005
+diff --git a/board/accton/as7710_32x/cpld.c b/board/accton/as7710_32x/cpld.c
+new file mode 100644
+index 0000000..4aa126b
+--- /dev/null
++++ b/board/accton/as7710_32x/cpld.c
+@@ -0,0 +1,71 @@
++/*
++ * Copyright 2014 Freescale Semiconductor
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ *
++ * Freescale T2080RDB board-specific CPLD controlling supports.
++ */
++
++#include <common.h>
++#include <command.h>
++#include "cpld.h"
++
++u8 cpld_read(unsigned int reg)
++{
++	void *p = (void *)CONFIG_SYS_CPLD_BASE;
++
++	return in_8(p + reg);
++}
++
++void cpld_write(unsigned int reg, u8 value)
++{
++	void *p = (void *)CONFIG_SYS_CPLD_BASE;
++
++	out_8(p + reg, value);
++}
++
++/* Set the boot bank to the alternate bank */
++void cpld_set_altbank(void)
++{
++	u8 reg = CPLD_READ(flash_csr);
++
++	reg = (reg & ~CPLD_BANK_SEL_MASK) | CPLD_LBMAP_ALTBANK;
++	CPLD_WRITE(flash_csr, reg);
++	CPLD_WRITE(reset_ctl, CPLD_LBMAP_RESET);
++}
++
++/* Set the boot bank to the default bank */
++void cpld_set_defbank(void)
++{
++	u8 reg = CPLD_READ(flash_csr);
++
++	reg = (reg & ~CPLD_BANK_SEL_MASK) | CPLD_LBMAP_DFLTBANK;
++	CPLD_WRITE(flash_csr, reg);
++	CPLD_WRITE(reset_ctl, CPLD_LBMAP_RESET);
++}
++
++int do_cpld(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
++{
++	int rc = 0;
++
++	if (argc <= 1)
++		return cmd_usage(cmdtp);
++
++	if (strcmp(argv[1], "reset") == 0) {
++		if (strcmp(argv[2], "altbank") == 0)
++			cpld_set_altbank();
++		else
++			cpld_set_defbank();
++	} else {
++		rc = cmd_usage(cmdtp);
++	}
++
++	return rc;
++}
++
++U_BOOT_CMD(
++	cpld, CONFIG_SYS_MAXARGS, 1, do_cpld,
++	"Reset the board or alternate bank",
++	"reset: reset to default bank\n"
++	"cpld reset altbank: reset to alternate bank\n"
++);
+diff --git a/board/accton/as7710_32x/cpld.h b/board/accton/as7710_32x/cpld.h
+new file mode 100644
+index 0000000..3f15338
+--- /dev/null
++++ b/board/accton/as7710_32x/cpld.h
+@@ -0,0 +1,42 @@
++/*
++ * Copyright 2014 Freescale Semiconductor
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++/*
++ * CPLD register set of T2080RDB board-specific.
++ */
++struct cpld_data {
++	u8 chip_id1;		/* 0x00 - Chip ID1 register */
++	u8 chip_id2;		/* 0x01 - Chip ID2 register */
++	u8 hw_ver;		/* 0x02 - Hardware Revision Register */
++	u8 sw_ver;		/* 0x03 - Software Revision register */
++	u8 res0[12];		/* 0x04 - 0x0F - not used */
++	u8 reset_ctl;		/* 0x10 - Reset control Register */
++	u8 flash_csr;		/* 0x11 - Flash control and status register */
++	u8 thermal_csr;		/* 0x12 - Thermal control and status register */
++	u8 led_csr;		/* 0x13 - LED control and status register */
++	u8 sfp_csr;		/* 0x14 - SFP+ control and status register */
++	u8 misc_csr;		/* 0x15 - Misc control and status register */
++	u8 boot_or;		/* 0x16 - Boot config override register */
++	u8 boot_cfg1;		/* 0x17 - Boot configuration register 1 */
++	u8 boot_cfg2;		/* 0x18 - Boot configuration register 2 */
++} cpld_data_t;
++
++u8 cpld_read(unsigned int reg);
++void cpld_write(unsigned int reg, u8 value);
++
++#define CPLD_READ(reg) cpld_read(offsetof(struct cpld_data, reg))
++#define CPLD_WRITE(reg, value)  \
++	cpld_write(offsetof(struct cpld_data, reg), value)
++
++/* CPLD on IFC */
++#define CPLD_LBMAP_MASK		0x3F
++#define CPLD_BANK_SEL_MASK	0x07
++#define CPLD_BANK_OVERRIDE	0x40
++#define CPLD_LBMAP_ALTBANK	0x44 /* BANK OR | BANK 4 */
++#define CPLD_LBMAP_DFLTBANK	0x40 /* BANK OR | BANK 0 */
++#define CPLD_LBMAP_RESET	0xFF
++#define CPLD_LBMAP_SHIFT	0x03
++#define CPLD_BOOT_SEL		0x80
+diff --git a/board/accton/as7710_32x/ddr.c b/board/accton/as7710_32x/ddr.c
+new file mode 100644
+index 0000000..ea29660
+--- /dev/null
++++ b/board/accton/as7710_32x/ddr.c
+@@ -0,0 +1,139 @@
++/*
++ * Copyright 2014 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * Version 2 or later as published by the Free Software Foundation.
++ */
++
++#include <common.h>
++#include <i2c.h>
++#include <hwconfig.h>
++#include <asm/mmu.h>
++#include <fsl_ddr_sdram.h>
++#include <fsl_ddr_dimm_params.h>
++#include <asm/fsl_law.h>
++#include "ddr.h"
++
++DECLARE_GLOBAL_DATA_PTR;
++
++void fsl_ddr_board_options(memctl_options_t *popts,
++				dimm_params_t *pdimm,
++				unsigned int ctrl_num)
++{
++	const struct board_specific_parameters *pbsp, *pbsp_highest = NULL;
++	ulong ddr_freq;
++
++	if (ctrl_num > 1) {
++		printf("Not supported controller number %d\n", ctrl_num);
++		return;
++	}
++	if (!pdimm->n_ranks)
++		return;
++
++	pbsp = udimms[0];
++
++	/* Get clk_adjust, wrlvl_start, wrlvl_ctl, according to the board ddr
++	 * freqency and n_banks specified in board_specific_parameters table.
++	 */
++	ddr_freq = get_ddr_freq(0) / 1000000;
++	while (pbsp->datarate_mhz_high) {
++		if (pbsp->n_ranks == pdimm->n_ranks &&
++		    (pdimm->rank_density >> 30) >= pbsp->rank_gb) {
++			if (ddr_freq <= pbsp->datarate_mhz_high) {
++				popts->clk_adjust = pbsp->clk_adjust;
++				popts->wrlvl_start = pbsp->wrlvl_start;
++				popts->wrlvl_ctl_2 = pbsp->wrlvl_ctl_2;
++				popts->wrlvl_ctl_3 = pbsp->wrlvl_ctl_3;
++				goto found;
++			}
++			pbsp_highest = pbsp;
++		}
++		pbsp++;
++	}
++
++	if (pbsp_highest) {
++		printf("Error: board specific timing not found");
++		printf("for data rate %lu MT/s\n", ddr_freq);
++		printf("Trying to use the highest speed (%u) parameters\n",
++		       pbsp_highest->datarate_mhz_high);
++		popts->clk_adjust = pbsp_highest->clk_adjust;
++		popts->wrlvl_start = pbsp_highest->wrlvl_start;
++		popts->wrlvl_ctl_2 = pbsp->wrlvl_ctl_2;
++		popts->wrlvl_ctl_3 = pbsp->wrlvl_ctl_3;
++	} else {
++		panic("DIMM is not supported by this board");
++	}
++found:
++	debug("Found timing match: n_ranks %d, data rate %d, rank_gb %d\n"
++		"\tclk_adjust %d, wrlvl_start %d, wrlvl_ctrl_2 0x%x, "
++		"wrlvl_ctrl_3 0x%x\n",
++		pbsp->n_ranks, pbsp->datarate_mhz_high, pbsp->rank_gb,
++		pbsp->clk_adjust, pbsp->wrlvl_start, pbsp->wrlvl_ctl_2,
++		pbsp->wrlvl_ctl_3);
++
++	/*
++	 * Factors to consider for half-strength driver enable:
++	 *	- number of DIMMs installed
++	 */
++	popts->half_strength_driver_enable = 0;
++	/*
++	 * Write leveling override
++	 */
++	popts->wrlvl_override = 1;
++	popts->wrlvl_sample = 0xf;
++
++	/*
++	 * Rtt and Rtt_WR override
++	 */
++	popts->rtt_override = 0;
++
++	/* Enable ZQ calibration */
++	popts->zq_en = 1;
++
++	/* DHC_EN =1, ODT = 75 Ohm */
++	//popts->ddr_cdr1 = DDR_CDR1_DHC_EN | DDR_CDR1_ODT(DDR_CDR_ODT_75ohm);
++	//popts->ddr_cdr2 = DDR_CDR2_ODT(DDR_CDR_ODT_75ohm);
++	popts->ddr_cdr1 = 0x80040000;
++	popts->ddr_cdr2 = 0x00000001;
++}
++
++phys_size_t initdram(int board_type)
++{
++	phys_size_t dram_size;
++
++#if defined(CONFIG_SPL_BUILD) || !defined(CONFIG_RAMBOOT_PBL)
++	puts("Initializing....using SPD\n");
++	dram_size = fsl_ddr_sdram();
++
++#if 0
++/* susan add */
++	volatile int *reg;
++	int i ;
++
++	reg =(volatile int*)(CONFIG_SYS_CCSRBAR + 0x8000);
++	for (i=0; i<0x214/4; i++)
++	{
++	     printf("[0x%x]:[0x%x]\n",(int)(reg+i),(volatile int)(*(reg+i)));
++	}
++	printf("==========DONE============\n");
++
++       for (i=0xE00/4; i<=0xE58/4; i++)
++	{
++	     printf("[0x%x]:[0x%x]\n",(int)(reg+i),(volatile int)(*(reg+i)));
++	}
++
++	// checkcpu();
++	// board_add_ram_info(0);
++	// printf("\n");
++/* end */
++#endif
++
++	dram_size = setup_ddr_tlbs(dram_size / 0x100000);
++	dram_size *= 0x100000;
++#else
++	/* DDR has been initialised by first stage boot loader */
++	dram_size = fsl_ddr_sdram_size();
++#endif
++	return dram_size;
++}
+diff --git a/board/accton/as7710_32x/ddr.h b/board/accton/as7710_32x/ddr.h
+new file mode 100644
+index 0000000..e44103e
+--- /dev/null
++++ b/board/accton/as7710_32x/ddr.h
+@@ -0,0 +1,49 @@
++/*
++ * Copyright 2014 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:     GPL-2.0+
++ */
++
++#ifndef __DDR_H__
++#define __DDR_H__
++struct board_specific_parameters {
++	u32 n_ranks;
++	u32 datarate_mhz_high;
++	u32 rank_gb;
++	u32 clk_adjust;
++	u32 wrlvl_start;
++	u32 wrlvl_ctl_2;
++	u32 wrlvl_ctl_3;
++};
++
++/*
++ * These tables contain all valid speeds we want to override with board
++ * specific parameters. datarate_mhz_high values need to be in ascending order
++ * for each n_ranks group.
++ */
++
++static const struct board_specific_parameters udimm0[] = {
++	/*
++	 * memory controller 0
++	 *   num|  hi| rank|  clk| wrlvl |   wrlvl   |  wrlvl |
++	 * ranks| mhz| GB  |adjst| start |   ctl2    |  ctl3  |
++	 */
++	{2,  1200, 2, 5,     7, 0x0808090a, 0x0b0c0c0a},
++	{2,  1500, 2, 5,     6, 0x07070809, 0x0a0b0b09},
++	 // NOTE: clk_adjst = 4: Clock is launched 1/2 applied cycle after address/command
++	 // wrlvl: 9/8; Bit settings indicate the amount of delay in 1/8 clock increments.
++	{2,  1600, 4, 22,    6, 0x0608050d, 0x090c0908},
++	{2,  1700, 2, 4,     7, 0x080a0a0c, 0x0c0d0e0a},
++	{2,  1900, 2, 5,     9, 0x0a0b0c0e, 0x0f10120c},
++	{1,  1200, 2, 5,     7, 0x0808090a, 0x0b0c0c0a},
++	{1,  1500, 2, 5,     6, 0x07070809, 0x0a0b0b09},
++	{1,  1600, 2, 5,     8, 0x0808070b, 0x0c0d0e0a},
++	{1,  1700, 2, 4,     7, 0x080a0a0c, 0x0c0d0e0a},
++	{1,  1900, 2, 5,     9, 0x0a0b0c0e, 0x0f10120c},
++	{}
++};
++
++static const struct board_specific_parameters *udimms[] = {
++	udimm0,
++};
++#endif
+diff --git a/board/accton/as7710_32x/eth_as7710_32x.c b/board/accton/as7710_32x/eth_as7710_32x.c
+new file mode 100644
+index 0000000..f5444d3
+--- /dev/null
++++ b/board/accton/as7710_32x/eth_as7710_32x.c
+@@ -0,0 +1,112 @@
++/*
++ * Copyright 2014 Freescale Semiconductor, Inc.
++ *
++ * Shengzhou Liu <Shengzhou.Liu@freescale.com>
++ *
++ * SPDX-License-Identifier:     GPL-2.0+
++ */
++
++#include <common.h>
++#include <command.h>
++#include <netdev.h>
++#include <asm/mmu.h>
++#include <asm/processor.h>
++#include <asm/immap_85xx.h>
++#include <asm/fsl_law.h>
++#include <asm/fsl_serdes.h>
++#include <asm/fsl_portals.h>
++#include <asm/fsl_liodn.h>
++#include <malloc.h>
++#include <fm_eth.h>
++#include <fsl_mdio.h>
++#include <miiphy.h>
++#include <phy.h>
++#include <asm/fsl_dtsec.h>
++#include <asm/fsl_serdes.h>
++
++int board_eth_init(bd_t *bis)
++{
++#if defined(CONFIG_FMAN_ENET)
++	int i, interface;
++	struct memac_mdio_info dtsec_mdio_info;
++	struct memac_mdio_info tgec_mdio_info;
++	struct mii_dev *dev;
++	ccsr_gur_t *gur = (void *)(CONFIG_SYS_MPC85xx_GUTS_ADDR);
++	u32 srds_s1;
++
++	srds_s1 = in_be32(&gur->rcwsr[4]) &
++					FSL_CORENET2_RCWSR4_SRDS1_PRTCL;
++	srds_s1 >>= FSL_CORENET2_RCWSR4_SRDS1_PRTCL_SHIFT;
++
++	dtsec_mdio_info.regs =
++		(struct memac_mdio_controller *)CONFIG_SYS_FM1_DTSEC_MDIO_ADDR;
++
++	dtsec_mdio_info.name = DEFAULT_FM_MDIO_NAME;
++
++	/* Register the 1G MDIO bus */
++	fm_memac_mdio_init(bis, &dtsec_mdio_info);
++
++	tgec_mdio_info.regs =
++		(struct memac_mdio_controller *)CONFIG_SYS_FM1_TGEC_MDIO_ADDR;
++	tgec_mdio_info.name = DEFAULT_FM_TGEC_MDIO_NAME;
++
++	/* Register the 10G MDIO bus */
++	fm_memac_mdio_init(bis, &tgec_mdio_info);
++
++	/* Set the two on-board RGMII PHY address */
++	//fm_info_set_phy_address(FM1_DTSEC1, BROADCOM_PHY_ADDR);
++	//fm_info_set_phy_address(FM1_DTSEC4, RGMII_PHY2_ADDR);
++
++	switch (srds_s1) {
++	case 0x66:
++	case 0x6b:
++		fm_info_set_phy_address(FM1_10GEC1, CORTINA_PHY_ADDR1);
++		fm_info_set_phy_address(FM1_10GEC2, CORTINA_PHY_ADDR2);
++		fm_info_set_phy_address(FM1_10GEC3, FM1_10GEC3_PHY_ADDR);
++		fm_info_set_phy_address(FM1_10GEC4, FM1_10GEC4_PHY_ADDR);
++		break;
++	case 0x6c:
++		fm_info_set_phy_address(FM1_DTSEC1, BROADCOM_PHY_ADDR);
++		break;
++	default:
++		printf("SerDes1 protocol 0x%x is not supported on T208xRDB\n",
++		       srds_s1);
++		break;
++	}
++
++	for (i = FM1_DTSEC1; i < FM1_DTSEC1 + CONFIG_SYS_NUM_FM1_DTSEC; i++) {
++		interface = fm_info_get_enet_if(i);
++		switch (interface) {
++		case PHY_INTERFACE_MODE_RGMII:
++			dev = miiphy_get_dev_by_name(DEFAULT_FM_MDIO_NAME);
++			fm_info_set_mdio(i, dev);
++			break;
++		case PHY_INTERFACE_MODE_SGMII:
++			dev = miiphy_get_dev_by_name(DEFAULT_FM_MDIO_NAME);
++			fm_info_set_mdio(i, dev);
++		default:
++			break;
++		}
++	}
++
++	for (i = FM1_10GEC1; i < FM1_10GEC1 + CONFIG_SYS_NUM_FM1_10GEC; i++) {
++		switch (fm_info_get_enet_if(i)) {
++		case PHY_INTERFACE_MODE_XGMII:
++			dev = miiphy_get_dev_by_name(DEFAULT_FM_TGEC_MDIO_NAME);
++			fm_info_set_mdio(i, dev);
++			break;
++		default:
++			break;
++		}
++	}
++
++	cpu_eth_init(bis);
++#endif /* CONFIG_FMAN_ENET */
++
++	return pci_eth_init(bis);
++}
++
++void fdt_fixup_board_enet(void *fdt)
++{
++	return;
++}
+diff --git a/board/accton/as7710_32x/law.c b/board/accton/as7710_32x/law.c
+new file mode 100644
+index 0000000..eb82431
+--- /dev/null
++++ b/board/accton/as7710_32x/law.c
+@@ -0,0 +1,34 @@
++/*
++ * Copyright 2008-2014 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * SPDX-License-Identifier:     GPL-2.0+
++ */
++
++#include <common.h>
++#include <asm/fsl_law.h>
++#include <asm/mmu.h>
++
++struct law_entry law_table[] = {
++	SET_LAW(CONFIG_SYS_FLASH_BASE_PHYS, LAW_SIZE_256M, LAW_TRGT_IF_IFC),
++#ifdef CONFIG_SYS_BMAN_MEM_PHYS
++	SET_LAW(CONFIG_SYS_BMAN_MEM_PHYS, LAW_SIZE_32M, LAW_TRGT_IF_BMAN),
++#endif
++#ifdef CONFIG_SYS_QMAN_MEM_PHYS
++	SET_LAW(CONFIG_SYS_QMAN_MEM_PHYS, LAW_SIZE_32M, LAW_TRGT_IF_QMAN),
++#endif
++#ifdef CONFIG_SYS_CPLD_BASE_PHYS
++	SET_LAW(CONFIG_SYS_CPLD_BASE_PHYS, LAW_SIZE_4K, LAW_TRGT_IF_IFC),
++#endif
++#ifdef CONFIG_SYS_DCSRBAR_PHYS
++	/* Limit DCSR to 32M to access NPC Trace Buffer */
++	SET_LAW(CONFIG_SYS_DCSRBAR_PHYS, LAW_SIZE_32M, LAW_TRGT_IF_DCSR),
++#endif
++#ifdef CONFIG_SYS_NAND_BASE_PHYS
++	SET_LAW(CONFIG_SYS_NAND_BASE_PHYS, LAW_SIZE_1M, LAW_TRGT_IF_IFC),
++#endif
++};
++
++int num_law_entries = ARRAY_SIZE(law_table);
+diff --git a/board/accton/as7710_32x/pci.c b/board/accton/as7710_32x/pci.c
+new file mode 100644
+index 0000000..ba7041a
+--- /dev/null
++++ b/board/accton/as7710_32x/pci.c
+@@ -0,0 +1,23 @@
++/*
++ * Copyright 2007-2014 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#include <common.h>
++#include <command.h>
++#include <pci.h>
++#include <asm/fsl_pci.h>
++#include <libfdt.h>
++#include <fdt_support.h>
++#include <asm/fsl_serdes.h>
++
++void pci_init_board(void)
++{
++	fsl_pcie_init_board(0);
++}
++
++void pci_of_setup(void *blob, bd_t *bd)
++{
++	FT_FSL_PCI_SETUP;
++}
+diff --git a/board/accton/as7710_32x/spl.c b/board/accton/as7710_32x/spl.c
+new file mode 100644
+index 0000000..8b15e60
+--- /dev/null
++++ b/board/accton/as7710_32x/spl.c
+@@ -0,0 +1,108 @@
++/* Copyright 2013 Freescale Semiconductor, Inc.
++ *
++ * SPDX-License-Identifier:    GPL-2.0+
++ */
++
++#include <common.h>
++#include <malloc.h>
++#include <ns16550.h>
++#include <nand.h>
++#include <i2c.h>
++#include <mmc.h>
++#include <fsl_esdhc.h>
++#include <spi_flash.h>
++
++DECLARE_GLOBAL_DATA_PTR;
++
++phys_size_t get_effective_memsize(void)
++{
++	return CONFIG_SYS_L3_SIZE;
++}
++
++unsigned long get_board_sys_clk(void)
++{
++	return CONFIG_SYS_CLK_FREQ;
++}
++
++unsigned long get_board_ddr_clk(void)
++{
++	return CONFIG_DDR_CLK_FREQ;
++}
++
++void board_init_f(ulong bootflag)
++{
++	u32 plat_ratio, sys_clk, ccb_clk;
++	ccsr_gur_t *gur = (void *)CONFIG_SYS_MPC85xx_GUTS_ADDR;
++
++	/* Memcpy existing GD at CONFIG_SPL_GD_ADDR */
++	memcpy((void *)CONFIG_SPL_GD_ADDR, (void *)gd, sizeof(gd_t));
++
++	/* Update GD pointer */
++	gd = (gd_t *)(CONFIG_SPL_GD_ADDR);
++
++	console_init_f();
++
++	/* initialize selected port with appropriate baud rate */
++	sys_clk = get_board_sys_clk();
++	plat_ratio = (in_be32(&gur->rcwsr[0]) >> 25) & 0x1f;
++	ccb_clk = sys_clk * plat_ratio / 2;
++
++	NS16550_init((NS16550_t)CONFIG_SYS_NS16550_COM1,
++		     ccb_clk / 16 / CONFIG_BAUDRATE);
++
++#if defined(CONFIG_SPL_MMC_BOOT)
++	puts("\nSD boot...\n");
++#elif defined(CONFIG_SPL_SPI_BOOT)
++	puts("\nSPI boot...\n");
++#elif defined(CONFIG_SPL_NAND_BOOT)
++	puts("\nNAND boot...\n");
++#endif
++
++	relocate_code(CONFIG_SPL_RELOC_STACK, (gd_t *)CONFIG_SPL_GD_ADDR, 0x0);
++}
++
++void board_init_r(gd_t *gd, ulong dest_addr)
++{
++	bd_t *bd;
++
++	bd = (bd_t *)(gd + sizeof(gd_t));
++	memset(bd, 0, sizeof(bd_t));
++	gd->bd = bd;
++	bd->bi_memstart = CONFIG_SYS_INIT_L3_ADDR;
++	bd->bi_memsize = CONFIG_SYS_L3_SIZE;
++
++	probecpu();
++	get_clocks();
++	mem_malloc_init(CONFIG_SPL_RELOC_MALLOC_ADDR,
++			CONFIG_SPL_RELOC_MALLOC_SIZE);
++
++#ifdef CONFIG_SPL_NAND_BOOT
++	nand_spl_load_image(CONFIG_ENV_OFFSET, CONFIG_ENV_SIZE,
++			    (uchar *)CONFIG_ENV_ADDR);
++#endif
++#ifdef CONFIG_SPL_MMC_BOOT
++	mmc_initialize(bd);
++	mmc_spl_load_image(CONFIG_ENV_OFFSET, CONFIG_ENV_SIZE,
++			   (uchar *)CONFIG_ENV_ADDR);
++#endif
++#ifdef CONFIG_SPL_SPI_BOOT
++	spi_spl_load_image(CONFIG_ENV_OFFSET, CONFIG_ENV_SIZE,
++			   (uchar *)CONFIG_ENV_ADDR);
++#endif
++
++	gd->env_addr  = (ulong)(CONFIG_ENV_ADDR);
++	gd->env_valid = 1;
++
++	i2c_init_all();
++
++	gd->ram_size = initdram(0);
++
++#ifdef CONFIG_SPL_MMC_BOOT
++	mmc_boot();
++      puts("'mmc boot ok");
++#elif defined(CONFIG_SPL_SPI_BOOT)
++	spi_boot();
++#elif defined(CONFIG_SPL_NAND_BOOT)
++	nand_boot();
++#endif
++}
+diff --git a/board/accton/as7710_32x/tlb.c b/board/accton/as7710_32x/tlb.c
+new file mode 100644
+index 0000000..2ebea36
+--- /dev/null
++++ b/board/accton/as7710_32x/tlb.c
+@@ -0,0 +1,153 @@
++/*
++ * Copyright 2008-2014 Freescale Semiconductor, Inc.
++ *
++ * (C) Copyright 2000
++ * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
++ *
++ * SPDX-License-Identifier:     GPL-2.0+
++ */
++
++#include <common.h>
++#include <asm/mmu.h>
++
++struct fsl_e_tlb_entry tlb_table[] = {
++	/* TLB 0 - for temp stack in cache */
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 4 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 4 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 8 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 8 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 12 * 1024,
++		      CONFIG_SYS_INIT_RAM_ADDR_PHYS + 12 * 1024,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 0, BOOKE_PAGESZ_4K, 0),
++
++	/* TLB 1 */
++	/* *I*** - Covers boot page */
++#if defined(CONFIG_SYS_RAMBOOT) && defined(CONFIG_SYS_INIT_L3_ADDR)
++	/*
++	 * *I*G - L3SRAM. When L3 is used as 1M SRAM, the address of the
++	 * SRAM is at 0xfff00000, it covered the 0xfffff000.
++	 */
++	SET_TLB_ENTRY(1, CONFIG_SYS_INIT_L3_ADDR, CONFIG_SYS_INIT_L3_ADDR,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 0, BOOKE_PAGESZ_1M, 1),
++#elif defined(CONFIG_SRIO_PCIE_BOOT_SLAVE)
++	/*
++	 * SRIO_PCIE_BOOT-SLAVE. When slave boot, the address of the
++	 * space is at 0xfff00000, it covered the 0xfffff000.
++	 */
++	SET_TLB_ENTRY(1, CONFIG_SYS_SRIO_PCIE_BOOT_SLAVE_ADDR,
++		      CONFIG_SYS_SRIO_PCIE_BOOT_SLAVE_ADDR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_W|MAS2_G,
++		      0, 0, BOOKE_PAGESZ_1M, 1),
++#else
++	SET_TLB_ENTRY(1, 0xfffff000, 0xfffff000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 0, BOOKE_PAGESZ_4K, 1),
++#endif
++
++	/* *I*G* - CCSRBAR */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CCSRBAR, CONFIG_SYS_CCSRBAR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 1, BOOKE_PAGESZ_16M, 1),
++
++	/* *I*G* - Flash, localbus */
++	/* This will be changed to *I*G* after relocation to RAM. */
++	SET_TLB_ENTRY(1, CONFIG_SYS_FLASH_BASE, CONFIG_SYS_FLASH_BASE_PHYS,
++		      MAS3_SX|MAS3_SR, MAS2_W|MAS2_G,
++		      0, 2, BOOKE_PAGESZ_256M, 1),
++
++#ifndef CONFIG_SPL_BUILD
++	/* *I*G* - PCIe 1, 0x80000000 */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_MEM_VIRT, CONFIG_SYS_PCIE1_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 3, BOOKE_PAGESZ_512M, 1),
++
++	/* *I*G* - PCIe 2, 0xa0000000 */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE2_MEM_VIRT, CONFIG_SYS_PCIE2_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 4, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCIe 3, 0xb0000000 */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE3_MEM_VIRT, CONFIG_SYS_PCIE3_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 5, BOOKE_PAGESZ_256M, 1),
++
++
++	/* *I*G* - PCIe 4, 0xc0000000 */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE4_MEM_VIRT, CONFIG_SYS_PCIE4_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 6, BOOKE_PAGESZ_256M, 1),
++
++	/* *I*G* - PCI I/O */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_IO_VIRT, CONFIG_SYS_PCIE1_IO_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 7, BOOKE_PAGESZ_256K, 1),
++
++	/* Bman/Qman */
++#ifdef CONFIG_SYS_BMAN_MEM_PHYS
++	SET_TLB_ENTRY(1, CONFIG_SYS_BMAN_MEM_BASE, CONFIG_SYS_BMAN_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 9, BOOKE_PAGESZ_16M, 1),
++	SET_TLB_ENTRY(1, CONFIG_SYS_BMAN_MEM_BASE + 0x01000000,
++		      CONFIG_SYS_BMAN_MEM_PHYS + 0x01000000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 10, BOOKE_PAGESZ_16M, 1),
++#endif
++#ifdef CONFIG_SYS_QMAN_MEM_PHYS
++	SET_TLB_ENTRY(1, CONFIG_SYS_QMAN_MEM_BASE, CONFIG_SYS_QMAN_MEM_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 11, BOOKE_PAGESZ_16M, 1),
++	SET_TLB_ENTRY(1, CONFIG_SYS_QMAN_MEM_BASE + 0x01000000,
++		      CONFIG_SYS_QMAN_MEM_PHYS + 0x01000000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 12, BOOKE_PAGESZ_16M, 1),
++#endif
++#endif
++#ifdef CONFIG_SYS_DCSRBAR_PHYS
++	SET_TLB_ENTRY(1, CONFIG_SYS_DCSRBAR, CONFIG_SYS_DCSRBAR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 13, BOOKE_PAGESZ_32M, 1),
++#endif
++#ifdef CONFIG_SYS_NAND_BASE
++	/*
++	 * *I*G - NAND
++	 * entry 14 and 15 has been used hard coded, they will be disabled
++	 * in cpu_init_f, so we use entry 16 for nand.
++	 */
++	SET_TLB_ENTRY(1, CONFIG_SYS_NAND_BASE, CONFIG_SYS_NAND_BASE_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 16, BOOKE_PAGESZ_64K, 1),
++#endif
++#ifdef CONFIG_SYS_CPLD_BASE
++	SET_TLB_ENTRY(1, CONFIG_SYS_CPLD_BASE, CONFIG_SYS_CPLD_BASE_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 17, BOOKE_PAGESZ_4K, 1),
++#endif
++#ifdef CONFIG_SRIO_PCIE_BOOT_SLAVE
++	/*
++	 * SRIO_PCIE_BOOT-SLAVE. 1M space from 0xffe00000 for
++	 * fetching ucode and ENV from master
++	 */
++	SET_TLB_ENTRY(1, CONFIG_SYS_SRIO_PCIE_BOOT_UCODE_ENV_ADDR,
++		      CONFIG_SYS_SRIO_PCIE_BOOT_UCODE_ENV_ADDR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_G,
++		      0, 18, BOOKE_PAGESZ_1M, 1),
++#endif
++#if defined(CONFIG_RAMBOOT_PBL) && !defined(CONFIG_SPL_BUILD)
++	SET_TLB_ENTRY(1, CONFIG_SYS_DDR_SDRAM_BASE, CONFIG_SYS_DDR_SDRAM_BASE,
++		      MAS3_SX|MAS3_SW|MAS3_SR, 0,
++		      0, 19, BOOKE_PAGESZ_2G, 1)
++#endif
++
++};
++
++int num_tlb_entries = ARRAY_SIZE(tlb_table);
+diff --git a/boards.cfg b/boards.cfg
+index 117d2a2..75ac0e7 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -977,6 +977,7 @@ Active  powerpc     mpc85xx        -           freescale       t208xrdb
+ Active  powerpc     mpc85xx        -           freescale       t208xrdb            T2080RDB_SECURE_BOOT                  T208xRDB:PPC_T2080,SECURE_BOOT                                                                                                    Aneesh Bansal <aneesh.bansal@freescale.com>
+ Active  powerpc     mpc85xx        -           freescale       t208xrdb            T2080RDB_SPIFLASH                     T208xRDB:PPC_T2080,RAMBOOT_PBL,SPL_FSL_PBL,SPIFLASH                                                                               -
+ Active  powerpc     mpc85xx        -           freescale       t208xrdb            T2080RDB_SRIO_PCIE_BOOT               T208xRDB:PPC_T2080,SRIO_PCIE_BOOT_SLAVE,SYS_TEXT_BASE=0xFFF40000                                                                  -
++Active  powerpc     mpc85xx        -           accton          as7710_32x          AS7710_32X                            AS7710_32X:PPC_T2080                                                                                                                -
+ Active  powerpc     mpc85xx        -           freescale       t4qds               T4160QDS                              T4240QDS:PPC_T4160                                                                                                                -
+ Active  powerpc     mpc85xx        -           freescale       t4qds               T4160QDS_NAND                         T4240QDS:PPC_T4160,RAMBOOT_PBL,SPL_FSL_PBL,NAND                                                                                   -
+ Active  powerpc     mpc85xx        -           freescale       t4qds               T4160QDS_SDCARD                       T4240QDS:PPC_T4160,RAMBOOT_PBL,SPL_FSL_PBL,SDCARD                                                                                 -
+diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
+index cf2ed1c..a1f6c01 100644
+--- a/common/cmd_sys_eeprom.c
++++ b/common/cmd_sys_eeprom.c
+@@ -1206,11 +1206,28 @@ int mac_read_from_eeprom(void)
+ 				macbase[0], macbase[1], macbase[2],
+ 				macbase[3], macbase[4], macbase[5]);
+ 			sprintf(enetvar, i ? "eth%daddr" : "ethaddr", i);
++
++#if 1
++			/* aaron_lien, 2013/08/05,
++			 * Initialize $ethaddr if it is blank or
++			 * if the current value is different from non-volatile board information
++			 * then change it.
++			 */
++			char *env;
++			env = getenv(enetvar);
++			if (!env) {
++				setenv(enetvar, ethaddr);
++			} else {
++				if(strcmp(env, ethaddr))
++					setenv(enetvar, ethaddr);
++			}
++#else
+ 			/* Only initialize environment variables that are blank
+ 			 * (i.e. have not yet been set)
+ 			 */
+ 			if (!getenv(enetvar))
+ 				setenv(enetvar, ethaddr);
++#endif
+ 
+ 			macbase[5]++;
+ 			if (macbase[5] == 0) {
+@@ -1255,9 +1272,6 @@ int populate_serial_number(void)
+ 	int eeprom_index;
+ 	tlvinfo_tlv_t * eeprom_tlv;
+ 
+-	if (getenv("serial#"))
+-		return 0;
+-
+ 	if (read_eeprom(eeprom)) {
+ 		printf("Read failed.\n");
+ 		return -1;
+@@ -1267,7 +1281,14 @@ int populate_serial_number(void)
+ 		eeprom_tlv = (tlvinfo_tlv_t *) &eeprom[eeprom_index];
+ 		memcpy(serialstr, eeprom_tlv->value, eeprom_tlv->length);
+ 		serialstr[eeprom_tlv->length] = 0;
+-		setenv("serial#", serialstr);
++		char *env;
++		env = getenv("serial#");
++		if (!env) {
++			setenv("serial#", serialstr);
++		} else {
++			if(strcmp(env, serialstr))
++				setenv("serial#", serialstr);
++		}
+ 	}
+ 
+ 	return 0;
+diff --git a/drivers/ddr/fsl/mpc85xx_ddr_gen3.c b/drivers/ddr/fsl/mpc85xx_ddr_gen3.c
+index 194a714..c5c9887 100644
+--- a/drivers/ddr/fsl/mpc85xx_ddr_gen3.c
++++ b/drivers/ddr/fsl/mpc85xx_ddr_gen3.c
+@@ -556,6 +556,9 @@ step2:
+ 		clrbits_be32(&ddr->sdram_cfg, 0x2);
+ 	}
+ #endif /* CONFIG_SYS_FSL_ERRATUM_DDR111_DDR134 */
++
++	out_be32(&ddr->sdram_cfg,0xe7040008); /* from benny config */
++
+ #ifdef CONFIG_FSL_DEEP_SLEEP
+ 	if (is_warm_boot())
+ 		/* exit self-refresh */
+diff --git a/drivers/i2c/fsl_i2c.c b/drivers/i2c/fsl_i2c.c
+index 2db75d0..b77ab65 100644
+--- a/drivers/i2c/fsl_i2c.c
++++ b/drivers/i2c/fsl_i2c.c
+@@ -46,11 +46,20 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+-static const struct fsl_i2c *i2c_dev[2] = {
++/* susan index 2 change 4 */
++static const struct fsl_i2c *i2c_dev[4] = {
+ 	(struct fsl_i2c *)(CONFIG_SYS_IMMR + CONFIG_SYS_FSL_I2C_OFFSET),
+ #ifdef CONFIG_SYS_FSL_I2C2_OFFSET
+-	(struct fsl_i2c *)(CONFIG_SYS_IMMR + CONFIG_SYS_FSL_I2C2_OFFSET)
++	(struct fsl_i2c *)(CONFIG_SYS_IMMR + CONFIG_SYS_FSL_I2C2_OFFSET),
+ #endif
++/* susan add */
++#ifdef CONFIG_SYS_FSL_I2C3_OFFSET
++	(struct fsl_i2c *)(CONFIG_SYS_IMMR + CONFIG_SYS_FSL_I2C3_OFFSET),
++#endif
++#ifdef CONFIG_SYS_FSL_I2C4_OFFSET
++	(struct fsl_i2c *)(CONFIG_SYS_IMMR + CONFIG_SYS_FSL_I2C4_OFFSET)
++#endif
++
+ };
+ 
+ /* I2C speed map for a DFSR value of 1 */
+@@ -539,3 +548,16 @@ U_BOOT_I2C_ADAP_COMPLETE(fsl_1, fsl_i2c_init, fsl_i2c_probe, fsl_i2c_read,
+ 			 CONFIG_SYS_FSL_I2C2_SPEED, CONFIG_SYS_FSL_I2C2_SLAVE,
+ 			 1)
+ #endif
++/* susan add */
++#ifdef CONFIG_SYS_FSL_I2C3_OFFSET
++U_BOOT_I2C_ADAP_COMPLETE(fsl_2, fsl_i2c_init, fsl_i2c_probe, fsl_i2c_read,
++			 fsl_i2c_write, fsl_i2c_set_bus_speed,
++			 CONFIG_SYS_FSL_I2C3_SPEED, CONFIG_SYS_FSL_I2C3_SLAVE,
++			 2)
++#endif
++#ifdef CONFIG_SYS_FSL_I2C4_OFFSET
++U_BOOT_I2C_ADAP_COMPLETE(fsl_3, fsl_i2c_init, fsl_i2c_probe, fsl_i2c_read,
++			 fsl_i2c_write, fsl_i2c_set_bus_speed,
++			 CONFIG_SYS_FSL_I2C4_SPEED, CONFIG_SYS_FSL_I2C4_SLAVE,
++			 3)
++#endif
+diff --git a/include/configs/AS7710_32X.h b/include/configs/AS7710_32X.h
+new file mode 100644
+index 0000000..65deeef
+--- /dev/null
++++ b/include/configs/AS7710_32X.h
+@@ -0,0 +1,842 @@
++/*
++ * Accton AS7710_32X network switch board configuration file
++ */
++
++#ifndef __CONFIG_H
++#define __CONFIG_H
++
++#include "configs/common_config.h"
++#include "version.h"
++
++#define CONFIG_LAST_STAGE_INIT
++
++#define CONFIG_SYS_GENERIC_BOARD
++#define CONFIG_DISPLAY_BOARDINFO
++#define CONFIG_T2080RDB
++#define CONFIG_AS7710_32X
++#define CONFIG_BOARDNAME        "Accton AS7710_32X"
++#define CONFIG_ICS307_REFCLK_HZ 25000000  /* ICS307 ref clk freq */
++#define CONFIG_MMC
++#define CONFIG_SPI_FLASH
++#define CONFIG_USB_EHCI
++#define CONFIG_FSL_SATA_V2
++
++/* High Level Configuration Options */
++#define CONFIG_PHYS_64BIT
++#define CONFIG_BOOKE
++#define CONFIG_E500		/* BOOKE e500 family */
++#define CONFIG_E500MC		/* BOOKE e500mc family */
++#define CONFIG_SYS_BOOK3E_HV	/* Category E.HV supported */
++#define CONFIG_MP		/* support multiple processors */
++#define CONFIG_ENABLE_36BIT_PHYS
++
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_ADDR_MAP 1
++#define CONFIG_SYS_NUM_ADDR_MAP 64 /* number of TLB1 entries */
++#endif
++
++#define CONFIG_SYS_FSL_CPC	/* Corenet Platform Cache */
++#define CONFIG_SYS_NUM_CPC	CONFIG_NUM_DDR_CONTROLLERS
++#define CONFIG_FSL_IFC		/* Enable IFC Support */
++#define CONFIG_FSL_LAW		/* Use common FSL init code */
++#define CONFIG_ENV_OVERWRITE
++
++#ifdef CONFIG_RAMBOOT_PBL
++#define CONFIG_SYS_FSL_PBL_PBI board/accton/as7710_32x_pbi.cfg
++#define CONFIG_SYS_FSL_PBL_RCW board/accton/as7710_32x_rcw.cfg
++
++#define CONFIG_SPL
++#define CONFIG_SPL_MPC8XXX_INIT_DDR_SUPPORT
++#define CONFIG_SPL_ENV_SUPPORT
++#define CONFIG_SPL_SERIAL_SUPPORT
++#define CONFIG_SPL_FLUSH_IMAGE
++#define CONFIG_SPL_TARGET		"u-boot-with-spl.bin"
++#define CONFIG_SPL_LIBGENERIC_SUPPORT
++#define CONFIG_SPL_LIBCOMMON_SUPPORT
++#define CONFIG_SPL_I2C_SUPPORT
++#define CONFIG_SPL_DRIVERS_MISC_SUPPORT
++#define CONFIG_FSL_LAW			/* Use common FSL init code */
++#define CONFIG_SYS_TEXT_BASE		0x00201000
++#define CONFIG_SPL_TEXT_BASE		0xFFFD8000
++#define CONFIG_SPL_PAD_TO		0x40000
++#define CONFIG_SPL_MAX_SIZE		0x28000
++#define RESET_VECTOR_OFFSET		0x27FFC
++#define BOOT_PAGE_OFFSET		0x27000
++#ifdef CONFIG_SPL_BUILD
++#define CONFIG_SPL_SKIP_RELOCATE
++#define CONFIG_SPL_COMMON_INIT_DDR
++#define CONFIG_SYS_CCSR_DO_NOT_RELOCATE
++#define CONFIG_SYS_NO_FLASH
++#endif
++
++#ifdef CONFIG_NAND
++#define CONFIG_SPL_NAND_SUPPORT
++#define CONFIG_SYS_NAND_U_BOOT_SIZE	(768 << 10)
++#define CONFIG_SYS_NAND_U_BOOT_DST	0x00200000
++#define CONFIG_SYS_NAND_U_BOOT_START	0x00200000
++#define CONFIG_SYS_NAND_U_BOOT_OFFS	(256 << 10)
++#define CONFIG_SYS_LDSCRIPT  "arch/powerpc/cpu/mpc85xx/u-boot-nand.lds"
++#define CONFIG_SPL_NAND_BOOT
++#endif
++
++#ifdef CONFIG_SPIFLASH
++#define        CONFIG_RESET_VECTOR_ADDRESS             0x200FFC
++#define CONFIG_SPL_SPI_SUPPORT
++#define CONFIG_SPL_SPI_FLASH_SUPPORT
++#define CONFIG_SPL_SPI_FLASH_MINIMAL
++#define CONFIG_SYS_SPI_FLASH_U_BOOT_SIZE       (768 << 10)
++#define CONFIG_SYS_SPI_FLASH_U_BOOT_DST                (0x00200000)
++#define CONFIG_SYS_SPI_FLASH_U_BOOT_START      (0x00200000)
++#define CONFIG_SYS_SPI_FLASH_U_BOOT_OFFS       (256 << 10)
++#define CONFIG_SYS_LDSCRIPT    "arch/powerpc/cpu/mpc85xx/u-boot.lds"
++#ifndef CONFIG_SPL_BUILD
++#define CONFIG_SYS_MPC85XX_NO_RESETVEC
++#endif
++#define CONFIG_SPL_SPI_BOOT
++#endif
++
++#ifdef CONFIG_SDCARD
++#define        CONFIG_RESET_VECTOR_ADDRESS             0x200FFC
++#define CONFIG_SPL_MMC_SUPPORT
++#define CONFIG_SPL_MMC_MINIMAL
++#define CONFIG_SYS_MMC_U_BOOT_SIZE     (768 << 10)
++#define CONFIG_SYS_MMC_U_BOOT_DST      (0x00200000)
++#define CONFIG_SYS_MMC_U_BOOT_START    (0x00200000)
++#define CONFIG_SYS_MMC_U_BOOT_OFFS     (260 << 10)
++#define CONFIG_SYS_LDSCRIPT    "arch/powerpc/cpu/mpc85xx/u-boot.lds"
++#ifndef CONFIG_SPL_BUILD
++#define CONFIG_SYS_MPC85XX_NO_RESETVEC
++#endif
++#define CONFIG_SPL_MMC_BOOT
++#endif
++
++#endif /* CONFIG_RAMBOOT_PBL */
++
++#define CONFIG_SRIO_PCIE_BOOT_MASTER
++#ifdef CONFIG_SRIO_PCIE_BOOT_SLAVE
++/* Set 1M boot space */
++#define CONFIG_SYS_SRIO_PCIE_BOOT_SLAVE_ADDR (CONFIG_SYS_TEXT_BASE & 0xfff00000)
++#define CONFIG_SYS_SRIO_PCIE_BOOT_SLAVE_ADDR_PHYS \
++		(0x300000000ull | CONFIG_SYS_SRIO_PCIE_BOOT_SLAVE_ADDR)
++#define CONFIG_RESET_VECTOR_ADDRESS 0xfffffffc
++#define CONFIG_SYS_NO_FLASH
++#endif
++
++#ifndef CONFIG_SYS_TEXT_BASE
++#define CONFIG_SYS_TEXT_BASE	0xeff40000
++#endif
++
++#ifndef CONFIG_RESET_VECTOR_ADDRESS
++#define CONFIG_RESET_VECTOR_ADDRESS	0xeffffffc
++#endif
++
++/*
++ * These can be toggled for performance analysis, otherwise use default.
++ */
++#define CONFIG_SYS_CACHE_STASHING
++#define CONFIG_BTB		/* toggle branch predition */
++#define CONFIG_DDR_ECC /* susan */
++#ifdef CONFIG_DDR_ECC
++#define CONFIG_ECC_INIT_VIA_DDRCONTROLLER
++#define CONFIG_MEM_INIT_VALUE		0xdeadbeef
++#endif
++
++#ifndef CONFIG_SYS_NO_FLASH
++#define CONFIG_FLASH_CFI_DRIVER
++#define CONFIG_SYS_FLASH_CFI
++#define CONFIG_SYS_FLASH_USE_BUFFER_WRITE
++#endif
++
++#define CONFIG_ENV_IS_IN_FLASH
++#define CONFIG_ENV_ADDR		(CONFIG_SYS_MONITOR_BASE - 0x20000)
++#define CONFIG_ENV_SIZE		0x2000
++#define CONFIG_ENV_SECT_SIZE	0x20000 /* 128K (one sector) */
++/* The env sector size must be existent in this file one time, or
++ * ONIE can't find the correct sector size.
++ */
++
++#ifndef __ASSEMBLY__
++unsigned long get_board_sys_clk(void);
++unsigned long get_board_ddr_clk(void);
++#endif
++
++#define CONFIG_SYS_CLK_FREQ	100000000
++#define CONFIG_DDR_CLK_FREQ	133330000
++
++/*
++ * Config the L3 Cache as L3 SRAM
++ */
++#define CONFIG_SYS_INIT_L3_ADDR		0xFFFC0000
++#define CONFIG_SYS_L3_SIZE		(512 << 10)
++#define CONFIG_SPL_GD_ADDR		(CONFIG_SYS_INIT_L3_ADDR + 32 * 1024)
++#ifdef CONFIG_RAMBOOT_PBL
++#define CONFIG_ENV_ADDR			(CONFIG_SPL_GD_ADDR + 4 * 1024)
++#endif
++#define CONFIG_SPL_RELOC_MALLOC_ADDR	(CONFIG_SPL_GD_ADDR + 12 * 1024)
++#define CONFIG_SPL_RELOC_MALLOC_SIZE	(50 << 10)
++#define CONFIG_SPL_RELOC_STACK		(CONFIG_SPL_GD_ADDR + 64 * 1024)
++#define CONFIG_SPL_RELOC_STACK_SIZE	(22 << 10)
++
++#define CONFIG_SYS_DCSRBAR	0xf0000000
++#define CONFIG_SYS_DCSRBAR_PHYS	0xf00000000ull
++
++/* EEPROM */
++#define CONFIG_ID_EEPROM
++#define CONFIG_SYS_I2C_EEPROM_NXID
++#define CONFIG_SYS_EEPROM_BUS_NUM	0
++#define CONFIG_SYS_I2C_EEPROM_ADDR	0x50
++#define CONFIG_SYS_I2C_EEPROM_ADDR_LEN	2
++
++/*
++ * DDR Setup
++ */
++#define CONFIG_VERY_BIG_RAM
++#define CONFIG_SYS_DDR_SDRAM_BASE	0x00000000
++#define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
++#define CONFIG_DIMM_SLOTS_PER_CTLR	2
++#define CONFIG_CHIP_SELECTS_PER_CTRL	(2 * CONFIG_DIMM_SLOTS_PER_CTLR)
++#define CONFIG_DDR_SPD
++#define CONFIG_SYS_FSL_DDR3
++#undef CONFIG_FSL_DDR_INTERACTIVE
++#define CONFIG_SYS_SPD_BUS_NUM	0
++#define CONFIG_SYS_SDRAM_SIZE	2048	/* for fixed parameter use */
++#define SPD_EEPROM_ADDRESS1	0x52 /* susan */
++#define SPD_EEPROM_ADDRESS2	0x53 /* susan */
++#define SPD_EEPROM_ADDRESS	SPD_EEPROM_ADDRESS1
++#define CTRL_INTLV_PREFERED	cacheline
++
++/*
++ * IFC Definitions
++ */
++#define CONFIG_SYS_FLASH_BASE		0xe8000000
++#define CONFIG_SYS_FLASH_BASE_PHYS	(0xf00000000ull | CONFIG_SYS_FLASH_BASE)
++#define CONFIG_SYS_NOR0_CSPR_EXT	(0xf)
++#define CONFIG_SYS_NOR0_CSPR	(CSPR_PHYS_ADDR(CONFIG_SYS_FLASH_BASE_PHYS) | \
++				CSPR_PORT_SIZE_16 | \
++				CSPR_MSEL_NOR | \
++				CSPR_V)
++#define CONFIG_SYS_NOR_AMASK	IFC_AMASK(128*1024*1024)
++
++/* NOR Flash Timing Params */
++#define CONFIG_SYS_NOR_CSOR	CSOR_NAND_TRHZ_80
++
++#define CONFIG_SYS_NOR_FTIM0	(FTIM0_NOR_TACSE(0x4) | \
++				FTIM0_NOR_TEADC(0x5) | \
++				FTIM0_NOR_TEAHC(0x5))
++#define CONFIG_SYS_NOR_FTIM1	(FTIM1_NOR_TACO(0x35) | \
++				FTIM1_NOR_TRAD_NOR(0x1A) |\
++				FTIM1_NOR_TSEQRAD_NOR(0x13))
++#define CONFIG_SYS_NOR_FTIM2	(FTIM2_NOR_TCS(0x4) | \
++				FTIM2_NOR_TCH(0x4) | \
++				FTIM2_NOR_TWPH(0x0E) | \
++				FTIM2_NOR_TWP(0x1c))
++#define CONFIG_SYS_NOR_FTIM3	0x0
++
++#define CONFIG_SYS_FLASH_QUIET_TEST
++#define CONFIG_FLASH_SHOW_PROGRESS	45 /* count down from 45/5: 9..1 */
++
++#define CONFIG_SYS_MAX_FLASH_BANKS	1	/* number of banks */
++#define CONFIG_SYS_MAX_FLASH_SECT	1024	/* sectors per device */
++#define CONFIG_SYS_FLASH_ERASE_TOUT	60000	/* Flash Erase Timeout (ms) */
++#define CONFIG_SYS_FLASH_WRITE_TOUT	500	/* Flash Write Timeout (ms) */
++#define CONFIG_SYS_FLASH_EMPTY_INFO
++#define CONFIG_SYS_FLASH_BANKS_LIST	{CONFIG_SYS_FLASH_BASE_PHYS }
++
++/* CPLD on IFC */
++#define CONFIG_SYS_CPLD_BASE	0xffdf0000
++#define CONFIG_SYS_CPLD_BASE_PHYS	(0xf00000000ull | CONFIG_SYS_CPLD_BASE)
++#define CONFIG_SYS_CSPR2_EXT	(0xf)
++#define CONFIG_SYS_CSPR2	(CSPR_PHYS_ADDR(CONFIG_SYS_CPLD_BASE) \
++				| CSPR_PORT_SIZE_8 \
++				| CSPR_MSEL_GPCM \
++				| CSPR_V)
++#define CONFIG_SYS_AMASK2	IFC_AMASK(64*1024)
++#define CONFIG_SYS_CSOR2	0x0
++
++/* CPLD Timing parameters for IFC CS2 */
++#define CONFIG_SYS_CS2_FTIM0		(FTIM0_GPCM_TACSE(0x0e) | \
++					FTIM0_GPCM_TEADC(0x0e) | \
++					FTIM0_GPCM_TEAHC(0x0e))
++#define CONFIG_SYS_CS2_FTIM1		(FTIM1_GPCM_TACO(0x0e) | \
++					FTIM1_GPCM_TRAD(0x1f))
++#define CONFIG_SYS_CS2_FTIM2		(FTIM2_GPCM_TCS(0x0e) | \
++					FTIM2_GPCM_TCH(0x0) | \
++					FTIM2_GPCM_TWP(0x1f))
++#define CONFIG_SYS_CS2_FTIM3		0x0
++
++/* NAND Flash on IFC */
++#define CONFIG_NAND_FSL_IFC
++#define CONFIG_SYS_NAND_BASE		0xff800000
++#define CONFIG_SYS_NAND_BASE_PHYS	(0xf00000000ull | CONFIG_SYS_NAND_BASE)
++
++#define CONFIG_SYS_NAND_CSPR_EXT	(0xf)
++#define CONFIG_SYS_NAND_CSPR	(CSPR_PHYS_ADDR(CONFIG_SYS_NAND_BASE_PHYS) \
++				| CSPR_PORT_SIZE_8 /* Port Size = 8 bit */ \
++				| CSPR_MSEL_NAND	 /* MSEL = NAND */ \
++				| CSPR_V)
++#define CONFIG_SYS_NAND_AMASK	IFC_AMASK(64*1024)
++
++#define CONFIG_SYS_NAND_CSOR	(CSOR_NAND_ECC_ENC_EN	/* ECC on encode */ \
++				| CSOR_NAND_ECC_DEC_EN	/* ECC on decode */ \
++				| CSOR_NAND_ECC_MODE_4	/* 4-bit ECC */	    \
++				| CSOR_NAND_RAL_3	/* RAL = 2Byes */   \
++				| CSOR_NAND_PGS_2K	/* Page Size = 2K */\
++				| CSOR_NAND_SPRZ_64	/* Spare size = 64 */\
++				| CSOR_NAND_PB(64))	/*Pages Per Block = 64*/
++
++#define CONFIG_SYS_NAND_ONFI_DETECTION
++
++/* ONFI NAND Flash mode0 Timing Params */
++#define CONFIG_SYS_NAND_FTIM0		(FTIM0_NAND_TCCST(0x07) | \
++					FTIM0_NAND_TWP(0x18)    | \
++					FTIM0_NAND_TWCHT(0x07)  | \
++					FTIM0_NAND_TWH(0x0a))
++#define CONFIG_SYS_NAND_FTIM1		(FTIM1_NAND_TADLE(0x32) | \
++					FTIM1_NAND_TWBE(0x39)   | \
++					FTIM1_NAND_TRR(0x0e)    | \
++					FTIM1_NAND_TRP(0x18))
++#define CONFIG_SYS_NAND_FTIM2		(FTIM2_NAND_TRAD(0x0f)  | \
++					FTIM2_NAND_TREH(0x0a)   | \
++					FTIM2_NAND_TWHRE(0x1e))
++#define CONFIG_SYS_NAND_FTIM3		0x0
++
++#define CONFIG_SYS_NAND_DDR_LAW		11
++#define CONFIG_SYS_NAND_BASE_LIST	{ CONFIG_SYS_NAND_BASE }
++#define CONFIG_SYS_MAX_NAND_DEVICE	1
++#define CONFIG_MTD_NAND_VERIFY_WRITE
++#define CONFIG_CMD_NAND
++#define CONFIG_SYS_NAND_BLOCK_SIZE	(512 * 1024)
++
++#if defined(CONFIG_NAND)
++#define CONFIG_SYS_CSPR0_EXT		CONFIG_SYS_NAND_CSPR_EXT
++#define CONFIG_SYS_CSPR0		CONFIG_SYS_NAND_CSPR
++#define CONFIG_SYS_AMASK0		CONFIG_SYS_NAND_AMASK
++#define CONFIG_SYS_CSOR0		CONFIG_SYS_NAND_CSOR
++#define CONFIG_SYS_CS0_FTIM0		CONFIG_SYS_NAND_FTIM0
++#define CONFIG_SYS_CS0_FTIM1		CONFIG_SYS_NAND_FTIM1
++#define CONFIG_SYS_CS0_FTIM2		CONFIG_SYS_NAND_FTIM2
++#define CONFIG_SYS_CS0_FTIM3		CONFIG_SYS_NAND_FTIM3
++#define CONFIG_SYS_CSPR1_EXT		CONFIG_SYS_NOR0_CSPR_EXT
++#define CONFIG_SYS_CSPR1		CONFIG_SYS_NOR0_CSPR
++#define CONFIG_SYS_AMASK1		CONFIG_SYS_NOR_AMASK
++#define CONFIG_SYS_CSOR1		CONFIG_SYS_NOR_CSOR
++#define CONFIG_SYS_CS1_FTIM0		CONFIG_SYS_NOR_FTIM0
++#define CONFIG_SYS_CS1_FTIM1		CONFIG_SYS_NOR_FTIM1
++#define CONFIG_SYS_CS1_FTIM2		CONFIG_SYS_NOR_FTIM2
++#define CONFIG_SYS_CS1_FTIM3		CONFIG_SYS_NOR_FTIM3
++#else
++#define CONFIG_SYS_CSPR0_EXT		CONFIG_SYS_NOR0_CSPR_EXT
++#define CONFIG_SYS_CSPR0		CONFIG_SYS_NOR0_CSPR
++#define CONFIG_SYS_AMASK0		CONFIG_SYS_NOR_AMASK
++#define CONFIG_SYS_CSOR0		CONFIG_SYS_NOR_CSOR
++#define CONFIG_SYS_CS0_FTIM0		CONFIG_SYS_NOR_FTIM0
++#define CONFIG_SYS_CS0_FTIM1		CONFIG_SYS_NOR_FTIM1
++#define CONFIG_SYS_CS0_FTIM2		CONFIG_SYS_NOR_FTIM2
++#define CONFIG_SYS_CS0_FTIM3		CONFIG_SYS_NOR_FTIM3
++#define CONFIG_SYS_CSPR1_EXT		CONFIG_SYS_NAND_CSPR_EXT
++#define CONFIG_SYS_CSPR1		CONFIG_SYS_NAND_CSPR
++#define CONFIG_SYS_AMASK1		CONFIG_SYS_NAND_AMASK
++#define CONFIG_SYS_CSOR1		CONFIG_SYS_NAND_CSOR
++#define CONFIG_SYS_CS1_FTIM0		CONFIG_SYS_NAND_FTIM0
++#define CONFIG_SYS_CS1_FTIM1		CONFIG_SYS_NAND_FTIM1
++#define CONFIG_SYS_CS1_FTIM2		CONFIG_SYS_NAND_FTIM2
++#define CONFIG_SYS_CS1_FTIM3		CONFIG_SYS_NAND_FTIM3
++#endif
++
++#if defined(CONFIG_RAMBOOT_PBL)
++#define CONFIG_SYS_RAMBOOT
++#endif
++
++#ifdef CONFIG_SPL_BUILD
++#define CONFIG_SYS_MONITOR_BASE  CONFIG_SPL_TEXT_BASE
++#else
++#define CONFIG_SYS_MONITOR_BASE  CONFIG_SYS_TEXT_BASE /* start of monitor */
++#endif
++
++#define CONFIG_BOARD_EARLY_INIT_R	/* call board_early_init_r function */
++#define CONFIG_MISC_INIT_R
++#define CONFIG_HWCONFIG
++
++/* define to use L1 as initial stack */
++#define CONFIG_L1_INIT_RAM
++#define CONFIG_SYS_INIT_RAM_LOCK
++#define CONFIG_SYS_INIT_RAM_ADDR	0xfdd00000 /* Initial L1 address */
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH	0xf
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW	0xfe0ec000
++/* The assembler doesn't like typecast */
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS \
++			((CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH * 1ull << 32) | \
++			CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW)
++#define CONFIG_SYS_INIT_RAM_SIZE	0x00004000
++#define CONFIG_SYS_GBL_DATA_OFFSET	(CONFIG_SYS_INIT_RAM_SIZE - \
++						GENERATED_GBL_DATA_SIZE)
++#define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
++#define CONFIG_SYS_MONITOR_LEN		(768 * 1024)
++#define CONFIG_SYS_MALLOC_LEN		(4 * 1024 * 1024)
++
++/*
++ * Serial Port
++ */
++#define CONFIG_CONS_INDEX		1
++#define CONFIG_SYS_NS16550
++#define CONFIG_SYS_NS16550_SERIAL
++#define CONFIG_SYS_NS16550_REG_SIZE	1
++#define CONFIG_SYS_NS16550_CLK		(get_bus_freq(0)/2)
++#define CONFIG_SYS_NS16550_COM1 (CONFIG_SYS_CCSRBAR+0x11C500)
++#define CONFIG_SYS_NS16550_COM2 (CONFIG_SYS_CCSRBAR+0x11C600)
++#define CONFIG_SYS_NS16550_COM3 (CONFIG_SYS_CCSRBAR+0x11D500)
++#define CONFIG_SYS_NS16550_COM4 (CONFIG_SYS_CCSRBAR+0x11D600)
++
++/* Use the HUSH parser */
++#define CONFIG_SYS_HUSH_PARSER
++#define CONFIG_SYS_PROMPT_HUSH_PS2 "> "
++
++/* new uImage format support */
++#define CONFIG_FIT_VERBOSE	/* enable fit_format_{error,warning}() */
++
++/*
++ * I2C
++ */
++#define CONFIG_SYS_I2C
++#define CONFIG_SYS_I2C_FSL
++#define CONFIG_SYS_FSL_I2C_SLAVE   0x7F
++#define CONFIG_SYS_FSL_I2C2_SLAVE  0x7F
++#define CONFIG_SYS_FSL_I2C3_SLAVE  0x7F
++#define CONFIG_SYS_FSL_I2C4_SLAVE  0x7F
++#define CONFIG_SYS_FSL_I2C_OFFSET  0x118000
++#define CONFIG_SYS_FSL_I2C2_OFFSET 0x118100
++#define CONFIG_SYS_FSL_I2C3_OFFSET 0x119000
++#define CONFIG_SYS_FSL_I2C4_OFFSET 0x119100
++#define CONFIG_SYS_FSL_I2C_SPEED   100000
++#define CONFIG_SYS_FSL_I2C2_SPEED  100000
++#define CONFIG_SYS_FSL_I2C3_SPEED  100000
++#define CONFIG_SYS_FSL_I2C4_SPEED  100000
++#define I2C_MUX_PCA_ADDR_PRI	0x77 /* I2C bus multiplexer,primary */
++#define I2C_MUX_PCA_ADDR_SEC1	0x75 /* I2C bus multiplexer,secondary 1 */
++#define I2C_MUX_PCA_ADDR_SEC2	0x76 /* I2C bus multiplexer,secondary 2 */
++#define I2C_MUX_CH_DEFAULT	0x4
++
++
++/*
++ * RapidIO
++ */
++#define CONFIG_SYS_SRIO1_MEM_VIRT	0xa0000000
++#define CONFIG_SYS_SRIO1_MEM_PHYS	0xc20000000ull
++#define CONFIG_SYS_SRIO1_MEM_SIZE	0x10000000 /* 256M */
++#define CONFIG_SYS_SRIO2_MEM_VIRT	0xb0000000
++#define CONFIG_SYS_SRIO2_MEM_PHYS	0xc30000000ull
++#define CONFIG_SYS_SRIO2_MEM_SIZE	0x10000000 /* 256M */
++/*
++ * for slave u-boot IMAGE instored in master memory space,
++ * PHYS must be aligned based on the SIZE
++ */
++#define CONFIG_SRIO_PCIE_BOOT_IMAGE_MEM_PHYS 0xfef200000ull
++#define CONFIG_SRIO_PCIE_BOOT_IMAGE_MEM_BUS1 0xfff00000ull
++#define CONFIG_SRIO_PCIE_BOOT_IMAGE_SIZE     0x100000 /* 1M */
++#define CONFIG_SRIO_PCIE_BOOT_IMAGE_MEM_BUS2 0x3fff00000ull
++/*
++ * for slave UCODE and ENV instored in master memory space,
++ * PHYS must be aligned based on the SIZE
++ */
++#define CONFIG_SRIO_PCIE_BOOT_UCODE_ENV_MEM_PHYS 0xfef100000ull
++#define CONFIG_SRIO_PCIE_BOOT_UCODE_ENV_MEM_BUS 0x3ffe00000ull
++#define CONFIG_SRIO_PCIE_BOOT_UCODE_ENV_SIZE    0x40000	/* 256K */
++
++/* slave core release by master*/
++#define CONFIG_SRIO_PCIE_BOOT_BRR_OFFSET 0xe00e4
++#define CONFIG_SRIO_PCIE_BOOT_RELEASE_MASK 0x00000001 /* release core 0 */
++
++/*
++ * SRIO_PCIE_BOOT - SLAVE
++ */
++#ifdef CONFIG_SRIO_PCIE_BOOT_SLAVE
++#define CONFIG_SYS_SRIO_PCIE_BOOT_UCODE_ENV_ADDR 0xFFE00000
++#define CONFIG_SYS_SRIO_PCIE_BOOT_UCODE_ENV_ADDR_PHYS \
++		(0x300000000ull | CONFIG_SYS_SRIO_PCIE_BOOT_UCODE_ENV_ADDR)
++#endif
++
++/*
++ * eSPI - Enhanced SPI
++ */
++#ifdef CONFIG_SPI_FLASH
++#define CONFIG_FSL_ESPI
++#define CONFIG_SPI_FLASH_STMICRO
++#define CONFIG_SPI_FLASH_BAR
++#define CONFIG_CMD_SF
++#define CONFIG_SF_DEFAULT_SPEED	 10000000
++#define CONFIG_SF_DEFAULT_MODE	  0
++#endif
++
++/*
++ * General PCI
++ * Memory space is mapped 1-1, but I/O space must start from 0.
++ */
++#define CONFIG_PCI		/* Enable PCI/PCIE */
++#define CONFIG_PCIE1		/* PCIE controler 1 */
++#define CONFIG_PCIE2		/* PCIE controler 2 */
++#define CONFIG_PCIE3		/* PCIE controler 3 */
++#define CONFIG_PCIE4		/* PCIE controler 4 */
++#define CONFIG_FSL_PCI_INIT	/* Use common FSL init code */
++#define CONFIG_SYS_PCI_64BIT	/* enable 64-bit PCI resources */
++/* controller 1, direct to uli, tgtid 3, Base address 20000 */
++#define CONFIG_SYS_PCIE1_MEM_VIRT	0x80000000
++#define CONFIG_SYS_PCIE1_MEM_BUS	0xe0000000
++#define CONFIG_SYS_PCIE1_MEM_PHYS	0xc00000000ull
++#define CONFIG_SYS_PCIE1_MEM_SIZE	0x20000000      /* 512M */
++#define CONFIG_SYS_PCIE1_IO_VIRT	0xf8000000
++#define CONFIG_SYS_PCIE1_IO_BUS		0x00000000
++#define CONFIG_SYS_PCIE1_IO_PHYS	0xff8000000ull
++#define CONFIG_SYS_PCIE1_IO_SIZE	0x00010000	/* 64k */
++
++/* controller 2, Slot 2, tgtid 2, Base address 201000 */
++#define CONFIG_SYS_PCIE2_MEM_VIRT	0xa0000000
++#define CONFIG_SYS_PCIE2_MEM_BUS	0xe0000000
++#define CONFIG_SYS_PCIE2_MEM_PHYS	0xc20000000ull
++#define CONFIG_SYS_PCIE2_MEM_SIZE	0x10000000 /* 256M */
++#define CONFIG_SYS_PCIE2_IO_VIRT	0xf8010000
++#define CONFIG_SYS_PCIE2_IO_BUS		0x00000000
++#define CONFIG_SYS_PCIE2_IO_PHYS	0xff8010000ull
++#define CONFIG_SYS_PCIE2_IO_SIZE	0x00010000	/* 64k */
++
++/* controller 3, Slot 1, tgtid 1, Base address 202000 */
++#define CONFIG_SYS_PCIE3_MEM_VIRT	0xb0000000
++#define CONFIG_SYS_PCIE3_MEM_BUS	0xe0000000
++#define CONFIG_SYS_PCIE3_MEM_PHYS	0xc30000000ull
++#define CONFIG_SYS_PCIE3_MEM_SIZE	0x10000000	/* 256M */
++#define CONFIG_SYS_PCIE3_IO_VIRT	0xf8020000
++#define CONFIG_SYS_PCIE3_IO_BUS		0x00000000
++#define CONFIG_SYS_PCIE3_IO_PHYS	0xff8020000ull
++#define CONFIG_SYS_PCIE3_IO_SIZE	0x00010000	/* 64k */
++
++/* controller 4, Base address 203000 */
++#define CONFIG_SYS_PCIE4_MEM_VIRT	0xd8000000
++#define CONFIG_SYS_PCIE4_MEM_PHYS	0xd8000000
++#define CONFIG_SYS_PCIE4_MEM_BUS	0xd8000000
++#define CONFIG_SYS_PCIE4_MEM_SIZE	0x08000000	/* 128MB */
++#define CONFIG_SYS_PCIE4_IO_VIRT	0xf8010000
++#define CONFIG_SYS_PCIE4_IO_PHYS	0xf8010000
++#define CONFIG_SYS_PCIE4_IO_BUS		0x00000000
++#define CONFIG_SYS_PCIE4_IO_SIZE	0x00010000	/* 64k */
++
++#ifdef CONFIG_PCI
++#define CONFIG_PCI_INDIRECT_BRIDGE
++#define CONFIG_FSL_PCIE_RESET           /* need PCIe reset errata LSZ ADD */
++#define CONFIG_NET_MULTI
++#define CONFIG_E1000
++#define CONFIG_PCI_PNP		/* do pci plug-and-play */
++#define CONFIG_PCI_SCAN_SHOW	/* show pci devices on startup */
++#endif
++
++/* Qman/Bman */
++#ifndef CONFIG_NOBQFMAN
++#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
++#define CONFIG_SYS_BMAN_NUM_PORTALS	18
++#define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
++#define CONFIG_SYS_BMAN_MEM_PHYS	0xff4000000ull
++#define CONFIG_SYS_BMAN_MEM_SIZE	0x02000000
++#define CONFIG_SYS_BMAN_SP_CENA_SIZE    0x4000
++#define CONFIG_SYS_BMAN_SP_CINH_SIZE    0x1000
++#define CONFIG_SYS_BMAN_CENA_BASE       CONFIG_SYS_BMAN_MEM_BASE
++#define CONFIG_SYS_BMAN_CENA_SIZE       (CONFIG_SYS_BMAN_MEM_SIZE >> 1)
++#define CONFIG_SYS_BMAN_CINH_BASE       (CONFIG_SYS_BMAN_MEM_BASE + \
++					CONFIG_SYS_BMAN_CENA_SIZE)
++#define CONFIG_SYS_BMAN_CINH_SIZE       (CONFIG_SYS_BMAN_MEM_SIZE >> 1)
++#define CONFIG_SYS_BMAN_SWP_ISDR_REG	0xE08
++#define CONFIG_SYS_QMAN_NUM_PORTALS	18
++#define CONFIG_SYS_QMAN_MEM_BASE	0xf6000000
++#define CONFIG_SYS_QMAN_MEM_PHYS	0xff6000000ull
++#define CONFIG_SYS_QMAN_MEM_SIZE	0x02000000
++#define CONFIG_SYS_QMAN_SP_CENA_SIZE    0x4000
++#define CONFIG_SYS_QMAN_SP_CINH_SIZE    0x1000
++#define CONFIG_SYS_QMAN_CENA_BASE       CONFIG_SYS_QMAN_MEM_BASE
++#define CONFIG_SYS_QMAN_CENA_SIZE       (CONFIG_SYS_QMAN_MEM_SIZE >> 1)
++#define CONFIG_SYS_QMAN_CINH_BASE       (CONFIG_SYS_QMAN_MEM_BASE + \
++					CONFIG_SYS_QMAN_CENA_SIZE)
++#define CONFIG_SYS_QMAN_CINH_SIZE       (CONFIG_SYS_QMAN_MEM_SIZE >> 1)
++#define CONFIG_SYS_QMAN_SWP_ISDR_REG	0xE08
++
++#define CONFIG_SYS_DPAA_FMAN
++#define CONFIG_SYS_DPAA_PME
++#define CONFIG_SYS_PMAN
++#define CONFIG_SYS_DPAA_DCE
++#define CONFIG_SYS_DPAA_RMAN		/* RMan */
++#define CONFIG_SYS_INTERLAKEN
++
++/* Default address of microcode for the Linux Fman driver */
++#if defined(CONFIG_SPIFLASH)
++/*
++ * env is stored at 0x100000, sector size is 0x10000, ucode is stored after
++ * env, so we got 0x110000.
++ */
++#define CONFIG_SYS_QE_FW_IN_SPIFLASH
++#define CONFIG_SYS_CORTINA_FW_IN_SPIFLASH
++#define CONFIG_SYS_FMAN_FW_ADDR		0x110000
++#define CONFIG_CORTINA_FW_ADDR		0x120000
++
++#elif defined(CONFIG_SDCARD)
++/*
++ * PBL SD boot image should stored at 0x1000(8 blocks), the size of the image is
++ * about 1MB (2048 blocks), Env is stored after the image, and the env size is
++ * 0x2000 (16 blocks), 8 + 2048 + 16 = 2072, enlarge it to 2080.
++ */
++#define CONFIG_SYS_QE_FMAN_FW_IN_MMC
++#define CONFIG_SYS_CORTINA_FW_IN_MMC
++#define CONFIG_SYS_FMAN_FW_ADDR		(512 * 0x820)
++#define CONFIG_CORTINA_FW_ADDR		(512 * 0x8a0)
++
++#elif defined(CONFIG_NAND)
++#define CONFIG_SYS_QE_FMAN_FW_IN_NAND
++#define CONFIG_SYS_CORTINA_FW_IN_NAND
++#define CONFIG_SYS_FMAN_FW_ADDR		(3 * CONFIG_SYS_NAND_BLOCK_SIZE)
++#define CONFIG_CORTINA_FW_ADDR		(4 * CONFIG_SYS_NAND_BLOCK_SIZE)
++#elif defined(CONFIG_SRIO_PCIE_BOOT_SLAVE)
++/*
++ * Slave has no ucode locally, it can fetch this from remote. When implementing
++ * in two corenet boards, slave's ucode could be stored in master's memory
++ * space, the address can be mapped from slave TLB->slave LAW->
++ * slave SRIO or PCIE outbound window->master inbound window->
++ * master LAW->the ucode address in master's memory space.
++ */
++#define CONFIG_SYS_QE_FMAN_FW_IN_REMOTE
++#define CONFIG_SYS_CORTINA_FW_IN_REMOTE
++#define CONFIG_SYS_FMAN_FW_ADDR		0xFFE00000
++#define CONFIG_CORTINA_FW_ADDR		0xFFE10000
++#else
++#define CONFIG_SYS_QE_FMAN_FW_IN_NOR
++#define CONFIG_SYS_CORTINA_FW_IN_NOR
++#define CONFIG_SYS_FMAN_FW_ADDR		0xEFF00000
++#define CONFIG_CORTINA_FW_ADDR		0xEFE00000
++#endif
++#define CONFIG_SYS_QE_FMAN_FW_LENGTH	0x10000
++#define CONFIG_SYS_FDT_PAD		(0x3000 + CONFIG_SYS_QE_FMAN_FW_LENGTH)
++#endif /* CONFIG_NOBQFMAN */
++
++#ifdef CONFIG_SYS_DPAA_FMAN
++#define CONFIG_FMAN_ENET
++#define CONFIG_PHYLIB_10G
++#define CONFIG_PHY_BROADCOM
++#define BROADCOM_PHY_ADDR	0x1f
++
++#if 1
++#define CONFIG_PHY_CORTINA
++#define CONFIG_PHY_AQ1202
++#define CONFIG_PHY_REALTEK
++#define CONFIG_CORTINA_FW_LENGTH	0x40000
++#define RGMII_PHY1_ADDR		0x01  /* RealTek RTL8211E */
++#define RGMII_PHY2_ADDR		0x02
++#define CORTINA_PHY_ADDR1	0x0c  /* Cortina CS4315 */
++#define CORTINA_PHY_ADDR2	0x0d
++#define FM1_10GEC3_PHY_ADDR	0x00  /* Aquantia AQ1202 10G Base-T */
++#define FM1_10GEC4_PHY_ADDR	0x01
++#endif
++#endif
++
++
++
++#ifdef CONFIG_FMAN_ENET
++#define CONFIG_MII		/* MII PHY management */
++#define CONFIG_ETHPRIME		"FM1@DTSEC1"
++#define CONFIG_PHY_GIGE		/* Include GbE speed/duplex detection */
++#endif
++
++/*
++ * SATA
++ */
++#ifdef CONFIG_FSL_SATA_V2
++#define CONFIG_LIBATA
++#define CONFIG_FSL_SATA
++#define CONFIG_SYS_SATA_MAX_DEVICE	2
++#define CONFIG_SATA1
++#define CONFIG_SYS_SATA1		CONFIG_SYS_MPC85xx_SATA1_ADDR
++#define CONFIG_SYS_SATA1_FLAGS		FLAGS_DMA
++#define CONFIG_SATA2
++#define CONFIG_SYS_SATA2		CONFIG_SYS_MPC85xx_SATA2_ADDR
++#define CONFIG_SYS_SATA2_FLAGS		FLAGS_DMA
++#define CONFIG_LBA48
++#define CONFIG_CMD_SATA
++#define CONFIG_CMD_EXT2
++#endif
++
++/*
++ * USB
++ */
++#ifdef CONFIG_USB_EHCI
++#define CONFIG_CMD_USB
++#define CONFIG_USB_STORAGE
++#define CONFIG_USB_EHCI_FSL
++#define CONFIG_EHCI_HCD_INIT_AFTER_RESET
++#define CONFIG_CMD_EXT2
++#define CONFIG_HAS_FSL_DR_USB
++#endif
++
++/*
++ * SDHC
++ */
++#ifdef CONFIG_MMC
++#define CONFIG_CMD_MMC
++#define CONFIG_FSL_ESDHC
++#define CONFIG_SYS_FSL_ESDHC_ADDR	CONFIG_SYS_MPC85xx_ESDHC_ADDR
++#define CONFIG_SYS_FSL_ESDHC_BROKEN_TIMEOUT
++#define CONFIG_SYS_FSL_MMC_HAS_CAPBLT_VS33
++#define CONFIG_GENERIC_MMC
++#define CONFIG_CMD_EXT2
++#define CONFIG_CMD_FAT
++#endif
++
++/*
++ * Dynamic MTD Partition support with mtdparts
++ */
++#ifndef CONFIG_SYS_NO_FLASH
++#define CONFIG_MTD_DEVICE
++#define CONFIG_MTD_PARTITIONS
++#define CONFIG_CMD_MTDPARTS
++#define CONFIG_FLASH_CFI_MTD
++#define MTDIDS_DEFAULT "nor0=fe8000000.nor,nand0=fff800000.flash," \
++			"spi0=spife110000.1"
++#define MTDPARTS_DEFAULT "mtdparts=fe8000000.nor:1m(uboot),5m(kernel)," \
++			"128k(dtb),96m(fs),-(user);fff800000.flash:1m(uboot)," \
++			"5m(kernel),128k(dtb),96m(fs),-(user);spife110000.1:" \
++			"1m(uboot),5m(kernel),128k(dtb),-(user)"
++#endif
++
++/*
++ * Environment
++ */
++
++/*
++ * Command line configuration.
++ */
++#include <config_cmd_default.h>
++
++#define CONFIG_CMD_DHCP
++#define CONFIG_CMD_ELF
++#define CONFIG_CMD_ERRATA
++#define CONFIG_CMD_MII
++#define CONFIG_CMD_I2C
++#define CONFIG_CMD_PING
++#define CONFIG_CMD_ECHO
++#define CONFIG_CMD_SETEXPR
++#define CONFIG_CMD_REGINFO
++#define CONFIG_CMD_BDI
++
++#ifdef CONFIG_PCI
++#define CONFIG_CMD_PCI
++#define CONFIG_CMD_NET
++#endif
++
++/*
++ * Miscellaneous configurable options
++ */
++#define CONFIG_SYS_LONGHELP		/* undef to save memory */
++#define CONFIG_CMDLINE_EDITING		/* Command-line editing */
++#define CONFIG_AUTO_COMPLETE		/* add autocompletion support */
++#define CONFIG_SYS_LOAD_ADDR	0x2000000 /* default load address */
++#define CONFIG_SYS_PROMPT	"LOADER=> "	  /* Monitor Command Prompt */
++
++/*
++ * For booting Linux, the board info and command line data
++ * have to be in the first 64 MB of memory, since this is
++ * the maximum mapped by the Linux kernel during initialization.
++ */
++#define CONFIG_SYS_BOOTMAPSZ	(64 << 20)	/* Initial map for Linux*/
++#define CONFIG_SYS_BOOTM_LEN	(64 << 20)	/* Increase max gunzip size */
++
++#ifdef CONFIG_CMD_KGDB
++#define CONFIG_KGDB_BAUDRATE	230400	/* speed to run kgdb serial port */
++#define CONFIG_KGDB_SER_INDEX	2	/* which serial port to use */
++#endif
++
++/*
++ * Environment Configuration
++ */
++#define CONFIG_ROOTPATH	 "/opt/nfsroot"
++#define CONFIG_BOOTFILE	 "uImage"
++#define CONFIG_UBOOTPATH "u-boot.bin"	/* U-Boot image on TFTP server */
++
++/* default location for tftp and bootm */
++#define CONFIG_LOADADDR		1000000
++#define CONFIG_BAUDRATE		115200
++#define CONFIG_BOOTDELAY	10	/* -1 disables auto-boot */
++#define __USB_PHY_TYPE		utmi
++
++#undef  CONFIG_ID_EEPROM
++
++#define CONFIG_HOSTNAME		as7710_32x-unknown
++#define CONFIG_IPADDR		192.168.1.10
++#define CONFIG_SERVERIP		192.168.1.99
++#define CONFIG_GATEWAYIP	192.168.1.10
++#define CONFIG_NETMASK		255.255.255.0
++
++#define CONFIG_BOOTARGS		"root=/dev/ram rw console=ttyS0,115200 quiet"
++
++#ifdef CONFIG_VERSION_VARIABLE
++	#define VER_VARIABLE "ver=" U_BOOT_VERSION " (" U_BOOT_DATE " - " U_BOOT_TIME ")" CONFIG_IDENT_STRING
++#else
++	#define VER_VARIABLE "\0"
++#endif
++
++/*
++ * ONIE additional features
++ */
++#define CONFIG_POPULATE_SERIAL_NUMBER
++#define CONFIG_BOOTP_OPTIONS
++#define CONFIG_ENV_WRITE_DEFAULT_IF_CRC_BAD
++
++/*
++ * Board hardware information, stored in flash.
++ */
++#define CONFIG_CMD_SYS_EEPROM
++#define CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO
++#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
++#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	3
++
++#define CONFIG_SYS_FLASH_HWINFO_ADDR		(CONFIG_SYS_FLASH_BASE + 0x20000)
++#define CONFIG_SYS_FLASH_HWINFO_SECT_SIZE	0x00020000
++#define CONFIG_SYS_EEPROM_MAX_SIZE		CONFIG_SYS_FLASH_HWINFO_SECT_SIZE
++
++/*
++ * u-boot environment for diag
++ */
++#define CONFIG_DIAG_ENV			\
++	"diag_start=0xea040000\0"	\
++	"diag_sz.b=0x02000000\0"
++
++#define CONFIG_DIAG_COMMON_ENV				\
++	"boot_diag=if test -n $onie_boot_reason; "	\
++	  "then if test $onie_boot_reason = diag; "	\
++	  "then run diag_bootcmd; fi; fi\0"		\
++	"diag_bootcmd=setenv bootargs root=/dev/ram rw "\
++	  "console=ttyS0,$baudrate quiet $diagargs "	\
++	  "mem=1920M; "					\
++	  "bootm $diag_start\0"				\
++	"bootcmd=run boot_diag; run check_boot_reason; "\
++	  "run nos_bootcmd; run onie_bootcmd\0"
++
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#define CONFIG_PLATFORM_ENV	\
++	"hwconfig=fsl_ddr:"		\
++	"ctlr_intlv=null;"		\
++	"usb1:dr_mode=host,phy_type=utmi\0"\
++	"netdev=eth0\0"			\
++	"consoledev=ttyS0\0"		\
++	"onie_start=0xe8040000\0"	\
++	"onie_sz.b=0x00500000\0"
++
++#define	CONFIG_EXTRA_ENV_SETTINGS	\
++	CONFIG_PLATFORM_ENV		\
++	CONFIG_ONIE_COMMON_UBOOT_ENV 	\
++	CONFIG_DIAG_ENV			\
++	CONFIG_DIAG_COMMON_ENV		\
++	VER_VARIABLE
++
++
++#ifdef CONFIG_SECURE_BOOT
++#include <asm/fsl_secure_boot.h>
++#undef CONFIG_CMD_USB
++#endif
++
++#endif	/* __CONFIG_H */

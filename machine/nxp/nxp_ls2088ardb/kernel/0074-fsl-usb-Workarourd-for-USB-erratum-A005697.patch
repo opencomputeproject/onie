@@ -1,0 +1,169 @@
+From acb2690291e08cd357ce08a30e93aa24daf78304 Mon Sep 17 00:00:00 2001
+From: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Date: Tue, 13 Aug 2013 14:31:35 +0530
+Subject: [PATCH 074/124] fsl/usb: Workarourd for USB erratum-A005697
+
+As per USB specification, in the Suspend state, the status bit does
+not change until the port is suspended. However, there may be a delay
+in suspending a port if there is a transaction currently in progress
+on the bus.
+
+In the USBDR controller, the PORTSCx[SUSP] bit changes immediately when
+the application sets it and not when the port is actually suspended
+
+Workaround for this issue involves waiting for a minimum of 10ms to
+allow the controller to go into SUSPEND state before proceeding ahead
+
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Change-Id: I8d20619d7d62afc12981c2f913c3d3ec735f7e64
+Reviewed-on: http://git.am.freescale.net:8181/3996
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Aggrwal Poonam-B10812 <Poonam.Aggrwal@freescale.com>
+Reviewed-by: Rivera Jose-B46482 <Jose.G.Rivera@freescale.com>
+---
+ drivers/usb/host/ehci-fsl.c      |  3 +++
+ drivers/usb/host/ehci-hub.c      |  2 ++
+ drivers/usb/host/ehci.h          |  6 +++++
+ drivers/usb/host/fsl-mph-dr-of.c | 51 ++++++++++++++++++++++++++++++++++++++++
+ include/linux/fsl_devices.h      |  1 +
+ 5 files changed, 63 insertions(+)
+
+diff --git a/drivers/usb/host/ehci-fsl.c b/drivers/usb/host/ehci-fsl.c
+index 1e94474..fec8b3c 100644
+--- a/drivers/usb/host/ehci-fsl.c
++++ b/drivers/usb/host/ehci-fsl.c
+@@ -349,6 +349,9 @@ static int ehci_fsl_usb_setup(struct ehci_hcd *ehci)
+ 	if (pdata->has_fsl_erratum_a005275 == 1)
+ 		ehci->has_fsl_hs_errata = 1;
+ 
++	if (pdata->has_fsl_erratum_a005697 == 1)
++		ehci->has_fsl_susp_errata = 1;
++
+ 	if ((pdata->operating_mode == FSL_USB2_DR_HOST) ||
+ 			(pdata->operating_mode == FSL_USB2_DR_OTG))
+ 		if (ehci_fsl_setup_phy(hcd, pdata->phy_mode, 0))
+diff --git a/drivers/usb/host/ehci-hub.c b/drivers/usb/host/ehci-hub.c
+index b3d7159..5842ad4 100644
+--- a/drivers/usb/host/ehci-hub.c
++++ b/drivers/usb/host/ehci-hub.c
+@@ -275,6 +275,8 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
+ 		else if ((t1 & PORT_PE) && !(t1 & PORT_SUSPEND)) {
+ 			t2 |= PORT_SUSPEND;
+ 			set_bit(port, &ehci->bus_suspended);
++			if (ehci_has_fsl_susp_errata(ehci))
++				usleep_range(10000, 20000);
+ 		}
+ 
+ 		/* enable remote wakeup on all ports, if told to do so */
+diff --git a/drivers/usb/host/ehci.h b/drivers/usb/host/ehci.h
+index d92313d..1d0f0cc 100644
+--- a/drivers/usb/host/ehci.h
++++ b/drivers/usb/host/ehci.h
+@@ -219,6 +219,7 @@ struct ehci_hcd {			/* one per controller */
+ 	unsigned		no_selective_suspend:1;
+ 	unsigned		has_fsl_port_bug:1; /* FreeScale */
+ 	unsigned		has_fsl_hs_errata:1;	/* Freescale HS quirk */
++	unsigned		has_fsl_susp_errata:1; /*Freescale SUSP quirk*/
+ 	unsigned		big_endian_mmio:1;
+ 	unsigned		big_endian_desc:1;
+ 	unsigned		big_endian_capbase:1;
+@@ -684,10 +685,15 @@ ehci_port_speed(struct ehci_hcd *ehci, unsigned int portsc)
+ #if defined(CONFIG_PPC_85xx)
+ /* Some Freescale processors have an erratum (USB A-005275) in which
+  * incoming packets get corrupted in HS mode
++ * Some Freescale processors have an erratum (USB A-005697) in which
++ * we need to wait for 10ms for bus to fo into suspend mode after
++ * setting SUSP bit
+  */
+ #define ehci_has_fsl_hs_errata(e)	((e)->has_fsl_hs_errata)
++#define ehci_has_fsl_susp_errata(e)	((e)->has_fsl_susp_errata)
+ #else
+ #define ehci_has_fsl_hs_errata(e)	(0)
++#define ehci_has_fsl_susp_errata(e)	(0)
+ #endif
+ 
+ /*-------------------------------------------------------------------------*/
+diff --git a/drivers/usb/host/fsl-mph-dr-of.c b/drivers/usb/host/fsl-mph-dr-of.c
+index 87c020b..a3425e9 100644
+--- a/drivers/usb/host/fsl-mph-dr-of.c
++++ b/drivers/usb/host/fsl-mph-dr-of.c
+@@ -144,6 +144,52 @@ static bool has_erratum_a005275(struct device_node *node)
+ 	return flag;
+ }
+ 
++static bool has_erratum_a005697(void)
++{
++	unsigned int svr = mfspr(SPRN_SVR);
++	bool flag = false;
++
++	switch (SVR_SOC_VER(svr)) {
++	case SVR_P1010:
++	case SVR_P1014:
++	case SVR_T1040:
++		if (SVR_REV(svr) == 0x10)
++			flag = true;
++		break;
++	case SVR_9132:
++		if ((SVR_REV(svr) == 0x10) || (SVR_REV(svr) == 0x11))
++			flag = true;
++		break;
++	case SVR_P5040:
++	case SVR_P5021:
++		if ((SVR_REV(svr) == 0x10) || (SVR_REV(svr) == 0x20) ||
++				(SVR_REV(svr) == 0x21))
++			flag = true;
++		break;
++	case SVR_T4240:
++	case SVR_T4160:
++	case SVR_P5020:
++	case SVR_P5010:
++		if ((SVR_REV(svr) == 0x10) || (SVR_REV(svr) == 0x20))
++			flag = true;
++		break;
++	case SVR_P2040:
++	case SVR_P2041:
++	case SVR_P3041:
++		if ((SVR_REV(svr) == 0x10) || (SVR_REV(svr) == 0x11) ||
++				(SVR_REV(svr) == 0x20))
++			flag = true;
++		break;
++	case SVR_P4080:
++		if ((SVR_REV(svr) == 0x10) || (SVR_REV(svr) == 0x20) ||
++				(SVR_REV(svr) == 0x30))
++			flag = true;
++		break;
++	}
++
++	return flag;
++}
++
+ static int usb_get_ver_info(struct device_node *np)
+ {
+ 	int ver = -1;
+@@ -241,6 +287,11 @@ static int fsl_usb2_mph_dr_of_probe(struct platform_device *ofdev)
+ 	else
+ 		pdata->has_fsl_erratum_a005275 = 0;
+ 
++	if (has_erratum_a005697())
++		pdata->has_fsl_erratum_a005697 = 1;
++	else
++		pdata->has_fsl_erratum_a005697 = 0;
++
+ 	if (of_get_property(np, "fsl,erratum_a006918", NULL))
+ 		pdata->has_fsl_erratum_a006918 = 1;
+ 	else
+diff --git a/include/linux/fsl_devices.h b/include/linux/fsl_devices.h
+index 2448384..eb618da 100644
+--- a/include/linux/fsl_devices.h
++++ b/include/linux/fsl_devices.h
+@@ -94,6 +94,7 @@ struct fsl_usb2_platform_data {
+ 	unsigned	already_suspended:1;
+ 	unsigned	has_fsl_erratum_a005275:1;
+ 	unsigned	has_fsl_erratum_a006918:1;
++	unsigned	has_fsl_erratum_a005697:1;
+ 
+ 	/* register save area for suspend/resume */
+ 	u32		pm_command;
+-- 
+2.1.0.27.g96db324
+

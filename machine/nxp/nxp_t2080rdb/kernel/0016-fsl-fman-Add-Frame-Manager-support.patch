@@ -1,0 +1,2964 @@
+From 97eae26502871f037470a0cd5cc2aea2e65c6365 Mon Sep 17 00:00:00 2001
+From: Igal Liberman <Igal.Liberman@freescale.com>
+Date: Thu, 19 Feb 2015 12:42:34 +0200
+Subject: [PATCH 16/53] fsl/fman: Add Frame Manager support
+
+Add Frame Manger Driver support.
+This patch adds The FMan configuration, initialization and
+runtime control routines.
+
+Signed-off-by: Igal Liberman <Igal.Liberman@freescale.com>
+---
+ drivers/net/ethernet/freescale/fman/Makefile       |    2 +-
+ drivers/net/ethernet/freescale/fman/fm.c           | 1076 ++++++++++++++++++++
+ drivers/net/ethernet/freescale/fman/fm.h           |  276 +++++
+ drivers/net/ethernet/freescale/fman/fm_common.h    |  114 +++
+ drivers/net/ethernet/freescale/fman/fm_drv.c       |  551 ++++++++++
+ drivers/net/ethernet/freescale/fman/fm_drv.h       |  109 ++
+ drivers/net/ethernet/freescale/fman/inc/enet_ext.h |  199 ++++
+ drivers/net/ethernet/freescale/fman/inc/fm_ext.h   |  446 ++++++++
+ .../net/ethernet/freescale/fman/inc/fsl_fman_drv.h |   99 ++
+ 9 files changed, 2871 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/net/ethernet/freescale/fman/fm.c
+ create mode 100644 drivers/net/ethernet/freescale/fman/fm.h
+ create mode 100644 drivers/net/ethernet/freescale/fman/fm_common.h
+ create mode 100644 drivers/net/ethernet/freescale/fman/fm_drv.c
+ create mode 100644 drivers/net/ethernet/freescale/fman/fm_drv.h
+ create mode 100644 drivers/net/ethernet/freescale/fman/inc/enet_ext.h
+ create mode 100644 drivers/net/ethernet/freescale/fman/inc/fm_ext.h
+ create mode 100644 drivers/net/ethernet/freescale/fman/inc/fsl_fman_drv.h
+
+diff --git a/drivers/net/ethernet/freescale/fman/Makefile b/drivers/net/ethernet/freescale/fman/Makefile
+index 55c91bd..f61d3a6 100644
+--- a/drivers/net/ethernet/freescale/fman/Makefile
++++ b/drivers/net/ethernet/freescale/fman/Makefile
+@@ -4,7 +4,7 @@ subdir-ccflags-y += -I$(srctree)/drivers/net/ethernet/freescale/fman/flib \
+ 
+ obj-y		+= fsl_fman.o
+ 
+-fsl_fman-objs	:= fman.o fm_muram.o
++fsl_fman-objs	:= fman.o fm_muram.o fm.o fm_drv.o
+ 
+ obj-y	+= port/
+ obj-y	+= mac/
+diff --git a/drivers/net/ethernet/freescale/fman/fm.c b/drivers/net/ethernet/freescale/fman/fm.c
+new file mode 100644
+index 0000000..7e5fa53
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/fman/fm.c
+@@ -0,0 +1,1076 @@
++/*
++ * Copyright 2008-2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include "fm_common.h"
++#include "fm.h"
++#include "fm_muram_ext.h"
++#include <asm/mpc85xx.h>
++#include "fsl_fman.h"
++
++#include <linux/string.h>
++#include <linux/slab.h>
++
++static struct fm_intg_t *fill_intg_params(u8 major, u8 minor)
++{
++	struct fm_intg_t *intg;
++
++	intg = kzalloc(sizeof(*intg), GFP_KERNEL);
++	if (!intg)
++		return NULL;
++
++	/* P1023 - Major 4
++	 * P4080 - Major 2
++	 * P2041/P3041/P5020/P5040 - Major 3
++	 * Tx/Bx - Major 6
++	 */
++
++	switch (major) {
++	case FM_IP_BLOCK_P2_P3_P5:
++		intg->fm_muram_size		= 160 * 1024;
++		intg->fm_iram_size		= 64 * 1024;
++		intg->fm_num_of_ctrl		= 2;
++
++		intg->dma_thresh_max_commq	= 31;
++		intg->dma_thresh_max_buf	= 127;
++
++		intg->qmi_max_num_of_tnums	= 64;
++		intg->qmi_def_tnums_thresh	= 48;
++
++		intg->bmi_max_num_of_tasks	= 128;
++		intg->bmi_max_num_of_dmas	= 32;
++		intg->port_max_weight		= 16;
++
++		intg->fm_port_num_of_cg		= 256;
++
++		intg->num_of_rx_ports		= 6;
++		break;
++
++	case FM_IP_BLOCK_P4:
++
++		intg->fm_muram_size		= 160 * 1024;
++		intg->fm_iram_size		= 64 * 1024;
++		intg->fm_num_of_ctrl		= 2;
++
++		intg->dma_thresh_max_commq	= 31;
++		intg->dma_thresh_max_buf	= 127;
++
++		intg->qmi_max_num_of_tnums	= 64;
++		intg->qmi_def_tnums_thresh	= 48;
++
++		intg->bmi_max_num_of_tasks	= 128;
++		intg->bmi_max_num_of_dmas	= 32;
++		intg->port_max_weight		= 16;
++
++		intg->fm_port_num_of_cg		= 256;
++
++		intg->num_of_rx_ports		= 5;
++		break;
++
++	case FM_IP_BLOCK_B_T:
++		intg->dma_thresh_max_commq	= 83;
++		intg->dma_thresh_max_buf	= 127;
++
++		intg->qmi_max_num_of_tnums	= 64;
++		intg->qmi_def_tnums_thresh	= 32;
++
++		intg->port_max_weight		= 16;
++		intg->fm_port_num_of_cg		= 256;
++
++		/* FManV3L */
++		if (minor == 1 || minor == 4) {
++			intg->fm_muram_size		= 192 * 1024;
++			intg->fm_num_of_ctrl		= 2;
++
++			intg->bmi_max_num_of_tasks	= 64;
++			intg->bmi_max_num_of_dmas	= 32;
++
++			intg->num_of_rx_ports		= 5;
++
++			if (minor == 1)
++				intg->fm_iram_size	= 32 * 1024;
++			else
++				intg->fm_iram_size	= 64 * 1024;
++		}
++		/* FManV3H */
++		else if (minor == 0 || minor == 2 || minor == 3) {
++			intg->fm_muram_size		= 384 * 1024;
++			intg->fm_iram_size		= 64 * 1024;
++			intg->fm_num_of_ctrl		= 4;
++
++			intg->bmi_max_num_of_tasks	= 128;
++			intg->bmi_max_num_of_dmas	= 84;
++
++			intg->num_of_rx_ports		= 8;
++		} else {
++			pr_err("Unsupported FManv3 version\n");
++			goto not_supported;
++		}
++
++		break;
++	default:
++		pr_err("Unsupported FMan version\n");
++		goto not_supported;
++	}
++
++	intg->bmi_max_fifo_size = intg->fm_muram_size;
++
++	return intg;
++
++not_supported:
++	kfree(intg);
++	return NULL;
++}
++
++static bool is_init_done(struct fman_cfg *fm_drv_params)
++{
++	/* Checks if FMan driver parameters were initialized */
++	if (!fm_drv_params)
++		return true;
++
++	return false;
++}
++
++static void free_init_resources(struct fm_t *fm)
++{
++	if (fm->cam_offset)
++		fm_muram_free_mem(fm->muram, fm->cam_offset, fm->cam_size);
++	if (fm->fifo_offset)
++		fm_muram_free_mem(fm->muram, fm->fifo_offset, fm->fifo_size);
++}
++
++static int check_fm_parameters(struct fm_t *fm)
++{
++	if (fm->fm_state->rev_info.major_rev < 6) {
++		if (!fm->fm_drv_param->dma_axi_dbg_num_of_beats ||
++		    (fm->fm_drv_param->dma_axi_dbg_num_of_beats >
++			DMA_MODE_MAX_AXI_DBG_NUM_OF_BEATS)) {
++			pr_err("axi_dbg_num_of_beats has to be in the range 1 - %d\n",
++			       DMA_MODE_MAX_AXI_DBG_NUM_OF_BEATS);
++			return -EINVAL;
++		}
++	}
++	if (fm->fm_drv_param->dma_cam_num_of_entries % DMA_CAM_UNITS) {
++		pr_err("dma_cam_num_of_entries has to be divisble by %d\n",
++		       DMA_CAM_UNITS);
++		return -EINVAL;
++	}
++	if (fm->fm_drv_param->dma_comm_qtsh_asrt_emer >
++	    fm->intg->dma_thresh_max_commq) {
++		pr_err("dma_comm_qtsh_asrt_emer can not be larger than %d\n",
++		       fm->intg->dma_thresh_max_commq);
++		return -EINVAL;
++	}
++	if (fm->fm_drv_param->dma_comm_qtsh_clr_emer >
++	    fm->intg->dma_thresh_max_commq) {
++		pr_err("dma_comm_qtsh_clr_emer can not be larger than %d\n",
++		       fm->intg->dma_thresh_max_commq);
++		return -EINVAL;
++	}
++	if (fm->fm_drv_param->dma_comm_qtsh_clr_emer >=
++	    fm->fm_drv_param->dma_comm_qtsh_asrt_emer) {
++		pr_err("dma_comm_qtsh_clr_emer must be smaller than dma_comm_qtsh_asrt_emer\n");
++		return -EINVAL;
++	}
++	if (fm->fm_state->rev_info.major_rev < 6) {
++		if (fm->fm_drv_param->dma_read_buf_tsh_asrt_emer >
++		    fm->intg->dma_thresh_max_buf) {
++			pr_err("dma_read_buf_tsh_asrt_emer can not be larger than %d\n",
++			       fm->intg->dma_thresh_max_buf);
++			return -EINVAL;
++		}
++		if (fm->fm_drv_param->dma_read_buf_tsh_clr_emer >
++		      fm->intg->dma_thresh_max_buf) {
++			pr_err("dma_read_buf_tsh_clr_emer can not be larger than %d\n",
++			       fm->intg->dma_thresh_max_buf);
++			return -EINVAL;
++		}
++		if (fm->fm_drv_param->dma_read_buf_tsh_clr_emer >=
++		      fm->fm_drv_param->dma_read_buf_tsh_asrt_emer) {
++			pr_err("dma_read_buf_tsh_clr_emer must be < dma_read_buf_tsh_asrt_emer\n");
++			return -EINVAL;
++		}
++		if (fm->fm_drv_param->dma_write_buf_tsh_asrt_emer >
++		      fm->intg->dma_thresh_max_buf) {
++			pr_err("dma_write_buf_tsh_asrt_emer can not be larger than %d\n",
++			       fm->intg->dma_thresh_max_buf);
++			return -EINVAL;
++		}
++		if (fm->fm_drv_param->dma_write_buf_tsh_clr_emer >
++		      fm->intg->dma_thresh_max_buf) {
++			pr_err("dma_write_buf_tsh_clr_emer can not be larger than %d\n",
++			       fm->intg->dma_thresh_max_buf);
++			return -EINVAL;
++		}
++		if (fm->fm_drv_param->dma_write_buf_tsh_clr_emer >=
++		      fm->fm_drv_param->dma_write_buf_tsh_asrt_emer) {
++			pr_err("dma_write_buf_tsh_clr_emer has to be less than dma_write_buf_tsh_asrt_emer\n");
++			return -EINVAL;
++		}
++	} else {
++		if ((fm->fm_drv_param->dma_dbg_cnt_mode ==
++		    E_FMAN_DMA_DBG_CNT_INT_READ_EM) ||
++		    (fm->fm_drv_param->dma_dbg_cnt_mode ==
++		    E_FMAN_DMA_DBG_CNT_INT_WRITE_EM) ||
++		    (fm->fm_drv_param->dma_dbg_cnt_mode ==
++		    E_FMAN_DMA_DBG_CNT_RAW_WAR_PROT)) {
++			pr_err("dma_dbg_cnt_mode value not supported by this SoC.\n");
++			return -EINVAL;
++		}
++		if ((fm->fm_drv_param->dma_emergency_bus_select ==
++		       FM_DMA_MURAM_READ_EMERGENCY) ||
++		      (fm->fm_drv_param->dma_emergency_bus_select ==
++		       FM_DMA_MURAM_WRITE_EMERGENCY)) {
++			pr_err("emergency_bus_select value not supported by this SoC.\n");
++			return -EINVAL;
++		}
++		if (fm->fm_drv_param->dma_stop_on_bus_error) {
++			pr_err("dma_stop_on_bus_error not supported by this SoC.\n");
++			return -EINVAL;
++		}
++		/* FM_AID_MODE_NO_TNUM_SW005 Errata workaround */
++		if (fm->fm_state->rev_info.major_rev >= 6 &&
++		    fm->fm_drv_param->dma_aid_mode !=
++		    E_FMAN_DMA_AID_OUT_PORT_ID) {
++			pr_err("dma_aid_mode not supported by this SoC.\n");
++			return -EINVAL;
++		}
++		if (fm->fm_drv_param->dma_axi_dbg_num_of_beats) {
++			pr_err("dma_axi_dbg_num_of_beats not supported by this SoC.\n");
++			return -EINVAL;
++		}
++	}
++
++	if (!fm->fm_state->fm_clk_freq) {
++		pr_err("fm_clk_freq must be set.\n");
++		return -EINVAL;
++	}
++	if ((fm->fm_drv_param->dma_watchdog *
++	    fm->fm_state->fm_clk_freq) > DMA_MAX_WATCHDOG) {
++		pr_err("dma_watchdog depends on FM clock. dma_watchdog(in microseconds)*clk (in Mhz), may not exceed 0x08%x\n",
++		       DMA_MAX_WATCHDOG);
++		return -EINVAL;
++	}
++	if (fm->fm_state->total_fifo_size % BMI_FIFO_UNITS) {
++		pr_err("total_fifo_size number has to be divisible by %d\n",
++		       BMI_FIFO_UNITS);
++	}
++	if (!fm->fm_state->total_fifo_size ||
++	    (fm->fm_state->total_fifo_size > fm->intg->bmi_max_fifo_size)) {
++		pr_err("total_fifo_size (curr - %d) has to be in the range 256 - %d\n",
++		       fm->fm_state->total_fifo_size,
++		       fm->intg->bmi_max_fifo_size);
++		return -EINVAL;
++	}
++	if (!fm->fm_state->total_num_of_tasks ||
++	    (fm->fm_state->total_num_of_tasks >
++	    fm->intg->bmi_max_num_of_tasks)) {
++		pr_err("total_num_of_tasks number has to be in the range 1 - %d\n",
++		       fm->intg->bmi_max_num_of_tasks);
++		return -EINVAL;
++	}
++
++	if ((fm->fm_state->rev_info.major_rev < 6) &&
++	    (!fm->fm_state->max_num_of_open_dmas ||
++	     (fm->fm_state->max_num_of_open_dmas >
++	     fm->intg->bmi_max_num_of_dmas))) {
++		pr_err("max_num_of_open_dmas number has to be in the range 1 - %d\n",
++		       fm->intg->bmi_max_num_of_dmas);
++		return -EINVAL;
++	}
++
++	if (fm->fm_drv_param->disp_limit_tsh > FPM_MAX_DISP_LIMIT) {
++		pr_err("disp_limit_tsh can't be greater than %d\n",
++		       FPM_MAX_DISP_LIMIT);
++		return -EINVAL;
++	}
++	if (!fm->exception_cb) {
++		pr_err("Exceptions callback not provided\n");
++		return -EINVAL;
++	}
++	if (!fm->bus_error_cb) {
++		pr_err("Error exceptions callback not provided\n");
++		return -EINVAL;
++	}
++	if ((fm->fm_state->rev_info.major_rev == 2) &&
++	    (fm->fm_drv_param->dma_watchdog)) {
++		pr_err("watchdog not supported\n");
++		return -EINVAL;
++	}
++
++	/* FM_ECC_HALT_NO_SYNC_ERRATA_10GMAC_A008 Errata workaround */
++	if ((fm->fm_state->rev_info.major_rev < 6) &&
++	    (fm->fm_drv_param->halt_on_unrecov_ecc_err)) {
++		pr_err("Halt on ecc error not supported\n");
++		return -EINVAL;
++	}
++
++	if (fm->fm_state->rev_info.major_rev < 6)
++		if (fm->fm_drv_param->tnum_aging_period) {
++			pr_err("Tnum aging not supported\n");
++			return -EINVAL;
++		}
++
++	return 0;
++}
++
++static void bmi_err_event(struct fm_t *fm)
++{
++	u32 event;
++	struct fman_bmi_regs __iomem *bmi_rg = fm->bmi_regs;
++
++	event = fman_get_bmi_err_event(bmi_rg);
++
++	if (event & BMI_ERR_INTR_EN_STORAGE_PROFILE_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_BMI_STORAGE_PROFILE_ECC);
++	if (event & BMI_ERR_INTR_EN_LIST_RAM_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_BMI_LIST_RAM_ECC);
++	if (event & BMI_ERR_INTR_EN_STATISTICS_RAM_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_BMI_STATISTICS_RAM_ECC);
++	if (event & BMI_ERR_INTR_EN_DISPATCH_RAM_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_BMI_DISPATCH_RAM_ECC);
++}
++
++static void qmi_err_event(struct fm_t *fm)
++{
++	u32 event;
++	struct fman_qmi_regs __iomem *qmi_rg = fm->qmi_regs;
++
++	event = fman_get_qmi_err_event(qmi_rg);
++
++	if (event & QMI_ERR_INTR_EN_DOUBLE_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_QMI_DOUBLE_ECC);
++	if (event & QMI_ERR_INTR_EN_DEQ_FROM_DEF)
++		fm->exception_cb(fm->dev_id, FM_EX_QMI_DEQ_FROM_UNKNOWN_PORTID);
++}
++
++static void dma_err_event(struct fm_t *fm)
++{
++	u32 status;
++	struct fman_dma_regs __iomem *dma_rg = fm->dma_regs;
++
++	status = fman_get_dma_err_event(dma_rg);
++
++	if (status & DMA_STATUS_FM_SPDAT_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_DMA_SINGLE_PORT_ECC);
++	if (status & DMA_STATUS_READ_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_DMA_READ_ECC);
++	if (status & DMA_STATUS_SYSTEM_WRITE_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_DMA_SYSTEM_WRITE_ECC);
++	if (status & DMA_STATUS_FM_WRITE_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_DMA_FM_WRITE_ECC);
++}
++
++static void fpm_err_event(struct fm_t *fm)
++{
++	u32 event;
++	struct fman_fpm_regs __iomem *fpm_rg = fm->fpm_regs;
++
++	event = fman_get_fpm_err_event(fpm_rg);
++
++	if ((event & FPM_EV_MASK_DOUBLE_ECC) &&
++	    (event & FPM_EV_MASK_DOUBLE_ECC_EN))
++		fm->exception_cb(fm->dev_id, FM_EX_FPM_DOUBLE_ECC);
++	if ((event & FPM_EV_MASK_STALL) && (event & FPM_EV_MASK_STALL_EN))
++		fm->exception_cb(fm->dev_id, FM_EX_FPM_STALL_ON_TASKS);
++	if ((event & FPM_EV_MASK_SINGLE_ECC) &&
++	    (event & FPM_EV_MASK_SINGLE_ECC_EN))
++		fm->exception_cb(fm->dev_id, FM_EX_FPM_SINGLE_ECC);
++}
++
++static void muram_err_intr(struct fm_t *fm)
++{
++	u32 event;
++	struct fman_fpm_regs __iomem *fpm_rg = fm->fpm_regs;
++
++	event = fman_get_muram_err_event(fpm_rg);
++
++	if (event & FPM_RAM_MURAM_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_MURAM_ECC);
++}
++
++static void qmi_event(struct fm_t *fm)
++{
++	u32 event;
++	struct fman_qmi_regs __iomem *qmi_rg = fm->qmi_regs;
++
++	event = fman_get_qmi_event(qmi_rg);
++
++	if (event & QMI_INTR_EN_SINGLE_ECC)
++		fm->exception_cb(fm->dev_id, FM_EX_QMI_SINGLE_ECC);
++}
++
++static void enable_time_stamp(struct fm_t *fm)
++{
++	struct fman_fpm_regs __iomem *fpm_rg = fm->fpm_regs;
++
++	WARN_ON(!fm->fm_state->count1_micro_bit);
++
++	fman_enable_time_stamp(fpm_rg,
++			       fm->fm_state->count1_micro_bit,
++			       fm->fm_state->fm_clk_freq);
++
++	fm->fm_state->enabled_time_stamp = true;
++}
++
++static int clear_iram(struct fm_t *fm)
++{
++	struct fm_iram_regs_t __iomem *iram;
++	int i;
++
++	iram = (struct fm_iram_regs_t __iomem *)(fm->base_addr + FM_MM_IMEM);
++
++	/* Enable the auto-increment */
++	out_be32(&iram->iadd, IRAM_IADD_AIE);
++	while (in_be32(&iram->iadd) != IRAM_IADD_AIE)
++		;
++
++	for (i = 0; i < (fm->intg->fm_iram_size / 4); i++)
++		out_be32(&iram->idata, 0xffffffff);
++
++	out_be32(&iram->iadd, fm->intg->fm_iram_size - 4);
++	/* Memory barrier */
++	mb();
++	while (in_be32(&iram->idata) != 0xffffffff)
++		;
++
++	return 0;
++}
++
++static u32 fm_get_exception_flag(enum fm_exceptions exception)
++{
++	u32 bit_mask;
++
++	switch (exception) {
++	case FM_EX_DMA_BUS_ERROR:
++		bit_mask = FM_EX_DMA_BUS_ERROR;
++		break;
++	case FM_EX_DMA_SINGLE_PORT_ECC:
++		bit_mask = FM_EX_DMA_SINGLE_PORT_ECC;
++		break;
++	case FM_EX_DMA_READ_ECC:
++		bit_mask = FM_EX_DMA_READ_ECC;
++		break;
++	case FM_EX_DMA_SYSTEM_WRITE_ECC:
++		bit_mask = FM_EX_DMA_SYSTEM_WRITE_ECC;
++		break;
++	case FM_EX_DMA_FM_WRITE_ECC:
++		bit_mask = FM_EX_DMA_FM_WRITE_ECC;
++		break;
++	case FM_EX_FPM_STALL_ON_TASKS:
++		bit_mask = FM_EX_FPM_STALL_ON_TASKS;
++		break;
++	case FM_EX_FPM_SINGLE_ECC:
++		bit_mask = FM_EX_FPM_SINGLE_ECC;
++		break;
++	case FM_EX_FPM_DOUBLE_ECC:
++		bit_mask = FM_EX_FPM_DOUBLE_ECC;
++		break;
++	case FM_EX_QMI_SINGLE_ECC:
++		bit_mask = FM_EX_QMI_SINGLE_ECC;
++		break;
++	case FM_EX_QMI_DOUBLE_ECC:
++		bit_mask = FM_EX_QMI_DOUBLE_ECC;
++		break;
++	case FM_EX_QMI_DEQ_FROM_UNKNOWN_PORTID:
++		bit_mask = FM_EX_QMI_DEQ_FROM_UNKNOWN_PORTID;
++		break;
++	case FM_EX_BMI_LIST_RAM_ECC:
++		bit_mask = FM_EX_BMI_LIST_RAM_ECC;
++		break;
++	case FM_EX_BMI_STORAGE_PROFILE_ECC:
++		bit_mask = FM_EX_BMI_STORAGE_PROFILE_ECC;
++		break;
++	case FM_EX_BMI_STATISTICS_RAM_ECC:
++		bit_mask = FM_EX_BMI_STATISTICS_RAM_ECC;
++		break;
++	case FM_EX_BMI_DISPATCH_RAM_ECC:
++		bit_mask = FM_EX_BMI_DISPATCH_RAM_ECC;
++		break;
++	case FM_EX_MURAM_ECC:
++		bit_mask = FM_EX_MURAM_ECC;
++		break;
++	default:
++		bit_mask = 0;
++		break;
++	}
++
++	return bit_mask;
++}
++
++static int fm_get_module_event(enum fm_event_modules module, u8 mod_id,
++			       enum fm_intr_type intr_type)
++{
++	int event;
++
++	switch (module) {
++	case FM_MOD_MAC:
++			event = (intr_type == FM_INTR_TYPE_ERR) ?
++			(FM_EV_ERR_MAC0 + mod_id) :
++			(FM_EV_MAC0 + mod_id);
++		break;
++	case FM_MOD_FMAN_CTRL:
++		if (intr_type == FM_INTR_TYPE_ERR)
++			event = FM_EV_DUMMY_LAST;
++		else
++			event = (FM_EV_FMAN_CTRL_0 + mod_id);
++		break;
++	case FM_MOD_DUMMY_LAST:
++		event = FM_EV_DUMMY_LAST;
++		break;
++	default:
++		event = FM_EV_DUMMY_LAST;
++		break;
++	}
++
++	return event;
++}
++
++void fm_register_intr(struct fm_t *fm, enum fm_event_modules module,
++		      u8 mod_id, enum fm_intr_type intr_type,
++		      void (*isr_cb)(void *src_arg), void *src_arg)
++{
++	int event = 0;
++
++	event = fm_get_module_event(module, mod_id, intr_type);
++	WARN_ON(!(event < FM_EV_DUMMY_LAST));
++
++	/* register in local FM structure */
++	fm->intr_mng[event].isr_cb = isr_cb;
++	fm->intr_mng[event].src_handle = src_arg;
++}
++
++void fm_unregister_intr(struct fm_t *fm, enum fm_event_modules module,
++			u8 mod_id, enum fm_intr_type intr_type)
++{
++	int event = 0;
++
++	event = fm_get_module_event(module, mod_id, intr_type);
++	WARN_ON(!(event < FM_EV_DUMMY_LAST));
++
++	fm->intr_mng[event].isr_cb = NULL;
++	fm->intr_mng[event].src_handle = NULL;
++}
++
++u8 fm_get_id(struct fm_t *fm)
++{
++	return fm->fm_state->fm_id;
++}
++
++u16 fm_get_clock_freq(struct fm_t *fm)
++{
++	return fm->fm_state->fm_clk_freq;
++}
++
++u32 fm_get_bmi_max_fifo_size(struct fm_t *fm)
++{
++	return fm->intg->bmi_max_fifo_size;
++}
++
++static int init_fm_dma(struct fm_t *fm)
++{
++	int err;
++
++	err = fman_dma_init(fm->dma_regs, fm->fm_drv_param);
++	if (err != 0)
++		return err;
++
++	/* Allocate MURAM for CAM */
++	fm->cam_size = (u32)(fm->fm_drv_param->dma_cam_num_of_entries *
++			     DMA_CAM_SIZEOF_ENTRY);
++	fm->cam_offset = fm_muram_alloc(fm->muram, fm->cam_size);
++	if (IS_ERR_VALUE(fm->cam_offset)) {
++		pr_err("MURAM alloc for DMA CAM failed\n");
++		return -ENOMEM;
++	}
++
++	if (fm->fm_state->rev_info.major_rev == 2) {
++		u32 __iomem *cam_base_addr;
++
++		fm_muram_free_mem(fm->muram, fm->cam_offset, fm->cam_size);
++
++		fm->cam_size =
++			fm->fm_drv_param->dma_cam_num_of_entries * 72 + 128;
++		fm->cam_offset = fm_muram_alloc(fm->muram, fm->cam_size);
++		if (IS_ERR_VALUE(fm->cam_offset)) {
++			pr_err("MURAM alloc for DMA CAM failed\n");
++			return -ENOMEM;
++		}
++
++		if (fm->fm_drv_param->dma_cam_num_of_entries % 8 ||
++		    fm->fm_drv_param->dma_cam_num_of_entries > 32) {
++			pr_err("wrong dma_cam_num_of_entries\n");
++			return -EINVAL;
++		}
++
++		cam_base_addr = (u32 __iomem *)
++				fm_muram_offset_to_vbase(fm->muram,
++							 fm->cam_offset);
++		out_be32(cam_base_addr,
++			 ~((1 <<
++			 (32 - fm->fm_drv_param->dma_cam_num_of_entries)) - 1));
++	}
++
++	fm->fm_drv_param->cam_base_addr = fm->cam_offset;
++
++	return 0;
++}
++
++void *fm_config(struct fm_params_t *fm_param)
++{
++	struct fm_t *fm;
++	void __iomem *base_addr;
++
++	base_addr = fm_param->base_addr;
++
++	/* Allocate FM structure */
++	fm = kzalloc(sizeof(*fm), GFP_KERNEL);
++	if (!fm)
++		return NULL;
++
++	fm->fm_state = kzalloc(sizeof(*fm->fm_state), GFP_KERNEL);
++	if (!fm->fm_state)
++		goto err_fm_state;
++
++	/* Initialize FM parameters which will be kept by the driver */
++	fm->fm_state->fm_id = fm_param->fm_id;
++
++	/* Allocate the FM driver's parameters structure */
++	fm->fm_drv_param = kzalloc(sizeof(*fm->fm_drv_param), GFP_KERNEL);
++	if (!fm->fm_drv_param)
++		goto err_fm_drv;
++
++	/* Initialize FM parameters which will be kept by the driver */
++	fm->fm_state->fm_id = fm_param->fm_id;
++	fm->muram = fm_param->muram;
++	fm->dev_id = fm_param->dev_id;
++	fm->fm_state->fm_clk_freq = fm_param->fm_clk_freq;
++	fm->exception_cb = fm_param->exception_cb;
++	fm->bus_error_cb = fm_param->bus_error_cb;
++	fm->fpm_regs = (struct fman_fpm_regs __iomem *)(base_addr + FM_MM_FPM);
++	fm->bmi_regs = (struct fman_bmi_regs __iomem *)(base_addr + FM_MM_BMI);
++	fm->qmi_regs = (struct fman_qmi_regs __iomem *)(base_addr + FM_MM_QMI);
++	fm->dma_regs = (struct fman_dma_regs __iomem *)(base_addr + FM_MM_DMA);
++	fm->base_addr = base_addr;
++
++	spin_lock_init(&fm->spinlock);
++	fman_defconfig(fm->fm_drv_param);
++
++	fm->fm_drv_param->qmi_deq_option_support = true;
++
++	fm->fm_state->rams_ecc_enable = false;
++	fm->fm_state->extra_fifo_pool_size = 0;
++	fm->fm_state->exceptions = DFLT_EXCEPTIONS;
++	fm->reset_on_init = DFLT_RESET_ON_INIT;
++
++	/* read revision */
++	/* Chip dependent, will be configured in Init */
++	fman_get_revision(fm->fpm_regs, &fm->fm_state->rev_info.major_rev,
++			  &fm->fm_state->rev_info.minor_rev);
++
++	fm->intg = fill_intg_params(fm->fm_state->rev_info.major_rev,
++				      fm->fm_state->rev_info.minor_rev);
++	if (!fm->intg)
++		goto err_fm_intg;
++
++	/* FM_AID_MODE_NO_TNUM_SW005 Errata workaround */
++	if (fm->fm_state->rev_info.major_rev >= 6)
++		fm->fm_drv_param->dma_aid_mode = FM_DMA_AID_OUT_PORT_ID;
++
++	fm->fm_drv_param->qmi_def_tnums_thresh =
++		fm->intg->qmi_def_tnums_thresh;
++
++	fm->fm_state->total_fifo_size = 0;
++	fm->fm_state->total_num_of_tasks =
++	DFLT_TOTAL_NUM_OF_TASKS(fm->fm_state->rev_info.major_rev,
++				fm->fm_state->rev_info.minor_rev,
++				fm->intg->bmi_max_num_of_tasks);
++
++	if (fm->fm_state->rev_info.major_rev < 6) {
++		fm->fm_state->max_num_of_open_dmas =
++		fm->intg->bmi_max_num_of_dmas;
++		fm->fm_drv_param->dma_comm_qtsh_clr_emer =
++		(u8)DFLT_DMA_COMM_Q_LOW(fm->fm_state->rev_info.major_rev,
++					fm->intg->dma_thresh_max_commq);
++
++		fm->fm_drv_param->dma_comm_qtsh_asrt_emer =
++		(u8)DFLT_DMA_COMM_Q_HIGH(fm->fm_state->rev_info.major_rev,
++					 fm->intg->dma_thresh_max_commq);
++
++		fm->fm_drv_param->dma_cam_num_of_entries =
++		DFLT_DMA_CAM_NUM_OF_ENTRIES(fm->fm_state->rev_info.major_rev);
++
++		fm->fm_drv_param->dma_read_buf_tsh_clr_emer =
++		DFLT_DMA_READ_INT_BUF_LOW(fm->intg->dma_thresh_max_buf);
++
++		fm->fm_drv_param->dma_read_buf_tsh_asrt_emer =
++		DFLT_DMA_READ_INT_BUF_HIGH(fm->intg->dma_thresh_max_buf);
++
++		fm->fm_drv_param->dma_write_buf_tsh_clr_emer =
++		DFLT_DMA_WRITE_INT_BUF_LOW(fm->intg->dma_thresh_max_buf);
++
++		fm->fm_drv_param->dma_write_buf_tsh_asrt_emer =
++		DFLT_DMA_WRITE_INT_BUF_HIGH(fm->intg->dma_thresh_max_buf);
++
++		fm->fm_drv_param->dma_axi_dbg_num_of_beats =
++		DFLT_AXI_DBG_NUM_OF_BEATS;
++	}
++
++	fm->fm_drv_param->tnum_aging_period = 0;
++	fm->tnum_aging_period = fm->fm_drv_param->tnum_aging_period;
++
++	return fm;
++
++err_fm_intg:
++	kfree(fm->fm_drv_param);
++err_fm_drv:
++	kfree(fm->fm_state);
++err_fm_state:
++	kfree(fm);
++	return NULL;
++}
++
++int fm_init(struct fm_t *fm)
++{
++	struct fman_cfg *fm_drv_param = NULL;
++	int err = 0;
++	struct fm_revision_info_t rev_info;
++	struct fman_rg fman_rg;
++
++	if (is_init_done(fm->fm_drv_param))
++		return -EINVAL;
++
++	fman_rg.bmi_rg = fm->bmi_regs;
++	fman_rg.qmi_rg = fm->qmi_regs;
++	fman_rg.fpm_rg = fm->fpm_regs;
++	fman_rg.dma_rg = fm->dma_regs;
++
++	fm->fm_state->count1_micro_bit = FM_TIMESTAMP_1_USEC_BIT;
++	fm->fm_drv_param->num_of_fman_ctrl_evnt_regs =
++		FM_NUM_OF_FMAN_CTRL_EVENT_REGS;
++
++	/* if user didn't configured total_fifo_size -
++	 * (total_fifo_size=0) we configure default
++	 * according to chip. otherwise, we use user's configuration.
++	 */
++	if (fm->fm_state->total_fifo_size == 0) {
++		fm->fm_state->total_fifo_size =
++		fm_dflt_total_fifo_size(fm->fm_state->rev_info.major_rev,
++					fm->fm_state->rev_info.minor_rev);
++		if (fm->fm_state->total_fifo_size == 0)
++			return -EINVAL;
++	}
++
++	err = check_fm_parameters(fm);
++	if (err)
++		return err;
++
++	fm_drv_param = fm->fm_drv_param;
++
++	fm_get_revision(fm, &rev_info);
++
++	/* clear revision-dependent non existing exception */
++	if (rev_info.major_rev < 6)
++		fm->fm_state->exceptions &= ~FM_EX_BMI_DISPATCH_RAM_ECC;
++
++	if (rev_info.major_rev >= 6)
++		fm->fm_state->exceptions &= ~FM_EX_QMI_SINGLE_ECC;
++
++	/* clear CPG */
++	memset_io((void __iomem *)(fm->base_addr + FM_MM_CGP), 0,
++		  fm->intg->fm_port_num_of_cg);
++
++	/* Reset the FM if required. */
++	if (fm->reset_on_init) {
++		if (rev_info.major_rev >= 6) {
++			/* Errata A007273 */
++			pr_debug("FManV3 reset is not supported!\n");
++		} else {
++			out_be32(&fm->fpm_regs->fm_rstc, FPM_RSTC_FM_RESET);
++			/* Memory barrier */
++			mb();
++			usleep_range(100, 300);
++		}
++
++		if (fman_is_qmi_halt_not_busy_state(fm->qmi_regs)) {
++			fman_resume(fm->fpm_regs);
++			usleep_range(100, 300);
++		}
++	}
++
++	if (clear_iram(fm) != 0)
++		return -EINVAL;
++
++	fm_drv_param->exceptions = fm->fm_state->exceptions;
++
++	/* Init DMA Registers */
++
++	err = init_fm_dma(fm);
++	if (err != 0) {
++		free_init_resources(fm);
++		return err;
++	}
++
++	/* Init FPM Registers */
++
++	err = fman_fpm_init(fm->fpm_regs, fm->fm_drv_param);
++	if (err != 0) {
++		free_init_resources(fm);
++		return err;
++	}
++
++	/* define common resources */
++	/* allocate MURAM for FIFO according to total size */
++	fm->fifo_offset = fm_muram_alloc(fm->muram,
++					 fm->fm_state->total_fifo_size);
++	if (IS_ERR_VALUE(fm->cam_offset)) {
++		free_init_resources(fm);
++		pr_err("MURAM alloc for BMI FIFO failed\n");
++		return -ENOMEM;
++	}
++
++	fm_drv_param->fifo_base_addr = fm->fifo_offset;
++	fm_drv_param->total_fifo_size = fm->fm_state->total_fifo_size;
++	fm_drv_param->total_num_of_tasks = fm->fm_state->total_num_of_tasks;
++	fm_drv_param->clk_freq = fm->fm_state->fm_clk_freq;
++
++	/* Init BMI Registers */
++	err = fman_bmi_init(fm->bmi_regs, fm->fm_drv_param);
++	if (err != 0) {
++		free_init_resources(fm);
++		return err;
++	}
++
++	/* Init QMI Registers */
++	err = fman_qmi_init(fm->qmi_regs, fm->fm_drv_param);
++	if (err != 0) {
++		free_init_resources(fm);
++		return err;
++	}
++
++	err = fman_enable(&fman_rg, fm_drv_param);
++	if (err != 0)
++		return err;
++
++	enable_time_stamp(fm);
++
++	kfree(fm->fm_drv_param);
++	fm->fm_drv_param = NULL;
++
++	return 0;
++}
++
++int fm_cfg_reset_on_init(struct fm_t *fm, bool enable)
++{
++	if (is_init_done(fm->fm_drv_param))
++		return -EINVAL;
++
++	fm->reset_on_init = enable;
++
++	return 0;
++}
++
++int fm_cfg_total_fifo_size(struct fm_t *fm, u32 total_fifo_size)
++{
++	if (is_init_done(fm->fm_drv_param))
++		return -EINVAL;
++
++	fm->fm_state->total_fifo_size = total_fifo_size;
++
++	return 0;
++}
++
++void fm_event_isr(struct fm_t *fm)
++{
++	u32 pending;
++	struct fman_fpm_regs __iomem *fpm_rg;
++
++	if (!is_init_done(fm->fm_drv_param))
++		return;
++
++	fpm_rg = fm->fpm_regs;
++
++	/* normal interrupts */
++	pending = fman_get_normal_pending(fpm_rg);
++	if (!pending)
++		return;
++
++	if (pending & INTR_EN_QMI)
++		qmi_event(fm);
++
++	/* MAC interrupts */
++	if (pending & INTR_EN_MAC0)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 0);
++	if (pending & INTR_EN_MAC1)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 1);
++	if (pending & INTR_EN_MAC2)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 2);
++	if (pending & INTR_EN_MAC3)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 3);
++	if (pending & INTR_EN_MAC4)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 4);
++	if (pending & INTR_EN_MAC5)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 5);
++	if (pending & INTR_EN_MAC6)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 6);
++	if (pending & INTR_EN_MAC7)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 7);
++	if (pending & INTR_EN_MAC8)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 8);
++	if (pending & INTR_EN_MAC9)
++		fm_call_mac_isr(fm, FM_EV_MAC0 + 9);
++}
++
++int fm_error_isr(struct fm_t *fm)
++{
++	u32 pending;
++	struct fman_fpm_regs __iomem *fpm_rg;
++
++	if (!is_init_done(fm->fm_drv_param))
++		return -EINVAL;
++
++	fpm_rg = fm->fpm_regs;
++
++	/* error interrupts */
++	pending = fman_get_fpm_error_interrupts(fpm_rg);
++	if (!pending)
++		return -EINVAL;
++
++	if (pending & ERR_INTR_EN_BMI)
++		bmi_err_event(fm);
++	if (pending & ERR_INTR_EN_QMI)
++		qmi_err_event(fm);
++	if (pending & ERR_INTR_EN_FPM)
++		fpm_err_event(fm);
++	if (pending & ERR_INTR_EN_DMA)
++		dma_err_event(fm);
++	if (pending & ERR_INTR_EN_MURAM)
++		muram_err_intr(fm);
++
++	/* MAC error interrupts */
++	if (pending & ERR_INTR_EN_MAC0)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 0);
++	if (pending & ERR_INTR_EN_MAC1)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 1);
++	if (pending & ERR_INTR_EN_MAC2)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 2);
++	if (pending & ERR_INTR_EN_MAC3)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 3);
++	if (pending & ERR_INTR_EN_MAC4)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 4);
++	if (pending & ERR_INTR_EN_MAC5)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 5);
++	if (pending & ERR_INTR_EN_MAC6)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 6);
++	if (pending & ERR_INTR_EN_MAC7)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 7);
++	if (pending & ERR_INTR_EN_MAC8)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 8);
++	if (pending & ERR_INTR_EN_MAC9)
++		fm_call_mac_isr(fm, FM_EV_ERR_MAC0 + 9);
++
++	return 0;
++}
++
++int fm_disable_rams_ecc(struct fm_t *fm)
++{
++	bool explicit_disable = false;
++	struct fman_fpm_regs __iomem *fpm_rg;
++	int ret;
++
++	if (!is_init_done(fm->fm_drv_param))
++		return ret;
++
++	fpm_rg = fm->fpm_regs;
++
++	if (!fm->fm_state->internal_call)
++		explicit_disable = true;
++	fm->fm_state->internal_call = false;
++
++	/* if rams are already disabled, or if rams were explicitly enabled and
++	 *  are currently called indirectly (not explicitly), ignore this call.
++	 */
++	if (!fm->fm_state->rams_ecc_enable ||
++	    (fm->fm_state->explicit_enable && !explicit_disable))
++		return 0;
++	if (fm->fm_state->explicit_enable)
++		/* This is the case were both explicit are true.
++		 * Turn off this flag for cases were following
++		 * ramsEnable routines are called
++		 */
++		fm->fm_state->explicit_enable = false;
++
++	fman_enable_rams_ecc(fpm_rg);
++	fm->fm_state->rams_ecc_enable = false;
++
++	return 0;
++}
++
++int fm_set_exception(struct fm_t *fm, enum fm_exceptions exception,
++		     bool enable)
++{
++	u32 bit_mask = 0;
++	struct fman_rg fman_rg;
++
++	if (!is_init_done(fm->fm_drv_param))
++		return -EINVAL;
++
++	fman_rg.bmi_rg = fm->bmi_regs;
++	fman_rg.qmi_rg = fm->qmi_regs;
++	fman_rg.fpm_rg = fm->fpm_regs;
++	fman_rg.dma_rg = fm->dma_regs;
++
++	bit_mask = fm_get_exception_flag(exception);
++	if (bit_mask) {
++		if (enable)
++			fm->fm_state->exceptions |= bit_mask;
++		else
++			fm->fm_state->exceptions &= ~bit_mask;
++
++		return fman_set_exception(&fman_rg,
++					  (enum fman_exceptions)exception,
++					  enable);
++	} else {
++		pr_err("Undefined exception\n");
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++void fm_get_revision(struct fm_t *fm,
++		     struct fm_revision_info_t *fm_rev)
++{
++	fm_rev->major_rev = fm->fm_state->rev_info.major_rev;
++	fm_rev->minor_rev = fm->fm_state->rev_info.minor_rev;
++}
+diff --git a/drivers/net/ethernet/freescale/fman/fm.h b/drivers/net/ethernet/freescale/fman/fm.h
+new file mode 100644
+index 0000000..d7eca90
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/fman/fm.h
+@@ -0,0 +1,276 @@
++/*
++ * Copyright 2008-2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef __FM_H
++#define __FM_H
++
++#include "fm_ext.h"
++
++#include "fsl_fman.h"
++
++#include <linux/io.h>
++
++/* Hardware defines */
++#define FM_MAX_NUM_OF_HW_PORT_IDS           64
++#define FM_MAX_NUM_OF_MACS	10
++
++#define FM_NUM_OF_FMAN_CTRL_EVENT_REGS		4
++
++/* defaults */
++#define DFLT_EXCEPTIONS	\
++	((FM_EX_DMA_BUS_ERROR)            | \
++	(FM_EX_DMA_READ_ECC)              | \
++	(FM_EX_DMA_SYSTEM_WRITE_ECC)      | \
++	(FM_EX_DMA_FM_WRITE_ECC)          | \
++	(FM_EX_FPM_STALL_ON_TASKS)        | \
++	(FM_EX_FPM_SINGLE_ECC)            | \
++	(FM_EX_FPM_DOUBLE_ECC)            | \
++	(FM_EX_QMI_DEQ_FROM_UNKNOWN_PORTID) | \
++	(FM_EX_BMI_LIST_RAM_ECC)          | \
++	(FM_EX_BMI_STORAGE_PROFILE_ECC)   | \
++	(FM_EX_BMI_STATISTICS_RAM_ECC)    | \
++	(FM_EX_MURAM_ECC)                 | \
++	(FM_EX_BMI_DISPATCH_RAM_ECC)      | \
++	(FM_EX_QMI_DOUBLE_ECC)            | \
++	(FM_EX_QMI_SINGLE_ECC))
++
++#define DFLT_AXI_DBG_NUM_OF_BEATS            1
++#define DFLT_RESET_ON_INIT                 false
++
++#define DFLT_DMA_READ_INT_BUF_LOW(dma_thresh_max_buf)	\
++	((dma_thresh_max_buf + 1) / 2)
++#define DFLT_DMA_READ_INT_BUF_HIGH(dma_thresh_max_buf)	\
++	((dma_thresh_max_buf + 1) * 3 / 4)
++#define DFLT_DMA_WRITE_INT_BUF_LOW(dma_thresh_max_buf)	\
++	((dma_thresh_max_buf + 1) / 2)
++#define DFLT_DMA_WRITE_INT_BUF_HIGH(dma_thresh_max_buf)\
++	((dma_thresh_max_buf + 1) * 3 / 4)
++
++#define DMA_COMM_Q_LOW_FMAN_V3		0x2A
++#define DMA_COMM_Q_LOW_FMAN_V2(dma_thresh_max_commq)		\
++	((dma_thresh_max_commq + 1) / 2)
++#define DFLT_DMA_COMM_Q_LOW(major, dma_thresh_max_commq)	\
++	((major == 6) ? DMA_COMM_Q_LOW_FMAN_V3 :		\
++	DMA_COMM_Q_LOW_FMAN_V2(dma_thresh_max_commq))
++
++#define DMA_COMM_Q_HIGH_FMAN_V3	0x3f
++#define DMA_COMM_Q_HIGH_FMAN_V2(dma_thresh_max_commq)		\
++	((dma_thresh_max_commq + 1) * 3 / 4)
++#define DFLT_DMA_COMM_Q_HIGH(major, dma_thresh_max_commq)	\
++	((major == 6) ? DMA_COMM_Q_HIGH_FMAN_V3 :		\
++	DMA_COMM_Q_HIGH_FMAN_V2(dma_thresh_max_commq))
++
++#define TOTAL_NUM_OF_TASKS_FMAN_V3L	59
++#define TOTAL_NUM_OF_TASKS_FMAN_V3H	124
++#define DFLT_TOTAL_NUM_OF_TASKS(major, minor, bmi_max_num_of_tasks)	\
++	((major == 6) ? ((minor == 1 || minor == 4) ?			\
++	TOTAL_NUM_OF_TASKS_FMAN_V3L : TOTAL_NUM_OF_TASKS_FMAN_V3H) :	\
++	bmi_max_num_of_tasks)
++
++#define DMA_CAM_NUM_OF_ENTRIES_FMAN_V3		64
++#define DMA_CAM_NUM_OF_ENTRIES_FMAN_V2		32
++#define DFLT_DMA_CAM_NUM_OF_ENTRIES(major)			\
++	(major == 6 ? DMA_CAM_NUM_OF_ENTRIES_FMAN_V3 :		\
++	DMA_CAM_NUM_OF_ENTRIES_FMAN_V2)
++
++#define FM_TIMESTAMP_1_USEC_BIT             8
++
++/* Defines used for enabling/disabling FM interrupts */
++#define ERR_INTR_EN_DMA         0x00010000
++#define ERR_INTR_EN_FPM         0x80000000
++#define ERR_INTR_EN_BMI         0x00800000
++#define ERR_INTR_EN_QMI         0x00400000
++#define ERR_INTR_EN_MURAM       0x00040000
++#define ERR_INTR_EN_MAC0        0x00004000
++#define ERR_INTR_EN_MAC1        0x00002000
++#define ERR_INTR_EN_MAC2        0x00001000
++#define ERR_INTR_EN_MAC3        0x00000800
++#define ERR_INTR_EN_MAC4        0x00000400
++#define ERR_INTR_EN_MAC5        0x00000200
++#define ERR_INTR_EN_MAC6        0x00000100
++#define ERR_INTR_EN_MAC7        0x00000080
++#define ERR_INTR_EN_MAC8        0x00008000
++#define ERR_INTR_EN_MAC9        0x00000040
++
++#define INTR_EN_QMI             0x40000000
++#define INTR_EN_MAC0            0x00080000
++#define INTR_EN_MAC1            0x00040000
++#define INTR_EN_MAC2            0x00020000
++#define INTR_EN_MAC3            0x00010000
++#define INTR_EN_MAC4            0x00000040
++#define INTR_EN_MAC5            0x00000020
++#define INTR_EN_MAC6            0x00000008
++#define INTR_EN_MAC7            0x00000002
++#define INTR_EN_MAC8            0x00200000
++#define INTR_EN_MAC9            0x00100000
++#define INTR_EN_REV0            0x00008000
++#define INTR_EN_REV1            0x00004000
++#define INTR_EN_REV2            0x00002000
++#define INTR_EN_REV3            0x00001000
++#define INTR_EN_TMR             0x01000000
++
++/* Modules registers offsets */
++#define FM_MM_MURAM             0x00000000
++#define FM_MM_BMI               0x00080000
++#define FM_MM_QMI               0x00080400
++#define FM_MM_PRS               0x000c7000
++#define FM_MM_DMA               0x000C2000
++#define FM_MM_FPM               0x000C3000
++#define FM_MM_IMEM              0x000C4000
++#define FM_MM_CGP               0x000DB000
++#define FM_MM_TRB(i)            (0x000D0200 + 0x400 * (i))
++#define FM_MM_SP                0x000dc000
++
++/* Memory Mapped Registers */
++
++struct fm_iram_regs_t {
++	u32 iadd;	/* FM IRAM instruction address register */
++	u32 idata;/* FM IRAM instruction data register */
++	u32 itcfg;/* FM IRAM timing config register */
++	u32 iready;/* FM IRAM ready register */
++};
++
++/* General defines */
++#define FM_FW_DEBUG_INSTRUCTION             0x6ffff805UL
++
++struct fm_state_struct_t {
++	u8 fm_id;
++	u16 fm_clk_freq;
++	struct fm_revision_info_t rev_info;
++	bool enabled_time_stamp;
++	u8 count1_micro_bit;
++	u8 total_num_of_tasks;
++	u32 total_fifo_size;
++	u8 max_num_of_open_dmas;
++	u8 accumulated_num_of_tasks;
++	u32 accumulated_fifo_size;
++	u8 accumulated_num_of_open_dmas;
++	u8 accumulated_num_of_deq_tnums;
++	bool low_end_restriction;
++	u32 exceptions;
++	bool rams_ecc_enable;
++	bool explicit_enable;
++	bool internal_call;
++	u32 extra_fifo_pool_size;
++	u8 extra_tasks_pool_size;
++	u8 extra_open_dmas_pool_size;
++};
++
++struct fm_intg_t {
++	/* Ram defines */
++	u32 fm_muram_size;
++	u32 fm_iram_size;
++	u32 fm_num_of_ctrl;
++
++	/* DMA defines */
++	u32 dma_thresh_max_commq;
++	u32 dma_thresh_max_buf;
++
++	/* QMI defines */
++	u32 qmi_max_num_of_tnums;
++	u32 qmi_def_tnums_thresh;
++
++	/* BMI defines */
++	u32 bmi_max_num_of_tasks;
++	u32 bmi_max_num_of_dmas;
++	u32 bmi_max_fifo_size;
++	u32 port_max_weight;
++
++	u32 fm_port_num_of_cg;
++	u32 num_of_rx_ports;
++};
++
++struct fm_t {
++	void __iomem *base_addr;
++	char fm_module_name[MODULE_NAME_SIZE];
++	struct fm_intr_src_t intr_mng[FM_EV_DUMMY_LAST];
++
++	struct fman_fpm_regs __iomem *fpm_regs;
++	struct fman_bmi_regs __iomem *bmi_regs;
++	struct fman_qmi_regs __iomem *qmi_regs;
++	struct fman_dma_regs __iomem *dma_regs;
++	fm_exceptions_cb *exception_cb;
++	fm_bus_error_cb *bus_error_cb;
++	void *dev_id;
++	/* Spinlock for FMan use */
++	spinlock_t spinlock;
++	struct fm_state_struct_t *fm_state;
++	u16 tnum_aging_period;
++
++	struct fman_cfg *fm_drv_param;
++	struct muram_info *muram;
++	/* cam section in muram */
++	int cam_offset;
++	size_t cam_size;
++	/* Fifo in MURAM */
++	int fifo_offset;
++	size_t fifo_size;
++	bool reset_on_init;
++
++	struct fm_intg_t *intg;
++};
++
++static inline int fm_dflt_total_fifo_size(u8 major, u8 minor)
++{
++	/* The total FIFO size values are calculation for each FMan version,
++	 * taking into account the available resources.
++	 */
++	switch (major) {
++	case 2:
++		/* P4080 */
++		return 100 * 1024;
++	case 3:
++		/* P2, P3, P5 */
++		return 122 * 1024;
++	case 4:
++		/* P1023 */
++		return 46 * 1024;
++	case 6:
++		/* FMan V3L (T1024, T1040) */
++		if (minor == 1 || minor == 4)
++			return 156 * 1024;
++		/* FMan V3H (B4, T4, T2080) */
++		else
++			return 295 * 1024;
++	default:
++		pr_err("Default total fifo size calculation failed\n");
++		return 0;
++	}
++}
++
++static inline void fm_call_mac_isr(struct fm_t *fm, u8 id)
++{
++	if (fm->intr_mng[id].isr_cb)
++		fm->intr_mng[id].isr_cb(fm->intr_mng[id].src_handle);
++}
++
++#endif /* __FM_H */
+diff --git a/drivers/net/ethernet/freescale/fman/fm_common.h b/drivers/net/ethernet/freescale/fman/fm_common.h
+new file mode 100644
+index 0000000..1cde270
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/fman/fm_common.h
+@@ -0,0 +1,114 @@
++/*
++ * Copyright 2008-2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++#ifndef __FM_COMMON_H
++#define __FM_COMMON_H
++
++#include "fm_ext.h"
++
++/* Enum for inter-module interrupts registration */
++enum fm_event_modules {
++	FM_MOD_MAC = 0,		/* MAC event */
++	FM_MOD_FMAN_CTRL,	/* FMAN Controller */
++	FM_MOD_DUMMY_LAST
++};
++
++/* Enum for interrupts types */
++enum fm_intr_type {
++	FM_INTR_TYPE_ERR,
++	FM_INTR_TYPE_NORMAL
++};
++
++/* Enum for inter-module interrupts registration */
++enum fm_inter_module_event {
++	FM_EV_ERR_MAC0 = 0,	/* MAC 0 error event */
++	FM_EV_ERR_MAC1,		/* MAC 1 error event */
++	FM_EV_ERR_MAC2,		/* MAC 2 error event */
++	FM_EV_ERR_MAC3,		/* MAC 3 error event */
++	FM_EV_ERR_MAC4,		/* MAC 4 error event */
++	FM_EV_ERR_MAC5,		/* MAC 5 error event */
++	FM_EV_ERR_MAC6,		/* MAC 6 error event */
++	FM_EV_ERR_MAC7,		/* MAC 7 error event */
++	FM_EV_ERR_MAC8,		/* MAC 8 error event */
++	FM_EV_ERR_MAC9,		/* MAC 9 error event */
++	FM_EV_MAC0,		/* MAC 0 event (Magic packet detection) */
++	FM_EV_MAC1,		/* MAC 1 event (Magic packet detection) */
++	FM_EV_MAC2,		/* MAC 2 (Magic packet detection) */
++	FM_EV_MAC3,		/* MAC 3 (Magic packet detection) */
++	FM_EV_MAC4,		/* MAC 4 (Magic packet detection) */
++	FM_EV_MAC5,		/* MAC 5 (Magic packet detection) */
++	FM_EV_MAC6,		/* MAC 6 (Magic packet detection) */
++	FM_EV_MAC7,		/* MAC 7 (Magic packet detection) */
++	FM_EV_MAC8,		/* MAC 8 event (Magic packet detection) */
++	FM_EV_MAC9,		/* MAC 9 event (Magic packet detection) */
++	FM_EV_FMAN_CTRL_0,	/* Fman controller event 0 */
++	FM_EV_FMAN_CTRL_1,	/* Fman controller event 1 */
++	FM_EV_FMAN_CTRL_2,	/* Fman controller event 2 */
++	FM_EV_FMAN_CTRL_3,	/* Fman controller event 3 */
++	FM_EV_DUMMY_LAST
++};
++
++/* FM IP BLOCK versions */
++#define FM_IP_BLOCK_P2_P3_P5		3
++#define FM_IP_BLOCK_P4			2
++#define FM_IP_BLOCK_B_T			6
++
++#define MODULE_NAME_SIZE        30
++#define DUMMY_PORT_ID           0
++
++#define FM_LIODN_OFFSET_MASK    0x3FF
++
++#define BMI_MAX_FIFO_SIZE                   (FM_MURAM_SIZE)
++#define BMI_FIFO_UNITS                      0x100
++
++struct fm_intr_src_t {
++	void (*isr_cb)(void *src_arg);
++	void *src_handle;
++};
++
++void fm_register_intr(struct fm_t *fm, enum fm_event_modules mod, u8 mod_id,
++		      enum fm_intr_type intr_type,
++		      void (*f_isr)(void *h_src_arg), void *h_src_arg);
++
++void fm_unregister_intr(struct fm_t *fm, enum fm_event_modules mod, u8 mod_id,
++			enum fm_intr_type intr_type);
++
++struct muram_info *fm_get_muram_pointer(struct fm_t *fm);
++
++int fm_reset_mac(struct fm_t *fm, u8 mac_id);
++
++u16 fm_get_clock_freq(struct fm_t *fm);
++
++u8 fm_get_id(struct fm_t *fm);
++
++u32 fm_get_bmi_max_fifo_size(struct fm_t *fm);
++
++#endif /* __FM_COMMON_H */
+diff --git a/drivers/net/ethernet/freescale/fman/fm_drv.c b/drivers/net/ethernet/freescale/fman/fm_drv.c
+new file mode 100644
+index 0000000..63b5ae1
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/fman/fm_drv.c
+@@ -0,0 +1,551 @@
++/*
++ * Copyright 2008-2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <linux/module.h>
++#include <linux/interrupt.h>
++#include <linux/of_platform.h>
++#include <linux/of_address.h>
++#include <linux/of_irq.h>
++#include <linux/slab.h>
++#include <linux/clk-provider.h>
++#include <linux/errno.h>
++#include <sysdev/fsl_soc.h>
++
++#include "fm_ext.h"
++#include "fm_drv.h"
++#include "fm_muram_ext.h"
++
++/* Bootargs defines */
++/* Extra headroom for RX buffers - Default, min and max */
++#define FSL_FM_RX_EXTRA_HEADROOM	64
++#define FSL_FM_RX_EXTRA_HEADROOM_MIN	16
++#define FSL_FM_RX_EXTRA_HEADROOM_MAX	384
++
++/* Maximum frame length */
++#define FSL_FM_MAX_FRAME_SIZE			1522
++#define FSL_FM_MAX_POSSIBLE_FRAME_SIZE		9600
++#define FSL_FM_MIN_POSSIBLE_FRAME_SIZE		64
++
++/* Extra headroom for Rx buffers.
++ * FMan is instructed to allocate, on the Rx path, this amount of
++ * space at the beginning of a data buffer, beside the DPA private
++ * data area and the IC fields.
++ * Does not impact Tx buffer layout.
++ * Configurable from bootargs. 64 by default, it's needed on
++ * particular forwarding scenarios that add extra headers to the
++ * forwarded frame.
++ */
++int fsl_fm_rx_extra_headroom = FSL_FM_RX_EXTRA_HEADROOM;
++module_param(fsl_fm_rx_extra_headroom, int, 0);
++MODULE_PARM_DESC(fsl_fm_rx_extra_headroom, "Extra headroom for Rx buffers");
++
++/* Max frame size, across all interfaces.
++ * Configurable from bootargs, to avoid allocating oversized (socket)
++ * buffers when not using jumbo frames.
++ * Must be large enough to accommodate the network MTU, but small enough
++ * to avoid wasting skb memory.
++ *
++ * Could be overridden once, at boot-time, via the
++ * fm_set_max_frm() callback.
++ */
++int fsl_fm_max_frm = FSL_FM_MAX_FRAME_SIZE;
++module_param(fsl_fm_max_frm, int, 0);
++MODULE_PARM_DESC(fsl_fm_max_frm, "Maximum frame size, across all interfaces");
++
++u16 fm_get_max_frm(void)
++{
++	static bool fm_check_mfl;
++
++	if (!fm_check_mfl) {
++		if (fsl_fm_max_frm > FSL_FM_MAX_POSSIBLE_FRAME_SIZE ||
++		    fsl_fm_max_frm < FSL_FM_MIN_POSSIBLE_FRAME_SIZE) {
++			pr_warn("Invalid fsl_fm_max_frm value (%d) in bootargs, valid range is %d-%d. Falling back to the default (%d)\n",
++				fsl_fm_max_frm,
++				FSL_FM_MIN_POSSIBLE_FRAME_SIZE,
++				FSL_FM_MAX_POSSIBLE_FRAME_SIZE,
++				FSL_FM_MAX_FRAME_SIZE);
++			fsl_fm_max_frm = FSL_FM_MAX_FRAME_SIZE;
++		}
++		fm_check_mfl = true;
++	}
++
++	return fsl_fm_max_frm;
++}
++EXPORT_SYMBOL(fm_get_max_frm);
++
++int fm_get_rx_extra_headroom(void)
++{
++	static bool fm_check_rx_extra_headroom;
++
++	if (!fm_check_rx_extra_headroom) {
++		if (fsl_fm_rx_extra_headroom > FSL_FM_RX_EXTRA_HEADROOM_MAX ||
++		    fsl_fm_rx_extra_headroom < FSL_FM_RX_EXTRA_HEADROOM_MIN) {
++			pr_warn("Invalid fsl_fm_rx_extra_headroom value (%d) in bootargs, valid range is %d-%d. Falling back to the default (%d)\n",
++				fsl_fm_rx_extra_headroom,
++				FSL_FM_RX_EXTRA_HEADROOM_MIN,
++				FSL_FM_RX_EXTRA_HEADROOM_MAX,
++				FSL_FM_RX_EXTRA_HEADROOM);
++			fsl_fm_rx_extra_headroom = FSL_FM_RX_EXTRA_HEADROOM;
++		}
++
++		fsl_fm_rx_extra_headroom = true;
++		fsl_fm_rx_extra_headroom = ALIGN(fsl_fm_rx_extra_headroom, 16);
++	}
++
++	return fsl_fm_rx_extra_headroom;
++}
++EXPORT_SYMBOL(fm_get_rx_extra_headroom);
++
++static irqreturn_t fm_irq(int irq, void *fm_dev)
++{
++	struct fm_drv_t *fm_drv = (struct fm_drv_t *)fm_dev;
++
++	fm_event_isr(fm_drv->fm_dev);
++
++	return IRQ_HANDLED;
++}
++
++static irqreturn_t fm_err_irq(int irq, void *fm_dev)
++{
++	struct fm_drv_t *fm_drv = (struct fm_drv_t *)fm_dev;
++
++	if (fm_error_isr(fm_drv->fm_dev) == 0)
++		return IRQ_HANDLED;
++
++	return IRQ_NONE;
++}
++
++static int fill_qman_channels_info(struct fm_drv_t *fm_drv)
++{
++	fm_drv->qman_channels = kcalloc(fm_drv->num_of_qman_channels,
++					sizeof(u32), GFP_KERNEL);
++	if (!fm_drv->qman_channels)
++		return -ENOMEM;
++
++	if (fm_drv->fm_rev_info.major_rev >= 6) {
++		fm_drv->qman_channels[0] = 0x30;
++		fm_drv->qman_channels[1] = 0x31;
++		fm_drv->qman_channels[2] = 0x28;
++		fm_drv->qman_channels[3] = 0x29;
++		fm_drv->qman_channels[4] = 0x2a;
++		fm_drv->qman_channels[5] = 0x2b;
++		fm_drv->qman_channels[6] = 0x2c;
++		fm_drv->qman_channels[7] = 0x2d;
++		fm_drv->qman_channels[8] = 0x2;
++		fm_drv->qman_channels[9] = 0x3;
++		fm_drv->qman_channels[10] = 0x4;
++		fm_drv->qman_channels[11] = 0x5;
++		fm_drv->qman_channels[12] = 0x6;
++		fm_drv->qman_channels[13] = 0x7;
++	} else {
++		fm_drv->qman_channels[0] = 0x30;
++		fm_drv->qman_channels[1] = 0x28;
++		fm_drv->qman_channels[2] = 0x29;
++		fm_drv->qman_channels[3] = 0x2a;
++		fm_drv->qman_channels[4] = 0x2b;
++		fm_drv->qman_channels[5] = 0x2c;
++		fm_drv->qman_channels[6] = 0x1;
++		fm_drv->qman_channels[7] = 0x2;
++		fm_drv->qman_channels[8] = 0x3;
++		fm_drv->qman_channels[9] = 0x4;
++		fm_drv->qman_channels[10] = 0x5;
++		fm_drv->qman_channels[11] = 0x6;
++	}
++
++	return 0;
++}
++
++static const struct of_device_id fm_muram_match[] = {
++	{
++	 .compatible = "fsl,fman-muram"},
++	{}
++};
++MODULE_DEVICE_TABLE(of, fm_muram_match);
++
++static struct fm_drv_t *read_fm_dev_tree_node(struct platform_device *of_dev)
++{
++	struct fm_drv_t *fm_drv;
++	struct device_node *fm_node, *muram_node;
++	struct resource *res;
++	const u32 *u32_prop;
++	int lenp, err;
++	struct clk *clk;
++	u32 clk_rate;
++
++	fm_node = of_node_get(of_dev->dev.of_node);
++
++	u32_prop = (const u32 *)of_get_property(fm_node, "cell-index", &lenp);
++	if (!u32_prop) {
++		pr_err("of_get_property(%s, cell-index) failed\n",
++		       fm_node->full_name);
++		goto _return_null;
++	}
++	if (WARN_ON(lenp != sizeof(u32)))
++		return NULL;
++
++	fm_drv = kzalloc(sizeof(*fm_drv), GFP_KERNEL);
++	if (!fm_drv)
++		goto _return_null;
++
++	fm_drv->dev = &of_dev->dev;
++	fm_drv->id = (u8)*u32_prop;
++
++	/* Get the FM interrupt */
++	res = platform_get_resource(of_dev, IORESOURCE_IRQ, 0);
++	if (!res) {
++		pr_err("Can't get FMan IRQ resource\n");
++		goto _return_null;
++	}
++	fm_drv->irq = res->start;
++
++	/* Get the FM error interrupt */
++	res = platform_get_resource(of_dev, IORESOURCE_IRQ, 1);
++	if (!res) {
++		pr_err("Can't get FMan Error IRQ resource\n");
++		goto _return_null;
++	}
++	fm_drv->err_irq = res->start;
++
++	/* Get the FM address */
++	res = platform_get_resource(of_dev, IORESOURCE_MEM, 0);
++	if (!res) {
++		pr_err("Can't get FMan memory resouce\n");
++		goto _return_null;
++	}
++
++	fm_drv->fm_base_addr = 0;
++	fm_drv->fm_phys_base_addr = res->start;
++	fm_drv->fm_mem_size = res->end + 1 - res->start;
++
++	clk = of_clk_get_by_name(fm_node, NULL);
++	if (IS_ERR(clk)) {
++		pr_err("Failed to get FM%d clock structure\n", fm_drv->id);
++		goto _return_null;
++	}
++
++	clk_rate = clk_get_rate(clk);
++	if (!clk_rate) {
++		pr_err("Failed to determine FM%d clock rate\n", fm_drv->id);
++		goto _return_null;
++	}
++	/* Rounding to MHz */
++	clk_rate = (clk_rate + 500000) / 1000000;
++	fm_drv->params.fm_clk_freq = (u16)clk_rate;
++
++	u32_prop = (const u32 *)of_get_property(fm_node,
++						"fsl,qman-channel-range",
++						&lenp);
++	if (!u32_prop) {
++		pr_err("of_get_property(%s, fsl,qman-channel-range) failed\n",
++		       fm_node->full_name);
++		goto _return_null;
++	}
++	if (WARN_ON(lenp != sizeof(u32) * 2))
++		goto _return_null;
++	fm_drv->qman_channel_base = u32_prop[0];
++	fm_drv->num_of_qman_channels = u32_prop[1];
++
++	/* Get the MURAM base address and size */
++	muram_node = of_find_matching_node(fm_node, fm_muram_match);
++	if (!muram_node) {
++		pr_err("could not find MURAM node\n");
++		goto _return_null;
++	}
++
++	err = of_address_to_resource(muram_node, 0, res);
++	if (err) {
++		of_node_put(muram_node);
++		pr_err("of_address_to_resource() = %d\n", err);
++		goto _return_null;
++	}
++
++	fm_drv->fm_muram_phys_base_addr = res->start;
++	fm_drv->fm_muram_mem_size = res->end + 1 - res->start;
++
++	{
++		/* In B4 rev 2.0 (and above) the MURAM size is 512KB.
++		 * Check the SVR and update MURAM size if required.
++		 */
++		u32 svr;
++
++		svr = mfspr(SPRN_SVR);
++
++		if ((SVR_SOC_VER(svr) == SVR_B4860) && (SVR_MAJ(svr) >= 2))
++			fm_drv->fm_muram_mem_size = 0x80000;
++	}
++
++	of_node_put(muram_node);
++	of_node_put(fm_node);
++
++	fm_drv->active = true;
++
++	goto _return;
++
++_return_null:
++	of_node_put(fm_node);
++	return NULL;
++_return:
++	return fm_drv;
++}
++
++static void fm_drv_exceptions_cb(void *dev_id,
++				 enum fm_exceptions __maybe_unused exception)
++{
++	struct fm_drv_t *fm_drv = (struct fm_drv_t *)dev_id;
++
++	WARN_ON(!fm_drv);
++
++	pr_debug("got fm exception %d\n", exception);
++}
++
++static void fm_drv_bus_error_cb(void *dev_id,
++				enum fm_port_type __maybe_unused port_type,
++				u8 __maybe_unused port_id,
++				u64 __maybe_unused addr,
++				u8 __maybe_unused tnum,
++				u16 __maybe_unused liodn)
++{
++	struct fm_drv_t *fm_drv = (struct fm_drv_t *)dev_id;
++
++	WARN_ON(!fm_drv);
++
++	pr_debug("got fm bus error: port_id[%d]\n", port_id);
++}
++
++u32 get_qman_channel_id(struct fm_drv_t *fm_drv, u32 port_id)
++{
++	u32 qman_channel = 0;
++	int i;
++
++	for (i = 0; i < fm_drv->num_of_qman_channels; i++) {
++		if (fm_drv->qman_channels[i] == port_id)
++			break;
++	}
++
++	if (i == fm_drv->num_of_qman_channels)
++		return 0;
++
++	qman_channel = fm_drv->qman_channel_base + i;
++
++	return qman_channel;
++}
++
++static int configure_fm_dev(struct fm_drv_t *fm_drv)
++{
++	int err;
++
++	if (!fm_drv->active) {
++		pr_err("FMan not configured\n");
++		return -EINVAL;
++	}
++
++	err = devm_request_irq(fm_drv->dev, fm_drv->irq, fm_irq,
++			       IRQF_NO_SUSPEND, "fman", fm_drv);
++	if (err < 0) {
++		pr_err("Error: allocating irq %d (error = %d)\n",
++		       fm_drv->irq, err);
++		return -EINVAL;
++	}
++
++	if (fm_drv->err_irq != 0) {
++		err = devm_request_irq(fm_drv->dev, fm_drv->err_irq,
++				       fm_err_irq,
++				       IRQF_SHARED | IRQF_NO_SUSPEND,
++				       "fman-err", fm_drv);
++		if (err < 0) {
++			pr_err("Error: allocating irq %d (error = %d)\n",
++			       fm_drv->err_irq, err);
++			return -EINVAL;
++		}
++	}
++
++	fm_drv->res = devm_request_mem_region(fm_drv->dev,
++					      fm_drv->fm_phys_base_addr,
++					      fm_drv->fm_mem_size, "fman");
++	if (!fm_drv->res) {
++		pr_err("request_mem_region() failed\n");
++		return -EINVAL;
++	}
++
++	fm_drv->fm_base_addr = devm_ioremap(fm_drv->dev,
++					    fm_drv->fm_phys_base_addr,
++					    fm_drv->fm_mem_size);
++	if (fm_drv->fm_base_addr == 0) {
++		pr_err("devm_ioremap() failed\n");
++		return -EINVAL;
++	}
++
++	fm_drv->params.base_addr = fm_drv->fm_base_addr;
++	fm_drv->params.fm_id = fm_drv->id;
++	fm_drv->params.exception_cb = fm_drv_exceptions_cb;
++	fm_drv->params.bus_error_cb = fm_drv_bus_error_cb;
++	fm_drv->params.dev_id = fm_drv;
++
++	return 0;
++}
++
++static int init_fm_dev(struct fm_drv_t *fm_drv)
++{
++	if (!fm_drv->active) {
++		pr_err("FMan not configured\n");
++		return -EINVAL;
++	}
++
++	fm_drv->muram = fm_muram_init(fm_drv->fm_muram_phys_base_addr,
++				      fm_drv->fm_muram_mem_size);
++	if (!fm_drv->muram) {
++		pr_err("FMan MURAM initalization failed\n");
++		return -EINVAL;
++	}
++
++	fm_drv->params.muram = fm_drv->muram;
++
++	fm_drv->fm_dev = fm_config(&fm_drv->params);
++	if (!fm_drv->fm_dev) {
++		pr_err("FMan config failed\n");
++		return -EINVAL;
++	}
++
++	fm_get_revision(fm_drv->fm_dev, &fm_drv->fm_rev_info);
++
++	if (fm_cfg_reset_on_init(fm_drv->fm_dev, true) != 0) {
++		pr_err("fm_cfg_reset_on_init() failed\n");
++		return -EINVAL;
++	}
++
++	/* Config total fifo size for FManV3H */
++	if ((fm_drv->fm_rev_info.major_rev >= 6) &&
++	    (fm_drv->fm_rev_info.minor_rev != 1 &&
++	     fm_drv->fm_rev_info.minor_rev != 4))
++			fm_cfg_total_fifo_size(fm_drv->fm_dev, 295 * 1024);
++
++	if (fm_init(fm_drv->fm_dev) != 0) {
++		pr_err("fm_init() failed\n");
++		return -EINVAL;
++	}
++
++	if (fm_drv->err_irq == 0) {
++		fm_set_exception(fm_drv->fm_dev, FM_EX_DMA_BUS_ERROR, false);
++		fm_set_exception(fm_drv->fm_dev, FM_EX_DMA_READ_ECC, false);
++		fm_set_exception(fm_drv->fm_dev,
++				 FM_EX_DMA_SYSTEM_WRITE_ECC, false);
++		fm_set_exception(fm_drv->fm_dev, FM_EX_DMA_FM_WRITE_ECC, false);
++		fm_set_exception(fm_drv->fm_dev,
++				 FM_EX_DMA_SINGLE_PORT_ECC, false);
++		fm_set_exception(fm_drv->fm_dev,
++				 FM_EX_FPM_STALL_ON_TASKS, false);
++		fm_set_exception(fm_drv->fm_dev, FM_EX_FPM_SINGLE_ECC, false);
++		fm_set_exception(fm_drv->fm_dev, FM_EX_FPM_DOUBLE_ECC, false);
++		fm_set_exception(fm_drv->fm_dev, FM_EX_QMI_SINGLE_ECC, false);
++		fm_set_exception(fm_drv->fm_dev,
++				 FM_EX_QMI_DOUBLE_ECC, false);
++		fm_set_exception(fm_drv->fm_dev,
++				 FM_EX_QMI_DEQ_FROM_UNKNOWN_PORTID, false);
++		fm_set_exception(fm_drv->fm_dev, FM_EX_BMI_LIST_RAM_ECC, false);
++		fm_set_exception(fm_drv->fm_dev,
++				 FM_EX_BMI_STORAGE_PROFILE_ECC, false);
++		fm_set_exception(fm_drv->fm_dev,
++				 FM_EX_BMI_STATISTICS_RAM_ECC, false);
++		fm_set_exception(fm_drv->fm_dev,
++				 FM_EX_BMI_DISPATCH_RAM_ECC, false);
++	}
++
++	if (fill_qman_channels_info(fm_drv) < 0) {
++		pr_err("can't fill qman channel info\n");
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int fm_probe(struct platform_device *of_dev)
++{
++	struct fm_drv_t *fm_drv;
++
++	fm_drv = read_fm_dev_tree_node(of_dev);
++	if (!fm_drv)
++		return -EIO;
++	if (configure_fm_dev(fm_drv) != 0)
++		return -EIO;
++	if (init_fm_dev(fm_drv) != 0)
++		return -EIO;
++
++	dev_set_drvdata(fm_drv->dev, fm_drv);
++
++	pr_debug("FM%d probed\n", fm_drv->id);
++
++	return 0;
++}
++
++struct fm *fm_bind(struct device *fm_dev)
++{
++	return (struct fm *)(dev_get_drvdata(get_device(fm_dev)));
++}
++
++void fm_unbind(struct fm *fm)
++{
++	struct fm_drv_t *fm_drv = (struct fm_drv_t *)fm;
++
++	put_device(fm_drv->dev);
++}
++
++struct resource *fm_get_mem_region(struct fm *fm)
++{
++	struct fm_drv_t *fm_drv = (struct fm_drv_t *)fm;
++
++	return fm_drv->res;
++}
++
++void *fm_get_handle(struct fm *fm)
++{
++	struct fm_drv_t *fm_drv = (struct fm_drv_t *)fm;
++
++	return (void *)fm_drv->fm_dev;
++}
++
++static const struct of_device_id fm_match[] = {
++	{
++	 .compatible = "fsl,fman"},
++	{}
++};
++
++MODULE_DEVICE_TABLE(of, fm_match);
++
++static struct platform_driver fm_driver = {
++	.driver = {
++		   .name = "fsl-fman",
++		   .of_match_table = fm_match,
++		   },
++	.probe = fm_probe,
++};
++
++builtin_platform_driver(fm_driver);
+diff --git a/drivers/net/ethernet/freescale/fman/fm_drv.h b/drivers/net/ethernet/freescale/fman/fm_drv.h
+new file mode 100644
+index 0000000..73d9eff
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/fman/fm_drv.h
+@@ -0,0 +1,109 @@
++/*
++ * Copyright 2008-2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef __FM_DRV_H__
++#define __FM_DRV_H__
++
++#include <asm/mpc85xx.h>
++
++#include "fsl_fman_drv.h"
++
++#ifndef CONFIG_FSL_FM_MAX_FRAME_SIZE
++#define CONFIG_FSL_FM_MAX_FRAME_SIZE 0
++#endif
++
++#ifndef CONFIG_FSL_FM_RX_EXTRA_HEADROOM
++#define CONFIG_FSL_FM_RX_EXTRA_HEADROOM       16
++#endif
++
++/* SoC info */
++#define SOC_VERSION(svr)        (((svr) & 0xFFF7FF00) >> 8)
++#define SOC_MAJOR_REV(svr)      (((svr) & 0x000000F0) >> 4)
++#define SOC_MINOR_REV(svr)      ((svr) & 0x0000000F)
++
++/* Port defines */
++#define NUM_OF_FM_PORTS			63
++#define FIRST_RX_PORT			0x08
++#define FIRST_TX_PORT			0x28
++#define LAST_RX_PORT			0x11
++#define LAST_TX_PORT			0x31
++
++#define TX_10G_PORT_BASE		0x30
++#define RX_10G_PORT_BASE		0x10
++
++struct fm_port_t;
++
++struct fm_port_drv_t {
++	u8 id;
++	char name[20];
++	bool active;
++	phys_addr_t phys_base_addr;
++	void __iomem *base_addr;	/* Port's *virtual* address */
++	resource_size_t mem_size;
++	struct fm_buffer_prefix_content_t buff_prefix_content;
++	struct fm_port_t *fm_port;
++	struct fm_drv_t *fm;
++	u16 tx_ch;
++	struct device *dev;
++	struct fm_revision_info_t fm_rev_info;
++};
++
++struct fm_drv_t {
++	u8 id;
++	char name[10];
++	bool active;
++	phys_addr_t fm_phys_base_addr;
++	void __iomem *fm_base_addr;
++	resource_size_t fm_mem_size;
++	phys_addr_t fm_muram_phys_base_addr;
++	resource_size_t fm_muram_mem_size;
++	int irq;
++	int err_irq;
++	struct fm_params_t params;
++	void *fm_dev;
++	struct muram_info *muram;
++
++	struct fm_port_drv_t ports[NUM_OF_FM_PORTS];
++
++	struct device *dev;
++	struct resource *res;
++
++	struct fm_revision_info_t fm_rev_info;
++	u32 qman_channel_base;
++	u32 num_of_qman_channels;
++	u32 *qman_channels;
++
++};
++
++u32 get_qman_channel_id(struct fm_drv_t *fm_drv, u32 port_id);
++
++#endif /* __FM_DRV_H__ */
+diff --git a/drivers/net/ethernet/freescale/fman/inc/enet_ext.h b/drivers/net/ethernet/freescale/fman/inc/enet_ext.h
+new file mode 100644
+index 0000000..e7d5c05
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/fman/inc/enet_ext.h
+@@ -0,0 +1,199 @@
++/*
++ * Copyright 2008-2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/* Ethernet generic definitions and enums. */
++
++#ifndef __ENET_EXT_H
++#define __ENET_EXT_H
++
++#include "fsl_enet.h"
++
++/* Number of octets (8-bit bytes) in an ethernet address */
++#define ENET_NUM_OCTETS_PER_ADDRESS 6
++/* Group address mask for ethernet addresses */
++#define ENET_GROUP_ADDR	    0x01
++
++/* Ethernet Address */
++typedef u8 enet_addr_t[ENET_NUM_OCTETS_PER_ADDRESS];
++
++/* Ethernet MAC-PHY Interface */
++enum ethernet_interface {
++	ENET_IF_MII = E_ENET_IF_MII,	 /* MII interface */
++	ENET_IF_RMII = E_ENET_IF_RMII, /* RMII interface */
++	ENET_IF_SMII = E_ENET_IF_SMII, /* SMII interface */
++	ENET_IF_GMII = E_ENET_IF_GMII, /* GMII interface */
++	ENET_IF_RGMII = E_ENET_IF_RGMII,
++					 /* RGMII interface */
++	ENET_IF_TBI = E_ENET_IF_TBI,	 /* TBI interface */
++	ENET_IF_RTBI = E_ENET_IF_RTBI, /* RTBI interface */
++	ENET_IF_SGMII = E_ENET_IF_SGMII,
++					 /* SGMII interface */
++	ENET_IF_XGMII = E_ENET_IF_XGMII,
++					 /* XGMII interface */
++	ENET_IF_QSGMII = E_ENET_IF_QSGMII,
++					 /* QSGMII interface */
++	ENET_IF_XFI = E_ENET_IF_XFI	 /* XFI interface */
++};
++
++/* SGMII/QSGII interface with 1000BaseX auto-negotiation between MAC and phy
++ * or backplane; Note: 1000BaseX auto-negotiation relates only to interface
++ * between MAC and phy/backplane, SGMII phy can still synchronize with far-end
++ * phy at 10Mbps, 100Mbps or 1000Mbps
++ */
++#define ENET_IF_SGMII_BASEX       0x80000000
++
++/* Ethernet Speed (nominal data rate) */
++enum ethernet_speed {
++	ENET_SPEED_10 = E_ENET_SPEED_10,	 /* 10 Mbps */
++	ENET_SPEED_100 = E_ENET_SPEED_100,	 /* 100 Mbps */
++	ENET_SPEED_1000 = E_ENET_SPEED_1000,	 /* 1000 Mbps = 1 Gbps */
++	ENET_SPEED_10000 = E_ENET_SPEED_10000	 /* 10000 Mbps = 10 Gbps */
++};
++
++/* Ethernet mode (combination of MAC-PHY interface and speed) */
++enum e_enet_mode {
++	ENET_MODE_INVALID = 0,	/* Invalid Ethernet mode */
++	/*    10 Mbps MII   */
++	ENET_MODE_MII_10 = (ENET_IF_MII | ENET_SPEED_10),
++	/*   100 Mbps MII   */
++	ENET_MODE_MII_100 = (ENET_IF_MII | ENET_SPEED_100),
++	/*    10 Mbps RMII  */
++	ENET_MODE_RMII_10 = (ENET_IF_RMII | ENET_SPEED_10),
++	/*   100 Mbps RMII  */
++	ENET_MODE_RMII_100 = (ENET_IF_RMII | ENET_SPEED_100),
++	/*    10 Mbps SMII  */
++	ENET_MODE_SMII_10 = (ENET_IF_SMII | ENET_SPEED_10),
++	/*   100 Mbps SMII  */
++	ENET_MODE_SMII_100 = (ENET_IF_SMII | ENET_SPEED_100),
++	/*  1000 Mbps GMII  */
++	ENET_MODE_GMII_1000 = (ENET_IF_GMII | ENET_SPEED_1000),
++	/*    10 Mbps RGMII */
++	ENET_MODE_RGMII_10 = (ENET_IF_RGMII | ENET_SPEED_10),
++	/*   100 Mbps RGMII */
++	ENET_MODE_RGMII_100 = (ENET_IF_RGMII | ENET_SPEED_100),
++	/*  1000 Mbps RGMII */
++	ENET_MODE_RGMII_1000 = (ENET_IF_RGMII | ENET_SPEED_1000),
++	/*  1000 Mbps TBI   */
++	ENET_MODE_TBI_1000 = (ENET_IF_TBI | ENET_SPEED_1000),
++	/*  1000 Mbps RTBI  */
++	ENET_MODE_RTBI_1000 = (ENET_IF_RTBI | ENET_SPEED_1000),
++	/* 10 Mbps SGMII with auto-negotiation between MAC and
++	 * SGMII phy according to Cisco SGMII specification
++	 */
++	ENET_MODE_SGMII_10 = (ENET_IF_SGMII | ENET_SPEED_10),
++	/* 100 Mbps SGMII with auto-negotiation between MAC and
++	 * SGMII phy according to Cisco SGMII specification
++	 */
++	ENET_MODE_SGMII_100 = (ENET_IF_SGMII | ENET_SPEED_100),
++	/* 1000 Mbps SGMII with auto-negotiation between MAC and
++	 * SGMII phy according to Cisco SGMII specification
++	 */
++	ENET_MODE_SGMII_1000 = (ENET_IF_SGMII | ENET_SPEED_1000),
++	/* 10 Mbps SGMII with 1000BaseX auto-negotiation between
++	 * MAC and SGMII phy or backplane
++	 */
++	ENET_MODE_SGMII_BASEX_10 =
++	    (ENET_IF_SGMII_BASEX | ENET_IF_SGMII | ENET_SPEED_10),
++	/* 100 Mbps SGMII with 1000BaseX auto-negotiation between
++	 * MAC and SGMII phy or backplane
++	 */
++	ENET_MODE_SGMII_BASEX_100 =
++	    (ENET_IF_SGMII_BASEX | ENET_IF_SGMII | ENET_SPEED_100),
++	/* 1000 Mbps SGMII with 1000BaseX auto-negotiation between
++	 * MAC and SGMII phy or backplane
++	 */
++	ENET_MODE_SGMII_BASEX_1000 =
++	    (ENET_IF_SGMII_BASEX | ENET_IF_SGMII | ENET_SPEED_1000),
++	/* 1000 Mbps QSGMII with auto-negotiation between MAC and
++	 * QSGMII phy according to Cisco QSGMII specification
++	 */
++	ENET_MODE_QSGMII_1000 = (ENET_IF_QSGMII | ENET_SPEED_1000),
++	/* 1000 Mbps QSGMII with 1000BaseX auto-negotiation between
++	 * MAC and QSGMII phy or backplane
++	 */
++	ENET_MODE_QSGMII_BASEX_1000 =
++	    (ENET_IF_SGMII_BASEX | ENET_IF_QSGMII | ENET_SPEED_1000),
++	/* 10000 Mbps XGMII */
++	ENET_MODE_XGMII_10000 = (ENET_IF_XGMII | ENET_SPEED_10000),
++	/* 10000 Mbps XFI */
++	ENET_MODE_XFI_10000 = (ENET_IF_XFI | ENET_SPEED_10000)
++};
++
++#define IS_ENET_MODE_VALID(mode)			\
++	(((mode) == ENET_MODE_MII_10) ||		\
++	((mode) == ENET_MODE_MII_100) ||		\
++	((mode) == ENET_MODE_RMII_10) ||		\
++	((mode) == ENET_MODE_RMII_100) ||		\
++	((mode) == ENET_MODE_SMII_10) ||		\
++	((mode) == ENET_MODE_SMII_100) ||		\
++	((mode) == ENET_MODE_GMII_1000) ||		\
++	((mode) == ENET_MODE_RGMII_10) ||		\
++	((mode) == ENET_MODE_RGMII_100) ||		\
++	((mode) == ENET_MODE_RGMII_1000) ||		\
++	((mode) == ENET_MODE_TBI_1000) ||		\
++	((mode) == ENET_MODE_RTBI_1000) ||		\
++	((mode) == ENET_MODE_SGMII_10) ||		\
++	((mode) == ENET_MODE_SGMII_100) ||		\
++	((mode) == ENET_MODE_SGMII_1000) ||		\
++	((mode) == ENET_MODE_SGMII_BASEX_10) ||	\
++	((mode) == ENET_MODE_SGMII_BASEX_100) ||	\
++	((mode) == ENET_MODE_SGMII_BASEX_1000) ||	\
++	((mode) == ENET_MODE_XGMII_10000) ||		\
++	((mode) == ENET_MODE_QSGMII_1000) ||		\
++	((mode) == ENET_MODE_QSGMII_BASEX_1000) ||	\
++	((mode) == ENET_MODE_XFI_10000))
++
++#define MAKE_ENET_MODE(_interface, _speed) \
++		      (enum e_enet_mode)((_interface) | (_speed))
++
++#define ENET_INTERFACE_FROM_MODE(mode) \
++				(enum ethernet_interface)((mode) & 0x0FFF0000)
++#define ENET_SPEED_FROM_MODE(mode) \
++			    (enum ethernet_speed)((mode) & 0x0000FFFF)
++
++#define ENET_ADDR_TO_UINT64(_enet_addr)		\
++	(u64)(((u64)(_enet_addr)[0] << 40) |		\
++	      ((u64)(_enet_addr)[1] << 32) |		\
++	      ((u64)(_enet_addr)[2] << 24) |		\
++	      ((u64)(_enet_addr)[3] << 16) |		\
++	      ((u64)(_enet_addr)[4] << 8) |		\
++	      ((u64)(_enet_addr)[5]))
++
++#define MAKE_ENET_ADDR_FROM_UINT64(_addr64, _enet_addr) \
++	do { \
++		int i; \
++		for (i = 0; i < ENET_NUM_OCTETS_PER_ADDRESS; i++) \
++			(_enet_addr)[i] = \
++			(u8)((_addr64) >> ((5 - i) * 8)); \
++	} while (0)
++
++#endif /* __ENET_EXT_H */
+diff --git a/drivers/net/ethernet/freescale/fman/inc/fm_ext.h b/drivers/net/ethernet/freescale/fman/inc/fm_ext.h
+new file mode 100644
+index 0000000..607f331
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/fman/inc/fm_ext.h
+@@ -0,0 +1,446 @@
++/*
++ * Copyright 2008-2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++/* FM Application Programming Interface. */
++#ifndef __FM_EXT
++#define __FM_EXT
++
++#include "fsl_fman_sp.h"
++
++/* Enum for defining port types */
++enum fm_port_type {
++	FM_PORT_TYPE_TX = 0,	/* TX Port */
++	FM_PORT_TYPE_RX,	/* RX Port */
++	FM_PORT_TYPE_DUMMY
++};
++
++/* Enum for defining port speed */
++enum fm_port_speed {
++	FM_PORT_SPEED_1G = 0,		/* 1G port */
++	FM_PORT_SPEED_10G,		/* 10G port */
++	FM_PORT_SPEED_DUMMY
++};
++
++/* BMan defines */
++#define BM_MAX_NUM_OF_POOLS		64 /* Buffers pools */
++#define FM_PORT_MAX_NUM_OF_EXT_POOLS	8  /* External BM pools per Rx port */
++
++/* General FM defines */
++#define FM_MAX_NUM_OF_PARTITIONS    64	 /* Maximum number of partitions */
++
++/* FM Frame descriptor macros  */
++/* Frame queue Context Override */
++#define FM_FD_CMD_FCO                   0x80000000
++#define FM_FD_CMD_RPD                   0x40000000  /* Read Prepended Data */
++#define FM_FD_CMD_DTC                   0x10000000  /* Do L4 Checksum */
++
++/* Not for Rx-Port! Unsupported Format */
++#define FM_FD_ERR_UNSUPPORTED_FORMAT    0x04000000
++/* Not for Rx-Port! Length Error */
++#define FM_FD_ERR_LENGTH                0x02000000
++#define FM_FD_ERR_DMA                   0x01000000  /* DMA Data error */
++
++/* IPR frame (not error) */
++#define FM_FD_IPR                       0x00000001
++/* IPR non-consistent-sp */
++#define FM_FD_ERR_IPR_NCSP              (0x00100000 | FM_FD_IPR)
++/* IPR error */
++#define FM_FD_ERR_IPR                   (0x00200000 | FM_FD_IPR)
++/* IPR timeout */
++#define FM_FD_ERR_IPR_TO                (0x00300000 | FM_FD_IPR)
++
++/* Rx FIFO overflow, FCS error, code error, running disparity error
++ * (SGMII and TBI modes), FIFO parity error. PHY Sequence error,
++ * PHY error control character detected.
++ */
++#define FM_FD_ERR_PHYSICAL              0x00080000
++/* Frame too long OR Frame size exceeds max_length_frame  */
++#define FM_FD_ERR_SIZE                  0x00040000
++/* classification discard */
++#define FM_FD_ERR_CLS_DISCARD           0x00020000
++/* Extract Out of Frame */
++#define FM_FD_ERR_EXTRACTION            0x00008000
++/* No Scheme Selected */
++#define FM_FD_ERR_NO_SCHEME             0x00004000
++/* Keysize Overflow */
++#define FM_FD_ERR_KEYSIZE_OVERFLOW      0x00002000
++/* Frame color is red */
++#define FM_FD_ERR_COLOR_RED             0x00000800
++/* Frame color is yellow */
++#define FM_FD_ERR_COLOR_YELLOW          0x00000400
++/* Parser Time out Exceed */
++#define FM_FD_ERR_PRS_TIMEOUT           0x00000080
++/* Invalid Soft Parser instruction */
++#define FM_FD_ERR_PRS_ILL_INSTRUCT      0x00000040
++/* Header error was identified during parsing */
++#define FM_FD_ERR_PRS_HDR_ERR           0x00000020
++/* Frame parsed beyind 256 first bytes */
++#define FM_FD_ERR_BLOCK_LIMIT_EXCEEDED  0x00000008
++
++/* non Frame-Manager error */
++#define FM_FD_RX_STATUS_ERR_NON_FM      0x00400000
++
++/* Parse results memory layout */
++struct fm_prs_result_t {
++	u8 lpid;		/* Logical port id */
++	u8 shimr;		/* Shim header result  */
++	u16 l2r;		/* Layer 2 result */
++	u16 l3r;		/* Layer 3 result */
++	u8 l4r;		/* Layer 4 result */
++	u8 cplan;		/* Classification plan id */
++	u16 nxthdr;		/* Next Header  */
++	u16 cksum;		/* Running-sum */
++	/* Flags&fragment-offset field of the last IP-header */
++	u16 flags_frag_off;
++	/* Routing type field of a IPV6 routing extension header */
++	u8 route_type;
++	/* Routing Extension Header Present; last bit is IP valid */
++	u8 rhp_ip_valid;
++	u8 shim_off[2];		/* Shim offset */
++	u8 ip_pid_off;		/* IP PID (last IP-proto) offset */
++	u8 eth_off;		/* ETH offset */
++	u8 llc_snap_off;	/* LLC_SNAP offset */
++	u8 vlan_off[2];		/* VLAN offset */
++	u8 etype_off;		/* ETYPE offset */
++	u8 pppoe_off;		/* PPP offset */
++	u8 mpls_off[2];		/* MPLS offset */
++	u8 ip_off[2];		/* IP offset */
++	u8 gre_off;		/* GRE offset */
++	u8 l4_off;		/* Layer 4 offset */
++	u8 nxthdr_off;		/** Parser end point */
++} __attribute__((__packed__));
++
++/* FM Exceptions */
++enum fm_exceptions {
++	FM_EX_DMA_BUS_ERROR = 0,	/* DMA bus error. */
++	/* Read Buffer ECC error (Valid for FM rev < 6) */
++	FM_EX_DMA_READ_ECC,
++	/* Write Buffer ECC error on system side (Valid for FM rev < 6) */
++	FM_EX_DMA_SYSTEM_WRITE_ECC,
++	/* Write Buffer ECC error on FM side (Valid for FM rev < 6) */
++	FM_EX_DMA_FM_WRITE_ECC,
++	/* Single Port ECC error on FM side (Valid for FM rev > 6) */
++	FM_EX_DMA_SINGLE_PORT_ECC,
++	FM_EX_FPM_STALL_ON_TASKS,	/* Stall of tasks on FPM */
++	FM_EX_FPM_SINGLE_ECC,		/* Single ECC on FPM. */
++	/* Double ECC error on FPM ram access */
++	FM_EX_FPM_DOUBLE_ECC,
++	FM_EX_QMI_SINGLE_ECC,		/* Single ECC on QMI. */
++	FM_EX_QMI_DOUBLE_ECC,		/* Double bit ECC occurred on QMI */
++	FM_EX_QMI_DEQ_FROM_UNKNOWN_PORTID,
++					/* Dequeue from unknown port id */
++	FM_EX_BMI_LIST_RAM_ECC,	/* Linked List RAM ECC error */
++	FM_EX_BMI_STORAGE_PROFILE_ECC,/* Storage Profile ECC Error */
++	/* Statistics Count RAM ECC Error Enable */
++	FM_EX_BMI_STATISTICS_RAM_ECC,
++	FM_EX_BMI_DISPATCH_RAM_ECC,	/* Dispatch RAM ECC Error Enable */
++	FM_EX_MURAM_ECC		/* Double bit ECC occurred on MURAM */
++};
++
++/** fm_exceptions_cb
++ * dev_id	- Pointer to the device
++ * exception	- The exception.
++ *
++ * Exceptions user callback routine, will be called upon an exception
++ * passing the exception identification.
++ */
++typedef void (fm_exceptions_cb)(void *dev_id,
++				 enum fm_exceptions exception);
++
++/** fm_bus_error_cb
++ * dev_id	- Pointer to the device
++ * port_type	- Port type (enum fm_port_type)
++ * port_id	- Port id
++ * addr		- Address that caused the error
++ * tnum		- Owner of error
++ * liodn	- Logical IO device number
++ *
++ * Bus error user callback routine, will be called upon bus error,
++ * passing parameters describing the errors and the owner.
++ */
++typedef void (fm_bus_error_cb)(void *dev_id, enum fm_port_type port_type,
++				u8 port_id, u64 addr, u8 tnum, u16 liodn);
++
++/* A structure for defining buffer prefix area content. */
++struct fm_buffer_prefix_content_t {
++	/* Number of bytes to be left at the beginning of the external
++	 * buffer; Note that the private-area will start from the base
++	 * of the buffer address.
++	 */
++	u16 priv_data_size;
++	/* true to pass the parse result to/from the FM;
++	 * User may use FM_PORT_GetBufferPrsResult() in
++	 * order to get the parser-result from a buffer.
++	 */
++	bool pass_prs_result;
++	/* true to pass the timeStamp to/from the FM User */
++	bool pass_time_stamp;
++	/* true to pass the KG hash result to/from the FM User may
++	 * use FM_PORT_GetBufferHashResult() in order to get the
++	 * parser-result from a buffer.
++	 */
++	bool pass_hash_result;
++	/* Add all other Internal-Context information: AD,
++	 * hash-result, key, etc.
++	 */
++	u16 data_align;
++};
++
++/* A structure of information about each of the external
++ * buffer pools used by a port or storage-profile.
++ */
++struct fm_ext_pool_params_t {
++	u8 id;		    /* External buffer pool id */
++	u16 size;		    /* External buffer pool buffer size */
++};
++
++/* A structure for informing the driver about the external
++ * buffer pools allocated in the BM and used by a port or a
++ * storage-profile.
++ */
++struct fm_ext_pools_t {
++	u8 num_of_pools_used; /* Number of pools use by this port */
++	struct fm_ext_pool_params_t ext_buf_pool[FM_PORT_MAX_NUM_OF_EXT_POOLS];
++					/* Parameters for each port */
++};
++
++/* A structure for defining backup BM Pools. */
++struct fm_backup_bm_pools_t {
++	/* Number of BM backup pools -  must be smaller
++	 * than the total number of pools defined for the specified port.
++	 */
++	u8 num_of_backup_pools;
++	/* num_of_backup_pools pool id's, specifying which pools should
++	 * be used only as backup. Pool id's specified here must be a
++	 * subset of the pools used by the specified port.
++	 */
++	u8 pool_ids[FM_PORT_MAX_NUM_OF_EXT_POOLS];
++};
++
++/* A structure for defining BM pool depletion criteria */
++struct fm_buf_pool_depletion_t {
++	/* select mode in which pause frames will be sent after a
++	 * number of pools (all together!) are depleted
++	 */
++	bool pools_grp_mode_enable;
++	/* the number of depleted pools that will invoke pause
++	 * frames transmission.
++	 */
++	u8 num_of_pools;
++	/* For each pool, true if it should be considered for
++	 * depletion (Note - this pool must be used by this port!).
++	 */
++	bool pools_to_consider[BM_MAX_NUM_OF_POOLS];
++	/* select mode in which pause frames will be sent
++	 * after a single-pool is depleted;
++	 */
++	bool single_pool_mode_enable;
++	/* For each pool, true if it should be considered
++	 * for depletion (Note - this pool must be used by this port!)
++	 */
++	bool pools_to_consider_for_single_mode[BM_MAX_NUM_OF_POOLS];
++};
++
++/* A Structure for defining FM initialization parameters */
++struct fm_params_t {
++	u8 fm_id;
++	/* Index of the FM */
++	void __iomem *base_addr;
++	/* A pointer to base of memory mapped FM registers (virtual);
++	 * NOTE that this should include ALL common registers of the FM
++	 * including the PCD registers area.
++	 */
++	struct muram_info *muram;
++	/* A pointer to an initialized MURAM object, to be used by the FM. */
++	u16 fm_clk_freq;
++	/* In Mhz; */
++	fm_exceptions_cb *exception_cb;
++	/* An application callback routine to handle exceptions; */
++	fm_bus_error_cb *bus_error_cb;
++	/* An application callback routine to handle exceptions; */
++	void *dev_id;
++	/* Device cookie used by the exception cbs */
++};
++
++struct fm_t; /* FMan data */
++
++/**
++ * fm_config
++ * @fm_params		A pointer to a data structure of mandatory FM
++ *			parameters
++ *
++ * Creates the FM module and returns its handle (descriptor).
++ * This descriptor must be passed as first parameter to all other
++ * FM function calls.
++ * No actual initialization or configuration of FM hardware is
++ * done by this routine. All FM parameters get default values that
++ * may be changed by calling one or more of the advance config
++ * routines.
++ *
++ * Return: A handle to the FM object, or NULL for Failure.
++ */
++void *fm_config(struct fm_params_t *fm_params);
++
++/**
++ * fm_init
++ * @fm		Pointer to the FMan module
++ *
++ * Initializes the FM module by defining the software structure
++ * and configuring the hardware registers.
++ *
++ * Return 0 on success; Error code otherwise.
++ */
++int fm_init(struct fm_t *fm);
++
++/**
++ * fm_free
++ * @fm		Pointer to the FMan module
++ *
++ * Frees all resources that were assigned to FM module.
++ * Calling this routine invalidates the descriptor.
++ *
++ * Return: 0 on success; Error code otherwise.
++ */
++int fm_free(struct fm_t *fm);
++
++/* Enum for choosing the field that will be output on AID */
++enum fm_dma_aid_mode {
++	FM_DMA_AID_OUT_PORT_ID = 0,	    /* 4 LSB of PORT_ID */
++	FM_DMA_AID_OUT_TNUM		    /* 4 LSB of TNUM */
++};
++
++/* Enum for selecting DMA Emergency options */
++/* Enable emergency for MURAM1 */
++#define  FM_DMA_MURAM_READ_EMERGENCY        0x00800000
++/* Enable emergency for MURAM2 */
++#define  FM_DMA_MURAM_WRITE_EMERGENCY       0x00400000
++/* Enable emergency for external bus */
++#define  FM_DMA_EXT_BUS_EMERGENCY           0x00100000
++
++/**
++ * fm_cfg_reset_on_init
++ * @fm	Pointer to the FMan module
++ * @enable	When true, FM will be reset before any
++ *
++ * Define whether to reset the FM before initialization.
++ * Change the default configuration [DEFAULT_RESET_ON_INIT].
++ *
++ * Allowed only following fm_config() and before fm_init().
++ *
++ * Return: 0 on success; Error code otherwise.
++ */
++int fm_cfg_reset_on_init(struct fm_t *fm, bool enable);
++
++/**
++ * fm_cfg_total_fifo_size
++ * @fm		Pointer to the FMan module
++ * @total_fifo_size	The selected new value.
++ *
++ * Define Total FIFO size for the whole FM.
++ * Calling this routine changes the total Fifo size in the internal driver
++ * data base from its default configuration [DEFAULT_total_fifo_size]
++ *
++ * Allowed only following fm_config() and before fm_init().
++ *
++ * Return: 0 on success; Error code otherwise.
++ */
++int fm_cfg_total_fifo_size(struct fm_t *fm, u32 total_fifo_size);
++
++/* A Structure for returning FM revision information */
++struct fm_revision_info_t {
++	u8 major_rev;		    /* Major revision */
++	u8 minor_rev;		    /* Minor revision */
++};
++
++/**
++ * fm_set_exception
++ * fm		Pointer to the FMan module
++ * exception	The exception to be selected.
++ * enable	True to enable interrupt, false to mask it.
++ *
++ * Calling this routine enables/disables the specified exception.
++ *
++ * Allowed only following fm_init().
++ *
++ * Return: 0 on success; Error code otherwise.
++ */
++int fm_set_exception(struct fm_t *fm, enum fm_exceptions exception,
++		     bool enable);
++
++/**
++ * fm_disable_rams_ecc
++ * @fm		Pointer to the FMan module
++ * Disables ECC mechanism for all the different FM RAM's; E.g. IRAM,
++ * MURAM, etc. Note:
++ *	In opposed to fm_enable_rams_ecc, this routine must be called
++ *	explicitly to disable all Rams ECC.
++ *
++ * Allowed only following fm_config() and before fm_init().
++ *
++ * Return: 0 on success; Error code otherwise.
++ */
++int fm_disable_rams_ecc(struct fm_t *fm);
++
++/**
++ * fm_get_revision
++ * @fm			- Pointer to the FMan module
++ * fm_rev		- A structure of revision information parameters.
++ * Returns the FM revision
++ *
++ * Allowed only following fm_init().
++ *
++ * Return: 0 on success; Error code otherwise.
++ */
++void fm_get_revision(struct fm_t *fm, struct fm_revision_info_t *fm_rev);
++
++/**
++ * fm_error_isr
++ * @fm		Pointer to the FMan module
++ * FM interrupt-service-routine for errors.
++ *
++ * Allowed only following fm_init().
++ *
++ * Return: 0 on success; EMPTY if no errors found in register, other
++ *	   error code otherwise.
++ */
++int fm_error_isr(struct fm_t *fm);
++
++/**
++ * fm_event_isr
++ * @fm	Pointer to the FMan module
++ *
++ * FM interrupt-service-routine for normal events.
++ * Allowed only following fm_init().
++ */
++void fm_event_isr(struct fm_t *fm);
++
++#endif /* __FM_EXT */
+diff --git a/drivers/net/ethernet/freescale/fman/inc/fsl_fman_drv.h b/drivers/net/ethernet/freescale/fman/inc/fsl_fman_drv.h
+new file mode 100644
+index 0000000..c96cfd1
+--- /dev/null
++++ b/drivers/net/ethernet/freescale/fman/inc/fsl_fman_drv.h
+@@ -0,0 +1,99 @@
++/*
++ * Copyright 2008-2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef __FSL_FMAN_DRV_H
++#define __FSL_FMAN_DRV_H
++
++#include <linux/types.h>
++#include <linux/device.h>	/* struct device */
++#include "fm_ext.h"
++
++/* FM device opaque structure used for type checking */
++struct fm;
++
++/**
++ * fm_bind
++ * @fm_dev:	the OF handle of the FM device.
++ *
++ * Bind to a specific FM device.
++ *
++ * Allowed only after the port was created.
++ *
++ * Return: A handle of the FM device.
++ */
++struct fm *fm_bind(struct device *fm_dev);
++
++/**
++ * fm_unbind
++ * @fm:		A handle of the FM device.
++ *
++ * Un-bind from a specific FM device.
++ *
++ * Allowed only after the port was created.
++ */
++void fm_unbind(struct fm *fm);
++
++/**
++ * fm_get_handle
++ * @fm:		A handle of the FM device
++ *
++ * Get pointer to internal FM strcuture
++ *
++ * Return: A pointer to internal FM structure
++ */
++void *fm_get_handle(struct fm *fm);
++
++/**
++ * fm_get_mem_region
++ * @fm:		A handle of the FM device
++ *
++ * Get FM memory region
++ *
++ * Return: A structure with FM memory region information
++ */
++
++struct resource *fm_get_mem_region(struct fm *fm);
++/**
++ * fm_get_max_frm
++ *
++ * Return: Max frame length configured in the FM driver
++ */
++u16 fm_get_max_frm(void);
++
++/**
++ * fm_get_rx_extra_headroom
++ *
++ * Return: Extra headroom size configured in the FM driver
++ */
++int fm_get_rx_extra_headroom(void);
++
++#endif /* __FSL_FMAN_DRV_H */
+-- 
+2.1.0.27.g96db324
+

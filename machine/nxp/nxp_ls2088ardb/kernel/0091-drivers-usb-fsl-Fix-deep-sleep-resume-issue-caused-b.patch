@@ -1,0 +1,124 @@
+From 768a269162e04c21417b74ed222884dc513b7623 Mon Sep 17 00:00:00 2001
+From: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Date: Wed, 26 Nov 2014 22:59:05 +0530
+Subject: [PATCH 091/124] drivers:usb:fsl: Fix deep-sleep resume issue caused
+ by usb
+
+usb ip driver needs to save and restore all registers including
+phy registers across deep-sleep. This is required since latest
+changes in u-boot code doesn't re-init usb phy anymore during
+deep-sleep resume
+
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Signed-off-by: Suresh Gupta <suresh.gupta@freescale.com>
+Signed-off-by: Nikhil Badola <nikhil.badola@freescale.com>
+Change-Id: Idc957b013a804bb4b12fa17836d0ae2371aeeed4
+Reviewed-on: http://git.am.freescale.net:8181/24603
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Richard Schmitt <richard.schmitt@freescale.com>
+---
+ drivers/usb/host/ehci-fsl.c | 62 +++++++++++++++++++++++++++++++++++----------
+ 1 file changed, 48 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/usb/host/ehci-fsl.c b/drivers/usb/host/ehci-fsl.c
+index 84a0bb9..50237cf 100644
+--- a/drivers/usb/host/ehci-fsl.c
++++ b/drivers/usb/host/ehci-fsl.c
+@@ -34,11 +34,45 @@
+ 
+ #include "ehci-fsl.h"
+ 
++#define FSL_USB_PHY_ADDR	0xffe214000
++
++struct ccsr_usb_port_ctrl {
++	u32     ctrl;
++	u32     drvvbuscfg;
++	u32     pwrfltcfg;
++	u32     sts;
++	u8      res_14[0xc];
++	u32     bistcfg;
++	u32     biststs;
++	u32     abistcfg;
++	u32     abiststs;
++	u8      res_30[0x10];
++	u32     xcvrprg;
++	u32     anaprg;
++	u32     anadrv;
++	u32     anasts;
++};
++
++struct ccsr_usb_phy {
++	u32     id;
++	struct ccsr_usb_port_ctrl port1;
++	u8      res_50[0xc];
++	u32     tvr;
++	u32     pllprg[4];
++	u8      res_70[0x4];
++	u32     anaccfg;
++	u32     dbg;
++	u8      res_7c[0x4];
++	struct ccsr_usb_port_ctrl port2;
++	u8      res_dc[0x334];
++};
++
+ struct ehci_fsl {
+ 	struct ehci_hcd ehci;
+ 
+ #ifdef CONFIG_PM
+-	struct ehci_regs *saved_regs;
++	struct ehci_regs saved_regs;
++	struct ccsr_usb_phy saved_phy_regs;
+ 	/* Saved USB PHY settings, need to restore after deep sleep. */
+ 	u32 usb_ctrl;
+ #endif
+@@ -476,9 +510,9 @@ static int ehci_fsl_setup(struct usb_hcd *hcd)
+ }
+ 
+ 
+-
+-
+ #ifdef CONFIG_PM
++void __iomem *phy_reg;
++
+ /* save usb registers */
+ static int ehci_fsl_save_context(struct usb_hcd *hcd)
+ {
+@@ -486,10 +520,10 @@ static int ehci_fsl_save_context(struct usb_hcd *hcd)
+ 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+ 	void __iomem *non_ehci = hcd->regs;
+ 
+-	ehci_fsl->saved_regs = kzalloc(sizeof(struct ehci_regs), GFP_KERNEL);
+-	if (!ehci_fsl->saved_regs)
+-		return -ENOMEM;
+-	_memcpy_fromio(ehci_fsl->saved_regs, ehci->regs,
++	phy_reg = ioremap(FSL_USB_PHY_ADDR, sizeof(struct ccsr_usb_phy));
++	_memcpy_fromio((void *)&ehci_fsl->saved_phy_regs, phy_reg,
++				sizeof(struct ccsr_usb_phy));
++	_memcpy_fromio((void *)&ehci_fsl->saved_regs, ehci->regs,
+ 					sizeof(struct ehci_regs));
+ 	ehci_fsl->usb_ctrl = ioread32be(non_ehci + FSL_SOC_USB_CTRL);
+ 	return 0;
+@@ -503,13 +537,13 @@ static int ehci_fsl_restore_context(struct usb_hcd *hcd)
+ 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+ 	void __iomem *non_ehci = hcd->regs;
+ 
+-	if (ehci_fsl->saved_regs) {
+-		_memcpy_toio(ehci->regs, ehci_fsl->saved_regs,
+-						sizeof(struct ehci_regs));
+-		iowrite32be(ehci_fsl->usb_ctrl, non_ehci + FSL_SOC_USB_CTRL);
+-		kfree(ehci_fsl->saved_regs);
+-		ehci_fsl->saved_regs = NULL;
+-	}
++	if (phy_reg)
++		_memcpy_toio(phy_reg, (void *)&ehci_fsl->saved_phy_regs,
++				sizeof(struct ccsr_usb_phy));
++
++	_memcpy_toio(ehci->regs, (void *)&ehci_fsl->saved_regs,
++					sizeof(struct ehci_regs));
++	iowrite32be(ehci_fsl->usb_ctrl, non_ehci + FSL_SOC_USB_CTRL);
+ 	return 0;
+ }
+ 
+-- 
+2.1.0.27.g96db324
+

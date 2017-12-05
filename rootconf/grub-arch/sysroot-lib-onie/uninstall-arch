@@ -1,0 +1,69 @@
+# x86_64 specific uninstall routine
+
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015,2016 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+[ -r "$lib_dir/onie-uninstaller-common" ] || {
+    echo "ERROR: Unable to find onie-uninstaller-common"
+    exit 1
+}
+. $lib_dir/onie-uninstaller-common
+
+[ -r "$lib_dir/onie-blkdev-common" ] || {
+    echo "ERROR: Unable to find onie-blkdev-common"
+    exit 1
+}
+. $lib_dir/onie-blkdev-common
+
+# After uninstall, clean up files and directories in the ESP.  Also
+# clean up any unused EFI boot numbers.
+uefi_clean_up()
+{
+    # Remove unused files from /boot/efi
+    ls -d $uefi_esp_mnt/EFI/* | while read dir ; do
+        case "$dir" in
+            */onie|*-DIAG|*/BOOT)
+                # preserve these
+                continue
+                ;;
+            *)
+                # remove the rest
+                rm -rf $dir
+        esac
+    done
+
+    uefi_rm_stale_bootnum
+}
+
+uninstall_system()
+{
+    # Clean up block device that contains ONIE
+    local blk_dev="$(onie_get_boot_disk | sed -e 's#/dev/##')"
+
+    [ -b "/dev/$blk_dev" ] || {
+        echo "Error: Unable to determine block device of ONIE install"
+        exit 1
+    }
+
+    if [ "$(onie_get_running_firmware)" = "uefi" ] ; then
+        uefi_clean_up
+        uefi_boot_onie_install
+    else
+        # Re-install ONIE GRUB in the MBR as the NOS we just removed
+        # probably installed there.
+        bios_boot_onie_install
+    fi
+
+    # Wipe out and delete all partitions, except for important ones,
+    # like GRUB, ONIE and possibly a DIAG.
+    erase_mass_storage $blk_dev
+
+    return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

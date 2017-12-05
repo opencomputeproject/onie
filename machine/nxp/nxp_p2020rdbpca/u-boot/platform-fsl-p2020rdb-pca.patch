@@ -1,0 +1,94 @@
+platform fsl p2020rdb-pca patch
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+Add ONIE support for the Freescale P2020RDB-PCA platform.
+
+diff --git a/boards.cfg b/boards.cfg
+index e4b0d44..f389720 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -822,6 +822,7 @@ P2020RDB_36BIT_SDCARD        powerpc     mpc85xx     p1_p2_rdb           freesca
+ P2020RDB_36BIT_SPIFLASH      powerpc     mpc85xx     p1_p2_rdb           freescale      -           P1_P2_RDB:P2020RDB,36BIT,SPIFLASH
+ P2020RDB_NAND                powerpc     mpc85xx     p1_p2_rdb           freescale      -           P1_P2_RDB:P2020RDB,NAND
+ P2020RDB-PC                  powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB
++P2020RDB-PC_ONIE_0           powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,ONIE,ONIE_PLATFORM_REV=0
+ P2020RDB-PC_36BIT            powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT
+ P2020RDB-PC_36BIT_NAND       powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT,NAND
+ P2020RDB-PC_36BIT_SDCARD     powerpc     mpc85xx     p1_p2_rdb_pc        freescale      -           p1_p2_rdb_pc:P2020RDB,36BIT,SDCARD
+diff --git a/include/configs/p1_p2_rdb_pc.h b/include/configs/p1_p2_rdb_pc.h
+index 964bfcd..55a4299 100644
+--- a/include/configs/p1_p2_rdb_pc.h
++++ b/include/configs/p1_p2_rdb_pc.h
+@@ -949,4 +949,69 @@ __stringify(__PCIE_RST_CMD)"\0"
+ 
+ #define CONFIG_BOOTCOMMAND	CONFIG_HDBOOT
+ 
++#ifdef CONFIG_ONIE
++
++/*
++ * Board hardware information (EEPROM), stored in flash.
++ */
++#define CONFIG_CMD_SYS_EEPROM
++#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
++#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	1
++
++#define CONFIG_SYS_EEPROM_USE_COMMON_FLASH_IO
++#define CONFIG_SYS_FLASH_HWINFO_ADDR		0xef040000
++/* 64K(one sector) for HWINFO */
++#define CONFIG_SYS_FLASH_HWINFO_SECT_SIZE	0x00020000
++#define CONFIG_SYS_EEPROM_MAX_SIZE		CONFIG_SYS_FLASH_HWINFO_SECT_SIZE
++
++/*
++ * We will use TSEC3 as the primary interface.
++ */
++
++#undef CONFIG_TSEC1
++#undef CONFIG_TSEC2
++#undef CONFIG_TSEC3_NAME
++#define	CONFIG_TSEC3_NAME	"eth0"
++
++#undef CONFIG_ETHPRIME
++#define CONFIG_ETHPRIME		"eth0"
++
++#undef CONFIG_HAS_ETH1
++#undef CONFIG_HAS_ETH2
++
++/* Undefine a few things provided by common_config.h */
++#undef CONFIG_BOOTCOMMAND
++#undef CONFIG_SYS_PBSIZE
++#undef CONFIG_DOS_PARTITION
++#undef CONFIG_LOADS_ECHO
++#undef CONFIG_SYS_LOADS_BAUD_CHANGE
++#undef CONFIG_SYS_PCIE1_NAME
++#undef CONFIG_SYS_PCIE2_NAME
++#undef CONFIG_OF_LIBFDT
++#undef CONFIG_OF_BOARD_SETUP
++#undef CONFIG_OF_STDOUT_VIA_ALIAS
++#undef CONFIG_FIT
++#undef CONFIG_SYS_BAUDRATE_TABLE
++#undef CONFIG_EXTRA_ENV_SETTINGS
++
++#include "configs/common_config.h"
++
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS0\0"	\
++	"onie_start=0xef960000\0"	\
++	"onie_sz.b=0x00600000\0" \
++	"vscfw_addr=ef000000\0"  \
++	"hwconfig=usb1:dr_mode=host,phy_type=ulpi\0"
++
++#define	CONFIG_EXTRA_ENV_SETTINGS		\
++	CONFIG_PLATFORM_ENV			\
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++#endif /* CONFIG_ONIE */
++
+ #endif /* __CONFIG_H */

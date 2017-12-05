@@ -30,6 +30,7 @@ support_platform()
 
 [ -r /lib/onie/support-arch ]     && . /lib/onie/support-arch
 [ -r /lib/onie/support-platform ] && . /lib/onie/support-platform
+[ -r /lib/onie/functions ] && . /lib/onie/functions
 
 cleanup() {
     umount $tmpdir > /dev/null 2>&1
@@ -43,9 +44,10 @@ mount -t tmpfs tmpfs $tmpdir || {
     cleanup 1
 }
 
-tarfile="$output_dir/onie-support.tar.bz2"
+onie_support_name="onie-support-${onie_machine}.tar.bz2"
+tarfile="$output_dir/$onie_support_name"
 
-tar_dir="onie-support"
+tar_dir="onie-support-${onie_machine}"
 save_dir="$tmpdir/$tar_dir"
 rm -rf $save_dir
 mkdir -p $save_dir || {
@@ -58,6 +60,13 @@ export > $save_dir/runtime-export-env.txt
 set > $save_dir/runtime-set-env.txt
 ps w > $save_dir/runtime-process.txt
 dmesg > $save_dir/dmesg.txt
+if [ -x /usr/bin/onie-syseeprom ] ; then
+    onie-syseeprom > $save_dir/onie-syseeprom.txt
+fi
+onie-sysinfo -a > $save_dir/onie-sysinfo.txt
+cp /etc/machine*.conf $save_dir
+blkid > $save_dir/blkid.txt
+fdisk -l > $save_dir/fdisk.txt
 support_arch
 support_platform
 tar -C $tmpdir -cjf $tarfile $tar_dir || {

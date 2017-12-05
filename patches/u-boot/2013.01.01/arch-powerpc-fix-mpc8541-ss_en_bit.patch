@@ -1,0 +1,34 @@
+From dfec63206015050d56501db5743e252b0350d246 Mon Sep 17 00:00:00 2001
+From: Luffy <luffy.cheng@quantatw.com>
+Date: Fri, 13 Mar 2015 09:43:05 +0800
+Subject: Fixup MPC8541/8555 SS_EN and CLK_ADJST configuration
+
+According datasheet MPC8555ERM :
+DDR_SDRAM_CLK_CNTL[0] SS_EN
+DDR_SDRAM_CLK_CNTL[5:7] CLK_ADJST
+
+The DDR_SDRAM_CLK_CNTL[SS_EN] default value out of reset is 0
+and this must be set to a 1 for proper operation.
+---
+ arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c b/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
+index 6265e52..2c71089 100644
+--- a/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
++++ b/arch/powerpc/cpu/mpc8xxx/ddr/ctrl_regs.c
+@@ -1215,7 +1215,11 @@ static void set_ddr_sdram_clk_cntl(fsl_ddr_cfg_regs_t *ddr,
+ 	unsigned int clk_adjust;	/* Clock adjust */
+ 
+ 	clk_adjust = popts->clk_adjust;
++#if defined(CONFIG_MPC8541) || defined(CONFIG_MPC8555)
++	ddr->ddr_sdram_clk_cntl = (0x80000000 | ((clk_adjust & 0x7) << 24));
++#else
+ 	ddr->ddr_sdram_clk_cntl = (clk_adjust & 0xF) << 23;
++#endif
+ 	debug("FSLDDR: clk_cntl = 0x%08x\n", ddr->ddr_sdram_clk_cntl);
+ }
+ 
+-- 
+1.7.3.4
+

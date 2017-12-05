@@ -1,11 +1,17 @@
 Add to support onie-syseeprom command.
 
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2014,2016,2017 david_yang <david_yang@accton.com>
+Copyright (C) 2015 Ellen Wang <ellen@cumulusnetworks.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
 diff --git a/include/24cXX.h b/include/24cXX.h
 new file mode 100644
-index 0000000..c304273
+index 0000000..5fb4641
 --- /dev/null
 +++ b/include/24cXX.h
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,66 @@
 +/***************************************************************************
 +    copyright            : (C) by 2002-2003 Stefano Barbato
 +    email                : stefano@codesink.org
@@ -28,6 +34,15 @@ index 0000000..c304273
 +#define EEPROM_TYPE_UNKNOWN	0
 +#define EEPROM_TYPE_8BIT_ADDR	1
 +#define EEPROM_TYPE_16BIT_ADDR 	2
++
++/*
++ * SYS_EEPROM_I2C_WRITE_1B_DELAY: delay number of microseconds after writing 1 byte
++ * SYS_EEPROM_I2C_WRITE_2B_DELAY: delay number of microseconds after writing 2 bytes
++ * SYS_EEPROM_I2C_WRITE_3B_DELAY: delay number of microseconds after writing 3 bytes
++ */
++#define SYS_EEPROM_I2C_WRITE_1B_DELAY   CONFIG_SYS_EEPROM_I2C_WRITE_1B_DELAY
++#define SYS_EEPROM_I2C_WRITE_2B_DELAY   CONFIG_SYS_EEPROM_I2C_WRITE_2B_DELAY
++#define SYS_EEPROM_I2C_WRITE_3B_DELAY   CONFIG_SYS_EEPROM_I2C_WRITE_3B_DELAY
 +
 +struct eeprom
 +{
@@ -64,17 +79,17 @@ index 0000000..c304273
 +
 +#endif
 diff --git a/include/applets.src.h b/include/applets.src.h
-index 5c3f6d6..1c8e0cb 100644
+index b9df5a1..71b8cbd 100644
 --- a/include/applets.src.h
 +++ b/include/applets.src.h
-@@ -416,6 +416,7 @@ IF_XZ(APPLET_ODDNAME(xz, unxz, BB_DIR_USR_BIN, BB_SUID_DROP, xz))
+@@ -344,6 +344,7 @@ IF_WC(APPLET(wc, BB_DIR_USR_BIN, BB_SUID_DROP))
+ IF_WHOAMI(APPLET_NOFORK(whoami, whoami, BB_DIR_USR_BIN, BB_SUID_DROP, whoami))
  IF_YES(APPLET_NOFORK(yes, yes, BB_DIR_USR_BIN, BB_SUID_DROP, yes))
- IF_GUNZIP(APPLET_ODDNAME(zcat, gunzip, BB_DIR_BIN, BB_SUID_DROP, zcat))
  IF_ZCIP(APPLET(zcip, BB_DIR_SBIN, BB_SUID_DROP))
 +IF_SYS_EEPROM(APPLET_ODDNAME(onie-syseeprom, onie_syseeprom, BB_DIR_USR_BIN, BB_SUID_DROP, onie_syseeprom))
  
- #if !defined(PROTOTYPES) && !defined(NAME_MAIN_CNAME) && !defined(MAKE_USAGE)
- };
+ #if !defined(PROTOTYPES) && !defined(NAME_MAIN) && !defined(MAKE_USAGE) \
+ 	&& !defined(MAKE_LINKS) && !defined(MAKE_SUID)
 diff --git a/include/i2c-dev.h b/include/i2c-dev.h
 new file mode 100644
 index 0000000..23f7c2c
@@ -413,10 +428,10 @@ index 0000000..23f7c2c
 +#endif /* _LINUX_I2C_DEV_H */
 diff --git a/include/onie_tlvinfo.h b/include/onie_tlvinfo.h
 new file mode 100644
-index 0000000..52e7cb9
+index 0000000..b602736
 --- /dev/null
 +++ b/include/onie_tlvinfo.h
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,172 @@
 +/*
 + *  The Definition of the TlvInfo EEPROM format can be found at onie.org or
 + *  github.com/onie
@@ -552,16 +567,18 @@ index 0000000..52e7cb9
 + * SYS_EEPROM_SIZE: size of usable eeprom
 + * SYS_EEPROM_I2C_DEVICE: i2c-bus
 + * SYS_EEPROM_I2C_ADDR: address on the bus
++ * SYS_EEPROM_I2C_MEM_ADDR_BITS: number of bits to address a byte in eeprom
 + * SYS_EEPROM_MTD_DEVICE: MTD device name of the eeprom
 + * SYS_EEPROM_MAX_SIZE: Total size of the eeprom
 + * SYS_EEPROM_OFFSET: offset from where the ONIE header starts
 + */
-+#define SYS_EEPROM_SIZE       CONFIG_SYS_EEPROM_SIZE
-+#define SYS_EEPROM_I2C_DEVICE CONFIG_SYS_EEPROM_I2C_DEVICE
-+#define SYS_EEPROM_I2C_ADDR   CONFIG_SYS_EEPROM_I2C_ADDR
-+#define SYS_EEPROM_MTD_DEVICE CONFIG_SYS_EEPROM_MTD_DEVICE
-+#define SYS_EEPROM_MAX_SIZE   CONFIG_SYS_EEPROM_MAX_SIZE
-+#define SYS_EEPROM_OFFSET     CONFIG_SYS_EEPROM_OFFSET
++#define SYS_EEPROM_SIZE              CONFIG_SYS_EEPROM_SIZE
++#define SYS_EEPROM_I2C_DEVICE        CONFIG_SYS_EEPROM_I2C_DEVICE
++#define SYS_EEPROM_I2C_ADDR          CONFIG_SYS_EEPROM_I2C_ADDR
++#define SYS_EEPROM_I2C_MEM_ADDR_BITS CONFIG_SYS_EEPROM_I2C_MEM_ADDR_BITS
++#define SYS_EEPROM_MTD_DEVICE        CONFIG_SYS_EEPROM_MTD_DEVICE
++#define SYS_EEPROM_MAX_SIZE          CONFIG_SYS_EEPROM_MAX_SIZE
++#define SYS_EEPROM_OFFSET            CONFIG_SYS_EEPROM_OFFSET
 +
 +#if CONFIG_SYS_EEPROM_SIZE == 0
 +  #error CONFIG_SYS_EEPROM_SIZE not specified!
@@ -597,7 +614,7 @@ index 0000000..94dfd5a
 +int write_sys_eeprom(void *eeprom_data, int len);
 diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
 new file mode 100644
-index 0000000..b448761
+index 0000000..ccc0965
 --- /dev/null
 +++ b/miscutils/24cXX.c
 @@ -0,0 +1,182 @@
@@ -636,7 +653,7 @@ index 0000000..b448761
 +	r = i2c_smbus_write_byte(e->fd, buf);
 +	if(r < 0)
 +		fprintf(stderr, "Error i2c_write_1b: %s\n", strerror(errno));
-+	usleep(10);
++	usleep(SYS_EEPROM_I2C_WRITE_1B_DELAY);
 +	return r;
 +}
 +
@@ -647,7 +664,7 @@ index 0000000..b448761
 +	r = i2c_smbus_write_byte_data(e->fd, buf[0], buf[1]);
 +	if(r < 0)
 +		fprintf(stderr, "Error i2c_write_2b: %s\n", strerror(errno));
-+	usleep(1000);
++	usleep(SYS_EEPROM_I2C_WRITE_2B_DELAY);
 +	return r;
 +}
 +
@@ -659,7 +676,7 @@ index 0000000..b448761
 +	r = i2c_smbus_write_word_data(e->fd, buf[0], buf[2] << 8 | buf[1]);
 +	if(r < 0)
 +		fprintf(stderr, "Error i2c_write_3b: %s\n", strerror(errno));
-+	usleep(10);
++	usleep(SYS_EEPROM_I2C_WRITE_3B_DELAY);
 +	return r;
 +}
 +
@@ -784,10 +801,10 @@ index 0000000..b448761
 +	}
 +}
 diff --git a/miscutils/Config.src b/miscutils/Config.src
-index 4a1928d..90d0d97 100644
+index 4d6425f..cdae45b 100644
 --- a/miscutils/Config.src
 +++ b/miscutils/Config.src
-@@ -625,4 +625,75 @@ config WATCHDOG
+@@ -546,4 +546,108 @@ config WATCHDOG
  	  certain amount of time, the watchdog device assumes the system has
  	  hung, and will cause the hardware to reboot.
  
@@ -823,11 +840,44 @@ index 4a1928d..90d0d97 100644
 +	  i2c bus name of the eeprom. e.g., /dev/i2c-1.
 +
 +config SYS_EEPROM_I2C_ADDR
-+	hex "device address on the bus"
++	hex "device address on the i2c bus"
 +	default 0
 +	depends on SYS_EEPROM_DEVICE_I2C
 +	help
 +	  i2c device address of the eeprom. e.g., 0x57.
++
++config SYS_EEPROM_I2C_MEM_ADDR_BITS
++	int "eeprom address bits"
++	range 8 16
++	default 8
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  Number of bits needed to address a byte in the EEPROM.
++	  e.g., 8 or 16.
++
++config SYS_EEPROM_I2C_WRITE_1B_DELAY
++	int "delay time for i2c writing 1 byte"
++	range 10 1000000
++	default 10
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  Delay number of microseconds after writing 1 byte.
++
++config SYS_EEPROM_I2C_WRITE_2B_DELAY
++	int "delay time for i2c writing 2 bytes"
++	range 10 1000000
++	default 1000
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  Delay number of microseconds after writing 2 bytes.
++
++config SYS_EEPROM_I2C_WRITE_3B_DELAY
++	int "delay time for i2c writing 3 bytes"
++	range 10 1000000
++	default 10
++	depends on SYS_EEPROM_DEVICE_I2C
++	help
++	  Delay number of microseconds after writing 3 bytes.
 +
 +config SYS_EEPROM_MTD_DEVICE
 +	string "MTD device"
@@ -838,7 +888,7 @@ index 4a1928d..90d0d97 100644
 +
 +config SYS_EEPROM_OFFSET
 +	int "offset"
-+	range 0 1023
++	range 0 65536
 +	default 0
 +	depends on SYS_EEPROM
 +	help
@@ -854,7 +904,7 @@ index 4a1928d..90d0d97 100644
 +
 +config SYS_EEPROM_MAX_SIZE
 +	int "total size in byte"
-+	range 256 2048
++	range 256 65536
 +	default 2048
 +	depends on SYS_EEPROM
 +	help
@@ -864,22 +914,22 @@ index 4a1928d..90d0d97 100644
 +
  endmenu
 diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index a2a860b..13d8cc3 100644
+index 9177818..a78273d 100644
 --- a/miscutils/Kbuild.src
 +++ b/miscutils/Kbuild.src
-@@ -50,3 +50,6 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
+@@ -51,3 +51,6 @@ lib-$(CONFIG_TTYSIZE)     += ttysize.o
+ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
  lib-$(CONFIG_VOLNAME)     += volname.o
- lib-$(CONFIG_WALL)        += wall.o
  lib-$(CONFIG_WATCHDOG)    += watchdog.o
 +lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
 +lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
 +lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
 diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
 new file mode 100644
-index 0000000..95a46e1
+index 0000000..5cf6463
 --- /dev/null
 +++ b/miscutils/onie_tlvinfo.c
-@@ -0,0 +1,753 @@
+@@ -0,0 +1,743 @@
 +#include "libbb.h"
 +#include "onie_tlvinfo.h"
 +#include "sys_eeprom.h"
@@ -1257,27 +1307,21 @@ index 0000000..95a46e1
 +    tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
 +    tlvinfo_tlv_t    * eeprom_crc;
 +    unsigned int       calc_crc;
++    int                eeprom_index;
 +
-+    // Is the eeprom header valid?
-+    if (!is_valid_tlvinfo_header(eeprom_hdr)) {
-+	return;
-+    }
-+    // Is the last TLV a CRC?
-+    eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
-+					   be16_to_cpu(eeprom_hdr->totallen) -
-+					   (sizeof(tlvinfo_tlv_t) + 4)];
-+    if (eeprom_crc->type != TLV_CODE_CRC_32) {
++    // Discover the CRC TLV
++    if (!tlvinfo_find_tlv(eeprom, TLV_CODE_CRC_32, &eeprom_index)) {
 +	if ((be16_to_cpu(eeprom_hdr->totallen) + sizeof(tlvinfo_tlv_t) + 4) >
 +	    TLV_TOTAL_LEN_MAX) {
 +	    return;
 +	}
-+	eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
-+					       be16_to_cpu(
-+						   eeprom_hdr->totallen)];
++	eeprom_index = sizeof(tlvinfo_header_t) +
++	    be16_to_cpu(eeprom_hdr->totallen);
 +	eeprom_hdr->totallen = cpu_to_be16(be16_to_cpu(eeprom_hdr->totallen) +
 +					   sizeof(tlvinfo_tlv_t) + 4);
-+	eeprom_crc->type = TLV_CODE_CRC_32;
 +    }
++    eeprom_crc = (tlvinfo_tlv_t *) &eeprom[eeprom_index];
++    eeprom_crc->type = TLV_CODE_CRC_32;
 +    eeprom_crc->length = 4;
 +
 +    // Calculate the checksum
@@ -1432,10 +1476,6 @@ index 0000000..95a46e1
 +    tlvinfo_tlv_t    * eeprom_tlv;
 +    int eeprom_end;
 +
-+    // Make sure the EEPROM contents are valid
-+    if (!is_valid_tlvinfo_header(eeprom_hdr) || !is_checksum_valid(eeprom)) {
-+	return(FALSE);
-+    }
 +    // Search through the TLVs, looking for the first one which matches the
 +    // supplied type code.
 +    *eeprom_index = sizeof(tlvinfo_header_t);
@@ -1822,14 +1862,22 @@ index 0000000..3003bd6
 +}
 diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
 new file mode 100644
-index 0000000..0927abc
+index 0000000..ed3235b
 --- /dev/null
 +++ b/miscutils/sys_eeprom_i2c.c
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,63 @@
 +#include "libbb.h"
 +#include "onie_tlvinfo.h"
 +#include "sys_eeprom.h"
 +#include "24cXX.h"
++
++#if SYS_EEPROM_I2C_MEM_ADDR_BITS == 8
++    #define EEPROM_TYPE EEPROM_TYPE_8BIT_ADDR
++#elif SYS_EEPROM_I2C_MEM_ADDR_BITS == 16
++    #define EEPROM_TYPE EEPROM_TYPE_16BIT_ADDR
++#else
++    #define EEPROM_TYPE EEPROM_TYPE_UNKNOWN
++#endif
 +
 +/*
 + * read_sys_eeprom - read the hwinfo from i2c EEPROM
@@ -1844,7 +1892,7 @@ index 0000000..0927abc
 +
 +    c = eeprom_data;
 +    if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
-+		    EEPROM_TYPE_8BIT_ADDR, &e)) {
++		    EEPROM_TYPE, &e)) {
 +	printf("ERROR: Cannot open I2C device\n");
 +	return -1;
 +    }
@@ -1870,7 +1918,7 @@ index 0000000..0927abc
 +    c = eeprom_data;
 +    for (i = 0; i < len; i++) {
 +	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
-+			EEPROM_TYPE_8BIT_ADDR, &e)) {
++			EEPROM_TYPE, &e)) {
 +	    printf("ERROR: Cannot open I2C device\n");
 +	    return -1;
 +	}

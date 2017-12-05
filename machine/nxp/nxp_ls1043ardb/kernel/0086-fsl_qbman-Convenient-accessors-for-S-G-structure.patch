@@ -1,0 +1,168 @@
+From 8e6b449f05fb92a27e9d6f4531264e251efc924a Mon Sep 17 00:00:00 2001
+From: Cristian Sovaiala <cristian.sovaiala@freescale.com>
+Date: Thu, 9 Jul 2015 17:37:48 +0300
+Subject: [PATCH 086/146] fsl_qbman: Convenient accessors for S/G structure
+
+Signed-off-by: Cristian Sovaiala <cristian.sovaiala@freescale.com>
+Change-Id: Iebaacc3477b9b88187afd178c9b35567b60ce6fd
+---
+ include/linux/fsl_qman.h | 113 +++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 99 insertions(+), 14 deletions(-)
+
+diff --git a/include/linux/fsl_qman.h b/include/linux/fsl_qman.h
+index b8c89b9..2a154eb 100644
+--- a/include/linux/fsl_qman.h
++++ b/include/linux/fsl_qman.h
+@@ -265,14 +265,10 @@ struct qm_sg_entry {
+ 			u32 addr_lo;	/* low 32-bits of 40-bit address */
+ 		};
+ 		struct {
+-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+ 			u64 __notaddress:24;
+ 			u64 addr:40;
+-#else
+-			u64 addr:40;
+-			u64 __notaddress:24;
+-#endif
+ 		};
++		u64 opaque;
+ 	};
+ 	union {
+ 		struct {
+@@ -282,35 +278,124 @@ struct qm_sg_entry {
+ 			u32 length:30;
+ #else
+ 			u32 length:30;
+-			u32 final:1;		/* Final bit */
+-			u32 extension:1;	/* Extension bit */
++			u32 final:1;            /* Final bit */
++			u32 extension:1;        /* Extension bit */
+ #endif
+ 		};
+ 		u32 sgt_efl;
+ 	};
+ 	u8 __reserved2;
+ 	u8 bpid;
++	union {
++		struct {
+ #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+-	u16 __reserved3:3;
+-	u16 offset:13;
++			u16 __reserved3:3;
++			u16 offset:13;
+ #else
+-	u16 offset:13;
+-	u16 __reserved3:3;
++			u16 offset:13;
++			u16 __reserved3:3;
+ #endif
++		};
++		u16 opaque_offset;
++	};
+ } __packed;
++union qm_sg_efl {
++	struct {
++#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++		u32 extension:1;	/* Extension bit */
++		u32 final:1;		/* Final bit */
++		u32 length:30;
++#else
++		u32 length:30;
++		u32 final:1;            /* Final bit */
++		u32 extension:1;        /* Extension bit */
++#endif
++	};
++	u32 efl;
++};
+ static inline u64 qm_sg_entry_get64(const struct qm_sg_entry *sg)
+ {
+-	return sg->addr;
++	u64 addr = (u64)sg->addr_hi << 32;
++
++	addr |= be32_to_cpu(sg->addr_lo);
++	return addr;
+ }
+ static inline dma_addr_t qm_sg_addr(const struct qm_sg_entry *sg)
+ {
+-	return (dma_addr_t)sg->addr;
++	u64 addr = (u64)sg->addr_hi << 32;
++
++	addr |= be32_to_cpu(sg->addr_lo);
++	return (dma_addr_t)addr;
++}
++static inline u8 qm_sg_entry_get_ext(const struct qm_sg_entry *sg)
++{
++	union qm_sg_efl u;
++
++	u.efl = be32_to_cpu(sg->sgt_efl);
++	return u.extension;
+ }
++static inline u8 qm_sg_entry_get_final(const struct qm_sg_entry *sg)
++{
++	union qm_sg_efl u;
++
++	u.efl = be32_to_cpu(sg->sgt_efl);
++	return u.final;
++}
++static inline u32 qm_sg_entry_get_len(const struct qm_sg_entry *sg)
++{
++	union qm_sg_efl u;
++
++	u.efl = be32_to_cpu(sg->sgt_efl);
++	return u.length;
++}
++static inline u8 qm_sg_entry_get_bpid(const struct qm_sg_entry *sg)
++{
++	return sg->bpid;
++}
++static inline u16 qm_sg_entry_get_offset(const struct qm_sg_entry *sg)
++{
++	u32 opaque_offset = be16_to_cpu(sg->opaque_offset);
++
++	return opaque_offset & 0x1fff;
++}
++
+ /* Macro, so we compile better if 'v' isn't always 64-bit */
+ #define qm_sg_entry_set64(sg, v) \
+ 	do { \
+ 		struct qm_sg_entry *__sg931 = (sg); \
+-		__sg931->addr = v; \
++		__sg931->addr_hi = (uint8_t)upper_32_bits(v); \
++		__sg931->addr_lo = cpu_to_be32(lower_32_bits(v)); \
++	} while (0)
++#define qm_sg_entry_set_ext(sg, v) \
++	do { \
++		union qm_sg_efl __u932; \
++		__u932.efl = be32_to_cpu((sg)->sgt_efl); \
++		__u932.extension = v; \
++		(sg)->sgt_efl = cpu_to_be32(__u932.efl); \
++	} while (0)
++#define qm_sg_entry_set_final(sg, v) \
++	do { \
++		union qm_sg_efl __u933; \
++		__u933.efl = be32_to_cpu((sg)->sgt_efl); \
++		__u933.final = v; \
++		(sg)->sgt_efl = cpu_to_be32(__u933.efl); \
++	} while (0)
++#define qm_sg_entry_set_len(sg, v) \
++	do { \
++		union qm_sg_efl __u934; \
++		__u934.efl = be32_to_cpu((sg)->sgt_efl); \
++		__u934.length = v; \
++		(sg)->sgt_efl = cpu_to_be32(__u934.efl); \
++	} while (0)
++#define qm_sg_entry_set_bpid(sg, v) \
++	do { \
++		struct qm_sg_entry *__u935 = (sg); \
++		__u935->bpid = v; \
++	} while (0)
++#define qm_sg_entry_set_offset(sg, v) \
++	do { \
++		struct qm_sg_entry *__u936 = (sg); \
++		__u936->opaque_offset = cpu_to_be16(v); \
+ 	} while (0)
+ 
+ /* See 1.5.8.1: "Enqueue Command" */
+-- 
+2.1.0.27.g96db324
+

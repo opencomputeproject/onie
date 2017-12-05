@@ -1,0 +1,44 @@
+lvm2 conf install directory fixup
+
+Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+The lvm2 install target for the conf/ subdirectory is not quite right
+for cross compiling.  It tries to install files in /etc instead of the
+target sysroot directory.
+
+diff --git a/conf/Makefile.in b/conf/Makefile.in
+index c88045c..ace00e2 100644
+--- a/conf/Makefile.in
++++ b/conf/Makefile.in
+@@ -35,20 +35,20 @@ generate:
+ 	(cat $(top_srcdir)/conf/lvmlocal.conf.base && LD_LIBRARY_PATH=$(top_builddir)/libdm:$(LD_LIBRARY_PATH) $(top_builddir)/tools/lvm dumpconfig --type default --unconfigured --withcomments --withspaces local) > lvmlocal.conf.in
+ 
+ install_conf: $(CONFSRC)
+-	@if [ ! -e $(confdir)/$(CONFDEST) ]; then \
+-		echo "$(INSTALL_WDATA) -D $< $(confdir)/$(CONFDEST)"; \
+-		$(INSTALL_WDATA) -D $< $(confdir)/$(CONFDEST); \
++	@if [ ! -e $(sysconfdir)/$(CONFDEST) ]; then \
++		echo "$(INSTALL_WDATA) -D $< $(sysconfdir)/$(CONFDEST)"; \
++		$(INSTALL_WDATA) -D $< $(sysconfdir)/$(CONFDEST); \
+ 	fi
+ 
+ install_localconf: $(CONFLOCAL)
+-	@if [ ! -e $(confdir)/$(CONFLOCAL) ]; then \
+-		echo "$(INSTALL_WDATA) -D $< $(confdir)/$(CONFLOCAL)"; \
+-		$(INSTALL_WDATA) -D $< $(confdir)/$(CONFLOCAL); \
++	@if [ ! -e $(sysconfdir)/$(CONFLOCAL) ]; then \
++		echo "$(INSTALL_WDATA) -D $< $(sysconfdir)/$(CONFLOCAL)"; \
++		$(INSTALL_WDATA) -D $< $(sysconfdir)/$(CONFLOCAL); \
+ 	fi
+ 
+ install_profiles: $(PROFILES)
+-	$(INSTALL_DIR) $(DESTDIR)$(DEFAULT_PROFILE_DIR)
+-	$(INSTALL_DATA) $(PROFILES) $(DESTDIR)$(DEFAULT_PROFILE_DIR)/
++	$(INSTALL_DIR) $(sysconfdir)/profile
++	$(INSTALL_DATA) $(PROFILES) $(sysconfdir)/profile/
+ 
+ install_lvm2: install_conf install_localconf install_profiles
+ 

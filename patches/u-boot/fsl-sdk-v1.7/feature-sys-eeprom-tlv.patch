@@ -1,0 +1,48 @@
+Add the 'hwinfo' command which read/writes board information from/to
+persistent storage (EEPROM or NOR flash) using a TLV format.
+
+Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2014 Srideep <srideep_devireddy@dell.com>
+
+SPDX-License-Identifier:     GPL-2.0
+
+diff --git a/arch/powerpc/lib/board.c b/arch/powerpc/lib/board.c
+index c797362..d23afd1 100644
+--- a/arch/powerpc/lib/board.c
++++ b/arch/powerpc/lib/board.c
+@@ -799,7 +799,8 @@ void board_init_r(gd_t *id, ulong dest_addr)
+ 	sc3_read_eeprom();
+ #endif
+ 
+-#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET)
++#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET) || \
++    defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
+ 	mac_read_from_eeprom();
+ #endif
+ 
+diff --git a/common/Makefile b/common/Makefile
+index 745c051..98122bc 100644
+--- a/common/Makefile
++++ b/common/Makefile
+@@ -106,6 +106,7 @@ obj-$(CONFIG_CMD_GPIO) += cmd_gpio.o
+ obj-$(CONFIG_CMD_I2C) += cmd_i2c.o
+ obj-$(CONFIG_CMD_IOTRACE) += cmd_iotrace.o
+ obj-$(CONFIG_CMD_HASH) += cmd_hash.o
++obj-$(CONFIG_CMD_SYS_EEPROM) += cmd_sys_eeprom.o
+ obj-$(CONFIG_CMD_IDE) += cmd_ide.o
+ obj-$(CONFIG_CMD_IMMAP) += cmd_immap.o
+ obj-$(CONFIG_CMD_INI) += cmd_ini.o
+diff --git a/common/board_r.c b/common/board_r.c
+index 653f02d..3b46b55 100644
+--- a/common/board_r.c
++++ b/common/board_r.c
+@@ -823,7 +823,8 @@ init_fnc_t init_sequence_r[] = {
+ #ifdef	CONFIG_HERMES
+ 	initr_hermes,
+ #endif
+-#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET)
++#if defined(CONFIG_ID_EEPROM) || defined(CONFIG_SYS_I2C_MAC_OFFSET) || \
++    defined(CONFIG_SYS_EEPROM_LOAD_ENV_MAC)
+ 	mac_read_from_eeprom,
+ #endif
+ #ifdef CONFIG_POPULATE_SERIAL_NUMBER

@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -11,7 +12,7 @@
 
 #-------------------------------------------------------------------------------
 
-LINUX_CONFIG 		= conf/kernel/$(LINUX_RELEASE)/linux.$(ONIE_ARCH).config
+LINUX_CONFIG 		?= conf/kernel/$(LINUX_RELEASE)/linux.$(ONIE_ARCH).config
 KERNELDIR   		= $(MBUILDDIR)/kernel
 LINUXDIR   		= $(KERNELDIR)/linux
 
@@ -50,7 +51,7 @@ kernel: $(KERNEL_STAMP)
 
 SOURCE += $(KERNEL_PATCH_STAMP)
 kernel-source: $(KERNEL_SOURCE_STAMP)
-$(KERNEL_SOURCE_STAMP): $(TREE_STAMP) | $(KERNEL_DOWNLOAD_STAMP)
+$(KERNEL_SOURCE_STAMP): $(TREE_STAMP) $(KERNEL_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting Linux ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(KERNELDIR) $(DOWNLOADDIR)/$(LINUX_TARBALL)
@@ -118,14 +119,14 @@ $(KERNEL_DTB_INSTALL_STAMP): $(KERNEL_BUILD_STAMP)
 		V=$(V) 				\
 		$(KERNEL_DTB)
 	$(Q) echo "==== Copy device tree blob to $(IMAGEDIR) ===="
-	$(Q) cp -vf $(LINUX_BOOTDIR)/$(KERNEL_DTB) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb
+	$(Q) cp -vf $(LINUX_BOOTDIR)/$(KERNEL_DTB_PATH) $(IMAGEDIR)/$(MACHINE_PREFIX).dtb
 	$(Q) touch $@
 
 kernel-vmlinuz-install: $(KERNEL_VMLINUZ_INSTALL_STAMP)
 $(KERNEL_VMLINUZ_INSTALL_STAMP): $(KERNEL_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Copy vmlinuz to $(IMAGEDIR) ===="
-	$(Q) cp -vf $(LINUX_BOOTDIR)/bzImage $(KERNEL_VMLINUZ)
+	$(Q) cp -vf $(KERNEL_IMAGE_FILE) $(KERNEL_VMLINUZ)
 	$(Q) ln -sf $(KERNEL_VMLINUZ) $(UPDATER_VMLINUZ)
 	$(Q) touch $@
 
@@ -134,7 +135,7 @@ $(KERNEL_INSTALL_STAMP): $(KERNEL_INSTALL_DEPS) $(KERNEL_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) touch $@
 
-CLEAN += kernel-clean
+MACHINE_CLEAN += kernel-clean
 kernel-clean:
 	$(Q) rm -rf $(KERNELDIR)
 	$(Q) rm -f $(KERNEL_STAMP)

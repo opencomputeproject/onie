@@ -1,0 +1,73 @@
+From 95b2a06f88813110d7faae95830439d022f6418b Mon Sep 17 00:00:00 2001
+From: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Date: Sat, 25 May 2013 16:06:44 +0530
+Subject: [PATCH 072/124] fsl/usb: Stops USB controller init if PLL fails to
+ lock
+
+USB erratum-A006918 workaround tries to start internal PHY inside
+uboot (when PLL fails to lock). However, if the workaround also
+fails, then USB initialization is also stopped inside Linux.
+Erratum-A006918 workaround failure creates "fsl,erratum_a006918"
+node in device-tree. Presence of this node in device-tree is
+used to stop USB controller initialization in Linux
+
+Signed-off-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Signed-off-by: Suresh Gupta <suresh.gupta@freescale.com>
+Change-Id: Ie463c7b14c14174756c46c57d83b8695cc43efda
+Reviewed-on: http://git.am.freescale.net:8181/2704
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Aggrwal Poonam-B10812 <Poonam.Aggrwal@freescale.com>
+Reviewed-by: Fleming Andrew-AFLEMING <AFLEMING@freescale.com>
+---
+ drivers/usb/host/ehci-fsl.c      | 5 +++++
+ drivers/usb/host/fsl-mph-dr-of.c | 5 +++++
+ include/linux/fsl_devices.h      | 1 +
+ 3 files changed, 11 insertions(+)
+
+diff --git a/drivers/usb/host/ehci-fsl.c b/drivers/usb/host/ehci-fsl.c
+index 9bed465..1e94474 100644
+--- a/drivers/usb/host/ehci-fsl.c
++++ b/drivers/usb/host/ehci-fsl.c
+@@ -283,6 +283,11 @@ static int ehci_fsl_setup_phy(struct usb_hcd *hcd,
+ 		portsc |= PORT_PTS_PTW;
+ 		/* fall through */
+ 	case FSL_USB2_PHY_UTMI:
++		if (pdata->has_fsl_erratum_a006918) {
++			pr_warn("fsl-ehci: USB PHY clock invalid\n");
++			return -EINVAL;
++		}
++
+ 		if (pdata->have_sysif_regs && pdata->controller_ver) {
+ 			/* controller version 1.6 or above */
+ 			setbits32(non_ehci + FSL_SOC_USB_CTRL, UTMI_PHY_EN);
+diff --git a/drivers/usb/host/fsl-mph-dr-of.c b/drivers/usb/host/fsl-mph-dr-of.c
+index d091f6d..87c020b 100644
+--- a/drivers/usb/host/fsl-mph-dr-of.c
++++ b/drivers/usb/host/fsl-mph-dr-of.c
+@@ -241,6 +241,11 @@ static int fsl_usb2_mph_dr_of_probe(struct platform_device *ofdev)
+ 	else
+ 		pdata->has_fsl_erratum_a005275 = 0;
+ 
++	if (of_get_property(np, "fsl,erratum_a006918", NULL))
++		pdata->has_fsl_erratum_a006918 = 1;
++	else
++		pdata->has_fsl_erratum_a006918 = 0;
++
+ 	if (pdata->have_sysif_regs) {
+ 		if (pdata->controller_ver < 0) {
+ 			dev_warn(&ofdev->dev, "Could not get controller version\n");
+diff --git a/include/linux/fsl_devices.h b/include/linux/fsl_devices.h
+index af5c229..2448384 100644
+--- a/include/linux/fsl_devices.h
++++ b/include/linux/fsl_devices.h
+@@ -93,6 +93,7 @@ struct fsl_usb2_platform_data {
+ 	unsigned	suspended:1;
+ 	unsigned	already_suspended:1;
+ 	unsigned	has_fsl_erratum_a005275:1;
++	unsigned	has_fsl_erratum_a006918:1;
+ 
+ 	/* register save area for suspend/resume */
+ 	u32		pm_command;
+-- 
+2.1.0.27.g96db324
+

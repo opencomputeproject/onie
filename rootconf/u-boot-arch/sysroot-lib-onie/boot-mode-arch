@@ -1,0 +1,40 @@
+#!/bin/sh
+
+#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# U-Boot boot mode implemenations see /etc/init.d/discover.sh
+
+# We want rescue mode booting to be a one time operation.  After the
+# rescue mode we should reboot into the previous state.
+rescue_revert_default_arch()
+{
+    # Delete the one time onie_boot_reason env variable.
+    fw_setenv -f onie_boot_reason > /dev/null 2>&1
+    # The onie_boot_reason variable may not be set, which is ok.
+    # Ignore failures.
+    return 0
+}
+
+# We want install mode booting to be sticky, i.e. if you boot into
+# install mode you stay install mode until an installer runs
+# successfully.
+install_remain_sticky_arch()
+{
+    # Delete the one time onie_boot_reason variable.  Also set
+    # nos_bootcmd to a no-op, which will keep us in this state
+    # if installation fails.
+    (cat <<EOF
+onie_boot_reason
+nos_bootcmd true
+EOF
+    ) | fw_setenv -f -s - > /dev/null 2>&1
+    # The variables may not be set, which is ok.  Ignore failures.
+    return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

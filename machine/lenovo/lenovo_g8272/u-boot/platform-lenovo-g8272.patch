@@ -1,0 +1,1334 @@
+diff --git a/arch/powerpc/cpu/mpc8xxx/fdt.c b/arch/powerpc/cpu/mpc8xxx/fdt.c
+index 1986fea..01d4527 100644
+--- a/arch/powerpc/cpu/mpc8xxx/fdt.c
++++ b/arch/powerpc/cpu/mpc8xxx/fdt.c
+@@ -105,9 +105,11 @@ static int fdt_fixup_usb_mode_phy_type(void *blob, const char *mode,
+ 		node_offset = fdt_node_offset_by_compatible(blob,
+ 			start_offset, compat_dr);
+ 		if (node_offset < 0) {
++#if !defined(CONFIG_LENOVO_G8272) //this gets displayed for the non-existent 2nd controller and is benign...squelch
+ 			printf("WARNING: could not find compatible"
+ 				" node %s or %s: %s.\n", compat_mph,
+ 				compat_dr, fdt_strerror(node_offset));
++#endif
+ 			return -1;
+ 		} else
+ 			node_type = compat_dr;
+diff --git a/board/lenovo/lenovo_g8272/Makefile b/board/lenovo/lenovo_g8272/Makefile
+new file mode 100644
+index 0000000..5be8423
+--- /dev/null
++++ b/board/lenovo/lenovo_g8272/Makefile
+@@ -0,0 +1,45 @@
++#
++# Copyright 2015 Lenovo.
++#
++# This program is free software; you can redistribute it and/or
++# modify it under the terms of the GNU General Public License as
++# published by the Free Software Foundation; either version 2 of
++# the License, or (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++# MA 02111-1307 USA
++#
++
++include $(TOPDIR)/config.mk
++
++LIB    = $(obj)lib$(BOARD).o
++
++MINIMAL=
++
++COBJS-y        += g8272.o
++COBJS-y        += ddr.o
++COBJS-y        += law.o
++COBJS-y        += tlb.o
++
++SRCS   := $(SOBJS:.o=.S) $(COBJS-y:.o=.c)
++OBJS   := $(addprefix $(obj),$(COBJS-y))
++SOBJS  := $(addprefix $(obj),$(SOBJS))
++
++$(LIB):	$(obj).depend $(OBJS) $(SOBJS)
++	$(call cmd_link_o_target, $(OBJS))
++
++#########################################################################
++
++# defines $(obj).depend target
++include $(SRCTREE)/rules.mk
++
++sinclude $(obj).depend
++
++#########################################################################
+diff --git a/board/lenovo/lenovo_g8272/ddr.c b/board/lenovo/lenovo_g8272/ddr.c
+new file mode 100644
+index 0000000..9f66e0d
+--- /dev/null
++++ b/board/lenovo/lenovo_g8272/ddr.c
+@@ -0,0 +1,151 @@
++/*
++ * Copyright 2015 Lenovo
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * Version 2 as published by the Free Software Foundation.
++ */
++
++#include <common.h>
++#include <asm/mmu.h>
++#include <asm/immap_85xx.h>
++#include <asm/processor.h>
++#include <asm/fsl_ddr_sdram.h>
++#include <asm/fsl_ddr_dimm_params.h>
++#include <asm/io.h>
++#include <asm/fsl_law.h>
++
++#ifdef CONFIG_SYS_DDR_RAW_TIMING
++/* Micron MT41J128M16_15E */
++dimm_params_t ddr_raw_timing = {
++	.n_ranks = 1,
++	.rank_density = 1073741824u,
++	.capacity = 1073741824u,
++	.primary_sdram_width = 64,
++	.ec_sdram_width = 0,
++	.registered_dimm = 0,
++	.mirrored_dimm = 0,
++	.n_row_addr = 14,
++	.n_col_addr = 10,
++	.n_banks_per_sdram_device = 8,
++	.edc_config = 0,
++	.burst_lengths_bitmask = 0x0c,
++
++	.tCKmin_X_ps = 1500,
++	.caslat_X = 0x7e << 4,	/* 5,6,7,8,9,10 */
++	.tAA_ps = 13500,
++	.tWR_ps = 15000,
++	.tRCD_ps = 13500,
++	.tRRD_ps = 6000,
++	.tRP_ps = 13500,
++	.tRAS_ps = 36000,
++	.tRC_ps = 49500,
++	.tRFC_ps = 160000,
++	.tWTR_ps = 7500,
++	.tRTP_ps = 7500,
++	.refresh_rate_ps = 7800000,
++	.tFAW_ps = 30000,
++};
++
++int fsl_ddr_get_dimm_params(dimm_params_t *pdimm,
++		unsigned int controller_number,
++		unsigned int dimm_number)
++{
++	const char dimm_model[] = "Fixed DDR on board";
++
++	if ((controller_number == 0) && (dimm_number == 0)) {
++		memcpy(pdimm, &ddr_raw_timing, sizeof(dimm_params_t));
++		memset(pdimm->mpart, 0, sizeof(pdimm->mpart));
++		memcpy(pdimm->mpart, dimm_model, sizeof(dimm_model) - 1);
++	}
++
++	return 0;
++}
++#endif /* CONFIG_SYS_DDR_RAW_TIMING */
++
++#ifdef CONFIG_SYS_DDR_CS0_BNDS
++/* Fixed sdram init -- doesn't use serial presence detect. */
++phys_size_t fixed_sdram(void)
++{
++	sys_info_t sysinfo;
++	char buf[32];
++	size_t ddr_size;
++	fsl_ddr_cfg_regs_t ddr_cfg_regs = {
++		.cs[0].bnds = CONFIG_SYS_DDR_CS0_BNDS,
++		.cs[0].config = CONFIG_SYS_DDR_CS0_CONFIG,
++		.cs[0].config_2 = CONFIG_SYS_DDR_CS0_CONFIG_2,
++#if CONFIG_CHIP_SELECTS_PER_CTRL > 1
++		.cs[1].bnds = CONFIG_SYS_DDR_CS1_BNDS,
++		.cs[1].config = CONFIG_SYS_DDR_CS1_CONFIG,
++		.cs[1].config_2 = CONFIG_SYS_DDR_CS1_CONFIG_2,
++#endif
++		.timing_cfg_3 = CONFIG_SYS_DDR_TIMING_3,
++		.timing_cfg_0 = CONFIG_SYS_DDR_TIMING_0,
++		.timing_cfg_1 = CONFIG_SYS_DDR_TIMING_1,
++		.timing_cfg_2 = CONFIG_SYS_DDR_TIMING_2,
++		.ddr_sdram_cfg = CONFIG_SYS_DDR_CONTROL,
++		.ddr_sdram_cfg_2 = CONFIG_SYS_DDR_CONTROL_2,
++		.ddr_sdram_mode = CONFIG_SYS_DDR_MODE_1,
++		.ddr_sdram_mode_2 = CONFIG_SYS_DDR_MODE_2,
++		.ddr_sdram_md_cntl = CONFIG_SYS_DDR_MODE_CONTROL,
++		.ddr_sdram_interval = CONFIG_SYS_DDR_INTERVAL,
++		.ddr_data_init = CONFIG_SYS_DDR_DATA_INIT,
++		.ddr_sdram_clk_cntl = CONFIG_SYS_DDR_CLK_CTRL,
++		.ddr_init_addr = CONFIG_SYS_DDR_INIT_ADDR,
++		.ddr_init_ext_addr = CONFIG_SYS_DDR_INIT_EXT_ADDR,
++		.timing_cfg_4 = CONFIG_SYS_DDR_TIMING_4,
++		.timing_cfg_5 = CONFIG_SYS_DDR_TIMING_5,
++		.ddr_zq_cntl = CONFIG_SYS_DDR_ZQ_CONTROL,
++		.ddr_wrlvl_cntl = CONFIG_SYS_DDR_WRLVL_CONTROL,
++		.ddr_sr_cntr = CONFIG_SYS_DDR_SR_CNTR,
++		.ddr_sdram_rcw_1 = CONFIG_SYS_DDR_RCW_1,
++		.ddr_sdram_rcw_2 = CONFIG_SYS_DDR_RCW_2
++	};
++
++	get_sys_info(&sysinfo);
++	printf("Configuring DDR for %s MT/s data rate\n",
++			strmhz(buf, sysinfo.freqDDRBus));
++
++	ddr_size = CONFIG_SYS_SDRAM_SIZE * 1024 * 1024;
++
++	fsl_ddr_set_memctl_regs(&ddr_cfg_regs, 0);
++
++	if (set_ddr_laws(CONFIG_SYS_DDR_SDRAM_BASE,
++				ddr_size, LAW_TRGT_IF_DDR_1) < 0) {
++		printf("ERROR setting Local Access Windows for DDR\n");
++		return 0;
++	};
++
++	return ddr_size;
++}
++#endif
++
++void fsl_ddr_board_options(memctl_options_t *popts,
++				dimm_params_t *pdimm,
++				unsigned int ctrl_num)
++{
++	int i;
++	popts->clk_adjust = 6;
++	popts->cpo_override = 0x1f;
++	popts->write_data_delay = 2;
++	popts->half_strength_driver_enable = 1;
++	/* Write leveling override */
++	popts->wrlvl_en = 1;
++	popts->wrlvl_override = 1;
++	popts->wrlvl_sample = 0xf;
++	popts->wrlvl_start = 0x8;
++	popts->trwt_override = 1;
++	popts->trwt = 0;
++
++	if (pdimm->primary_sdram_width == 64)
++		popts->data_bus_width = 0;
++	else if (pdimm->primary_sdram_width == 32)
++		popts->data_bus_width = 1;
++	else
++		printf("Error in DDR bus width configuration!\n");
++
++	for (i = 0; i < CONFIG_CHIP_SELECTS_PER_CTRL; i++) {
++		popts->cs_local_opts[i].odt_rd_cfg = FSL_DDR_ODT_NEVER;
++		popts->cs_local_opts[i].odt_wr_cfg = FSL_DDR_ODT_CS;
++	}
++}
+diff --git a/board/lenovo/lenovo_g8272/g8272.c b/board/lenovo/lenovo_g8272/g8272.c
+new file mode 100644
+index 0000000..c807864
+--- /dev/null
++++ b/board/lenovo/lenovo_g8272/g8272.c
+@@ -0,0 +1,302 @@
++/*
++ * Copyright 2015 Lenovo
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * Version 2 as published by the Free Software Foundation.
++ */
++
++#include <common.h>
++#include <command.h>
++#include <hwconfig.h>
++#include <pci.h>
++#include <i2c.h>
++#include <asm/processor.h>
++#include <asm/mmu.h>
++#include <asm/cache.h>
++#include <asm/immap_85xx.h>
++#include <asm/fsl_pci.h>
++#include <asm/fsl_ddr_sdram.h>
++#include <asm/io.h>
++#include <asm/fsl_law.h>
++#include <asm/fsl_lbc.h>
++#include <asm/mp.h>
++#include <miiphy.h>
++#include <libfdt.h>
++#include <fdt_support.h>
++#include <fsl_mdio.h>
++#include <tsec.h>
++#include <ioports.h>
++#include <asm/fsl_serdes.h>
++#include <netdev.h>
++#include <post.h>
++
++/* Some definitions for fan controller */
++#define ADT7470_PWM12_CONFIG_REG    0x68
++#define ADT7470_PWM34_CONFIG_REG    0x69
++enum {
++	ADT7470_PWM1_REG = 0x32,
++	ADT7470_PWM2_REG = 0x33,
++	ADT7470_PWM3_REG = 0x34,
++	ADT7470_PWM4_REG = 0x35,
++};
++
++/* The two Fan controllers use the same I2C address. They are seperated by another mux PCA9548 */
++#define ADT7470_BUS                     0
++#define ADT7470_I2C_LV1_MUX             0x70  /* level 1 mux */
++#define ADT7470_I2C_LV2_MUX             0x73  /* level 2 mux */
++#define ADT7470_I2C_LV1_MUX_CHANNEL     0x80
++#define ADT7470_I2C_LV2_MUX_CHANNEL_1   0x1
++#define ADT7470_I2C_LV2_MUX_CHANNEL_2   0x2
++
++#define ADT7470_1_ADDR	(0x2C)
++#define ADT7470_2_ADDR	(0x2C)
++
++void board_gpio_init(void)
++{
++	ccsr_gpio_t *pgpio = (void *)(CONFIG_SYS_MPC85xx_GPIO_ADDR);
++
++	/* Set GPIO3 to low to enable manual fan speed control */
++	setbits_be32(&pgpio->gpdir, 0x36560000);
++	setbits_be32(&pgpio->gpodr, 0x36560000);
++	clrbits_be32(&pgpio->gpdat, 0xFFBD0000);
++}
++
++int board_early_init_f(void)
++{
++	return 0;
++}
++
++int checkboard(void)
++{
++	u8 val;
++	printf("Board: %s\n", CONFIG_BOARDNAME);
++	/* Release some resets. */
++#define CONFIG_SYS_I2C_CPLD_ADDR    0x47
++#define CPLD_DEV_RESET_STATUS_REG   0x0a
++
++#define CPLD_DEV_RESET_DEVICES      0xFF  /*Release all device reset here  */
++
++	/* perform se */
++	if (i2c_read(CONFIG_SYS_I2C_CPLD_ADDR, CPLD_DEV_RESET_STATUS_REG, 1, &val, 1) < 0) {
++		printf("Error reading i2c CPLD (adr=0x%x)!\n", CONFIG_SYS_I2C_CPLD_ADDR);
++		return 0; /* Don't want to hang() on this error */
++	}
++
++	val = CPLD_DEV_RESET_DEVICES;
++	if (i2c_write(CONFIG_SYS_I2C_CPLD_ADDR, CPLD_DEV_RESET_STATUS_REG, 1, &val, 1) < 0) {
++		printf("Error writing i2c CPLD (adr=0x%x)!\n", CONFIG_SYS_I2C_CPLD_ADDR);
++		return 0; /* Don't want to hang() on this error */
++	}
++	udelay(1000000); /* Wait for component to  come alive */
++	/* Init board specific gpio init settings */
++	board_gpio_init();
++	return 0;
++}
++
++#ifdef CONFIG_PCI
++void pci_init_board(void)
++{
++	fsl_pcie_init_board(0);
++}
++#endif
++
++int board_early_init_r(void)
++{
++	const unsigned int flashbase = CONFIG_SYS_FLASH_BASE;
++	const u8 flash_esel = find_tlb_idx((void *)flashbase, 1);
++
++	/*
++	 * Remap Boot flash region to caching-inhibited
++	 * so that flash can be erased properly.
++	 */
++
++	/* Flush d-cache and invalidate i-cache of any FLASH data */
++	flush_dcache();
++	invalidate_icache();
++
++	/* invalidate existing TLB entry for flash */
++	disable_tlb(flash_esel);
++
++	set_tlb(1, flashbase, CONFIG_SYS_FLASH_BASE_PHYS, /* tlb, epn, rpn */
++		MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,/* perms, wimge */
++		0, flash_esel, BOOKE_PAGESZ_64M, 1);/* ts, esel, tsize, iprot */
++	return 0;
++}
++
++int board_eth_init(bd_t *bis)
++{
++	struct fsl_pq_mdio_info mdio_info;
++	struct tsec_info_struct tsec_info[4];
++	ccsr_gur_t *gur __attribute__((unused)) =
++		(void *)(CONFIG_SYS_MPC85xx_GUTS_ADDR);
++	int num = 0;
++
++#ifdef CONFIG_TSEC1
++	SET_STD_TSEC_INFO(tsec_info[num], 1);
++	num++;
++#endif
++#ifdef CONFIG_TSEC2
++	SET_STD_TSEC_INFO(tsec_info[num], 2);
++	if (is_serdes_configured(SGMII_TSEC2)) {
++		printf("eTSEC2 is in sgmii mode.\n");
++		tsec_info[num].flags |= TSEC_SGMII;
++	}
++	num++;
++#endif
++#ifdef CONFIG_TSEC3
++	SET_STD_TSEC_INFO(tsec_info[num], 3);
++	if (is_serdes_configured(SGMII_TSEC3)) {
++		printf("eTSEC3 is in sgmii mode.\n");
++		tsec_info[num].flags |= TSEC_SGMII;
++	}
++	num++;
++#endif
++
++	if (!num) {
++		printf("No TSECs initialized\n");
++		return 0;
++	}
++
++
++	mdio_info.regs = (struct tsec_mii_mng *)CONFIG_SYS_MDIO_BASE_ADDR;
++	mdio_info.name = DEFAULT_MII_NAME;
++
++	fsl_pq_mdio_init(bis, &mdio_info);
++	tsec_eth_init(bis, tsec_info, num);
++	return pci_eth_init(bis);
++}
++
++
++#ifdef CONFIG_OF_BOARD_SETUP
++void ft_board_setup(void *blob, bd_t *bd)
++{
++	phys_addr_t base;
++	phys_size_t size;
++
++	ft_cpu_setup(blob, bd);
++
++	base = getenv_bootm_low();
++	size = getenv_bootm_size();
++
++	fdt_fixup_memory(blob, (u64)base, (u64)size);
++
++	FT_FSL_PCI_SETUP;
++
++#if defined(CONFIG_HAS_FSL_DR_USB)
++	fdt_fixup_dr_usb(blob, bd);
++#endif
++}
++#endif
++
++/*
++ * Misc init routine
++ * Set the default Fan speed to 100% duty cycle according to the ONIE porting guide.
++ */
++
++int misc_init_r(void)
++{
++	u8 val;
++	u8 reg;
++	int bus;
++	u8 pwm_reg[4] = {
++		ADT7470_PWM1_REG,
++		ADT7470_PWM2_REG,
++		ADT7470_PWM3_REG,
++		ADT7470_PWM4_REG,
++	};
++
++	bus = i2c_get_bus_num();
++	i2c_set_bus_num(ADT7470_BUS);
++
++	/* Program first level mux */
++	val = ADT7470_I2C_LV1_MUX_CHANNEL;
++	i2c_write(ADT7470_I2C_LV1_MUX, 0, 1, &val, 1);
++
++	/* Program all PWM registers on both ADT7470 devices to 100%. */
++	/* mux bus-select to the first adt7470 */
++	val = ADT7470_I2C_LV2_MUX_CHANNEL_1;
++	i2c_write(ADT7470_I2C_LV2_MUX, 0, 1, &val, 1);
++
++	/* Set PWM config register to maunal mode */
++	val = 0x0;
++	i2c_write(ADT7470_1_ADDR, ADT7470_PWM12_CONFIG_REG, 1, &val, 1);
++	i2c_write(ADT7470_1_ADDR, ADT7470_PWM34_CONFIG_REG, 1, &val, 1);
++
++	/* Write all four PWM registers to full speed. */
++	val = 0xFF;
++	for (reg = 0 ; reg < 4; reg++) {
++		i2c_write(ADT7470_1_ADDR, pwm_reg[reg], 1, &val, 1);
++	}
++
++	/* mux bus-select to the second adt7470 */
++	val = ADT7470_I2C_LV2_MUX_CHANNEL_2;
++	i2c_write(ADT7470_I2C_LV2_MUX, 0, 1, &val, 1);
++
++	/* Set PWM config register to maunal mode */
++	val = 0x0;
++	i2c_write(ADT7470_2_ADDR, ADT7470_PWM12_CONFIG_REG, 1, &val, 1);
++	i2c_write(ADT7470_2_ADDR, ADT7470_PWM34_CONFIG_REG, 1, &val, 1);
++
++	/* Write all four PWM registers to full speed */
++	val = 0xFF;
++	for (reg = 0 ; reg < 4; reg++) {
++		i2c_write(ADT7470_1_ADDR, pwm_reg[reg], 1, &val, 1);
++	}
++
++	/* Disable the 2nd level  MUX */
++	val = 0;
++	i2c_write(ADT7470_I2C_LV2_MUX, 0, 1, &val, 1);
++
++	/* Disable the 1st level MUX */
++	val = 0;
++	i2c_write(ADT7470_I2C_LV1_MUX, 0, 1, &val, 1);
++
++	/* Restore i2c bus */
++	i2c_set_bus_num(bus);
++	return 0;
++}
++
++#if defined(CONFIG_SYS_DRAM_TEST)
++int testdram(void)
++{
++	int flags;
++
++	char *mem = getenv ("memtest");
++	if (!mem)
++		return 0;
++
++	/* Please be extra careful with this. The only reason we can call memory_post_test()
++	 * is because gd info has been setup already.
++	 */
++	if(strcmp(mem, "true")) {
++		flags = 0;
++	}
++	else {
++		printf("\n\nmemtest=true detected ...\n");
++		flags = POST_SLOWTEST;
++	}
++
++	printf("\n############################################# ");
++	printf("\n########     DRAM TEST (%s Mode)   ######## ", (flags & POST_SLOWTEST)?"Slow":"Fast");
++	printf("\n############################################# \n");
++
++#if CONFIG_POST & CONFIG_SYS_POST_MEMORY
++	if (memory_post_test(flags) != 0) {
++		printf("Memory test : FAILED\n");
++		/* returns 0 means "continue" in init_fnc_t, we want to avoid
++		 * hang up and keep continue, even though it doesn't make any
++		 * sense (except fake error is injected in memory.c for testing
++		 * purpose, we don't want it to hang for sure).
++		 */
++		return 0;
++	}
++
++	printf("Memory test : PASSED\n");
++#else
++	printf(" ---- WARNING!!!  Memory test is not implemented ---- ");
++#endif
++	return 0;
++
++}
++#endif
+diff --git a/board/lenovo/lenovo_g8272/law.c b/board/lenovo/lenovo_g8272/law.c
+new file mode 100644
+index 0000000..d2a4361
+--- /dev/null
++++ b/board/lenovo/lenovo_g8272/law.c
+@@ -0,0 +1,20 @@
++/*
++ * Copyright 2015 Lenovo
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * Version 2 as published by the Free Software Foundation.
++ */
++
++#include <common.h>
++#include <asm/fsl_law.h>
++#include <asm/mmu.h>
++
++struct law_entry law_table[] = {
++	SET_LAW(CONFIG_SYS_FLASH_BASE_PHYS, LAW_SIZE_64M, LAW_TRGT_IF_LBC),
++#ifdef CONFIG_SYS_NAND_BASE_PHYS
++	SET_LAW(CONFIG_SYS_NAND_BASE_PHYS, LAW_SIZE_32K, LAW_TRGT_IF_LBC),
++#endif
++};
++
++int num_law_entries = ARRAY_SIZE(law_table);
+diff --git a/board/lenovo/lenovo_g8272/tlb.c b/board/lenovo/lenovo_g8272/tlb.c
+new file mode 100644
+index 0000000..cc679b9
+--- /dev/null
++++ b/board/lenovo/lenovo_g8272/tlb.c
+@@ -0,0 +1,90 @@
++/*
++ * Copyright 2015 Lenovo
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * Version 2 as published by the Free Software Foundation.
++ */
++
++#include <common.h>
++#include <asm/mmu.h>
++
++struct fsl_e_tlb_entry tlb_table[] = {
++	/* TLB 0 - for temp stack in cache */
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR,
++			CONFIG_SYS_INIT_RAM_ADDR_PHYS,
++			MAS3_SX|MAS3_SW|MAS3_SR, 0,
++			0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 4 * 1024 ,
++			CONFIG_SYS_INIT_RAM_ADDR_PHYS + 4 * 1024,
++			MAS3_SX|MAS3_SW|MAS3_SR, 0,
++			0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 8 * 1024 ,
++			CONFIG_SYS_INIT_RAM_ADDR_PHYS + 8 * 1024,
++			MAS3_SX|MAS3_SW|MAS3_SR, 0,
++			0, 0, BOOKE_PAGESZ_4K, 0),
++	SET_TLB_ENTRY(0, CONFIG_SYS_INIT_RAM_ADDR + 12 * 1024 ,
++			CONFIG_SYS_INIT_RAM_ADDR_PHYS + 12 * 1024,
++			MAS3_SX|MAS3_SW|MAS3_SR, 0,
++			0, 0, BOOKE_PAGESZ_4K, 0),
++
++	/* TLB 1 */
++	/* *I*** - Covers boot page */
++	SET_TLB_ENTRY(1, 0xfffff000, 0xfffff000,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I,
++			0, 0, BOOKE_PAGESZ_4K, 1),
++
++	/* *I*G* - CCSRBAR */
++	SET_TLB_ENTRY(1, CONFIG_SYS_CCSRBAR, CONFIG_SYS_CCSRBAR_PHYS,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++			0, 1, BOOKE_PAGESZ_1M, 1),
++
++#ifndef CONFIG_SPL_BUILD
++	/* W**G* - Flash/promjet, localbus */
++	/* This will be changed to *I*G* after relocation to RAM. */
++	SET_TLB_ENTRY(1, CONFIG_SYS_FLASH_BASE, CONFIG_SYS_FLASH_BASE_PHYS,
++			MAS3_SX|MAS3_SR, MAS2_W|MAS2_G,
++			0, 2, BOOKE_PAGESZ_64M, 1),
++
++#ifdef CONFIG_PCI
++	/* *I*G* - PCI memory 1.5G */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_MEM_VIRT, CONFIG_SYS_PCIE1_MEM_PHYS,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++			0, 3, BOOKE_PAGESZ_1G, 1),
++
++	/* *I*G* - PCI I/O effective: 192K  */
++	SET_TLB_ENTRY(1, CONFIG_SYS_PCIE1_IO_VIRT, CONFIG_SYS_PCIE1_IO_PHYS,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++			0, 4, BOOKE_PAGESZ_256K, 1),
++#endif
++
++#endif /* not SPL */
++
++#ifdef CONFIG_SYS_NAND_BASE
++	/* *I*G - NAND */
++	SET_TLB_ENTRY(1, CONFIG_SYS_NAND_BASE, CONFIG_SYS_NAND_BASE_PHYS,
++			MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++			0, 7, BOOKE_PAGESZ_1M, 1),
++#endif
++
++#if defined(CONFIG_SYS_RAMBOOT) || defined(CONFIG_SPL)
++#ifdef CONFIG_SYS_INIT_L2_ADDR
++	/* L2SRAM */
++	SET_TLB_ENTRY(1, CONFIG_SYS_INIT_L2_ADDR, CONFIG_SYS_INIT_L2_ADDR_PHYS,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 8, BOOKE_PAGESZ_256K, 1),
++	SET_TLB_ENTRY(1, CONFIG_SYS_INIT_L2_ADDR + 0x40000,
++		      CONFIG_SYS_INIT_L2_ADDR_PHYS + 0x40000,
++		      MAS3_SX|MAS3_SW|MAS3_SR, MAS2_I|MAS2_G,
++		      0, 12, BOOKE_PAGESZ_256K, 1),
++#else
++	/* *I*G - eSDHC/eSPI/NAND boot */
++	SET_TLB_ENTRY(1, CONFIG_SYS_DDR_SDRAM_BASE, CONFIG_SYS_DDR_SDRAM_BASE,
++			MAS3_SX|MAS3_SW|MAS3_SR, 0,
++			0, 8, BOOKE_PAGESZ_1G, 1),
++
++#endif /* not L2 SRAM */
++#endif /* RAMBOOT/SPL */
++};
++
++int num_tlb_entries = ARRAY_SIZE(tlb_table);
+diff --git a/boards.cfg b/boards.cfg
+index e4b0d44..863e89c 100644
+--- a/boards.cfg
++++ b/boards.cfg
+@@ -1108,5 +1108,8 @@ gr_xc3s_1500                 sparc       leon3       -                   gaisler
+ coreboot-x86                 x86         x86        coreboot            chromebook-x86 coreboot    coreboot:SYS_TEXT_BASE=0x01110000
+ eNET                         x86         x86        eNET                -              sc520       eNET:SYS_TEXT_BASE=0x38040000
+ eNET_SRAM                    x86         x86        eNET                -              sc520       eNET:SYS_TEXT_BASE=0x19000000
++
+ # Target                     ARCH        CPU         Board name          Vendor	        SoC         Options
+ ########################################################################################################################
++# Lenovo - LENOVO_G8272.
++LENOVO_G8272                 powerpc     mpc85xx     lenovo_g8272      	 lenovo	-          lenovo_g8272:LENOVO_G8272,ONIE,ONIE_PLATFORM_REV=0,36BIT
+diff --git a/common/cmd_sys_eeprom.c b/common/cmd_sys_eeprom.c
+index cf2ed1c..8a9482e 100644
+--- a/common/cmd_sys_eeprom.c
++++ b/common/cmd_sys_eeprom.c
+@@ -1058,8 +1058,9 @@ int read_sys_eeprom(void *eeprom, int offset, int len)
+ #endif
+ #ifdef CONFIG_SYS_I2C_EEPROM_MUX_ADDR
+ 	i2c_write(CONFIG_SYS_I2C_EEPROM_MUX_ADDR,
+-			CONFIG_SYS_I2C_EEPROM_MUX_CTRL, 1, &data, 1);
++			CONFIG_SYS_I2C_EEPROM_MUX_CTRL, 1, data, 1);
+ #endif
++
+ 	ret = eeprom_read(CONFIG_SYS_I2C_EEPROM_ADDR,
+ 			  EEPROM_OFFSET + offset,
+ 			  eeprom, len);
+@@ -1092,7 +1093,7 @@ int write_sys_eeprom(void *eeprom, int len)
+ #endif
+ #ifdef CONFIG_SYS_I2C_EEPROM_MUX_ADDR
+ 	i2c_write(CONFIG_SYS_I2C_EEPROM_MUX_ADDR,
+-			CONFIG_SYS_I2C_EEPROM_MUX_CTRL, 1, &data, 1);
++			CONFIG_SYS_I2C_EEPROM_MUX_CTRL, 1, data, 1);
+ #endif
+ 	ret = eeprom_write(CONFIG_SYS_I2C_EEPROM_ADDR,
+ 			   EEPROM_OFFSET,
+diff --git a/drivers/net/tsec.c b/drivers/net/tsec.c
+index f5e314b..3d58d2d 100644
+--- a/drivers/net/tsec.c
++++ b/drivers/net/tsec.c
+@@ -72,12 +72,15 @@ static struct tsec_info_struct tsec_info[] = {
+ #endif
+ };
+ 
++#if defined(CONFIG_LENOVO_G8272)
++#define TBIANA_SETTINGS 0x4001
++#else
+ #define TBIANA_SETTINGS ( \
+ 		TBIANA_ASYMMETRIC_PAUSE \
+ 		| TBIANA_SYMMETRIC_PAUSE \
+ 		| TBIANA_FULL_DUPLEX \
+ 		)
+-
++#endif
+ /* By default force the TBI PHY into 1000Mbps full duplex when in SGMII mode */
+ #ifndef CONFIG_TSEC_TBICR_SETTINGS
+ #define CONFIG_TSEC_TBICR_SETTINGS ( \
+diff --git a/include/configs/lenovo_g8272.h b/include/configs/lenovo_g8272.h
+new file mode 100644
+index 0000000..7085130
+--- /dev/null
++++ b/include/configs/lenovo_g8272.h
+@@ -0,0 +1,616 @@
++/*
++ * Copyright 2015 Lenovo
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License
++ * Version 2 as published by the Free Software Foundation.
++ */
++
++/*
++ * Lenovo G827 configuration file
++ */
++#ifndef __CONFIG_H
++#define __CONFIG_H
++
++#ifdef CONFIG_36BIT
++#define CONFIG_PHYS_64BIT
++#endif
++
++#define CONFIG_BOARDNAME "Lenovo-G8272"
++#define CONFIG_P2020
++#define CONFIG_FLASH_CFI_DRIVER
++#define __SW_BOOT_MASK		0x03
++#define __SW_BOOT_NOR		0xc8
++#define __SW_BOOT_SPI		0x28
++#define __SW_BOOT_SD		0x68 /* or 0x18 */
++#define __SW_BOOT_NAND		0xe8
++#define __SW_BOOT_PCIE		0xa8
++#define CONFIG_SYS_L2_SIZE	(512 << 10)
++#endif
++
++#if CONFIG_SYS_L2_SIZE >= (512 << 10)
++/* must be 32-bit */
++#define CONFIG_SYS_INIT_L2_ADDR	0xf8f80000
++#define CONFIG_SYS_INIT_L2_ADDR_PHYS CONFIG_SYS_INIT_L2_ADDR
++#define CONFIG_SYS_INIT_L2_END  (CONFIG_SYS_INIT_L2_ADDR + CONFIG_SYS_L2_SIZE)
++#endif
++
++#ifndef CONFIG_SYS_TEXT_BASE
++#define CONFIG_SYS_TEXT_BASE		0xeff80000
++#endif
++
++#ifndef CONFIG_RESET_VECTOR_ADDRESS
++#define CONFIG_RESET_VECTOR_ADDRESS	0xeffffffc
++
++#ifndef CONFIG_SYS_MONITOR_BASE
++#define CONFIG_SYS_MONITOR_BASE	CONFIG_SYS_TEXT_BASE	/* start of monitor */
++#endif
++
++/* High Level Configuration Options */
++#define CONFIG_BOOKE
++#define CONFIG_E500
++#define CONFIG_MPC85xx
++
++#define CONFIG_MP
++
++#define CONFIG_FSL_ELBC
++#define CONFIG_PCI
++#define CONFIG_PCIE1	/* PCIE controler 1 (slot 1) */
++/* #define CONFIG_PCIE2 */	/* PCIE controler 2 (slot 2) */
++#define CONFIG_FSL_PCI_INIT	/* Use common FSL init code */
++#define CONFIG_FSL_PCIE_RESET	/* need PCIe reset errata */
++#define CONFIG_SYS_PCI_64BIT	/* enable 64-bit PCI resources */
++
++#define CONFIG_FSL_LAW
++#define CONFIG_TSEC_ENET	/* tsec ethernet support */
++#define CONFIG_ENV_OVERWRITE
++
++#define CONFIG_CMD_SATA
++#define CONFIG_SATA_SIL
++#define CONFIG_SYS_SATA_MAX_DEVICE	2
++#define CONFIG_LIBATA
++#define CONFIG_LBA48
++
++#define CONFIG_SYS_CLK_FREQ	100000000
++#define CONFIG_DDR_CLK_FREQ	100000000
++
++#define CONFIG_HWCONFIG
++/*
++ * These can be toggled for performance analysis, otherwise use default.
++ */
++#define CONFIG_L2_CACHE
++#define CONFIG_BTB
++
++#define CONFIG_BOARD_EARLY_INIT_F	/* Call board_pre_init */
++
++#define CONFIG_ENABLE_36BIT_PHYS
++
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_ADDR_MAP			1
++#define CONFIG_SYS_NUM_ADDR_MAP		16	/* number of TLB1 entries */
++#endif
++
++#define CONFIG_POST CONFIG_SYS_POST_MEMORY	/* Alphanetworks */
++
++#define CONFIG_SYS_MEMTEST_START	0x00200000	/* memtest works on */
++#define CONFIG_SYS_MEMTEST_END		0x1fffffff
++#define CONFIG_PANIC_HANG	/* do not reset board on panic */
++
++#define CONFIG_SYS_CCSRBAR		0xffe00000
++#define CONFIG_SYS_CCSRBAR_PHYS_LOW	CONFIG_SYS_CCSRBAR
++
++/* DDR Setup */
++#define CONFIG_VERY_BIG_RAM  /* Alphanetworks */
++#define CONFIG_FSL_DDR3
++#define CONFIG_SYS_DDR_RAW_TIMING
++#define CONFIG_DDR_SPD
++#define CONFIG_SYS_SPD_BUS_NUM 0
++#define SPD_EEPROM_ADDRESS 0x52
++#undef CONFIG_FSL_DDR_INTERACTIVE
++
++#define CONFIG_SYS_SDRAM_SIZE_LAW	LAW_SIZE_2G
++#define CONFIG_CHIP_SELECTS_PER_CTRL	4
++#define CONFIG_SYS_SDRAM_SIZE		4096 /*(1u << (CONFIG_SYS_SDRAM_SIZE_LAW - 19))*/
++#define CONFIG_SYS_DDR_SDRAM_BASE	0x00000000
++#define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
++
++#define CONFIG_NUM_DDR_CONTROLLERS	1
++#define CONFIG_DIMM_SLOTS_PER_CTLR	1
++
++#define CONFIG_DDR_ECC		/* support DDR ECC function */
++#define CONFIG_ECC_INIT_VIA_DDRCONTROLLER
++#define CONFIG_MEM_INIT_VALUE		0xdeadbeef
++
++/*
++ * Memory test or not?
++ */
++#define CONFIG_SYS_DRAM_TEST
++
++/* Default settings for DDR3 */
++#define CONFIG_SYS_DDR_CS0_BNDS		0x0000003F
++#define CONFIG_SYS_DDR_CS0_CONFIG	0x80014202
++#define CONFIG_SYS_DDR_CS0_CONFIG_2	0x00000000
++
++#define CONFIG_SYS_DDR_CS1_BNDS		0x0040007f  /* Alphanetworks */
++#define CONFIG_SYS_DDR_CS1_CONFIG	0x80014302  /* Alphanetworks */
++#define CONFIG_SYS_DDR_CS1_CONFIG_2	0x00000000  /* Alphanetworks */
++
++#define CONFIG_SYS_DDR_INIT_ADDR	0x00000000
++#define CONFIG_SYS_DDR_INIT_EXT_ADDR	0x00000000
++#define CONFIG_SYS_DDR_MODE_CONTROL	0x00000000
++#define CONFIG_SYS_DDR_ZQ_CONTROL	0x00000000
++#define CONFIG_SYS_DDR_WRLVL_CONTROL	0x00000000
++#define CONFIG_SYS_DDR_SR_CNTR		0x00000000
++#define CONFIG_SYS_DDR_RCW_1		0x00000000
++#define CONFIG_SYS_DDR_RCW_2		0x00000000
++#define CONFIG_SYS_DDR_CONTROL		0x43000000	/* Type = DDR2*/
++#define CONFIG_SYS_DDR_CONTROL_2	0x24401000
++#define CONFIG_SYS_DDR_TIMING_4		0x00000000
++#define CONFIG_SYS_DDR_TIMING_5		0x00000000
++
++#define CONFIG_SYS_DDR_DATA_INIT	0xdeadbeef
++
++#define CONFIG_SYS_DDR_TIMING_3	0x00040000
++#define CONFIG_SYS_DDR_TIMING_0	0x00770802
++#define CONFIG_SYS_DDR_TIMING_1	0x6f6b6543
++#define CONFIG_SYS_DDR_TIMING_2	0x0fa074d1
++#define CONFIG_SYS_DDR_CLK_CTRL	0x02800000
++#define CONFIG_SYS_DDR_MODE_1	0x00040852
++#define CONFIG_SYS_DDR_MODE_2	0x00000000
++#define CONFIG_SYS_DDR_INTERVAL	0x0c300100
++
++#undef CONFIG_CLOCKS_IN_MHZ
++
++/*
++ * Memory map
++ *
++ * 0x0000_0000 0x7fff_ffff	DDR		Up to 2GB cacheable
++ * 0x8000_0000 0xdfff_ffff	PCI Express Mem	1.5G non-cacheable(PCIe * 3)
++ * 0xec00_0000 0xefff_ffff	NOR flash	Up to 64M non-cacheable	CS0/1
++ * 0xf8f8_0000 0xf8ff_ffff	L2 SRAM		Up to 512K cacheable
++ *   (early boot only)
++ * 0xff80_0000 0xff80_7fff	NAND flash	32K non-cacheable	CS1/0
++ * 0xffc0_0000 0xffc3_ffff	PCI IO range	256k non-cacheable
++ * 0xffd0_0000 0xffd0_3fff	L1 for stack	16K cacheable
++ * 0xffe0_0000 0xffef_ffff	CCSR		1M non-cacheable
++ */
++
++
++/*
++ * Local Bus Definitions
++ */
++#define CONFIG_SYS_MAX_FLASH_SECT	256	         /* MX29LV640 has 134 sectors, make it max=256 */
++#define CONFIG_SYS_FLASH_LOWER_BOUND 0xF0000000
++#define CONFIG_SYS_FLASH_BASE   0xef000000
++
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_SYS_FLASH_BASE_PHYS	(0xf00000000ull | CONFIG_SYS_FLASH_BASE)
++#else
++#define CONFIG_SYS_FLASH_BASE_PHYS	CONFIG_SYS_FLASH_BASE
++#endif
++
++#define CONFIG_FLASH_BR_PRELIM (BR_PHYS_ADDR(CONFIG_SYS_FLASH_BASE_PHYS) \
++	| BR_PS_16 | BR_V)
++
++#define CONFIG_FLASH_OR_PRELIM	0xfc000ff7
++
++#define CONFIG_SYS_FLASH_BANKS_LIST	{CONFIG_SYS_FLASH_BASE_PHYS}
++#define CONFIG_SYS_FLASH_QUIET_TEST
++#define CONFIG_FLASH_SHOW_PROGRESS	45	/* count down from 45/5: 9..1 */
++
++#define CONFIG_SYS_MAX_FLASH_BANKS	1	/* number of banks */
++
++#undef CONFIG_SYS_FLASH_CHECKSUM
++#define CONFIG_SYS_FLASH_ERASE_TOUT	60000	/* Flash Erase Timeout (ms) */
++#define CONFIG_SYS_FLASH_WRITE_TOUT	500	/* Flash Write Timeout (ms) */
++
++#define CONFIG_FLASH_CFI_DRIVER
++#define CONFIG_SYS_FLASH_CFI
++#define CONFIG_SYS_FLASH_EMPTY_INFO
++#define CONFIG_SYS_FLASH_USE_BUFFER_WRITE
++
++/* Nand Flash */
++#ifdef CONFIG_NAND_FSL_ELBC
++#define CONFIG_SYS_NAND_BASE		0xff800000
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_SYS_NAND_BASE_PHYS	0xfff800000ull
++#else
++#define CONFIG_SYS_NAND_BASE_PHYS	CONFIG_SYS_NAND_BASE
++#endif
++
++#define CONFIG_SYS_NAND_BASE_LIST	{ CONFIG_SYS_NAND_BASE }
++#define CONFIG_SYS_MAX_NAND_DEVICE	1
++#define CONFIG_MTD_NAND_VERIFY_WRITE
++#define CONFIG_CMD_NAND
++#define CONFIG_SYS_NAND_BLOCK_SIZE	(16 * 1024)
++
++#define CONFIG_SYS_NAND_BR_PRELIM (BR_PHYS_ADDR(CONFIG_SYS_NAND_BASE_PHYS) \
++	| (2<<BR_DECC_SHIFT)	/* Use HW ECC */ \
++	| BR_PS_8	/* Port Size = 8 bit */ \
++	| BR_MS_FCM	/* MSEL = FCM */ \
++	| BR_V)	/* valid */
++#define CONFIG_SYS_NAND_OR_PRELIM	(OR_AM_32KB	/* small page */ \
++	| OR_FCM_CSCT \
++	| OR_FCM_CST \
++	| OR_FCM_CHT \
++	| OR_FCM_SCY_1 \
++	| OR_FCM_TRLX \
++	| OR_FCM_EHTR)
++#endif /* CONFIG_NAND_FSL_ELBC */
++
++#define CONFIG_BOARD_EARLY_INIT_R	/* call board_early_init_r function */
++
++#define CONFIG_SYS_INIT_RAM_LOCK
++#define CONFIG_SYS_INIT_RAM_ADDR	0xffd00000 /* stack in RAM */
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH 0xf
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW CONFIG_SYS_INIT_RAM_ADDR
++/* The assembler doesn't like typecast */
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS \
++	((CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH * 1ull << 32) | \
++	  CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW)
++#else
++/* Initial L1 address */
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS	CONFIG_SYS_INIT_RAM_ADDR
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_HIGH 0
++#define CONFIG_SYS_INIT_RAM_ADDR_PHYS_LOW CONFIG_SYS_INIT_RAM_ADDR_PHYS
++#endif
++/* Size of used area in RAM */
++#define CONFIG_SYS_INIT_RAM_SIZE	0x00004000
++
++#define CONFIG_SYS_GBL_DATA_OFFSET	(CONFIG_SYS_INIT_RAM_SIZE - \
++					GENERATED_GBL_DATA_SIZE)
++#define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
++
++#define CONFIG_SYS_MONITOR_LEN	(256 * 1024)/* Reserve 256 kB for Mon */
++#define CONFIG_SYS_MALLOC_LEN	(1024 * 1024)/* Reserved for malloc */
++
++/* Serial Port */
++#define CONFIG_CONS_INDEX		1
++#undef CONFIG_SERIAL_SOFTWARE_FIFO
++#define CONFIG_SYS_NS16550
++#define CONFIG_SYS_NS16550_SERIAL
++#define CONFIG_SYS_NS16550_REG_SIZE	1
++#define CONFIG_SYS_NS16550_CLK		get_bus_freq(0)
++#ifdef CONFIG_SPL_BUILD
++#define CONFIG_NS16550_MIN_FUNCTIONS
++#endif
++
++#define CONFIG_SYS_BAUDRATE_TABLE	\
++	{300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200}
++
++#define CONFIG_SYS_NS16550_COM1	(CONFIG_SYS_CCSRBAR+0x4500)
++#define CONFIG_SYS_NS16550_COM2	(CONFIG_SYS_CCSRBAR+0x4600)
++
++/* Use the HUSH parser */
++#define CONFIG_SYS_HUSH_PARSER
++
++/*
++ * Pass open firmware flat tree
++ */
++#define CONFIG_OF_LIBFDT
++#define CONFIG_OF_BOARD_SETUP
++#define CONFIG_OF_STDOUT_VIA_ALIAS
++
++/* new uImage format support */
++#define CONFIG_FIT
++#define CONFIG_FIT_VERBOSE	/* enable fit_format_{error,warning}() */
++
++/* I2C */
++#define CONFIG_FSL_I2C			/* Use FSL common I2C driver */
++#define CONFIG_HARD_I2C			/* I2C with hardware support */
++#undef CONFIG_SOFT_I2C			/* I2C bit-banged */
++#define CONFIG_I2C_MULTI_BUS
++#define CONFIG_I2C_CMD_TREE
++#define CONFIG_SYS_I2C_SPEED		100000	/* I2C spd and slave address */
++#define CONFIG_SYS_I2C_EEPROM_ADDR	0x56    /* Mainboard eeprom */
++#define CONFIG_SYS_I2C_SLAVE		0x7F
++#define CONFIG_SYS_I2C_NOPROBES		{{0, 0x29}} /* Don't probe this addr */
++#define CONFIG_SYS_I2C_OFFSET		0x3000
++#define CONFIG_SYS_I2C2_OFFSET		0x3100
++#define CONFIG_SYS_SPD_BUS_NUM		0 /* For rom_loc and flash bank */
++
++/*
++ * I2C2 EEPROM
++ */
++
++/* enable read and write access to EEPROM */
++#define CONFIG_CMD_EEPROM
++#define CONFIG_SYS_I2C_MULTI_EEPROMS
++#define CONFIG_SYS_EEPROM_BUS_NUM	0
++#define CONFIG_SYS_EEPROM_MAX_SIZE 2048
++
++#define CONFIG_SYS_EEPROM_USE_COMMON_I2C_IO
++#define CONFIG_I2C_EEPROM_ADDR  	0x56
++#define CONFIG_SYS_I2C_EEPROM_ADDR_LEN 2
++#define CONFIG_SYS_EEPROM_PAGE_WRITE_BITS 3
++#define CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS 5
++
++/* Assign Some board specific I2C information here */
++#define CONFIG_SYS_I2C_CPLD_ADDR    0x47
++/* G8272 uses the mainboard eeprom as the sys eeprom. This eeprom is hidden behind a PCA9548 */
++#define CONFIG_SYS_I2C_EEPROM_MUX_ADDR     0x70
++#define CONFIG_SYS_I2C_EEPROM_MUX_CHAN     0x4
++#define CONFIG_SYS_I2C_EEPROM_MUX_CTRL     0x0
++/*ONIE reservered space in VPD is at offset 0x300*/
++#define CONFIG_SYS_EEPROM_OFFSET           0x300
++/* Populate serial number and mac address from EEPROM */
++#define CONFIG_POPULATE_SERIAL_NUMBER
++#define CONFIG_SYS_EEPROM_LOAD_ENV_MAC
++#define CONFIG_SYS_EEPROM_MAX_NUM_ETH_PORTS	1
++
++/*
++ * eSPI - Enhanced SPI
++ */
++#define CONFIG_HARD_SPI
++#define CONFIG_FSL_ESPI
++
++#if defined(CONFIG_SPI_FLASH)
++#define CONFIG_SPI_FLASH_SPANSION
++#define CONFIG_CMD_SF
++#define CONFIG_SF_DEFAULT_SPEED	10000000
++#define CONFIG_SF_DEFAULT_MODE	0
++#endif
++
++#if defined(CONFIG_PCI)
++/*
++ * General PCI
++ * Memory space is mapped 1-1, but I/O space must start from 0.
++ */
++
++/* controller 2, direct to uli, tgtid 2, Base address 9000 */
++#define CONFIG_SYS_PCIE2_NAME		"PCIe SLOT"
++#define CONFIG_SYS_PCIE2_MEM_VIRT	0xa0000000
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_SYS_PCIE2_MEM_BUS	0xc0000000
++#define CONFIG_SYS_PCIE2_MEM_PHYS	0xc20000000ull
++#else
++#define CONFIG_SYS_PCIE2_MEM_BUS	0xa0000000
++#define CONFIG_SYS_PCIE2_MEM_PHYS	0xa0000000
++#endif
++#define CONFIG_SYS_PCIE2_MEM_SIZE	0x20000000	/* 512M */
++#define CONFIG_SYS_PCIE2_IO_VIRT	0xffc10000
++#define CONFIG_SYS_PCIE2_IO_BUS		0x00000000
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_SYS_PCIE2_IO_PHYS	0xfffc10000ull
++#else
++#define CONFIG_SYS_PCIE2_IO_PHYS	0xffc10000
++#endif
++#define CONFIG_SYS_PCIE2_IO_SIZE	0x00010000	/* 64k */
++
++/* controller 1, Slot 2, tgtid 1, Base address a000 */
++#define CONFIG_SYS_PCIE1_NAME		"mini PCIe SLOT"
++#define CONFIG_SYS_PCIE1_MEM_VIRT	0x80000000
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_SYS_PCIE1_MEM_BUS	0x80000000
++#define CONFIG_SYS_PCIE1_MEM_PHYS	0xc00000000ull
++#else
++#define CONFIG_SYS_PCIE1_MEM_BUS	0x80000000
++#define CONFIG_SYS_PCIE1_MEM_PHYS	0x80000000
++#endif
++#define CONFIG_SYS_PCIE1_MEM_SIZE	0x20000000	/* 512M */
++#define CONFIG_SYS_PCIE1_IO_VIRT	0xffc00000
++#define CONFIG_SYS_PCIE1_IO_BUS		0x00000000
++#ifdef CONFIG_PHYS_64BIT
++#define CONFIG_SYS_PCIE1_IO_PHYS	0xfffc00000ull
++#else
++#define CONFIG_SYS_PCIE1_IO_PHYS	0xffc00000
++#endif
++#define CONFIG_SYS_PCIE1_IO_SIZE	0x00010000	/* 64k */
++
++#define CONFIG_PCI_PNP	/* do pci plug-and-play */
++#define CONFIG_E1000	/* Defind e1000 pci Ethernet card*/
++
++#define CONFIG_CMD_PCI
++#define CONFIG_CMD_NET
++
++#define CONFIG_PCI_SCAN_SHOW	/* show pci devices on startup */
++#define CONFIG_DOS_PARTITION
++#endif /* CONFIG_PCI */
++
++#if defined(CONFIG_TSEC_ENET)
++#define CONFIG_MII				1		/* MII PHY management */
++#define CONFIG_MII_DEFAULT_TSEC	3	/* Allow unregistered phys */
++#define CONFIG_TSEC1			1
++#define CONFIG_TSEC1_NAME		"eTSEC1"
++#define CONFIG_TSEC2			1
++#define CONFIG_TSEC2_NAME		"eTSEC2"
++#define CONFIG_TSEC3			1
++#define CONFIG_TSEC3_NAME		"eTSEC3"
++
++#define TSEC1_PHY_ADDR	2
++#define TSEC2_PHY_ADDR	1
++#define TSEC3_PHY_ADDR	0
++
++#define TSEC1_FLAGS	(TSEC_GIGABIT )
++#define TSEC2_FLAGS	(TSEC_GIGABIT )
++#define TSEC3_FLAGS	(TSEC_GIGABIT )
++
++#define TSEC1_PHYIDX	0
++#define TSEC2_PHYIDX	0
++#define TSEC3_PHYIDX	0
++
++#define CONFIG_ETHPRIME	"eTSEC3"
++
++#define CONFIG_PHY_GIGE	1	/* Include GbE speed/duplex detection */
++
++#define CONFIG_HAS_ETH0
++#define CONFIG_HAS_ETH1
++#define CONFIG_HAS_ETH2
++
++#endif /* CONFIG_TSEC_ENET */
++
++#ifdef CONFIG_QE
++/* QE microcode/firmware address */
++#define CONFIG_SYS_QE_FMAN_FW_IN_NOR
++#define CONFIG_SYS_QE_FMAN_FW_ADDR	0xefec0000
++#define CONFIG_SYS_QE_FMAN_FW_LENGTH	0x10000
++#endif /* CONFIG_QE */
++
++/* Environment */
++#define CONFIG_ENV_IS_IN_FLASH
++#define CONFIG_ENV_ADDR         0xef020000
++#define CONFIG_ENV_SIZE         0x2000
++#define CONFIG_ENV_SECT_SIZE	0x20000 /* 128K (one sector) */
++
++/* Configurations for ONIE TLV infomation stored in EEPROM */
++#define CONFIG_CMD_SYS_EEPROM
++
++#define CONFIG_LOADS_ECHO		/* echo on for serial download */
++#define CONFIG_SYS_LOADS_BAUD_CHANGE	/* allow baudrate change */
++
++/*
++ * Command line configuration.
++ */
++#include <config_cmd_default.h>
++
++#define CONFIG_CMD_IRQ
++#define CONFIG_CMD_PING
++#define CONFIG_CMD_I2C
++#define CONFIG_CMD_MII
++#define CONFIG_CMD_DATE
++#define CONFIG_CMD_ELF
++#define CONFIG_CMD_SETEXPR
++#define CONFIG_CMD_REGINFO
++
++/*
++ * MTD configuration
++ */
++#define CONFIG_CMD_MTDPARTS	1
++#define CONFIG_MTD_DEVICE		/* needed for mtdparts commands */
++#define CONFIG_FLASH_CFI_MTD
++#define MTDIDS_DEFAULT		"nor0=cm5200-0"
++#define MTDPARTS_DEFAULT	"mtdparts=cm5200-0:"			\
++					"384k(uboot),128k(env),"	\
++					"128k(redund_env),128k(dtb),"	\
++					"2m(kernel),27904k(rootfs),"	\
++					"-(config)"
++
++
++/*
++ * USB
++ */
++#define CONFIG_HAS_FSL_DR_USB
++
++#if defined(CONFIG_HAS_FSL_DR_USB)
++#define CONFIG_USB_EHCI
++
++#ifdef CONFIG_USB_EHCI
++#define CONFIG_CMD_USB
++#define CONFIG_EHCI_HCD_INIT_AFTER_RESET
++#define CONFIG_USB_EHCI_FSL
++#define CONFIG_USB_STORAGE
++#endif
++#endif
++
++#define CONFIG_MMC
++
++#ifdef CONFIG_MMC
++#define CONFIG_FSL_ESDHC
++#define CONFIG_SYS_FSL_ESDHC_ADDR	CONFIG_SYS_MPC85xx_ESDHC_ADDR
++#define CONFIG_CMD_MMC
++#define CONFIG_GENERIC_MMC
++#endif
++
++#if defined(CONFIG_MMC) || defined(CONFIG_USB_EHCI) \
++		 || defined(CONFIG_FSL_SATA)
++#define CONFIG_CMD_EXT2
++#define CONFIG_CMD_FAT
++#define CONFIG_DOS_PARTITION
++#endif
++
++#undef CONFIG_WATCHDOG	/* watchdog disabled */
++
++/*
++ * Miscellaneous configurable options
++ */
++#define CONFIG_SYS_LONGHELP			/* undef to save memory */
++#define CONFIG_CMDLINE_EDITING			/* Command-line editing */
++#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address */
++#define CONFIG_SYS_PROMPT	"=> "		/* Monitor Command Prompt */
++#define CONFIG_SYS_PBSIZE (CONFIG_SYS_CBSIZE + sizeof(CONFIG_SYS_PROMPT) + 16)
++/* Print Buffer Size */
++#define CONFIG_SYS_MAXARGS	16	/* max number of command args */
++#define CONFIG_SYS_BARGSIZE	CONFIG_SYS_CBSIZE/* Boot Argument Buffer Size */
++#define CONFIG_SYS_HZ		1000	/* decrementer freq: 1ms tick */
++
++/*
++ * For booting Linux, the board info and command line data
++ * have to be in the first 64 MB of memory, since this is
++ * the maximum mapped by the Linux kernel during initialization.
++ */
++#define CONFIG_SYS_BOOTMAPSZ	(64 << 20)	/* Initial Memory for Linux*/
++#define CONFIG_SYS_BOOTM_LEN	(64 << 20)	/* Increase max gunzip size */
++
++#if defined(CONFIG_CMD_KGDB)
++#define CONFIG_KGDB_BAUDRATE	230400	/* speed to run kgdb serial port */
++#define CONFIG_KGDB_SER_INDEX	2	/* which serial port to use */
++#endif
++
++/*
++ * Environment Configuration
++ */
++#define CONFIG_HOSTNAME		Lenovo-g8272-unknown
++#define CONFIG_ROOTPATH		"/opt/nfsroot"
++#define CONFIG_BOOTFILE		"uImage"
++#define CONFIG_UBOOTPATH	u-boot.bin /* U-Boot image on TFTP server */
++
++/* default location for tftp and bootm */
++#define CONFIG_LOADADDR	1000000
++
++#define CONFIG_BOOTDELAY 10	/* -1 disables auto-boot */
++#define CONFIG_BOOTARGS	/* the boot command will set bootargs */
++
++#define CONFIG_BAUDRATE	115200
++
++#ifdef CONFIG_ONIE
++
++#undef CONFIG_TSEC1
++#undef CONFIG_TSEC3
++#undef CONFIG_TSEC2_NAME
++#define	CONFIG_TSEC2_NAME	"eth0"
++
++#undef CONFIG_ETHPRIME
++#define CONFIG_ETHPRIME		"eth0"
++
++#undef CONFIG_HAS_ETH1
++#undef CONFIG_HAS_ETH2
++
++/* Undefine a few things provided by common_config.h */
++#undef CONFIG_BOOTCOMMAND
++#undef CONFIG_SYS_PBSIZE
++#undef CONFIG_DOS_PARTITION
++#undef CONFIG_LOADS_ECHO
++#undef CONFIG_SYS_LOADS_BAUD_CHANGE
++#undef CONFIG_SYS_PCIE1_NAME
++#undef CONFIG_SYS_PCIE2_NAME
++#undef CONFIG_OF_LIBFDT
++#undef CONFIG_OF_BOARD_SETUP
++#undef CONFIG_OF_STDOUT_VIA_ALIAS
++#undef CONFIG_FIT
++#undef CONFIG_SYS_BAUDRATE_TABLE
++#undef CONFIG_EXTRA_ENV_SETTINGS
++
++#include "configs/common_config.h"
++
++/*
++** Platform environment variables needed by the common env
++** infrastructure.
++**
++*/
++#define CONFIG_PLATFORM_ENV	\
++	"consoledev=ttyS0\0"	\
++	"onie_start=0xefba0000\0"	\
++	"onie_sz.b=0x003e0000\0" \
++	"hwconfig=usb1:dr_mode=host,phy_type=ulpi\0"
++
++#define	CONFIG_EXTRA_ENV_SETTINGS		\
++	CONFIG_PLATFORM_ENV			\
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++/* Enable platform specific init routine */
++#define CONFIG_MISC_INIT_R      1
++
++#endif /* CONFIG_ONIE */
++
++#endif /* __CONFIG_H */

@@ -1,0 +1,26 @@
+# This script fragment is sourced by /etc/init.d/init-arch.sh,
+# which in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+init_platform_post_arch()
+{
+	#
+	# Init the iO-expander PCA9548 and 
+	# wait for the EEPROM to come up.
+	#
+	sleep 1
+	
+	[ -w /sys/bus/i2c/devices/i2c-3/new_device ] || {
+		[ -w /sys/bus/i2c/devices/i2c-0/new_device ] && {
+			echo pca9548 0x70 > /sys/bus/i2c/devices/i2c-0/new_device
+		}
+	}
+
+	if onie-syseeprom >/dev/null 2>&1; then
+		echo "Info: EEPROM device found."
+	else
+		echo "Error: EEPROM device not found!!!"
+	fi
+
+	sleep 1
+}

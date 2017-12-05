@@ -1,0 +1,99 @@
+# U-Boot specific ONIE installer functions
+
+#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Default implementation for updating kernel
+install_onie_kernel()
+{
+    echo "Updating ONIE kernel ..."
+    flashcp -v onie.itb /dev/mtd-onie || {
+        echo "ERROR: Updating ONIE kernel failed."
+        exit 1
+    }
+}
+
+# Default implementation for updating u-boot
+install_onie_uboot()
+{
+    # install u-boot
+    echo "Updating ONIE U-Boot ..."
+    flashcp -v %%UPDATER_UBOOT_NAME%% /dev/mtd-uboot || {
+        echo "ERROR: Updating ONIE U-Boot failed."
+        exit 1
+    }
+}
+
+# Default implementation for updating u-boot env
+update_uboot_env()
+{
+    # Set/clear a few U-Boot environment variables.  Some of the values
+    # come from the compiled-in default environment of the update image.
+    #
+    # - clear the onie_boot_reason if set
+    #
+    # - update onie_version with the version of the update image.
+    #
+    # - update onie_uboot_version environment variable.  Use the
+    #   U-Boot/ONIE version compiled into the image.  The string is
+    #   null-terminated.
+    #
+    # - update onie_build_date with the image build date.
+    #
+    # - update the onie_bootcmd variable as this command may have changed
+    #   from one version to the next.  Use the value found in the update
+    #   image.
+    case "$onie_arch" in
+        powerpc)
+            ver=$(dd if=u-boot.bin bs=1 skip=4 count=256 2>/dev/null | awk -F\x00 '{ print $1; exit }')
+            ;;
+        arm)
+            ver=$(awk -F\x00 '{print $1}' u-boot.bin | grep U-Boot | head -n 1)
+            ;;
+        *)
+            echo "ERROR: Unsupported ONIE U-Boot architecture: $onie_arch"
+            echo "ERROR: Setting U-Boot env 'onie_uboot_version' to 'unknown'"
+            ver="unknown"
+    esac
+    bootcmd=$(awk -F\x00 '{print $1}' u-boot.bin | awk -F= '{ if ($1 == "onie_bootcmd") { print $2 } }')
+    if [ -z "$bootcmd" ] ; then
+    # do not update this var
+        bootvar=
+    else
+        bootvar=onie_bootcmd
+    fi
+
+    (cat <<EOF
+onie_boot_reason
+onie_version $image_version
+ver $ver
+onie_uboot_version $ver
+onie_build_date $image_build_date
+$bootvar $bootcmd
+EOF
+    ) | fw_setenv -f -s -
+
+}
+
+install_image()
+{
+    # install kernel
+    install_onie_kernel
+
+    # install u-boot
+    install_onie_uboot
+
+    # update u-boot env
+    update_uboot_env
+
+    # update sys_eeprom
+    update_syseeprom
+
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

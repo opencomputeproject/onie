@@ -1,0 +1,80 @@
+From ab323e2730ffed58ec753b60f033b51000e79bba Mon Sep 17 00:00:00 2001
+From: Prabhakar Kushwaha <prabhakar@freescale.com>
+Date: Wed, 4 Nov 2015 12:26:02 +0530
+Subject: [PATCH 33/74] driver: net: ldpaa: Fix Rx buffer alignment
+
+MC 0.7.1.2 enforces limitation i.e.: "Packets may be corrupted
+in several combinations of buffer size and frame offsets.
+Workaround: Use buffers that are of size that is a multiple of 256, and
+frame offset that is a multiple of 256"
+
+Updating the DPNI Eth driver to comply with the restriction.
+
+Signed-off-by: Bogdan Hamciuc <bogdan.hamciuc@freescale.com>
+Signed-off-by: Prabhakar Kushwaha <prabhakar@freescale.com>
+Reviewed-by: York Sun <yorksun@freescale.com>
+---
+ drivers/net/ldpaa_eth/ldpaa_eth.c | 11 ++++++++---
+ drivers/net/ldpaa_eth/ldpaa_eth.h |  6 +++---
+ 2 files changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/net/ldpaa_eth/ldpaa_eth.c b/drivers/net/ldpaa_eth/ldpaa_eth.c
+index 5ddc9fe..69530b1 100644
+--- a/drivers/net/ldpaa_eth/ldpaa_eth.c
++++ b/drivers/net/ldpaa_eth/ldpaa_eth.c
+@@ -500,7 +500,7 @@ static int ldpaa_bp_add_7(uint16_t bpid)
+ 	struct qbman_release_desc rd;
+ 
+ 	for (i = 0; i < 7; i++) {
+-		addr = memalign(L1_CACHE_BYTES, LDPAA_ETH_RX_BUFFER_SIZE);
++		addr = memalign(LDPAA_ETH_BUF_ALIGN, LDPAA_ETH_RX_BUFFER_SIZE);
+ 		if (!addr) {
+ 			printf("addr allocation failed\n");
+ 			goto err_alloc;
+@@ -685,10 +685,13 @@ static int ldpaa_dpni_setup(struct ldpaa_eth_priv *priv)
+ 	/* Configure our buffers' layout */
+ 	dflt_dpni->buf_layout.options = DPNI_BUF_LAYOUT_OPT_PARSER_RESULT |
+ 				   DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
+-				   DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE;
++				   DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE |
++				   DPNI_BUF_LAYOUT_OPT_DATA_ALIGN;
+ 	dflt_dpni->buf_layout.pass_parser_result = true;
+ 	dflt_dpni->buf_layout.pass_frame_status = true;
+ 	dflt_dpni->buf_layout.private_data_size = LDPAA_ETH_SWA_SIZE;
++	/* HW erratum mandates data alignment in multiples of 256 */
++	dflt_dpni->buf_layout.data_align = LDPAA_ETH_BUF_ALIGN;
+ 	/* ...rx, ... */
+ 	err = dpni_set_rx_buffer_layout(dflt_mc_io, MC_CMD_NO_FLAGS,
+ 					dflt_dpni->dpni_handle,
+@@ -699,7 +702,9 @@ static int ldpaa_dpni_setup(struct ldpaa_eth_priv *priv)
+ 	}
+ 
+ 	/* ... tx, ... */
+-	dflt_dpni->buf_layout.options &= ~DPNI_BUF_LAYOUT_OPT_PARSER_RESULT;
++	/* remove Rx-only options */
++	dflt_dpni->buf_layout.options &= ~(DPNI_BUF_LAYOUT_OPT_DATA_ALIGN |
++				      DPNI_BUF_LAYOUT_OPT_PARSER_RESULT);
+ 	err = dpni_set_tx_buffer_layout(dflt_mc_io, MC_CMD_NO_FLAGS,
+ 					dflt_dpni->dpni_handle,
+ 					&dflt_dpni->buf_layout);
+diff --git a/drivers/net/ldpaa_eth/ldpaa_eth.h b/drivers/net/ldpaa_eth/ldpaa_eth.h
+index b86a695..af41b27 100644
+--- a/drivers/net/ldpaa_eth/ldpaa_eth.h
++++ b/drivers/net/ldpaa_eth/ldpaa_eth.h
+@@ -28,10 +28,10 @@ enum ldpaa_eth_type {
+ #define LDPAA_ETH_REFILL_THRESH		(LDPAA_ETH_NUM_BUFS/2)
+ #define LDPAA_ETH_RX_BUFFER_SIZE	2048
+ 
+-/* Hardware requires alignment for ingress/egress buffer addresses
+- * and ingress buffer lengths.
++/* Hardware requires alignment for buffer address and length: 256-byte
++ * for ingress, 64-byte for egress. Using 256 for both.
+  */
+-#define LDPAA_ETH_BUF_ALIGN		64
++#define LDPAA_ETH_BUF_ALIGN		256
+ 
+ /* So far we're only accomodating a skb backpointer in the frame's
+  * software annotation, but the hardware options are either 0 or 64.
+-- 
+2.1.0.27.g96db324
+

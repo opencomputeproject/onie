@@ -1,0 +1,36 @@
+From b8c45288e7f8e39925bc865c635b9f93e4831287 Mon Sep 17 00:00:00 2001
+From: Nikhil Badola <nikhil.badola@freescale.com>
+Date: Sun, 19 Oct 2014 18:55:07 +0530
+Subject: [PATCH 085/124] drivers: usb: fsl: Set USB_EN bit to select ULPI phy
+
+Set USB_EN bit to select ULPI phy for USB controller version 2.5
+
+Signed-off-by: Nikhil Badola <nikhil.badola@freescale.com>
+Change-Id: I22fd6921d264d64f59d795d81f82ea89214862d9
+Reviewed-on: http://git.am.freescale.net:8181/21817
+Tested-by: Review Code-CDREVIEW <CDREVIEW@freescale.com>
+Reviewed-by: Ramneek Mehresh <ramneek.mehresh@freescale.com>
+Reviewed-by: Zhengxiong Jin <Jason.Jin@freescale.com>
+---
+ drivers/usb/host/ehci-fsl.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/usb/host/ehci-fsl.c b/drivers/usb/host/ehci-fsl.c
+index 5cdd4653..2e88748 100644
+--- a/drivers/usb/host/ehci-fsl.c
++++ b/drivers/usb/host/ehci-fsl.c
+@@ -169,6 +169,11 @@ static int usb_hcd_fsl_probe(const struct hc_driver *driver,
+ 	if (pdata->have_sysif_regs && pdata->controller_ver < FSL_USB_VER_1_6)
+ 		setbits32(hcd->regs + FSL_SOC_USB_CTRL, 0x4);
+ 
++	/* Set USB_EN bit to select ULPI phy for USB controller version 2.5 */
++	if (pdata->controller_ver == FSL_USB_VER_2_5 &&
++	   pdata->phy_mode == FSL_USB2_PHY_ULPI)
++		iowrite32be(USB_CTRL_USB_EN, hcd->regs + FSL_SOC_USB_CTRL);
++
+ 	/*
+ 	 * Enable UTMI phy and program PTS field in UTMI mode before asserting
+ 	 * controller reset for USB Controller version 2.5
+-- 
+2.1.0.27.g96db324
+

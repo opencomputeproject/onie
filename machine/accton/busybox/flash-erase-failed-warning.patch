@@ -1,0 +1,21 @@
+show warning message if erasing flash failed
+
+diff --git a/libbb/xfuncs_printf.c b/libbb/xfuncs_printf.c
+index e9222f6..3931df1 100644
+--- a/libbb/xfuncs_printf.c
++++ b/libbb/xfuncs_printf.c
+@@ -553,7 +553,13 @@ int FAST_FUNC bb_xioctl(int fd, unsigned request, void *argp, const char *ioctl_
+ 
+ 	ret = ioctl(fd, request, argp);
+ 	if (ret < 0)
+-		bb_simple_perror_msg_and_die(ioctl_name);
++	{
++#include <mtd/mtd-user.h>
++		if (request == MEMERASE)
++			bb_simple_perror_msg(ioctl_name);
++		else
++			bb_simple_perror_msg_and_die(ioctl_name);
++	}
+ 	return ret;
+ }
+ #else

@@ -1,0 +1,62 @@
+gcc6-use-no-pie-compiler-flag
+
+GCC6 defaults to the -pie linker flag during the link step.
+
+This patch adds a check to the configure script to detect whether the
+complier supports the "-no-pie" option.  If it does, then add
+"-no-pie" to the CFLAGS.
+
+diff --git a/acinclude.m4 b/acinclude.m4
+index 526f97a..fc44ee4 100644
+--- a/acinclude.m4
++++ b/acinclude.m4
+@@ -390,6 +390,30 @@ else
+ [fi]
+ ])
+ 
++dnl Check if the C compiler supports `-no-pie'.
++AC_DEFUN([grub_CHECK_NO_PIE],[
++[# Disabling position independent executable.
++no_pie_possible=yes]
++AC_MSG_CHECKING([whether `$CC' accepts `-no-pie' option])
++# Is this a reliable test case?
++AC_LANG_CONFTEST([AC_LANG_SOURCE([[
++int main() {
++	return 0;
++}
++]])])
++
++[# `$CC -c -o ...' might not be portable.  But, oh, well...  Is calling
++# `ac_compile' like this correct, after all?
++if eval "$ac_compile -S -o conftest.s" 2> /dev/null; then]
++  AC_MSG_RESULT([yes])
++  [# Should we clear up other files as well, having called `AC_LANG_CONFTEST'?
++  rm -f conftest.s
++else
++  no_pie_possible=no]
++  AC_MSG_RESULT([no])
++[fi]
++])
++
+ dnl Check if the C compiler supports `-fPIC'.
+ AC_DEFUN([grub_CHECK_PIC],[
+ [# Position independent executable.
+diff --git a/configure.ac b/configure.ac
+index a85b134..1d4cd24 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1184,10 +1184,14 @@ CFLAGS="$TARGET_CFLAGS"
+ 
+ # Position independent executable.
+ grub_CHECK_PIE
++grub_CHECK_NO_PIE
+ [# Need that, because some distributions ship compilers that include
+ # `-fPIE' in the default specs.
+ if [ x"$pie_possible" = xyes ]; then
+   TARGET_CFLAGS="$TARGET_CFLAGS -fno-PIE"
++  if [ x"$no_pie_possible" = xyes ]; then
++    TARGET_CFLAGS="$TARGET_CFLAGS -no-pie"
++  fi
+ fi]
+ 
+ CFLAGS="$TARGET_CFLAGS"

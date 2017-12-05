@@ -1,0 +1,61 @@
+From 8a0076e48cc5b18b139b6753453ba55e22c17a6b Mon Sep 17 00:00:00 2001
+From: Zhao Qiang <qiang.zhao@nxp.com>
+Date: Tue, 7 Feb 2017 13:00:55 +0800
+Subject: [PATCH 64/74] armv8/fsl-lsch3: Make CCN-504 related code conditional
+
+LS2080 family has CCN-504 cache coherent interconnet. Other SoCs
+may have differnt interconnect.
+
+Signed-off-by: York Sun <york.sun@nxp.com>
+Signed-off-by: Alison Wang <alison.wang@nxp.com>
+Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/lowlevel.S      | 4 +++-
+ arch/arm/include/asm/arch-fsl-layerscape/config.h | 1 +
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/lowlevel.S b/arch/arm/cpu/armv8/fsl-layerscape/lowlevel.S
+index 9c69ed1..2e365e1 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/lowlevel.S
++++ b/arch/arm/cpu/armv8/fsl-layerscape/lowlevel.S
+@@ -17,7 +17,7 @@
+ ENTRY(lowlevel_init)
+ 	mov	x29, lr			/* Save LR */
+ 
+-#ifdef CONFIG_FSL_LSCH3
++#if defined(CONFIG_FSL_LSCH3) && defined (CONFIG_SYS_FSL_HAS_CCN504)
+ 
+ 	/* Set Wuo bit for RN-I 20 */
+ #if defined(CONFIG_LS2085A) || defined (CONFIG_LS2080A)
+@@ -181,6 +181,7 @@ ENTRY(lowlevel_init)
+ 	ret
+ ENDPROC(lowlevel_init)
+ 
++#ifdef CONFIG_SYS_FSL_HAS_CCN504
+ hnf_pstate_poll:
+ 	/* x0 has the desired status, return 0 for success, 1 for timeout
+ 	 * clobber x1, x2, x3, x4, x6, x7
+@@ -258,6 +259,7 @@ ENTRY(__asm_flush_l3_cache)
+ 	mov	lr, x29
+ 	ret
+ ENDPROC(__asm_flush_l3_cache)
++#endif /* CONFIG_SYS_FSL_HAS_CCN504 */
+ 
+ #ifdef CONFIG_MP
+ 	/* Keep literals not used by the secondary boot code outside it */
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/config.h b/arch/arm/include/asm/arch-fsl-layerscape/config.h
+index 9ec2438..f2f233d 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/config.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/config.h
+@@ -25,6 +25,7 @@
+ 
+ #if defined(CONFIG_LS2080A)
+ #define CONFIG_MAX_CPUS				16
++#define CONFIG_SYS_FSL_HAS_CCN504
+ #define CONFIG_SYS_FSL_IFC_BANK_COUNT		8
+ #define CONFIG_NUM_DDR_CONTROLLERS		2
+ #define CONFIG_SYS_FSL_CLUSTER_CLOCKS		{ 1, 1, 4, 4 }
+-- 
+2.1.0.27.g96db324
+
