@@ -1,0 +1,24 @@
+gen_live_config()
+{
+# Build machine info
+onie_platform_series=s41
+
+# product name in system-eeprom
+product_name=$(onie-syseeprom -g 0x21  | cut -d '-' -f 1 |  awk '{ print tolower($0) }')
+platform_series=$(echo $product_name  | cut -d '-' -f 1 |  awk '{ print tolower($0) }' | cut -c1-3)
+
+# If product-ID(TLV 0x21) is defined and is valid
+if [ $platform_series = $onie_platform_series ]; then
+
+    platform=dellemc_${product_name}_c2338
+
+    local live_machine="$platform"
+
+    if [ -n "$live_machine" ] ; then
+        cat<<EOF
+# Runtime ONIE Machine
+onie_machine="$live_machine"
+EOF
+    fi
+fi
+}
