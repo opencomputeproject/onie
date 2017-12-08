@@ -1,0 +1,45 @@
+From a252840b98e8b67294738f197286d550d67b60f0 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Mon, 13 Jan 2014 12:12:51 +0000
+Subject: Write marker if core.img was written to filesystem
+
+The Debian bug reporting script includes a warning in this case.
+
+Patch-Name: core_in_fs.patch
+---
+ util/setup.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/util/setup.c b/util/setup.c
+index 8aa5a39a7..3b5c46fde 100644
+--- a/util/setup.c
++++ b/util/setup.c
+@@ -58,6 +58,8 @@
+ 
+ #include <errno.h>
+ 
++#define CORE_IMG_IN_FS		"setup_left_core_image_in_filesystem"
++
+ /* On SPARC this program fills in various fields inside of the 'boot' and 'core'
+  * image files.
+  *
+@@ -600,6 +602,8 @@ SETUP (const char *dir,
+ 
+     grub_free (sectors);
+ 
++    unlink (DEFAULT_DIRECTORY "/" CORE_IMG_IN_FS);
++
+     goto finish;
+   }
+ 
+@@ -642,6 +646,10 @@ unable_to_embed:
+   /* The core image must be put on a filesystem unfortunately.  */
+   grub_util_info ("will leave the core image on the filesystem");
+ 
++  fp = grub_util_fd_open (DEFAULT_DIRECTORY "/" CORE_IMG_IN_FS,
++			  GRUB_UTIL_FD_O_WRONLY);
++  grub_util_fd_close (fp);
++
+   grub_util_biosdisk_flush (root_dev->disk);
+ 
+   /* Clean out the blocklists.  */

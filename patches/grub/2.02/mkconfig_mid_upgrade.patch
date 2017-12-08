@@ -1,0 +1,39 @@
+From 2f97dcc8caba3334636240f4417596c5ac27cc00 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:03 +0000
+Subject: Bail out if trying to run grub-mkconfig during upgrade to 2.00
+
+Since files in /etc/grub.d/ are conffiles, they are not put in place
+until grub-common is configured, meaning that they may be out of sync
+with the parts of grub-mkconfig that reside in /usr/.  In GRUB 1.99,
+/etc/grub.d/00_header contained a reference to ${GRUB_PREFIX}/video.lst.
+This and other code from 1.99 breaks with 2.00's grub-mkconfig.
+Deferring this to when grub-PLATFORM.postinst eventually runs is safe
+and avoids this problem.
+
+Forwarded: no
+Last-Update: 2013-12-25
+
+Patch-Name: mkconfig_mid_upgrade.patch
+---
+ util/grub-mkconfig.in | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/util/grub-mkconfig.in b/util/grub-mkconfig.in
+index 54fbe5288..99ba7acba 100644
+--- a/util/grub-mkconfig.in
++++ b/util/grub-mkconfig.in
+@@ -102,6 +102,13 @@ do
+     esac
+ done
+ 
++if fgrep -qs '${GRUB_PREFIX}/video.lst' "${grub_mkconfig_dir}/00_header"; then
++  echo "GRUB >= 2.00 has been unpacked but not yet configured." >&2
++  echo "grub-mkconfig will not work until the upgrade is complete." >&2
++  echo "It should run later as part of configuring the new GRUB packages." >&2
++  exit 0
++fi
++
+ if [ "x$EUID" = "x" ] ; then
+   EUID=`id -u`
+ fi

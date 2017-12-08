@@ -1,0 +1,220 @@
+From c5486f3a81aacdbb9f0092fa9e8c106b6928d7ca Mon Sep 17 00:00:00 2001
+From: Steve McIntyre <93sam@debian.org>
+Date: Wed, 3 Dec 2014 01:25:12 +0000
+Subject: Add support for forcing EFI installation to the removable media path
+
+Add an extra option to grub-install "--no-extra-removable". On EFI
+platforms, this will cause the copy of the grub-efi image to not be
+written to the removable media path /boot/efi/EFI/BOOT/BOOT$ARCH.EFI.
+This will help with broken UEFI implementations where you can't install
+to the removable path as a fallback option if Boot Entries get corrupt.
+
+Signed-off-by: Steve McIntyre <93sam@debian.org>
+Signed-off-by: Mathieu Trudel-Lapierre <mathieu.trudel-lapierre@canonical.com>
+
+Bug-Debian: https://bugs.debian.org/767037 https://bugs.debian.org/773092
+Forwarded: Not yet
+Last-Update: 2014-12-20
+
+Patch-Name: grub-install-extra-removable.patch
+---
+ util/grub-install.c | 128 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 126 insertions(+), 2 deletions(-)
+
+diff --git a/util/grub-install.c b/util/grub-install.c
+index a7c0f566e..a4f253918 100644
+--- a/util/grub-install.c
++++ b/util/grub-install.c
+@@ -56,6 +56,7 @@
+ 
+ static char *target;
+ static int removable = 0;
++static int no_extra_removable = 0;
+ static int recheck = 0;
+ static int update_nvram = 1;
+ static char *install_device = NULL;
+@@ -113,7 +114,8 @@ enum
+     OPTION_LABEL_BGCOLOR,
+     OPTION_PRODUCT_VERSION,
+     OPTION_UEFI_SECURE_BOOT,
+-    OPTION_NO_UEFI_SECURE_BOOT
++    OPTION_NO_UEFI_SECURE_BOOT,
++    OPTION_NO_EXTRA_REMOVABLE
+   };
+ 
+ static int fs_probe = 1;
+@@ -216,6 +218,10 @@ argp_parser (int key, char *arg, struct argp_state *state)
+       removable = 1;
+       return 0;
+ 
++    case OPTION_NO_EXTRA_REMOVABLE:
++      no_extra_removable = 1;
++      return 0;
++
+     case OPTION_ALLOW_FLOPPY:
+       allow_floppy = 1;
+       return 0;
+@@ -322,6 +328,9 @@ static struct argp_option options[] = {
+    N_("do not install an image usable with UEFI Secure Boot, even if the "
+       "system was currently started using it. "
+       "This option is only available on EFI."), 2},
++  {"no-extra-removable", OPTION_NO_EXTRA_REMOVABLE, 0, 0,
++   N_("Do not install bootloader code to the removable media path. "
++      "This option is only available on EFI."), 2},
+   {0, 0, 0, 0, 0, 0}
+ };
+ 
+@@ -835,6 +844,109 @@ fill_core_services (const char *core_services)
+   free (sysv_plist);
+ }
+ 
++/* Helper routine for also_install_removable() below. Walk through the
++   specified dir, looking to see if there is a file/dir that matches
++   the search string exactly, but in a case-insensitive manner. If so,
++   return a copy of the exact file/dir that *does* exist. If not,
++   return NULL */
++static char *
++check_component_exists(const char *dir,
++		       const char *search)
++{
++  grub_util_fd_dir_t d;
++  grub_util_fd_dirent_t de;
++  char *found = NULL;
++
++  d = grub_util_fd_opendir (dir);
++  if (!d)
++    grub_util_error (_("cannot open directory `%s': %s"),
++		     dir, grub_util_fd_strerror ());
++
++  while ((de = grub_util_fd_readdir (d)))
++    {
++      if (strcasecmp (de->d_name, search) == 0)
++	{
++	  found = xstrdup (de->d_name);
++	  break;
++	}
++    }
++  grub_util_fd_closedir (d);
++  return found;
++}
++
++/* Some complex directory-handling stuff in here, to cope with
++ * case-insensitive FAT/VFAT filesystem semantics. Ugh. */
++static void
++also_install_removable(const char *src,
++		       const char *base_efidir,
++		       const char *efi_suffix,
++		       const char *efi_suffix_upper)
++{
++  char *efi_file = NULL;
++  char *dst = NULL;
++  char *cur = NULL;
++  char *found = NULL;
++  char *fb_signed = NULL;
++  char *fb_file = NULL;
++  char *generic_efidir = NULL;
++
++  if (!efi_suffix)
++    grub_util_error ("%s", _("efi_suffix not set"));
++  if (!efi_suffix_upper)
++    grub_util_error ("%s", _("efi_suffix_upper not set"));
++
++  efi_file = xasprintf ("BOOT%s.EFI", efi_suffix_upper);
++  fb_signed = xasprintf ("fb%s.efi.signed", efi_suffix);
++  fb_file = xasprintf ("fb%s.efi", efi_suffix);
++
++  /* We need to install in $base_efidir/EFI/BOOT/$efi_file, but we
++   * need to cope with case-insensitive stuff here. Build the path one
++   * component at a time, checking for existing matches each time. */
++
++  /* Look for "EFI" in base_efidir. Make it if it does not exist in
++   * some form. */
++  found = check_component_exists(base_efidir, "EFI");
++  if (found == NULL)
++    found = xstrdup("EFI");
++  dst = grub_util_path_concat (2, base_efidir, found);
++  cur = xstrdup (dst);
++  free (dst);
++  free (found);
++  grub_install_mkdir_p (cur);
++
++  /* Now BOOT */
++  found = check_component_exists(cur, "BOOT");
++  if (found == NULL)
++    found = xstrdup("BOOT");
++  dst = grub_util_path_concat (2, cur, found);
++  free (cur);
++  free (found);
++  grub_install_mkdir_p (dst);
++  generic_efidir = xstrdup (dst);
++  free (dst);
++
++  /* Now $efi_file */
++  found = check_component_exists(generic_efidir, efi_file);
++  if (found == NULL)
++    found = xstrdup(efi_file);
++  dst = grub_util_path_concat (2, generic_efidir, found);
++  free (found);
++  grub_install_copy_file (src, dst, 1);
++  free (efi_file);
++  free (dst);
++
++  /* Now try to also install fallback */
++  efi_file = grub_util_path_concat (2, "/usr/lib/shim/", fb_signed);
++  dst = grub_util_path_concat (2, generic_efidir, fb_file);
++  free (generic_efidir);
++  grub_install_copy_file (efi_file, dst, 0);
++  free (efi_file);
++  free (dst);
++
++  free (fb_file);
++  free (fb_signed);
++}
++
+ int
+ main (int argc, char *argv[])
+ {
+@@ -852,6 +964,7 @@ main (int argc, char *argv[])
+   char *relative_grubdir;
+   char **efidir_device_names = NULL;
+   grub_device_t efidir_grub_dev = NULL;
++  char *base_efidir = NULL;
+   char *efidir_grub_devname;
+   int efidir_is_mac = 0;
+   int is_prep = 0;
+@@ -884,6 +997,9 @@ main (int argc, char *argv[])
+       bootloader_id = xstrdup ("grub");
+     }
+ 
++  if (removable && no_extra_removable)
++    grub_util_error (_("Invalid to use both --removable and --no_extra_removable"));
++
+   if (!grub_install_source_directory)
+     {
+       if (!target)
+@@ -1093,6 +1209,8 @@ main (int argc, char *argv[])
+       if (!efidir_is_mac && grub_strcmp (fs->name, "fat") != 0)
+ 	grub_util_error (_("%s doesn't look like an EFI partition"), efidir);
+ 
++      base_efidir = xstrdup(efidir);
++
+       /* The EFI specification requires that an EFI System Partition must
+ 	 contain an "EFI" subdirectory, and that OS loaders are stored in
+ 	 subdirectories below EFI.  Vendors are expected to pick names that do
+@@ -1984,9 +2102,15 @@ main (int argc, char *argv[])
+ 	    fprintf (config_dst_f, "configfile $prefix/grub.cfg\n");
+ 	    fclose (config_dst_f);
+ 	    free (config_dst);
++	    if (!removable && !no_extra_removable)
++	      also_install_removable(efi_signed, base_efidir, efi_suffix, efi_suffix_upper);
+ 	  }
+ 	else
+-	  grub_install_copy_file (imgfile, dst, 1);
++	  {
++	    grub_install_copy_file (imgfile, dst, 1);
++	    if (!removable && !no_extra_removable)
++	      also_install_removable(imgfile, base_efidir, efi_suffix, efi_suffix_upper);
++	  }
+ 	free (dst);
+       }
+       if (!removable && update_nvram)

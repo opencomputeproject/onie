@@ -1,0 +1,76 @@
+From 280a233c59586f396fe0106a97d85544de55b511 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:31 +0000
+Subject: Probe FusionIO devices
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1237519
+Forwarded: no
+Last-Update: 2016-09-18
+
+Patch-Name: probe_fusionio.patch
+---
+ grub-core/osdep/linux/getroot.c | 13 +++++++++++++
+ util/deviceiter.c               | 19 +++++++++++++++++++
+ 2 files changed, 32 insertions(+)
+
+diff --git a/grub-core/osdep/linux/getroot.c b/grub-core/osdep/linux/getroot.c
+index 90d92d3ad..7adc0f30e 100644
+--- a/grub-core/osdep/linux/getroot.c
++++ b/grub-core/osdep/linux/getroot.c
+@@ -950,6 +950,19 @@ grub_util_part_to_disk (const char *os_dev, struct stat *st,
+ 	  *pp = '\0';
+ 	  return path;
+ 	}
++
++      /* If this is a FusionIO disk.  */
++      if ((strncmp ("fio", p, 3) == 0) && p[3] >= 'a' && p[3] <= 'z')
++	{
++	  char *pp = p + 3;
++	  while (*pp >= 'a' && *pp <= 'z')
++	    pp++;
++	  if (*pp)
++	    *is_part = 1;
++	  /* /dev/fio[a-z]+[0-9]* */
++	  *pp = '\0';
++	  return path;
++	}
+     }
+ 
+   return path;
+diff --git a/util/deviceiter.c b/util/deviceiter.c
+index 23d49aecd..bc68b2549 100644
+--- a/util/deviceiter.c
++++ b/util/deviceiter.c
+@@ -383,6 +383,12 @@ get_nvme_disk_name (char *name, int controller, int namespace)
+ {
+   sprintf (name, "/dev/nvme%dn%d", controller, namespace);
+ }
++
++static void
++get_fio_disk_name (char *name, int unit)
++{
++  sprintf (name, "/dev/fio%c", unit + 'a');
++}
+ #endif
+ 
+ static struct seen_device
+@@ -923,6 +929,19 @@ grub_util_iterate_devices (int (*hook) (const char *, int, void *), void *hook_d
+       }
+   }
+ 
++  /* FusionIO.  */
++  for (i = 0; i < 26; i++)
++    {
++      char name[16];
++
++      get_fio_disk_name (name, i);
++      if (check_device_readable_unique (name))
++	{
++	  if (hook (name, 0, hook_data))
++	    goto out;
++	}
++    }
++
+ # ifdef HAVE_DEVICE_MAPPER
+ #  define dmraid_check(cond, ...) \
+   if (! (cond)) \

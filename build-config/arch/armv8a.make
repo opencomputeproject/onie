@@ -36,7 +36,6 @@ STRACE_ENABLE ?= yes
 
 # Disable Grub support by default. a machine make file can override this
 GRUB_ENABLE ?= no
-GRUB_IMAGE_NAME = grubaa64.efi
 
 # Disable UEFI support by default. a machine make file can override this
 UEFI_ENABLE ?= no

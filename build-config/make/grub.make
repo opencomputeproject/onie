@@ -11,7 +11,7 @@
 # This is a makefile fragment that defines the build of grub
 #
 
-GRUB_VERSION		= 2.02~beta3
+GRUB_VERSION		= 2.02
 GRUB_TARBALL		= grub-$(GRUB_VERSION).tar.xz
 GRUB_TARBALL_URLS	+= $(ONIE_MIRROR) http://git.savannah.gnu.org/cgit/grub.git/snapshot/ ftp://alpha.gnu.org/gnu/grub/
 GRUB_BUILD_DIR		= $(USER_BUILDDIR)/grub
@@ -54,6 +54,8 @@ ifeq ($(FIRMWARE_TYPE),coreboot)
   GRUB_INSTALL_I386_COREBOOT_STAMP	= $(STAMPDIR)/grub-install-i386-coreboot
 endif
 
+GRUB_IMAGE_NAME		= grub$(EFI_ARCH).efi
+
 GRUB_STAMP		= $(GRUB_SOURCE_STAMP) \
 			  $(GRUB_PATCH_STAMP) \
 			  $(GRUB_CONFIGURE_I386_STAMP) \
@@ -69,6 +71,19 @@ GRUB_STAMP		= $(GRUB_SOURCE_STAMP) \
 			  $(GRUB_INSTALL_I386_COREBOOT_STAMP) \
 			  $(GRUB_INSTALL_STAMP)
 
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+  GRUB_INSTALL_SB_STAMP	= $(STAMPDIR)/grub-install-sb
+  GRUB_MONOLITH_IMAGE	= $(MBUILDDIR)/grub$(EFI_ARCH).efi.unsigned
+  GRUB_SECURE_BOOT_IMAGE= $(MBUILDDIR)/grub$(EFI_ARCH).efi
+  GRUB_STAMP		+= $(GRUB_INSTALL_SB_STAMP)
+  UPDATER_IMAGE_PARTS   += $(GRUB_SECURE_BOOT_IMAGE)
+  UPDATER_IMAGE_PARTS_COMPLETE += $(GRUB_INSTALL_SB_STAMP)
+  PHONY			+= grub-install-sb
+  UEFI_BOOT_LOADER	= $(SHIM_IMAGE_NAME)
+else
+  UEFI_BOOT_LOADER	= $(GRUB_IMAGE_NAME)
+endif
+
 GRUB_TIMEOUT	?= 5
 
 # GRUB configuration options common to i386-pc and $(ARCH)-efi
@@ -81,8 +96,8 @@ GRUB_COMMON_CONFIG = 			\
 		--disable-grub-themes
 
 PHONY += grub grub-download grub-source grub-patch \
-	 grub-configure grub-build grub-install grub-clean \
-	 grub-download-clean
+	 grub-configure grub-build grub-install \
+	 grub-clean grub-download-clean
 
 GRUB_SBIN = grub-install grub-bios-setup grub-probe grub-reboot grub-set-default
 GRUB_BIN = grub-mkrelpath grub-mkimage grub-editenv
@@ -229,7 +244,7 @@ $(GRUB_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(GRUB_INSTALL_I386_STAMP) \
 USER_CLEAN += grub-clean
 grub-clean:
 	$(Q) rm -rf $(GRUB_BUILD_DIR)
-	$(Q) rm -f $(GRUB_STAMP)
+	$(Q) rm -f $(GRUB_STAMP) $(GRUB_MONOLITH_IMAGE)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
 
 DOWNLOAD_CLEAN += grub-download-clean
@@ -345,6 +360,17 @@ grub-host-clean:
 	$(Q) rm -rf $(GRUB_HOST_BUILD_DIR)
 	$(Q) rm -f $(GRUB_HOST_STAMP)
 	$(Q) echo "=== Finished making $@ for $(PLATFORM)"
+
+grub-install-sb: $(GRUB_INSTALL_SB_STAMP)
+$(GRUB_INSTALL_SB_STAMP): $(SBSIGNTOOL_INSTALL_STAMP) $(GRUB_INSTALL_STAMP) $(GRUB_HOST_INSTALL_STAMP)
+	$(Q) echo "====  Building grub-$(ARCH)-efi-$(GRUB_VERSION) monolithic secure boot image ===="
+	$(Q) rm -rf $(SYSROOTDIR)/usr/lib/grub/$(ARCH)-efi
+	$(Q) $(SCRIPTDIR)/mk-grub-efi-image $(ARCH) $(GRUB_HOST_BIN_UEFI_DIR) \
+		$(GRUB_TARGET_LIB_UEFI_DIR) $(GRUB_MONOLITH_IMAGE)
+	$(Q) $(SBSIGN_EXE) --key $(ONIE_VENDOR_SECRET_KEY_PEM) \
+		--cert $(ONIE_VENDOR_CERT_PEM) \
+		--output $(GRUB_SECURE_BOOT_IMAGE) $(GRUB_MONOLITH_IMAGE)
+	$(Q) touch $@
 
 #-------------------------------------------------------------------------------
 #

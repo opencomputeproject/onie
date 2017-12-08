@@ -1,0 +1,99 @@
+From 35cc4a78cc5fa386336061bc7edbd3f054dc3508 Mon Sep 17 00:00:00 2001
+From: Mathieu Trudel-Lapierre <mathieu.trudel-lapierre@canonical.com>
+Date: Wed, 1 Nov 2017 13:39:59 -0400
+Subject: Add some grub_dprintf() in the linuxefi path.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+
+Origin: vendor, https://github.com/rhboot/grub2/commit/527a427a8edf05d8994f679a16d0dc98106563f4
+Forwarded: no
+Last-Update: 2017-11-01
+
+Patch-Name: linuxefi_debug.patch
+---
+ grub-core/loader/efi/linux.c      | 16 +++++++++++++---
+ grub-core/loader/i386/efi/linux.c | 11 ++++++++++-
+ 2 files changed, 23 insertions(+), 4 deletions(-)
+
+diff --git a/grub-core/loader/efi/linux.c b/grub-core/loader/efi/linux.c
+index 8890bdf05..dbf63e20e 100644
+--- a/grub-core/loader/efi/linux.c
++++ b/grub-core/loader/efi/linux.c
+@@ -43,12 +43,22 @@ grub_linuxefi_secure_validate (void *data, grub_uint32_t size)
+   shim_lock = grub_efi_locate_protocol(&guid, NULL);
+   grub_dprintf ("secureboot", "shim_lock: %p\n", shim_lock);
+   if (!shim_lock)
+-    return 0;
++    {
++      grub_dprintf ("secureboot", "shim not available\n");
++      return 0;
++    }
+ 
+-  status = shim_lock->verify(data, size);
++  grub_dprintf ("secureboot", "Asking shim to verify kernel signature\n");
++  status = shim_lock->verify (data, size);
+   grub_dprintf ("secureboot", "shim_lock->verify(): %ld\n", status);
+   if (status == GRUB_EFI_SUCCESS)
+-    return 1;
++    {
++      grub_dprintf ("secureboot", "Kernel signature verification passed\n");
++      return 1;
++    }
++
++  grub_dprintf ("secureboot", "Kernel signature verification failed (0x%lx)\n",
++		(unsigned long) status);
+ 
+   return -1;
+ }
+diff --git a/grub-core/loader/i386/efi/linux.c b/grub-core/loader/i386/efi/linux.c
+index 010bf982d..7df379ab7 100644
+--- a/grub-core/loader/i386/efi/linux.c
++++ b/grub-core/loader/i386/efi/linux.c
+@@ -19,6 +19,7 @@
+ #include <grub/loader.h>
+ #include <grub/file.h>
+ #include <grub/err.h>
++#include <grub/misc.h>
+ #include <grub/types.h>
+ #include <grub/mm.h>
+ #include <grub/cpu/linux.h>
+@@ -114,6 +115,8 @@ grub_cmd_initrd (grub_command_t cmd __attribute__ ((unused)),
+       goto fail;
+     }
+ 
++  grub_dprintf ("linuxefi", "initrd_mem = %lx\n", (unsigned long) initrd_mem);
++
+   params->ramdisk_size = size;
+   params->ramdisk_image = (grub_uint32_t)(grub_uint64_t) initrd_mem;
+ 
+@@ -202,6 +205,8 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+       goto fail;
+     }
+ 
++  grub_dprintf ("linuxefi", "params = %lx\n", (unsigned long) params);
++
+   grub_memset (params, 0, 16384);
+ 
+   grub_memcpy (&lh, kernel, sizeof (lh));
+@@ -239,6 +244,9 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+       goto fail;
+     }
+ 
++  grub_dprintf ("linuxefi", "linux_cmdline = %lx\n",
++		(unsigned long)linux_cmdline);
++
+   grub_memcpy (linux_cmdline, LINUX_IMAGE, sizeof (LINUX_IMAGE));
+   grub_create_loader_cmdline (argc, argv,
+                               linux_cmdline + sizeof (LINUX_IMAGE) - 1,
+@@ -272,9 +280,10 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+   grub_memcpy (params, &lh, 2 * 512);
+ 
+   params->type_of_loader = 0x21;
++  grub_dprintf("linuxefi", "kernel_mem: %p handover_offset: %08x\n",
++	       kernel_mem, handover_offset);
+ 
+  fail:
+-
+   if (file)
+     grub_file_close (file);
+ 

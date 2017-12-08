@@ -1,0 +1,445 @@
+From 9aa4d2f67a0109cb9c4ed23997b47f3c47943e2c Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Fri, 3 Nov 2017 12:06:24 -0400
+Subject: Load arm with SB enabled.
+
+Make sure we actually try to validate secure boot on this platform (even
+though we're not shipping it enabled by default.)
+
+This means giving the kernel grub's loaded image as the vehicle for the
+kernel command line, because we can't call systab->bs->LoadImage() if SB
+is enabled.
+
+Origin: vendor, https://github.com/rhboot/grub2/commit/2786ab864cf00c15123320671f653e9a36ba12b4
+Forwarded: no
+Last-Update: 2017-11-01
+Patch-Name: linuxefi_load_arm_with_sb.patch
+---
+ grub-core/Makefile.core.def       |   3 +
+ grub-core/loader/arm/linux.c      |   1 +
+ grub-core/loader/arm64/linux.c    | 119 ++++++++++++++++++++------------------
+ grub-core/loader/efi/linux.c      |  65 +++++++++++++++++++++
+ grub-core/loader/i386/efi/linux.c |  39 +------------
+ include/grub/arm64/linux.h        |   7 +++
+ include/grub/efi/linux.h          |  31 ++++++++++
+ 7 files changed, 174 insertions(+), 91 deletions(-)
+ create mode 100644 grub-core/loader/efi/linux.c
+ create mode 100644 include/grub/efi/linux.h
+
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index cedf27eb8..1b642472e 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -1670,6 +1670,8 @@ module = {
+   ia64_efi = loader/ia64/efi/linux.c;
+   arm = loader/arm/linux.c;
+   arm64 = loader/arm64/linux.c;
++  arm64 = loader/efi/linux.c;
++  fdt = lib/fdt.c;
+   common = loader/linux.c;
+   common = lib/cmdline.c;
+   enable = noemu;
+@@ -1737,6 +1739,7 @@ module = {
+   name = linuxefi;
+   efi = loader/i386/efi/linux.c;
+   efi = lib/cmdline.c;
++  efi = loader/efi/linux.c;
+   enable = i386_efi;
+   enable = x86_64_efi;
+ };
+diff --git a/grub-core/loader/arm/linux.c b/grub-core/loader/arm/linux.c
+index 5b39f02bb..d7ebae0ff 100644
+--- a/grub-core/loader/arm/linux.c
++++ b/grub-core/loader/arm/linux.c
+@@ -26,6 +26,7 @@
+ #include <grub/command.h>
+ #include <grub/cache.h>
+ #include <grub/cpu/linux.h>
++#include <grub/efi/linux.h>
+ #include <grub/lib/cmdline.h>
+ #include <grub/linux.h>
+ 
+diff --git a/grub-core/loader/arm64/linux.c b/grub-core/loader/arm64/linux.c
+index 57890fdda..bc7ebb699 100644
+--- a/grub-core/loader/arm64/linux.c
++++ b/grub-core/loader/arm64/linux.c
+@@ -28,6 +28,7 @@
+ #include <grub/cpu/linux.h>
+ #include <grub/efi/efi.h>
+ #include <grub/efi/fdtload.h>
++#include <grub/efi/linux.h>
+ #include <grub/efi/pe32.h>
+ #include <grub/i18n.h>
+ #include <grub/lib/cmdline.h>
+@@ -39,6 +40,7 @@ static int loaded;
+ 
+ static void *kernel_addr;
+ static grub_uint64_t kernel_size;
++static grub_uint32_t handover_offset;
+ 
+ static char *linux_args;
+ static grub_uint32_t cmdline_size;
+@@ -67,7 +69,8 @@ grub_arm64_uefi_check_image (struct grub_arm64_linux_kernel_header * lh)
+ static grub_err_t
+ finalize_params_linux (void)
+ {
+-  int node, retval;
++  grub_efi_loaded_image_t *loaded_image = NULL;
++  int node, retval, len;
+ 
+   void *fdt;
+ 
+@@ -102,6 +105,26 @@ finalize_params_linux (void)
+   if (grub_fdt_install() != GRUB_ERR_NONE)
+     goto failure;
+ 
++  grub_dprintf ("linux", "Installed/updated FDT configuration table @ %p\n",
++		fdt);
++
++  /* Convert command line to UCS-2 */
++  loaded_image = grub_efi_get_loaded_image (grub_efi_image_handle);
++  if (!loaded_image)
++    goto failure;
++
++  loaded_image->load_options_size = len =
++    (grub_strlen (linux_args) + 1) * sizeof (grub_efi_char16_t);
++  loaded_image->load_options =
++    grub_efi_allocate_pages (0,
++			     GRUB_EFI_BYTES_TO_PAGES (loaded_image->load_options_size));
++  if (!loaded_image->load_options)
++    return grub_error(GRUB_ERR_BAD_OS, "failed to create kernel parameters");
++
++  loaded_image->load_options_size =
++    2 * grub_utf8_to_utf16 (loaded_image->load_options, len,
++			    (grub_uint8_t *) linux_args, len, NULL);
++
+   return GRUB_ERR_NONE;
+ 
+ failure:
+@@ -109,73 +132,49 @@ failure:
+   return grub_error(GRUB_ERR_BAD_OS, "failed to install/update FDT");
+ }
+ 
+-grub_err_t
+-grub_arm64_uefi_boot_image (grub_addr_t addr, grub_size_t size, char *args)
++static void
++free_params (void)
+ {
+-  grub_efi_memory_mapped_device_path_t *mempath;
+-  grub_efi_handle_t image_handle;
+-  grub_efi_boot_services_t *b;
+-  grub_efi_status_t status;
+-  grub_efi_loaded_image_t *loaded_image;
+-  int len;
+-
+-  mempath = grub_malloc (2 * sizeof (grub_efi_memory_mapped_device_path_t));
+-  if (!mempath)
+-    return grub_errno;
+-
+-  mempath[0].header.type = GRUB_EFI_HARDWARE_DEVICE_PATH_TYPE;
+-  mempath[0].header.subtype = GRUB_EFI_MEMORY_MAPPED_DEVICE_PATH_SUBTYPE;
+-  mempath[0].header.length = grub_cpu_to_le16_compile_time (sizeof (*mempath));
+-  mempath[0].memory_type = GRUB_EFI_LOADER_DATA;
+-  mempath[0].start_address = addr;
+-  mempath[0].end_address = addr + size;
++  grub_efi_loaded_image_t *loaded_image = NULL;
+ 
+-  mempath[1].header.type = GRUB_EFI_END_DEVICE_PATH_TYPE;
+-  mempath[1].header.subtype = GRUB_EFI_END_ENTIRE_DEVICE_PATH_SUBTYPE;
+-  mempath[1].header.length = sizeof (grub_efi_device_path_t);
+-
+-  b = grub_efi_system_table->boot_services;
+-  status = b->load_image (0, grub_efi_image_handle,
+-			  (grub_efi_device_path_t *) mempath,
+-			  (void *) addr, size, &image_handle);
+-  if (status != GRUB_EFI_SUCCESS)
+-    return grub_error (GRUB_ERR_BAD_OS, "cannot load image");
++  loaded_image = grub_efi_get_loaded_image (grub_efi_image_handle);
++  if (loaded_image)
++    {
++      if (loaded_image->load_options)
++	grub_efi_free_pages ((grub_efi_physical_address_t)
++			      loaded_image->load_options,
++			     GRUB_EFI_BYTES_TO_PAGES (loaded_image->load_options_size));
++      loaded_image->load_options = NULL;
++      loaded_image->load_options_size = 0;
++    }
++}
+ 
+-  grub_dprintf ("linux", "linux command line: '%s'\n", args);
++grub_err_t
++grub_arm64_uefi_boot_image (grub_addr_t addr __attribute__ ((unused)),
++			    grub_size_t size __attribute__ ((unused)),
++			    char *args)
++{
++  grub_err_t retval;
+ 
+-  /* Convert command line to UCS-2 */
+-  loaded_image = grub_efi_get_loaded_image (image_handle);
+-  loaded_image->load_options_size = len =
+-    (grub_strlen (args) + 1) * sizeof (grub_efi_char16_t);
+-  loaded_image->load_options =
+-    grub_efi_allocate_pages (0,
+-			     GRUB_EFI_BYTES_TO_PAGES (loaded_image->load_options_size));
+-  if (!loaded_image->load_options)
++  retval = finalize_params_linux ();
++  if (retval != GRUB_ERR_NONE)
+     return grub_errno;
+ 
+-  loaded_image->load_options_size =
+-    2 * grub_utf8_to_utf16 (loaded_image->load_options, len,
+-			    (grub_uint8_t *) args, len, NULL);
+-
+-  grub_dprintf ("linux", "starting image %p\n", image_handle);
+-  status = b->start_image (image_handle, 0, NULL);
++  grub_dprintf ("linux", "linux command line: '%s'\n", args);
+ 
+-  /* When successful, not reached */
+-  b->unload_image (image_handle);
+-  grub_efi_free_pages ((grub_efi_physical_address_t) loaded_image->load_options,
+-		       GRUB_EFI_BYTES_TO_PAGES (loaded_image->load_options_size));
++  retval = grub_efi_linux_boot ((char *)kernel_addr, handover_offset,
++				kernel_addr);
+ 
+-  return grub_errno;
++  /* Never reached... */
++  free_params();
++  return retval;
+ }
+ 
+ static grub_err_t
+ grub_linux_boot (void)
+ {
+-  if (finalize_params_linux () != GRUB_ERR_NONE)
+-    return grub_errno;
+-
+-  return (grub_arm64_uefi_boot_image((grub_addr_t)kernel_addr,
+-                                     kernel_size, linux_args));
++  return grub_arm64_uefi_boot_image ((grub_addr_t)kernel_addr,
++				     kernel_size, linux_args);
+ }
+ 
+ static grub_err_t
+@@ -253,6 +252,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+ {
+   grub_file_t file = 0;
+   struct grub_arm64_linux_kernel_header lh;
++  struct grub_arm64_linux_pe_header *pe;
+ 
+   grub_dl_ref (my_mod);
+ 
+@@ -297,6 +297,15 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+ 
+   grub_dprintf ("linux", "kernel @ %p\n", kernel_addr);
+ 
++  if (!grub_linuxefi_secure_validate (kernel_addr, kernel_size))
++    {
++      grub_error (GRUB_ERR_INVALID_COMMAND, N_("%s has invalid signature"), argv[0]);
++      goto fail;
++    }
++
++  pe = (void *)((unsigned long)kernel_addr + lh.hdr_offset);
++  handover_offset = pe->opt.entry_addr;
++
+   cmdline_size = grub_loader_cmdline_size (argc, argv) + sizeof (LINUX_IMAGE);
+   linux_args = grub_malloc (cmdline_size);
+   if (!linux_args)
+diff --git a/grub-core/loader/efi/linux.c b/grub-core/loader/efi/linux.c
+new file mode 100644
+index 000000000..aea378adf
+--- /dev/null
++++ b/grub-core/loader/efi/linux.c
+@@ -0,0 +1,65 @@
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2014 Free Software Foundation, Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <grub/err.h>
++#include <grub/mm.h>
++#include <grub/types.h>
++#include <grub/cpu/linux.h>
++#include <grub/efi/efi.h>
++#include <grub/efi/pe32.h>
++#include <grub/efi/linux.h>
++
++#define SHIM_LOCK_GUID \
++ { 0x605dab50, 0xe046, 0x4300, {0xab, 0xb6, 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23} }
++
++struct grub_efi_shim_lock
++{
++  grub_efi_status_t (*verify) (void *buffer, grub_uint32_t size);
++};
++typedef struct grub_efi_shim_lock grub_efi_shim_lock_t;
++
++grub_efi_boolean_t
++grub_linuxefi_secure_validate (void *data, grub_uint32_t size)
++{
++  grub_efi_guid_t guid = SHIM_LOCK_GUID;
++  grub_efi_shim_lock_t *shim_lock;
++
++  shim_lock = grub_efi_locate_protocol(&guid, NULL);
++
++  if (!shim_lock)
++    return 1;
++
++  if (shim_lock->verify(data, size) == GRUB_EFI_SUCCESS)
++    return 1;
++
++  return 0;
++}
++
++typedef void (*handover_func) (void *, grub_efi_system_table_t *, void *);
++
++grub_err_t
++grub_efi_linux_boot (void *kernel_addr, grub_off_t offset,
++		     void *kernel_params)
++{
++  handover_func hf;
++
++  hf = (handover_func)((char *)kernel_addr + offset);
++  hf (grub_efi_image_handle, grub_efi_system_table, kernel_params);
++
++  return GRUB_ERR_BUG;
++}
+diff --git a/grub-core/loader/i386/efi/linux.c b/grub-core/loader/i386/efi/linux.c
+index 6afa13d41..ddd50dbf1 100644
+--- a/grub-core/loader/i386/efi/linux.c
++++ b/grub-core/loader/i386/efi/linux.c
+@@ -26,6 +26,7 @@
+ #include <grub/i18n.h>
+ #include <grub/lib/cmdline.h>
+ #include <grub/efi/efi.h>
++#include <grub/efi/linux.h>
+ 
+ GRUB_MOD_LICENSE ("GPLv3+");
+ 
+@@ -40,52 +41,18 @@ static char *linux_cmdline;
+ 
+ #define BYTES_TO_PAGES(bytes)   (((bytes) + 0xfff) >> 12)
+ 
+-#define SHIM_LOCK_GUID \
+-  { 0x605dab50, 0xe046, 0x4300, {0xab, 0xb6, 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23} }
+-
+-struct grub_efi_shim_lock
+-{
+-  grub_efi_status_t (*verify) (void *buffer, grub_uint32_t size);
+-};
+-typedef struct grub_efi_shim_lock grub_efi_shim_lock_t;
+-
+-static grub_efi_boolean_t
+-grub_linuxefi_secure_validate (void *data, grub_uint32_t size)
+-{
+-  grub_efi_guid_t guid = SHIM_LOCK_GUID;
+-  grub_efi_shim_lock_t *shim_lock;
+-
+-  shim_lock = grub_efi_locate_protocol(&guid, NULL);
+-
+-  if (!shim_lock)
+-    return 1;
+-
+-  if (shim_lock->verify(data, size) == GRUB_EFI_SUCCESS)
+-    return 1;
+-
+-  return 0;
+-}
+-
+-typedef void(*handover_func)(void *, grub_efi_system_table_t *, struct linux_kernel_params *);
+-
+ static grub_err_t
+ grub_linuxefi_boot (void)
+ {
+-  handover_func hf;
+   int offset = 0;
+ 
+ #ifdef __x86_64__
+   offset = 512;
+ #endif
+-
+-  hf = (handover_func)((char *)kernel_mem + handover_offset + offset);
+-
+   asm volatile ("cli");
+ 
+-  hf (grub_efi_image_handle, grub_efi_system_table, params);
+-
+-  /* Not reached */
+-  return GRUB_ERR_NONE;
++  return grub_efi_linux_boot ((char *)kernel_mem, handover_offset + offset,
++			      params);
+ }
+ 
+ static grub_err_t
+diff --git a/include/grub/arm64/linux.h b/include/grub/arm64/linux.h
+index 1ea23696e..a2ba24e9f 100644
+--- a/include/grub/arm64/linux.h
++++ b/include/grub/arm64/linux.h
+@@ -20,6 +20,7 @@
+ #define GRUB_LINUX_CPU_HEADER 1
+ 
+ #include <grub/efi/efi.h>
++#include <grub/efi/pe32.h>
+ 
+ #define GRUB_ARM64_LINUX_MAGIC 0x644d5241 /* 'ARM\x64' */
+ 
+@@ -44,5 +45,11 @@ grub_err_t grub_arm64_uefi_check_image (struct grub_arm64_linux_kernel_header
+                                         *lh);
+ grub_err_t grub_arm64_uefi_boot_image (grub_addr_t addr, grub_size_t size,
+                                        char *args);
++struct grub_arm64_linux_pe_header
++{
++  grub_uint32_t magic;
++  struct grub_pe32_coff_header coff;
++  struct grub_pe64_optional_header opt;
++};
+ 
+ #endif /* ! GRUB_LINUX_CPU_HEADER */
+diff --git a/include/grub/efi/linux.h b/include/grub/efi/linux.h
+new file mode 100644
+index 000000000..d9ede3677
+--- /dev/null
++++ b/include/grub/efi/linux.h
+@@ -0,0 +1,31 @@
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2014  Free Software Foundation, Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ */
++#ifndef GRUB_EFI_LINUX_HEADER
++#define GRUB_EFI_LINUX_HEADER	1
++
++#include <grub/efi/api.h>
++#include <grub/err.h>
++#include <grub/symbol.h>
++
++grub_efi_boolean_t
++EXPORT_FUNC(grub_linuxefi_secure_validate) (void *data, grub_uint32_t size);
++grub_err_t
++EXPORT_FUNC(grub_efi_linux_boot) (void *kernel_address, grub_off_t offset,
++				  void *kernel_param);
++
++#endif /* ! GRUB_EFI_LINUX_HEADER */
