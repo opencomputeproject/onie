@@ -1,0 +1,126 @@
+From 559610a5daacf7f6da1316d0fa3977bd59e574f7 Mon Sep 17 00:00:00 2001
+From: Michael Chang <mchang@suse.com>
+Date: Thu, 27 Oct 2016 17:41:21 -0400
+Subject: efinet: UEFI IPv6 PXE support
+
+When grub2 image is booted from UEFI IPv6 PXE, the DHCPv6 Reply packet is
+cached in firmware buffer which can be obtained by PXE Base Code protocol. The
+network interface can be setup through the parameters in that obtained packet.
+
+Signed-off-by: Michael Chang <mchang@suse.com>
+Signed-off-by: Ken Lin <ken.lin@hpe.com>
+
+Patch-Name: efinet_uefi_ipv6_pxe_support.patch
+---
+ grub-core/net/drivers/efi/efinet.c | 24 +++++++++++++----
+ include/grub/efi/api.h             | 55 +++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 73 insertions(+), 6 deletions(-)
+
+diff --git a/grub-core/net/drivers/efi/efinet.c b/grub-core/net/drivers/efi/efinet.c
+index 5388f952b..fc90415f2 100644
+--- a/grub-core/net/drivers/efi/efinet.c
++++ b/grub-core/net/drivers/efi/efinet.c
+@@ -378,11 +378,25 @@ grub_efi_net_config_real (grub_efi_handle_t hnd, char **device,
+     if (! pxe)
+       continue;
+     pxe_mode = pxe->mode;
+-    grub_net_configure_by_dhcp_ack (card->name, card, 0,
+-				    (struct grub_net_bootp_packet *)
+-				    &pxe_mode->dhcp_ack,
+-				    sizeof (pxe_mode->dhcp_ack),
+-				    1, device, path);
++
++    if (pxe_mode->using_ipv6)
++      {
++	grub_net_configure_by_dhcpv6_reply (card->name, card, 0,
++					    (struct grub_net_dhcp6_packet *)
++					    &pxe_mode->dhcp_ack,
++					    sizeof (pxe_mode->dhcp_ack),
++					    1, device, path);
++	if (grub_errno)
++	  grub_print_error ();
++      }
++    else
++      {
++	grub_net_configure_by_dhcp_ack (card->name, card, 0,
++					(struct grub_net_bootp_packet *)
++					&pxe_mode->dhcp_ack,
++					sizeof (pxe_mode->dhcp_ack),
++					1, device, path);
++      }
+     return;
+   }
+ }
+diff --git a/include/grub/efi/api.h b/include/grub/efi/api.h
+index c7c9f0e1d..92f9b5a6f 100644
+--- a/include/grub/efi/api.h
++++ b/include/grub/efi/api.h
+@@ -1452,14 +1452,67 @@ typedef struct grub_efi_simple_text_output_interface grub_efi_simple_text_output
+ 
+ typedef grub_uint8_t grub_efi_pxe_packet_t[1472];
+ 
++typedef struct {
++  grub_uint8_t addr[4];
++} grub_efi_pxe_ipv4_address_t;
++
++typedef struct {
++  grub_uint8_t addr[16];
++} grub_efi_pxe_ipv6_address_t;
++
++typedef struct {
++  grub_uint8_t addr[32];
++} grub_efi_pxe_mac_address_t;
++
++typedef union {
++    grub_uint32_t addr[4];
++    grub_efi_pxe_ipv4_address_t v4;
++    grub_efi_pxe_ipv6_address_t v6;
++} grub_efi_pxe_ip_address_t;
++
++#define GRUB_EFI_PXE_BASE_CODE_MAX_IPCNT 8
++typedef struct {
++    grub_uint8_t filters;
++    grub_uint8_t ip_cnt;
++    grub_uint16_t reserved;
++    grub_efi_pxe_ip_address_t ip_list[GRUB_EFI_PXE_BASE_CODE_MAX_IPCNT];
++} grub_efi_pxe_ip_filter_t;
++
++typedef struct {
++    grub_efi_pxe_ip_address_t ip_addr;
++    grub_efi_pxe_mac_address_t mac_addr;
++} grub_efi_pxe_arp_entry_t;
++
++typedef struct {
++    grub_efi_pxe_ip_address_t ip_addr;
++    grub_efi_pxe_ip_address_t subnet_mask;
++    grub_efi_pxe_ip_address_t gw_addr;
++} grub_efi_pxe_route_entry_t;
++
++
++#define GRUB_EFI_PXE_BASE_CODE_MAX_ARP_ENTRIES 8
++#define GRUB_EFI_PXE_BASE_CODE_MAX_ROUTE_ENTRIES 8
++
+ typedef struct grub_efi_pxe_mode
+ {
+-  grub_uint8_t unused[52];
++  grub_uint8_t started;
++  grub_uint8_t ipv6_available;
++  grub_uint8_t ipv6_supported;
++  grub_uint8_t using_ipv6;
++  grub_uint8_t unused[16];
++  grub_efi_pxe_ip_address_t station_ip;
++  grub_efi_pxe_ip_address_t subnet_mask;
+   grub_efi_pxe_packet_t dhcp_discover;
+   grub_efi_pxe_packet_t dhcp_ack;
+   grub_efi_pxe_packet_t proxy_offer;
+   grub_efi_pxe_packet_t pxe_discover;
+   grub_efi_pxe_packet_t pxe_reply;
++  grub_efi_pxe_packet_t pxe_bis_reply;
++  grub_efi_pxe_ip_filter_t ip_filter;
++  grub_uint32_t arp_cache_entries;
++  grub_efi_pxe_arp_entry_t arp_cache[GRUB_EFI_PXE_BASE_CODE_MAX_ARP_ENTRIES];
++  grub_uint32_t route_table_entries;
++  grub_efi_pxe_route_entry_t route_table[GRUB_EFI_PXE_BASE_CODE_MAX_ROUTE_ENTRIES];
+ } grub_efi_pxe_mode_t;
+ 
+ typedef struct grub_efi_pxe

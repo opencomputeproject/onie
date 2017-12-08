@@ -1,0 +1,380 @@
+From d2063145edd759756d2f7dbde3feb9581882c266 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:26 +0000
+Subject: Add configure option to reduce visual clutter at boot time
+
+If this option is enabled, then do all of the following:
+
+Don't display introductory message about line editing unless we're
+actually offering a shell prompt.  (This is believed to be a workaround
+for a different bug.  We'll go with this for now, but will drop this in
+favour of a better fix upstream if somebody figures out what that is.)
+
+Don't clear the screen just before booting if we never drew the menu in
+the first place.
+
+Remove verbose messages printed before reading configuration.  In some
+ways this is awkward because it makes debugging harder, but it's a
+requirement for a smooth-looking boot process; we may be able to do
+better in future.  Upstream doesn't want this, though.
+
+Disable the cursor as well, for similar reasons of tidiness.
+
+Suppress kernel/initrd progress messages, except in recovery mode.
+
+Suppress "GRUB loading" message unless Shift is held down.  Upstream
+doesn't want this, as it makes debugging harder.  Ubuntu wants it to
+provide a cleaner boot experience.
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/386922
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/861048
+Forwarded: (partial) http://lists.gnu.org/archive/html/grub-devel/2009-09/msg00056.html
+Last-Update: 2014-01-03
+
+Patch-Name: maybe_quiet.patch
+---
+ config.h.in                       |  2 ++
+ configure.ac                      | 16 ++++++++++++++++
+ grub-core/boot/i386/pc/boot.S     | 11 +++++++++++
+ grub-core/boot/i386/pc/diskboot.S | 26 ++++++++++++++++++++++++++
+ grub-core/kern/main.c             | 17 +++++++++++++++++
+ grub-core/kern/rescue_reader.c    |  2 ++
+ grub-core/normal/main.c           | 11 +++++++++++
+ grub-core/normal/menu.c           | 17 +++++++++++++++--
+ util/grub.d/10_linux.in           | 15 +++++++++++----
+ 9 files changed, 111 insertions(+), 6 deletions(-)
+
+diff --git a/config.h.in b/config.h.in
+index 9e8f9911b..d2c4ce8e5 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -12,6 +12,8 @@
+ /* Define to 1 to enable disk cache statistics.  */
+ #define DISK_CACHE_STATS @DISK_CACHE_STATS@
+ #define BOOT_TIME_STATS @BOOT_TIME_STATS@
++/* Define to 1 to make GRUB quieter at boot time.  */
++#define QUIET_BOOT @QUIET_BOOT@
+ 
+ /* We don't need those.  */
+ #define MINILZO_CFG_SKIP_LZO_PTR 1
+diff --git a/configure.ac b/configure.ac
+index d4978ad5d..dd2fbd01c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1817,6 +1817,17 @@ else
+ fi
+ AC_SUBST([LIBNVPAIR])
+ 
++AC_ARG_ENABLE([quiet-boot],
++              [AS_HELP_STRING([--enable-quiet-boot],
++                              [emit fewer messages at boot time (default=no)])],
++              [], [enable_quiet_boot=no])
++if test x"$enable_quiet_boot" = xyes ; then
++  QUIET_BOOT=1
++else
++  QUIET_BOOT=0
++fi
++AC_SUBST([QUIET_BOOT])
++
+ LIBS=""
+ 
+ AC_SUBST([FONT_SOURCE])
+@@ -2081,5 +2092,10 @@ echo "Without liblzma (no support for XZ-compressed mips images) ($liblzma_excus
+ else
+ echo "With liblzma from $LIBLZMA (support for XZ-compressed mips images)"
+ fi
++if [ x"$enable_quiet_boot" = xyes ]; then
++echo With quiet boot: Yes
++else
++echo With quiet boot: No
++fi
+ echo "*******************************************************"
+ ]
+diff --git a/grub-core/boot/i386/pc/boot.S b/grub-core/boot/i386/pc/boot.S
+index 2bd0b2d28..451c8bea5 100644
+--- a/grub-core/boot/i386/pc/boot.S
++++ b/grub-core/boot/i386/pc/boot.S
+@@ -19,6 +19,9 @@
+ 
+ #include <grub/symbol.h>
+ #include <grub/machine/boot.h>
++#if defined(QUIET_BOOT) && !defined(HYBRID_BOOT)
++#include <grub/machine/memory.h>
++#endif
+ 
+ /*
+  *  defines for the code go here
+@@ -249,9 +252,17 @@ real_start:
+ 	/* save drive reference first thing! */
+ 	pushw	%dx
+ 
++#if defined(QUIET_BOOT) && !defined(HYBRID_BOOT)
++	/* is either shift key held down? */
++	movw	$(GRUB_MEMORY_MACHINE_BIOS_DATA_AREA_ADDR + 0x17), %bx
++	testb	$3, (%bx)
++	jz	2f
++#endif
++
+ 	/* print a notification message on the screen */
+ 	MSG(notification_string)
+ 
++2:
+ 	/* set %si to the disk address packet */
+ 	movw	$disk_address_packet, %si
+ 
+diff --git a/grub-core/boot/i386/pc/diskboot.S b/grub-core/boot/i386/pc/diskboot.S
+index 1ee4cf5b2..31096ce5a 100644
+--- a/grub-core/boot/i386/pc/diskboot.S
++++ b/grub-core/boot/i386/pc/diskboot.S
+@@ -18,6 +18,9 @@
+ 
+ #include <grub/symbol.h>
+ #include <grub/machine/boot.h>
++#ifdef QUIET_BOOT
++#include <grub/machine/memory.h>
++#endif
+ 
+ /*
+  *  defines for the code go here
+@@ -25,6 +28,12 @@
+ 
+ #define MSG(x)	movw $x, %si; call LOCAL(message)
+ 
++#ifdef QUIET_BOOT
++#define SILENT(x)	call LOCAL(check_silent); jz LOCAL(x)
++#else
++#define SILENT(x)
++#endif
++
+ 	.file	"diskboot.S"
+ 
+ 	.text
+@@ -50,11 +59,14 @@ _start:
+ 	/* save drive reference first thing! */
+ 	pushw	%dx
+ 
++	SILENT(after_notification_string)
++
+ 	/* print a notification message on the screen */
+ 	pushw	%si
+ 	MSG(notification_string)
+ 	popw	%si
+ 
++LOCAL(after_notification_string):
+ 	/* this sets up for the first run through "bootloop" */
+ 	movw	$LOCAL(firstlist), %di
+ 
+@@ -279,7 +291,10 @@ LOCAL(copy_buffer):
+ 	/* restore addressing regs and print a dot with correct DS
+ 	   (MSG modifies SI, which is saved, and unused AX and BX) */
+ 	popw	%ds
++	SILENT(after_notification_step)
+ 	MSG(notification_step)
++
++LOCAL(after_notification_step):
+ 	popa
+ 
+ 	/* check if finished with this dataset */
+@@ -295,8 +310,11 @@ LOCAL(copy_buffer):
+ /* END OF MAIN LOOP */
+ 
+ LOCAL(bootit):
++	SILENT(after_notification_done)
+ 	/* print a newline */
+ 	MSG(notification_done)
++
++LOCAL(after_notification_done):
+ 	popw	%dx	/* this makes sure %dl is our "boot" drive */
+ 	ljmp	$0, $(GRUB_BOOT_MACHINE_KERNEL_ADDR + 0x200)
+ 
+@@ -320,6 +338,14 @@ LOCAL(general_error):
+ /* go here when you need to stop the machine hard after an error condition */
+ LOCAL(stop):	jmp	LOCAL(stop)
+ 
++#ifdef QUIET_BOOT
++LOCAL(check_silent):
++	/* is either shift key held down? */
++	movw	$(GRUB_MEMORY_MACHINE_BIOS_DATA_AREA_ADDR + 0x17), %bx
++	testb	$3, (%bx)
++	ret
++#endif
++
+ notification_string:	.asciz "loading"
+ 
+ notification_step:	.asciz "."
+diff --git a/grub-core/kern/main.c b/grub-core/kern/main.c
+index 9cad0c448..5613cd553 100644
+--- a/grub-core/kern/main.c
++++ b/grub-core/kern/main.c
+@@ -264,15 +264,25 @@ reclaim_module_space (void)
+ void __attribute__ ((noreturn))
+ grub_main (void)
+ {
++#ifdef QUIET_BOOT
++  struct grub_term_output *term;
++#endif
++
+   /* First of all, initialize the machine.  */
+   grub_machine_init ();
+ 
+   grub_boot_time ("After machine init.");
+ 
++#ifdef QUIET_BOOT
++  /* Disable the cursor until we need it.  */
++  FOR_ACTIVE_TERM_OUTPUTS(term)
++    grub_term_setcursor (term, 0);
++#else
+   /* Hello.  */
+   grub_setcolorstate (GRUB_TERM_COLOR_HIGHLIGHT);
+   grub_printf ("Welcome to GRUB!\n\n");
+   grub_setcolorstate (GRUB_TERM_COLOR_STANDARD);
++#endif
+ 
+   grub_load_config ();
+ 
+@@ -308,5 +318,12 @@ grub_main (void)
+   grub_boot_time ("After execution of embedded config. Attempt to go to normal mode");
+ 
+   grub_load_normal_mode ();
++
++#ifdef QUIET_BOOT
++  /* If we have to enter rescue mode, enable the cursor again.  */
++  FOR_ACTIVE_TERM_OUTPUTS(term)
++    grub_term_setcursor (term, 1);
++#endif
++
+   grub_rescue_run ();
+ }
+diff --git a/grub-core/kern/rescue_reader.c b/grub-core/kern/rescue_reader.c
+index dcd7d4439..03826cf63 100644
+--- a/grub-core/kern/rescue_reader.c
++++ b/grub-core/kern/rescue_reader.c
+@@ -78,7 +78,9 @@ grub_rescue_read_line (char **line, int cont,
+ void __attribute__ ((noreturn))
+ grub_rescue_run (void)
+ {
++#ifdef QUIET_BOOT
+   grub_printf ("Entering rescue mode...\n");
++#endif
+ 
+   while (1)
+     {
+diff --git a/grub-core/normal/main.c b/grub-core/normal/main.c
+index 78a70a8bf..e924f6448 100644
+--- a/grub-core/normal/main.c
++++ b/grub-core/normal/main.c
+@@ -389,6 +389,15 @@ static grub_err_t
+ grub_normal_read_line_real (char **line, int cont, int nested)
+ {
+   const char *prompt;
++#ifdef QUIET_BOOT
++  static int displayed_intro;
++
++  if (! displayed_intro)
++    {
++      grub_normal_reader_init (nested);
++      displayed_intro = 1;
++    }
++#endif
+ 
+   if (cont)
+     /* TRANSLATORS: it's command line prompt.  */
+@@ -441,7 +450,9 @@ grub_cmdline_run (int nested, int force_auth)
+       return;
+     }
+ 
++#ifndef QUIET_BOOT
+   grub_normal_reader_init (nested);
++#endif
+ 
+   while (1)
+     {
+diff --git a/grub-core/normal/menu.c b/grub-core/normal/menu.c
+index 9d0ad4c95..1f3447ad3 100644
+--- a/grub-core/normal/menu.c
++++ b/grub-core/normal/menu.c
+@@ -826,12 +826,18 @@ run_menu (grub_menu_t menu, int nested, int *auto_boot)
+ 
+ /* Callback invoked immediately before a menu entry is executed.  */
+ static void
+-notify_booting (grub_menu_entry_t entry,
++notify_booting (grub_menu_entry_t entry
++#ifdef QUIET_BOOT
++		__attribute__((unused))
++#endif
++		,
+ 		void *userdata __attribute__((unused)))
+ {
++#ifndef QUIET_BOOT
+   grub_printf ("  ");
+   grub_printf_ (N_("Booting `%s'"), entry->title);
+   grub_printf ("\n\n");
++#endif
+ }
+ 
+ /* Callback invoked when a default menu entry executed because of a timeout
+@@ -879,6 +885,9 @@ show_menu (grub_menu_t menu, int nested, int autobooted)
+       int boot_entry;
+       grub_menu_entry_t e;
+       int auto_boot;
++#ifdef QUIET_BOOT
++      int initial_timeout = grub_menu_get_timeout ();
++#endif
+ 
+       boot_entry = run_menu (menu, nested, &auto_boot);
+       if (boot_entry < 0)
+@@ -888,7 +897,11 @@ show_menu (grub_menu_t menu, int nested, int autobooted)
+       if (! e)
+ 	continue; /* Menu is empty.  */
+ 
+-      grub_cls ();
++#ifdef QUIET_BOOT
++      /* Only clear the screen if we drew the menu in the first place.  */
++      if (initial_timeout != 0)
++#endif
++	grub_cls ();
+ 
+       if (auto_boot)
+ 	grub_menu_execute_with_fallback (menu, e, autobooted,
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index 60467460b..67d57ecfd 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -21,5 +21,6 @@ prefix="@prefix@"
+ exec_prefix="@exec_prefix@"
+ datarootdir="@datarootdir@"
++quiet_boot="@QUIET_BOOT@"
+ 
+ . "$pkgdatadir/grub-mkconfig_lib"
+ 
+@@ -148,10 +149,12 @@ linux_entry ()
+     fi
+     printf '%s\n' "${prepare_boot_cache}" | sed "s/^/$submenu_indentation/"
+   fi
+-  message="$(gettext_printf "Loading Linux %s ..." ${version})"
+-  sed "s/^/$submenu_indentation/" << EOF
++  if [ x"$quiet_boot" = x0 ] || [ x"$type" != xsimple ]; then
++    message="$(gettext_printf "Loading Linux %s ..." ${version})"
++    sed "s/^/$submenu_indentation/" << EOF
+ 	echo	'$(echo "$message" | grub_quote)'
+ EOF
++  fi
+   if test -d /sys/firmware/efi && test -e "${linux}.efi.signed"; then
+     sed "s/^/$submenu_indentation/" << EOF
+ 	linux	${rel_dirname}/${basename}.efi.signed root=${linux_root_device_thisversion} ro ${args}
+@@ -163,9 +166,13 @@ EOF
+   fi
+   if test -n "${initrd}" ; then
+     # TRANSLATORS: ramdisk isn't identifier. Should be translated.
+-    message="$(gettext_printf "Loading initial ramdisk ...")"
+-    sed "s/^/$submenu_indentation/" << EOF
++    if [ x"$quiet_boot" = x0 ] || [ x"$type" != xsimple ]; then
++      message="$(gettext_printf "Loading initial ramdisk ...")"
++      sed "s/^/$submenu_indentation/" << EOF
+ 	echo	'$(echo "$message" | grub_quote)'
++EOF
++    fi
++    sed "s/^/$submenu_indentation/" << EOF
+ 	initrd	${rel_dirname}/${initrd}
+ EOF
+   fi

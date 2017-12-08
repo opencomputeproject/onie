@@ -1,0 +1,90 @@
+From fe53371a0cc47533ec8231e5454711b6e12bd0a0 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Sat, 3 Jan 2015 12:04:59 +0000
+Subject: Generate alternative init entries in advanced menu
+
+Add fallback boot entries for alternative installed init systems.  Based
+on patches from Michael Biebl and Didier Roche.
+
+Bug-Debian: https://bugs.debian.org/757298
+Bug-Debian: https://bugs.debian.org/773173
+Forwarded: no
+Last-Update: 2017-06-23
+
+Patch-Name: mkconfig_other_inits.patch
+---
+ util/grub.d/10_linux.in     | 10 ++++++++++
+ util/grub.d/20_linux_xen.in | 11 +++++++++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index d344f05e6..4cf321c54 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -32,6 +32,7 @@ export TEXTDOMAIN=@PACKAGE@
+ export TEXTDOMAINDIR="@localedir@"
+ 
+ CLASS="--class gnu-linux --class gnu --class os"
++SUPPORTED_INITS="sysvinit:/lib/sysvinit/init systemd:/lib/systemd/systemd upstart:/sbin/upstart"
+ 
+ if [ "x${GRUB_DISTRIBUTOR}" = "x" ] ; then
+   OS=GNU/Linux
+@@ -117,6 +118,8 @@ linux_entry ()
+       case $type in
+ 	  recovery)
+ 	      title="$(gettext_printf "%s, with Linux %s (%s)" "${os}" "${version}" "$(gettext "${GRUB_RECOVERY_TITLE}")")" ;;
++	  init-*)
++	      title="$(gettext_printf "%s, with Linux %s (%s)" "${os}" "${version}" "${type#init-}")" ;;
+ 	  *)
+ 	      title="$(gettext_printf "%s, with Linux %s" "${os}" "${version}")" ;;
+       esac
+@@ -344,6 +347,13 @@ while [ "x$list" != "x" ] ; do
+ 
+   linux_entry "${OS}" "${version}" advanced \
+               "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
++  for supported_init in ${SUPPORTED_INITS}; do
++    init_path="${supported_init#*:}"
++    if [ -x "${init_path}" ] && [ "$(readlink -f /sbin/init)" != "$(readlink -f "${init_path}")" ]; then
++      linux_entry "${OS}" "${version}" "init-${supported_init%%:*}" \
++		  "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} init=${init_path}"
++    fi
++  done
+   if [ "x${GRUB_DISABLE_RECOVERY}" != "xtrue" ]; then
+     linux_entry "${OS}" "${version}" recovery \
+                 "${GRUB_CMDLINE_LINUX_RECOVERY} ${GRUB_CMDLINE_LINUX}"
+diff --git a/util/grub.d/20_linux_xen.in b/util/grub.d/20_linux_xen.in
+index 62d663334..d3edb46df 100644
+--- a/util/grub.d/20_linux_xen.in
++++ b/util/grub.d/20_linux_xen.in
+@@ -27,6 +27,7 @@ export TEXTDOMAIN=@PACKAGE@
+ export TEXTDOMAINDIR="@localedir@"
+ 
+ CLASS="--class gnu-linux --class gnu --class os --class xen"
++SUPPORTED_INITS="sysvinit:/lib/sysvinit/init systemd:/lib/systemd/systemd upstart:/sbin/upstart"
+ 
+ if [ "x${GRUB_DISTRIBUTOR}" = "x" ] ; then
+   OS=GNU/Linux
+@@ -96,6 +97,8 @@ linux_entry ()
+   if [ x$type != xsimple ] ; then
+       if [ x$type = xrecovery ] ; then
+ 	  title="$(gettext_printf "%s, with Xen %s and Linux %s (%s)" "${os}" "${xen_version}" "${version}" "$(gettext "${GRUB_RECOVERY_TITLE}")")"
++      elif [ "${type#init-}" != "$type" ] ; then
++	  title="$(gettext_printf "%s, with Xen %s and Linux %s (%s)" "${os}" "${xen_version}" "${version}" "${type#init-}")"
+       else
+ 	  title="$(gettext_printf "%s, with Xen %s and Linux %s" "${os}" "${xen_version}" "${version}")"
+       fi
+@@ -259,6 +262,14 @@ while [ "x${xen_list}" != "x" ] ; do
+ 
+ 	linux_entry "${OS}" "${version}" "${xen_version}" advanced \
+ 	    "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}" "${GRUB_CMDLINE_XEN} ${GRUB_CMDLINE_XEN_DEFAULT}"
++	for supported_init in ${SUPPORTED_INITS}; do
++	    init_path="${supported_init#*:}"
++	    if [ -x "${init_path}" ] && [ "$(readlink -f /sbin/init)" != "$(readlink -f "${init_path}")" ]; then
++		linux_entry "${OS}" "${version}" "${xen_version}" "init-${supported_init%%:*}" \
++		    "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT} init=${init_path}" "${GRUB_CMDLINE_XEN} ${GRUB_CMDLINE_XEN_DEFAULT}"
++
++	    fi
++	done
+ 	if [ "x${GRUB_DISABLE_RECOVERY}" != "xtrue" ]; then
+ 	    linux_entry "${OS}" "${version}" "${xen_version}" recovery \
+ 		"single ${GRUB_CMDLINE_LINUX}" "${GRUB_CMDLINE_XEN}"

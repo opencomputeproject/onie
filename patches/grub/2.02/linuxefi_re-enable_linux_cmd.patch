@@ -1,0 +1,43 @@
+From 43d3508475ff2c2714a95e17ef9e7e3ee7e76f36 Mon Sep 17 00:00:00 2001
+From: Mathieu Trudel-Lapierre <mathieu.trudel-lapierre@canonical.com>
+Date: Wed, 1 Nov 2017 13:51:03 -0400
+Subject: Temporarily re-enable the generic linux loader
+
+We're currently relying on it and an automatic hand-off to linuxefi for EFI
+booting; so we need the linux command to start to be able to do the hand-off
+correctly.
+
+This is a temporary measure until we switch to calling linuxefi directly.
+
+Forwarded: no
+Last-Update: 2017-11-01
+
+Patch-Name: linuxefi_re-enable_linux_cmd.patch
+---
+ grub-core/loader/i386/linux.c | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/grub-core/loader/i386/linux.c b/grub-core/loader/i386/linux.c
+index 3e3b45aa8..ae0be0f26 100644
+--- a/grub-core/loader/i386/linux.c
++++ b/grub-core/loader/i386/linux.c
+@@ -1194,9 +1194,6 @@ static grub_command_t cmd_linux, cmd_initrd;
+ 
+ GRUB_MOD_INIT(linux)
+ {
+-  if (grub_efi_secure_boot())
+-    return;
+-
+   cmd_linux = grub_register_command ("linux", grub_cmd_linux,
+ 				     0, N_("Load Linux."));
+   cmd_initrd = grub_register_command ("initrd", grub_cmd_initrd,
+@@ -1206,9 +1203,6 @@ GRUB_MOD_INIT(linux)
+ 
+ GRUB_MOD_FINI(linux)
+ {
+-  if (grub_efi_secure_boot())
+-    return;
+-
+   grub_unregister_command (cmd_linux);
+   grub_unregister_command (cmd_initrd);
+ }

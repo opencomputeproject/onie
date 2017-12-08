@@ -1,0 +1,47 @@
+From ba2b2485acc94bee484d08ae774cddf61758a21a Mon Sep 17 00:00:00 2001
+From: Mathieu Trudel-Lapierre <mathieu.trudel-lapierre@canonical.com>
+Date: Wed, 1 Nov 2017 17:03:36 -0400
+Subject: Don't fail build on some warnings we know might show up building
+ linuxefi
+
+Specifically:
+  -Wno-error=format=
+  -Wno-error=cast-align
+  -Wno-error=int-to-pointer-cast
+  -Wno-error=pointer-to-int-cast
+  -Wno-error=unused-parameter
+
+There are a few cases where we legitimately cast to memory that is bigger
+than we need when building on one arch, because on a different arch it will
+be just right. For example, grub_status_t can be int32 or int64, depending
+on the size of void*.
+
+Signed-off-by: Mathieu Trudel-Lapierre <mathieu.trudel-lapierre@canonical.com>
+
+Forwarded: no
+Last-Updated: 2017-11-01
+Patch-Name: dont-fail-efi-warnings.patch
+---
+ grub-core/Makefile.core.def | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index e3662bb03..208b8c136 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -1747,6 +1747,7 @@ module = {
+ 
+ module = {
+   name = linuxefi;
++  cflags = '-Wno-error=format= -Wno-error=cast-align -Wno-error=int-to-pointer-cast -Wno-error=pointer-to-int-cast -Wno-error=unused-parameter';
+   efi = loader/i386/efi/linux.c;
+   efi = lib/cmdline.c;
+   efi = loader/efi/linux.c;
+@@ -1756,6 +1757,7 @@ module = {
+ 
+ module = {
+   name = chain;
++  cflags = '-Wno-error=format= -Wno-error=cast-align -Wno-error=int-to-pointer-cast -Wno-error=pointer-to-int-cast -Wno-error=unused-parameter';
+   efi = loader/efi/chainloader.c;
+   efi = loader/efi/linux.c;
+   i386_pc = loader/i386/pc/chainloader.c;

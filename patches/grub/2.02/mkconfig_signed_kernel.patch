@@ -1,0 +1,48 @@
+From 3853b53c91000f146eedaa0d4c80cb5852da91ee Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:21 +0000
+Subject: Generate configuration for signed UEFI kernels if available
+
+Forwarded: no
+Last-Update: 2013-12-25
+
+Patch-Name: mkconfig_signed_kernel.patch
+---
+ util/grub.d/10_linux.in | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index 37c248c54..60467460b 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -151,8 +151,16 @@ linux_entry ()
+   message="$(gettext_printf "Loading Linux %s ..." ${version})"
+   sed "s/^/$submenu_indentation/" << EOF
+ 	echo	'$(echo "$message" | grub_quote)'
++EOF
++  if test -d /sys/firmware/efi && test -e "${linux}.efi.signed"; then
++    sed "s/^/$submenu_indentation/" << EOF
++	linux	${rel_dirname}/${basename}.efi.signed root=${linux_root_device_thisversion} ro ${args}
++EOF
++  else
++    sed "s/^/$submenu_indentation/" << EOF
+ 	linux	${rel_dirname}/${basename} root=${linux_root_device_thisversion} ro ${args}
+ EOF
++  fi
+   if test -n "${initrd}" ; then
+     # TRANSLATORS: ramdisk isn't identifier. Should be translated.
+     message="$(gettext_printf "Loading initial ramdisk ...")"
+@@ -200,6 +208,13 @@ submenu_indentation=""
+ is_top_level=true
+ while [ "x$list" != "x" ] ; do
+   linux=`version_find_latest $list`
++  case $linux in
++    *.efi.signed)
++      # We handle these in linux_entry.
++      list=`echo $list | tr ' ' '\n' | grep -vx $linux | tr '\n' ' '`
++      continue
++      ;;
++  esac
+   gettext_printf "Found linux image: %s\n" "$linux" >&2
+   basename=`basename $linux`
+   dirname=`dirname $linux`
