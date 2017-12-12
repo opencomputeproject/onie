@@ -57,11 +57,12 @@ PLATFORM_IMAGE_COMPLETE = $(IMAGE_UPDATER_STAMP) $(RECOVERY_ISO_STAMP)
 # Disable UEFI support by default
 UEFI_ENABLE ?= no
 ifeq ($(UEFI_ENABLE),yes)
-  # Set the target firmware type.  Possible values are "auto", "uefi"
-  # and "bios":
+  # Set the target firmware type.  Possible values are "auto", "uefi",
+  # "bios" and "coreboot":
   #  - auto -- auto-detect the firmware type at runtime, either 'uefi' or 'bios'
   #  - uefi -- UEFI firmware mode
   #  - bios -- legacy BIOS mode
+  #  - coreboot -- coreboot firmware mode
   #
   # If firmware type is set to "bios" on a UEFI system, the ONIE
   # installer uses the legacy GRUB MBR method.  The system will *not*
@@ -124,11 +125,6 @@ GRUB_IMAGE_NAME = grubx64.efi
 # Default to include the i2ctools.  A particular machine.make can
 # override this.
 I2CTOOLS_ENABLE ?= yes
-
-# The onie-syseeprom in i2ctools is deprecated from now on.
-# It is recommended to migrate the support from i2ctools to busybox.
-# To compatible with current design, the feature is still enabled by default.
-I2CTOOLS_SYSEEPROM ?= yes
 
 # Include dmidecode tools
 DMIDECODE_ENABLE = yes

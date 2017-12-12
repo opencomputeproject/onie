@@ -1,0 +1,68 @@
+#!/bin/sh
+
+#  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Verify that all binaries and libraries are represented in the final
+# sysroot.
+
+set -e
+
+check_dir() {
+    find_type="$1"
+
+    case "$find_type" in
+        files)
+            find_opts="-type f" ;;
+        symlinks)
+            find_opts="-type l" ;;
+        *)
+            echo "ERROR: unexpected find_type: $find_type"
+            exit 1
+    esac
+
+
+    (cd "$SYSROOTDIR" && find . $find_opts | LC_ALL=C sort > "$SYSFILES")
+    (cd "$CHECKDIR" && find . $find_opts | LC_ALL=C sort > "$CHECKFILES")
+
+    diff -q "$SYSFILES" "$CHECKFILES" > /dev/null 2>&1 || {
+        echo "ERROR: Missing/unexpected $find_type in SYSROOTDIR:"
+        diff "$SYSFILES" "$CHECKFILES"
+        exit 1
+    }
+}
+
+POPULATE_CMD="$1"
+
+[ -x "$POPULATE_CMD" ] || {
+    echo "ERROR: Unable to find populate executable: $POPULATE_CMD"
+    exit 1
+}
+
+DEV_SYSROOT="$2"
+[ -f "${DEV_SYSROOT}/usr/lib/libc.a" ] || {
+    echo "ERROR: Unable to find valid DEV_SYSROOT: $DEV_SYSROOT"
+    exit 1
+}
+
+SYSROOTDIR="$3"
+[ -d "${SYSROOTDIR}/var/log" ] || {
+    echo "ERROR: Unable to find valid SYSROOTDIR: $SYSROOTDIR"
+    exit 1
+}
+
+CHECKROOT="$4"
+mkdir -p "$CHECKROOT"
+
+CHECKDIR="${CHECKROOT}/checkdir"
+
+CHECKFILES="${CHECKROOT}/checkfiles.txt"
+SYSFILES="${CHECKROOT}/sysfiles.txt"
+
+"$POPULATE_CMD" -r "$DEV_SYSROOT" \
+		-s "$SYSROOTDIR" \
+		-d "$CHECKDIR"
+
+check_dir files
+check_dir symlinks

@@ -49,10 +49,10 @@ endif
 
 # List of files to remove from base ONIE image for the demo.
 DEMO_TRIM = \
-   etc/rc0.d/K25discover.sh	\
-   etc/rc3.d/S50discover.sh	\
-   etc/rc6.d/K25discover.sh	\
-   etc/rcS.d/S03boot-mode.sh	\
+   etc/rc0.d/K*discover.sh	\
+   etc/rc3.d/S*discover.sh	\
+   etc/rc6.d/K*discover.sh	\
+   etc/rcS.d/S*boot-mode.sh	\
    etc/init.d/discover.sh	\
    etc/init.d/boot-mode.sh	\
    bin/discover			\

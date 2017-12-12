@@ -1,0 +1,80 @@
+====================================
+Installing ONIE on Lenovo NE1032T
+====================================
+
+- lenovo_ne1032t-r0
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make -j4 MACHINEROOT=../machine/lenovo MACHINE=lenovo_ne1032t all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/lenovo MACHINE=lenovo_ne1032t all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r-- 5636096 July 18 02:05 onie-lenovo_ne1032t-r0.bin
+
+Installing the ONIE binaries
+============================
+
+A single binary image needs to be installed on the NOR flash.
+
+Image 1 -- ONIE kernel and u-boot.
+  name:  onie-lenovo_ne1032t-r0.bin
+
+Step 1 -- Put the ONIE file on a TFTP server
+---------------------------------------------
+
+The following directions assume the files are on the root of the TFTP
+server.
+
+Step 2 -- Install image (onie-lenovo_ne1032t-r0.bin)
+--------------------------------------------------------
+
+Copying the image down using TFTP and flash to the NOR flash::
+
+  => tftp $loadadd onie-lenovo_ne1032t-r0.bin
+  => setenv onie_start 0xefaa0000
+  => protect off all
+  => erase $onie_start +$filesize;
+  => erase 0xef040000 +0x00020000
+  => cp.b $loadaddr $onie_start $filesize
+
+Step 3 -- Configure Serial Console
+----------------------------------
+
+ONIE defaults the serial console baud rate to 115200.  You may need to
+adjust your terminal settings.
+
+Step 4 -- Restart The System
+----------------------------
+
+You can interrupt the boot process by pressing any key during the
+count down::
+
+  => reset
+
+Step 5 -- Optional
+------------------
+
+By default the system will start the ONIE in *install* mode.  After
+booting press the [Enter] key to active the console.
+
+Alternatively you can start the system in *rescue* mode so you can
+login and look around the ONIE.  To start the rescue mode type this::
+
+  => setenv onie_boot_reason rescue
+  => saveenv
+  => reset
+
+or 
+
+  => run onie_rescue
+

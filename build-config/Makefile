@@ -3,7 +3,7 @@
 #
 #  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
-#  Copyright (C) 2014 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -178,6 +178,7 @@ XTOOLS_ENABLE ?= yes
 # List of known ASIC vendors -- keep this list in alphabetical order
 KNOWN_ASIC_VENDORS = \
   bcm    \
+  bft    \
   cavium \
   centec \
   mlnx   \
@@ -228,6 +229,8 @@ endif
 # Should ONIE skip programming the Ethernet management interface MAC
 # addresses?  Can be set to "yes" in machine.make.
 SKIP_ETHMGMT_MACS ?= no
+
+ONIE_BUILD_DATE := $(shell LC_ALL=C date -Imin)
 
 TREE_STAMP  = $(STAMPDIR)/tree
 tree-stamp: $(TREE_STAMP)
@@ -374,7 +377,7 @@ ifeq ($(UEFI_ENABLE),yes)
   include make/efivar.make
   include make/efibootmgr.make
 endif
-ifeq ($(I2CTOOLS_ENABLE),yes)
+ifeq ($(I2CTOOLS_SYSEEPROM),yes)
   include make/i2ctools.make
 endif
 ifeq ($(DMIDECODE_ENABLE),yes)

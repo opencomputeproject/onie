@@ -19,7 +19,9 @@ endif
 # Mellanox IANA number
 VENDOR_ID = 33049
 
+# Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
+I2CTOOLS_SYSEEPROM = yes
 
 export EXTRA_CMDLINE_LINUX := acpi_enforce_resources=no nmi_watchdog=0 $(EXTRA_CMDLINE_LINUX)
 

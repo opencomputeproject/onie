@@ -40,13 +40,17 @@ PHONY += util-linux util-linux-download util-linux-source util-linux-configure \
 
 UTILLINUX_CONFIG	= --enable-libuuid
 UTILLINUX_LIBS		= \
-	libuuid.so    libuuid.so.1    libuuid.so.1.3.0
+	libuuid.so.1    libuuid.so.1.3.0
+UTILLINUX_USR_LIBS	= \
+	libuuid.so
 
 ifeq ($(UTILLINUX_FLAVOR),util-linux)
 # These are needed when ext34 and lvm2 are enabled
 UTILLINUX_CONFIG	+= --enable-libblkid
 UTILLINUX_LIBS		+= \
-	libblkid.so   libblkid.so.1   libblkid.so.1.1.0
+	libblkid.so.1   libblkid.so.1.1.0
+UTILLINUX_USR_LIBS	+= \
+	libblkid.so
 endif
 
 util-linux: $(UTILLINUX_STAMP)
@@ -81,7 +85,7 @@ $(UTILLINUX_CONFIGURE_STAMP): $(UTILLINUX_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STA
 	$(Q) cd $(UTILLINUX_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(UTILLINUX_DIR)/configure			\
 		--enable-shared					\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"				\
@@ -96,8 +100,8 @@ util-linux-build: $(UTILLINUX_BUILD_STAMP)
 $(UTILLINUX_BUILD_STAMP): $(UTILLINUX_CONFIGURE_STAMP) $(UTILLINUX_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building util-linux-$(UTILLINUX_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(UTILLINUX_DIR)
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UTILLINUX_DIR) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(UTILLINUX_DIR) DESTDIR=$(DEV_SYSROOT) 
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(UTILLINUX_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 util-linux-install: $(UTILLINUX_INSTALL_STAMP)
@@ -105,7 +109,10 @@ $(UTILLINUX_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(UTILLINUX_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing util-linux in $(SYSROOTDIR) ===="
 	$(Q) for file in $(UTILLINUX_LIBS) ; do \
-		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
+		cp -av $(DEV_SYSROOT)/lib/$$file $(SYSROOTDIR)/lib/ || exit 1 ; \
+	     done
+	$(Q) for file in $(UTILLINUX_USR_LIBS) ; do \
+		cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ || exit 1 ; \
 	     done
 	$(Q) touch $@
 
