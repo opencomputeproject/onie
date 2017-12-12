@@ -153,6 +153,18 @@ elif [ "$format" = "uboot_ubootenv-up" ] ; then
     }
     cat $UBOOT_BIN $pad_file > ${output_bin}.uboot+env
     rm -f $pad_file
+elif [ "$format" = "contiguous-uboot_ubootenv-up" ] ; then
+    # single ROM image : u-boot + env
+    # In increasing physical address space the order is:
+    #   low : u-boot
+    #   mid : u-boot env
+    # Pad U-Boot to uboot_max_size.
+    output_bin_uboot_env=${output_bin}.uboot+env
+    dd if=$UBOOT_BIN of=$output_bin_uboot_env ibs=$uboot_max_size conv=sync > /dev/null 2>&1 || {
+        echo "ERROR: Problems with dd for $format image"
+        exit 1
+    }
+    head --bytes=$env_sector_size /dev/zero >> $output_bin_uboot_env
 elif [ "$format" = "contiguous-onie_uboot" ] ; then
     # No ubootenv included. It's in a separate piece of flash and we'd end up creating a
     # giant image if we included it.
