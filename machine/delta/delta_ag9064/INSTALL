@@ -1,0 +1,122 @@
+================================================================================
+Installing ONIE on Delta AG9064 Series w/ Intel Xeon D1527 CPU Module
+================================================================================
+
+Cross-Compiling ONIE
+====================
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make -j12 MACHINEROOT=../machine/delta MACHINE=delta_ag9064 all"``.
+For example::
+
+  $ cd build-config
+  $ make -j12 MACHINEROOT=../machine/delta MACHINE=delta_ag9064 all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+  -rw-r--r--  5527024 Mar 27 11:01 delta_ag9064-r0.initrd
+  -rw-r--r--  3360144 Mar 27 11:00 delta_ag9064-r0.vmlinuz
+  -rw-r--r-- 22981120 Mar 27 11:01 onie-recovery-x86_64-delta_ag9064-r0.efi64.pxe
+  -rw-r--r-- 20381696 Mar 27 11:01 onie-recovery-x86_64-delta_ag9064-r0.iso
+  -rw-r--r--  8941431 Mar 27 11:01 onie-updater-x86_64-delta_ag9064-r0
+
+Cross-Compiling the DEMO OS
+===========================
+
+To compile the demo OS first change directories to ``build-config``
+and then type ``"make -j12 MACHINEROOT=../machine/delta MACHINE=delta_ag9064 demo"``.
+For example::
+
+  $ cd build-config
+  $ make -j12 MACHINEROOT=../machine/delta MACHINE=delta_ag9064 demo
+
+When complete, the demo OS installer is located in ``build/images``::
+
+  -rw-r--r-- 10486945 Mar 27 13:30 demo-installer-x86_64-delta_ag9064-r0.bin
+
+Installing ONIE on a Blank Machine
+==================================
+
+To install ONIE on a new machine use one of the onie-recovery images.
+
+Overview
+--------
+
+An "ONIE recovery image" is used for:
+
+1. installing ONIE on a blank machine, i.e. what manufacturing would
+   use.
+
+2. recovering a destroyed ONIE system.
+
+The two types of recovery images are:
+
+. <machine>.iso       -- a hybrid ISO image.
+
+. <machine>.efi64.pxe -- a PXE image for UEFI64 machines.
+
+PXE-UEFI64 Recovery Image
+-------------------------
+
+The .efi64.pxe was made for the AGC5648s whose PXE client is UEFI64
+based.  Booting regular PXE does not work on this platform.
+
+The .efi64.pxe is simply a combination of grub-efi-64 and the .iso
+recovery image, that looks like a UEFI application.  The UEFI/PXE
+client on this particular platform can then boot it.
+
+See this discussion about `UEFI/PXE Netboot
+https://wiki.ubuntu.com/UEFI/PXE-netboot-install`_.
+
+Next configure your DHCP server to serve the .efi64.pxe image as the
+bootfile.
+
+To enable IPv4 PXE boot on the AGC5648 enter the BIOS configuration and:
+
+1. Enable the PXE network stack:
+
+  Advanced-->Network Stack-->Ipv4 PXE Support-->Enabled
+
+2. Change the boot order to boot PXE IPv4 first:
+
+  Boot-->Boot Option #1-->UEFI: IP4 
+
+3. Save and Exit the BIOS configuration
+
+
+ISO Recovery Image
+------------------
+
+The .iso image is used to create the .efi64.pxe image.
+
+You can also use the .iso image to create a bootable USB memory stick.
+Use ``dd`` to copy the .iso image to a USB stick and boot from that::
+
+  dd if=<machine>.iso of=/dev/sdX bs=10M
+
+Find the correct ``/dev/sdX`` by inspecing the ``dmesg``
+output after inserting the USB stick into your work station.
+
+To enable booting from USB in the BIOS:
+
+1. Insert the USB stick (needs to be in before configuring BIOS)
+
+2. Power on the AGC9064 and enter the BIOS configuration
+
+3. Set the USB device to "Hard Disk"::
+
+  Advanced-->USB Configuration-->Mass Storage Devices:
+      <Name of your device>    [Hard Disk]
+
+  <Name of your device> might be something like "SanDisk 1.26".
+
+4. Set the hard drive boot order::
+
+  Boot-->Hard Drive BBS Priorities-->Boot Option #1
+
+  In "Boot Option #1" select the device that corresponds to your
+  device.
+
+5. Save and Exit the BIOS configuration
+
