@@ -1,4 +1,4 @@
-# Lenovo NE10032
+# Lenovo NE2572
 
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
@@ -25,7 +25,7 @@ VENDOR_ID = 19046
 
 # Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
-#I2CTOOLS_SYSEEPROM = no
+#I2CTOOLS_SYSEEPROM = no 
 
 # Console parameters
 CONSOLE_DEV = 1
