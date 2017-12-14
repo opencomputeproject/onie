@@ -1,0 +1,112 @@
+================================================
+Installing ONIE on Lenovo NE2572
+================================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/lenovo  MACHINE=lenovo_ne2572 all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/lenovo  MACHINE=lenovo_ne2572 all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-r--r-- 8562660 Dec 13 00:39 lenovo_ne2572-r0.initrd
+-rw-r--r-- 3480000 Dec 13 00:43 lenovo_ne2572-r0.vmlinuz
+-rw-r--r-- 29753344 Dec 13 00:43 onie-recovery-x86_64-lenovo_ne2572-r0.iso
+-rw-r--r-- 12095351 Dec 13 00:43 onie-updater-x86_64-lenovo_ne2572-r0
+
+lenovo_ne2572-r0.vmlinuz -- This is the ONIE kernel image
+
+lenovo_ne2572-r0.initrd  -- This is the ONIE initramfs (filesystem)
+
+onie-updater-x86_64-lenovo_ne2572-r0 -- This is the ONIE self-update
+image. This image is a self-extracting archive used for installing ONIE.
+
+onie-recovery-x86_64-lenovo_ne2572-r0.iso -- This is the ONIE recovery
+ISO image. This image can be used to create a bootable USB memory stick
+for installing/recovery ONIE.
+
+Installing ONIE on a Blank Machine
+==================================
+
+To install ONIE on a new machine, you can use the recovery ISO image to
+create a bootable USB memory stick.
+
+Creating bootable USB stick
+---------------------------
+
+Use rufus (https://rufus.akeo.ie/) to create a bootable USB stick. 
+-	Under "Create a bootable disk using" load the onie-recovery image (above) 
+	from your filesystem and choose "DD Image" from the drop down box 
+	(load the file first, then choose DD Image) .
+-	Hit Start and agree with the prompts and a boot able USB stick should be created
+-	Use the usb converter cable to plug your USB stick into the NE2572 
+	(the cable should have come with the switch)
+
+Booting from USB stick
+----------------------
+
+To enable booting from USB in the BIOS:
+
+1. Insert the USB stick
+
+2. Power on the switch and enter the BIOS configuration
+
+3. Set the hard drive boot order:
+
+  In "Boot Option #1" select the device that corresponds to your
+  device::
+
+    Boot-->Boot Option Priorities-->Boot Option #1
+
+  If the device name is not listed in "Boot Option #1", please
+  check the priorities in the hard drive boot order::
+
+    Boot-->Hard Drive BBS Priorities-->Boot Option #1
+
+  Taking ``UEFI: Generic Flash Disk 8.07`` as an example, the boot
+  order will look like following::
+
+    Boot Option Priorities
+    Boot Option #1          [UEFI: Generic Flash...]
+    Boot Option #2          [UEFI: TS32GMTS400  ...]
+    Boot Option #3          [P0: TS32GMTS400    ...]
+    Boot Option #4          [UEFI: Built-in EFI ...]
+
+4. Save and Exit the BIOS configuration
+
+5. After several seconds, you should see:
+
+                     GNU GRUB  version 2.02~beta3
+
+ +----------------------------------------------------------------------------+
+ | ONIE: Rescue                                                               |
+ |*ONIE: Embed ONIE                                                           |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line.
+
+  - Choose ``ONIE: Embed ONIE`` for creating a fresh partition layout and
+    installing ONIE automatically.  All data on the mass storage will be
+    erased.
+  - Choose ``ONIE: Rescue`` for entering ONIE recovery command-line shell.
+
