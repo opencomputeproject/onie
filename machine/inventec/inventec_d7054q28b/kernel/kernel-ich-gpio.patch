@@ -1,0 +1,68 @@
+Kernel ich gpio
+
+diff --git a/drivers/gpio/gpio-ich.c b/drivers/gpio/gpio-ich.c
+index 4f6d643..065bab1 100644
+--- a/drivers/gpio/gpio-ich.c
++++ b/drivers/gpio/gpio-ich.c
+@@ -109,7 +109,7 @@ struct ichx_desc {
+ 	int outlvl_cache[3];	/* cached output values */
+ } ichx_priv;
+ 
+-static int modparam_gpiobase = -1;	/* dynamic */
++static int modparam_gpiobase = 0;//el6661 -1;	/* dynamic */
+ module_param_named(gpiobase, modparam_gpiobase, int, 0444);
+ MODULE_PARM_DESC(gpiobase, "The GPIO number base. -1 means dynamic, "
+ 			   "which is the default.");
+@@ -477,6 +477,13 @@ static int ichx_gpio_probe(struct platform_device *pdev)
+ 	ichx_priv.pm_base = res_pm;
+ 
+ init:
++
++#ifdef CONFIG_INVENTEC_MAGNOLIA
++	//inventec set default suspend well output value
++	//0x0B09E000;
++	#define DEFAULT_SUS_WELL_OUT_LVL_MAGNOLIA ((1<<13) | (1<<14) | (1<<15) | (1<<16) | (1<<24) | (1<<25) | (1<<27) )
++	//ichx_priv.outlvl_cache[1] = DEFAULT_SUS_WELL_OUT_LVL_MAGNOLIA;
++#endif
+ 	ichx_gpiolib_setup(&ichx_priv.chip);
+ 	err = gpiochip_add_data(&ichx_priv.chip, NULL);
+ 	if (err) {
+diff --git a/drivers/mfd/lpc_ich.c b/drivers/mfd/lpc_ich.c
+index c8dee47..2a589e8 100644
+--- a/drivers/mfd/lpc_ich.c
++++ b/drivers/mfd/lpc_ich.c
+@@ -493,6 +493,7 @@ enum lpc_chipsets {
+ 	[LPC_LPT] = {
+ 		.name = "Lynx Point",
+ 		.iTCO_version = 2,
++		.gpio_version = ICH_V5_GPIO,
+ 	},
+ 	[LPC_LPT_LP] = {
+ 		.name = "Lynx Point_LP",
+@@ -540,6 +541,7 @@ enum lpc_chipsets {
+  * functions that probably will be registered by other drivers.
+  */
+ static const struct pci_device_id lpc_ich_ids[] = {
++	//{ PCI_VDEVICE(INTEL, 0x8c42), LPC_ICH10}, //el6661 added for broadwell_de gpio
+ 	{ PCI_VDEVICE(INTEL, 0x0f1c), LPC_BAYTRAIL},
+ 	{ PCI_VDEVICE(INTEL, 0x1c41), LPC_CPT},
+ 	{ PCI_VDEVICE(INTEL, 0x1c42), LPC_CPTD},
+diff --git a/include/linux/mfd/lpc_ich.h b/include/linux/mfd/lpc_ich.h
+index 2b300b4..3cbecbb 100644
+--- a/include/linux/mfd/lpc_ich.h
++++ b/include/linux/mfd/lpc_ich.h
+@@ -20,6 +20,14 @@
+ #ifndef LPC_ICH_H
+ #define LPC_ICH_H
+ 
++
++/* Watchdog resources */
++#define ICH_RES_IO_TCO		0
++#define ICH_RES_IO_SMI		1
++#define ICH_RES_MEM_OFF		2
++#define ICH_RES_MEM_GCS_PMC	0
++
++
+ /* GPIO resources */
+ #define ICH_RES_GPIO	0
+ #define ICH_RES_GPE0	1

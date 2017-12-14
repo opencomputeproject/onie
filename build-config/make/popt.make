@@ -66,7 +66,7 @@ $(POPT_CONFIGURE_STAMP): $(POPT_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) echo "====  Configure popt-$(POPT_VERSION) ===="
 	$(Q) cd $(POPT_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(POPT_DIR)/configure				\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		--disable-nls					\
 		CC=$(CROSSPREFIX)gcc				\
@@ -84,7 +84,7 @@ $(POPT_BUILD_STAMP): $(POPT_CONFIGURE_STAMP) $(POPT_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building popt-$(POPT_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(POPT_DIR)
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(POPT_DIR) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(POPT_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 popt-install: $(POPT_INSTALL_STAMP)

@@ -1,10 +1,10 @@
 Kernel Magnolia Driver
 
 diff --git a/drivers/gpio/gpio-ich.c b/drivers/gpio/gpio-ich.c
-index 7030422..7364fd0 100644
+index 4f6d643..d3ef178 100644
 --- a/drivers/gpio/gpio-ich.c
 +++ b/drivers/gpio/gpio-ich.c
-@@ -108,7 +108,7 @@ static struct {
+@@ -109,7 +109,7 @@ struct ichx_desc {
  	int outlvl_cache[3];	/* cached output values */
  } ichx_priv;
  
@@ -13,26 +13,26 @@ index 7030422..7364fd0 100644
  module_param_named(gpiobase, modparam_gpiobase, int, 0444);
  MODULE_PARM_DESC(gpiobase, "The GPIO number base. -1 means dynamic, "
  			   "which is the default.");
-@@ -492,6 +492,14 @@ static int ichx_gpio_probe(struct platform_device *pdev)
+@@ -477,6 +477,14 @@ static int ichx_gpio_probe(struct platform_device *pdev)
  	ichx_priv.pm_base = res_pm;
  
  init:
 +
 +#ifdef CONFIG_INVENTEC_MAGNOLIA
-+    //inventec set default suspend well output value
-+//0x0B09E000;
-+#define DEFAULT_SUS_WELL_OUT_LVL_MAGNOLIA ((1<<13) | (1<<14) | (1<<15) | (1<<16) | (1<<24) | (1<<25) | (1<<27) )
-+    ichx_priv.outlvl_cache[1] = DEFAULT_SUS_WELL_OUT_LVL_MAGNOLIA;
-+#endif    
-+    
++	//inventec set default suspend well output value
++	//0x0B09E000;
++	#define DEFAULT_SUS_WELL_OUT_LVL_MAGNOLIA ((1<<13) | (1<<14) | (1<<15) | (1<<16) | (1<<24) | (1<<25) | (1<<27) )
++	ichx_priv.outlvl_cache[1] = DEFAULT_SUS_WELL_OUT_LVL_MAGNOLIA;
++#endif
++
  	ichx_gpiolib_setup(&ichx_priv.chip);
- 	err = gpiochip_add(&ichx_priv.chip);
+ 	err = gpiochip_add_data(&ichx_priv.chip, NULL);
  	if (err) {
 diff --git a/drivers/mfd/lpc_ich.c b/drivers/mfd/lpc_ich.c
-index 07c5735..766994f 100644
+index c8dee47..882e3f7 100644
 --- a/drivers/mfd/lpc_ich.c
 +++ b/drivers/mfd/lpc_ich.c
-@@ -488,7 +488,6 @@ static struct lpc_ich_info lpc_chipset_info[] = {
+@@ -488,7 +488,6 @@ enum lpc_chipsets {
  	[LPC_PPT] = {
  		.name = "Panther Point",
  		.iTCO_version = 2,
@@ -41,13 +41,14 @@ index 07c5735..766994f 100644
  	[LPC_LPT] = {
  		.name = "Lynx Point",
 diff --git a/drivers/platform/x86/Kconfig b/drivers/platform/x86/Kconfig
-index 7f43cf8..8eedb14 100644
+index b8a21d7..1207e9e 100644
 --- a/drivers/platform/x86/Kconfig
 +++ b/drivers/platform/x86/Kconfig
-@@ -779,4 +779,10 @@ config SAMSUNG_Q10
- 	  This driver provides support for backlight control on Samsung Q10
- 	  and related laptops, including Dell Latitude X200.
- 
+@@ -1027,4 +1027,11 @@ config INTEL_TELEMETRY
+ 	  used to get various SoC events and parameters
+ 	  directly via debugfs files. Various tools may use
+ 	  this interface for SoC state monitoring.
++
 +config INVENTEC_MAGNOLIA
 +	tristate "Inventec Magnolia"
 +	depends on X86
@@ -56,13 +57,13 @@ index 7f43cf8..8eedb14 100644
 +
  endif # X86_PLATFORM_DEVICES
 diff --git a/drivers/platform/x86/Makefile b/drivers/platform/x86/Makefile
-index 293a320..2438e01 100644
+index 2efa86d..3f6c8ab 100644
 --- a/drivers/platform/x86/Makefile
 +++ b/drivers/platform/x86/Makefile
-@@ -45,3 +45,4 @@ obj-$(CONFIG_MXM_WMI)		+= mxm-wmi.o
- obj-$(CONFIG_INTEL_MID_POWER_BUTTON)	+= intel_mid_powerbtn.o
- obj-$(CONFIG_INTEL_OAKTRAIL)	+= intel_oaktrail.o
- obj-$(CONFIG_SAMSUNG_Q10)	+= samsung-q10.o
+@@ -71,3 +71,4 @@ obj-$(CONFIG_INTEL_TELEMETRY)	+= intel_telemetry_core.o \
+ 				   intel_telemetry_pltdrv.o \
+ 				   intel_telemetry_debugfs.o
+ obj-$(CONFIG_INTEL_PMC_CORE)    += intel_pmc_core.o
 +obj-$(CONFIG_INVENTEC_MAGNOLIA)	+= inv_magnolia.o inv_psoc.o inv_cpld.o
 diff --git a/drivers/platform/x86/inv_cpld.c b/drivers/platform/x86/inv_cpld.c
 new file mode 100644
@@ -487,7 +488,7 @@ index 0000000..683ffa0
 +module_exit(inv_cpld_exit);
 diff --git a/drivers/platform/x86/inv_magnolia.c b/drivers/platform/x86/inv_magnolia.c
 new file mode 100644
-index 0000000..408b16a
+index 0000000..e4f4c26
 --- /dev/null
 +++ b/drivers/platform/x86/inv_magnolia.c
 @@ -0,0 +1,336 @@
@@ -500,8 +501,8 @@ index 0000000..408b16a
 +#include <linux/platform_device.h>
 +
 +#include <linux/i2c/pca954x.h>
-+#include <linux/i2c/pca953x.h>
-+#include <linux/i2c/at24.h>
++#include <linux/platform_data/pca953x.h>
++#include <linux/platform_data/at24.h>
 +
 +//#include <asm/gpio.h>
 +#define IO_EXPAND_BASE    64
@@ -807,7 +808,7 @@ index 0000000..408b16a
 +        
 +        adap = i2c_get_adapter( i2cdev_list[i].ch );
 +        if (adap == NULL) {
-+            printk("magnolia get channel %d adapter fail\n", i);
++            printk("magnolia get channel %d adapter fail\n", i2cdev_list[i].ch);
 +            continue;
 +            return -ENODEV;
 +        }

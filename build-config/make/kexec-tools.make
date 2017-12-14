@@ -71,7 +71,7 @@ $(KEXEC_CONFIGURE_STAMP): $(ZLIB_BUILD_STAMP) \
 	$(Q) echo "====  Configure kexec-tools-$(KEXEC_VERSION) ===="
 	$(Q) cd $(KEXEC_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(KEXEC_DIR)/configure				\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		$($(ARCH)_KEXEC_CONFIG_OPTS)			\
 		CC=$(CROSSPREFIX)gcc				\
@@ -88,8 +88,8 @@ kexec-tools-build: $(KEXEC_BUILD_STAMP)
 $(KEXEC_BUILD_STAMP): $(KEXEC_NEW_FILES) $(KEXEC_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building kexec-tools-$(KEXEC_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(KEXEC_DIR)
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(KEXEC_DIR) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(KEXEC_DIR) DESTDIR=$(DEV_SYSROOT)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(KEXEC_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 kexec-tools-install: $(KEXEC_INSTALL_STAMP)

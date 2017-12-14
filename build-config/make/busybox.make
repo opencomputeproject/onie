@@ -101,6 +101,13 @@ ifeq ($(DOSFSTOOLS_ENABLE),yes)
 	$(Q) sed -i \
 		-e '/\bCONFIG_MKFS_VFAT\b/c\# CONFIG_MKFS_VFAT is not set' $@
 endif
+ifeq ($(I2CTOOLS_ENABLE),yes)
+	$(Q) sed -i \
+		-e '/\bCONFIG_I2CGET\b/cCONFIG_I2CGET=y' \
+		-e '/\bCONFIG_I2CSET\b/cCONFIG_I2CSET=y' \
+		-e '/\bCONFIG_I2CDUMP\b/cCONFIG_I2CDUMP=y' \
+		-e '/\bCONFIG_I2CDETECT\b/cCONFIG_I2CDETECT=y' $@
+endif
 	$(Q) $(SCRIPTDIR)/apply-config-patch $@ $(MACHINE_BUSYBOX_CONFIG_FILE)
 
 busybox-config: $(BUSYBOX_DIR)/.config
