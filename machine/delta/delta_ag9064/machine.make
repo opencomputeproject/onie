@@ -20,15 +20,13 @@ endif
 VENDOR_ID = 5324
 
 I2CTOOLS_ENABLE = yes
-#I2CTOOLS_SYSEEPROM = no
-I2CTOOLS_SYSEEPROM = yes
+I2CTOOLS_SYSEEPROM = no
 
 # This platform requires the PXE_EFI64 installer
 PXE_EFI64_ENABLE = yes
 
 CONSOLE_SPEED = 115200
 CONSOLE_DEV = 0
-CONSOLE_FLAG = 0
 
 # Set Linux kernel version
 LINUX_VERSION		= 4.1
@@ -36,8 +34,6 @@ LINUX_MINOR_VERSION	= 38
 
 UEFI_ENABLE = yes
 
-
-EXTRA_CMDLINE_LINUX = i2c-ismt.bus_speed=100
 
 #-------------------------------------------------------------------------------
 #
