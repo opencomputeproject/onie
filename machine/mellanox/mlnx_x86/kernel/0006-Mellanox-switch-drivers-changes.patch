@@ -1,0 +1,2118 @@
+Linux backport patch. Includes following commits:
+02f1d19ecd08f7da83bf17d556ba147b16ed9dab
+50deb9064015956274a989d035c0a101188c5bf2
+515dc42e5f57aa4b2dbb18fbe6b3200224d051a7
+63b01357d3f002ebed8e532b503a84dde6f45060
+7c2ed7426f0835d5408a2c97fc6ebcc67c5feea0
+65f178307a4274f1ab52f4e729e1eabe00ee2d96
+81ce6e3fefba4ed1578db80609b54ccc3ae624cb
+3f65860a8b01652fbda978b991d13c02848c8ee2
+05cdb2439ba8bb00a1746ec68e27cec62ea1e142
+021697a48b00b51636d88e5056015ad65b6da821
+f6410966453b7671a0c4032652db36b2e67ba43c
+acf30a9f0714a734531078b7a6d85ab7762c3589
+f334341a185bad33bbc3cf0a3b7d7189d8803bc0
+aec592f5c0d44b3ac4038dc539859fa247738f6e
+589428b6233c6a9bffbf8c8bca86f62838f35021
+
+
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/Kconfig b/drivers/net/ethernet/mellanox/mlxsw/Kconfig
+--- a/drivers/net/ethernet/mellanox/mlxsw/Kconfig	2017-05-25 13:45:05.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/Kconfig	2017-11-09 12:40:31.940814834 +0000
+@@ -19,6 +19,24 @@
+ 	---help---
+ 	  Say Y here if you want to expose HWMON interface on mlxsw devices.
+ 
++config MLXSW_CORE_THERMAL
++	bool "Thermal zone support for Mellanox Technologies Switch ASICs"
++	depends on MLXSW_CORE && THERMAL
++	depends on !(MLXSW_CORE=y && THERMAL=m)
++	default y
++	---help---
++	 Say Y here if you want to automatically control fans speed according
++	 ambient temperature reported by ASIC.
++
++config MLXSW_CORE_QSFP
++	bool "QSFP support for Mellanox Technologies Switch ASICs"
++	depends on MLXSW_CORE && HWMON
++	depends on !(MLXSW_CORE=y && HWMON=m)
++	default y
++	---help---
++	  Say Y here if you want to expose sysfs QSFP interface on mlxsw
++	  devices.
++
+ config MLXSW_PCI
+ 	tristate "PCI bus implementation for Mellanox Technologies Switch ASICs"
+ 	depends on PCI && HAS_DMA && HAS_IOMEM && MLXSW_CORE
+@@ -29,6 +47,27 @@
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called mlxsw_pci.
+ 
++config MLXSW_I2C
++	tristate "I2C bus implementation for Mellanox Technologies Switch ASICs"
++	depends on I2C && MLXSW_CORE
++	default m
++	---help---
++	  This is I2C bus implementation for Mellanox Technologies Switch ASICs.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called mlxsw_i2c.
++
++config MLXSW_SWITCHIB
++	tristate "Mellanox Technologies SwitchIB and SwitchIB-2 support"
++	depends on MLXSW_CORE && NET_SWITCHDEV
++	default m
++	---help---
++	  This driver supports Mellanox Technologies SwitchIB and SwitchIB-2
++	  Infiniband Switch ASICs.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called mlxsw_switchib.
++
+ config MLXSW_SWITCHX2
+ 	tristate "Mellanox Technologies SwitchX-2 support"
+ 	depends on MLXSW_CORE && NET_SWITCHDEV
+@@ -58,3 +97,14 @@
+ 	---help---
+ 	  Say Y here if you want to use Data Center Bridging (DCB) in the
+ 	  driver.
++
++config MLXSW_MINIMAL
++	tristate "Mellanox Technologies minimal I2C support"
++	depends on MLXSW_CORE && MLXSW_I2C
++	default m
++	---help---
++	  This driver supports I2C access for Mellanox Technologies Switch
++	  ASICs.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called mlxsw_minimal.
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/Makefile b/drivers/net/ethernet/mellanox/mlxsw/Makefile
+--- a/drivers/net/ethernet/mellanox/mlxsw/Makefile	2017-05-25 13:45:05.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/Makefile	2017-11-09 12:40:31.940814834 +0000
+@@ -1,8 +1,14 @@
+ obj-$(CONFIG_MLXSW_CORE)	+= mlxsw_core.o
+ mlxsw_core-objs			:= core.o
+ mlxsw_core-$(CONFIG_MLXSW_CORE_HWMON) += core_hwmon.o
++mlxsw_core-$(CONFIG_MLXSW_CORE_THERMAL) += core_thermal.o
++mlxsw_core-$(CONFIG_MLXSW_CORE_QSFP) += qsfp_sysfs.o
+ obj-$(CONFIG_MLXSW_PCI)		+= mlxsw_pci.o
+ mlxsw_pci-objs			:= pci.o
++obj-$(CONFIG_MLXSW_I2C)		+= mlxsw_i2c.o
++mlxsw_i2c-objs			:= i2c.o
++obj-$(CONFIG_MLXSW_SWITCHIB)	+= mlxsw_switchib.o
++mlxsw_switchib-objs		:= switchib.o
+ obj-$(CONFIG_MLXSW_SWITCHX2)	+= mlxsw_switchx2.o
+ mlxsw_switchx2-objs		:= switchx2.o
+ obj-$(CONFIG_MLXSW_SPECTRUM)	+= mlxsw_spectrum.o
+@@ -10,3 +16,5 @@
+ 				   spectrum_switchdev.o spectrum_router.o \
+ 				   spectrum_kvdl.o
+ mlxsw_spectrum-$(CONFIG_MLXSW_SPECTRUM_DCB)	+= spectrum_dcb.o
++obj-$(CONFIG_MLXSW_MINIMAL)	+= mlxsw_minimal.o
++mlxsw_minimal-objs		:= minimal.o
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/core.c b/drivers/net/ethernet/mellanox/mlxsw/core.c
+--- a/drivers/net/ethernet/mellanox/mlxsw/core.c	2017-05-25 13:45:05.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/core.c	2017-11-09 13:03:45.824833341 +0000
+@@ -113,6 +113,9 @@
+ 	} lag;
+ 	struct mlxsw_resources resources;
+ 	struct mlxsw_hwmon *hwmon;
++	struct mlxsw_thermal *thermal;
++struct mlxsw_qsfp *qsfp;
++	struct mlxsw_core_port ports[MLXSW_PORT_MAX_PORTS];
+ 	unsigned long driver_priv[0];
+ 	/* driver_priv has to be always the last item */
+ };
+@@ -579,6 +582,9 @@
+ 	u64 tid;
+ 	int err;
+ 
++	if (!(mlxsw_core->bus->features & MLXSW_BUS_F_TXRX))
++		return 0;
++
+ 	/* Set the upper 32 bits of the transaction ID field to a random
+ 	 * number. This allows us to discard EMADs addressed to other
+ 	 * devices.
+@@ -615,6 +621,9 @@
+ {
+ 	char hpkt_pl[MLXSW_REG_HPKT_LEN];
+ 
++	if (!(mlxsw_core->bus->features & MLXSW_BUS_F_TXRX))
++		return;
++
+ 	mlxsw_core->emad.use_emad = false;
+ 	mlxsw_reg_hpkt_pack(hpkt_pl, MLXSW_REG_HPKT_ACTION_DISCARD,
+ 			    MLXSW_TRAP_ID_ETHEMAD);
+@@ -1128,9 +1137,21 @@
+ 	if (err)
+ 		goto err_hwmon_init;
+ 
+-	err = mlxsw_driver->init(mlxsw_core, mlxsw_bus_info);
++	err = mlxsw_thermal_init(mlxsw_core, mlxsw_bus_info,
++				 &mlxsw_core->thermal);
+ 	if (err)
+-		goto err_driver_init;
++		goto err_thermal_init;
++
++	err = mlxsw_qsfp_init(mlxsw_core, mlxsw_bus_info,
++				 &mlxsw_core->qsfp);
++	if (err)
++		goto err_qsfp_init;
++
++	if (mlxsw_driver->init) {
++		err = mlxsw_driver->init(mlxsw_core, mlxsw_bus_info);
++		if (err)
++			goto err_driver_init;
++	}
+ 
+ 	err = mlxsw_core_debugfs_init(mlxsw_core);
+ 	if (err)
+@@ -1141,6 +1162,10 @@
+ err_debugfs_init:
+ 	mlxsw_core->driver->fini(mlxsw_core);
+ err_driver_init:
++	mlxsw_qsfp_fini(mlxsw_core->qsfp);
++err_qsfp_init:
++	mlxsw_thermal_fini(mlxsw_core->thermal);
++err_thermal_init:
+ err_hwmon_init:
+ 	devlink_unregister(devlink);
+ err_devlink_register:
+@@ -1165,7 +1190,10 @@
+ 	struct devlink *devlink = priv_to_devlink(mlxsw_core);
+ 
+ 	mlxsw_core_debugfs_fini(mlxsw_core);
+-	mlxsw_core->driver->fini(mlxsw_core);
++	if (mlxsw_core->driver->fini)
++		mlxsw_core->driver->fini(mlxsw_core);
++	mlxsw_qsfp_fini(mlxsw_core->qsfp);
++	mlxsw_thermal_fini(mlxsw_core->thermal);
+ 	devlink_unregister(devlink);
+ 	mlxsw_emad_fini(mlxsw_core);
+ 	mlxsw_core->bus->fini(mlxsw_core->bus_priv);
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/core.h b/drivers/net/ethernet/mellanox/mlxsw/core.h
+--- a/drivers/net/ethernet/mellanox/mlxsw/core.h	2017-05-25 13:45:05.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/core.h	2017-11-09 13:03:45.824833341 +0000
+@@ -300,6 +300,8 @@
+ 
+ struct mlxsw_resources *mlxsw_core_resources_get(struct mlxsw_core *mlxsw_core);
+ 
++#define MLXSW_BUS_F_TXRX	BIT(0)
++
+ struct mlxsw_bus {
+ 	const char *kind;
+ 	int (*init)(void *bus_priv, struct mlxsw_core *mlxsw_core,
+@@ -315,6 +317,7 @@
+ 			char *in_mbox, size_t in_mbox_size,
+ 			char *out_mbox, size_t out_mbox_size,
+ 			u8 *p_status);
++	u8 features;
+ };
+ 
+ struct mlxsw_bus_info {
+@@ -349,5 +352,53 @@
+ }
+ 
+ #endif
++
++struct mlxsw_thermal;
++
++#ifdef CONFIG_MLXSW_CORE_THERMAL
++
++int mlxsw_thermal_init(struct mlxsw_core *mlxsw_core,
++		       const struct mlxsw_bus_info *mlxsw_bus_info,
++		       struct mlxsw_thermal **p_thermal);
++void mlxsw_thermal_fini(struct mlxsw_thermal *thermal);
++
++#else
++
++static inline int mlxsw_thermal_init(struct mlxsw_core *mlxsw_core,
++				     const struct mlxsw_bus_info *mlxsw_bus_info,
++				     struct mlxsw_thermal **p_thermal)
++{
++	return 0;
++}
++
++static inline void mlxsw_thermal_fini(struct mlxsw_thermal *thermal)
++{
++}
++
++#endif
++
++struct mlxsw_qsfp;
++
++#ifdef CONFIG_MLXSW_CORE_QSFP
++
++int mlxsw_qsfp_init(struct mlxsw_core *mlxsw_core,
++		    const struct mlxsw_bus_info *mlxsw_bus_info,
++		    struct mlxsw_qsfp **p_qsfp);
++void mlxsw_qsfp_fini(struct mlxsw_qsfp *qsfp);
++
++#else
++
++static inline int mlxsw_qsfp_init(struct mlxsw_core *mlxsw_core,
++				  const struct mlxsw_bus_info *mlxsw_bus_info,
++				  struct mlxsw_qsfp **p_qsfp)
++{
++	return 0;
++}
++
++static inline void mlxsw_qsfp_fini(struct mlxsw_qsfp *qsfp)
++{
++}
++
++#endif
+ 
+ #endif
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/core_hwmon.c b/drivers/net/ethernet/mellanox/mlxsw/core_hwmon.c
+--- a/drivers/net/ethernet/mellanox/mlxsw/core_hwmon.c	2017-05-25 13:45:05.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/core_hwmon.c	2017-11-09 13:04:29.120833916 +0000
+@@ -262,7 +262,7 @@
+ 
+ static int mlxsw_hwmon_temp_init(struct mlxsw_hwmon *mlxsw_hwmon)
+ {
+-	char mtcap_pl[MLXSW_REG_MTCAP_LEN];
++	char mtcap_pl[MLXSW_REG_MTCAP_LEN] = {0};
+ 	char mtmp_pl[MLXSW_REG_MTMP_LEN];
+ 	u8 sensor_count;
+ 	int i;
+@@ -295,7 +295,7 @@
+ 
+ static int mlxsw_hwmon_fans_init(struct mlxsw_hwmon *mlxsw_hwmon)
+ {
+-	char mfcr_pl[MLXSW_REG_MFCR_LEN];
++	char mfcr_pl[MLXSW_REG_MFCR_LEN] = {0};
+ 	enum mlxsw_reg_mfcr_pwm_frequency freq;
+ 	unsigned int type_index;
+ 	unsigned int num;
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/core_thermal.c b/drivers/net/ethernet/mellanox/mlxsw/core_thermal.c
+--- a/drivers/net/ethernet/mellanox/mlxsw/core_thermal.c	1970-01-01 00:00:00.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/core_thermal.c	2017-11-09 13:04:52.192834223 +0000
+@@ -0,0 +1,436 @@
++/*
++ * drivers/net/ethernet/mellanox/mlxsw/core_thermal.c
++ * Copyright (c) 2016 Ivan Vecera <cera@cera.cz>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the names of the copyright holders nor the names of its
++ *    contributors may be used to endorse or promote products derived from
++ *    this software without specific prior written permission.
++ *
++ * Alternatively, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") version 2 as published by the Free
++ * Software Foundation.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <linux/kernel.h>
++#include <linux/types.h>
++#include <linux/device.h>
++#include <linux/sysfs.h>
++#include <linux/thermal.h>
++#include <linux/err.h>
++
++#include "core.h"
++
++#define MLXSW_THERMAL_POLL_INT	1000	/* ms */
++#define MLXSW_THERMAL_MAX_TEMP	110000	/* 110C */
++#define MLXSW_THERMAL_MAX_STATE	10
++#define MLXSW_THERMAL_MAX_DUTY	255
++
++struct mlxsw_thermal_trip {
++	int	type;
++	int	temp;
++	int	min_state;
++	int	max_state;
++};
++
++static const struct mlxsw_thermal_trip default_thermal_trips[] = {
++	{	/* Above normal - 60%-100% PWM */
++		.type		= THERMAL_TRIP_ACTIVE,
++		.temp		= 75000,
++		.min_state	= (6 * MLXSW_THERMAL_MAX_STATE) / 10,
++		.max_state	= MLXSW_THERMAL_MAX_STATE,
++	},
++	{
++		/* Very high - 100% PWM */
++		.type		= THERMAL_TRIP_ACTIVE,
++		.temp		= 85000,
++		.min_state	= MLXSW_THERMAL_MAX_STATE,
++		.max_state	= MLXSW_THERMAL_MAX_STATE,
++	},
++	{	/* Warning */
++		.type		= THERMAL_TRIP_HOT,
++		.temp		= 105000,
++		.min_state	= MLXSW_THERMAL_MAX_STATE,
++		.max_state	= MLXSW_THERMAL_MAX_STATE,
++	},
++	{	/* Critical - soft poweroff */
++		.type		= THERMAL_TRIP_CRITICAL,
++		.temp		= MLXSW_THERMAL_MAX_TEMP,
++		.min_state	= MLXSW_THERMAL_MAX_STATE,
++		.max_state	= MLXSW_THERMAL_MAX_STATE,
++	}
++};
++
++#define MLXSW_THERMAL_NUM_TRIPS	ARRAY_SIZE(default_thermal_trips)
++
++/* Make sure all trips are writable */
++#define MLXSW_THERMAL_TRIP_MASK	(BIT(MLXSW_THERMAL_NUM_TRIPS) - 1)
++
++struct mlxsw_thermal {
++	struct mlxsw_core *core;
++	const struct mlxsw_bus_info *bus_info;
++	struct thermal_zone_device *tzdev;
++	struct thermal_cooling_device *cdevs[MLXSW_MFCR_PWMS_MAX];
++	struct mlxsw_thermal_trip trips[MLXSW_THERMAL_NUM_TRIPS];
++	enum thermal_device_mode mode;
++};
++
++static inline u8 mlxsw_state_to_duty(int state)
++{
++	return DIV_ROUND_CLOSEST(state * MLXSW_THERMAL_MAX_DUTY,
++				 MLXSW_THERMAL_MAX_STATE);
++}
++
++static inline int mlxsw_duty_to_state(u8 duty)
++{
++	return DIV_ROUND_CLOSEST(duty * MLXSW_THERMAL_MAX_STATE,
++				 MLXSW_THERMAL_MAX_DUTY);
++}
++
++static int mlxsw_get_cooling_device_idx(struct mlxsw_thermal *thermal,
++					struct thermal_cooling_device *cdev)
++{
++	int i;
++
++	for (i = 0; i < MLXSW_MFCR_PWMS_MAX; i++)
++		if (thermal->cdevs[i] == cdev)
++			return i;
++
++	return -ENODEV;
++}
++
++static int mlxsw_thermal_bind(struct thermal_zone_device *tzdev,
++			      struct thermal_cooling_device *cdev)
++{
++	struct mlxsw_thermal *thermal = tzdev->devdata;
++	struct device *dev = thermal->bus_info->dev;
++	int i, err;
++
++	/* If the cooling device is one of ours bind it */
++	if (mlxsw_get_cooling_device_idx(thermal, cdev) < 0)
++		return 0;
++
++	for (i = 0; i < MLXSW_THERMAL_NUM_TRIPS; i++) {
++		const struct mlxsw_thermal_trip *trip = &thermal->trips[i];
++
++		err = thermal_zone_bind_cooling_device(tzdev, i, cdev,
++						       trip->max_state,
++						       trip->min_state,
++						       THERMAL_WEIGHT_DEFAULT);
++		if (err < 0) {
++			dev_err(dev, "Failed to bind cooling device to trip %d\n", i);
++			return err;
++		}
++	}
++	return 0;
++}
++
++static int mlxsw_thermal_unbind(struct thermal_zone_device *tzdev,
++				struct thermal_cooling_device *cdev)
++{
++	struct mlxsw_thermal *thermal = tzdev->devdata;
++	struct device *dev = thermal->bus_info->dev;
++	int i;
++	int err;
++
++	/* If the cooling device is our one unbind it */
++	if (mlxsw_get_cooling_device_idx(thermal, cdev) < 0)
++		return 0;
++
++	for (i = 0; i < MLXSW_THERMAL_NUM_TRIPS; i++) {
++		err = thermal_zone_unbind_cooling_device(tzdev, i, cdev);
++		if (err < 0) {
++			dev_err(dev, "Failed to unbind cooling device\n");
++			return err;
++		}
++	}
++	return 0;
++}
++
++static int mlxsw_thermal_get_mode(struct thermal_zone_device *tzdev,
++				  enum thermal_device_mode *mode)
++{
++	struct mlxsw_thermal *thermal = tzdev->devdata;
++
++	*mode = thermal->mode;
++
++	return 0;
++}
++
++static int mlxsw_thermal_set_mode(struct thermal_zone_device *tzdev,
++				  enum thermal_device_mode mode)
++{
++	struct mlxsw_thermal *thermal = tzdev->devdata;
++
++	mutex_lock(&tzdev->lock);
++
++	if (mode == THERMAL_DEVICE_ENABLED)
++		tzdev->polling_delay = MLXSW_THERMAL_POLL_INT;
++	else
++		tzdev->polling_delay = 0;
++
++	mutex_unlock(&tzdev->lock);
++
++	thermal->mode = mode;
++	thermal_zone_device_update(tzdev, THERMAL_EVENT_UNSPECIFIED);
++
++	return 0;
++}
++
++static int mlxsw_thermal_get_temp(struct thermal_zone_device *tzdev,
++				  int *p_temp)
++{
++	struct mlxsw_thermal *thermal = tzdev->devdata;
++	struct device *dev = thermal->bus_info->dev;
++	char mtmp_pl[MLXSW_REG_MTMP_LEN];
++	unsigned int temp;
++	int err;
++
++	mlxsw_reg_mtmp_pack(mtmp_pl, 0, false, false);
++
++	err = mlxsw_reg_query(thermal->core, MLXSW_REG(mtmp), mtmp_pl);
++	if (err) {
++		dev_err(dev, "Failed to query temp sensor\n");
++		return err;
++	}
++	mlxsw_reg_mtmp_unpack(mtmp_pl, &temp, NULL, NULL);
++
++	*p_temp = (int) temp;
++	return 0;
++}
++
++static int mlxsw_thermal_get_trip_type(struct thermal_zone_device *tzdev,
++				       int trip,
++				       enum thermal_trip_type *p_type)
++{
++	struct mlxsw_thermal *thermal = tzdev->devdata;
++
++	if (trip < 0 || trip >= MLXSW_THERMAL_NUM_TRIPS)
++		return -EINVAL;
++
++	*p_type = thermal->trips[trip].type;
++	return 0;
++}
++
++static int mlxsw_thermal_get_trip_temp(struct thermal_zone_device *tzdev,
++				       int trip, int *p_temp)
++{
++	struct mlxsw_thermal *thermal = tzdev->devdata;
++
++	if (trip < 0 || trip >= MLXSW_THERMAL_NUM_TRIPS)
++		return -EINVAL;
++
++	*p_temp = thermal->trips[trip].temp;
++	return 0;
++}
++
++static int mlxsw_thermal_set_trip_temp(struct thermal_zone_device *tzdev,
++				       int trip, int temp)
++{
++	struct mlxsw_thermal *thermal = tzdev->devdata;
++
++	if (trip < 0 || trip >= MLXSW_THERMAL_NUM_TRIPS ||
++	    temp > MLXSW_THERMAL_MAX_TEMP)
++		return -EINVAL;
++
++	thermal->trips[trip].temp = temp;
++	return 0;
++}
++
++static struct thermal_zone_device_ops mlxsw_thermal_ops = {
++	.bind = mlxsw_thermal_bind,
++	.unbind = mlxsw_thermal_unbind,
++	.get_mode = mlxsw_thermal_get_mode,
++	.set_mode = mlxsw_thermal_set_mode,
++	.get_temp = mlxsw_thermal_get_temp,
++	.get_trip_type	= mlxsw_thermal_get_trip_type,
++	.get_trip_temp	= mlxsw_thermal_get_trip_temp,
++	.set_trip_temp	= mlxsw_thermal_set_trip_temp,
++};
++
++static int mlxsw_thermal_get_max_state(struct thermal_cooling_device *cdev,
++				       unsigned long *p_state)
++{
++	*p_state = MLXSW_THERMAL_MAX_STATE;
++	return 0;
++}
++
++static int mlxsw_thermal_get_cur_state(struct thermal_cooling_device *cdev,
++				       unsigned long *p_state)
++
++{
++	struct mlxsw_thermal *thermal = cdev->devdata;
++	struct device *dev = thermal->bus_info->dev;
++	char mfsc_pl[MLXSW_REG_MFSC_LEN];
++	int err, idx;
++	u8 duty;
++
++	idx = mlxsw_get_cooling_device_idx(thermal, cdev);
++	if (idx < 0)
++		return idx;
++
++	mlxsw_reg_mfsc_pack(mfsc_pl, idx, 0);
++	err = mlxsw_reg_query(thermal->core, MLXSW_REG(mfsc), mfsc_pl);
++	if (err) {
++		dev_err(dev, "Failed to query PWM duty\n");
++		return err;
++	}
++
++	duty = mlxsw_reg_mfsc_pwm_duty_cycle_get(mfsc_pl);
++	*p_state = mlxsw_duty_to_state(duty);
++	return 0;
++}
++
++static int mlxsw_thermal_set_cur_state(struct thermal_cooling_device *cdev,
++				       unsigned long state)
++
++{
++	struct mlxsw_thermal *thermal = cdev->devdata;
++	struct device *dev = thermal->bus_info->dev;
++	char mfsc_pl[MLXSW_REG_MFSC_LEN];
++	int err, idx;
++
++	idx = mlxsw_get_cooling_device_idx(thermal, cdev);
++	if (idx < 0)
++		return idx;
++
++	mlxsw_reg_mfsc_pack(mfsc_pl, idx, mlxsw_state_to_duty(state));
++	err = mlxsw_reg_write(thermal->core, MLXSW_REG(mfsc), mfsc_pl);
++	if (err) {
++		dev_err(dev, "Failed to write PWM duty\n");
++		return err;
++	}
++	return 0;
++}
++
++static const struct thermal_cooling_device_ops mlxsw_cooling_ops = {
++	.get_max_state	= mlxsw_thermal_get_max_state,
++	.get_cur_state	= mlxsw_thermal_get_cur_state,
++	.set_cur_state	= mlxsw_thermal_set_cur_state,
++};
++
++int mlxsw_thermal_init(struct mlxsw_core *core,
++		       const struct mlxsw_bus_info *bus_info,
++		       struct mlxsw_thermal **p_thermal)
++{
++	char mfcr_pl[MLXSW_REG_MFCR_LEN] = { 0 };
++	enum mlxsw_reg_mfcr_pwm_frequency freq;
++	struct device *dev = bus_info->dev;
++	struct mlxsw_thermal *thermal;
++	u16 tacho_active;
++	u8 pwm_active;
++	int err, i;
++
++	thermal = devm_kzalloc(dev, sizeof(*thermal),
++			       GFP_KERNEL);
++	if (!thermal)
++		return -ENOMEM;
++
++	thermal->core = core;
++	thermal->bus_info = bus_info;
++	memcpy(thermal->trips, default_thermal_trips, sizeof(thermal->trips));
++
++	err = mlxsw_reg_query(thermal->core, MLXSW_REG(mfcr), mfcr_pl);
++	if (err) {
++		dev_err(dev, "Failed to probe PWMs\n");
++		goto err_free_thermal;
++	}
++	mlxsw_reg_mfcr_unpack(mfcr_pl, &freq, &tacho_active, &pwm_active);
++
++	for (i = 0; i < MLXSW_MFCR_TACHOS_MAX; i++) {
++		if (tacho_active & BIT(i)) {
++			char mfsl_pl[MLXSW_REG_MFSL_LEN];
++
++			mlxsw_reg_mfsl_pack(mfsl_pl, i, 0, 0);
++
++			/* We need to query the register to preserve maximum */
++			err = mlxsw_reg_query(thermal->core, MLXSW_REG(mfsl),
++					      mfsl_pl);
++			if (err)
++				goto err_free_thermal;
++
++			/* set the minimal RPMs to 0 */
++			mlxsw_reg_mfsl_tach_min_set(mfsl_pl, 0);
++			err = mlxsw_reg_write(thermal->core, MLXSW_REG(mfsl),
++					      mfsl_pl);
++			if (err)
++				goto err_free_thermal;
++		}
++	}
++	for (i = 0; i < MLXSW_MFCR_PWMS_MAX; i++) {
++		if (pwm_active & BIT(i)) {
++			struct thermal_cooling_device *cdev;
++
++			cdev = thermal_cooling_device_register("Fan", thermal,
++							&mlxsw_cooling_ops);
++			if (IS_ERR(cdev)) {
++				err = PTR_ERR(cdev);
++				dev_err(dev, "Failed to register cooling device\n");
++				goto err_unreg_cdevs;
++			}
++			thermal->cdevs[i] = cdev;
++		}
++	}
++
++	thermal->tzdev = thermal_zone_device_register("mlxsw",
++						      MLXSW_THERMAL_NUM_TRIPS,
++						      MLXSW_THERMAL_TRIP_MASK,
++						      thermal,
++						      &mlxsw_thermal_ops,
++						      NULL, 0,
++						      MLXSW_THERMAL_POLL_INT);
++	if (IS_ERR(thermal->tzdev)) {
++		err = PTR_ERR(thermal->tzdev);
++		dev_err(dev, "Failed to register thermal zone\n");
++		goto err_unreg_cdevs;
++	}
++
++	thermal->mode = THERMAL_DEVICE_ENABLED;
++	*p_thermal = thermal;
++	return 0;
++err_unreg_cdevs:
++	for (i = 0; i < MLXSW_MFCR_PWMS_MAX; i++)
++		if (thermal->cdevs[i])
++			thermal_cooling_device_unregister(thermal->cdevs[i]);
++err_free_thermal:
++	devm_kfree(dev, thermal);
++	return err;
++}
++
++void mlxsw_thermal_fini(struct mlxsw_thermal *thermal)
++{
++	int i;
++
++	if (thermal->tzdev) {
++		thermal_zone_device_unregister(thermal->tzdev);
++		thermal->tzdev = NULL;
++	}
++
++	for (i = 0; i < MLXSW_MFCR_PWMS_MAX; i++) {
++		if (thermal->cdevs[i]) {
++			thermal_cooling_device_unregister(thermal->cdevs[i]);
++			thermal->cdevs[i] = NULL;
++		}
++	}
++
++	devm_kfree(thermal->bus_info->dev, thermal);
++}
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/i2c.c b/drivers/net/ethernet/mellanox/mlxsw/i2c.c
+--- a/drivers/net/ethernet/mellanox/mlxsw/i2c.c	1970-01-01 00:00:00.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/i2c.c	2017-11-09 13:04:29.120833916 +0000
+@@ -0,0 +1,582 @@
++/*
++ * drivers/net/ethernet/mellanox/mlxsw/i2c.c
++ * Copyright (c) 2016 Mellanox Technologies. All rights reserved.
++ * Copyright (c) 2016 Vadim Pasternak <vadimp@mellanox.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the names of the copyright holders nor the names of its
++ *    contributors may be used to endorse or promote products derived from
++ *    this software without specific prior written permission.
++ *
++ * Alternatively, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") version 2 as published by the Free
++ * Software Foundation.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <linux/err.h>
++#include <linux/i2c.h>
++#include <linux/init.h>
++#include <linux/jiffies.h>
++#include <linux/kernel.h>
++#include <linux/mutex.h>
++#include <linux/module.h>
++#include <linux/mod_devicetable.h>
++#include <linux/slab.h>
++
++#include "cmd.h"
++#include "core.h"
++#include "i2c.h"
++
++static const char mlxsw_i2c_driver_name[] = "mlxsw_i2c";
++
++#define MLXSW_I2C_CIR2_BASE		0x72000
++#define MLXSW_I2C_CIR_STATUS_OFF	0x18
++#define MLXSW_I2C_CIR2_OFF_STATUS	(MLXSW_I2C_CIR2_BASE + \
++					 MLXSW_I2C_CIR_STATUS_OFF)
++#define MLXSW_I2C_OPMOD_SHIFT		12
++#define MLXSW_I2C_GO_BIT_SHIFT		23
++#define MLXSW_I2C_CIR_CTRL_STATUS_SHIFT	24
++#define MLXSW_I2C_GO_BIT		BIT(MLXSW_I2C_GO_BIT_SHIFT)
++#define MLXSW_I2C_GO_OPMODE		BIT(MLXSW_I2C_OPMOD_SHIFT)
++#define MLXSW_I2C_SET_IMM_CMD		(MLXSW_I2C_GO_OPMODE | \
++					 MLXSW_CMD_OPCODE_QUERY_FW)
++#define MLXSW_I2C_PUSH_IMM_CMD		(MLXSW_I2C_GO_BIT | \
++					 MLXSW_I2C_SET_IMM_CMD)
++#define MLXSW_I2C_SET_CMD		(MLXSW_CMD_OPCODE_ACCESS_REG)
++#define MLXSW_I2C_PUSH_CMD		(MLXSW_I2C_GO_BIT | MLXSW_I2C_SET_CMD)
++#define MLXSW_I2C_TLV_HDR_SIZE		0x10
++#define MLXSW_I2C_ADDR_WIDTH		4
++#define MLXSW_I2C_PUSH_CMD_SIZE		(MLXSW_I2C_ADDR_WIDTH + 4)
++#define MLXSW_I2C_READ_SEMA_SIZE	4
++#define MLXSW_I2C_PREP_SIZE		(MLXSW_I2C_ADDR_WIDTH + 28)
++#define MLXSW_I2C_MBOX_SIZE		20
++#define MLXSW_I2C_MBOX_OUT_PARAM_OFF	12
++#define MLXSW_I2C_MAX_BUFF_SIZE		32
++#define MLXSW_I2C_MBOX_OFFSET_BITS	20
++#define MLXSW_I2C_MBOX_SIZE_BITS	12
++#define MLXSW_I2C_ADDR_BUF_SIZE		4
++#define MLXSW_I2C_BLK_MAX		32
++#define MLXSW_I2C_RETRY			5
++#define MLXSW_I2C_TIMEOUT_MSECS		5000
++
++/**
++ * struct mlxsw_i2c - device private data:
++ * @cmd.mb_size_in: input mailbox size;
++ * @cmd.mb_off_in: input mailbox offset in register space;
++ * @cmd.mb_size_out: output mailbox size;
++ * @cmd.mb_off_out: output mailbox offset in register space;
++ * @cmd.lock: command execution lock;
++ * @dev: I2C device;
++ * @core: switch core pointer;
++ * @bus_info: bus info block;
++ */
++struct mlxsw_i2c {
++	struct {
++		u32 mb_size_in;
++		u32 mb_off_in;
++		u32 mb_size_out;
++		u32 mb_off_out;
++		struct mutex lock;
++	} cmd;
++	struct device *dev;
++	struct mlxsw_core *core;
++	struct mlxsw_bus_info bus_info;
++};
++
++#define MLXSW_I2C_READ_MSG(_client, _addr_buf, _buf, _len) {	\
++	{ .addr = (_client)->addr,				\
++	  .buf = (_addr_buf),					\
++	  .len = MLXSW_I2C_ADDR_BUF_SIZE,			\
++	  .flags = 0 },						\
++	{ .addr = (_client)->addr,				\
++	  .buf = (_buf),					\
++	  .len = (_len),					\
++	  .flags = I2C_M_RD } }
++
++#define MLXSW_I2C_WRITE_MSG(_client, _buf, _len)		\
++	{ .addr = (_client)->addr,				\
++	  .buf = (u8 *)(_buf),					\
++	  .len = (_len),					\
++	  .flags = 0 }
++
++/* Routine converts in and out mail boxes offset and size. */
++static inline void
++mlxsw_i2c_convert_mbox(struct mlxsw_i2c *mlxsw_i2c, u8 *buf)
++{
++	u32 tmp;
++
++	/* Local in/out mailboxes: 20 bits for offset, 12 for size */
++	tmp = be32_to_cpup((__be32 *) buf);
++	mlxsw_i2c->cmd.mb_off_in = tmp &
++				   GENMASK(MLXSW_I2C_MBOX_OFFSET_BITS - 1, 0);
++	mlxsw_i2c->cmd.mb_size_in = (tmp & GENMASK(31,
++					MLXSW_I2C_MBOX_OFFSET_BITS)) >>
++					MLXSW_I2C_MBOX_OFFSET_BITS;
++
++	tmp = be32_to_cpup((__be32 *) (buf + MLXSW_I2C_ADDR_WIDTH));
++	mlxsw_i2c->cmd.mb_off_out = tmp &
++				    GENMASK(MLXSW_I2C_MBOX_OFFSET_BITS - 1, 0);
++	mlxsw_i2c->cmd.mb_size_out = (tmp & GENMASK(31,
++					MLXSW_I2C_MBOX_OFFSET_BITS)) >>
++					MLXSW_I2C_MBOX_OFFSET_BITS;
++}
++
++/* Routine obtains register size from mail box buffer. */
++static inline int mlxsw_i2c_get_reg_size(u8 *in_mbox)
++{
++	u16  tmp = be16_to_cpup((__be16 *) (in_mbox + MLXSW_I2C_TLV_HDR_SIZE));
++
++	return (tmp & 0x7ff) * 4 + MLXSW_I2C_TLV_HDR_SIZE;
++}
++
++/* Routine sets I2C device internal offset in the transaction buffer. */
++static inline void mlxsw_i2c_set_slave_addr(u8 *buf, u32 off)
++{
++	__be32 *val = (__be32 *) buf;
++
++	*val = htonl(off);
++}
++
++/* Routine waits until go bit is cleared. */
++static int mlxsw_i2c_wait_go_bit(struct i2c_client *client,
++				 struct mlxsw_i2c *mlxsw_i2c, u8 *p_status)
++{
++	u8 addr_buf[MLXSW_I2C_ADDR_BUF_SIZE];
++	u8 buf[MLXSW_I2C_READ_SEMA_SIZE];
++	int len = MLXSW_I2C_READ_SEMA_SIZE;
++	struct i2c_msg read_sema[] =
++		MLXSW_I2C_READ_MSG(client, addr_buf, buf, len);
++	bool wait_done = false;
++	unsigned long end;
++	int i = 0, err;
++
++	mlxsw_i2c_set_slave_addr(addr_buf, MLXSW_I2C_CIR2_OFF_STATUS);
++
++	end = jiffies + msecs_to_jiffies(MLXSW_I2C_TIMEOUT_MSECS);
++	do {
++		u32 ctrl;
++
++		err = i2c_transfer(client->adapter, read_sema,
++				   ARRAY_SIZE(read_sema));
++
++		ctrl = be32_to_cpu(*(__be32 *) buf);
++		if (err == ARRAY_SIZE(read_sema)) {
++			if (!(ctrl & MLXSW_I2C_GO_BIT)) {
++				wait_done = true;
++				*p_status = ctrl >>
++					    MLXSW_I2C_CIR_CTRL_STATUS_SHIFT;
++				break;
++			}
++		}
++		cond_resched();
++	} while ((time_before(jiffies, end)) || (i++ < MLXSW_I2C_RETRY));
++
++	if (wait_done) {
++		if (*p_status)
++			err = -EIO;
++	} else {
++		return -ETIMEDOUT;
++	}
++
++	return err > 0 ? 0 : err;
++}
++
++/* Routine posts a command to ASIC though mail box. */
++static int mlxsw_i2c_write_cmd(struct i2c_client *client,
++			       struct mlxsw_i2c *mlxsw_i2c,
++			       int immediate)
++{
++	__be32 push_cmd_buf[MLXSW_I2C_PUSH_CMD_SIZE / 4] = {
++		0, cpu_to_be32(MLXSW_I2C_PUSH_IMM_CMD)
++	};
++	__be32 prep_cmd_buf[MLXSW_I2C_PREP_SIZE / 4] = {
++		0, 0, 0, 0, 0, 0,
++		cpu_to_be32(client->adapter->nr & 0xffff),
++		cpu_to_be32(MLXSW_I2C_SET_IMM_CMD)
++	};
++	struct i2c_msg push_cmd =
++		MLXSW_I2C_WRITE_MSG(client, push_cmd_buf,
++				    MLXSW_I2C_PUSH_CMD_SIZE);
++	struct i2c_msg prep_cmd =
++		MLXSW_I2C_WRITE_MSG(client, prep_cmd_buf, MLXSW_I2C_PREP_SIZE);
++	int err;
++
++	if (!immediate) {
++		push_cmd_buf[1] = cpu_to_be32(MLXSW_I2C_PUSH_CMD);
++		prep_cmd_buf[7] = cpu_to_be32(MLXSW_I2C_SET_CMD);
++	}
++	mlxsw_i2c_set_slave_addr((u8 *)prep_cmd_buf,
++				 MLXSW_I2C_CIR2_BASE);
++	mlxsw_i2c_set_slave_addr((u8 *)push_cmd_buf,
++				 MLXSW_I2C_CIR2_OFF_STATUS);
++
++	/* Prepare Command Interface Register for transaction */
++	err = i2c_transfer(client->adapter, &prep_cmd, 1);
++	if (err < 0)
++		return err;
++	else if (err != 1)
++		return -EIO;
++
++	/* Write out Command Interface Register GO bit to push transaction */
++	err = i2c_transfer(client->adapter, &push_cmd, 1);
++	if (err < 0)
++		return err;
++	else if (err != 1)
++		return -EIO;
++
++	return 0;
++}
++
++/* Routine obtains mail box offsets from ASIC register space. */
++static int mlxsw_i2c_get_mbox(struct i2c_client *client,
++			      struct mlxsw_i2c *mlxsw_i2c)
++{
++	u8 addr_buf[MLXSW_I2C_ADDR_BUF_SIZE];
++	u8 buf[MLXSW_I2C_MBOX_SIZE];
++	struct i2c_msg mbox_cmd[] =
++		MLXSW_I2C_READ_MSG(client, addr_buf, buf, MLXSW_I2C_MBOX_SIZE);
++	int err;
++
++	/* Read mail boxes offsets. */
++	mlxsw_i2c_set_slave_addr(addr_buf, MLXSW_I2C_CIR2_BASE);
++	err = i2c_transfer(client->adapter, mbox_cmd, 2);
++	if (err != 2) {
++		dev_err(&client->dev, "Could not obtain mail boxes\n");
++		if (!err)
++			return -EIO;
++		else
++			return err;
++	}
++
++	/* Convert mail boxes. */
++	mlxsw_i2c_convert_mbox(mlxsw_i2c, &buf[MLXSW_I2C_MBOX_OUT_PARAM_OFF]);
++
++	return err;
++}
++
++/* Routine sends I2C write transaction to ASIC device. */
++static int
++mlxsw_i2c_write(struct device *dev, size_t in_mbox_size, u8 *in_mbox, int num,
++		u8 *p_status)
++{
++	struct i2c_client *client = to_i2c_client(dev);
++	struct mlxsw_i2c *mlxsw_i2c = i2c_get_clientdata(client);
++	unsigned long timeout = msecs_to_jiffies(MLXSW_I2C_TIMEOUT_MSECS);
++	u8 tran_buf[MLXSW_I2C_MAX_BUFF_SIZE + MLXSW_I2C_ADDR_BUF_SIZE];
++	int off = mlxsw_i2c->cmd.mb_off_in, chunk_size, i, j;
++	unsigned long end;
++	struct i2c_msg write_tran =
++		MLXSW_I2C_WRITE_MSG(client, tran_buf, MLXSW_I2C_PUSH_CMD_SIZE);
++	int err;
++
++	for (i = 0; i < num; i++) {
++		chunk_size = (in_mbox_size > MLXSW_I2C_BLK_MAX) ?
++			     MLXSW_I2C_BLK_MAX : in_mbox_size;
++		write_tran.len = MLXSW_I2C_ADDR_WIDTH + chunk_size;
++		mlxsw_i2c_set_slave_addr(tran_buf, off);
++		memcpy(&tran_buf[MLXSW_I2C_ADDR_BUF_SIZE], in_mbox +
++		       MLXSW_I2C_BLK_MAX * i, chunk_size);
++
++		j = 0;
++		end = jiffies + timeout;
++		do {
++			err = i2c_transfer(client->adapter, &write_tran, 1);
++			if (err == 1)
++				break;
++
++			cond_resched();
++		} while ((time_before(jiffies, end)) ||
++			 (j++ < MLXSW_I2C_RETRY));
++
++		if (err != 1) {
++			if (!err)
++				err = -EIO;
++			return err;
++		}
++
++		off += chunk_size;
++		in_mbox_size -= chunk_size;
++	}
++
++	/* Prepare and write out Command Interface Register for transaction. */
++	err = mlxsw_i2c_write_cmd(client, mlxsw_i2c, 0);
++	if (err) {
++		dev_err(&client->dev, "Could not start transaction");
++		return -EIO;
++	}
++
++	/* Wait until go bit is cleared. */
++	err = mlxsw_i2c_wait_go_bit(client, mlxsw_i2c, p_status);
++	if (err) {
++		dev_err(&client->dev, "HW semaphore is not released");
++		return err;
++	}
++
++	/* Validate transaction completion status. */
++	if (*p_status) {
++		dev_err(&client->dev, "Bad transaction completion status %x\n",
++			*p_status);
++		return -EIO;
++	}
++
++	return 0;
++}
++
++/* Routine executes I2C command. */
++static int
++mlxsw_i2c_cmd(struct device *dev, size_t in_mbox_size, u8 *in_mbox,
++	      size_t out_mbox_size, u8 *out_mbox, u8 *status)
++{
++	struct i2c_client *client = to_i2c_client(dev);
++	struct mlxsw_i2c *mlxsw_i2c = i2c_get_clientdata(client);
++	unsigned long timeout = msecs_to_jiffies(MLXSW_I2C_TIMEOUT_MSECS);
++	u8 tran_buf[MLXSW_I2C_ADDR_BUF_SIZE];
++	int num, chunk_size, reg_size, i, j;
++	int off = mlxsw_i2c->cmd.mb_off_out;
++	unsigned long end;
++	struct i2c_msg read_tran[] =
++		MLXSW_I2C_READ_MSG(client, tran_buf, NULL, 0);
++	int err;
++
++	WARN_ON(in_mbox_size % sizeof(u32) || out_mbox_size % sizeof(u32));
++
++	reg_size = mlxsw_i2c_get_reg_size(in_mbox);
++	num = reg_size / MLXSW_I2C_BLK_MAX;
++	if (reg_size % MLXSW_I2C_BLK_MAX)
++		num++;
++
++	if (mutex_lock_interruptible(&mlxsw_i2c->cmd.lock) < 0) {
++		dev_err(&client->dev, "Could not acquire lock");
++		return -EINVAL;
++	}
++
++	err = mlxsw_i2c_write(dev, reg_size, in_mbox, num, status);
++	if (err)
++		goto cmd_fail;
++
++	/* No out mailbox is case of write transaction. */
++	if (!out_mbox) {
++		mutex_unlock(&mlxsw_i2c->cmd.lock);
++		return 0;
++	}
++
++	/* Send read transaction to get output mailbox content. */
++	read_tran[1].buf = out_mbox;
++	for (i = 0; i < num; i++) {
++		chunk_size = (reg_size > MLXSW_I2C_BLK_MAX) ?
++			     MLXSW_I2C_BLK_MAX : reg_size;
++		read_tran[1].len = chunk_size;
++		mlxsw_i2c_set_slave_addr(tran_buf, off);
++
++		j = 0;
++		end = jiffies + timeout;
++		do {
++			err = i2c_transfer(client->adapter, read_tran,
++					   ARRAY_SIZE(read_tran));
++			if (err == ARRAY_SIZE(read_tran))
++				break;
++
++			cond_resched();
++		} while ((time_before(jiffies, end)) ||
++			 (j++ < MLXSW_I2C_RETRY));
++
++		if (err != ARRAY_SIZE(read_tran)) {
++			if (!err)
++				err = -EIO;
++
++			goto cmd_fail;
++		}
++
++		off += chunk_size;
++		reg_size -= chunk_size;
++		read_tran[1].buf += chunk_size;
++	}
++
++	mutex_unlock(&mlxsw_i2c->cmd.lock);
++
++	return 0;
++
++cmd_fail:
++	mutex_unlock(&mlxsw_i2c->cmd.lock);
++	return err;
++}
++
++static int mlxsw_i2c_cmd_exec(void *bus_priv, u16 opcode, u8 opcode_mod,
++			      u32 in_mod, bool out_mbox_direct,
++			      char *in_mbox, size_t in_mbox_size,
++			      char *out_mbox, size_t out_mbox_size,
++			      u8 *status)
++{
++	struct mlxsw_i2c *mlxsw_i2c = bus_priv;
++
++	return mlxsw_i2c_cmd(mlxsw_i2c->dev, in_mbox_size, in_mbox,
++			     out_mbox_size, out_mbox, status);
++}
++
++static bool mlxsw_i2c_skb_transmit_busy(void *bus_priv,
++					const struct mlxsw_tx_info *tx_info)
++{
++	return false;
++}
++
++static int mlxsw_i2c_skb_transmit(void *bus_priv, struct sk_buff *skb,
++				  const struct mlxsw_tx_info *tx_info)
++{
++	return 0;
++}
++
++static int
++mlxsw_i2c_init(void *bus_priv, struct mlxsw_core *mlxsw_core,
++	       const struct mlxsw_config_profile *profile,
++	       struct mlxsw_resources *resources)
++{
++	struct mlxsw_i2c *mlxsw_i2c = bus_priv;
++
++	mlxsw_i2c->core = mlxsw_core;
++
++	return 0;
++}
++
++static void mlxsw_i2c_fini(void *bus_priv)
++{
++	struct mlxsw_i2c *mlxsw_i2c = bus_priv;
++
++	mlxsw_i2c->core = NULL;
++}
++
++static const struct mlxsw_bus mlxsw_i2c_bus = {
++	.kind			= "i2c",
++	.init			= mlxsw_i2c_init,
++	.fini			= mlxsw_i2c_fini,
++	.skb_transmit_busy	= mlxsw_i2c_skb_transmit_busy,
++	.skb_transmit		= mlxsw_i2c_skb_transmit,
++	.cmd_exec		= mlxsw_i2c_cmd_exec,
++};
++
++static int mlxsw_i2c_probe(struct i2c_client *client,
++			   const struct i2c_device_id *id)
++{
++	struct mlxsw_i2c *mlxsw_i2c;
++	u8 status;
++	int err;
++
++	mlxsw_i2c = devm_kzalloc(&client->dev, sizeof(*mlxsw_i2c), GFP_KERNEL);
++	if (!mlxsw_i2c)
++		return -ENOMEM;
++
++	i2c_set_clientdata(client, mlxsw_i2c);
++	mutex_init(&mlxsw_i2c->cmd.lock);
++
++	/* In order to use mailboxes through the i2c, special area is reserved
++	 * on the i2c address space that can be used for input and output
++	 * mailboxes. Such mailboxes are called local mailboxes. When using a
++	 * local mailbox, software should specify 0 as the Input/Output
++	 * parameters. The location of the Local Mailbox addresses on the i2c
++	 * space can be retrieved through the QUERY_FW command.
++	 * For this purpose QUERY_FW is to be issued with opcode modifier equal
++	 * 0x01. For such command the output parameter is an immediate value.
++	 * Here QUERY_FW command is invoked for ASIC probing and for getting
++	 * local mailboxes addresses from immedate output parameters.
++	 */
++
++	/* Prepare and write out Command Interface Register for transaction */
++	err = mlxsw_i2c_write_cmd(client, mlxsw_i2c, 1);
++	if (err) {
++		dev_err(&client->dev, "Could not start transaction");
++		goto errout;
++	}
++
++	/* Wait until go bit is cleared. */
++	err = mlxsw_i2c_wait_go_bit(client, mlxsw_i2c, &status);
++	if (err) {
++		dev_err(&client->dev, "HW semaphore is not released");
++		goto errout;
++	}
++
++	/* Validate transaction completion status. */
++	if (status) {
++		dev_err(&client->dev, "Bad transaction completion status %x\n",
++			status);
++		err = -EIO;
++		goto errout;
++	}
++
++	/* Get mailbox offsets. */
++	err = mlxsw_i2c_get_mbox(client, mlxsw_i2c);
++	if (err < 0) {
++		dev_err(&client->dev, "Fail to get mailboxes\n");
++		goto errout;
++	}
++
++	dev_info(&client->dev, "%s mb size=%x off=0x%08x out mb size=%x off=0x%08x\n",
++		 id->name, mlxsw_i2c->cmd.mb_size_in,
++		 mlxsw_i2c->cmd.mb_off_in, mlxsw_i2c->cmd.mb_size_out,
++		 mlxsw_i2c->cmd.mb_off_out);
++
++	/* Register device bus. */
++	mlxsw_i2c->bus_info.device_kind = id->name;
++	mlxsw_i2c->bus_info.device_name = client->name;
++	mlxsw_i2c->bus_info.dev = &client->dev;
++	mlxsw_i2c->dev = &client->dev;
++
++	err = mlxsw_core_bus_device_register(&mlxsw_i2c->bus_info,
++					     &mlxsw_i2c_bus, mlxsw_i2c);
++	if (err) {
++		dev_err(&client->dev, "Fail to register core bus\n");
++		return err;
++	}
++
++	return 0;
++
++errout:
++	i2c_set_clientdata(client, NULL);
++
++	return err;
++}
++
++static int mlxsw_i2c_remove(struct i2c_client *client)
++{
++	struct mlxsw_i2c *mlxsw_i2c = i2c_get_clientdata(client);
++
++	mlxsw_core_bus_device_unregister(mlxsw_i2c->core);
++	mutex_destroy(&mlxsw_i2c->cmd.lock);
++
++	return 0;
++}
++
++int mlxsw_i2c_driver_register(struct i2c_driver *i2c_driver)
++{
++	i2c_driver->probe = mlxsw_i2c_probe;
++	i2c_driver->remove = mlxsw_i2c_remove;
++	return i2c_add_driver(i2c_driver);
++}
++EXPORT_SYMBOL(mlxsw_i2c_driver_register);
++
++void mlxsw_i2c_driver_unregister(struct i2c_driver *i2c_driver)
++{
++	i2c_del_driver(i2c_driver);
++}
++EXPORT_SYMBOL(mlxsw_i2c_driver_unregister);
++
++MODULE_AUTHOR("Vadim Pasternak <vadimp@mellanox.com>");
++MODULE_DESCRIPTION("Mellanox switch I2C interface driver");
++MODULE_LICENSE("Dual BSD/GPL");
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/i2c.h b/drivers/net/ethernet/mellanox/mlxsw/i2c.h
+--- a/drivers/net/ethernet/mellanox/mlxsw/i2c.h	1970-01-01 00:00:00.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/i2c.h	2017-11-09 12:03:09.944785064 +0000
+@@ -0,0 +1,60 @@
++/*
++ * drivers/net/ethernet/mellanox/mlxsw/i2c.h
++ * Copyright (c) 2016 Mellanox Technologies. All rights reserved.
++ * Copyright (c) 2016 Vadim Pasternak <vadimp@mellanox.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the names of the copyright holders nor the names of its
++ *    contributors may be used to endorse or promote products derived from
++ *    this software without specific prior written permission.
++ *
++ * Alternatively, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") version 2 as published by the Free
++ * Software Foundation.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef _MLXSW_I2C_H
++#define _MLXSW_I2C_H
++
++#include <linux/i2c.h>
++
++#if IS_ENABLED(CONFIG_MLXSW_I2C)
++
++int mlxsw_i2c_driver_register(struct i2c_driver *i2c_driver);
++void mlxsw_i2c_driver_unregister(struct i2c_driver *i2c_driver);
++
++#else
++
++static inline int
++mlxsw_i2c_driver_register(struct i2c_driver *i2c_driver)
++{
++	return -ENODEV;
++}
++
++static inline void
++mlxsw_i2c_driver_unregister(struct i2c_driver *i2c_driver)
++{
++}
++
++#endif
++
++#endif
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/minimal.c b/drivers/net/ethernet/mellanox/mlxsw/minimal.c
+--- a/drivers/net/ethernet/mellanox/mlxsw/minimal.c	1970-01-01 00:00:00.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/minimal.c	2017-11-09 12:03:23.332785242 +0000
+@@ -0,0 +1,97 @@
++/*
++ * drivers/net/ethernet/mellanox/mlxsw/minimal.c
++ * Copyright (c) 2016 Mellanox Technologies. All rights reserved.
++ * Copyright (c) 2016 Vadim Pasternak <vadimp@mellanox.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the names of the copyright holders nor the names of its
++ *    contributors may be used to endorse or promote products derived from
++ *    this software without specific prior written permission.
++ *
++ * Alternatively, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") version 2 as published by the Free
++ * Software Foundation.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <linux/i2c.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/mod_devicetable.h>
++#include <linux/types.h>
++
++#include "core.h"
++#include "i2c.h"
++
++static const char mlxsw_minimal_driver_name[] = "mlxsw_minimal";
++
++static const struct mlxsw_config_profile mlxsw_minimal_config_profile;
++
++static struct mlxsw_driver mlxsw_minimal_driver = {
++	.kind		= mlxsw_minimal_driver_name,
++	.priv_size	= 1,
++	.profile	= &mlxsw_minimal_config_profile,
++};
++
++static const struct i2c_device_id mlxsw_minimal_i2c_id[] = {
++	{ "mlxsw_minimal", 0},
++	{ },
++};
++
++static struct i2c_driver mlxsw_minimal_i2c_driver = {
++	.driver.name = "mlxsw_minimal",
++	.class = I2C_CLASS_HWMON,
++	.id_table = mlxsw_minimal_i2c_id,
++};
++
++static int __init mlxsw_minimal_module_init(void)
++{
++	int err;
++
++	err = mlxsw_core_driver_register(&mlxsw_minimal_driver);
++	if (err)
++		return err;
++
++	err = mlxsw_i2c_driver_register(&mlxsw_minimal_i2c_driver);
++	if (err)
++		goto err_i2c_driver_register;
++
++	return 0;
++
++err_i2c_driver_register:
++	mlxsw_core_driver_unregister(&mlxsw_minimal_driver);
++
++	return err;
++}
++
++static void __exit mlxsw_minimal_module_exit(void)
++{
++	mlxsw_i2c_driver_unregister(&mlxsw_minimal_i2c_driver);
++	mlxsw_core_driver_unregister(&mlxsw_minimal_driver);
++}
++
++module_init(mlxsw_minimal_module_init);
++module_exit(mlxsw_minimal_module_exit);
++
++MODULE_LICENSE("Dual BSD/GPL");
++MODULE_AUTHOR("Vadim Pasternak <vadimp@mellanox.com>");
++MODULE_DESCRIPTION("Mellanox minimal driver");
++MODULE_DEVICE_TABLE(i2c, mlxsw_minimal_i2c_id);
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/pci.c b/drivers/net/ethernet/mellanox/mlxsw/pci.c
+--- a/drivers/net/ethernet/mellanox/mlxsw/pci.c	2017-05-25 13:45:05.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/pci.c	2017-11-09 13:03:45.824833341 +0000
+@@ -1836,6 +1836,7 @@
+ 	.skb_transmit_busy	= mlxsw_pci_skb_transmit_busy,
+ 	.skb_transmit		= mlxsw_pci_skb_transmit,
+ 	.cmd_exec		= mlxsw_pci_cmd_exec,
++	.features		= MLXSW_BUS_F_TXRX,
+ };
+ 
+ static int mlxsw_pci_sw_reset(struct mlxsw_pci *mlxsw_pci,
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/qsfp_sysfs.c b/drivers/net/ethernet/mellanox/mlxsw/qsfp_sysfs.c
+--- a/drivers/net/ethernet/mellanox/mlxsw/qsfp_sysfs.c	1970-01-01 00:00:00.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/qsfp_sysfs.c	2017-11-09 13:04:52.192834223 +0000
+@@ -0,0 +1,379 @@
++/*
++ * drivers/net/ethernet/mellanox/mlxsw/qsfp_sysfs.c
++ * Copyright (c) 2017 Mellanox Technologies. All rights reserved.
++ * Copyright (c) 2017 Vadim Pasternak <vadimp@mellanox.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the names of the copyright holders nor the names of its
++ *    contributors may be used to endorse or promote products derived from
++ *    this software without specific prior written permission.
++ *
++ * Alternatively, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") version 2 as published by the Free
++ * Software Foundation.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <linux/device.h>
++#include <linux/err.h>
++#include <linux/kernel.h>
++#include <linux/sysfs.h>
++#include <linux/types.h>
++
++#include "core.h"
++
++#define MLXSW_QSFP_I2C_ADDR		0x50
++#define MLXSW_QSFP_PAGE_NUM		5
++#define MLXSW_QSFP_PAGE_SIZE		128
++#define MLXSW_QSFP_SUB_PAGE_NUM		3
++#define MLXSW_QSFP_SUB_PAGE_SIZE	48
++#define MLXSW_QSFP_LAST_SUB_PAGE_SIZE	32
++#define MLXSW_QSFP_MAX_NUM		64
++#define MLXSW_QSFP_MIN_REQ_LEN		4
++#define MLXSW_QSFP_STATUS_VALID_TIME	(120 * HZ)
++#define MLXSW_QSFP_MAX_CPLD_NUM		1
++
++static const u8 mlxsw_qsfp_page_number[] = { 0xa0, 0x00, 0x01, 0x02, 0x03 };
++static const u16 mlxsw_qsfp_page_shift[] = { 0x00, 0x80, 0x80, 0x80, 0x80 };
++
++/**
++ * Mellanox device Management Cable Info Access Register buffer for reading
++ * QSFP EEPROM info is limited by 48 bytes. In case full page is to be read
++ * (128 bytes), such request will be implemented by three transactions of size
++ * 48, 48, 32.
++ */
++static const u16 mlxsw_qsfp_sub_page_size[] = {
++	MLXSW_QSFP_SUB_PAGE_SIZE,
++	MLXSW_QSFP_SUB_PAGE_SIZE,
++	MLXSW_QSFP_LAST_SUB_PAGE_SIZE
++};
++
++struct mlxsw_qsfp_module {
++	unsigned long last_updated;
++	u8 cache_status;
++};
++
++struct mlxsw_qsfp {
++	struct mlxsw_core *core;
++	const struct mlxsw_bus_info *bus_info;
++	struct attribute *attrs[MLXSW_QSFP_MAX_NUM + 1];
++	struct device_attribute *dev_attrs;
++	struct bin_attribute *eeprom;
++	struct bin_attribute **eeprom_attr_list;
++	struct mlxsw_qsfp_module modules[MLXSW_QSFP_MAX_NUM];
++	u8 module_ind[MLXSW_QSFP_MAX_NUM];
++	u8 module_count;
++	struct attribute *cpld_attrs[MLXSW_QSFP_MAX_CPLD_NUM + 1];
++	struct device_attribute *cpld_dev_attrs;
++};
++
++static int
++mlxsw_qsfp_query_module_eeprom(struct mlxsw_qsfp *mlxsw_qsfp, u8 index,
++			       loff_t off, size_t count, int page, char *buf)
++{
++	char eeprom_tmp[MLXSW_QSFP_PAGE_SIZE];
++	char mcia_pl[MLXSW_REG_MCIA_LEN];
++	int status;
++	int err;
++
++	mlxsw_reg_mcia_pack(mcia_pl, index, 0, page, off, count,
++			    MLXSW_QSFP_I2C_ADDR);
++
++	err = mlxsw_reg_query(mlxsw_qsfp->core, MLXSW_REG(mcia), mcia_pl);
++	if (err)
++		return err;
++
++	status = mlxsw_reg_mcia_status_get(mcia_pl);
++	if (status)
++		return -EIO;
++
++	mlxsw_reg_mcia_eeprom_memcpy_from(mcia_pl, eeprom_tmp);
++	memcpy(buf, eeprom_tmp, count);
++
++	return 0;
++}
++
++static int
++mlxsw_qsfp_get_module_eeprom(struct mlxsw_qsfp *mlxsw_qsfp, u8 index,
++			     char *buf, loff_t off, size_t count)
++{
++	int page_ind, page, page_off, subpage, offset, size, res = 0;
++	int err;
++
++	if (!count)
++		return -EINVAL;
++
++	memset(buf, 0, count);
++	size = count;
++	while (res < count) {
++		page_ind = off / MLXSW_QSFP_PAGE_SIZE;
++		page_off = off % MLXSW_QSFP_PAGE_SIZE;
++		page = mlxsw_qsfp_page_number[page_ind];
++		offset = mlxsw_qsfp_page_shift[page_ind] + page_off;
++		subpage = page_off / MLXSW_QSFP_SUB_PAGE_SIZE;
++		size = min_t(u16, size, mlxsw_qsfp_sub_page_size[subpage]);
++		err = mlxsw_qsfp_query_module_eeprom(mlxsw_qsfp, index, offset,
++						     size, page, buf + res);
++		if (err) {
++			dev_err(mlxsw_qsfp->bus_info->dev, "Eeprom query failed\n");
++			return err;
++		}
++		off += size;
++		res += size;
++		size = count - size;
++	}
++
++	return res;
++}
++
++static ssize_t mlxsw_qsfp_bin_read(struct file *filp, struct kobject *kobj,
++				   struct bin_attribute *attr, char *buf,
++				   loff_t off, size_t count)
++{
++	struct mlxsw_qsfp *mlxsw_qsfp = dev_get_platdata(container_of(kobj,
++							 struct device, kobj));
++	u8 *module_ind = attr->private;
++	size_t size;
++
++	size = mlxsw_qsfp->eeprom[*module_ind].size;
++
++	if (off > size)
++		return -ESPIPE;
++	else if (off == size)
++		return 0;
++	else if ((off + count) > size)
++		count = size - off;
++
++	return mlxsw_qsfp_get_module_eeprom(mlxsw_qsfp, *module_ind, buf, off,
++					    count);
++}
++
++static ssize_t
++mlxsw_qsfp_status_show(struct device *dev, struct device_attribute *attr,
++		       char *buf)
++{
++	struct mlxsw_qsfp *mlxsw_qsfp = dev_get_platdata(dev);
++	char mcia_pl[MLXSW_REG_MCIA_LEN];
++	int status;
++	u32 i;
++	int err;
++
++	for (i = 0; i < mlxsw_qsfp->module_count; i++) {
++		if ((mlxsw_qsfp->dev_attrs + i) == attr)
++			break;
++	}
++	if (i == mlxsw_qsfp->module_count)
++		return -EINVAL;
++
++	if (time_before(jiffies, mlxsw_qsfp->modules[i].last_updated +
++			MLXSW_QSFP_STATUS_VALID_TIME))
++		return sprintf(buf, "%u\n",
++			       mlxsw_qsfp->modules[i].cache_status);
++
++	mlxsw_reg_mcia_pack(mcia_pl, i, 0, 0, 0, MLXSW_QSFP_MIN_REQ_LEN,
++			    MLXSW_QSFP_I2C_ADDR);
++	err = mlxsw_reg_query(mlxsw_qsfp->core, MLXSW_REG(mcia), mcia_pl);
++	if (err)
++		return err;
++
++	status = mlxsw_reg_mcia_status_get(mcia_pl);
++	mlxsw_qsfp->modules[i].cache_status = !status;
++	mlxsw_qsfp->modules[i].last_updated = jiffies;
++
++	return sprintf(buf, "%u\n", !status);
++}
++
++static ssize_t
++mlxsw_qsfp_cpld_show(struct device *dev, struct device_attribute *attr,
++		     char *buf)
++{
++	struct mlxsw_qsfp *mlxsw_qsfp = dev_get_platdata(dev);
++	char msci_pl[MLXSW_REG_MSCI_LEN];
++	u32 version, i;
++	int err;
++
++	for (i = 0; i < MLXSW_QSFP_MAX_CPLD_NUM; i++) {
++		if ((mlxsw_qsfp->cpld_dev_attrs + i) == attr)
++			break;
++	}
++	if (i == MLXSW_QSFP_MAX_CPLD_NUM)
++		return -EINVAL;
++
++	mlxsw_reg_msci_pack(msci_pl, i);
++	err = mlxsw_reg_query(mlxsw_qsfp->core, MLXSW_REG(msci), msci_pl);
++	if (err)
++		return err;
++
++	version = mlxsw_reg_msci_version_get(msci_pl);
++
++	return sprintf(buf, "%u\n", version);
++}
++
++int mlxsw_qsfp_init(struct mlxsw_core *mlxsw_core,
++		    const struct mlxsw_bus_info *mlxsw_bus_info,
++		    struct mlxsw_qsfp **p_qsfp)
++{
++	struct device_attribute *dev_attr, *cpld_dev_attr;
++	char pmlp_pl[MLXSW_REG_PMLP_LEN];
++	struct mlxsw_qsfp *mlxsw_qsfp;
++	struct bin_attribute *eeprom;
++	int i, count;
++	u8 width;
++	int err;
++
++	if (!strcmp(mlxsw_bus_info->device_kind, "i2c"))
++		return 0;
++
++	mlxsw_qsfp = devm_kzalloc(mlxsw_bus_info->dev, sizeof(*mlxsw_qsfp),
++				  GFP_KERNEL);
++	if (!mlxsw_qsfp)
++		return -ENOMEM;
++
++	mlxsw_qsfp->core = mlxsw_core;
++	mlxsw_qsfp->bus_info = mlxsw_bus_info;
++	mlxsw_bus_info->dev->platform_data = mlxsw_qsfp;
++
++	for (i = 1; i <= MLXSW_QSFP_MAX_NUM; i++) {
++		mlxsw_reg_pmlp_pack(pmlp_pl, i);
++		err = mlxsw_reg_query(mlxsw_qsfp->core, MLXSW_REG(pmlp),
++				      pmlp_pl);
++		if (err)
++			return err;
++		width = mlxsw_reg_pmlp_width_get(pmlp_pl);
++		if (!width)
++			continue;
++		mlxsw_qsfp->module_count++;
++	}
++
++	count = mlxsw_qsfp->module_count + 1;
++	mlxsw_qsfp->eeprom = devm_kzalloc(mlxsw_bus_info->dev,
++					  mlxsw_qsfp->module_count *
++					  sizeof(*mlxsw_qsfp->eeprom),
++					  GFP_KERNEL);
++	if (!mlxsw_qsfp->eeprom)
++		return -ENOMEM;
++
++	mlxsw_qsfp->eeprom_attr_list = devm_kzalloc(mlxsw_bus_info->dev,
++						    count *
++						    sizeof(mlxsw_qsfp->eeprom),
++						    GFP_KERNEL);
++	if (!mlxsw_qsfp->eeprom_attr_list)
++		return -ENOMEM;
++
++	mlxsw_qsfp->dev_attrs = devm_kzalloc(mlxsw_bus_info->dev, count *
++					     sizeof(*mlxsw_qsfp->dev_attrs),
++					     GFP_KERNEL);
++	if (!mlxsw_qsfp->dev_attrs)
++		return -ENOMEM;
++
++	mlxsw_qsfp->cpld_dev_attrs = devm_kzalloc(mlxsw_bus_info->dev,
++					MLXSW_QSFP_MAX_CPLD_NUM *
++					sizeof(*mlxsw_qsfp->cpld_dev_attrs),
++					GFP_KERNEL);
++	if (!mlxsw_qsfp->cpld_dev_attrs)
++		return -ENOMEM;
++
++	eeprom = mlxsw_qsfp->eeprom;
++	dev_attr = mlxsw_qsfp->dev_attrs;
++	for (i = 0; i < mlxsw_qsfp->module_count; i++, eeprom++, dev_attr++) {
++		dev_attr->show = mlxsw_qsfp_status_show;
++		dev_attr->attr.mode = 0444;
++		dev_attr->attr.name = devm_kasprintf(mlxsw_bus_info->dev,
++						     GFP_KERNEL,
++						     "qsfp%d_status", i + 1);
++		mlxsw_qsfp->attrs[i] = &dev_attr->attr;
++		sysfs_attr_init(&dev_attr->attr);
++		err = sysfs_create_file(&mlxsw_bus_info->dev->kobj,
++					mlxsw_qsfp->attrs[i]);
++		if (err)
++			goto err_create_file;
++
++		sysfs_bin_attr_init(eeprom);
++		eeprom->attr.name = devm_kasprintf(mlxsw_bus_info->dev,
++						   GFP_KERNEL, "qsfp%d",
++						   i + 1);
++		eeprom->attr.mode = 0444;
++		eeprom->read = mlxsw_qsfp_bin_read;
++		eeprom->size = MLXSW_QSFP_PAGE_NUM * MLXSW_QSFP_PAGE_SIZE;
++		mlxsw_qsfp->module_ind[i] = i;
++		eeprom->private = &mlxsw_qsfp->module_ind[i];
++		mlxsw_qsfp->eeprom_attr_list[i] = eeprom;
++		err = sysfs_create_bin_file(&mlxsw_bus_info->dev->kobj,
++					    eeprom);
++		if (err)
++			goto err_create_bin_file;
++	}
++
++	cpld_dev_attr = mlxsw_qsfp->cpld_dev_attrs;
++	for (i = 0; i < MLXSW_QSFP_MAX_CPLD_NUM; i++, cpld_dev_attr++) {
++		cpld_dev_attr->show = mlxsw_qsfp_cpld_show;
++		cpld_dev_attr->attr.mode = 0444;
++		cpld_dev_attr->attr.name = devm_kasprintf(mlxsw_bus_info->dev,
++						     GFP_KERNEL,
++						     "cpld%d_version", i + 1);
++		mlxsw_qsfp->cpld_attrs[i] = &cpld_dev_attr->attr;
++		sysfs_attr_init(&cpld_dev_attr->attr);
++		err = sysfs_create_file(&mlxsw_bus_info->dev->kobj,
++					mlxsw_qsfp->cpld_attrs[i]);
++		if (err)
++			goto err_create_cpld_file;
++	}
++
++	*p_qsfp = mlxsw_qsfp;
++
++	return 0;
++
++err_create_cpld_file:
++	sysfs_remove_file(&mlxsw_bus_info->dev->kobj,
++			  mlxsw_qsfp->cpld_attrs[i--]);
++	i = mlxsw_qsfp->module_count;
++err_create_bin_file:
++	sysfs_remove_file(&mlxsw_bus_info->dev->kobj,
++			  mlxsw_qsfp->attrs[i--]);
++err_create_file:
++	while (--i > 0) {
++		sysfs_remove_bin_file(&mlxsw_bus_info->dev->kobj,
++				      mlxsw_qsfp->eeprom_attr_list[i]);
++		sysfs_remove_file(&mlxsw_bus_info->dev->kobj,
++				  mlxsw_qsfp->attrs[i]);
++	}
++
++	return err;
++}
++
++void mlxsw_qsfp_fini(struct mlxsw_qsfp *mlxsw_qsfp)
++{
++	int i;
++
++	if (!strcmp(mlxsw_qsfp->bus_info->device_kind, "i2c"))
++		return;
++
++	for (i = mlxsw_qsfp->module_count - 1; i >= 0; i--) {
++		sysfs_remove_bin_file(&mlxsw_qsfp->bus_info->dev->kobj,
++				      mlxsw_qsfp->eeprom_attr_list[i]);
++		sysfs_remove_file(&mlxsw_qsfp->bus_info->dev->kobj,
++				  mlxsw_qsfp->attrs[i]);
++	}
++}
++
++MODULE_LICENSE("Dual BSD/GPL");
++MODULE_AUTHOR("Vadim Pasternak <vadimp@mellanox.com>");
++MODULE_DESCRIPTION("Mellanox switch QSFP sysfs driver");
+diff -Nur a/drivers/net/ethernet/mellanox/mlxsw/reg.h b/drivers/net/ethernet/mellanox/mlxsw/reg.h
+--- a/drivers/net/ethernet/mellanox/mlxsw/reg.h	2017-05-25 13:45:05.000000000 +0000
++++ b/drivers/net/ethernet/mellanox/mlxsw/reg.h	2017-11-09 13:05:10.576834467 +0000
+@@ -50,6 +50,12 @@
+ 	u16 len; /* In u8 */
+ };
+ 
++#define MLXSW_REG_DEFINE(_name, _id, _len)				\
++static const struct mlxsw_reg_info mlxsw_reg_##_name = {		\
++	.id = _id,							\
++	.len = _len,							\
++}
++
+ #define MLXSW_REG(type) (&mlxsw_reg_##type)
+ #define MLXSW_REG_LEN(type) MLXSW_REG(type)->len
+ #define MLXSW_REG_ZERO(type, payload) memset(payload, 0, MLXSW_REG(type)->len)
+@@ -4466,7 +4472,7 @@
+  */
+ MLXSW_ITEM32(reg, mfcr, pwm_frequency, 0x00, 0, 6);
+ 
+-#define MLXSW_MFCR_TACHOS_MAX 10
++#define MLXSW_MFCR_TACHOS_MAX 12
+ 
+ /* reg_mfcr_tacho_active
+  * Indicates which of the tachometer is active (bit per tachometer).
+@@ -4564,6 +4570,54 @@
+ 	mlxsw_reg_mfsm_tacho_set(payload, tacho);
+ }
+ 
++/* MFSL - Management Fan Speed Limit Register
++ * ------------------------------------------
++ * The Fan Speed Limit register is used to configure the fan speed
++ * event / interrupt notification mechanism. Fan speed threshold are
++ * defined for both under-speed and over-speed.
++ */
++#define MLXSW_REG_MFSL_ID 0x9004
++#define MLXSW_REG_MFSL_LEN 0x0C
++
++MLXSW_REG_DEFINE(mfsl, MLXSW_REG_MFSL_ID, MLXSW_REG_MFSL_LEN);
++
++/* reg_mfsl_tacho
++ * Fan tachometer index.
++ * Access: Index
++ */
++MLXSW_ITEM32(reg, mfsl, tacho, 0x00, 24, 4);
++
++/* reg_mfsl_tach_min
++ * Tachometer minimum value (minimum RPM).
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mfsl, tach_min, 0x04, 0, 16);
++
++/* reg_mfsl_tach_max
++ * Tachometer maximum value (maximum RPM).
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mfsl, tach_max, 0x08, 0, 16);
++
++static inline void mlxsw_reg_mfsl_pack(char *payload, u8 tacho,
++				       u16 tach_min, u16 tach_max)
++{
++	MLXSW_REG_ZERO(mfsl, payload);
++	mlxsw_reg_mfsl_tacho_set(payload, tacho);
++	mlxsw_reg_mfsl_tach_min_set(payload, tach_min);
++	mlxsw_reg_mfsl_tach_max_set(payload, tach_max);
++}
++
++static inline void mlxsw_reg_mfsl_unpack(char *payload, u8 tacho,
++					 u16 *p_tach_min, u16 *p_tach_max)
++{
++	if (p_tach_min)
++		*p_tach_min = mlxsw_reg_mfsl_tach_min_get(payload);
++
++	if (p_tach_max)
++		*p_tach_max = mlxsw_reg_mfsl_tach_max_get(payload);
++}
++
+ /* MTCAP - Management Temperature Capabilities
+  * -------------------------------------------
+  * This register exposes the capabilities of the device and
+@@ -4635,6 +4689,29 @@
+  */
+ MLXSW_ITEM32(reg, mtmp, max_temperature, 0x08, 0, 16);
+ 
++/* reg_mtmp_tee
++ * Temperature Event Enable.
++ * 0 - Do not generate event
++ * 1 - Generate event
++ * 2 - Generate single event
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mtmp, tee, 0x0C, 30, 2);
++
++#define MLXSW_REG_MTMP_THRESH_HI 0x348	/* 105 Celsius */
++
++/* reg_mtmp_temperature_threshold_hi
++ * High threshold for Temperature Warning Event. In 0.125 Celsius.
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mtmp, temperature_threshold_hi, 0x0C, 0, 16);
++
++/* reg_mtmp_temperature_threshold_lo
++ * Low threshold for Temperature Warning Event. In 0.125 Celsius.
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mtmp, temperature_threshold_lo, 0x10, 0, 16);
++
+ #define MLXSW_REG_MTMP_SENSOR_NAME_SIZE 8
+ 
+ /* reg_mtmp_sensor_name
+@@ -4651,6 +4728,8 @@
+ 	mlxsw_reg_mtmp_sensor_index_set(payload, sensor_index);
+ 	mlxsw_reg_mtmp_mte_set(payload, max_temp_enable);
+ 	mlxsw_reg_mtmp_mtr_set(payload, max_temp_reset);
++	mlxsw_reg_mtmp_temperature_threshold_hi_set(payload,
++						    MLXSW_REG_MTMP_THRESH_HI);
+ }
+ 
+ static inline void mlxsw_reg_mtmp_unpack(char *payload, unsigned int *p_temp,
+@@ -4671,6 +4750,81 @@
+ 		mlxsw_reg_mtmp_sensor_name_memcpy_from(payload, sensor_name);
+ }
+ 
++/* MCIA - Management Cable Info Access
++ * -----------------------------------
++ * MCIA register is used to access the SFP+ and QSFP connector's EPROM.
++ */
++
++#define MLXSW_REG_MCIA_ID 0x9014
++#define MLXSW_REG_MCIA_LEN 0x40
++
++MLXSW_REG_DEFINE(mcia, MLXSW_REG_MCIA_ID, MLXSW_REG_MCIA_LEN);
++
++/* reg_mcia_l
++ * Lock bit. Setting this bit will lock the access to the specific
++ * cable. Used for updating a full page in a cable EPROM. Any access
++ * other then subsequence writes will fail while the port is locked.
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mcia, l, 0x00, 31, 1);
++
++/* reg_mcia_module
++ * Module number.
++ * Access: Index
++ */
++MLXSW_ITEM32(reg, mcia, module, 0x00, 16, 8);
++
++/* reg_mcia_status
++ * Module status.
++ * Access: RO
++ */
++MLXSW_ITEM32(reg, mcia, status, 0x00, 0, 8);
++
++/* reg_mcia_i2c_device_address
++ * I2C device address.
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mcia, i2c_device_address, 0x04, 24, 8);
++
++/* reg_mcia_page_number
++ * Page number.
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mcia, page_number, 0x04, 16, 8);
++
++/* reg_mcia_device_address
++ * Device address.
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mcia, device_address, 0x04, 0, 16);
++
++/* reg_mcia_size
++ * Number of bytes to read/write (up to 48 bytes).
++ * Access: RW
++ */
++MLXSW_ITEM32(reg, mcia, size, 0x08, 0, 16);
++
++#define MLXSW_SP_REG_MCIA_EEPROM_SIZE 48
++
++/* reg_mcia_eeprom
++ * Bytes to read/write.
++ * Access: RW
++ */
++MLXSW_ITEM_BUF(reg, mcia, eeprom, 0x10, MLXSW_SP_REG_MCIA_EEPROM_SIZE);
++
++static inline void mlxsw_reg_mcia_pack(char *payload, u8 module, u8 lock,
++				       u8 page_number, u16 device_addr,
++				       u8 size, u8 i2c_device_addr)
++{
++	MLXSW_REG_ZERO(mcia, payload);
++	mlxsw_reg_mcia_module_set(payload, module);
++	mlxsw_reg_mcia_l_set(payload, lock);
++	mlxsw_reg_mcia_page_number_set(payload, page_number);
++	mlxsw_reg_mcia_device_address_set(payload, device_addr);
++	mlxsw_reg_mcia_size_set(payload, size);
++	mlxsw_reg_mcia_i2c_device_address_set(payload, i2c_device_addr);
++}
++
+ /* MPAT - Monitoring Port Analyzer Table
+  * -------------------------------------
+  * MPAT Register is used to query and configure the Switch PortAnalyzer Table.
+@@ -4788,6 +4942,43 @@
+ 	mlxsw_reg_mpar_pa_id_set(payload, pa_id);
+ }
+ 
++/* MSCI - Management System CPLD Information Register
++ * ---------------------------------------------------
++ * This register allows querying for the System CPLD(s) information.
++ */
++#define MLXSW_REG_MSCI_ID 0x902A
++#define MLXSW_REG_MSCI_LEN 0x10
++
++static const struct mlxsw_reg_info mlxsw_reg_msci = {
++	.id = MLXSW_REG_MSCI_ID,
++	.len = MLXSW_REG_MSCI_LEN,
++};
++
++/* reg_msci_index
++ * Index to access.
++ * Access: Index
++ */
++MLXSW_ITEM32(reg, msci, index, 0x00, 0, 4);
++
++/* reg_msci_version
++ * CPLD version.
++ * Access: R0
++ */
++MLXSW_ITEM32(reg, msci, version, 0x04, 0, 32);
++
++static inline void
++mlxsw_reg_msci_pack(char *payload, u8 index)
++{
++	MLXSW_REG_ZERO(msci, payload);
++	mlxsw_reg_msci_index_set(payload, index);
++}
++
++static inline void
++mlxsw_reg_msci_unpack(char *payload, u16 *p_version)
++{
++	*p_version = mlxsw_reg_msci_version_get(payload);
++}
++
+ /* MLCR - Management LED Control Register
+  * --------------------------------------
+  * Controls the system LEDs.

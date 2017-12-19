@@ -1,0 +1,47 @@
+onie_mlnx_machine_dflt=mlnx_x86
+
+set_onie_machine()
+{
+    tmp=$(/usr/bin/onie-syseeprom -g 0x21 | awk '{print $1}')
+    machine_model=$(echo "$tmp" | awk '{print tolower($0)}')
+    case "$machine_model" in
+    panther)
+        live_machine=mlnx_msn2700
+        ;;
+    spider)
+        live_machine=mlnx_msn2410
+        ;;
+    neptune)
+        live_machine=mlnx_msx6710
+        ;;
+    scorpion)
+        live_machine=mlnx_msb7700
+        ;;
+    tarantula)
+        live_machine=mlnx_msx1410
+        ;;
+    *)
+        machine_name=$(echo "$machine_model" | awk -F'-' '{print $1}')
+        machine_suffix=$(echo "$machine_model" | awk -F'-' '{print $2}')
+        live_machine=mlnx_$machine_name$machine_suffix
+        ;;
+    esac
+}
+
+gen_live_config()
+{
+    onie_build_machine=$(cat /etc/machine-build.conf | grep 'onie_build_machine=' | cut -d "=" -f 2)
+    if [ "$onie_build_machine" = "$onie_mlnx_machine_dflt" ]; then
+        set_onie_machine
+    fi
+
+    # Source build-time machine configuration
+    . /etc/machine-build.conf
+    if [ -n "$live_machine" ] ; then
+        cat<<EOF
+# Runtime ONIE Machine
+onie_machine=$live_machine
+onie_platform=${onie_arch}-${live_machine}-r${onie_machine_rev}
+EOF
+    fi
+}
