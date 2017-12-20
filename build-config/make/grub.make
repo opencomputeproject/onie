@@ -69,6 +69,8 @@ GRUB_STAMP		= $(GRUB_SOURCE_STAMP) \
 			  $(GRUB_INSTALL_I386_COREBOOT_STAMP) \
 			  $(GRUB_INSTALL_STAMP)
 
+GRUB_TIMEOUT	?= 5
+
 # GRUB configuration options common to i386-pc and $(ARCH)-efi
 GRUB_COMMON_CONFIG = 			\
 		--prefix=/usr		\

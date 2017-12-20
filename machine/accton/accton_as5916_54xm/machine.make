@@ -1,4 +1,4 @@
-# Accton AS7816_64X
+# Accton AS5916_54XM
 
 # Vendor's version number can be defined here.
 # Available variable is 'VENDOR_VERSION'.
@@ -13,10 +13,6 @@ VENDOR_REV ?= 0
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),0)
   MACHINE_REV = 0
-else ifeq ($(VENDOR_REV),1)
-  MACHINE_REV = 1
-  CONSOLE_SPEED = 9600
-  GRUB_TIMEOUT = 10
 else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
@@ -30,14 +26,12 @@ VENDOR_ID = 259
 UEFI_ENABLE = yes
 PXE_EFI64_ENABLE = yes
 
-I2CTOOLS_ENABLE = yes
-
 # Console parameters
 CONSOLE_DEV = 0
 
 # Set Linux kernel version
-LINUX_VERSION		= 4.1
-LINUX_MINOR_VERSION	= 38
+LINUX_VERSION = 4.1
+LINUX_MINOR_VERSION = 38
 
 GCC_VERSION = 4.9.2
 

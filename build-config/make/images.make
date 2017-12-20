@@ -272,6 +272,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_build_machine=$(ONIE_BUILD_MACHINE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_machine_rev=$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_build_platform=$(ARCH)-$(ONIE_BUILD_MACHINE)-r$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_config_version=$(ONIE_CONFIG_VERSION)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_build_date=\"$(ONIE_BUILD_DATE)\"" >> $(MACHINE_CONF)
 	$(Q) echo "onie_partition_type=$(PARTITION_TYPE)" >> $(MACHINE_CONF)
@@ -349,6 +350,7 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(UPDATER_IMAGE_PARTS_PL
 	$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
 	     CONSOLE_DEV=$(CONSOLE_DEV) \
 	     CONSOLE_PORT=$(CONSOLE_PORT) \
+	     GRUB_TIMEOUT=$(GRUB_TIMEOUT) \
 	     UPDATER_UBOOT_NAME=$(UPDATER_UBOOT_NAME) \
 	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
 	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \

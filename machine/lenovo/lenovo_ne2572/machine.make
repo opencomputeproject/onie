@@ -1,9 +1,4 @@
-# Accton AS7816_64X
-
-# Vendor's version number can be defined here.
-# Available variable is 'VENDOR_VERSION'.
-# e.g.,
-# VENDOR_VERSION = .00.01
+# Lenovo NE2572
 
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
@@ -13,36 +8,44 @@ VENDOR_REV ?= 0
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),0)
   MACHINE_REV = 0
-else ifeq ($(VENDOR_REV),1)
-  MACHINE_REV = 1
-  CONSOLE_SPEED = 9600
-  GRUB_TIMEOUT = 10
 else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
 endif
 
+# The VENDOR_VERSION string is appended to the overal ONIE version
+# string.  HW vendors can use this to appended their own versioning
+# information to the base ONIE version string.
+VENDOR_VERSION = .0.3
+
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
-# Accton Technology Corporation IANA number
-VENDOR_ID = 259
+# Lenovo 
+VENDOR_ID = 19046
 
-UEFI_ENABLE = yes
-PXE_EFI64_ENABLE = yes
-
+# Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
+#I2CTOOLS_SYSEEPROM = no 
 
 # Console parameters
-CONSOLE_DEV = 0
+CONSOLE_DEV = 1
 
+#Enable UEFI support
+UEFI_ENABLE = yes
 # Set Linux kernel version
 LINUX_VERSION		= 4.1
 LINUX_MINOR_VERSION	= 38
 
+# Specify uClibc version
+#UCLIBC_VERSION = 0.9.32.1
 GCC_VERSION = 4.9.2
+
+#Extra kernel command line
+EXTRA_CMDLINE_LINUX ?= quiet
 
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
 # mode: makefile-gmake
 # End:
+
