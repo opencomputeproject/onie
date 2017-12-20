@@ -19,11 +19,14 @@ endif
 # Mellanox IANA number
 VENDOR_ID = 33049
 
-# Enable the i2ctools and the onie-syseeprom command for this platform
+# Enable the i2ctools for this platform
 I2CTOOLS_ENABLE = yes
-I2CTOOLS_SYSEEPROM = yes
+I2CTOOLS_SYSEEPROM = no
 
-export EXTRA_CMDLINE_LINUX := acpi_enforce_resources=no nmi_watchdog=0 $(EXTRA_CMDLINE_LINUX)
+UEFI_ENABLE = yes
+SKIP_ETHMGMT_MACS = yes
+
+export EXTRA_CMDLINE_LINUX := acpi_enforce_resources=lax acpi=noirq nmi_watchdog=0 $(EXTRA_CMDLINE_LINUX)
 
 #
 #-------------------------------------------------------------------------------
@@ -32,14 +35,9 @@ export EXTRA_CMDLINE_LINUX := acpi_enforce_resources=no nmi_watchdog=0 $(EXTRA_C
 # mode: makefile-gmake
 # End:
 
-LINUX_VERSION = 3.10
+LINUX_VERSION = 4.9
 
-LINUX_MINOR_VERSION = 0-54.0.1.el7.x86_64
-
-LINUX_TARBALL = linux-3.10.0-54.0.1.el7.x86_64.tar.xz
-
-# Older GCC required for older 3.10 kernel
-GCC_VERSION = 4.9.2
+LINUX_MINOR_VERSION = 57
 
 MELLANOX_PXE_UPDATER_STAMP   = $(STAMPDIR)/mellanox-pxe-updater-stamp
 MELLANOX_NETBOOT_PXE_UPDATER = $(IMAGEDIR)/mellanox_net_boot_label.sh
@@ -53,6 +51,3 @@ $(MELLANOX_NETBOOT_PXE_UPDATER): $(MACHINEDIR)/net_boot_label.template
 	mkdir -p $(@D)
 	cat $< | sed -e "s/@VERSION@/$(MACHINE_PREFIX)/g" > $@
 	chmod +x $@
-
-include $(MACHINEDIR)/mellanox_bsp_tools_kernel.make
-include $(MACHINEDIR)/mellanox_bsp_tools.make

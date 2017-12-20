@@ -1,0 +1,685 @@
+From 2c7476ab57dd42d8cba6c417ff32a77252964858 Mon Sep 17 00:00:00 2001
+From: Vadim Pasternak <vadimp@mellanox.com>
+Date: Thu, 16 Nov 2017 17:22:56 +0000
+Subject: [v4.9 backport 38/38] platform: mellonox: introduce mlxreg-io driver
+ and add driver activation to mlx-platform
+
+Patch introduces new module mlxreg-io, which exposes the registers of the
+programmable devices, equipped on Melanox systems to sysfs. These are the
+registers, which are used for system resets operation, system reset causes
+monitoring, select operation and version info.
+
+Signed-off-by: Vadim Pasternak <vadimp@mellanox.com>
+---
+ drivers/leds/leds-mlxreg.c            |  10 +-
+ drivers/platform/mellanox/Kconfig     |  11 ++
+ drivers/platform/mellanox/Makefile    |   1 +
+ drivers/platform/mellanox/mlxreg-io.c | 211 ++++++++++++++++++++++++++++++++++
+ drivers/platform/x86/mlx-platform.c   | 193 +++++++++++++++++++++++++++++--
+ include/linux/platform_data/mlxreg.h  |   6 +-
+ 6 files changed, 418 insertions(+), 14 deletions(-)
+ create mode 100644 drivers/platform/mellanox/mlxreg-io.c
+
+diff --git a/drivers/leds/leds-mlxreg.c b/drivers/leds/leds-mlxreg.c
+index a932f20..036c214 100644
+--- a/drivers/leds/leds-mlxreg.c
++++ b/drivers/leds/leds-mlxreg.c
+@@ -79,7 +79,7 @@ struct mlxreg_led_data {
+  */
+ struct mlxreg_led_priv_data {
+ 	struct platform_device *pdev;
+-	struct mlxreg_core_led_platform_data *pdata;
++	struct mlxreg_core_platform_data *pdata;
+ 	struct mutex access_lock; /* protect IO operations */
+ };
+ 
+@@ -87,7 +87,7 @@ static int
+ mlxreg_led_store_hw(struct mlxreg_led_data *led_data, u8 vset)
+ {
+ 	struct mlxreg_led_priv_data *priv = led_data->data_parent;
+-	struct mlxreg_core_led_platform_data *led_pdata = priv->pdata;
++	struct mlxreg_core_platform_data *led_pdata = priv->pdata;
+ 	struct mlxreg_core_data *data = led_data->data;
+ 	u32 regval;
+ 	u32 nib;
+@@ -125,7 +125,7 @@ static enum led_brightness
+ mlxreg_led_get_hw(struct mlxreg_led_data *led_data)
+ {
+ 	struct mlxreg_led_priv_data *priv = led_data->data_parent;
+-	struct mlxreg_core_led_platform_data *led_pdata = priv->pdata;
++	struct mlxreg_core_platform_data *led_pdata = priv->pdata;
+ 	struct mlxreg_core_data *data = led_data->data;
+ 	u32 regval;
+ 	int ret;
+@@ -212,7 +212,7 @@ mlxreg_led_blink_set(struct led_classdev *cled, unsigned long *delay_on,
+ 
+ static int mlxreg_led_config(struct mlxreg_led_priv_data *priv)
+ {
+-	struct mlxreg_core_led_platform_data *led_pdata = priv->pdata;
++	struct mlxreg_core_platform_data *led_pdata = priv->pdata;
+ 	struct mlxreg_core_data *data = led_pdata->data;
+ 	struct mlxreg_led_data *led_data;
+ 	struct led_classdev *led_cdev;
+@@ -266,7 +266,7 @@ static int mlxreg_led_config(struct mlxreg_led_priv_data *priv)
+ 
+ static int mlxreg_led_probe(struct platform_device *pdev)
+ {
+-	struct mlxreg_core_led_platform_data *led_pdata;
++	struct mlxreg_core_platform_data *led_pdata;
+ 	struct mlxreg_led_priv_data *priv;
+ 
+ 	led_pdata = dev_get_platdata(&pdev->dev);
+diff --git a/drivers/platform/mellanox/Kconfig b/drivers/platform/mellanox/Kconfig
+index b197cc1..5c6dc29 100644
+--- a/drivers/platform/mellanox/Kconfig
++++ b/drivers/platform/mellanox/Kconfig
+@@ -22,4 +22,15 @@ config MLXREG_HOTPLUG
+ 	  This driver handles hot-plug events for the power suppliers, power
+ 	  cables and fans on the wide range Mellanox IB and Ethernet systems.
+ 
++config MLXREG_IO
++	tristate "Mellanox platform register driver support"
++	depends on REGMAP
++	depends on HWMON
++	---help---
++	  This driver allows access to Mellanox programmable device register
++	  space trough sysfs interface. The set of registers for sysfs access
++	  are defined per system type bases and includes the registers related
++	  to system resets operation, system reset causes monitoring and some
++	  kinds of mux selection.
++
+ endif # MELLANOX_PLATFORM
+diff --git a/drivers/platform/mellanox/Makefile b/drivers/platform/mellanox/Makefile
+index f58d089..b9a2692 100644
+--- a/drivers/platform/mellanox/Makefile
++++ b/drivers/platform/mellanox/Makefile
+@@ -1 +1,2 @@
+ obj-$(CONFIG_MLXREG_HOTPLUG)	+= mlxreg-hotplug.o
++obj-$(CONFIG_MLXREG_IO)	+= mlxreg-io.o
+diff --git a/drivers/platform/mellanox/mlxreg-io.c b/drivers/platform/mellanox/mlxreg-io.c
+new file mode 100644
+index 0000000..f7434ca
+--- /dev/null
++++ b/drivers/platform/mellanox/mlxreg-io.c
+@@ -0,0 +1,211 @@
++#include <linux/bitops.h>
++#include <linux/device.h>
++#include <linux/hwmon.h>
++#include <linux/hwmon-sysfs.h>
++#include <linux/module.h>
++#include <linux/of_device.h>
++#include <linux/platform_data/mlxreg.h>
++#include <linux/platform_device.h>
++#include <linux/regmap.h>
++
++/* Attribute parameters. */
++#define MLXREG_IO_ATT_SIZE	10
++#define MLXREG_IO_ATT_NUM	48
++
++/**
++ * struct mlxreg_io_priv_data - driver's private data:
++ *
++ * @pdev: platform device;
++ * @pdata: platform data;
++ * @hwmon: hwmon device;
++ * @mlxreg_io_attr: sysfs attributes array;
++ * @mlxreg_io_dev_attr: sysfs sensor device attribute array;
++ * @group: sysfs attribute group;
++ * @groups: list of sysfs attribute group for hwmon registration;
++ */
++struct mlxreg_io_priv_data {
++	struct platform_device *pdev;
++	struct mlxreg_core_platform_data *pdata;
++	struct device *hwmon;
++	struct attribute *mlxreg_io_attr[MLXREG_IO_ATT_NUM + 1];
++	struct sensor_device_attribute mlxreg_io_dev_attr[MLXREG_IO_ATT_NUM];
++	struct attribute_group group;
++	const struct attribute_group *groups[2];
++};
++
++static ssize_t
++mlxreg_io_attr_show(struct device *dev, struct device_attribute *attr,
++		    char *buf)
++{
++	struct mlxreg_io_priv_data *priv = dev_get_drvdata(dev);
++	int index = to_sensor_dev_attr(attr)->index;
++	struct mlxreg_core_data *data = priv->pdata->data + index;
++	u32 regval = 0;
++	int ret;
++
++	ret = regmap_read(priv->pdata->regmap, data->reg, &regval);
++	if (ret)
++		goto access_error;
++
++	if (!data->bit)
++		regval = !!(regval & ~data->mask);
++
++	return sprintf(buf, "%u\n", regval);
++
++access_error:
++	return ret;
++}
++
++static ssize_t
++mlxreg_io_attr_store(struct device *dev, struct device_attribute *attr,
++		     const char *buf, size_t len)
++{
++	struct mlxreg_io_priv_data *priv = dev_get_drvdata(dev);
++	int index = to_sensor_dev_attr(attr)->index;
++	struct mlxreg_core_data *data = priv->pdata->data + index;
++	u32 val, regval;
++	int ret;
++
++	ret = kstrtou32(buf, MLXREG_IO_ATT_SIZE, &val);
++	if (ret)
++		return ret;
++
++	ret = regmap_read(priv->pdata->regmap, data->reg, &regval);
++	if (ret)
++		goto access_error;
++
++	regval &= data->mask;
++
++	val = !!val;
++	if (val)
++		regval |= ~data->mask;
++	else
++		regval &= data->mask;
++
++	ret = regmap_write(priv->pdata->regmap, data->reg, regval);
++	if (ret)
++		goto access_error;
++
++	return len;
++
++access_error:
++	dev_err(&priv->pdev->dev, "Bus access error\n");
++	return ret;
++}
++
++static int mlxreg_io_attr_init(struct mlxreg_io_priv_data *priv)
++{
++	int i;
++
++	priv->group.attrs = devm_kzalloc(&priv->pdev->dev,
++					 priv->pdata->counter *
++					 sizeof(struct attribute *),
++					 GFP_KERNEL);
++	if (!priv->group.attrs)
++		return -ENOMEM;
++
++	for (i = 0; i < priv->pdata->counter; i++) {
++		priv->mlxreg_io_attr[i] =
++				&priv->mlxreg_io_dev_attr[i].dev_attr.attr;
++
++		/* Set attribute name as a label. */
++		priv->mlxreg_io_attr[i]->name =
++				devm_kasprintf(&priv->pdev->dev, GFP_KERNEL,
++					       priv->pdata->data[i].label);
++
++		if (!priv->mlxreg_io_attr[i]->name) {
++			dev_err(&priv->pdev->dev, "Memory allocation failed for sysfs attribute %d.\n",
++				i + 1);
++			return -ENOMEM;
++		}
++
++		priv->mlxreg_io_dev_attr[i].dev_attr.attr.mode =
++						priv->pdata->data[i].mode;
++		switch (priv->pdata->data[i].mode) {
++		case 0200:
++			priv->mlxreg_io_dev_attr[i].dev_attr.store =
++							mlxreg_io_attr_store;
++			break;
++
++		case 0444:
++			priv->mlxreg_io_dev_attr[i].dev_attr.show =
++							mlxreg_io_attr_show;
++			break;
++
++		case 0644:
++			priv->mlxreg_io_dev_attr[i].dev_attr.show =
++							mlxreg_io_attr_show;
++			priv->mlxreg_io_dev_attr[i].dev_attr.store =
++							mlxreg_io_attr_store;
++			break;
++
++		default:
++			dev_err(&priv->pdev->dev, "Bad access mode %u for attribute %s.\n",
++				priv->pdata->data[i].mode,
++				priv->mlxreg_io_attr[i]->name);
++			return -EINVAL;
++		}
++
++		priv->mlxreg_io_dev_attr[i].dev_attr.attr.name =
++					priv->mlxreg_io_attr[i]->name;
++		priv->mlxreg_io_dev_attr[i].index = i;
++		sysfs_attr_init(&priv->mlxreg_io_dev_attr[i].dev_attr.attr);
++	}
++
++	priv->group.attrs = priv->mlxreg_io_attr;
++	priv->groups[0] = &priv->group;
++	priv->groups[1] = NULL;
++
++	return 0;
++}
++
++static int mlxreg_io_probe(struct platform_device *pdev)
++{
++	struct mlxreg_io_priv_data *priv;
++	int err;
++
++	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
++	if (!priv)
++		return -ENOMEM;
++
++	priv->pdata = dev_get_platdata(&pdev->dev);
++	if (!priv->pdata) {
++		dev_err(&pdev->dev, "Failed to get platform data.\n");
++		return -EINVAL;
++	}
++
++	priv->pdev = pdev;
++
++	err = mlxreg_io_attr_init(priv);
++	if (err) {
++		dev_err(&priv->pdev->dev, "Failed to allocate attributes: %d\n",
++			err);
++		return err;
++	}
++
++	priv->hwmon = devm_hwmon_device_register_with_groups(&pdev->dev,
++					"mlxreg_io", priv, priv->groups);
++	if (IS_ERR(priv->hwmon)) {
++		dev_err(&pdev->dev, "Failed to register hwmon device %ld\n",
++			PTR_ERR(priv->hwmon));
++		return PTR_ERR(priv->hwmon);
++	}
++
++	dev_set_drvdata(&pdev->dev, priv);
++
++	return 0;
++}
++
++static struct platform_driver mlxreg_io_driver = {
++	.driver = {
++	    .name = "mlxreg-io",
++	},
++	.probe = mlxreg_io_probe,
++};
++
++module_platform_driver(mlxreg_io_driver);
++
++MODULE_AUTHOR("Vadim Pasternak <vadimp@mellanox.com>");
++MODULE_DESCRIPTION("Mellanox regmap I/O access driver");
++MODULE_LICENSE("Dual BSD/GPL");
++MODULE_ALIAS("platform:mlxreg-io");
+diff --git a/drivers/platform/x86/mlx-platform.c b/drivers/platform/x86/mlx-platform.c
+index 49721c2..61cbe35 100644
+--- a/drivers/platform/x86/mlx-platform.c
++++ b/drivers/platform/x86/mlx-platform.c
+@@ -47,16 +47,31 @@
+ /* LPC bus IO offsets */
+ #define MLXPLAT_CPLD_LPC_I2C_BASE_ADRR		0x2000
+ #define MLXPLAT_CPLD_LPC_REG_BASE_ADRR		0x2500
++#define MLXPLAT_CPLD_LPC_REG_CPLD1_VER_OFF	0x00
++#define MLXPLAT_CPLD_LPC_REG_CPLD2_VER_OFF	0x01
++#define MLXPLAT_CPLD_LPC_REG_RESET_CAUSE_OFF	0x1d
+ #define MLXPLAT_CPLD_LPC_REG_LED1_OFF		0x20
+ #define MLXPLAT_CPLD_LPC_REG_LED2_OFF		0x21
+ #define MLXPLAT_CPLD_LPC_REG_LED3_OFF		0x22
+ #define MLXPLAT_CPLD_LPC_REG_LED4_OFF		0x23
+ #define MLXPLAT_CPLD_LPC_REG_LED5_OFF		0x24
++#define MLXPLAT_CPLD_LPC_REG_GP1_OFF		0x30
++#define MLXPLAT_CPLD_LPC_REG_WP1_OFF		0x31
++#define MLXPLAT_CPLD_LPC_REG_GP2_OFF		0x32
++#define MLXPLAT_CPLD_LPC_REG_WP2_OFF		0x33
+ #define MLXPLAT_CPLD_LPC_REG_AGGR_OFF		0x3a
++#define MLXPLAT_CPLD_LPC_REG_AGGR_MASK_OFF	0x3b
+ #define MLXPLAT_CPLD_LPC_REG_AGGR_LOW_OFF	0x40
++#define MLXPLAT_CPLD_LPC_REG_AGGR_LOW_MASK_OFF	0x41
+ #define MLXPLAT_CPLD_LPC_REG_PSU_OFF		0x58
++#define MLXPLAT_CPLD_LPC_REG_PSU_EVENT_OFF	0x59
++#define MLXPLAT_CPLD_LPC_REG_PSU_MASK_OFF	0x5a
+ #define MLXPLAT_CPLD_LPC_REG_PWR_OFF		0x64
++#define MLXPLAT_CPLD_LPC_REG_PWR_EVENT_OFF	0x65
++#define MLXPLAT_CPLD_LPC_REG_PWR_MASK_OFF	0x66
+ #define MLXPLAT_CPLD_LPC_REG_FAN_OFF		0x88
++#define MLXPLAT_CPLD_LPC_REG_FAN_EVENT_OFF	0x89
++#define MLXPLAT_CPLD_LPC_REG_FAN_MASK_OFF	0x8a
+ #define MLXPLAT_CPLD_LPC_IO_RANGE		0x100
+ #define MLXPLAT_CPLD_LPC_I2C_CH1_OFF		0xdb
+ #define MLXPLAT_CPLD_LPC_I2C_CH2_OFF		0xda
+@@ -100,12 +115,14 @@
+  * @pdev_mux - array of mux platform devices
+  * @pdev_hotplug - hotplug platform devices
+  * @pdev_led - led platform devices
++ * @pdev_io_regs - register access platform devices
+  */
+ struct mlxplat_priv {
+ 	struct platform_device *pdev_i2c;
+ 	struct platform_device *pdev_mux[MLXPLAT_CPLD_LPC_MUX_DEVS];
+ 	struct platform_device *pdev_hotplug;
+ 	struct platform_device *pdev_led;
++	struct platform_device *pdev_io_regs;
+ };
+ 
+ /* Regions for LPC I2C controller and LPC base register space */
+@@ -643,7 +660,7 @@ static struct mlxreg_core_data mlxplat_mlxcpld_default_led_data[] = {
+ 	},
+ };
+ 
+-static struct mlxreg_core_led_platform_data mlxplat_default_led_data = {
++static struct mlxreg_core_platform_data mlxplat_default_led_data = {
+ 		.data = mlxplat_mlxcpld_default_led_data,
+ 		.counter = ARRAY_SIZE(mlxplat_mlxcpld_default_led_data),
+ };
+@@ -697,7 +714,7 @@ static struct mlxreg_core_data mlxplat_mlxcpld_msn21xx_led_data[] = {
+ 	},
+ };
+ 
+-static struct mlxreg_core_led_platform_data mlxplat_msn21xx_led_data = {
++static struct mlxreg_core_platform_data mlxplat_msn21xx_led_data = {
+ 		.data = mlxplat_mlxcpld_msn21xx_led_data,
+ 		.counter = ARRAY_SIZE(mlxplat_mlxcpld_msn21xx_led_data),
+ };
+@@ -786,11 +803,105 @@ static struct mlxreg_core_data mlxplat_mlxcpld_default_ng_led_data[] = {
+ 	},
+ };
+ 
+-static struct mlxreg_core_led_platform_data mlxplat_default_ng_led_data = {
++static struct mlxreg_core_platform_data mlxplat_default_ng_led_data = {
+ 		.data = mlxplat_mlxcpld_default_ng_led_data,
+ 		.counter = ARRAY_SIZE(mlxplat_mlxcpld_default_ng_led_data),
+ };
+ 
++static bool mlxplat_mlxcpld_writeable_reg(struct device *dev, unsigned int reg)
++{
++	switch (reg) {
++	case MLXPLAT_CPLD_LPC_REG_LED1_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED2_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED3_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED4_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED5_OFF:
++	case MLXPLAT_CPLD_LPC_REG_GP1_OFF:
++	case MLXPLAT_CPLD_LPC_REG_WP1_OFF:
++	case MLXPLAT_CPLD_LPC_REG_GP2_OFF:
++	case MLXPLAT_CPLD_LPC_REG_WP2_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_LOW_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PSU_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PSU_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PWR_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PWR_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_FAN_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_FAN_MASK_OFF:
++		return true;
++	}
++	return false;
++}
++
++static bool mlxplat_mlxcpld_readable_reg(struct device *dev, unsigned int reg)
++{
++	switch (reg) {
++	case MLXPLAT_CPLD_LPC_REG_CPLD1_VER_OFF:
++	case MLXPLAT_CPLD_LPC_REG_CPLD2_VER_OFF:
++	case MLXPLAT_CPLD_LPC_REG_RESET_CAUSE_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED1_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED2_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED3_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED4_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED5_OFF:
++	case MLXPLAT_CPLD_LPC_REG_GP1_OFF:
++	case MLXPLAT_CPLD_LPC_REG_WP1_OFF:
++	case MLXPLAT_CPLD_LPC_REG_GP2_OFF:
++	case MLXPLAT_CPLD_LPC_REG_WP2_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_LOW_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_LOW_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PSU_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PSU_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PSU_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PWR_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PWR_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PWR_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_FAN_OFF:
++	case MLXPLAT_CPLD_LPC_REG_FAN_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_FAN_MASK_OFF:
++		return true;
++	}
++	return false;
++}
++
++static bool mlxplat_mlxcpld_volatile_reg(struct device *dev, unsigned int reg)
++{
++	switch (reg) {
++	case MLXPLAT_CPLD_LPC_REG_CPLD1_VER_OFF:
++	case MLXPLAT_CPLD_LPC_REG_CPLD2_VER_OFF:
++	case MLXPLAT_CPLD_LPC_REG_RESET_CAUSE_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED1_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED2_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED3_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED4_OFF:
++	case MLXPLAT_CPLD_LPC_REG_LED5_OFF:
++	case MLXPLAT_CPLD_LPC_REG_GP1_OFF:
++	case MLXPLAT_CPLD_LPC_REG_GP2_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_LOW_OFF:
++	case MLXPLAT_CPLD_LPC_REG_AGGR_LOW_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PSU_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PSU_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PSU_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PWR_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PWR_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_PWR_MASK_OFF:
++	case MLXPLAT_CPLD_LPC_REG_FAN_OFF:
++	case MLXPLAT_CPLD_LPC_REG_FAN_EVENT_OFF:
++	case MLXPLAT_CPLD_LPC_REG_FAN_MASK_OFF:
++		return true;
++	}
++	return false;
++}
++
++static const struct reg_default mlxplat_mlxcpld_regmap_default[] = {
++	{ MLXPLAT_CPLD_LPC_REG_WP1_OFF, 0x00 },
++	{ MLXPLAT_CPLD_LPC_REG_WP2_OFF, 0x00 },
++};
++
+ static int
+ mlxplat_mlxcpld_reg_read(void *context, unsigned int reg, unsigned int *val)
+ {
+@@ -809,6 +920,12 @@ const struct regmap_config mlxplat_mlxcpld_regmap_config = {
+ 	.reg_bits = 8,
+ 	.val_bits = 8,
+ 	.max_register = 255,
++	.cache_type = REGCACHE_FLAT,
++	.writeable_reg = mlxplat_mlxcpld_writeable_reg,
++	.readable_reg = mlxplat_mlxcpld_readable_reg,
++	.volatile_reg = mlxplat_mlxcpld_volatile_reg,
++	.reg_defaults = mlxplat_mlxcpld_regmap_default,
++	.num_reg_defaults = ARRAY_SIZE(mlxplat_mlxcpld_regmap_default),
+ 	.reg_read = mlxplat_mlxcpld_reg_read,
+ 	.reg_write = mlxplat_mlxcpld_reg_write,
+ };
+@@ -817,9 +934,38 @@ static struct resource mlxplat_mlxcpld_resources[] = {
+ 	[0] = DEFINE_RES_IRQ_NAMED(17, "mlxreg-hotplug"),
+ };
+ 
+-struct platform_device *mlxplat_dev;
+-struct mlxreg_core_hotplug_platform_data *mlxplat_hotplug;
+-struct mlxreg_core_led_platform_data *mlxplat_led;
++static struct mlxreg_core_data mlxplat_mlxcpld_default_regs_io_data[] = {
++	{ "cpld1_version", MLXPLAT_CPLD_LPC_REG_CPLD1_VER_OFF, 0x00,
++	  GENMASK(7, 0), 0444 },
++	{ "cpld2_version", MLXPLAT_CPLD_LPC_REG_CPLD2_VER_OFF, 0x00,
++	  GENMASK(7, 0), 0444 },
++	{ "cause_long_pb", MLXPLAT_CPLD_LPC_REG_RESET_CAUSE_OFF,
++	  GENMASK(7, 0) & ~BIT(0), 0x00, 0444 },
++	{ "cause_short_pb", MLXPLAT_CPLD_LPC_REG_RESET_CAUSE_OFF,
++	  GENMASK(7, 0) & ~BIT(1), 0x00, 0444 },
++	{ "cause_pwr_aux", MLXPLAT_CPLD_LPC_REG_RESET_CAUSE_OFF,
++	  GENMASK(7, 0) & ~BIT(2), 0x00, 0444 },
++	{ "cause_pwr_fail", MLXPLAT_CPLD_LPC_REG_RESET_CAUSE_OFF,
++	  GENMASK(7, 0) & ~BIT(3), 0x00, 0444 },
++	{ "psu1_on", MLXPLAT_CPLD_LPC_REG_GP1_OFF, GENMASK(7, 0) & ~BIT(0),
++	  0x00, 0200 },
++	{ "psu2_on", MLXPLAT_CPLD_LPC_REG_GP1_OFF,  GENMASK(7, 0) & ~BIT(1),
++	  0x00, 0200 },
++	{ "pwr_cycle", MLXPLAT_CPLD_LPC_REG_GP1_OFF, GENMASK(7, 0) & ~BIT(2),
++	  0x00, 0200 },
++	{ "select_iio", MLXPLAT_CPLD_LPC_REG_GP2_OFF, GENMASK(7, 0) & ~BIT(6),
++	  0x00, 0644 },
++};
++
++static struct mlxreg_core_platform_data mlxplat_default_regs_io_data = {
++		.data = mlxplat_mlxcpld_default_regs_io_data,
++		.counter = ARRAY_SIZE(mlxplat_mlxcpld_default_regs_io_data),
++};
++
++static struct platform_device *mlxplat_dev;
++static struct mlxreg_core_hotplug_platform_data *mlxplat_hotplug;
++static struct mlxreg_core_platform_data *mlxplat_led;
++static struct mlxreg_core_platform_data *mlxplat_regs_io;
+ 
+ static int __init mlxplat_dmi_default_matched(const struct dmi_system_id *dmi)
+ {
+@@ -832,6 +978,7 @@ static int __init mlxplat_dmi_default_matched(const struct dmi_system_id *dmi)
+ 	}
+ 	mlxplat_hotplug = &mlxplat_mlxcpld_default_data;
+ 	mlxplat_led = &mlxplat_default_led_data;
++	mlxplat_regs_io = &mlxplat_default_regs_io_data;
+ 
+ 	return 1;
+ };
+@@ -847,6 +994,7 @@ static int __init mlxplat_dmi_msn21xx_matched(const struct dmi_system_id *dmi)
+ 	}
+ 	mlxplat_hotplug = &mlxplat_mlxcpld_msn21xx_data;
+ 	mlxplat_led = &mlxplat_msn21xx_led_data;
++	mlxplat_regs_io = &mlxplat_default_regs_io_data;
+ 
+ 	return 1;
+ };
+@@ -862,6 +1010,7 @@ static int __init mlxplat_dmi_msn274x_matched(const struct dmi_system_id *dmi)
+ 	}
+ 	mlxplat_hotplug = &mlxplat_mlxcpld_msn274x_data;
+ 	mlxplat_led = &mlxplat_default_led_data;
++	mlxplat_regs_io = &mlxplat_default_regs_io_data;
+ 
+ 	return 1;
+ };
+@@ -877,6 +1026,7 @@ static int __init mlxplat_dmi_qmb7xx_matched(const struct dmi_system_id *dmi)
+ 	}
+ 	mlxplat_hotplug = &mlxplat_mlxcpld_default_ng_data;
+ 	mlxplat_led = &mlxplat_default_ng_led_data;
++	mlxplat_regs_io = &mlxplat_default_regs_io_data;
+ 
+ 	return 1;
+ };
+@@ -892,6 +1042,7 @@ static int __init mlxplat_dmi_msn201x_matched(const struct dmi_system_id *dmi)
+ 	}
+ 	mlxplat_hotplug = &mlxplat_mlxcpld_msn201x_data;
+ 	mlxplat_led = &mlxplat_msn21xx_led_data;
++	mlxplat_regs_io = &mlxplat_default_regs_io_data;
+ 
+ 	return 1;
+ };
+@@ -974,7 +1125,7 @@ static int __init mlxplat_init(void)
+ {
+ 	struct mlxplat_priv *priv;
+ 	void __iomem *base;
+-	int i, err = 0;
++	int i, j, err = 0;
+ 
+ 	if (!dmi_check_system(mlxplat_dmi_table))
+ 		return -ENODEV;
+@@ -1023,6 +1174,15 @@ static int __init mlxplat_init(void)
+ 	if (IS_ERR(mlxplat_hotplug->regmap))
+ 		goto fail_platform_mux_register;
+ 
++	/* Set default registers. */
++	for (j = 0; j <  mlxplat_mlxcpld_regmap_config.num_reg_defaults; j++) {
++		err = regmap_write(mlxplat_hotplug->regmap,
++				   mlxplat_mlxcpld_regmap_default[j].reg,
++				   mlxplat_mlxcpld_regmap_default[j].def);
++		if (err)
++			goto fail_platform_mux_register;
++	}
++
+ 	priv->pdev_hotplug = platform_device_register_resndata(
+ 				&mlxplat_dev->dev, "mlxreg-hotplug",
+ 				PLATFORM_DEVID_NONE,
+@@ -1044,8 +1204,26 @@ static int __init mlxplat_init(void)
+ 		goto fail_platform_hotplug_register;
+ 	}
+ 
++	mlxplat_regs_io->regmap = mlxplat_hotplug->regmap;
++	priv->pdev_io_regs = platform_device_register_resndata(
++				&mlxplat_dev->dev, "mlxreg-io",
++				PLATFORM_DEVID_NONE, NULL, 0,
++				mlxplat_regs_io, sizeof(*mlxplat_regs_io));
++	if (IS_ERR(priv->pdev_io_regs)) {
++		err = PTR_ERR(priv->pdev_io_regs);
++		goto fail_platform_led_register;
++	}
++
++	/* Sync registers with hardware. */
++	regcache_mark_dirty(mlxplat_hotplug->regmap);
++	err = regcache_sync(mlxplat_hotplug->regmap);
++	if (err)
++		goto fail_platform_led_register;
++
+ 	return 0;
+ 
++fail_platform_led_register:
++	platform_device_unregister(priv->pdev_led);
+ fail_platform_hotplug_register:
+ 	platform_device_unregister(priv->pdev_hotplug);
+ fail_platform_mux_register:
+@@ -1064,6 +1242,7 @@ static void __exit mlxplat_exit(void)
+ 	struct mlxplat_priv *priv = platform_get_drvdata(mlxplat_dev);
+ 	int i;
+ 
++	platform_device_unregister(priv->pdev_io_regs);
+ 	platform_device_unregister(priv->pdev_led);
+ 	platform_device_unregister(priv->pdev_hotplug);
+ 
+diff --git a/include/linux/platform_data/mlxreg.h b/include/linux/platform_data/mlxreg.h
+index dd471c5..c25623b 100644
+--- a/include/linux/platform_data/mlxreg.h
++++ b/include/linux/platform_data/mlxreg.h
+@@ -61,6 +61,7 @@ struct mlxreg_hotplug_device {
+  * @label: attribute register offset;
+  * @reg: attribute register;
+  * @mask: attribute access mask;
++ * @mode: access mode;
+  * @bit: attribute effective bit;
+  * @np - pointer to node platform associated with attribute;
+  * @hpdev - hotplug device data;
+@@ -72,6 +73,7 @@ struct mlxreg_core_data {
+ 	u32 reg;
+ 	u32 mask;
+ 	u32 bit;
++	umode_t	mode;
+ 	struct device_node *np;
+ 	struct mlxreg_hotplug_device hpdev;
+ 	u8 health_cntr;
+@@ -104,13 +106,13 @@ struct mlxreg_core_item {
+ };
+ 
+ /**
+- * struct mlxreg_core_led_platform_data - led platform data:
++ * struct mlxreg_core_platform_data - platform data:
+  *
+  * @led_data: led private data;
+  * @regmap: register map of parent device;
+  * @counter: number of led instances;
+  */
+-struct mlxreg_core_led_platform_data {
++struct mlxreg_core_platform_data {
+ 	struct mlxreg_core_data *data;
+ 	void *regmap;
+ 	int counter;
+-- 
+2.1.4
+
