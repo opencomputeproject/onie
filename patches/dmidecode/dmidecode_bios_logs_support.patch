@@ -1,0 +1,106 @@
+--- a/dmidecode.c	2017-12-20 20:03:41.605835500 +0000
++++ b/dmidecode.c	2017-12-20 20:47:44.013870586 +0000
+@@ -63,7 +63,11 @@
+ #include <strings.h>
+ #include <stdlib.h>
+ #include <unistd.h>
+-
++#include <fcntl.h>
++#include <sys/mman.h>
++#include <ctype.h>
++#include <errno.h>
++#include <unistd.h>
+ #include "version.h"
+ #include "config.h"
+ #include "types.h"
+@@ -2251,6 +2255,82 @@
+ 	}
+ }
+ 
++static const char* dmi_log_record_time(u8 *p, char* str)
++{
++    if (!str) {
++        return str;
++    }
++
++    snprintf(str, 24, "%02x/%02x/20%02x %02x:%02x:%02x", p[2], p[1], p[0], \
++             p[3], p[4], p[5]);
++
++    return str;
++}
++
++static u8 dmi_display_log_record(u8 num, u8 *p)
++{
++    char str[24];
++
++    memset(str, 0, 24);
++    if (p[1] != 0xFF) {
++        printf("\t%d:\t%s\t%s\n", num, dmi_log_record_time(p + 2, str), \
++               dmi_event_log_descriptor_type(p[0]));
++    }
++
++    return p[1];
++}
++
++static void dmi_display_log_records(const struct dmi_header *h)
++{
++    const u8 *data = h->data;
++    u16       len = WORD(data + 0x04);
++    u16       offs = WORD(data + 0x08);
++    off_t     base_addr = DWORD(data + 0x10);
++    int       i, num = 1, rec_len;
++    u8       *p, *mem_p, *curr_p;
++    int       mem_fd, page_sz;
++
++    page_sz = (int)sysconf(_SC_PAGESIZE);
++    p = malloc(len + (page_sz - 1));
++    if (!p) {
++        printf("Failed alloc buff for log errors\n");
++        return;
++    }
++    mem_p = p;
++    if ((unsigned long)mem_p % page_sz) {
++        mem_p += page_sz - ((unsigned long)mem_p % page_sz);
++    }
++
++    mem_fd = open("/dev/mem", O_RDWR);
++    if (mem_fd < 0) {
++        printf("Failed open /dev/mem\n");
++        return;
++    }
++
++    mem_p = (u8*)mmap(mem_p, len, PROT_READ, MAP_SHARED | MAP_FIXED, mem_fd, base_addr);
++    if (mem_p == MAP_FAILED) {
++        printf("mmap failed, errno %s(%d), 0x%x\n", strerror(errno), errno, (unsigned int)base_addr);
++        free(p);
++        close(mem_fd);
++        return;
++    }
++    curr_p = mem_p + offs;
++
++    printf("BIOS log records:\n");
++    for (i = 0; i < len;) {
++        rec_len = dmi_display_log_record(num, curr_p);
++        if (rec_len == 0xff) {
++            break;
++        } else {
++            i += rec_len;
++            curr_p += rec_len;
++            num++;
++        }
++    }
++
++    close(mem_fd);
++}
++
+ /*
+  * 7.17 Physical Memory Array (Type 16)
+  */
+@@ -3793,6 +3873,7 @@
+ 				data[0x15]);
+ 			if (h->length < 0x17 + data[0x15] * data[0x16]) break;
+ 			dmi_event_log_descriptors(data[0x15], data[0x16], data + 0x17, "\t");
++        		dmi_display_log_records(h);
+ 			break;
+ 
+ 		case 16: /* 7.17 Physical Memory Array */
