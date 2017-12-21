@@ -1,0 +1,35 @@
+From 4e8f2e4f5974b75b3c2c876e1da6cc815036f1f6 Mon Sep 17 00:00:00 2001
+From: Zhao Qiang <qiang.zhao@nxp.com>
+Date: Thu, 21 Dec 2017 15:00:58 +0800
+Subject: [PATCH] fw_env: modify crc size in getenvsize
+
+In functin getenvsize, crc size is calcultated by sizeof(long),
+meanwhile, in the struct it is a uint32_t type.
+	struct env_image_single {
+	       uint32_t        crc;    /* CRC32 over data bytes    */
+	       char            data[];
+	};
+long is the same size with uint32_t in some machines, but different
+in other machines, so modify it with sizeof(uint32_t)
+
+Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ miscutils/fw_env.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/miscutils/fw_env.c b/miscutils/fw_env.c
+index f6f0d27..777c369 100644
+--- a/miscutils/fw_env.c
++++ b/miscutils/fw_env.c
+@@ -122,7 +122,7 @@ static int get_config (const char *);
+ #endif
+ static inline ulong getenvsize (void)
+ {
+-	ulong rc = CONFIG_ENV_SIZE - sizeof (long);
++	ulong rc = CONFIG_ENV_SIZE - sizeof (uint32_t);
+ 
+ 	if (HaveRedundEnv)
+ 		rc -= sizeof (char);
+-- 
+2.7.4
+
