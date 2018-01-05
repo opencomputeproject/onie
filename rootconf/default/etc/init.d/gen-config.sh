@@ -47,7 +47,7 @@ EOF
     local onie_platform="${onie_arch}-${onie_machine}-r${onie_machine_rev}"
     cat <<EOF >> $machine_conf
 onie_machine=$onie_machine
-onie_platform="$onie_platform"
+onie_platform=$onie_platform
 EOF
 
 }
