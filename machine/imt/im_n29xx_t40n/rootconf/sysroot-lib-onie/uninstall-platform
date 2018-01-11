@@ -49,6 +49,57 @@ install_grub_config()
     $boot_dir/onie/grub.d/50_onie_grub >> $grub_root_dir/grub.cfg
 }
 
+# Get MSDOS partition type
+#
+# Return partition type: primary|extended|logical|unknown
+get_msdos_part_type()
+{
+    local blk_dev=$1
+    local part=$2
+    parted /dev/${blk_dev} print | sed "s/^ //" | grep "^${part}" | awk '{split($0,a," "); print a[5]}' || echo "unknown"
+}
+
+# Erase a mass storage
+#
+# arg $1 - block device without the "/dev"
+erase_mass_storage()
+{
+    local blk_dev=$1
+    # check if we have an mmcblk device
+    local blk_suffix=
+    echo ${blk_dev} | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo ${blk_dev} | grep -q nvme && blk_suffix="p"
+
+    if ls -d /sys/block/$blk_dev/${blk_dev}* > /dev/null 2>&1 ; then
+        # Wipe out and delete all partitions, except for important ones,
+        # like GRUB, ONIE and possibly a DIAG.
+        ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev$blk_suffix//" | while read part ; do
+            if eval $should_delete_partition $blk_dev $part ; then
+                # MSDOS extended partitions should be removed after logical
+                # without data errasing
+                if [ "$onie_partition_type" = "msdos" ] && [ "$(get_msdos_part_type $blk_dev $part)" = "logical" ]; then
+                    erase_block_device ${blk_dev}${blk_suffix}${part}
+                elif [ "$onie_partition_type" != "msdos" ] || [ "$(get_msdos_part_type $blk_dev $part)" != "extended" ]; then
+                    erase_part $blk_dev $part
+                fi
+            fi
+        done
+
+        ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev$blk_suffix//" | while read part ; do
+            if eval $should_delete_partition $blk_dev $part && [ "$(get_msdos_part_type $blk_dev $part)" = "extended" ]; then
+                eval $delete_partition $blk_dev $part || {
+                    printf "${log_pre}Unable to remove partition $part on /dev/$blk_dev\n"
+                    return 1
+                }
+            fi
+        done
+    else
+        # Wipe out the whole block device
+        erase_block_device $blk_dev
+    fi
+}
+
 [ -r "$lib_dir/onie-blkdev-common" ] || {
     echo "ERROR: Unable to find onie-blkdev-common"
     exit 1
