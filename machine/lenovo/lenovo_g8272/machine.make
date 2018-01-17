@@ -4,6 +4,7 @@ ONIE_ARCH ?= powerpc-softfloat
 SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
+VENDOR_VERSION = .0.3
 
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),0)
