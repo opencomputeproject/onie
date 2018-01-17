@@ -32,7 +32,7 @@ GRUB_PATCH_STAMP	= $(USER_STAMPDIR)/grub-patch
 GRUB_CONFIGURE_STAMP	= $(USER_STAMPDIR)/grub-configure
 GRUB_BUILD_STAMP	= $(USER_STAMPDIR)/grub-build
 GRUB_INSTALL_STAMP	= $(STAMPDIR)/grub-install
-ifeq ($(FIRMWARE_TYPE),$(filter $(FIRMWARE_TYPE),auto bios))
+ifeq ($(FIRMWARE_TYPE),$(filter $(FIRMWARE_TYPE),auto bios coreboot))
   GRUB_CONFIGURE_I386_STAMP	= $(USER_STAMPDIR)/grub-configure-i386-pc
   GRUB_BUILD_I386_STAMP		= $(USER_STAMPDIR)/grub-build-i386-pc
   GRUB_INSTALL_I386_STAMP	= $(STAMPDIR)/grub-install-i386-pc
@@ -68,6 +68,8 @@ GRUB_STAMP		= $(GRUB_SOURCE_STAMP) \
 			  $(GRUB_INSTALL_UEFI_STAMP) \
 			  $(GRUB_INSTALL_I386_COREBOOT_STAMP) \
 			  $(GRUB_INSTALL_STAMP)
+
+GRUB_TIMEOUT	?= 5
 
 # GRUB configuration options common to i386-pc and $(ARCH)-efi
 GRUB_COMMON_CONFIG = 			\
@@ -146,6 +148,7 @@ $(GRUB_CONFIGURE_I386_COREBOOT_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) |
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure grub-i386-coreboot-$(GRUB_VERSION) ===="
 	$(Q) mkdir -p $(GRUB_I386_COREBOOT_DIR)
+	$(Q) zcat $(GRUB_DIR)/unifont-5.1.20080820.bdf.gz > $(GRUB_I386_COREBOOT_DIR)/unifont.bdf
 	$(Q) cd $(GRUB_I386_COREBOOT_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
 		--host=$(TARGET)				\

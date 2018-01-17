@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -135,9 +135,9 @@ echo -n "."
 cp -r $installer_dir/$arch_dir/* $tmp_installdir
 echo -n "."
 
-[ -r $machine_dir/installer/install-platform ] && {
+if [ "$update_type" = "onie" -a -r $machine_dir/installer/install-platform ] ; then
     cp $machine_dir/installer/install-platform $tmp_installdir
-}
+fi
 
 # Massage install-arch
 if [ "$arch_dir" = "u-boot-arch" ] ; then
@@ -149,6 +149,9 @@ echo -n "."
 # Add optional installer configuration files
 if [ "$rootfs_arch" = "grub-arch" -a "$update_type" = "onie" ] ; then
     cp "$installer_conf" $tmp_installdir || exit 1
+    echo -n "."
+
+    sed -i -e "s/%%GRUB_TIMEOUT%%/$GRUB_TIMEOUT/" $tmp_installdir/grub/grub-common.cfg
     echo -n "."
 
     if [ "$SERIAL_CONSOLE_ENABLE" = "yes" ] ; then
@@ -206,7 +209,7 @@ EOF
         $tmp_installdir/grub.d/50_onie_grub
 fi
 
-sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine.conf || exit 1
+sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine-build.conf || exit 1
 echo -n "."
 
 if [ "$update_type" = "firmware" ] ; then

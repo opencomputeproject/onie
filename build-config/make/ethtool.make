@@ -55,7 +55,7 @@ $(ETHTOOL_CONFIGURE_STAMP): $(ETHTOOL_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) echo "====  Configure ethtool-$(ETHTOOL_VERSION) ===="
 	$(Q) cd $(ETHTOOL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(ETHTOOL_DIR)/configure			\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
 		LDFLAGS="$(ONIE_LDFLAGS)"
@@ -65,8 +65,8 @@ ethtool-build: $(ETHTOOL_BUILD_STAMP)
 $(ETHTOOL_BUILD_STAMP): $(ETHTOOL_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building ethtool-$(ETHTOOL_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(ETHTOOL_DIR)
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(ETHTOOL_DIR) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(ETHTOOL_DIR) DESTDIR=$(DEV_SYSROOT)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(ETHTOOL_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 ethtool-install: $(ETHTOOL_INSTALL_STAMP)

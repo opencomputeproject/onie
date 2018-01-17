@@ -1,15 +1,17 @@
 support Broadcom Tigon3 Ethernet driver
 
 diff --git a/drivers/net/ethernet/broadcom/Makefile b/drivers/net/ethernet/broadcom/Makefile
-index b789605..486c71c 100644
+index e2a958a..34f00e6 100644
 --- a/drivers/net/ethernet/broadcom/Makefile
 +++ b/drivers/net/ethernet/broadcom/Makefile
-@@ -8,4 +8,4 @@ obj-$(CONFIG_BNX2) += bnx2.o
+@@ -9,6 +9,6 @@ obj-$(CONFIG_BNX2) += bnx2.o
  obj-$(CONFIG_CNIC) += cnic.o
  obj-$(CONFIG_BNX2X) += bnx2x/
  obj-$(CONFIG_SB1250_MAC) += sb1250-mac.o
 -obj-$(CONFIG_TIGON3) += tg3.o
 +obj-$(CONFIG_TIGON3) += tg3/
+ obj-$(CONFIG_BGMAC) += bgmac.o
+ obj-$(CONFIG_SYSTEMPORT) += bcmsysport.o
 diff --git a/drivers/net/ethernet/broadcom/tg3/Makefile b/drivers/net/ethernet/broadcom/tg3/Makefile
 new file mode 100644
 index 0000000..22b6141
@@ -297,10 +299,10 @@ index 0000000..6a3e466
 +#endif  // _nicext_h_
 diff --git a/drivers/net/ethernet/broadcom/tg3/tg3.c b/drivers/net/ethernet/broadcom/tg3/tg3.c
 new file mode 100644
-index 0000000..87a7911
+index 0000000..833eaef
 --- /dev/null
 +++ b/drivers/net/ethernet/broadcom/tg3/tg3.c
-@@ -0,0 +1,19897 @@
+@@ -0,0 +1,19911 @@
 +/*
 + * tg3.c: Broadcom Tigon3 ethernet driver.
 + *
@@ -6838,10 +6840,9 @@ index 0000000..87a7911
 +	return 0;
 +}
 +
-+static int tg3_ptp_gettime(struct ptp_clock_info *ptp, struct timespec *ts)
++static int tg3_ptp_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 +{
 +	u64 ns;
-+	u32 remainder;
 +	struct tg3 *tp = container_of(ptp, struct tg3, ptp_info);
 +
 +	tg3_full_lock(tp, 0);
@@ -6849,19 +6850,18 @@ index 0000000..87a7911
 +	ns += tp->ptp_adjust;
 +	tg3_full_unlock(tp);
 +
-+	ts->tv_sec = div_u64_rem(ns, 1000000000, &remainder);
-+	ts->tv_nsec = remainder;
++	*ts = ns_to_timespec64(ns);
 +
 +	return 0;
 +}
 +
 +static int tg3_ptp_settime(struct ptp_clock_info *ptp,
-+			   const struct timespec *ts)
++			   const struct timespec64 *ts)
 +{
 +	u64 ns;
 +	struct tg3 *tp = container_of(ptp, struct tg3, ptp_info);
 +
-+	ns = timespec_to_ns(ts);
++	ns = timespec64_to_ns(ts);
 +
 +	tg3_full_lock(tp, 0);
 +	tg3_refclk_write(tp, ns);
@@ -6940,8 +6940,8 @@ index 0000000..87a7911
 +	.pps		= 0,
 +	.adjfreq	= tg3_ptp_adjfreq,
 +	.adjtime	= tg3_ptp_adjtime,
-+	.gettime	= tg3_ptp_gettime,
-+	.settime	= tg3_ptp_settime,
++	.gettime64	= tg3_ptp_gettime,
++	.settime64	= tg3_ptp_settime,
 +	.enable		= tg3_ptp_enable,
 +};
 +
@@ -6995,10 +6995,10 @@ index 0000000..87a7911
 +
 +static void tg3_ptp_calibrate(struct tg3 *tp)
 +{
-+	struct timespec now;
++	struct timespec64 now;
 +
 +	getnstimeofday(&now);
-+	tg3_refclk_write(tp, timespec_to_ns(&now));
++	tg3_refclk_write(tp, timespec64_to_ns(&now));
 +
 +	/* Synchronize our NIC clock against system wall clock. */
 +	memset(&tp->cycles, 0, sizeof(tp->cycles));
@@ -8977,9 +8977,9 @@ index 0000000..87a7911
 +		base_flags |= TXD_FLAG_JMB_PKT;
 +
 +#ifdef BCM_KERNEL_SUPPORTS_8021Q
-+	if (vlan_tx_tag_present(skb)) {
++	if (skb_vlan_tag_present(skb)) {
 +		base_flags |= TXD_FLAG_VLAN;
-+		vlan = vlan_tx_tag_get(skb);
++		vlan = skb_vlan_tag_get(skb);
 +	}
 +#endif
 +
@@ -13931,10 +13931,15 @@ index 0000000..87a7911
 +	return size;
 +}
 +
-+static int tg3_get_rxfh_indir(struct net_device *dev, u32 *indir)
++static int tg3_get_rxfh(struct net_device *dev, u32 *indir, u8 *key, u8 *hfunc)
 +{
 +	struct tg3 *tp = netdev_priv(dev);
 +	int i;
++
++	if (hfunc)
++		*hfunc = ETH_RSS_HASH_TOP;
++	if (!indir)
++		return 0;
 +
 +	for (i = 0; i < TG3_RSS_INDIR_TBL_SIZE; i++)
 +		indir[i] = tp->rss_ind_tbl[i];
@@ -13942,10 +13947,21 @@ index 0000000..87a7911
 +	return 0;
 +}
 +
-+static int tg3_set_rxfh_indir(struct net_device *dev, const u32 *indir)
++static int tg3_set_rxfh(struct net_device *dev, const u32 *indir, const u8 *key,
++			const u8 hfunc)
 +{
 +	struct tg3 *tp = netdev_priv(dev);
 +	size_t i;
++
++	/* We require at least one supported parameter to be changed and no
++	 * change in any of the unsupported parameters
++	 */
++	if (key ||
++	    (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP))
++		return -EOPNOTSUPP;
++
++	if (!indir)
++		return 0;
 +
 +	for (i = 0; i < TG3_RSS_INDIR_TBL_SIZE; i++)
 +		tp->rss_ind_tbl[i] = indir[i];
@@ -15571,8 +15587,8 @@ index 0000000..87a7911
 +#ifdef BCM_HAS_GET_RXFH_INDIR_SIZE
 +	.get_rxfh_indir_size    = tg3_get_rxfh_indir_size,
 +#endif /* BCM_HAS_GET_RXFH_INDIR_SIZE */
-+	.get_rxfh_indir		= tg3_get_rxfh_indir,
-+	.set_rxfh_indir		= tg3_set_rxfh_indir,
++	.get_rxfh		= tg3_get_rxfh,
++	.set_rxfh		= tg3_set_rxfh,
 +#endif /* BCM_HAS_GET_RXFH_INDIR */
 +#if defined(ETHTOOL_GCHANNELS) && !defined(GET_ETHTOOL_OP_EXT)
 +	.get_channels		= tg3_get_channels,
@@ -27488,10 +27504,10 @@ index 0000000..eff7b9d
 +#endif /* BCM_HAS_REQUEST_FIRMWARE */
 diff --git a/drivers/net/ethernet/broadcom/tg3/tg3_flags.h b/drivers/net/ethernet/broadcom/tg3/tg3_flags.h
 new file mode 100644
-index 0000000..5958197
+index 0000000..e7ce105
 --- /dev/null
 +++ b/drivers/net/ethernet/broadcom/tg3/tg3_flags.h
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,89 @@
 +#define BCM_HAS_BOOL
 +#define BCM_HAS_LE32
 +#define BCM_HAS_RESOURCE_SIZE_T
@@ -27508,37 +27524,34 @@ index 0000000..5958197
 +#define BCM_HAS_SKB_TX_TIMESTAMP
 +#define BCM_HAS_SKB_FRAG_SIZE
 +#define BCM_HAS_SKB_FRAG_DMA_MAP
++#define BCM_HAS_BUILD_SKB
 +#define BCM_HAS_PCI_PCIE_CAP
++#define BCM_HAS_PCIE_CAP_RW
 +#define BCM_HAS_PCI_IS_PCIE
 +#define BCM_HAS_PCI_IOREMAP_BAR
 +#define BCM_HAS_PCI_READ_VPD
 +#define BCM_HAS_INTX_MSI_WORKAROUND
-+#define BCM_HAS_PCI_TARGET_STATE
 +#define BCM_HAS_PCI_CHOOSE_STATE
 +#define BCM_HAS_PCI_PME_CAPABLE
 +#define BCM_HAS_PCI_ENABLE_WAKE
 +#define BCM_HAS_PCI_WAKE_FROM_D3
 +#define BCM_HAS_PCI_SET_POWER_STATE
 +#define BCM_HAS_PCI_EEH_SUPPORT
++#define BCM_HAS_PCI_BUSN_RES
 +#define BCM_HAS_PCI_IS_ENABLED
++#define BCM_HAS_PCI_DEV_IS_PRESENT
 +#define BCM_HAS_DEVICE_WAKEUP_API
 +#define BCM_HAS_DEVICE_SET_WAKEUP_CAPABLE
 +#define BCM_HAS_NEW_PCI_DMA_MAPPING_ERROR
 +#define BCM_HAS_PCIE_GET_READRQ
 +#define BCM_HAS_PCIE_SET_READRQ
-+#define BCM_HAS_ETHTOOL_OP_SET_TX_IPV6_CSUM
-+#define BCM_HAS_ETHTOOL_OP_SET_TX_HW_CSUM
-+#define BCM_HAS_ETHTOOL_OP_SET_SG
-+#define BCM_HAS_ETHTOOL_OP_SET_TSO
-+#define BCM_HAS_MDIX_STATUS
 +#define BCM_HAS_SET_PHYS_ID
-+#define BCM_HAS_SET_TX_CSUM
 +#define BCM_HAS_ETHTOOL_CMD_SPEED_SET
 +#define BCM_HAS_ETHTOOL_CMD_SPEED
-+#define BCM_HAS_EXTERNAL_LB_DONE
 +#define BCM_HAS_GET_RXNFC
++#define BCM_HAS_ETHTOOL_RXFH_INDIR_DEFAULT
++#define BCM_HAS_GET_RXFH_INDIR_SIZE
 +#define BCM_HAS_GET_RXFH_INDIR
-+#define BCM_HAS_LP_ADVERTISING
 +#define BCM_HAS_SKB_TRANSPORT_OFFSET
 +#define BCM_HAS_SKB_GET_QUEUE_MAPPING
 +#define BCM_HAS_IP_HDR
@@ -27553,6 +27566,12 @@ index 0000000..5958197
 +#define BCM_HAS_NETDEV_TX_T
 +#define BCM_HAS_NETDEV_HW_ADDR
 +#define BCM_HAS_NETDEV_NAME
++#define BCM_HAS_NETDEV_SENT_QUEUE
++#define BCM_HAS_NETDEV_TX_SENT_QUEUE
++#define BCM_HAS_NETDEV_COMPLETED_QUEUE
++#define BCM_HAS_NETDEV_TX_COMPLETED_QUEUE
++#define BCM_HAS_NETDEV_RESET_QUEUE
++#define BCM_HAS_NETDEV_TX_RESET_QUEUE
 +#define BCM_HAS_NET_DEVICE_OPS
 +#define BCM_HAS_GET_STATS64
 +#define BCM_HAS_FIX_FEATURES
@@ -27563,12 +27582,15 @@ index 0000000..5958197
 +#define BCM_HAS_NAPI_GRO_RECEIVE
 +#define BCM_HAS_NETIF_TX_LOCK
 +#define BCM_HAS_TXQ_TRANS_UPDATE
++#define BCM_HAS_NETDEV_FEATURES_T
++#define BCM_HAS_GET_NUM_DFLT_RSS_QS
 +#define BCM_HAS_NEW_VLAN_INTERFACE
 +#define BCM_HAS_DEV_DRIVER_STRING
 +#define BCM_HAS_DEV_NAME
 +#define BCM_HAS_MDIO_H
 +#define BCM_HAS_MII_RESOLVE_FLOWCTRL_FDX
 +#define BCM_HAS_MII_ADVERTISE_FLOWCTRL
++#define BCM_HAS_ETHTOOL_ADV_TO_MII_ADV_T
 +#define BCM_HAS_MDIOBUS_ALLOC
 +#define BCM_HAS_DMA_DATA_DIRECTION
 +#define BCM_HAS_DMA_UNMAP_ADDR

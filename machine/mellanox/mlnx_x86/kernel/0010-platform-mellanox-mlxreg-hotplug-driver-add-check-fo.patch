@@ -1,0 +1,53 @@
+From c794f8ffa6521c47bfbff813e7f713561d7da7bd Mon Sep 17 00:00:00 2001
+From: Vadim Pasternak <vadimp@mellanox.com>
+Date: Mon, 11 Dec 2017 19:02:19 +0000
+Subject: [v4.9 backport 09/29] platform/mellanox: mlxreg-hotplug driver add
+ check for low aggregation register mask
+
+It adds verification for low aggregation register mask offset. Only
+non-zero offset is considered as valid.
+
+Signed-off-by: Vadim Pasternak <vadimp@mellanox.com>
+---
+ drivers/platform/mellanox/mlxreg-hotplug.c | 18 +++++++++++-------
+ 1 file changed, 11 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/platform/mellanox/mlxreg-hotplug.c b/drivers/platform/mellanox/mlxreg-hotplug.c
+index 94fdb6b..ba9241e 100644
+--- a/drivers/platform/mellanox/mlxreg-hotplug.c
++++ b/drivers/platform/mellanox/mlxreg-hotplug.c
+@@ -550,10 +550,13 @@ static int mlxreg_hotplug_set_irq(struct mlxreg_hotplug_priv_data *priv)
+ 		goto access_error;
+ 
+ 	/* Keep low aggregation initial status as zero and unmask events. */
+-	ret = regmap_write(priv->regmap, pdata->cell_low +
+-			   MLXREG_HOTPLUG_AGGR_MASK_OFF, pdata->mask_low);
+-	if (ret)
+-		goto access_error;
++	if (pdata->cell_low) {
++		ret = regmap_write(priv->regmap, pdata->cell_low +
++				   MLXREG_HOTPLUG_AGGR_MASK_OFF,
++				   pdata->mask_low);
++		if (ret)
++			goto access_error;
++	}
+ 
+ 	/* Invoke work handler for initializing hot plug devices setting. */
+ 	mlxreg_hotplug_work_handler(&priv->dwork_irq.work);
+@@ -582,9 +585,10 @@ static void mlxreg_hotplug_unset_irq(struct mlxreg_hotplug_priv_data *priv)
+ 	disable_irq(priv->irq);
+ 	cancel_delayed_work_sync(&priv->dwork_irq);
+ 
+-	/* Mask low aggregation event. */
+-	regmap_write(priv->regmap, pdata->cell_low +
+-		     MLXREG_HOTPLUG_AGGR_MASK_OFF, 0);
++	/* Mask low aggregation event, if defined. */
++	if (pdata->cell_low)
++		regmap_write(priv->regmap, pdata->cell_low +
++			     MLXREG_HOTPLUG_AGGR_MASK_OFF, 0);
+ 
+ 	/* Mask aggregation event. */
+ 	regmap_write(priv->regmap, pdata->cell + MLXREG_HOTPLUG_AGGR_MASK_OFF,
+-- 
+2.1.4
+

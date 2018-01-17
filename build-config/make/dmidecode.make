@@ -9,8 +9,8 @@
 # This is a makefile fragment that defines the build of dmidecode
 #
 
-DMIDECODE_VERSION		= 2.12
-DMIDECODE_TARBALL		= dmidecode-$(DMIDECODE_VERSION).tar.gz
+DMIDECODE_VERSION		= 3.1
+DMIDECODE_TARBALL		= dmidecode-$(DMIDECODE_VERSION).tar.xz
 DMIDECODE_TARBALL_URLS		+= $(ONIE_MIRROR) http://download.savannah.gnu.org/releases/dmidecode/
 DMIDECODE_BUILD_DIR		= $(USER_BUILDDIR)/dmidecode
 DMIDECODE_DIR			= $(DMIDECODE_BUILD_DIR)/dmidecode-$(DMIDECODE_VERSION)

@@ -55,7 +55,7 @@ $(IPMITOOL_CONFIGURE_STAMP): $(IPMITOOL_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP
 	$(Q) echo "====  Configure ipmitool-$(IPMITOOL_VERSION) ===="
 	$(Q) cd $(IPMITOOL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(IPMITOOL_DIR)/configure			\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
 		LDFLAGS="$(ONIE_LDFLAGS)"
@@ -66,8 +66,8 @@ ipmitool-build: $(IPMITOOL_BUILD_STAMP)
 $(IPMITOOL_BUILD_STAMP): $(IPMITOOL_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building ipmitool-$(IPMITOOL_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(IPMITOOL_DIR)
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(IPMITOOL_DIR) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(IPMITOOL_DIR) DESTDIR=$(DEV_SYSROOT)
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(IPMITOOL_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 ipmitool-install: $(IPMITOOL_INSTALL_STAMP)
