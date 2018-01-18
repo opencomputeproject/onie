@@ -37,7 +37,7 @@ export EXTRA_CMDLINE_LINUX := acpi_enforce_resources=lax acpi=noirq nmi_watchdog
 
 LINUX_VERSION = 4.9
 
-LINUX_MINOR_VERSION = 57
+LINUX_MINOR_VERSION = 77
 
 MELLANOX_PXE_UPDATER_STAMP   = $(STAMPDIR)/mellanox-pxe-updater-stamp
 MELLANOX_NETBOOT_PXE_UPDATER = $(IMAGEDIR)/mellanox_net_boot_label.sh
