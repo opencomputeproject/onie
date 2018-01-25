@@ -1,0 +1,32 @@
+# This script fragment is sourced by /etc/init.d/init-arch.sh,
+# which in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+init_platform_post_arch()
+{
+	#
+	# Wait for the EEPROM to come up.  Or more specifically,
+	# wait for the mcp2221 USB-to-I2C bridge to come up.
+	# USB device initialization can happen asynchronously
+	# and late.  We want the EEPROM to be available before
+	# the rest of user-level initialization.
+	#
+	sleep 1.5
+	i=100
+	while true; do
+		if onie-syseeprom >/dev/null 2>&1; then
+			echo "EEPROM device found."
+			break
+		fi
+		if [ $i -le 0 ]; then
+			echo "EEPROM device unavailable."
+			break
+		fi
+		if [ $(($i % 10)) -eq 0 ]; then
+			echo "Waiting for EEPROM device to become" \
+			     "available... $(($i / 10))"
+		fi
+		sleep 0.1
+		i=$(($i - 1))
+	done
+}
