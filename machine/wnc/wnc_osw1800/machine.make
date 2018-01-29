@@ -32,10 +32,6 @@ I2CTOOLS_ENABLE = yes
 # quick way to turn off the feature in i2ctools.  The command will be removed
 # from i2ctools in the future once all machines migrate their support of
 # sys_eeprom to busybox.
-#
-# The option is significant when I2CTOOLS_ENABLE is 'yes'
-#
-I2CTOOLS_SYSEEPROM = no
 
 # Set the desired kernel version.
 LINUX_VERSION		= 3.14
