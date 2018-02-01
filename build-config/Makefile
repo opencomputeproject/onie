@@ -341,6 +341,7 @@ ifeq ($(SECURE_BOOT_ENABLE),yes)
   OPENSSL_ENABLE = yes
   MOKUTIL_ENABLE = yes
   SHIM_ENABLE = yes
+  KEYUTILS_ENABLE = yes
 endif
 
 include make/kernel-download.make
@@ -433,6 +434,9 @@ ifeq ($(MOKUTIL_ENABLE),yes)
 endif
 ifeq ($(SHIM_ENABLE),yes)
   include make/shim.make
+endif
+ifeq ($(KEYUTILS_ENABLE),yes)
+  include make/keyutils.make
 endif
 include make/images.make
 include make/demo.make
