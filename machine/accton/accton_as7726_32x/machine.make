@@ -23,6 +23,9 @@ endif
 # Accton Technology Corporation IANA number
 VENDOR_ID = 259
 
+UEFI_ENABLE = yes
+PXE_EFI64_ENABLE = yes
+
 # Console parameters
 CONSOLE_DEV = 0
 
