@@ -290,9 +290,13 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_firmware=$(FIRMWARE_TYPE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_switch_asic=$(SWITCH_ASIC_VENDOR)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_skip_ethmgmt_macs=$(SKIP_ETHMGMT_MACS)" >> $(MACHINE_CONF)
-       ifeq ($(GRUB_ENABLE),yes)
-	  $(Q) echo "onie_grub_image_name=$(GRUB_IMAGE_NAME)" >> $(MACHINE_CONF)
-       endif
+ifeq ($(UEFI_ENABLE),yes)
+	$(Q) echo "onie_uefi_boot_loader=$(UEFI_BOOT_LOADER)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_uefi_arch=$(EFI_ARCH)" >> $(MACHINE_CONF)
+endif
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+	$(Q) echo "onie_secure_boot=$(SECURE_BOOT_ENABLE)" >> $(MACHINE_CONF)
+endif
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine-build.conf
@@ -364,7 +368,7 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(UPDATER_IMAGE_PARTS_PL
 	     UPDATER_UBOOT_NAME=$(UPDATER_UBOOT_NAME) \
 	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
 	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
-	     UEFI_BOOT_LOADER=$(GRUB_IMAGE_NAME) \
+	     UEFI_BOOT_LOADER=$(UEFI_BOOT_LOADER) \
 	     $(SCRIPTDIR)/onie-mk-installer.sh onie $(ROOTFS_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS) $(UPDATER_IMAGE_PARTS_PLATFORM)
