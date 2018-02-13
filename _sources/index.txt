@@ -23,9 +23,9 @@ Open Network Install Environment
 News
 ====
 
-January 21, 2018
-  Release candidate `2018.02-rc2
-  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-January/001625.html>`_
+February 13, 2018
+  Released version `2018.02
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-February/001647.html>`_
 
 January 15, 2018
   Comments on `Meltdown and Spectre
@@ -38,10 +38,6 @@ November 15, 2017
 October 20, 2017
   Release candidate `2017.11-rc1
   <http://lists.opencompute.org/pipermail/opencompute-onie/2017-October/001559.html>`_
-
-August 15, 2017
-  Released version `2017.08
-  <http://lists.opencompute.org/pipermail/opencompute-onie/2017-August/001504.html>`_
 
 Read more :ref:`news`
 
