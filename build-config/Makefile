@@ -335,6 +335,7 @@ ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 # By default do not enable secure boot
 SECURE_BOOT_ENABLE ?= no
 ifeq ($(SECURE_BOOT_ENABLE),yes)
+  SBSIGNTOOL_ENABLE = yes
   PESIGN_ENABLE = yes
   GNU_EFI_ENABLE = yes
   OPENSSL_ENABLE = yes
@@ -351,6 +352,12 @@ ifeq ($(XTOOLS_ENABLE),yes)
   include make/xtools.make
 endif
 include make/sysroot.make
+ifeq ($(GNU_EFI_ENABLE),yes)
+  include make/gnu-efi.make
+endif
+ifeq ($(SBSIGNTOOL_ENABLE),yes)
+  include make/sbsigntool.make
+endif
 include make/kernel.make
 ifeq ($(UBOOT_ENABLE),yes)
   include make/u-boot.make
@@ -417,9 +424,6 @@ ifeq ($(IPMITOOL_ENABLE),yes)
 endif
 ifeq ($(PESIGN_ENABLE),yes)
   include make/pesign.make
-endif
-ifeq ($(GNU_EFI_ENABLE),yes)
-  include make/gnu-efi.make
 endif
 ifeq ($(OPENSSL_ENABLE),yes)
   include make/openssl.make
