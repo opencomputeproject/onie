@@ -1,0 +1,130 @@
+From f779d4dece1d0ad368efba62fcc0a3bead497222 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:33 +0000
+Subject: Add GRUB_RECOVERY_TITLE option
+
+This allows the controversial "recovery mode" text to be customised.
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1240360
+Forwarded: no
+Last-Update: 2013-12-25
+
+Patch-Name: mkconfig_recovery_title.patch
+---
+ docs/grub.texi              | 5 +++++
+ util/grub-mkconfig.in       | 7 ++++++-
+ util/grub.d/10_hurd.in      | 4 ++--
+ util/grub.d/10_kfreebsd.in  | 2 +-
+ util/grub.d/10_linux.in     | 2 +-
+ util/grub.d/10_netbsd.in    | 2 +-
+ util/grub.d/20_linux_xen.in | 2 +-
+ 7 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/docs/grub.texi b/docs/grub.texi
+index 5b2a7bbb2..f1216d19d 100644
+--- a/docs/grub.texi
++++ b/docs/grub.texi
+@@ -1504,6 +1504,11 @@ a console is restricted or limited.
+ This option is only effective when GRUB was configured with the
+ @option{--enable-quick-boot} option.
+ 
++@item GRUB_RECOVERY_TITLE
++This option sets the English text of the string that will be displayed in
++parentheses to indicate that a boot option is provided to help users recover
++a broken system.  The default is "recovery mode".
++
+ @end table
+ 
+ The following options are still accepted for compatibility with existing
+diff --git a/util/grub-mkconfig.in b/util/grub-mkconfig.in
+index fac560464..ad716384b 100644
+--- a/util/grub-mkconfig.in
++++ b/util/grub-mkconfig.in
+@@ -189,6 +189,10 @@ GRUB_ACTUAL_DEFAULT="$GRUB_DEFAULT"
+ 
+ if [ "x${GRUB_ACTUAL_DEFAULT}" = "xsaved" ] ; then GRUB_ACTUAL_DEFAULT="`"${grub_editenv}" - list | sed -n '/^saved_entry=/ s,^saved_entry=,,p'`" ; fi
+ 
++if [ "x${GRUB_RECOVERY_TITLE}" = "x" ]; then
++  GRUB_RECOVERY_TITLE="recovery mode"
++fi
++
+ 
+ # These are defined in this script, export them here so that user can
+ # override them.
+@@ -240,7 +244,8 @@ export GRUB_DEFAULT \
+   GRUB_BADRAM \
+   GRUB_OS_PROBER_SKIP_LIST \
+   GRUB_DISABLE_SUBMENU \
+-  GRUB_RECORDFAIL_TIMEOUT
++  GRUB_RECORDFAIL_TIMEOUT \
++  GRUB_RECOVERY_TITLE
+ 
+ if test "x${grub_cfg}" != "x"; then
+   rm -f "${grub_cfg}.new"
+diff --git a/util/grub.d/10_hurd.in b/util/grub.d/10_hurd.in
+index 59a9a48a2..7fa3a3fbd 100644
+--- a/util/grub.d/10_hurd.in
++++ b/util/grub.d/10_hurd.in
+@@ -88,8 +88,8 @@ hurd_entry () {
+ 
+   if [ x$type != xsimple ] ; then
+       if [ x$type = xrecovery ] ; then
+-	  title="$(gettext_printf "%s, with Hurd %s (recovery mode)" "${OS}" "${kernel_base}")"
+-	  oldtitle="$OS using $kernel_base (recovery mode)"
++	  title="$(gettext_printf "%s, with Hurd %s (%s)" "${OS}" "${kernel_base}" "$(gettext "${GRUB_RECOVERY_TITLE}")")"
++	  oldtitle="$OS using $kernel_base ($GRUB_RECOVERY_TITLE)"
+       else
+ 	  title="$(gettext_printf "%s, with Hurd %s" "${OS}" "${kernel_base}")"
+ 	  oldtitle="$OS using $kernel_base"
+diff --git a/util/grub.d/10_kfreebsd.in b/util/grub.d/10_kfreebsd.in
+index 9d8e8fd85..8301d361a 100644
+--- a/util/grub.d/10_kfreebsd.in
++++ b/util/grub.d/10_kfreebsd.in
+@@ -76,7 +76,7 @@ kfreebsd_entry ()
+   fi
+   if [ x$type != xsimple ] ; then
+       if [ x$type = xrecovery ] ; then
+-	  title="$(gettext_printf "%s, with kFreeBSD %s (recovery mode)" "${os}" "${version}")"
++	  title="$(gettext_printf "%s, with kFreeBSD %s (%s)" "${os}" "${version}" "$(gettext "${GRUB_RECOVERY_TITLE}")")"
+       else
+ 	  title="$(gettext_printf "%s, with kFreeBSD %s" "${os}" "${version}")"
+       fi
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index 18c859214..704e834d5 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -116,7 +116,7 @@ linux_entry ()
+   if [ x$type != xsimple ] ; then
+       case $type in
+ 	  recovery)
+-	      title="$(gettext_printf "%s, with Linux %s (recovery mode)" "${os}" "${version}")" ;;
++	      title="$(gettext_printf "%s, with Linux %s (%s)" "${os}" "${version}" "$(gettext "${GRUB_RECOVERY_TITLE}")")" ;;
+ 	  *)
+ 	      title="$(gettext_printf "%s, with Linux %s" "${os}" "${version}")" ;;
+       esac
+diff --git a/util/grub.d/10_netbsd.in b/util/grub.d/10_netbsd.in
+index 874f59969..bb29cc046 100644
+--- a/util/grub.d/10_netbsd.in
++++ b/util/grub.d/10_netbsd.in
+@@ -102,7 +102,7 @@ netbsd_entry ()
+ 
+   if [ x$type != xsimple ] ; then
+       if [ x$type = xrecovery ] ; then
+-	  title="$(gettext_printf "%s, with kernel %s (via %s, recovery mode)" "${OS}" "$(echo ${kernel} | sed -e 's,^.*/,,')" "${loader}")"
++	  title="$(gettext_printf "%s, with kernel %s (via %s, %s)" "${OS}" "$(echo ${kernel} | sed -e 's,^.*/,,')" "${loader}" "$(gettext "${GRUB_RECOVERY_TITLE}")")"
+       else
+ 	  title="$(gettext_printf "%s, with kernel %s (via %s)" "${OS}" "$(echo ${kernel} | sed -e 's,^.*/,,')" "${loader}")"
+       fi
+diff --git a/util/grub.d/20_linux_xen.in b/util/grub.d/20_linux_xen.in
+index af05bd276..62d663334 100644
+--- a/util/grub.d/20_linux_xen.in
++++ b/util/grub.d/20_linux_xen.in
+@@ -95,7 +95,7 @@ linux_entry ()
+   fi
+   if [ x$type != xsimple ] ; then
+       if [ x$type = xrecovery ] ; then
+-	  title="$(gettext_printf "%s, with Xen %s and Linux %s (recovery mode)" "${os}" "${xen_version}" "${version}")"
++	  title="$(gettext_printf "%s, with Xen %s and Linux %s (%s)" "${os}" "${xen_version}" "${version}" "$(gettext "${GRUB_RECOVERY_TITLE}")")"
+       else
+ 	  title="$(gettext_printf "%s, with Xen %s and Linux %s" "${os}" "${xen_version}" "${version}")"
+       fi

@@ -1,0 +1,53 @@
+#!/bin/sh
+
+# Copyright (C) 2018 Curt Brune <curt@cumulusnetworks.com>
+#
+# SPDX-License-Identifier:     GPL-2.0
+
+set -e
+
+# Create UEFI secure boot key pairs for testing purposes.
+
+# Create a hardware vendor "platform key" PK
+./mk-key-and-cert PK  "hw-vendor" "HW Vendor PK"
+
+# Create a hardware vendor "key exchange key" KEK
+./mk-key-and-cert KEK  "hw-vendor" "HW Vendor KEK"
+
+# Create a hardware vendor "database key" db
+./mk-key-and-cert DB   "hw-vendor" "HW Vendor DB"
+
+# Create a software vendor "key exchange key" KEK
+./mk-key-and-cert KEK "sw-vendor" "Software Corp KEK"
+
+# Create a software vendor "database key" DB
+./mk-key-and-cert DB "sw-vendor" "Software Corp DB"
+
+# Create an ONIE vendor "shim key" SHIM
+./mk-key-and-cert SHIM "onie-vendor" "ONIE Vendor SHIM"
+
+# Prepared signed KEK and DB signature lists for updating a fresh
+# system.  Include the hardware vendor's and software vendors's keys
+# in these lists.  Trying to simulate the scenario where both the
+# hardware vendor and a software vendor have their keys enrolled in
+# the KEK and DB.
+
+uuidgen --random > /tmp/GUID.txt
+
+# the KEK variable update, signed by hw-vendor PK
+cert-to-efi-sig-list -g $(cat /tmp/GUID.txt) ./sw-vendor-KEK-cert.pem /tmp/kek-sw.esl
+cert-to-efi-sig-list -g $(cat /tmp/GUID.txt) ./hw-vendor-KEK-cert.pem /tmp/kek-hw.esl
+cat /tmp/kek-hw.esl /tmp/kek-sw.esl > /tmp/kek-all.esl
+sign-efi-sig-list -g $(cat /tmp/GUID.txt) \
+                  -c ./hw-vendor-PK-cert.pem \
+                  -k ./hw-vendor-PK-secret-key.pem \
+                  kek /tmp/kek-all.esl ./kek-all.auth
+
+# the DB variable update, signed by hw-vendor PK
+cert-to-efi-sig-list -g $(cat /tmp/GUID.txt) ./sw-vendor-DB-cert.pem /tmp/db-sw.esl
+cert-to-efi-sig-list -g $(cat /tmp/GUID.txt) ./hw-vendor-DB-cert.pem /tmp/db-hw.esl
+cat /tmp/db-hw.esl /tmp/db-sw.esl > /tmp/db-all.esl
+sign-efi-sig-list -g $(cat /tmp/GUID.txt) \
+                  -c ./hw-vendor-PK-cert.pem \
+                  -k ./hw-vendor-PK-secret-key.pem \
+                  db /tmp/db-all.esl ./db-all.auth

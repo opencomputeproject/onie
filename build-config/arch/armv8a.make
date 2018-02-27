@@ -13,6 +13,7 @@ ARCH        ?= arm64
 TARGET	    ?= aarch64-onie-linux-gnueabi
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
+EFI_ARCH    ?= aa64
 
 KERNEL_ARCH		= arm64
 KERNEL_LOAD_ADDRESS     ?= 0x80080000
@@ -35,7 +36,6 @@ STRACE_ENABLE ?= yes
 
 # Disable Grub support by default. a machine make file can override this
 GRUB_ENABLE ?= no
-GRUB_IMAGE_NAME = grubaa64.efi
 
 # Disable UEFI support by default. a machine make file can override this
 UEFI_ENABLE ?= no

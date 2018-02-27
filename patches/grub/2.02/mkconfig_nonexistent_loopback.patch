@@ -1,0 +1,55 @@
+From 9e93c5490a5275ec97858de653adb0026ecb506c Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:08 +0000
+Subject: Avoid getting confused by inaccessible loop device backing paths
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/938724
+Forwarded: no
+Last-Update: 2013-12-20
+
+Patch-Name: mkconfig_nonexistent_loopback.patch
+---
+ util/grub-mkconfig_lib.in   | 2 +-
+ util/grub.d/30_os-prober.in | 9 +++++----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/util/grub-mkconfig_lib.in b/util/grub-mkconfig_lib.in
+index 9ee60d5fa..2c9743052 100644
+--- a/util/grub-mkconfig_lib.in
++++ b/util/grub-mkconfig_lib.in
+@@ -143,7 +143,7 @@ prepare_grub_to_access_device ()
+         *)
+           loop_device="$1"
+           shift
+-          set -- `"${grub_probe}" --target=device "${loop_file}"` "$@"
++          set -- `"${grub_probe}" --target=device "${loop_file}"` "$@" || return 0
+         ;;
+       esac
+     ;;
+diff --git a/util/grub.d/30_os-prober.in b/util/grub.d/30_os-prober.in
+index 775ceb2e0..b7e1147c4 100644
+--- a/util/grub.d/30_os-prober.in
++++ b/util/grub.d/30_os-prober.in
+@@ -219,6 +219,11 @@ EOF
+ 	  LINITRD="${LINITRD#/boot}"
+ 	fi
+ 
++	if [ -z "${prepare_boot_cache}" ]; then
++	  prepare_boot_cache="$(prepare_grub_to_access_device ${LBOOT} | grub_add_tab)"
++	  [ "${prepare_boot_cache}" ] || continue
++	fi
++
+ 	onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
+ 	recovery_params="$(echo "${LPARAMS}" | grep 'single\|recovery')" || true
+ 	counter=1
+@@ -230,10 +235,6 @@ EOF
+ 	fi
+ 	used_osprober_linux_ids="$used_osprober_linux_ids 'osprober-gnulinux-$LKERNEL-${recovery_params}-$counter-$boot_device_id'"
+ 
+-	if [ -z "${prepare_boot_cache}" ]; then
+-	  prepare_boot_cache="$(prepare_grub_to_access_device ${LBOOT} | grub_add_tab)"
+-	fi
+-
+ 	if [ "x$is_top_level" = xtrue ] && [ "x${GRUB_DISABLE_SUBMENU}" != xy ]; then
+             cat << EOF
+ menuentry '$(echo "$OS $onstr" | grub_quote)' $CLASS --class gnu-linux --class gnu --class os \$menuentry_id_option 'osprober-gnulinux-simple-$boot_device_id' {

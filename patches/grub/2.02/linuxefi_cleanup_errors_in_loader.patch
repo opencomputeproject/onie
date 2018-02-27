@@ -1,0 +1,103 @@
+From 6c8809100c8e55c3278d2b95c00213a18e433e4c Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Wed, 24 May 2017 15:58:18 -0400
+Subject: Clean up some errors in the linuxefi loader
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+
+Origin: vendor, https://github.com/rhboot/grub2/commit/df0d3873162dd7e9352e1d4fbd589aa60e722f2e
+Forwarded: no
+Last-Update: 2017-11-01
+
+Patch-Name: linuxefi_cleanup_errors_in_loader.patch
+---
+ grub-core/loader/i386/efi/linux.c | 16 ++++++++--------
+ grub-core/loader/i386/linux.c     |  5 ++++-
+ 2 files changed, 12 insertions(+), 9 deletions(-)
+
+diff --git a/grub-core/loader/i386/efi/linux.c b/grub-core/loader/i386/efi/linux.c
+index d466cafd9..9a3f7477b 100644
+--- a/grub-core/loader/i386/efi/linux.c
++++ b/grub-core/loader/i386/efi/linux.c
+@@ -162,8 +162,8 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+ 		int argc, char *argv[])
+ {
+   grub_file_t file = 0;
+-  struct linux_kernel_header *lh;
+-  grub_ssize_t len, start, filelen;
++  struct linux_kernel_header *lh = NULL;
++  grub_ssize_t start, filelen;
+   void *kernel = NULL;
+   int setup_header_end_offset;
+   int rc;
+@@ -213,18 +213,19 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+       goto fail;
+     }
+ 
+-  grub_dprintf ("linuxefi", "params = %p\n", (unsigned long) params);
++  grub_dprintf ("linuxefi", "params = %p\n", params);
+ 
+   grub_memset (params, 0, sizeof(*params));
+ 
+   setup_header_end_offset = *((grub_uint8_t *)kernel + 0x201);
+-  grub_dprintf ("linuxefi", "copying %d bytes from %p to %p\n",
+-		MIN(0x202+setup_header_end_offset,sizeof (*params)) - 0x1f1,
++  grub_dprintf ("linuxefi", "copying %zu bytes from %p to %p\n",
++		MIN((grub_size_t)0x202+setup_header_end_offset,
++		    sizeof (*params)) - 0x1f1,
+ 		(grub_uint8_t *)kernel + 0x1f1,
+ 		(grub_uint8_t *)params + 0x1f1);
+   grub_memcpy ((grub_uint8_t *)params + 0x1f1,
+ 	       (grub_uint8_t *)kernel + 0x1f1,
+-		MIN(0x202+setup_header_end_offset,sizeof (*params)) - 0x1f1);
++		MIN((grub_size_t)0x202+setup_header_end_offset,sizeof (*params)) - 0x1f1);
+   lh = (struct linux_kernel_header *)params;
+   grub_dprintf ("linuxefi", "lh is at %p\n", lh);
+   grub_dprintf ("linuxefi", "checking lh->boot_flag\n");
+@@ -298,7 +299,6 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+   handover_offset = lh->handover_offset;
+ 
+   start = (lh->setup_sects + 1) * 512;
+-  len = grub_file_size(file) - start;
+ 
+   kernel_mem = grub_efi_allocate_pages(lh->pref_address,
+ 				       BYTES_TO_PAGES(lh->init_size));
+@@ -344,7 +344,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+       loaded = 0;
+     }
+ 
+-  if (linux_cmdline && !loaded)
++  if (linux_cmdline && lh && !loaded)
+     grub_efi_free_pages ((grub_efi_physical_address_t)(grub_addr_t)
+ 			 linux_cmdline,
+ 			 BYTES_TO_PAGES(lh->cmdline_size + 1));
+diff --git a/grub-core/loader/i386/linux.c b/grub-core/loader/i386/linux.c
+index e4b8342f5..c9e89310b 100644
+--- a/grub-core/loader/i386/linux.c
++++ b/grub-core/loader/i386/linux.c
+@@ -680,6 +680,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+ {
+   grub_file_t file = 0;
+   struct linux_kernel_header lh;
++  grub_uint8_t *linux_params_ptr;
+   grub_uint8_t setup_sects;
+   grub_size_t real_size, prot_size, prot_file_size, kernel_offset;
+   grub_ssize_t len;
+@@ -811,6 +812,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+ 		      preferred_address))
+     goto fail;
+ 
++
+   grub_memset (&linux_params, 0, sizeof (linux_params));
+   grub_memcpy (&linux_params.setup_sects, &lh.setup_sects, sizeof (lh) - 0x1F1);
+ 
+@@ -820,7 +822,8 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+ 
+   len = sizeof (linux_params) - sizeof (lh);
+ 
+-  grub_memcpy (&linux_params + sizeof (lh), kernel + kernel_offset, len);
++  linux_params_ptr = (void *)&linux_params;
++  grub_memcpy (linux_params_ptr + sizeof (lh), kernel + kernel_offset, len);
+   kernel_offset += len;
+ 
+   linux_params.type_of_loader = GRUB_LINUX_BOOT_LOADER_TYPE;

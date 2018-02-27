@@ -1,0 +1,143 @@
+From 47a39db1b92abd0030b6be6c3a809bd9e4f39def Mon Sep 17 00:00:00 2001
+From: Eric Biggers <ebiggers@google.com>
+Date: Thu, 29 Jun 2017 13:27:49 +0000
+Subject: Allow GRUB to mount ext2/3/4 filesystems that have the encryption
+ feature.
+
+On such a filesystem, inodes may have EXT4_ENCRYPT_FLAG set.
+For a regular file, this means its contents are encrypted; for a
+directory, this means the filenames in its directory entries are
+encrypted; and for a symlink, this means its target is encrypted.  Since
+GRUB cannot decrypt encrypted contents or filenames, just issue an error
+if it would need to do so.  This is sufficient to allow unencrypted boot
+files to co-exist with encrypted files elsewhere on the filesystem.
+
+(Note that encrypted regular files and symlinks will not normally be
+encountered outside an encrypted directory; however, it's possible via
+hard links, so they still need to be handled.)
+
+Tested by booting from an ext4 /boot partition on which I had run
+'tune2fs -O encrypt'.  I also verified that the expected error messages
+are printed when trying to access encrypted directories, files, and
+symlinks from the GRUB command line.  Also ran 'sudo ./grub-fs-tester
+ext4_encrypt'; note that this requires e2fsprogs v1.43+ and Linux v4.1+.
+
+Signed-off-by: Eric Biggers <ebiggers@google.com>
+
+Origin: upstream, https://git.savannah.gnu.org/cgit/grub.git/commit/?id=734668238fcc0ef691a080839e04f33854fa133a
+Bug-Debian: https://bugs.debian.org/840204
+Last-Update: 2017-07-06
+
+Patch-Name: ext4_feature_encrypt.patch
+---
+ grub-core/fs/ext2.c          | 23 ++++++++++++++++++++++-
+ tests/ext234_test.in         |  1 +
+ tests/util/grub-fs-tester.in | 10 ++++++++++
+ 3 files changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/grub-core/fs/ext2.c b/grub-core/fs/ext2.c
+index cdce63bcc..b8ad75a0f 100644
+--- a/grub-core/fs/ext2.c
++++ b/grub-core/fs/ext2.c
+@@ -102,6 +102,7 @@ GRUB_MOD_LICENSE ("GPLv3+");
+ #define EXT4_FEATURE_INCOMPAT_64BIT		0x0080
+ #define EXT4_FEATURE_INCOMPAT_MMP		0x0100
+ #define EXT4_FEATURE_INCOMPAT_FLEX_BG		0x0200
++#define EXT4_FEATURE_INCOMPAT_ENCRYPT          0x10000
+ 
+ /* The set of back-incompatible features this driver DOES support. Add (OR)
+  * flags here as the related features are implemented into the driver.  */
+@@ -109,7 +110,8 @@ GRUB_MOD_LICENSE ("GPLv3+");
+                                        | EXT4_FEATURE_INCOMPAT_EXTENTS  \
+                                        | EXT4_FEATURE_INCOMPAT_FLEX_BG \
+                                        | EXT2_FEATURE_INCOMPAT_META_BG \
+-                                       | EXT4_FEATURE_INCOMPAT_64BIT)
++                                       | EXT4_FEATURE_INCOMPAT_64BIT \
++                                       | EXT4_FEATURE_INCOMPAT_ENCRYPT)
+ /* List of rationales for the ignored "incompatible" features:
+  * needs_recovery: Not really back-incompatible - was added as such to forbid
+  *                 ext2 drivers from mounting an ext3 volume with a dirty
+@@ -138,6 +140,7 @@ GRUB_MOD_LICENSE ("GPLv3+");
+ #define EXT3_JOURNAL_FLAG_DELETED	4
+ #define EXT3_JOURNAL_FLAG_LAST_TAG	8
+ 
++#define EXT4_ENCRYPT_FLAG              0x800
+ #define EXT4_EXTENTS_FLAG		0x80000
+ 
+ /* The ext2 superblock.  */
+@@ -706,6 +709,12 @@ grub_ext2_read_symlink (grub_fshelp_node_t node)
+       grub_ext2_read_inode (diro->data, diro->ino, &diro->inode);
+       if (grub_errno)
+ 	return 0;
++
++      if (diro->inode.flags & grub_cpu_to_le32_compile_time (EXT4_ENCRYPT_FLAG))
++       {
++         grub_error (GRUB_ERR_NOT_IMPLEMENTED_YET, "symlink is encrypted");
++         return 0;
++       }
+     }
+ 
+   symlink = grub_malloc (grub_le_to_cpu32 (diro->inode.size) + 1);
+@@ -749,6 +758,12 @@ grub_ext2_iterate_dir (grub_fshelp_node_t dir,
+ 	return 0;
+     }
+ 
++  if (diro->inode.flags & grub_cpu_to_le32_compile_time (EXT4_ENCRYPT_FLAG))
++    {
++      grub_error (GRUB_ERR_NOT_IMPLEMENTED_YET, "directory is encrypted");
++      return 0;
++    }
++
+   /* Search the file.  */
+   while (fpos < grub_le_to_cpu32 (diro->inode.size))
+     {
+@@ -859,6 +874,12 @@ grub_ext2_open (struct grub_file *file, const char *name)
+ 	goto fail;
+     }
+ 
++  if (fdiro->inode.flags & grub_cpu_to_le32_compile_time (EXT4_ENCRYPT_FLAG))
++    {
++      err = grub_error (GRUB_ERR_NOT_IMPLEMENTED_YET, "file is encrypted");
++      goto fail;
++    }
++
+   grub_memcpy (data->inode, &fdiro->inode, sizeof (struct grub_ext2_inode));
+   grub_free (fdiro);
+ 
+diff --git a/tests/ext234_test.in b/tests/ext234_test.in
+index c986960a8..5f4553607 100644
+--- a/tests/ext234_test.in
++++ b/tests/ext234_test.in
+@@ -30,3 +30,4 @@ fi
+ "@builddir@/grub-fs-tester" ext3
+ "@builddir@/grub-fs-tester" ext4
+ "@builddir@/grub-fs-tester" ext4_metabg
++"@builddir@/grub-fs-tester" ext4_encrypt
+diff --git a/tests/util/grub-fs-tester.in b/tests/util/grub-fs-tester.in
+index 2337771a1..5219aa8b4 100644
+--- a/tests/util/grub-fs-tester.in
++++ b/tests/util/grub-fs-tester.in
+@@ -135,6 +135,12 @@ for ((LOGSECSIZE=MINLOGSECSIZE;LOGSECSIZE<=MAXLOGSECSIZE;LOGSECSIZE=LOGSECSIZE +
+ 		# Could go further but what's the point?
+ 	    MAXBLKSIZE=$((65536*1024))
+ 	    ;;
++       xext4_encrypt)
++           # OS LIMITATION: Linux currently only allows the 'encrypt' feature
++           # in combination with block_size = PAGE_SIZE (4096 bytes on x86).
++           MINBLKSIZE=$(getconf PAGE_SIZE)
++           MAXBLKSIZE=$MINBLKSIZE
++           ;;
+ 	xext*)
+ 	    MINBLKSIZE=1024
+ 	    if [ $MINBLKSIZE -lt $SECSIZE ]; then
+@@ -766,6 +772,10 @@ for ((LOGSECSIZE=MINLOGSECSIZE;LOGSECSIZE<=MAXLOGSECSIZE;LOGSECSIZE=LOGSECSIZE +
+ 		    MKE2FS_DEVICE_SECTSIZE=$SECSIZE "mkfs.ext4" -O meta_bg,^resize_inode -b $BLKSIZE -L "$FSLABEL" -q "${LODEVICES[0]}"
+ 		    MOUNTFS=ext4
+ 		    ;;
++               xext4_encrypt)
++                   MKE2FS_DEVICE_SECTSIZE=$SECSIZE "mkfs.ext4" -O encrypt -b $BLKSIZE -L "$FSLABEL" -q "${MOUNTDEVICE}"
++                   MOUNTFS=ext4
++                   ;;
+ 		xext*)
+ 		    MKE2FS_DEVICE_SECTSIZE=$SECSIZE "mkfs.$fs" -b $BLKSIZE -L "$FSLABEL" -q "${LODEVICES[0]}" ;;
+ 		xxfs)

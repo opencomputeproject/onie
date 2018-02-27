@@ -1,0 +1,96 @@
+From 1193f4dfa4ad36e1cd5301522473da3c8a4baab2 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Mon, 13 Jan 2014 12:13:00 +0000
+Subject: Handle filesystems loop-mounted on file images
+
+Improve prepare_grub_to_access_device to emit appropriate commands for
+such filesystems, and ignore them in Linux grub.d scripts.
+
+This is needed for Ubuntu's Wubi installation method.
+
+This patch isn't inherently Debian/Ubuntu-specific.  losetup and
+/proc/mounts are Linux-specific, though, so we might need to refine this
+before sending it upstream.  The changes to the Linux grub.d scripts
+might be better handled by integrating 10_lupin properly instead.
+
+Patch-Name: mkconfig_loopback.patch
+---
+ util/grub-mkconfig_lib.in   | 24 ++++++++++++++++++++++++
+ util/grub.d/10_linux.in     |  5 +++++
+ util/grub.d/20_linux_xen.in |  5 +++++
+ 3 files changed, 34 insertions(+)
+
+diff --git a/util/grub-mkconfig_lib.in b/util/grub-mkconfig_lib.in
+index 3a4684e78..9ee60d5fa 100644
+--- a/util/grub-mkconfig_lib.in
++++ b/util/grub-mkconfig_lib.in
+@@ -133,6 +133,22 @@ prepare_grub_to_access_device ()
+     esac
+   done
+ 
++  loop_file=
++  case $1 in
++    /dev/loop/*|/dev/loop[0-9])
++      grub_loop_device="${1#/dev/}"
++      loop_file=`losetup "$1" | sed -e "s/^[^(]*(\([^)]\+\)).*/\1/"`
++      case $loop_file in
++        /dev/*) ;;
++        *)
++          loop_device="$1"
++          shift
++          set -- `"${grub_probe}" --target=device "${loop_file}"` "$@"
++        ;;
++      esac
++    ;;
++  esac
++
+   # Abstraction modules aren't auto-loaded.
+   abstraction="`"${grub_probe}" --device $@ --target=abstraction`"
+   for module in ${abstraction} ; do
+@@ -165,6 +181,14 @@ prepare_grub_to_access_device ()
+     echo "fi"
+   fi
+   IFS="$old_ifs"
++
++  if [ "x${loop_file}" != x ]; then
++    loop_mountpoint="$(awk '"'${loop_file}'" ~ "^"$2 && $2 != "/" { print $2 }' /proc/mounts | tail -n1)"
++    if [ "x${loop_mountpoint}" != x ]; then
++      echo "loopback ${grub_loop_device} ${loop_file#$loop_mountpoint}"
++      echo "set root=(${grub_loop_device})"
++    fi
++  fi
+ }
+ 
+ grub_get_device_id ()
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index c34d470c9..5ff76f59a 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -40,6 +40,11 @@ fi
+ case ${GRUB_DEVICE} in
+   /dev/loop/*|/dev/loop[0-9])
+     GRUB_DEVICE=`losetup ${GRUB_DEVICE} | sed -e "s/^[^(]*(\([^)]\+\)).*/\1/"`
++    # We can't cope with devices loop-mounted from files here.
++    case ${GRUB_DEVICE} in
++      /dev/*) ;;
++      *) exit 0 ;;
++    esac
+   ;;
+ esac
+ 
+diff --git a/util/grub.d/20_linux_xen.in b/util/grub.d/20_linux_xen.in
+index c48af948d..af05bd276 100644
+--- a/util/grub.d/20_linux_xen.in
++++ b/util/grub.d/20_linux_xen.in
+@@ -40,6 +40,11 @@ fi
+ case ${GRUB_DEVICE} in
+   /dev/loop/*|/dev/loop[0-9])
+     GRUB_DEVICE=`losetup ${GRUB_DEVICE} | sed -e "s/^[^(]*(\([^)]\+\)).*/\1/"`
++    # We can't cope with devices loop-mounted from files here.
++    case ${GRUB_DEVICE} in
++      /dev/*) ;;
++      *) exit 0 ;;
++    esac
+   ;;
+ esac
+ 

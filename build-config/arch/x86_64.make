@@ -14,6 +14,7 @@ ARCH        ?= x86_64
 TARGET      ?= $(ARCH)-onie-linux-uclibc
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
+EFI_ARCH    ?= x64
 
 #
 # Console parameters
@@ -120,7 +121,6 @@ BTRFS_PROGS_ENABLE = yes
 
 # Include GRUB tools
 GRUB_ENABLE = yes
-GRUB_IMAGE_NAME = grubx64.efi
 
 # Default to include the i2ctools.  A particular machine.make can
 # override this.

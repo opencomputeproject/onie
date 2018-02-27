@@ -152,7 +152,7 @@ MACHINE  ?= kvm_x86_64
 MACHINE_PREFIX = $(MACHINE)-r$(MACHINE_REV)
 
 MACHINEROOT ?= $(realpath ../machine)
-MACHINEDIR   = $(MACHINEROOT)/$(MACHINE)
+MACHINEDIR   = $(realpath $(MACHINEROOT)/$(MACHINE))
 
 # Do not pass the MACHINE variable to sub-makes or to the environment.
 # Various sub-projects also define and use a variable called MACHINE
@@ -332,6 +332,18 @@ endif
 # Default mirror for packages needed by ONIE
 ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 
+# By default do not enable secure boot
+SECURE_BOOT_ENABLE ?= no
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+  SBSIGNTOOL_ENABLE = yes
+  PESIGN_ENABLE = yes
+  GNU_EFI_ENABLE = yes
+  OPENSSL_ENABLE = yes
+  MOKUTIL_ENABLE = yes
+  SHIM_ENABLE = yes
+  KEYUTILS_ENABLE = yes
+endif
+
 include make/kernel-download.make
 ifeq ($(XTOOLS_ENABLE),yes)
   include make/crosstool-ng.make
@@ -341,6 +353,12 @@ ifeq ($(XTOOLS_ENABLE),yes)
   include make/xtools.make
 endif
 include make/sysroot.make
+ifeq ($(GNU_EFI_ENABLE),yes)
+  include make/gnu-efi.make
+endif
+ifeq ($(SBSIGNTOOL_ENABLE),yes)
+  include make/sbsigntool.make
+endif
 include make/kernel.make
 ifeq ($(UBOOT_ENABLE),yes)
   include make/u-boot.make
@@ -405,6 +423,21 @@ endif
 ifeq ($(IPMITOOL_ENABLE),yes)
   include make/ipmitool.make
 endif
+ifeq ($(PESIGN_ENABLE),yes)
+  include make/pesign.make
+endif
+ifeq ($(OPENSSL_ENABLE),yes)
+  include make/openssl.make
+endif
+ifeq ($(MOKUTIL_ENABLE),yes)
+  include make/mokutil.make
+endif
+ifeq ($(SHIM_ENABLE),yes)
+  include make/shim.make
+endif
+ifeq ($(KEYUTILS_ENABLE),yes)
+  include make/keyutils.make
+endif
 include make/images.make
 include make/demo.make
 
@@ -413,6 +446,7 @@ FIRMWARE_UPDATE_ENABLE ?= no
 ifeq ($(FIRMWARE_UPDATE_ENABLE),yes)
   include make/firmware-update.make
 endif
+
 
 #-------------------------------------------------------------------------------
 #
@@ -482,7 +516,9 @@ DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
 				  realpath gawk libncurses5 libncurses5-dev bc \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
-				  libexpat1-dev fakeroot python-sphinx rst2pdf
+				  libexpat1-dev fakeroot python-sphinx rst2pdf \
+				  libefivar-dev libnss3-tools libnss3-dev libpopt-dev \
+				  libssl-dev efitools uuid-runtime
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:
