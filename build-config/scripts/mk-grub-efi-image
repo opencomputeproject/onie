@@ -91,6 +91,15 @@ GRUB_MODULES="
 	zfsinfo
 "
 
+# Make an embedded config that reads a grub.cfg from the EFI directory
+# where the final grub binary is running.
+tmp_config=$(mktemp)
+cat <<EOF > $tmp_config
+configfile \$cmdpath/grub.cfg
+EOF
+
 "$grub_mkimage" --format="${ARCH}-efi" --directory="$GRUB_TARGET_LIB_UEFI_DIR" \
-                --prefix="/EFI/onie" --output="$OUTPUT_IMAGE" \
+                --prefix="/bogus" --config="$tmp_config" --output="$OUTPUT_IMAGE" \
                 $GRUB_MODULES
+
+rm -f $tmp_config
