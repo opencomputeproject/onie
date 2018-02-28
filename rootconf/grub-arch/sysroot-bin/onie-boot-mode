@@ -8,14 +8,21 @@
 this_script=$(basename $(realpath $0))
 lib_dir="$(dirname $(realpath $0))/../lib/onie"
 
-args="o:lhvq"
+args="o:flhvq"
 
 usage()
 {
-    echo "usage: $this_script [-o <onie_mode>] [-lhvq]"
+    echo "usage: $this_script [-o <onie_mode>] [-flhvq]"
     cat <<EOF
 Get or set the default GRUB boot entry.  The default is to show
 the current default entry.
+
+Some boot entries are "one time", like "rescue" mode.  After they run
+once, these boot modes clear and the default becomes active for
+subsequent boots.
+
+To make a boot option persistent, set it as the "fallback" using the
+-f option.
 
 COMMAND LINE OPTIONS
 
@@ -36,8 +43,19 @@ COMMAND LINE OPTIONS
 
                 The 'none' mode will use the first ONIE boot menu entry.
 
+                When combined with the -f option, set the fallback
+                entry instead of the default entry.
+
+        -f
+                Set the fallback GRUB boot entry specified by the -o
+                option.  Only valid when used in conjunction with the
+                -o option.
+
 	-l
 		List the current default entry.  This is the default.
+
+		When combined with the -f option, the fallback entry
+		is displayed instead.
 
 	-h
 		Help.  Print this message.
@@ -51,6 +69,7 @@ EOF
 }
 
 onie_mode=
+fallback=
 list=
 quiet=no
 verbose=no
@@ -72,6 +91,9 @@ while getopts "$args" a ; do
         o)
             onie_mode="$OPTARG"
             ;;
+        f)
+            fallback=yes
+            ;;
         q)
             quiet=yes
             ;;
@@ -90,34 +112,40 @@ done
 }
 . $lib_dir/onie-blkdev-common
 
+if [ "$fallback" = "yes" ] ; then
+    label="Fallback"
+    grub_env=onie_fallback
+else
+    label="Default"
+    grub_env=onie_mode
+fi
+
+
 if [ -n "$onie_mode" ] ; then
     case "$onie_mode" in
         install|uninstall|rescue|update|embed|diag)
-            [ "$verbose" = "yes" ] && echo "Setting ONIE mode to: $onie_mode"
-            # Set ONIE boot mode in grubenv
-            onie_setenv onie_mode "$onie_mode"
+            [ "$verbose" = "yes" ] && echo "Setting ONIE $label mode to: $onie_mode"
+            onie_setenv $grub_env "$onie_mode"
             ;;
         none)
-            [ "$verbose" = "yes" ] && echo "Clearing the ONIE mode"
-            # Clear the ONIE boot mode in grubenv
-            onie_setenv onie_mode
+            [ "$verbose" = "yes" ] && echo "Clearing the ONIE $label mode"
+            onie_setenv $grub_env
             ;;
         *)
             echo "ERROR: Unknown ONIE mode: $onie_mode"
             exit 1
     esac
-
 fi
 
 if [ -z "$onie_mode" ] || [ "$list" = "yes" ] ; then
     # Read ONIE mode from grubenv
-    mode="$(onie_getenv onie_mode)"
+    mode="$(onie_getenv $grub_env)"
     if [ -n "$mode" ] ; then
-        default="ONIE mode: $mode"
+        default="$mode"
     else
-        default="ONIE mode: unknown"
+        default="none"
     fi
-    echo "Default boot: $default"
+    echo "$label ONIE mode: $default"
 fi
 
 exit 0
