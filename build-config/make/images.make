@@ -29,6 +29,7 @@ ONIE_TOOLS_DIR	= $(abspath ../tools)
 ONIE_SYSROOT_TOOLS_LIST = \
 	lib/onie \
 	bin/onie-boot-mode \
+	bin/onie-nos-mode \
 	bin/onie-fwpkg
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin

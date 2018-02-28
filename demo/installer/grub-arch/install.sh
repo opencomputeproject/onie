@@ -466,3 +466,10 @@ umount $demo_mnt || {
 }
 
 cd /
+
+if [ "$demo_type" = "OS" ] ; then
+    # Set NOS mode if available -- skip this for diag installers
+    if [ -x /bin/onie-nos-mode ] ; then
+        /bin/onie-nos-mode -s
+    fi
+fi

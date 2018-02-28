@@ -1,0 +1,135 @@
+#!/bin/sh
+
+#  Copyright (C) 2018 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Get/set the NOS mode
+
+this_script=$(basename $(realpath $0))
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+
+
+# Arch dependent NOS mode set interface.  Implemented in
+# nos-mode-arch.
+nos_mode_set_arch()
+{
+    false
+}
+
+# Arch dependent NOS mode get interface.  Implemented in
+# nos-mode-arch.
+nos_mode_get_arch()
+{
+    false
+}
+
+# Arch dependent NOS mode clear interface.  Implemented in
+# nos-mode-arch.
+nos_mode_clear_arch()
+{
+    false
+}
+
+if [ -r "$lib_dir/nos-mode-arch" ] ; then
+    . "$lib_dir/nos-mode-arch"
+else
+    echo "ERROR: $this_script: unable to locate $lib_dir/nos-mode-arch"
+fi
+
+args="hcsgv"
+
+usage()
+{
+    echo "usage: $this_script [-s] [-c] [-g] [-v] [-h]"
+    cat <<EOF
+Get, set or clear the ONIE NOS mode.  When set, NOS mode indicates
+that a NOS has been installed.  When clear, NOS mode india tes that no
+NOS is installed.
+
+Without any arguments the default is to print the NOS mode.
+
+COMMAND LINE OPTIONS
+
+	-c
+		Clear the NOS mode.
+
+	-s
+                Set the NOS mode to true.
+
+	-g
+                Get the current NOS mode.
+
+	-v
+		Be verbose.  Print what is happening.
+
+	-h
+		Help.  Print this message.
+EOF
+}
+
+
+clear=no
+set=no
+get=no
+verbose=no
+
+while getopts "$args" a ; do
+    case $a in
+        h)
+            usage
+            exit 0
+            ;;
+        c)
+            clear=yes
+            ;;
+        s)
+            set=yes
+            ;;
+        g)
+            get=yes
+            ;;
+        v)
+            verbose=yes
+            ;;
+        *)
+            echo "Unknown argument: $a"
+            usage
+            exit 1
+    esac
+done
+
+if [ "$clear" = "yes" -a "$set" = "yes" ] ; then
+    echo "ERROR: $this_script: Only one of '-c' or '-s' can be specified"
+    exit 1
+fi
+
+if [ "$set" = "yes" ] ; then
+    [ "$verbose" = "yes" ] && echo "Enabling NOS mode."
+    nos_mode_set_arch || {
+        echo "ERROR: $this_script: Enabling NOS mode failed."
+        exit 1
+    }
+elif [ "$clear" = "yes" ] ; then
+    [ "$verbose" = "yes" ] && echo "Disabling NOS mode."
+    nos_mode_clear_arch || {
+        echo "ERROR: $this_script: Clearing NOS mode failed."
+        exit 1
+    }
+else
+    # default to displaying the current mode
+    get=yes
+fi
+
+if [ "$get" = "yes" ] ; then
+    mode=$(nos_mode_get_arch) || {
+        echo "ERROR: $this_script: Reading NOS mode failed."
+        exit 1
+    }
+    mode=${mode:-none}
+    if [ "$verbose" = "yes" ] ; then
+        echo "Current NOS mode: $mode"
+    else
+        echo "$mode"
+    fi
+fi
