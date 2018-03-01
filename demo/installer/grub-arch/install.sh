@@ -460,6 +460,9 @@ EOF
 
 fi
 
+# Set the ONIE fallback to rescue mode
+onie-boot-mode -f -o rescue
+
 # clean up
 umount $demo_mnt || {
     echo "Error: Problems umounting $demo_mnt"
