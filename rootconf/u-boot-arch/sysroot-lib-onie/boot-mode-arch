@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2015,2018 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -15,6 +15,25 @@ rescue_revert_default_arch()
     # The onie_boot_reason variable may not be set, which is ok.
     # Ignore failures.
     return 0
+}
+
+# Check whether we are running in NOS mode (after a successful NOS
+# install) or not.  If we are running in NOS mode, then make
+# architecture specific changes to turn the current install mode into
+# a one time operation.
+check_nos_mode_arch()
+{
+    local nos_mode="$(onie-nos-mode -g)"
+    if [ "$nos_mode" = "yes" ] ; then
+        # Clear the current boot reason to prevent install mode from
+        # being sticky.
+        fw_setenv -f onie_boot_reason > /dev/null 2>&1
+        # The onie_boot_reason variable may not be set, which is ok.
+        return 0
+    fi
+
+    # non-zero indicates NOS mode was not set
+    return 1
 }
 
 # We want install mode booting to be sticky, i.e. if you boot into

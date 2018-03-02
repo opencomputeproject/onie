@@ -38,3 +38,10 @@ EOF
 fw_setenv -f -s /tmp/env.txt
 
 cd /
+
+# Set NOS mode if available.  For manufacturing diag installers, you
+# probably want to skip this step so that the system remains in ONIE
+# "installer" mode for installing a true NOS later.
+if [ -x /bin/onie-nos-mode ] ; then
+    /bin/onie-nos-mode -s
+fi
