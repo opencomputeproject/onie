@@ -135,7 +135,7 @@ endif
 ifeq ($(SECURE_BOOT_ENABLE),yes)
 	$(Q) echo "====  Signing kernel secure boot image ===="
 	$(Q) cp -vf $(KERNEL_VMLINUZ) $(KERNEL_VMLINUZ).unsigned
-	$(Q) $(SBSIGN_EXE) --key $(ONIE_VENDOR_SECRET_KEY_PEM) \
+	$(Q) sbsign --key $(ONIE_VENDOR_SECRET_KEY_PEM) \
 		--cert $(ONIE_VENDOR_CERT_PEM) \
 		--output $(KERNEL_VMLINUZ) $(KERNEL_VMLINUZ).unsigned
 endif
