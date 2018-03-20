@@ -335,7 +335,6 @@ ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 # By default do not enable secure boot
 SECURE_BOOT_ENABLE ?= no
 ifeq ($(SECURE_BOOT_ENABLE),yes)
-  SBSIGNTOOL_ENABLE = yes
   PESIGN_ENABLE = yes
   GNU_EFI_ENABLE = yes
   OPENSSL_ENABLE = yes
@@ -355,9 +354,6 @@ endif
 include make/sysroot.make
 ifeq ($(GNU_EFI_ENABLE),yes)
   include make/gnu-efi.make
-endif
-ifeq ($(SBSIGNTOOL_ENABLE),yes)
-  include make/sbsigntool.make
 endif
 include make/kernel.make
 ifeq ($(UBOOT_ENABLE),yes)
@@ -518,7 +514,7 @@ DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
 				  libexpat1-dev fakeroot python-sphinx rst2pdf \
 				  libefivar-dev libnss3-tools libnss3-dev libpopt-dev \
-				  libssl-dev efitools uuid-runtime
+				  libssl-dev sbsigntool uuid-runtime
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:

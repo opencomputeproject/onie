@@ -93,22 +93,23 @@ fi
 }
 
 if [ "$SECURE_BOOT_ENABLE" = "yes" ] ; then
-   [ -x "$SBSIGN_EXE" ]  || {
-       echo "ERROR: Unable to find sbsign utility: $SBSIGN_EXE"
-       exit 1
-   }
-   [ -r "$SB_SHIM" ]  || {
-       echo "ERROR: Unable to read secure boot signed shim image: $SB_SHIM"
-       exit 1
-   }
-   [ -r "$ONIE_VENDOR_SECRET_KEY_PEM" ]  || {
-       echo "ERROR: Unable to read ONIE_VENDOR_SECRET_KEY_PEM file: $ONIE_VENDOR_SECRET_KEY_PEM"
-       exit 1
-   }
-   [ -r "$ONIE_VENDOR_CERT_PEM" ]  || {
-       echo "ERROR: Unable to read ONIE_VENDOR_CERT_PEM file: $ONIE_VENDOR_CERT_PEM"
-       exit 1
-   }
+    which sbsign > /dev/null 2>&1 || {
+        echo "ERROR: Unable to find sbsign utility: sbsign"
+        echo "ERROR: Check that package sbsigntool is installed on your system"
+        exit 1
+    }
+    [ -r "$SB_SHIM" ]  || {
+        echo "ERROR: Unable to read secure boot signed shim image: $SB_SHIM"
+        exit 1
+    }
+    [ -r "$ONIE_VENDOR_SECRET_KEY_PEM" ]  || {
+        echo "ERROR: Unable to read ONIE_VENDOR_SECRET_KEY_PEM file: $ONIE_VENDOR_SECRET_KEY_PEM"
+        exit 1
+    }
+    [ -r "$ONIE_VENDOR_CERT_PEM" ]  || {
+        echo "ERROR: Unable to read ONIE_VENDOR_CERT_PEM file: $ONIE_VENDOR_CERT_PEM"
+        exit 1
+    }
 fi
 
 # Make sure a few tools are available
@@ -256,7 +257,7 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
     # UEFI loader image(s) into it.
     if [ "$SECURE_BOOT_ENABLE" = "yes" ] ; then
         # sign the grub image with the onie vendor key
-        "$SBSIGN_EXE" --key $ONIE_VENDOR_SECRET_KEY_PEM --cert $ONIE_VENDOR_CERT_PEM \
+        sbsign --key $ONIE_VENDOR_SECRET_KEY_PEM --cert $ONIE_VENDOR_CERT_PEM \
                --output $RECOVERY_EFI_GRUBX86_IMG $RECOVERY_GRUBX86_IMG
         # copy shim into place as the loader
         cp $SB_SHIM $RECOVERY_EFI_BOOTX86_IMG
