@@ -97,3 +97,5 @@ if grep -q securityfs /proc/filesystems ; then
 fi
 
 mkdir -p $ONIE_RUN_DIR
+mkdir -p $ONIE_USB_DIR
+
