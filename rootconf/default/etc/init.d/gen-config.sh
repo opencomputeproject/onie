@@ -26,17 +26,7 @@ gen_machine_config()
 
     gen_live_config > $live_conf
 
-    cat <<EOF > $machine_conf
-# /etc/machine.conf for onie
-
-#  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2017 david_yang <david_yang@accton.com>
-#
-#  SPDX-License-Identifier:     GPL-2.0
-
-EOF
-
-    cat $build_conf $live_conf >> $machine_conf
+    cat $build_conf $live_conf > $machine_conf
     sed -i -e '/onie_machine=/d' $machine_conf
     sed -i -e '/onie_platform=/d' $machine_conf
 
