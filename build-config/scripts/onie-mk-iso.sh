@@ -92,6 +92,26 @@ fi
     exit 1
 }
 
+if [ "$SECURE_BOOT_ENABLE" = "yes" ] ; then
+    which sbsign > /dev/null 2>&1 || {
+        echo "ERROR: Unable to find sbsign utility: sbsign"
+        echo "ERROR: Check that package sbsigntool is installed on your system"
+        exit 1
+    }
+    [ -r "$SB_SHIM" ]  || {
+        echo "ERROR: Unable to read secure boot signed shim image: $SB_SHIM"
+        exit 1
+    }
+    [ -r "$ONIE_VENDOR_SECRET_KEY_PEM" ]  || {
+        echo "ERROR: Unable to read ONIE_VENDOR_SECRET_KEY_PEM file: $ONIE_VENDOR_SECRET_KEY_PEM"
+        exit 1
+    }
+    [ -r "$ONIE_VENDOR_CERT_PEM" ]  || {
+        echo "ERROR: Unable to read ONIE_VENDOR_CERT_PEM file: $ONIE_VENDOR_CERT_PEM"
+        exit 1
+    }
+fi
+
 # Make sure a few tools are available
 XORRISO=$(which xorriso) || {
     echo "ERROR: unable to find xorriso binary"
@@ -111,6 +131,8 @@ RECOVERY_CORE_IMG="$RECOVERY_DIR/core.img"
 RECOVERY_EFI_DIR="$RECOVERY_DIR/EFI"
 RECOVERY_EFI_BOOT_DIR="$RECOVERY_EFI_DIR/BOOT"
 RECOVERY_EFI_BOOTX86_IMG="$RECOVERY_EFI_BOOT_DIR/bootx64.efi"
+RECOVERY_GRUBX86_IMG="$RECOVERY_DIR/grubx64.efi"
+RECOVERY_EFI_GRUBX86_IMG="$RECOVERY_EFI_BOOT_DIR/grubx64.efi"
 RECOVERY_ELTORITO_IMG="$RECOVERY_ISO_SYSROOT/boot/eltorito.img"
 RECOVERY_EMBEDDED_IMG="$RECOVERY_DIR/embedded.img"
 RECOVERY_UEFI_IMG="$RECOVERY_ISO_SYSROOT/boot/efi.img"
@@ -143,7 +165,7 @@ if [ "$FIRMWARE_TYPE" != "uefi" ] ; then
 	# Populate .ISO sysroot with i386-pc GRUB modules
 	mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc
 	(cd $GRUB_TARGET_LIB_I386_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/i386-pc)
-	
+
 	# Generate legacy BIOS eltorito format GRUB image
 	$GRUB_HOST_BIN_I386_DIR/grub-mkimage \
 		--format=i386-pc \
@@ -152,16 +174,74 @@ if [ "$FIRMWARE_TYPE" != "uefi" ] ; then
 		--output=$RECOVERY_CORE_IMG \
 		part_msdos part_gpt iso9660 biosdisk
 	cat $GRUB_TARGET_LIB_I386_DIR/cdboot.img $RECOVERY_CORE_IMG > $RECOVERY_ELTORITO_IMG
-	
+
 	# Generate legacy BIOS MBR format GRUB image
 	cat $GRUB_TARGET_LIB_I386_DIR/boot.img $RECOVERY_CORE_IMG > $RECOVERY_EMBEDDED_IMG
 fi
 
 if [ "$UEFI_ENABLE" = "yes" ] ; then
-    # Populate .ISO sysroot with ${ARCH}-efi GRUB modules
-    mkdir -p $RECOVERY_ISO_SYSROOT/boot/grub/${ARCH}-efi
-    (cd $GRUB_TARGET_LIB_UEFI_DIR && cp *mod *lst $RECOVERY_ISO_SYSROOT/boot/grub/${ARCH}-efi)
-
+    # List of modules to build into the grub image.
+    GRUB_MODULES="
+	all_video
+	boot
+	btrfs
+	cat
+	chain
+	configfile
+	echo
+	efifwsetup
+	efinet
+	ext2
+	fat
+	font
+	gettext
+	gfxmenu
+	gfxterm
+	gfxterm_background
+	gzio
+	halt
+	hfsplus
+	iso9660
+	jpeg
+	keystatus
+	loadenv
+	loopback
+	linux
+	linuxefi
+	lsefi
+	lsefimmap
+	lsefisystab
+	lssal
+	lvm
+	mdraid09
+	mdraid1x
+	memdisk
+	minicmd
+	normal
+	part_apple
+	part_msdos
+	part_gpt
+	password_pbkdf2
+	png
+	raid5rec
+	raid6rec
+	reboot
+	search
+	search_fs_uuid
+	search_fs_file
+	search_label
+	serial
+	sleep
+	squash4
+	terminal
+	terminfo
+	test
+	true
+	video
+	zfs
+	zfscrypt
+	zfsinfo
+"
     # Generate UEFI format GRUB image
     mkdir -p $RECOVERY_EFI_BOOT_DIR
     $GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \
@@ -169,16 +249,29 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
         --directory=$GRUB_TARGET_LIB_UEFI_DIR \
         --prefix=/boot/grub \
         --config=$RECOVERY_CONF_DIR/grub-uefi.cfg \
-        --output=$RECOVERY_EFI_BOOTX86_IMG \
-        part_msdos part_gpt fat iso9660 search
+        --output=$RECOVERY_GRUBX86_IMG \
+        $GRUB_MODULES
 
-    # For UEFI the GRUB image is embedded inside a UEFI ESP (fat16) disk
-    # partition image.  Create that here and copy GRUB UEFI image into it.
-    # The size of the ESP needs to be large enough to hold the bootx64.efi
-    # file, plus file system overhead.
-    BOOTX86_IMG_SIZE_BYTES=$(stat -c '%s' $RECOVERY_EFI_BOOTX86_IMG)
+    # For UEFI, the GRUB loader image is embedded inside a UEFI ESP
+    # (fat16) disk partition image.  Create that here and copy the
+    # UEFI loader image(s) into it.
+    if [ "$SECURE_BOOT_ENABLE" = "yes" ] ; then
+        # sign the grub image with the onie vendor key
+        sbsign --key $ONIE_VENDOR_SECRET_KEY_PEM --cert $ONIE_VENDOR_CERT_PEM \
+               --output $RECOVERY_EFI_GRUBX86_IMG $RECOVERY_GRUBX86_IMG
+        # copy shim into place as the loader
+        cp $SB_SHIM $RECOVERY_EFI_BOOTX86_IMG
+    else
+        # for non-secure boot, GRUB is the only loader image
+        mv $RECOVERY_GRUBX86_IMG $RECOVERY_EFI_BOOTX86_IMG
+    fi
+
+    # The size of the ESP needs to be large enough to hold the
+    # contents of the /EFI/BOOT directory, plus file system overhead.
+    EFI_BOOT_SIZE_BYTES=$(du --bytes $RECOVERY_EFI_BOOT_DIR | awk '{ print $1 }')
+
     # mcopy wants disk to be an integer number of 32 sectors
-    BOOTX86_IMG_SECTORS=$(( ( ( $BOOTX86_IMG_SIZE_BYTES / 512 ) + 31 ) / 32 ))
+    BOOTX86_IMG_SECTORS=$(( ( ( $EFI_BOOT_SIZE_BYTES / 512 ) + 31 ) / 32 ))
     # plus a couple of chunks for the file system overhead
     BOOTX86_IMG_SECTORS=$(( ( $BOOTX86_IMG_SECTORS + 2 ) * 32 ))
 
@@ -193,9 +286,9 @@ if [ "$FIRMWARE_TYPE" = "uefi" ] ; then
 elif [ "$FIRMWARE_TYPE" = "auto" ] ; then
     rm -f ${RECOVERY_XORRISO_OPTIONS} && touch ${RECOVERY_XORRISO_OPTIONS}
 	git merge-file -p --union ${RECOVERY_CONF_DIR}/xorriso-options-bios.cfg \
-							  ${RECOVERY_XORRISO_OPTIONS} \
-							  ${RECOVERY_CONF_DIR}/xorriso-options-uefi.cfg \
-							  > ${RECOVERY_XORRISO_OPTIONS}
+            ${RECOVERY_XORRISO_OPTIONS} \
+            ${RECOVERY_CONF_DIR}/xorriso-options-uefi.cfg \
+            > ${RECOVERY_XORRISO_OPTIONS}
 else
 	cp ${RECOVERY_CONF_DIR}/xorriso-options-bios.cfg ${RECOVERY_XORRISO_OPTIONS}
 fi

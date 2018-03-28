@@ -76,7 +76,7 @@ $(BTRFSPROGS_CONFIGURE_STAMP): $(E2FSPROGS_BUILD_STAMP) \
 	$(Q) echo "====  Configure btrfs-progs-$(BTRFSPROGS_VERSION) ===="
 	$(Q) cd $(BTRFSPROGS_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(BTRFSPROGS_DIR)/configure			\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		--disable-documentation				\
 		--disable-backtrace				\
@@ -95,8 +95,8 @@ btrfs-progs-build: $(BTRFSPROGS_BUILD_STAMP)
 $(BTRFSPROGS_BUILD_STAMP): $(BTRFSPROGS_NEW_FILES) $(BTRFSPROGS_CONFIGURE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building btrfs-progs-$(BTRFSPROGS_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(BTRFSPROGS_DIR)
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(BTRFSPROGS_DIR) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(BTRFSPROGS_DIR) DESTDIR=$(DEV_SYSROOT)
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(BTRFSPROGS_DIR) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 btrfs-progs-install: $(BTRFSPROGS_INSTALL_STAMP)

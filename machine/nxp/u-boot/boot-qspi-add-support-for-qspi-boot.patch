@@ -1,0 +1,43 @@
+From a3882122110adf70a3ac3411fa9b6fdeb15e3a1e Mon Sep 17 00:00:00 2001
+From: Zhao Qiang <qiang.zhao@nxp.com>
+Date: Wed, 20 Dec 2017 17:49:21 +0800
+Subject: [PATCH] boot: qspi: add support for qspi boot
+
+Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ include/configs/onie_common_config.h | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/include/configs/onie_common_config.h b/include/configs/onie_common_config.h
+index c941e2a..e0d56c6 100644
+--- a/include/configs/onie_common_config.h
++++ b/include/configs/onie_common_config.h
+@@ -40,13 +40,24 @@
+  * oniestart -- platform specific address of onie image in NOR flash
+  * oniesz.b  -- size in bytes of the platform specific onie image in NOR flash
+  */
++#ifdef CONFIG_QSPI_BOOT
+ #define CONFIG_ONIE_BOOT_CMD \
+ 	"nos_bootcmd=echo\0"						\
+ 	"onie_bootcmd=echo Loading Open Network Install Environment ...; " \
+ 	  "echo Platform: $onie_platform ; "				\
+ 	  "echo Version : $onie_version ; "				\
+-	  "cp.b $onie_start $loadaddr ${onie_sz.b} && "			\
++	  "saveenv && sf probe 0:0 && "				\
++	  "sf read $loadaddr $onie_start ${onie_sz.b} && "			\
+ 	  "run onie_args && bootm ${loadaddr}\0"
++#else
++#define CONFIG_ONIE_BOOT_CMD \
++	"nos_bootcmd=echo\0"						\
++	"onie_bootcmd=echo Loading Open Network Install Environment ...; " \
++	  "echo Platform: $onie_platform ; "				\
++	  "echo Version : $onie_version ; "				\
++	  "saveenv && cp.b $onie_start $loadaddr ${onie_sz.b} && "			\
++	  "run onie_args && bootm ${loadaddr}\0"
++#endif
+ 
+ /*
+  * Default onie boot args.
+-- 
+2.7.4
+

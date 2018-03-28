@@ -1,0 +1,109 @@
+From b040e4ae5582925ed7c81144dbffa34bf8ed80c1 Mon Sep 17 00:00:00 2001
+From: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+Date: Fri, 25 Aug 2017 12:55:30 +0530
+Subject: [PATCH 182/211] armv8: fsl-layerscape: Add support of disabling core prefetch
+
+Instruction prefetch feature is by default enabled during core
+release.
+
+This patch add support of disabling instruction prefetch by setting
+core mask in PPA. Here each core mask bit represents a core and
+prefetch is disabled at the time of core release.
+
+Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/cpu.c            |   38 ++++++++++++++++++++
+ .../armv8/fsl-layerscape/doc/README.core_prefetch  |   18 +++++++++
+ 2 files changed, 56 insertions(+), 0 deletions(-)
+ create mode 100644 arch/arm/cpu/armv8/fsl-layerscape/doc/README.core_prefetch
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/cpu.c b/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
+index e3d22b6..0997fcc 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
+@@ -32,6 +32,7 @@
+ #include <fsl_ddr.h>
+ #endif
+ #include <asm/arch/clock.h>
++#include <hwconfig.h>
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+@@ -504,6 +505,41 @@ static inline int check_psci(void)
+ 	return 0;
+ }
+ 
++static void config_core_prefetch(void)
++{
++	char *buf = NULL;
++	char buffer[HWCONFIG_BUFFER_SIZE];
++	const char *prefetch_arg = NULL;
++	size_t arglen;
++	unsigned int mask;
++	struct pt_regs regs;
++
++	if (getenv_f("hwconfig", buffer, sizeof(buffer)) > 0)
++		buf = buffer;
++
++	prefetch_arg = hwconfig_subarg_f("core_prefetch", "disable",
++					 &arglen, buf);
++
++	if (prefetch_arg) {
++		mask = simple_strtoul(prefetch_arg, NULL, 0) & 0xff;
++		if (mask & 0x1) {
++			printf("Core0 prefetch can't be disabled\n");
++			return;
++		}
++
++#define SIP_PREFETCH_DISABLE_64 0xC200FF13
++		regs.regs[0] = SIP_PREFETCH_DISABLE_64;
++		regs.regs[1] = mask;
++		smc_call(&regs);
++
++		if (regs.regs[0])
++			printf("Prefetch disable config failed for mask ");
++		else
++			printf("Prefetch disable config passed for mask ");
++		printf("0x%x\n", mask);
++	}
++}
++
+ int arch_early_init_r(void)
+ {
+ #ifdef CONFIG_SYS_FSL_ERRATUM_A009635
+@@ -531,6 +567,8 @@ int arch_early_init_r(void)
+ 	fsl_rgmii_init();
+ #endif
+ 
++	config_core_prefetch();
++
+ #ifdef CONFIG_SYS_HAS_SERDES
+ 	fsl_serdes_init();
+ #endif
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/doc/README.core_prefetch b/arch/arm/cpu/armv8/fsl-layerscape/doc/README.core_prefetch
+new file mode 100644
+index 0000000..f605a4c
+--- /dev/null
++++ b/arch/arm/cpu/armv8/fsl-layerscape/doc/README.core_prefetch
+@@ -0,0 +1,18 @@
++Core instruction prefetch disable
++---------------------------------
++To disable instruction prefetch of core; hwconfig needs to be updated.
++for e.g.
++setenv hwconfig 'fsl_ddr:bank_intlv=auto;core_prefetch:disable=0x02'
++
++Here 0x02 can be replaced with any valid value. It represents 64 bit mask.
++The 64-bit Mask has one bit for each core.
++Mask[0] = core0
++Mask[1] = core1
++Mask[2] = core2
++etc
++If the bit is set ('b1) in the mask, then prefetch is disabled for
++that core when it is released from reset.
++core0 prefetch should not be disabled.
++
++Once disabled, prefetch remains disabled until the next reset.
++There is no function to re-enable prefetch.
+-- 
+1.7.1
+

@@ -91,4 +91,11 @@ for x in $mtds ; do
     fi
 done
 
+# mount securityfs if supported
+if grep -q securityfs /proc/filesystems ; then
+    mount -t securityfs securityfs /sys/kernel/security
+fi
+
 mkdir -p $ONIE_RUN_DIR
+mkdir -p $ONIE_USB_DIR
+

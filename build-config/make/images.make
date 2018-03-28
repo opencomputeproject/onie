@@ -29,6 +29,7 @@ ONIE_TOOLS_DIR	= $(abspath ../tools)
 ONIE_SYSROOT_TOOLS_LIST = \
 	lib/onie \
 	bin/onie-boot-mode \
+	bin/onie-nos-mode \
 	bin/onie-fwpkg
 
 IMAGE_BIN_STAMP		= $(STAMPDIR)/image-bin
@@ -101,6 +102,17 @@ ifeq ($(BTRFS_PROGS_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(BTRFSPROGS_INSTALL_STAMP)
 endif
 
+ifeq ($(OPENSSL_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(OPENSSL_INSTALL_STAMP)
+endif
+
+ifeq ($(MOKUTIL_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(MOKUTIL_INSTALL_STAMP)
+endif
+
+ifeq ($(KEYUTILS_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(KEYUTILS_INSTALL_STAMP)
+endif
 
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
@@ -126,9 +138,6 @@ endif
 PHONY += sysroot-check sysroot-complete
 
 CHECKROOT	= $(MBUILDDIR)/check
-CHECKDIR	= $(CHECKROOT)/checkdir
-CHECKFILES	= $(CHECKROOT)/checkfiles.txt
-SYSFILES	= $(CHECKROOT)/sysfiles.txt
 
 ifeq ($(XTOOLS_LIBC),uClibc-ng)
   SYSROOT_LIBS	= ld$(CLIB64)-uClibc.so.0 ld$(CLIB64)-uClibc-$(XTOOLS_LIBC_VERSION).so \
@@ -197,7 +206,6 @@ endif
 # - verifies that we have all the shared libraries required by the
 #   executables in our final sysroot.
 
-
 sysroot-check: $(SYSROOT_CHECK_STAMP)
 $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	$(Q) for file in $(SYSROOT_LIBS) ; do \
@@ -219,19 +227,11 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 	done
 	$(Q) find $(SYSROOTDIR) -path */lib/grub/* -prune -o \( -type f -print0 \) | xargs -0 file | \
 		grep ELF | awk -F':' '{ print $$1 }' | grep -v "/lib/modules/" | xargs $(CROSSBIN)/$(CROSSPREFIX)strip
+ifeq ($(XTOOLS_ENABLE),yes)
 	$(Q) rm -rf $(CHECKROOT)
-        ifeq ($(XTOOLS_ENABLE),yes)
-	  $(Q) mkdir -p $(CHECKROOT) && \
-	      $(CROSSBIN)/$(CROSSPREFIX)populate -r $(DEV_SYSROOT) \
-		  -s $(SYSROOTDIR) -d $(CHECKDIR) && \
-		  (cd $(SYSROOTDIR) && find . | LC_ALL=C sort > $(SYSFILES)) && \
-		  (cd $(CHECKDIR) && find . | LC_ALL=C sort > $(CHECKFILES)) && \
-		  diff -q $(SYSFILES) $(CHECKFILES) > /dev/null 2>&1 || { \
-			  (echo "ERROR: Missing files in SYSROOTDIR:" && \
-			   diff $(SYSFILES) $(CHECKFILES) ; \
-			   false) \
-		  }
-       endif
+	$(Q) $(SCRIPTDIR)/check-libs $(CROSSBIN)/$(CROSSPREFIX)populate \
+		$(DEV_SYSROOT) $(SYSROOTDIR) $(CHECKROOT)
+endif
 	$(Q) touch $@
 
 # Setting ONIE_BUILD_MACHINE on the command line allows you "fake" a
@@ -283,6 +283,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_build_machine=$(ONIE_BUILD_MACHINE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_machine_rev=$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_arch=$(ARCH)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_build_platform=$(ARCH)-$(ONIE_BUILD_MACHINE)-r$(MACHINE_REV)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_config_version=$(ONIE_CONFIG_VERSION)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_build_date=\"$(ONIE_BUILD_DATE)\"" >> $(MACHINE_CONF)
 	$(Q) echo "onie_partition_type=$(PARTITION_TYPE)" >> $(MACHINE_CONF)
@@ -290,9 +291,13 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_firmware=$(FIRMWARE_TYPE)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_switch_asic=$(SWITCH_ASIC_VENDOR)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_skip_ethmgmt_macs=$(SKIP_ETHMGMT_MACS)" >> $(MACHINE_CONF)
-       ifeq ($(GRUB_ENABLE),yes)
-	  $(Q) echo "onie_grub_image_name=$(GRUB_IMAGE_NAME)" >> $(MACHINE_CONF)
-       endif
+ifeq ($(UEFI_ENABLE),yes)
+	$(Q) echo "onie_uefi_boot_loader=$(UEFI_BOOT_LOADER)" >> $(MACHINE_CONF)
+	$(Q) echo "onie_uefi_arch=$(EFI_ARCH)" >> $(MACHINE_CONF)
+endif
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+	$(Q) echo "onie_secure_boot=$(SECURE_BOOT_ENABLE)" >> $(MACHINE_CONF)
+endif
 	$(Q) cp $(LSB_RELEASE_FILE) $(SYSROOTDIR)/etc/lsb-release
 	$(Q) cp $(OS_RELEASE_FILE) $(SYSROOTDIR)/etc/os-release
 	$(Q) cp $(MACHINE_CONF) $(SYSROOTDIR)/etc/machine-build.conf
@@ -360,10 +365,11 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(UPDATER_IMAGE_PARTS_PL
 	$(Q) CONSOLE_SPEED=$(CONSOLE_SPEED) \
 	     CONSOLE_DEV=$(CONSOLE_DEV) \
 	     CONSOLE_PORT=$(CONSOLE_PORT) \
+	     GRUB_TIMEOUT=$(GRUB_TIMEOUT) \
 	     UPDATER_UBOOT_NAME=$(UPDATER_UBOOT_NAME) \
 	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
 	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
-	     UEFI_BOOT_LOADER=$(GRUB_IMAGE_NAME) \
+	     UEFI_BOOT_LOADER=$(UEFI_BOOT_LOADER) \
 	     $(SCRIPTDIR)/onie-mk-installer.sh onie $(ROOTFS_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS) $(UPDATER_IMAGE_PARTS_PLATFORM)
@@ -431,6 +437,10 @@ $(RECOVERY_ISO_STAMP): $(GRUB_INSTALL_STAMP) $(GRUB_HOST_INSTALL_STAMP) $(RECOVE
 	     UEFI_ENABLE=$(UEFI_ENABLE) \
 	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
 	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
+	     SECURE_BOOT_ENABLE=$(SECURE_BOOT_ENABLE) \
+	     SB_SHIM=$(SHIM_SECURE_BOOT_IMAGE) \
+	     ONIE_VENDOR_SECRET_KEY_PEM=$(ONIE_VENDOR_SECRET_KEY_PEM) \
+	     ONIE_VENDOR_CERT_PEM=$(ONIE_VENDOR_CERT_PEM) \
 	     $(SCRIPTDIR)/onie-mk-iso.sh $(ARCH) $(UPDATER_VMLINUZ) \
 		$(RECOVERY_INITRD) $(RECOVERY_DIR) \
 		$(MACHINE_CONF) $(RECOVERY_CONF_DIR) \

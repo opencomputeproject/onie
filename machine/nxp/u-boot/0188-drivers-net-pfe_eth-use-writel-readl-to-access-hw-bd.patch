@@ -1,0 +1,182 @@
+From 5dc8c93b03a42c71c96e26af634bfec298cdcfb0 Mon Sep 17 00:00:00 2001
+From: Calvin Johnson <calvin.johnson@nxp.com>
+Date: Fri, 17 Nov 2017 11:31:52 +0530
+Subject: [PATCH 188/211] drivers: net: pfe_eth: use writel/readl to access hw bds
+
+writel/readl accessors should be used to access hardware buffer descriptors.
+
+Signed-off-by: Calvin Johnson <calvin.johnson@nxp.com>
+Signed-off-by: Anjaneyulu Jagarlmudi <anji.jagarlmudi@nxp.com>
+---
+ drivers/net/pfe_eth/pfe_driver.c |   70 +++++++++++++++++++-------------------
+ 1 files changed, 35 insertions(+), 35 deletions(-)
+
+diff --git a/drivers/net/pfe_eth/pfe_driver.c b/drivers/net/pfe_eth/pfe_driver.c
+index 55fc145..730aca2 100644
+--- a/drivers/net/pfe_eth/pfe_driver.c
++++ b/drivers/net/pfe_eth/pfe_driver.c
+@@ -35,18 +35,18 @@ int pfe_recv(unsigned int *pkt_ptr, int *phy_port)
+ 
+ 	bd = rx_desc->rx_base + rx_desc->rx_to_read;
+ 
+-	if (bd->ctrl & BD_CTRL_DESC_EN)
++	if (readl(&bd->ctrl) & BD_CTRL_DESC_EN)
+ 		return len; /* No pending Rx packet */
+ 
+-	/* this len include hif_header(8bytes) */
+-	len = bd->ctrl & 0xFFFF;
++	/* this len include hif_header(8 bytes) */
++	len = readl(&bd->ctrl) & 0xFFFF;
+ 
+-	hif_header = (struct hif_header_s *)DDR_PFE_TO_VIRT(bd->data);
++	hif_header = (struct hif_header_s *)DDR_PFE_TO_VIRT(readl(&bd->data));
+ 
+ 	/* Get the recive port info from the packet */
+ 	debug(
+ 		"Pkt recv'd: Pkt ptr(%p), len(%d), gemac_port(%d) status(%08x)\n",
+-		hif_header, len, hif_header->port_no, bd->status);
++		hif_header, len, hif_header->port_no, readl(&bd->status));
+ 
+ #ifdef DEBUG
+ 	{
+@@ -87,11 +87,12 @@ void pfe_rx_done(void)
+ 	bd = rx_desc->rx_base + rx_desc->rx_to_read;
+ 
+ 	/* reset the control field */
+-	bd->ctrl = (MAX_FRAME_SIZE | BD_CTRL_LIFM | BD_CTRL_DESC_EN
+-		    | BD_CTRL_DIR);
+-	bd->status = 0;
++	writel((MAX_FRAME_SIZE | BD_CTRL_LIFM | BD_CTRL_DESC_EN
++		    | BD_CTRL_DIR), &bd->ctrl);
++	writel(0, &bd->status);
+ 
+-	debug("Rx Done : status: %08x, ctrl: %08x\n", bd->status, bd->ctrl);
++	debug("Rx Done : status: %08x, ctrl: %08x\n", readl(&bd->status),
++	      readl(&bd->ctrl));
+ 
+ 	/* Give START_STROBE to BDP to fetch the descriptor __NOW__,
+ 	 * BDP need not to wait for rx_poll_cycle time to fetch the descriptor,
+@@ -137,18 +138,16 @@ int pfe_send(int phy_port, void *data, int length)
+ 	bd = tx_desc->tx_base + tx_desc->tx_to_send;
+ 
+ 	/* check queue-full condition */
+-	if (bd->ctrl & BD_CTRL_DESC_EN) {
+-		printf("Tx queue full\n");
++	if (readl(&bd->ctrl) & BD_CTRL_DESC_EN)
+ 		return -1;
+-	}
+ 
+ 	/* PFE checks for min pkt size */
+ 	if (length < MIN_PKT_SIZE)
+ 		length = MIN_PKT_SIZE;
+ 
+-	tx_buf_va = (void *)DDR_PFE_TO_VIRT(bd->data);
++	tx_buf_va = (void *)DDR_PFE_TO_VIRT(readl(&bd->data));
+ 	debug("%s: tx_buf_va: %p, tx_buf_pa: %08x\n", __func__, tx_buf_va,
+-	      bd->data);
++	      readl(&bd->data));
+ 
+ 	/* Fill the gemac/phy port number to send this packet out */
+ 	memset(&hif_header, 0, sizeof(struct hif_header_s));
+@@ -171,15 +170,13 @@ int pfe_send(int phy_port, void *data, int length)
+ 	}
+ #endif
+ 
+-	debug("before0: Tx Done, status: %08x, ctrl: %08x\n", bd->status,
+-	      bd->ctrl);
++	debug("Tx Done: status: %08x, ctrl: %08x\n", readl(&bd->status),
++	      readl(&bd->ctrl));
+ 
+ 	/* fill the tx desc */
+-	bd->ctrl = (u32)(BD_CTRL_DESC_EN | BD_CTRL_LIFM | (length & 0xFFFF));
+-	bd->status = 0;
+-
+-	/* NOTE: This code can be removed after verification */
+-	bd->status = 0xF0;
++	writel((u32)(BD_CTRL_DESC_EN | BD_CTRL_LIFM | (length & 0xFFFF)),
++	       &bd->ctrl);
++	writel(0, &bd->status);
+ 
+ 	writel((HIF_CTRL_DMA_EN | HIF_CTRL_BDP_CH_START_WSTB), HIF_TX_CTRL);
+ 
+@@ -208,15 +205,15 @@ int pfe_tx_done(void)
+ 	bd = tx_desc->tx_base + tx_desc->tx_to_send;
+ 
+ 	/* check queue-full condition */
+-	if (bd->ctrl & BD_CTRL_DESC_EN)
++	if (readl(&bd->ctrl) & BD_CTRL_DESC_EN)
+ 		return -1;
+ 
+ 	/* reset the control field */
+-	bd->ctrl = 0;
+-	/* bd->data = (u32)NULL; */
+-	bd->status = 0;
++	writel(0, &bd->ctrl);
++	writel(0, &bd->status);
+ 
+-	debug("Tx Done : status: %08x, ctrl: %08x\n", bd->status, bd->ctrl);
++	debug("Tx Done : status: %08x, ctrl: %08x\n", readl(&bd->status),
++	      readl(&bd->ctrl));
+ 
+ 	/* increment the txtosend index to next location */
+ 	tx_desc->tx_to_send = (tx_desc->tx_to_send + 1)
+@@ -248,7 +245,10 @@ static inline void hif_rx_desc_dump(void)
+ 	      rx_desc->rx_base_pa);
+ 	for (i = 0; i < rx_desc->rx_ring_size; i++) {
+ 		debug("status: %08x, ctrl: %08x, data: %08x, next: 0x%08x\n",
+-		      bd_va->status, bd_va->ctrl, bd_va->data, bd_va->next);
++		      readl(&bd_va->status),
++		      readl(&bd_va->ctrl),
++		      readl(&bd_va->data),
++		      readl(&bd_va->next));
+ 		bd_va++;
+ 	}
+ }
+@@ -271,7 +271,7 @@ void hif_rx_desc_disable(void)
+ 	bd_va = rx_desc->rx_base;
+ 
+ 	for (i = 0; i < rx_desc->rx_ring_size; i++) {
+-		bd_va->ctrl |= BD_CTRL_LAST_BD;
++		writel(readl(&bd_va->ctrl) | BD_CTRL_LAST_BD, &bd_va->ctrl);
+ 		bd_va++;
+ 	}
+ }
+@@ -322,14 +322,14 @@ static int hif_rx_desc_init(struct pfe *pfe)
+ 	ctrl = (MAX_FRAME_SIZE | BD_CTRL_DESC_EN | BD_CTRL_DIR | BD_CTRL_LIFM);
+ 
+ 	for (i = 0; i < rx_desc->rx_ring_size; i++) {
+-		bd_va->next = (unsigned long)(bd_pa + 1);
+-		bd_va->ctrl = ctrl;
+-		bd_va->data = rx_buf_pa + (i * MAX_FRAME_SIZE);
++		writel((unsigned long)(bd_pa + 1), &bd_va->next);
++		writel(ctrl, &bd_va->ctrl);
++		writel(rx_buf_pa + (i * MAX_FRAME_SIZE), &bd_va->data);
+ 		bd_va++;
+ 		bd_pa++;
+ 	}
+ 	--bd_va;
+-	bd_va->next = (u32)rx_desc->rx_base_pa;
++	writel((u32)rx_desc->rx_base_pa, &bd_va->next);
+ 
+ 	writel(rx_desc->rx_base_pa, HIF_RX_BDP_ADDR);
+ 	writel((readl(HIF_RX_CTRL) | HIF_CTRL_BDP_CH_START_WSTB), HIF_RX_CTRL);
+@@ -407,13 +407,13 @@ static int hif_tx_desc_init(struct pfe *pfe)
+ 	tx_buf_pa = pfe->ddr_phys_baseaddr + HIF_TX_PKT_DDR_BASEADDR;
+ 
+ 	for (i = 0; i < tx_desc->tx_ring_size; i++) {
+-		bd_va->next = (unsigned long)(bd_pa + 1);
+-		bd_va->data = tx_buf_pa + (i * MAX_FRAME_SIZE);
++		writel((unsigned long)(bd_pa + 1), &bd_va->next);
++		writel(tx_buf_pa + (i * MAX_FRAME_SIZE), &bd_va->data);
+ 		bd_va++;
+ 		bd_pa++;
+ 	}
+ 	--bd_va;
+-	bd_va->next = (u32)tx_desc->tx_base_pa;
++	writel((u32)tx_desc->tx_base_pa, &bd_va->next);
+ 
+ 	writel(tx_desc->tx_base_pa, HIF_TX_BDP_ADDR);
+ 
+-- 
+1.7.1
+

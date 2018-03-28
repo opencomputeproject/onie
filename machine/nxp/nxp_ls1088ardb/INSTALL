@@ -1,0 +1,59 @@
+=========================================
+Installing ONIE on NXP LS1088ARDB
+=========================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/nxp MACHINE=nxp_ls1088ardb all"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/nxp MACHINE=nxp_ls1088ardb all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+Installing the ONIE binaries
+============================
+Step 1: Install firmwares on QSPI flash
+
+	1> get firmware_ls1088ardb_uboot_qspiboot.img and put it in your TFTP
+	wget http://www.nxp.com/lgfiles/sdk/lsdk1712/firmware_ls1088ardb_uboot_qspiboot.img
+
+	2> Intstall the img on QSPI flash
+	=> tftp a0000000 <path>/firmware_ls1088ardb_uboot_qspiboot.img
+	=> sf probe 0:0
+	=> sf erase 0 +$filesize && sf write 0xa0000000 0 $filesize
+
+note: Must do step 1 before step 2 and 3
+
+---------------------------------------------
+Step 2: Install uboot (onie-nxp_ls1088ardb-r0.bin.uboot+env)
+
+	=> tftp a0000000 <path>/onie-nxp_ls1088ardb-r0.bin.uboot+env
+	=> sf probe 0:0
+	=> sf erase 0x100000 +$filesize && sf write 0xa0000000 0x100000 $filesize
+
+----------------------------------
+Step 3: Install kernel (nxp_ls1088ardb-r0.itb)
+
+	 => tftp a0000000 <path>/nxp_ls1088ardb-r0.itb
+	 => sf probe 0:0
+	 => sf erase 0x1000000 +$filesize && sf write 0xa0000000 0x1000000 $filesize
+
+----------------------------------
+Step 4 -- Configure Serial Console
+
+	ONIE defaults the serial console baud rate to 115200.  You may need to
+	adjust your terminal settings.
+
+----------------------------
+Step 5 -- Restart The System
+
+	You can interrupt the boot process by pressing any key during the
+	count down::
+
+	=> reset

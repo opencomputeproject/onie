@@ -1,0 +1,178 @@
+From 10cafca84f4bf65bed8c0fcd0c171a9d50a08cf0 Mon Sep 17 00:00:00 2001
+From: Steve McIntyre <93sam@debian.org>
+Date: Mon, 30 Jan 2017 19:04:51 +0000
+Subject: Make grub-install check for errors from efibootmgr
+
+Code is currently ignoring errors from efibootmgr, giving users
+clearly bogus output like:
+
+        Setting up grub-efi-amd64 (2.02~beta3-4) ...
+        Installing for x86_64-efi platform.
+        Could not delete variable: No space left on device
+        Could not prepare Boot variable: No space left on device
+        Installation finished. No error reported.
+
+and then potentially unbootable systems. If efibootmgr fails,
+grub-install should know that and report it!
+
+Signed-off-by: Steve McIntyre <93sam@debian.org>
+
+Bug-Debian: https://bugs.debian.org/853234
+Forwarded: https://lists.gnu.org/archive/html/grub-devel/2017-01/msg00107.html
+
+Patch-Name: grub-install-efibootmgr-check.patch
+---
+ grub-core/osdep/unix/platform.c | 24 +++++++++++++++---------
+ include/grub/util/install.h     |  2 +-
+ util/grub-install.c             | 14 +++++++++++---
+ 3 files changed, 27 insertions(+), 13 deletions(-)
+
+diff --git a/grub-core/osdep/unix/platform.c b/grub-core/osdep/unix/platform.c
+index 28cb37e15..f9c376c35 100644
+--- a/grub-core/osdep/unix/platform.c
++++ b/grub-core/osdep/unix/platform.c
+@@ -78,19 +78,20 @@ get_ofpathname (const char *dev)
+ 		   dev);
+ }
+ 
+-static void
++static int
+ grub_install_remove_efi_entries_by_distributor (const char *efi_distributor)
+ {
+   int fd;
+   pid_t pid = grub_util_exec_pipe ((const char * []){ "efibootmgr", NULL }, &fd);
+   char *line = NULL;
+   size_t len = 0;
++  int error = 0;
+ 
+   if (!pid)
+     {
+       grub_util_warn (_("Unable to open stream from %s: %s"),
+ 		      "efibootmgr", strerror (errno));
+-      return;
++      return errno;
+     }
+ 
+   FILE *fp = fdopen (fd, "r");
+@@ -98,7 +99,7 @@ grub_install_remove_efi_entries_by_distributor (const char *efi_distributor)
+     {
+       grub_util_warn (_("Unable to open stream from %s: %s"),
+ 		      "efibootmgr", strerror (errno));
+-      return;
++      return errno;
+     }
+ 
+   line = xmalloc (80);
+@@ -119,23 +120,25 @@ grub_install_remove_efi_entries_by_distributor (const char *efi_distributor)
+       bootnum = line + sizeof ("Boot") - 1;
+       bootnum[4] = '\0';
+       if (!verbosity)
+-	grub_util_exec ((const char * []){ "efibootmgr", "-q",
++	error = grub_util_exec ((const char * []){ "efibootmgr", "-q",
+ 	      "-b", bootnum,  "-B", NULL });
+       else
+-	grub_util_exec ((const char * []){ "efibootmgr",
++	error = grub_util_exec ((const char * []){ "efibootmgr",
+ 	      "-b", bootnum, "-B", NULL });
+     }
+ 
+   free (line);
++  return error;
+ }
+ 
+-void
++int
+ grub_install_register_efi (grub_device_t efidir_grub_dev,
+ 			   const char *efifile_path,
+ 			   const char *efi_distributor)
+ {
+   const char * efidir_disk;
+   int efidir_part;
++  int error = 0;
+   efidir_disk = grub_util_biosdisk_get_osdev (efidir_grub_dev->disk);
+   efidir_part = efidir_grub_dev->disk->partition ? efidir_grub_dev->disk->partition->number + 1 : 1;
+ 
+@@ -151,23 +154,26 @@ grub_install_register_efi (grub_device_t efidir_grub_dev,
+   grub_util_exec ((const char * []){ "modprobe", "-q", "efivars", NULL });
+ #endif
+   /* Delete old entries from the same distributor.  */
+-  grub_install_remove_efi_entries_by_distributor (efi_distributor);
++  error = grub_install_remove_efi_entries_by_distributor (efi_distributor);
++  if (error)
++    return error;
+ 
+   char *efidir_part_str = xasprintf ("%d", efidir_part);
+ 
+   if (!verbosity)
+-    grub_util_exec ((const char * []){ "efibootmgr", "-q",
++    error = grub_util_exec ((const char * []){ "efibootmgr", "-q",
+ 	  "-c", "-d", efidir_disk,
+ 	  "-p", efidir_part_str, "-w",
+ 	  "-L", efi_distributor, "-l", 
+ 	  efifile_path, NULL });
+   else
+-    grub_util_exec ((const char * []){ "efibootmgr",
++    error = grub_util_exec ((const char * []){ "efibootmgr",
+ 	  "-c", "-d", efidir_disk,
+ 	  "-p", efidir_part_str, "-w",
+ 	  "-L", efi_distributor, "-l", 
+ 	  efifile_path, NULL });
+   free (efidir_part_str);
++  return error;
+ }
+ 
+ void
+diff --git a/include/grub/util/install.h b/include/grub/util/install.h
+index 9f517a1bb..58648e209 100644
+--- a/include/grub/util/install.h
++++ b/include/grub/util/install.h
+@@ -209,7 +209,7 @@ grub_install_get_default_x86_platform (void);
+ const char *
+ grub_install_get_default_x86_platform (void);
+ 
+-void
++int
+ grub_install_register_efi (grub_device_t efidir_grub_dev,
+ 			   const char *efifile_path,
+ 			   const char *efi_distributor);
+diff --git a/util/grub-install.c b/util/grub-install.c
+index a4f253918..fae92f40b 100644
+--- a/util/grub-install.c
++++ b/util/grub-install.c
+@@ -2020,9 +2020,13 @@ main (int argc, char *argv[])
+ 	  if (!removable && update_nvram)
+ 	    {
+ 	      /* Try to make this image bootable using the EFI Boot Manager, if available.  */
+-	      grub_install_register_efi (efidir_grub_dev,
++	      int error = 0;
++	      error = grub_install_register_efi (efidir_grub_dev,
+ 					 "\\System\\Library\\CoreServices",
+ 					 efi_distributor);
++	      if (error)
++	        grub_util_error (_("efibootmgr failed to register the boot entry: %s"),
++				 strerror (error));
+ 	    }
+ 
+ 	  grub_device_close (ins_dev);
+@@ -2117,6 +2121,7 @@ main (int argc, char *argv[])
+ 	{
+ 	  char * efifile_path;
+ 	  char * part;
++	  int error = 0;
+ 
+ 	  /* Try to make this image bootable using the EFI Boot Manager, if available.  */
+ 	  if (!efi_distributor || efi_distributor[0] == '\0')
+@@ -2133,8 +2138,11 @@ main (int argc, char *argv[])
+ 			  efidir_grub_dev->disk->name,
+ 			  (part ? ",": ""), (part ? : ""));
+ 	  grub_free (part);
+-	  grub_install_register_efi (efidir_grub_dev,
+-				     efifile_path, efi_distributor);
++	  error = grub_install_register_efi (efidir_grub_dev,
++					     efifile_path, efi_distributor);
++	  if (error)
++	    grub_util_error (_("efibootmgr failed to register the boot entry: %s"),
++			     strerror (error));
+ 	}
+       break;
+ 

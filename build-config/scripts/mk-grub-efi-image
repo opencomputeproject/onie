@@ -1,0 +1,105 @@
+#!/bin/sh
+
+#  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Create monolithic GRUB EFI boot images for signing
+
+set -e
+
+ARCH="$1"
+GRUB_HOST_BIN_UEFI_DIR="$2"
+GRUB_TARGET_LIB_UEFI_DIR="$3"
+OUTPUT_IMAGE="$4"
+
+grub_mkimage="${GRUB_HOST_BIN_UEFI_DIR}/grub-mkimage"
+[ -x "$grub_mkimage" ] || {
+    echo "ERROR: Unable to find grub-mkimage: $grub_mkimage"
+    exit 1
+}
+
+[ -r "${GRUB_TARGET_LIB_UEFI_DIR}/efinet.mod" ] || {
+    echo "ERROR: Does not look like valid GRUB ${ARCH}-efi library directory: $GRUB_TARGET_LIB_UEFI_DIR"
+    exit 1
+}
+
+touch "$OUTPUT_IMAGE" || {
+    echo "ERROR: Unable to create output image: $OUTPUT_IMAGE"
+    exit 1
+}
+
+GRUB_MODULES="
+	all_video
+	boot
+	btrfs
+	cat
+	chain
+	configfile
+	echo
+	efifwsetup
+	efinet
+	ext2
+	fat
+	font
+	gettext
+	gfxmenu
+	gfxterm
+	gfxterm_background
+	gzio
+	halt
+	hfsplus
+	iso9660
+	jpeg
+	keystatus
+	loadenv
+	loopback
+	linux
+	linuxefi
+	lsefi
+	lsefimmap
+	lsefisystab
+	lssal
+	lvm
+	mdraid09
+	mdraid1x
+	memdisk
+	minicmd
+	normal
+	part_apple
+	part_msdos
+	part_gpt
+	password_pbkdf2
+	png
+	raid5rec
+	raid6rec
+	reboot
+	search
+	search_fs_uuid
+	search_fs_file
+	search_label
+	serial
+	sleep
+	squash4
+	terminal
+	terminfo
+	test
+	true
+	video
+	zfs
+	zfscrypt
+	zfsinfo
+"
+
+# Make an embedded config that reads a grub.cfg from the EFI directory
+# where the final grub binary is running.
+tmp_config=$(mktemp)
+cat <<EOF > $tmp_config
+configfile \$cmdpath/grub.cfg
+EOF
+
+"$grub_mkimage" --format="${ARCH}-efi" --directory="$GRUB_TARGET_LIB_UEFI_DIR" \
+                --prefix="/bogus" --config="$tmp_config" --output="$OUTPUT_IMAGE" \
+                $GRUB_MODULES
+
+rm -f $tmp_config

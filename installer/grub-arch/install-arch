@@ -1,6 +1,6 @@
 # x86_64 specific ONIE installer functions
 
-#  Copyright (C) 2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014,2015,2016,2018 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
@@ -616,8 +616,9 @@ install_grub()
 
 }
 
-# UEFI BIOS GRUB install function.
-# Installs GRUB in the specified location.
+
+# UEFI traditional GRUB install function.  Installs GRUB in the
+# specified location.
 #
 # arg $1 -- EFI root directory
 # arg $2 -- install device
@@ -645,6 +646,80 @@ install_uefi_grub()
         exit 1
     }
     rm -f $grub_install_log
+}
+
+# UEFI shim and GRUB install function.  Installs GRUB and the shim
+# binaries in the specified location.
+#
+# arg $1 -- EFI root directory
+# arg $2 -- install device
+# arg $3 -- GRUB boot directory
+
+install_uefi_shim_grub()
+{
+    local uefi_dir="$1"
+    local boot_dev="$2"
+    local boot_dir="$3"
+
+    [ "$verbose" = "yes" ] && echo "Installing UEFI SHIM, GRUB in device: $uefi_dir, boot-directory: $boot_dir"
+
+    local loader_dir="${uefi_dir}/EFI/onie"
+
+    mkdir -p "$loader_dir" || {
+        echo "ERROR: Unable to create directory: $loader_dir"
+        return 1
+    }
+
+    # copy shim and grub binaries into loader directory
+    for f in shim mm grub ; do
+        local loader="${f}${image_uefi_arch}.efi"
+        cp "$loader" $loader_dir || {
+            echo "ERROR: Unable to copy loader file: $loader to loader_dir: $loader_dir"
+            return 1
+        }
+    done
+
+    local onie_boot_uuid=$(grub-probe --target=fs_uuid $boot_dir) || {
+        echo "ERROR: Unable to determine UUID of GRUB boot directory: $boot_dir"
+        return 1
+    }
+
+    # Generate tiny grub config for monolithic image
+    cat<< EOF > "${loader_dir}/grub.cfg"
+search.fs_uuid $onie_boot_uuid root hd0,gpt$onie_boot_part
+set prefix=(\$root)'/grub'
+configfile \$prefix/grub.cfg
+EOF
+
+    # Install primary grub config in $onie_boot_part
+    grub_dir="${boot_dir}/grub"
+    mkdir -p "${grub_dir}/fonts" "${grub_dir}/locale"
+
+}
+
+
+# UEFI loader install function.
+#
+# arg $1 -- EFI root directory
+# arg $2 -- install device
+# arg $3 -- GRUB boot directory
+install_uefi_loader()
+{
+    local uefi_dir="$1"
+    local boot_dev="$2"
+    local boot_dir="$3"
+
+    if [ "$image_secure_boot" = "yes" ] ; then
+        install_uefi_shim_grub "$uefi_dir" "$boot_dev" "$boot_dir" || {
+            echo "ERROR: problems installing shim and grub on: $boot_dev"
+            exit 1
+        }
+    else
+        install_uefi_grub "$uefi_dir" "$boot_dev" "$boot_dir" || {
+            echo "ERROR: problems installing grub on: $boot_dev"
+            exit 1
+        }
+    fi
 
     if [ "$onie_boot_reason" = "embed" ] ; then
         # Configure EFI NVRAM Boot variables.  --create also sets the
@@ -652,7 +727,7 @@ install_uefi_grub()
         efibootmgr --quiet --create \
             --label "ONIE: Open Network Install Environment" \
             --disk $boot_dev --part $uefi_esp_part \
-            --loader /EFI/onie/${onie_grub_image_name} || {
+            --loader /EFI/onie/${image_uefi_boot_loader} || {
             echo "ERROR: efibootmgr failed to create new boot variable on: $boot_dev"
             exit 1
         }
@@ -731,8 +806,8 @@ install_image()
         exit 1
     }
 
-    # Create basic directories for installing and logging
-    mkdir -p $onie_root_dir $onie_update_dir $onie_update_results_dir $onie_update_pending_dir
+    # Create ONIE data directory
+    mkdir -p $onie_root_dir
 
     # Put the ONIE kernel and initramfs into place.
     kernel_name="vmlinuz-${image_kernel_version}-onie"
@@ -753,8 +828,8 @@ install_image()
     }
 
     if [ "$install_firmware" = "uefi" ] ; then
-        install_uefi_grub $uefi_esp_mnt $onie_dev $onie_boot_mnt || {
-            echo "Error: Problems installing UEFI GRUB on device: $uefi_esp_mnt, $onie_dev, $onie_boot_mnt"
+        install_uefi_loader $uefi_esp_mnt $onie_dev $onie_boot_mnt || {
+            echo "Error: Problems installing UEFI loader on device: $uefi_esp_mnt, $onie_dev, $onie_boot_mnt"
             exit 1
         }
     else
@@ -783,11 +858,18 @@ install_image()
     # Restore the previous update directory
     if [ "$preserve_update_dir" = "yes" ] ; then
         cp -a /tmp/preserve-update $onie_update_dir
+    else
+        # Create empty update logging directories
+        mkdir -p $onie_update_dir $onie_update_results_dir $onie_update_pending_dir
     fi
 
     # Return to default boot mode on the next boot.  Use this
     # installer's version of onie-boot-mode.
     $onie_root_dir/tools/bin/onie-boot-mode -q -o none
+    if [ "$onie_boot_reason" = "embed" ] ; then
+        # Also clear out the NOS mode
+        $onie_root_dir/tools/bin/onie-nos-mode -c
+    fi
 
     if [ -n "$post_install_hook" ]; then
         eval $post_install_hook || {

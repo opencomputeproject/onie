@@ -1,0 +1,356 @@
+From ab09a982d2fa084a0b205fdef5b8a099a2d65cee Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Thu, 9 Jun 2016 12:22:29 -0400
+Subject: Re-work some intricacies of PE loading.
+
+The PE spec is not a well written document, and awesomely every place
+where there's an ambiguous way to read something, Windows' bootmgfw.efi
+takes a different read than either of them.
+
+Origin: vendor, https://github.com/rhboot/grub2/commit/3f023d25a1ceb6d23c1bb17b754fbc1f8321427d
+Forwarded: no
+Last-Update: 2017-11-01
+
+Patch-Name: linuxefi_rework_pe_loading.patch
+---
+ grub-core/loader/efi/chainloader.c | 156 +++++++++++++++++++++++++++++--------
+ include/grub/efi/pe32.h            |  32 +++++++-
+ 2 files changed, 152 insertions(+), 36 deletions(-)
+
+diff --git a/grub-core/loader/efi/chainloader.c b/grub-core/loader/efi/chainloader.c
+index 83e191460..505d883ef 100644
+--- a/grub-core/loader/efi/chainloader.c
++++ b/grub-core/loader/efi/chainloader.c
+@@ -301,7 +301,7 @@ image_is_64_bit (grub_pe_header_t *pe_hdr)
+   return 0;
+ }
+ 
+-static const grub_uint16_t machine_type =
++static const grub_uint16_t machine_type __attribute__((__unused__)) =
+ #if defined(__x86_64__)
+   GRUB_PE32_MACHINE_X86_64;
+ #elif defined(__aarch64__)
+@@ -367,10 +367,10 @@ relocate_coff (pe_coff_loader_image_context_t *context,
+ 
+   reloc_base = image_address (orig, size, section->raw_data_offset);
+   reloc_base_end = image_address (orig, size, section->raw_data_offset
+-				  + section->virtual_size - 1);
++				  + section->virtual_size);
+ 
+-  grub_dprintf ("chain", "reloc_base %p reloc_base_end %p\n", reloc_base,
+-		reloc_base_end);
++  grub_dprintf ("chain", "relocate_coff(): reloc_base %p reloc_base_end %p\n",
++		reloc_base, reloc_base_end);
+ 
+   if (!reloc_base && !reloc_base_end)
+     return GRUB_EFI_SUCCESS;
+@@ -507,12 +507,13 @@ handle_image (void *data, grub_efi_uint32_t datasize)
+   grub_efi_status_t efi_status;
+   char *buffer = NULL;
+   char *buffer_aligned = NULL;
+-  grub_efi_uint32_t i, size;
++  grub_efi_uint32_t i;
+   struct grub_pe32_section_table *section;
+   char *base, *end;
+   pe_coff_loader_image_context_t context;
+   grub_uint32_t section_alignment;
+   grub_uint32_t buffer_size;
++  int found_entry_point = 0;
+ 
+   b = grub_efi_system_table->boot_services;
+ 
+@@ -526,8 +527,28 @@ handle_image (void *data, grub_efi_uint32_t datasize)
+       goto error_exit;
+     }
+ 
++  /*
++   * The spec says, uselessly, of SectionAlignment:
++   * =====
++   * The alignment (in bytes) of sections when they are loaded into
++   * memory. It must be greater than or equal to FileAlignment. The
++   * default is the page size for the architecture.
++   * =====
++   * Which doesn't tell you whose responsibility it is to enforce the
++   * "default", or when.  It implies that the value in the field must
++   * be > FileAlignment (also poorly defined), but it appears visual
++   * studio will happily write 512 for FileAlignment (its default) and
++   * 0 for SectionAlignment, intending to imply PAGE_SIZE.
++   *
++   * We only support one page size, so if it's zero, nerf it to 4096.
++   */
+   section_alignment = context.section_alignment;
++  if (section_alignment == 0)
++    section_alignment = 4096;
++
+   buffer_size = context.image_size + section_alignment;
++  grub_dprintf ("chain", "image size is %08lx, datasize is %08x\n",
++	       context.image_size, datasize);
+ 
+   efi_status = efi_call_3 (b->allocate_pool, GRUB_EFI_LOADER_DATA,
+ 			   buffer_size, (void**) &buffer);
+@@ -539,7 +560,6 @@ handle_image (void *data, grub_efi_uint32_t datasize)
+     }
+ 
+   buffer_aligned = (char *)ALIGN_UP ((grub_addr_t)buffer, section_alignment);
+-
+   if (!buffer_aligned)
+     {
+       grub_error (GRUB_ERR_OUT_OF_MEMORY, N_("out of memory"));
+@@ -548,27 +568,62 @@ handle_image (void *data, grub_efi_uint32_t datasize)
+ 
+   grub_memcpy (buffer_aligned, data, context.size_of_headers);
+ 
++  entry_point = image_address (buffer_aligned, context.image_size,
++			       context.entry_point);
++
++  grub_dprintf ("chain", "entry_point: %p\n", entry_point);
++  if (!entry_point)
++    {
++      grub_error (GRUB_ERR_BAD_ARGUMENT, "invalid entry point");
++      goto error_exit;
++    }
++
+   char *reloc_base, *reloc_base_end;
+-  reloc_base = image_address (buffer_aligned, datasize,
++  grub_dprintf ("chain", "reloc_dir: %p reloc_size: 0x%08x\n",
++		(void *)(unsigned long long)context.reloc_dir->rva,
++		context.reloc_dir->size);
++  reloc_base = image_address (buffer_aligned, context.image_size,
+ 			      context.reloc_dir->rva);
+   /* RelocBaseEnd here is the address of the last byte of the table */
+-  reloc_base_end = image_address (buffer_aligned, datasize,
++  reloc_base_end = image_address (buffer_aligned, context.image_size,
+ 				  context.reloc_dir->rva
+ 				  + context.reloc_dir->size - 1);
++  grub_dprintf ("chain", "reloc_base: %p reloc_base_end: %p\n",
++		reloc_base, reloc_base_end);
++
+   struct grub_pe32_section_table *reloc_section = NULL;
+ 
+   section = context.first_section;
+   for (i = 0; i < context.number_of_sections; i++, section++)
+     {
+-      size = section->virtual_size;
+-      if (size > section->raw_data_size)
+-        size = section->raw_data_size;
++      char name[9];
+ 
+       base = image_address (buffer_aligned, context.image_size,
+ 			    section->virtual_address);
+       end = image_address (buffer_aligned, context.image_size,
+-			   section->virtual_address + size - 1);
++			   section->virtual_address + section->virtual_size -1);
+ 
++      grub_strncpy(name, section->name, 9);
++      name[8] = '\0';
++      grub_dprintf ("chain", "Section %d \"%s\" at %p..%p\n", i,
++		   name, base, end);
++
++      if (end < base)
++	{
++	  grub_dprintf ("chain", " base is %p but end is %p... bad.\n",
++		       base, end);
++	  grub_error (GRUB_ERR_BAD_ARGUMENT,
++		      "Image has invalid negative size");
++	  goto error_exit;
++	}
++
++      if (section->virtual_address <= context.entry_point &&
++	  (section->virtual_address + section->raw_data_size - 1)
++	  > context.entry_point)
++	{
++	  found_entry_point++;
++	  grub_dprintf ("chain", " section contains entry point\n");
++	}
+ 
+       /* We do want to process .reloc, but it's often marked
+        * discardable, so we don't want to memcpy it. */
+@@ -587,21 +642,46 @@ handle_image (void *data, grub_efi_uint32_t datasize)
+ 	  if (section->raw_data_size && section->virtual_size &&
+ 	      base && end && reloc_base == base && reloc_base_end == end)
+ 	    {
++	      grub_dprintf ("chain", " section is relocation section\n");
+ 	      reloc_section = section;
+ 	    }
++	  else
++	    {
++	      grub_dprintf ("chain", " section is not reloc section?\n");
++	      grub_dprintf ("chain", " rds: 0x%08x, vs: %08x\n",
++			    section->raw_data_size, section->virtual_size);
++	      grub_dprintf ("chain", " base: %p end: %p\n", base, end);
++	      grub_dprintf ("chain", " reloc_base: %p reloc_base_end: %p\n",
++			    reloc_base, reloc_base_end);
++	    }
+ 	}
+ 
+-      if (section->characteristics && GRUB_PE32_SCN_MEM_DISCARDABLE)
+-	continue;
++      grub_dprintf ("chain", " Section characteristics are %08x\n",
++		   section->characteristics);
++      grub_dprintf ("chain", " Section virtual size: %08x\n",
++		   section->virtual_size);
++      grub_dprintf ("chain", " Section raw_data size: %08x\n",
++		   section->raw_data_size);
++      if (section->characteristics & GRUB_PE32_SCN_MEM_DISCARDABLE)
++	{
++	  grub_dprintf ("chain", " Discarding section\n");
++	  continue;
++	}
+ 
+       if (!base || !end)
+         {
++	  grub_dprintf ("chain", " section is invalid\n");
+           grub_error (GRUB_ERR_BAD_ARGUMENT, "Invalid section size");
+           goto error_exit;
+         }
+ 
+-      if (section->virtual_address < context.size_of_headers ||
+-	  section->raw_data_offset < context.size_of_headers)
++      if (section->characteristics & GRUB_PE32_SCN_CNT_UNINITIALIZED_DATA)
++	{
++	  if (section->raw_data_size != 0)
++	    grub_dprintf ("chain", " UNINITIALIZED_DATA section has data?\n");
++	}
++      else if (section->virtual_address < context.size_of_headers ||
++	       section->raw_data_offset < context.size_of_headers)
+ 	{
+ 	  grub_error (GRUB_ERR_BAD_ARGUMENT,
+ 		      "Section %d is inside image headers", i);
+@@ -609,13 +689,24 @@ handle_image (void *data, grub_efi_uint32_t datasize)
+ 	}
+ 
+       if (section->raw_data_size > 0)
+-        grub_memcpy (base, (grub_efi_uint8_t*)data + section->raw_data_offset,
+-		     size);
++	{
++	  grub_dprintf ("chain", " copying 0x%08x bytes to %p\n",
++			section->raw_data_size, base);
++	  grub_memcpy (base,
++		       (grub_efi_uint8_t*)data + section->raw_data_offset,
++		       section->raw_data_size);
++	}
+ 
+-      if (size < section->virtual_size)
+-        grub_memset (base + size, 0, section->virtual_size - size);
++      if (section->raw_data_size < section->virtual_size)
++	{
++	  grub_dprintf ("chain", " padding with 0x%08x bytes at %p\n",
++			section->virtual_size - section->raw_data_size,
++			base + section->raw_data_size);
++	  grub_memset (base + section->raw_data_size, 0,
++		       section->virtual_size - section->raw_data_size);
++	}
+ 
+-      grub_dprintf ("chain", "copied section %s\n", section->name);
++      grub_dprintf ("chain", " finished section %s\n", name);
+     }
+ 
+   /* 5 == EFI_IMAGE_DIRECTORY_ENTRY_BASERELOC */
+@@ -638,12 +729,15 @@ handle_image (void *data, grub_efi_uint32_t datasize)
+ 	}
+     }
+ 
+-  entry_point = image_address (buffer_aligned, context.image_size,
+-			       context.entry_point);
+-
+-  if (!entry_point)
++  if (!found_entry_point)
+     {
+-      grub_error (GRUB_ERR_BAD_ARGUMENT, "invalid entry point");
++      grub_error (GRUB_ERR_BAD_ARGUMENT, "entry point is not within sections");
++      goto error_exit;
++    }
++  if (found_entry_point > 1)
++    {
++      grub_error (GRUB_ERR_BAD_ARGUMENT, "%d sections contain entry point",
++		  found_entry_point);
+       goto error_exit;
+     }
+ 
+@@ -661,26 +755,24 @@ handle_image (void *data, grub_efi_uint32_t datasize)
+   li->load_options_size = cmdline_len;
+   li->file_path = grub_efi_get_media_file_path (file_path);
+   li->device_handle = dev_handle;
+-  if (li->file_path)
+-    {
+-      grub_printf ("file path: ");
+-      grub_efi_print_device_path (li->file_path);
+-    }
+-  else
++  if (!li->file_path)
+     {
+       grub_error (GRUB_ERR_UNKNOWN_DEVICE, "no matching file path found");
+       goto error_exit;
+     }
+ 
++  grub_dprintf ("chain", "booting via entry point\n");
+   efi_status = efi_call_2 (entry_point, grub_efi_image_handle,
+ 			   grub_efi_system_table);
+ 
++  grub_dprintf ("chain", "entry_point returned %ld\n", efi_status);
+   grub_memcpy (li, &li_bak, sizeof (grub_efi_loaded_image_t));
+   efi_status = efi_call_1 (b->free_pool, buffer);
+ 
+   return 1;
+ 
+ error_exit:
++  grub_dprintf ("chain", "error_exit: grub_errno: %d\n", grub_errno);
+   if (buffer)
+       efi_call_1 (b->free_pool, buffer);
+ 
+diff --git a/include/grub/efi/pe32.h b/include/grub/efi/pe32.h
+index f79782e1b..8396bde49 100644
+--- a/include/grub/efi/pe32.h
++++ b/include/grub/efi/pe32.h
+@@ -227,12 +227,18 @@ struct grub_pe32_section_table
+   grub_uint32_t characteristics;
+ };
+ 
++#define GRUB_PE32_SCN_TYPE_NO_PAD		0x00000008
+ #define GRUB_PE32_SCN_CNT_CODE			0x00000020
+ #define GRUB_PE32_SCN_CNT_INITIALIZED_DATA	0x00000040
+-#define GRUB_PE32_SCN_MEM_DISCARDABLE		0x02000000
+-#define GRUB_PE32_SCN_MEM_EXECUTE		0x20000000
+-#define GRUB_PE32_SCN_MEM_READ			0x40000000
+-#define GRUB_PE32_SCN_MEM_WRITE			0x80000000
++#define GRUB_PE32_SCN_CNT_UNINITIALIZED_DATA	0x00000080
++#define GRUB_PE32_SCN_LNK_OTHER			0x00000100
++#define GRUB_PE32_SCN_LNK_INFO			0x00000200
++#define GRUB_PE32_SCN_LNK_REMOVE		0x00000800
++#define GRUB_PE32_SCN_LNK_COMDAT		0x00001000
++#define GRUB_PE32_SCN_GPREL			0x00008000
++#define GRUB_PE32_SCN_MEM_16BIT			0x00020000
++#define GRUB_PE32_SCN_MEM_LOCKED		0x00040000
++#define GRUB_PE32_SCN_MEM_PRELOAD		0x00080000
+ 
+ #define GRUB_PE32_SCN_ALIGN_1BYTES		0x00100000
+ #define GRUB_PE32_SCN_ALIGN_2BYTES		0x00200000
+@@ -241,10 +247,28 @@ struct grub_pe32_section_table
+ #define GRUB_PE32_SCN_ALIGN_16BYTES		0x00500000
+ #define GRUB_PE32_SCN_ALIGN_32BYTES		0x00600000
+ #define GRUB_PE32_SCN_ALIGN_64BYTES		0x00700000
++#define GRUB_PE32_SCN_ALIGN_128BYTES		0x00800000
++#define GRUB_PE32_SCN_ALIGN_256BYTES		0x00900000
++#define GRUB_PE32_SCN_ALIGN_512BYTES		0x00A00000
++#define GRUB_PE32_SCN_ALIGN_1024BYTES		0x00B00000
++#define GRUB_PE32_SCN_ALIGN_2048BYTES		0x00C00000
++#define GRUB_PE32_SCN_ALIGN_4096BYTES		0x00D00000
++#define GRUB_PE32_SCN_ALIGN_8192BYTES		0x00E00000
+ 
+ #define GRUB_PE32_SCN_ALIGN_SHIFT		20
+ #define GRUB_PE32_SCN_ALIGN_MASK		7
+ 
++#define GRUB_PE32_SCN_LNK_NRELOC_OVFL		0x01000000
++#define GRUB_PE32_SCN_MEM_DISCARDABLE		0x02000000
++#define GRUB_PE32_SCN_MEM_NOT_CACHED		0x04000000
++#define GRUB_PE32_SCN_MEM_NOT_PAGED		0x08000000
++#define GRUB_PE32_SCN_MEM_SHARED		0x10000000
++#define GRUB_PE32_SCN_MEM_EXECUTE		0x20000000
++#define GRUB_PE32_SCN_MEM_READ			0x40000000
++#define GRUB_PE32_SCN_MEM_WRITE			0x80000000
++
++
++
+ #define GRUB_PE32_SIGNATURE_SIZE 4
+ 
+ struct grub_pe32_header

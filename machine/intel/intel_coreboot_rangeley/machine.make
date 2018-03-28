@@ -4,6 +4,7 @@
 
 ONIE_ARCH = x86_64
 FIRMWARE_TYPE = coreboot
+SWITCH_ASIC_VENDOR = none
 
 VENDOR_REV ?= 0
 

@@ -253,26 +253,59 @@ demo_install_uefi_grub()
         exit 1
     }
 
-    grub_install_log=$(mktemp)
-    grub-install \
-        --no-nvram \
-        --bootloader-id="$demo_volume_label" \
-        --efi-directory="/boot/efi" \
-        --boot-directory="$demo_mnt" \
-        --recheck \
-        "$blk_dev" > /$grub_install_log 2>&1 || {
-        echo "ERROR: grub-install failed on: $blk_dev"
-        cat $grub_install_log && rm -f $grub_install_log
-        exit 1
-    }
-    rm -f $grub_install_log
+    if [ "$onie_secure_boot" = "yes" ] ; then
+        # ONIE is booting via shim, so the demo needs to also
+        local loader_dir="/boot/efi/EFI/$demo_volume_label"
+        mkdir -p "$loader_dir" || {
+            echo "ERROR: Unable to create directory: $loader_dir"
+            exit 1
+        }
+        # Use ONIE's .efi binaries
+        cp -a /boot/efi/EFI/onie/*${onie_uefi_arch}.efi "$loader_dir" || {
+            echo "ERROR: Unable to copy ONIE .efi binaries to: $loader_dir"
+            exit 1
+        }
+
+        local demo_boot_uuid=$(grub-probe --target=fs_uuid $demo_mnt) || {
+            echo "ERROR: Unable to determine UUID of GRUB boot directory: $demo_mnt"
+            return 1
+        }
+
+        # Generate tiny grub config for monolithic image
+        cat<< EOF > "${loader_dir}/grub.cfg"
+search.fs_uuid $demo_boot_uuid root
+echo "Search for uuid $demo_boot_uuid"
+ecoh "Found root: \$root"
+set prefix=(\$root)'/grub'
+configfile \$prefix/grub.cfg
+EOF
+
+        # Install primary grub config in $demo_mnt
+        grub_dir="${demo_mnt}/grub"
+        mkdir -p "${grub_dir}/fonts" "${grub_dir}/locale"
+    else
+        # Regular GRUB install
+        grub_install_log=$(mktemp)
+        grub-install \
+            --no-nvram \
+            --bootloader-id="$demo_volume_label" \
+            --efi-directory="/boot/efi" \
+            --boot-directory="$demo_mnt" \
+            --recheck \
+            "$blk_dev" > /$grub_install_log 2>&1 || {
+            echo "ERROR: grub-install failed on: $blk_dev"
+            cat $grub_install_log && rm -f $grub_install_log
+            exit 1
+        }
+        rm -f $grub_install_log
+    fi
 
     # Configure EFI NVRAM Boot variables.  --create also sets the
     # new boot number as active.
     efibootmgr --quiet --create \
         --label "$demo_volume_label" \
         --disk $blk_dev --part $uefi_part \
-        --loader "/EFI/$demo_volume_label/${onie_grub_image_name}" || {
+        --loader "/EFI/$demo_volume_label/$onie_uefi_boot_loader" || {
         echo "ERROR: efibootmgr failed to create new boot variable on: $blk_dev"
         exit 1
     }
@@ -433,3 +466,10 @@ umount $demo_mnt || {
 }
 
 cd /
+
+if [ "$demo_type" = "OS" ] ; then
+    # Set NOS mode if available -- skip this for diag installers
+    if [ -x /bin/onie-nos-mode ] ; then
+        /bin/onie-nos-mode -s
+    fi
+fi

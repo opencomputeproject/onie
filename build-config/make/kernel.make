@@ -104,6 +104,7 @@ $(KERNEL_BUILD_STAMP): $(KERNEL_SOURCE_STAMP) $(LINUX_NEW_FILES) $(LINUXDIR)/.co
 	    $(MAKE) -C $(LINUXDIR)		\
 		ARCH=$(KERNEL_ARCH)		\
 		CROSS_COMPILE=$(CROSSPREFIX)	\
+		MODULE_SIG_KEY_SRCPREFIX=$(MACHINEDIR)/x509/ \
 		V=$(V) 				\
 		all
 	$(Q) touch $@
@@ -123,10 +124,21 @@ $(KERNEL_DTB_INSTALL_STAMP): $(KERNEL_BUILD_STAMP)
 	$(Q) touch $@
 
 kernel-vmlinuz-install: $(KERNEL_VMLINUZ_INSTALL_STAMP)
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+$(KERNEL_VMLINUZ_INSTALL_STAMP): $(SBSIGNTOOL_INSTALL_STAMP) $(KERNEL_BUILD_STAMP)
+else
 $(KERNEL_VMLINUZ_INSTALL_STAMP): $(KERNEL_BUILD_STAMP)
+endif
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Copy vmlinuz to $(IMAGEDIR) ===="
 	$(Q) cp -vf $(KERNEL_IMAGE_FILE) $(KERNEL_VMLINUZ)
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+	$(Q) echo "====  Signing kernel secure boot image ===="
+	$(Q) cp -vf $(KERNEL_VMLINUZ) $(KERNEL_VMLINUZ).unsigned
+	$(Q) sbsign --key $(ONIE_VENDOR_SECRET_KEY_PEM) \
+		--cert $(ONIE_VENDOR_CERT_PEM) \
+		--output $(KERNEL_VMLINUZ) $(KERNEL_VMLINUZ).unsigned
+endif
 	$(Q) ln -sf $(KERNEL_VMLINUZ) $(UPDATER_VMLINUZ)
 	$(Q) touch $@
 

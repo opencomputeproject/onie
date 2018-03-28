@@ -16,53 +16,47 @@ type ``"make MACHINEROOT=../machine/nxp MACHINE=nxp_ls1043ardb all"``.  For exam
 When complete, the ONIE binaries are located in
 ``build/images``::
 
-  -rw-r--r-- 11272192 Apr 29 11:25  onie-nxp_ls1043ardb-r0.bin
-
 Installing the ONIE binaries
 ============================
+Step 1: Install firmwares on NOR flash
 
-A single binary image needs to be installed on the NOR flash.
+	1> get firmware_ls1043ardb_uboot_qspiboot.img and put it in your TFTP
+	wget http://www.nxp.com/lgfiles/sdk/lsdk1712/firmware_ls1043ardb_uboot_norboot.img
 
-Image 1 -- ONIE kernel and u-boot.
-  name:  onie-nxp_ls1043ardb-r0.bin
+	2> Intstall the img on NOR flash
+	=> tftp a0000000 <path>/firmware_ls1043ardb_uboot_norboot.img
+	=> protect off 60000000 +$filesize
+	=> erase 60000000 +$filesize
+	=> cp.b a0000000 60000000 $filesize
 
-Step 1 -- Put the ONIE file on a TFTP server
+note: Must do step 1 before step 2 and 3
+
 ---------------------------------------------
+Step 2: Install uboot (onie-nxp_ls1043ardb-r0.bin.uboot+env)
 
-The following directions assume the files are on the root of the TFTP
-server.
+	=> tftp a0000000 <path>/onie-nxp_ls1043ardb-r0.bin.uboot+env
+	=> protect off 60100000 +$filesize
+	=> erase 60100000 +$filesize
+	=> cp.b a0000000 60100000 $filesize
 
-Step 2 -- Install image1 (onie-nxp_ls1043ardb-r0.bin)
------------------------------------------------
-
-Copying the image down using TFTP and flash to the NOR flash::
-  => setenv onie_start 0x61300000
-  => setenv onie_sz.b 0xac0000
-  => tftp onie-nxp_ls1043ardb-r0.bin
-  => protect off $onie_start +${onie_sz.b} && erase $onie_start +${onie_sz.b}
-  => cp.b $loadaddr $onie_start ${onie_sz.b} && protect on $onie_start +${onie_sz.b}
-
-Step 3 -- Configure Serial Console
 ----------------------------------
+Step 3: Install kernel (nxp_ls1043ardb-r0.itb)
 
-ONIE defaults the serial console baud rate to 115200.  You may need to
-adjust your terminal settings.
+	=> tftp a0000000 <path>/nxp_ls1043ardb-r0.itb
+	=> protect off 61000000 +$filesize
+	=> erase 61000000 +$filesize
+	=> cp.b a0000000 61000000 $filesize
 
-Step 4 -- Restart The System
+----------------------------------
+Step 4 -- Configure Serial Console
+
+	ONIE defaults the serial console baud rate to 115200.  You may need to
+	adjust your terminal settings.
+
 ----------------------------
+Step 5 -- Restart The System
 
-You can interrupt the boot process by pressing any key during the
-count down::
+	You can interrupt the boot process by pressing any key during the
+	count down::
 
-  => reset
-
-Step 5 -- Optional
-------------------
-
-By default the system will start the ONIE in *install* mode.  After
-booting press the [Enter] key to active the console.
-
-Alternatively you can start the system in *rescue* mode so you can
-login and look around the ONIE.  To start the rescue mode type this::
-
-  => run onie_rescue
+	=> reset

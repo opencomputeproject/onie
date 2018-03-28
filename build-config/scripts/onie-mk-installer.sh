@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
-#  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
+#  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -149,6 +149,9 @@ echo -n "."
 # Add optional installer configuration files
 if [ "$rootfs_arch" = "grub-arch" -a "$update_type" = "onie" ] ; then
     cp "$installer_conf" $tmp_installdir || exit 1
+    echo -n "."
+
+    sed -i -e "s/%%GRUB_TIMEOUT%%/$GRUB_TIMEOUT/" $tmp_installdir/grub/grub-common.cfg
     echo -n "."
 
     if [ "$SERIAL_CONSOLE_ENABLE" = "yes" ] ; then

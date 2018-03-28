@@ -13,6 +13,7 @@ ARCH        ?= arm64
 TARGET	    ?= aarch64-onie-linux-gnueabi
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
+EFI_ARCH    ?= aa64
 
 KERNEL_ARCH		= arm64
 KERNEL_LOAD_ADDRESS     ?= 0x80080000
@@ -35,7 +36,6 @@ STRACE_ENABLE ?= yes
 
 # Disable Grub support by default. a machine make file can override this
 GRUB_ENABLE ?= no
-GRUB_IMAGE_NAME = grubaa64.efi
 
 # Disable UEFI support by default. a machine make file can override this
 UEFI_ENABLE ?= no
@@ -58,7 +58,8 @@ endif
 
 ifeq ($(UEFI_ENABLE),yes)
   UPDATER_IMAGE_PARTS = $(UPDATER_VMLINUZ) $(UPDATER_INITRD) $(UPDATER_ONIE_TOOLS) \
-			$(ROOTCONFDIR)/grub-arch/sysroot-lib-onie/onie-blkdev-common
+			$(ROOTCONFDIR)/grub-arch/sysroot-lib-onie/onie-blkdev-common \
+			$(ROOTCONFDIR)/grub-arch/sysroot-lib-onie/nos-mode-arch
   UPDATER_IMAGE_PARTS_COMPLETE = $(KERNEL_INSTALL_STAMP) $(UPDATER_INITRD) $(UPDATER_ONIE_TOOLS)
 else
   UPDATER_IMAGE_PARTS = $(UPDATER_ITB) $(UPDATER_UBOOT)

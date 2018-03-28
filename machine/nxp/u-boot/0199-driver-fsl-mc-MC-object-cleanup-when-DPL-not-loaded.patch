@@ -1,0 +1,35 @@
+From 6adcdca76969aad8fd33f0b21c3547b695bb4976 Mon Sep 17 00:00:00 2001
+From: Yogesh Gaur <yogeshnarayan.gaur@nxp.com>
+Date: Tue, 28 Nov 2017 10:08:04 +0530
+Subject: [PATCH 199/211] driver: fsl-mc: MC object cleanup when DPL not loaded
+
+For case when MC is loaded but DPL is not deployed perform MC
+object [DPBP, DPIO, DPNI and DPRC] cleanup.
+
+Signed-off-by: Yogesh Gaur <yogeshnarayan.gaur@nxp.com>
+---
+ drivers/net/fsl-mc/mc.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/net/fsl-mc/mc.c b/drivers/net/fsl-mc/mc.c
+index 24b2a65..6df9dcd 100644
+--- a/drivers/net/fsl-mc/mc.c
++++ b/drivers/net/fsl-mc/mc.c
+@@ -1467,12 +1467,13 @@ int fsl_mc_ldpaa_exit(bd_t *bd)
+ 	 */
+ 	if (bd && mc_boot_status && !is_dpl_apply_status) {
+ 		printf("fsl-mc: DPL not deployed, DPAA2 ethernet not work\n");
+-		return 0;
++		goto mc_obj_cleanup;
+ 	}
+ 
+ 	if (bd && mc_boot_status && is_dpl_apply_status)
+ 		return 0;
+ 
++mc_obj_cleanup:
+ 	err = dpbp_exit();
+ 	if (err < 0) {
+ 		printf("dpbp_exit() failed: %d\n", err);
+-- 
+1.7.1
+

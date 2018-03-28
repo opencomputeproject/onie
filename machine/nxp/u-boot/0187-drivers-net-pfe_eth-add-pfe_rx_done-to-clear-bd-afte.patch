@@ -1,0 +1,99 @@
+From 8dc0a6309525cc0181f8d303ca9c5c819bfbb8c0 Mon Sep 17 00:00:00 2001
+From: Calvin Johnson <calvin.johnson@nxp.com>
+Date: Fri, 17 Nov 2017 11:19:10 +0530
+Subject: [PATCH 187/211] drivers: net: pfe_eth: add pfe_rx_done to clear bd after packet processing
+
+Create pfe_rx_done function to clear buffer descriptor
+after the packet is processed by the network stack.
+
+Signed-off-by: Calvin Johnson <calvin.johnson@nxp.com>
+Signed-off-by: Anjaneyulu Jagarlmudi <anji.jagarlmudi@nxp.com>
+---
+ drivers/net/pfe_eth/pfe_driver.c |   35 ++++++++++++++++++++++++++++++-----
+ drivers/net/pfe_eth/pfe_eth.c    |    1 +
+ include/pfe_eth/pfe_driver.h     |    1 +
+ 3 files changed, 32 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/pfe_eth/pfe_driver.c b/drivers/net/pfe_eth/pfe_driver.c
+index 5336ba7..55fc145 100644
+--- a/drivers/net/pfe_eth/pfe_driver.c
++++ b/drivers/net/pfe_eth/pfe_driver.c
+@@ -66,22 +66,47 @@ int pfe_recv(unsigned int *pkt_ptr, int *phy_port)
+ 	*phy_port = hif_header->port_no;
+ 	len -= sizeof(struct hif_header_s);
+ 
+-	rx_desc->rx_to_read = (rx_desc->rx_to_read + 1)
+-			       & (rx_desc->rx_ring_size - 1);
++	return len;
++}
++
++/*
++ * HIF to check the Rx done
++ *  This function will check the rx done indication of the current rx_to_read
++ * locations
++ *  if success, moves the rx_to_read to next location.
++ *
++ */
++void pfe_rx_done(void)
++{
++	struct rx_desc_s *rx_desc = g_rx_desc;
++	struct buf_desc *bd;
+ 
+-	/* reset bd control field */
++	debug("%s:rx_base: %p, rx_to_read: %d\n", __func__, rx_desc->rx_base,
++	      rx_desc->rx_to_read);
++
++	bd = rx_desc->rx_base + rx_desc->rx_to_read;
++
++	/* reset the control field */
+ 	bd->ctrl = (MAX_FRAME_SIZE | BD_CTRL_LIFM | BD_CTRL_DESC_EN
+ 		    | BD_CTRL_DIR);
+ 	bd->status = 0;
+ 
++	debug("Rx Done : status: %08x, ctrl: %08x\n", bd->status, bd->ctrl);
++
+ 	/* Give START_STROBE to BDP to fetch the descriptor __NOW__,
+ 	 * BDP need not to wait for rx_poll_cycle time to fetch the descriptor,
+ 	 * In idle state (ie., no rx pkt), BDP will not fetch
+-	 * the descriptor even if strobe is given(I think)
++	 * the descriptor even if strobe is given.
+ 	 */
+ 	writel((readl(HIF_RX_CTRL) | HIF_CTRL_BDP_CH_START_WSTB), HIF_RX_CTRL);
+ 
+-	return len;
++	/* increment the rx_to_read index to next location */
++	rx_desc->rx_to_read = (rx_desc->rx_to_read + 1)
++			       & (rx_desc->rx_ring_size - 1);
++
++	debug("Rx next pkt location: %d\n", rx_desc->rx_to_read);
++
++	return 0;
+ }
+ 
+ /*
+diff --git a/drivers/net/pfe_eth/pfe_eth.c b/drivers/net/pfe_eth/pfe_eth.c
+index 4db823f..6d2906f 100644
+--- a/drivers/net/pfe_eth/pfe_eth.c
++++ b/drivers/net/pfe_eth/pfe_eth.c
+@@ -198,6 +198,7 @@ static int ls1012a_eth_recv(struct eth_device *dev)
+ 	/* Pass the packet up to the protocol layers. */
+ 	net_process_received_packet((void *)(long int)pkt_buf, len);
+ 
++	pfe_rx_done();
+ 	return 0;
+ }
+ 
+diff --git a/include/pfe_eth/pfe_driver.h b/include/pfe_eth/pfe_driver.h
+index 28997b4..2a539e2 100644
+--- a/include/pfe_eth/pfe_driver.h
++++ b/include/pfe_eth/pfe_driver.h
+@@ -51,5 +51,6 @@ struct tx_desc_s {
+ int pfe_send(int phy_port, void *data, int length);
+ int pfe_recv(unsigned int *pkt_ptr, int *phy_port);
+ int pfe_tx_done(void);
++void pfe_rx_done(void);
+ 
+ #endif
+-- 
+1.7.1
+

@@ -10,7 +10,7 @@
 # This is a makefile fragment that defines the build of efivar
 #
 
-EFIVAR_VERSION			= 0.20
+EFIVAR_VERSION			= 30
 EFIVAR_TARBALL			= efivar-$(EFIVAR_VERSION).tar.bz2
 EFIVAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/rhinstaller/efivar/releases/download/$(EFIVAR_VERSION)
 EFIVAR_BUILD_DIR		= $(USER_BUILDDIR)/efivar
@@ -33,7 +33,13 @@ PHONY += efivar efivar-download efivar-source efivar-patch \
 	efivar-build efivar-install efivar-clean efivar-download-clean
 
 EFIVAR_BINS = efivar
-EFIVAR_LIBS = libefivar.so.0 libefivar.so libefiboot.so.0 libefiboot.so
+EFIVAR_LIBS = \
+	libefivar.so.1.30 \
+	libefivar.so.1 \
+	libefivar.so \
+	libefiboot.so.1.30 \
+	libefiboot.so.1 \
+	libefiboot.so
 
 efivar: $(EFIVAR_STAMP)
 
@@ -71,8 +77,10 @@ $(EFIVAR_BUILD_STAMP): $(EFIVAR_PATCH_STAMP) $(EFIVAR_NEW_FILES) $(POPT_BUILD_ST
 				| $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building efivar-$(EFIVAR_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) CROSS_COMPILE=$(CROSSPREFIX)
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) CROSS_COMPILE=$(CROSSPREFIX) DESTDIR=$(DEV_SYSROOT) install
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) \
+		CROSS_COMPILE=$(CROSSPREFIX) PKG_CONFIG=pkg-config $(ONIE_PKG_CONFIG) DESTDIR=$(DEV_SYSROOT)
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) \
+		CROSS_COMPILE=$(CROSSPREFIX) PKG_CONFIG=pkg-config $(ONIE_PKG_CONFIG) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 efivar-install: $(EFIVAR_INSTALL_STAMP)
@@ -80,13 +88,13 @@ $(EFIVAR_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(EFIVAR_BUILD_STAMP) $(POPT_INST
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing efivar in $(SYSROOTDIR) ===="
 	$(Q) for file in $(EFIVAR_BINS); do \
-		cp -av $(DEV_SYSROOT)/usr/bin/$$file $(SYSROOTDIR)/usr/bin/ ; \
+		cp -av $(DEV_SYSROOT)/usr/bin/$$file $(SYSROOTDIR)/usr/bin/ || exit 1 ; \
 	     done
 	$(Q) for file in $(EFIVAR_LIBS); do \
 		if [ "$(ARCH)" == "arm64" ] || [ "$(ARCH)" == "x86_64" ]; then \
-		    cp -av $(DEV_SYSROOT)/usr/lib64/$$file $(SYSROOTDIR)/usr/lib/ ; \
+		    cp -av $(DEV_SYSROOT)/usr/lib64/$$file $(SYSROOTDIR)/usr/lib/ || exit 1 ; \
 		else \
-		    cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ ; \
+		    cp -av $(DEV_SYSROOT)/usr/lib/$$file $(SYSROOTDIR)/usr/lib/ || exit 1 ; \
 		fi \
 	     done
 	$(Q) touch $@

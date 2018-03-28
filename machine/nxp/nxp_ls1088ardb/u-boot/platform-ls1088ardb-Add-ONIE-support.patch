@@ -1,0 +1,120 @@
+From 3319ad2dc8bb01bb479171b0b4a0bcbdc1a8413f Mon Sep 17 00:00:00 2001
+From: Zhao Qiang <qiang.zhao@nxp.com>
+Date: Mon, 27 Nov 2017 10:58:58 +0800
+Subject: [PATCH] platform: ls1088ardb: Add ONIE support
+
+Add ONIE support for Freescale ls1088ardb platform
+
+Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ configs/ls1088ardb_ONIE_0_defconfig | 42 +++++++++++++++++++++++++++++++++
+ include/configs/ls1088ardb.h        | 46 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 88 insertions(+)
+ create mode 100644 configs/ls1088ardb_ONIE_0_defconfig
+
+diff --git a/configs/ls1088ardb_ONIE_0_defconfig b/configs/ls1088ardb_ONIE_0_defconfig
+new file mode 100644
+index 0000000..e6087f7
+--- /dev/null
++++ b/configs/ls1088ardb_ONIE_0_defconfig
+@@ -0,0 +1,42 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088ARDB=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_DM_SPI=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-rdb"
++CONFIG_FIT=y
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_OF_STDOUT_VIA_ALIAS=y
++CONFIG_SYS_EXTRA_OPTIONS="SYS_FSL_DDR4, QSPI_BOOT,ONIE,ONIE_PLATFORM_REV=0"
++CONFIG_HUSH_PARSER=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_I2C=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_CMD_DHCP=y
++CONFIG_CMD_PING=y
++CONFIG_OF_CONTROL=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_SPI_FLASH=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_DM_PCI_COMPAT=y
++CONFIG_PCIE_LAYERSCAPE=y
++CONFIG_SYS_NS16550=y
++CONFIG_FSL_DSPI=y
++CONFIG_EFI_LOADER_BOUNCE_BUFFER=y
++# CONFIG_DISPLAY_BOARDINFO is not set
++CONFIG_FSL_LS_PPA=y
++CONFIG_USB=y
++CONFIG_USB_GADGET=y
++CONFIG_CMD_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_DWC3=y
++CONFIG_USB_STORAGE=y
++CONFIG_DISTRO_DEFAULTS=y
+diff --git a/include/configs/ls1088ardb.h b/include/configs/ls1088ardb.h
+index 7bd152d..de68b43 100644
+--- a/include/configs/ls1088ardb.h
++++ b/include/configs/ls1088ardb.h
+@@ -493,4 +493,50 @@
+ 
+ #include <asm/fsl_secure_boot.h>
+ 
++#ifdef CONFIG_ONIE
++/* Undefine those macros which are provided by common_config.h */
++#undef CONFIG_BOOTCOMMAND
++#undef CONFIG_SYS_PBSIZE
++#undef CONFIG_DOS_PARTITION
++#undef CONFIG_CMDLINE_EDITING
++#undef CONFIG_SYS_MAXARGS
++#undef CONFIG_OF_LIBFDT
++#undef CONFIG_OF_BOARD_SETUP
++#undef CONFIG_SYS_BAUDRATE_TABLE
++#undef CONFIG_ENV_SIZE
++#undef CONFIG_FIT
++#undef CONFIG_EXTRA_ENV_SETTINGS
++
++#include "configs/common_config.h"
++
++#undef CONFIG_CMD_IRQ
++#undef CONFIG_CMD_JFFS2
++#undef CONFIG_OF_STDOUT_VIA_ALIAS
++#undef CONFIG_API
++
++/* Platform environment variables needed by the common env infrastructure */
++#define CONFIG_PLATFORM_ENV    \
++	"consoledev=ttyS0\0baudrate=115200\0" \
++	"onie_start=0x1000000\0" \
++	"onie_sz.b=0x1000000\0"  \
++	"hwconfig=fsl_ddr:bank_intlv=auto\0"	\
++	"loadaddr=0xa0000000\0"			\
++	"bootargs=console=ttyS0,115200 root=/dev/ram0 " \
++		"earlycon=uart8250,mmio,0x21c0600 ramdisk_size=0x2000000 " \
++		"default_hugepagesz=2m hugepagesz=2m hugepages=256\0" \
++	"mcinitcmd=sf probe 0:0 && sf read 0x80000000 0xA00000 0x100000 && "\
++	"sf read 0x80100000 0xE00000 0x100000 && "\
++	"fsl_mc start mc 0x80000000 0x80100000 &&" \
++	"sf read 0x80200000 0xd00000 0x100000 && " \
++	"fsl_mc apply dpl 0x80200000\0" \
++	"mcmemsize=0x70000000\0"	\
++	"fdt_high=0xa0000000\0"		\
++	"initrd_high=0xffffffffffffffff\0"
++
++#define CONFIG_EXTRA_ENV_SETTINGS \
++	CONFIG_PLATFORM_ENV       \
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++#endif /* CONFIG_ONIE */
++
+ #endif /* __LS1088A_RDB_H */
+-- 
+2.7.4
+

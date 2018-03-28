@@ -70,7 +70,7 @@ $(DROPBEAR_CONFIGURE_STAMP): $(DROPBEAR_SOURCE_STAMP) $(ZLIB_BUILD_STAMP) \
 	$(Q) echo "====  Configure dropbear-$(DROPBEAR_VERSION) ===="
 	$(Q) cd $(DROPBEAR_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(DROPBEAR_DIR)/configure			\
-		--prefix=$(DEV_SYSROOT)/usr			\
+		--prefix=/usr					\
 		--host=$(TARGET)				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
 		LDFLAGS="$(ONIE_LDFLAGS)"
@@ -84,9 +84,9 @@ dropbear-build: $(DROPBEAR_BUILD_STAMP)
 $(DROPBEAR_BUILD_STAMP): $(DROPBEAR_DIR)/options.h $(DROPBEAR_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building dropbear-$(DROPBEAR_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DROPBEAR_DIR) \
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DROPBEAR_DIR) DESTDIR=$(DEV_SYSROOT) \
 		PROGRAMS="$(DROPBEAR_PROGRAMS)" MULTI=1 SCPPROGRESS=1
-	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(DROPBEAR_DIR) \
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(DROPBEAR_DIR) DESTDIR=$(DEV_SYSROOT) \
 		PROGRAMS="$(DROPBEAR_PROGRAMS)" MULTI=1 install
 	$(Q) touch $@
 

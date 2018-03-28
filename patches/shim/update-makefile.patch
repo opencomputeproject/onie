@@ -1,0 +1,100 @@
+Update Makefiles
+
+Modify the Makefiles slightly to mesh with the ONIE build environment.
+
+diff --git a/Cryptlib/Makefile b/Cryptlib/Makefile
+index bf9d0dc..76fd154 100644
+--- a/Cryptlib/Makefile
++++ b/Cryptlib/Makefile
+@@ -1,7 +1,11 @@
+ 
+ EFI_INCLUDES	= -I$(TOPDIR)/Include -I$(EFI_INCLUDE) -I$(EFI_INCLUDE)/$(ARCH) -I$(EFI_INCLUDE)/protocol
+ 
+-CFLAGS		= -ggdb -O0 -I$(TOPDIR) -iquote $(TOPDIR) -fno-stack-protector -fno-strict-aliasing -fpic -fshort-wchar \
++# Seed compiler and linker flags ONIE build environment flags
++CFLAGS		= $(ONIE_CFLAGS)
++LDFLAGS		= $(ONIE_LDFLAGS)
++
++CFLAGS		+= -ggdb -O0 -I$(TOPDIR) -iquote $(TOPDIR) -fno-stack-protector -fno-strict-aliasing -fpic -fshort-wchar \
+ 		  -Wall $(EFI_INCLUDES) -std=gnu89 \
+ 		  -ffreestanding -I$(shell $(CC) -print-file-name=include)
+ 
+@@ -17,7 +21,7 @@ endif
+ ifeq ($(ARCH),aarch64)
+ 	CFLAGS	+= -DMDE_CPU_AARCH64
+ endif
+-LDFLAGS		= -nostdlib -znocombreloc
++LDFLAGS		+= -nostdlib -znocombreloc
+ 
+ TARGET		= libcryptlib.a
+ OBJS		=   Hash/CryptMd4Null.o \
+diff --git a/Cryptlib/OpenSSL/Makefile b/Cryptlib/OpenSSL/Makefile
+index b61b66d..f5b1cca 100644
+--- a/Cryptlib/OpenSSL/Makefile
++++ b/Cryptlib/OpenSSL/Makefile
+@@ -3,7 +3,11 @@ EFI_INCLUDES	= -I$(TOPDIR)/../Include \
+ 		  -I$(EFI_INCLUDE) -I$(EFI_INCLUDE)/$(ARCH) -I$(EFI_INCLUDE)/protocol \
+ 		  -I$(TOPDIR)/crypto/asn1 -I$(TOPDIR)/crypto/evp -I$(TOPDIR)/crypto/modes -I$(TOPDIR)/crypto/include
+ 
+-CFLAGS		= -ggdb -O0 -I$(TOPDIR) -I$(TOPDIR)/.. -I$(TOPDIR)/../Include/ -I$(TOPDIR)/crypto \
++# Seed compiler and linker flags ONIE build environment flags
++CFLAGS		= $(ONIE_CFLAGS)
++LDFLAGS		= $(ONIE_LDFLAGS)
++
++CFLAGS		+= -ggdb -O0 -I$(TOPDIR) -I$(TOPDIR)/.. -I$(TOPDIR)/../Include/ -I$(TOPDIR)/crypto \
+ 		  -fno-stack-protector -fno-strict-aliasing -fpic -fshort-wchar -nostdinc \
+ 		  -ffreestanding -std=gnu89 -I$(shell $(CC) -print-file-name=include) \
+ 		  -Wall $(EFI_INCLUDES) -DL_ENDIAN -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE -DOPENSSL_SMALL_FOOTPRINT -DPEDANTIC
+@@ -23,7 +27,7 @@ endif
+ ifeq ($(ARCH),arm)
+ 	CFLAGS	+= -O2 -DMDE_CPU_ARM
+ endif
+-LDFLAGS		= -nostdlib -znocombreloc
++LDFLAGS		+= -nostdlib -znocombreloc
+ 
+ TARGET		= libopenssl.a
+ OBJS		=   crypto/cryptlib.o \
+diff --git a/Makefile b/Makefile
+index 0328737..fbe8bba 100644
+--- a/Makefile
++++ b/Makefile
+@@ -50,7 +50,11 @@ EFI_LIBS	= -lefi -lgnuefi --start-group Cryptlib/libcryptlib.a Cryptlib/OpenSSL/
+ EFI_CRT_OBJS 	= $(EFI_PATH)/crt0-efi-$(ARCH).o
+ EFI_LDS		= $(TOPDIR)/elf_$(ARCH)_efi.lds
+ 
+-CFLAGS		= -ggdb -O0 -fno-stack-protector -fno-strict-aliasing -fpic \
++# Seed compiler and linker flags ONIE build environment flags
++CFLAGS		= $(ONIE_CFLAGS)
++LDFLAGS		= $(ONIE_LDFLAGS)
++
++CFLAGS		+= -ggdb -O0 -fno-stack-protector -fno-strict-aliasing -fpic \
+ 		  -fshort-wchar -Wall -Wsign-compare -Werror -fno-builtin \
+ 		  -Werror=sign-compare -ffreestanding -std=gnu89 \
+ 		  -I$(shell $(CC) -print-file-name=include) \
+@@ -131,7 +135,7 @@ ifneq ($(origin VENDOR_DBX_FILE), undefined)
+ 	CFLAGS += -DVENDOR_DBX_FILE=\"$(VENDOR_DBX_FILE)\"
+ endif
+ 
+-LDFLAGS		= --hash-style=sysv -nostdlib -znocombreloc -T $(EFI_LDS) -shared -Bsymbolic -L$(EFI_PATH) -L$(LIBDIR) -LCryptlib -LCryptlib/OpenSSL $(EFI_CRT_OBJS) --build-id=sha1 $(ARCH_LDFLAGS)
++LDFLAGS		+= --hash-style=sysv -nostdlib -znocombreloc -T $(EFI_LDS) -shared -Bsymbolic -L$(EFI_PATH) -L$(LIBDIR) -LCryptlib -LCryptlib/OpenSSL $(EFI_CRT_OBJS) --build-id=sha1 $(ARCH_LDFLAGS)
+ 
+ TARGETS	= $(SHIMNAME)
+ TARGETS += $(SHIMNAME).debug $(MMNAME).debug $(FBNAME).debug
+@@ -240,7 +244,7 @@ ifeq ($(origin EFIDIR),undefined)
+ endif
+ 
+ install-deps : $(TARGETS)
+-install-deps : $(SHIMNAME).debug $(MMNAME).debug $(FBNAME).debug buildid
++install-deps : $(SHIMNAME).debug $(MMNAME).debug $(FBNAME).debug
+ install-deps : $(BOOTCSVNAME)
+ 
+ install-debugsource : install-deps
+@@ -251,7 +255,7 @@ install-debugsource : install-deps
+ 		$(INSTALL) -m 0644 $${file} $(DESTDIR)/$(DEBUGSOURCE)/$(PKGNAME)-$(VERSION)$(DASHRELEASE)/$${outfile} ; \
+ 	done
+ 
+-install-debuginfo : install-deps
++install-debuginfo : install-deps buildid
+ 	$(INSTALL) -d -m 0755 $(DESTDIR)/
+ 	$(INSTALL) -d -m 0755 $(DESTDIR)/$(DEBUGINFO)$(TARGETDIR)/
+ 	@./buildid $(wildcard *.efi.debug) | while read file buildid ; do \
