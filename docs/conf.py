@@ -49,7 +49,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Open Network Install Environment'
-copyright = u'2013-2017, <a href="https://cumulusnetworks.com/">Cumulus Networks, Inc.</a>  All Rights Reserved'
+copyright = u'2013-2018, <a href="https://cumulusnetworks.com/">Cumulus Networks, Inc.</a>  All Rights Reserved'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
