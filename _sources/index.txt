@@ -23,6 +23,11 @@ Open Network Install Environment
 News
 ====
 
+March 27-28, 2018
+  OCP U.S. Summit 2018 Presentation `Video
+  <https://www.youtube.com/watch?v=FCJJxzRtVro>`_ and `Slides
+  <http://www.opencompute.org/assets/Uploads/ONIE-SecureBoot-OCP18.pdf>`_
+
 February 13, 2018
   Released version `2018.02
   <http://lists.opencompute.org/pipermail/opencompute-onie/2018-February/001647.html>`_
@@ -34,10 +39,6 @@ January 15, 2018
 November 15, 2017
   Release version `2017.11
   <http://lists.opencompute.org/pipermail/opencompute-onie/2017-November/001572.html>`_
-
-October 20, 2017
-  Release candidate `2017.11-rc1
-  <http://lists.opencompute.org/pipermail/opencompute-onie/2017-October/001559.html>`_
 
 Read more :ref:`news`
 
