@@ -1,0 +1,146 @@
+From 7dabe52605d07dee782e2734d278956ef263c7ab Mon Sep 17 00:00:00 2001
+From: Vinitha V Pillai <vinitha.pillai@nxp.com>
+Date: Thu, 4 Jan 2018 14:28:46 +0530
+Subject: [PATCH 064/129] ls1088ardb: Add SD Secure boot target support
+
+Signed-off-by: Udit Agarwal <udit.agarwal@nxp.com>
+Signed-off-by: Sumit Garg <sumit.garg@nxp.com>
+Signed-off-by: Vinitha V Pillai <vinitha.pillai@nxp.com>
+---
+ arch/arm/include/asm/fsl_secure_boot.h             |   16 +++---
+ board/freescale/ls1088a/MAINTAINERS                |    5 ++
+ .../ls1088ardb_sdcard_qspi_SECURE_BOOT_defconfig   |   48 ++++++++++++++++++++
+ include/configs/ls1088a_common.h                   |   15 ++++++-
+ 4 files changed, 75 insertions(+), 9 deletions(-)
+ create mode 100644 configs/ls1088ardb_sdcard_qspi_SECURE_BOOT_defconfig
+
+diff --git a/arch/arm/include/asm/fsl_secure_boot.h b/arch/arm/include/asm/fsl_secure_boot.h
+index ec6463d..3f30470 100644
+--- a/arch/arm/include/asm/fsl_secure_boot.h
++++ b/arch/arm/include/asm/fsl_secure_boot.h
+@@ -26,6 +26,14 @@
+ 
+ #define CONFIG_KEY_REVOCATION
+ 
++#if defined(CONFIG_FSL_LAYERSCAPE)
++/*
++ * For fsl layerscape based platforms, ESBC image Address in Header
++ * is 64 bit.
++ */
++#define CONFIG_ESBC_ADDR_64BIT
++#endif
++
+ #ifndef CONFIG_SPL_BUILD
+ #ifndef CONFIG_SYS_RAMBOOT
+ /* The key used for verification of next level images
+@@ -42,14 +50,6 @@
+ 
+ #endif
+ 
+-#if defined(CONFIG_FSL_LAYERSCAPE)
+-/*
+- * For fsl layerscape based platforms, ESBC image Address in Header
+- * is 64 bit.
+- */
+-#define CONFIG_ESBC_ADDR_64BIT
+-#endif
+-
+ #ifdef CONFIG_ARCH_LS2080A
+ #define CONFIG_EXTRA_ENV \
+ 	"setenv fdt_high 0xa0000000;"	\
+diff --git a/board/freescale/ls1088a/MAINTAINERS b/board/freescale/ls1088a/MAINTAINERS
+index de3961d..88effb5 100644
+--- a/board/freescale/ls1088a/MAINTAINERS
++++ b/board/freescale/ls1088a/MAINTAINERS
+@@ -27,3 +27,8 @@ M:	Udit Agarwal <udit.agarwal@nxp.com>
+ M:	Vinitha Pillai-B57223 <vinitha.pillai@nxp.com>
+ S:	Maintained
+ F:	configs/ls1088ardb_qspi_SECURE_BOOT_defconfig
++
++LS1088ARDB_SDCARD_QSPI_SECURE_BOOT BOARD
++M:	Sumit Garg <sumit.garg@nxp.com>
++S:	Maintained
++F:	configs/ls1088ardb_sdcard_qspi_SECURE_BOOT_defconfig
+diff --git a/configs/ls1088ardb_sdcard_qspi_SECURE_BOOT_defconfig b/configs/ls1088ardb_sdcard_qspi_SECURE_BOOT_defconfig
+new file mode 100644
+index 0000000..5f02fea
+--- /dev/null
++++ b/configs/ls1088ardb_sdcard_qspi_SECURE_BOOT_defconfig
+@@ -0,0 +1,48 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088ARDB=y
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_SPL_LIBGENERIC_SUPPORT=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_SPL_MMC_SUPPORT=y
++CONFIG_SPL_SERIAL_SUPPORT=y
++CONFIG_SPL_DRIVERS_MISC_SUPPORT=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-rdb"
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_PARTITIONS=y
++CONFIG_SYS_EXTRA_OPTIONS="SD_BOOT_QSPI"
++CONFIG_SD_BOOT=y
++CONFIG_SECURE_BOOT=y
++# CONFIG_DISPLAY_BOARDINFO is not set
++# CONFIG_USE_BOOTCOMMAND is not set
++CONFIG_SPL=y
++CONFIG_SPL_BUILD=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x8b0
++CONFIG_SPL_DM=y
++CONFIG_SPL_ENV_SUPPORT=y
++CONFIG_SPL_I2C_SUPPORT=y
++CONFIG_SPL_MPC8XXX_INIT_DDR_SUPPORT=y
++CONFIG_HUSH_PARSER=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_DHCP=y
++CONFIG_CMD_PING=y
++CONFIG_OF_CONTROL=y
++CONFIG_ENV_IS_IN_MMC=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_FSL_DSPI=y
++CONFIG_RSA=y
++CONFIG_SPL_RSA=y
++CONFIG_SPL_CRYPTO_SUPPORT=y
++CONFIG_SPL_HASH_SUPPORT=y
+diff --git a/include/configs/ls1088a_common.h b/include/configs/ls1088a_common.h
+index ef66119..85d304b 100644
+--- a/include/configs/ls1088a_common.h
++++ b/include/configs/ls1088a_common.h
+@@ -259,7 +259,20 @@ unsigned long long get_qixis_addr(void);
+ 
+ #define CONFIG_SYS_SPL_MALLOC_SIZE     0x00100000
+ #define CONFIG_SYS_SPL_MALLOC_START    0x80200000
+-#define CONFIG_SYS_MONITOR_LEN         (512 * 1024)
++
++#ifdef CONFIG_SECURE_BOOT
++#define CONFIG_U_BOOT_HDR_SIZE		(16 << 10)
++/*
++ * HDR would be appended at end of image and copied to DDR along
++ * with U-Boot image. Here u-boot max. size is 512K. So if binary
++ * size increases then increase this size in case of secure boot as
++ * it uses raw u-boot image instead of fit image.
++ */
++#define CONFIG_SYS_MONITOR_LEN         (0x100000 + CONFIG_U_BOOT_HDR_SIZE)
++#else
++#define CONFIG_SYS_MONITOR_LEN         0x100000
++#endif /* ifdef CONFIG_SECURE_BOOT */
++
+ #endif
+ #define CONFIG_SYS_BOOTM_LEN   (64 << 20)      /* Increase max gunzip size */
+ 
+-- 
+1.7.1
+

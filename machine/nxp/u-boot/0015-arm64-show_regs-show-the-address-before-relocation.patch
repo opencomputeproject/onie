@@ -1,0 +1,47 @@
+From 3ce3c40960d685f55b8e02565f5049fd614b5c65 Mon Sep 17 00:00:00 2001
+From: Peng Fan <peng.fan@nxp.com>
+Date: Tue, 28 Nov 2017 10:08:08 +0800
+Subject: [PATCH 015/129] arm64 :show_regs: show the address before relocation
+
+After relocation, when error happends, it is hard to track
+ELR and LR with asm file objdumped from elf file.
+
+So subtract the gd->reloc_off the reflect the compliation address.
+
+Signed-off-by: Peng Fan <peng.fan@nxp.com>
+Reviewed-by: Simon Glass <sjg@chromium.org>
+---
+ arch/arm/lib/interrupts_64.c |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/lib/interrupts_64.c b/arch/arm/lib/interrupts_64.c
+index 7c9cfce..cbcfeec 100644
+--- a/arch/arm/lib/interrupts_64.c
++++ b/arch/arm/lib/interrupts_64.c
+@@ -9,6 +9,7 @@
+ #include <linux/compiler.h>
+ #include <efi_loader.h>
+ 
++DECLARE_GLOBAL_DATA_PTR;
+ 
+ int interrupt_init(void)
+ {
+@@ -29,8 +30,13 @@ void show_regs(struct pt_regs *regs)
+ {
+ 	int i;
+ 
+-	printf("ELR:     %lx\n", regs->elr);
+-	printf("LR:      %lx\n", regs->regs[30]);
++	if (gd->flags & GD_FLG_RELOC) {
++		printf("ELR:     %lx\n", regs->elr - gd->reloc_off);
++		printf("LR:      %lx\n", regs->regs[30] - gd->reloc_off);
++	} else {
++		printf("ELR:     %lx\n", regs->elr);
++		printf("LR:      %lx\n", regs->regs[30]);
++	}
+ 	for (i = 0; i < 29; i += 2)
+ 		printf("x%-2d: %016lx x%-2d: %016lx\n",
+ 		       i, regs->regs[i], i+1, regs->regs[i+1]);
+-- 
+1.7.1
+

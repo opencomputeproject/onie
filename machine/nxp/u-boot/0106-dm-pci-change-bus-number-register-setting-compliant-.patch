@@ -1,0 +1,70 @@
+From 621dd4759183088dafefc8d6bf8570de9ceb50b0 Mon Sep 17 00:00:00 2001
+From: Minghuan Lian <Minghuan.Lian@nxp.com>
+Date: Fri, 20 Oct 2017 10:45:50 +0800
+Subject: [PATCH 106/129] dm: pci: change bus number register setting compliant with Linux
+
+This patch is to change U-Boot PCI bus assignement compliant with Linux.
+It means each PCIe controller's bus number is 0, not the current maximum
+PCI bus number, when start to scan this controller.
+
+Signed-off-by: Minghuan Lian <Minghuan.Lian@nxp.com>
+Signed-off-by: Hou Zhiqiang <Zhiqiang.Hou@nxp.com>
+Reviewed-by: Bin Meng <bmeng.cn@gmail.com>
+---
+ drivers/pci/pci_auto.c        |    6 +++---
+ drivers/pci/pcie_dw_mvebu.c   |    1 +
+ drivers/pci/pcie_layerscape.c |    2 +-
+ 3 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/pci/pci_auto.c b/drivers/pci/pci_auto.c
+index ee9a854..c2bc326 100644
+--- a/drivers/pci/pci_auto.c
++++ b/drivers/pci/pci_auto.c
+@@ -181,8 +181,8 @@ void dm_pciauto_prescan_setup_bridge(struct udevice *dev, int sub_bus)
+ 
+ 	/* Configure bus number registers */
+ 	dm_pci_write_config8(dev, PCI_PRIMARY_BUS,
+-			     PCI_BUS(dm_pci_get_bdf(dev)));
+-	dm_pci_write_config8(dev, PCI_SECONDARY_BUS, sub_bus);
++			     PCI_BUS(dm_pci_get_bdf(dev)) - ctlr->seq);
++	dm_pci_write_config8(dev, PCI_SECONDARY_BUS, sub_bus - ctlr->seq);
+ 	dm_pci_write_config8(dev, PCI_SUBORDINATE_BUS, 0xff);
+ 
+ 	if (pci_mem) {
+@@ -257,7 +257,7 @@ void dm_pciauto_postscan_setup_bridge(struct udevice *dev, int sub_bus)
+ 	pci_io = ctlr_hose->pci_io;
+ 
+ 	/* Configure bus number registers */
+-	dm_pci_write_config8(dev, PCI_SUBORDINATE_BUS, sub_bus);
++	dm_pci_write_config8(dev, PCI_SUBORDINATE_BUS, sub_bus - ctlr->seq);
+ 
+ 	if (pci_mem) {
+ 		/* Round memory allocator to 1MB boundary */
+diff --git a/drivers/pci/pcie_dw_mvebu.c b/drivers/pci/pcie_dw_mvebu.c
+index 202cfe9..a198855 100644
+--- a/drivers/pci/pcie_dw_mvebu.c
++++ b/drivers/pci/pcie_dw_mvebu.c
+@@ -162,6 +162,7 @@ static uintptr_t set_cfg_address(struct pcie_dw_mvebu *pcie,
+ 		/* Accessing root port configuration space. */
+ 		va_address = (uintptr_t)pcie->ctrl_base;
+ 	} else {
++		d = PCI_MASK_BUS(d) | (PCI_BUS(d) - pcie->first_busno);
+ 		writel(d << 8, pcie->ctrl_base + PCIE_ATU_LOWER_TARGET);
+ 		va_address = (uintptr_t)pcie->cfg_base;
+ 	}
+diff --git a/drivers/pci/pcie_layerscape.c b/drivers/pci/pcie_layerscape.c
+index 0cb7f6d..503fd5e 100644
+--- a/drivers/pci/pcie_layerscape.c
++++ b/drivers/pci/pcie_layerscape.c
+@@ -255,7 +255,7 @@ int ls_pcie_conf_address(struct udevice *bus, pci_dev_t bdf,
+ 		return 0;
+ 	}
+ 
+-	busdev = PCIE_ATU_BUS(PCI_BUS(bdf)) |
++	busdev = PCIE_ATU_BUS(PCI_BUS(bdf) - bus->seq) |
+ 		 PCIE_ATU_DEV(PCI_DEV(bdf)) |
+ 		 PCIE_ATU_FUNC(PCI_FUNC(bdf));
+ 
+-- 
+1.7.1
+

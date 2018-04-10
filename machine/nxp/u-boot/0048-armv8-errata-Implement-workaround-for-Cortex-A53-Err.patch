@@ -1,0 +1,107 @@
+From 8f2dd3f9362d9a804a629ab6924e28236fe51e67 Mon Sep 17 00:00:00 2001
+From: Alison Wang <b18965@freescale.com>
+Date: Thu, 28 Dec 2017 10:42:37 +0800
+Subject: [PATCH 048/129] armv8: errata: Implement workaround for Cortex-A53 Erratum 855873
+
+855873: An eviction might overtake a cache clean operation
+Workaround: The erratum can be avoided by upgrading cache clean by
+address operations to cache clean and invalidate operations. For
+Cortex-A53 r0p3 and later release, this can be achieved by setting
+CPUACTLR.ENDCCASCI to 1.
+
+This patch is to implement the workaround for this erratum.
+
+Signed-off-by: Alison Wang <alison.wang@nxp.com>
+---
+ arch/arm/Kconfig                          |    3 +++
+ arch/arm/cpu/armv8/fsl-layerscape/Kconfig |    3 +++
+ arch/arm/cpu/armv8/start.S                |   24 +++++++++++++++++++++++-
+ 3 files changed, 29 insertions(+), 1 deletions(-)
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 1304417..91ad5e8 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -106,6 +106,9 @@ config ARM_ERRATA_852421
+ config ARM_ERRATA_852423
+ 	bool
+ 
++config ARM_ERRATA_855873
++	bool
++
+ config CPU_ARM720T
+ 	bool
+ 	select SYS_CACHE_SHIFT_5
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/Kconfig b/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
+index 5a75920..bc5ba91 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
++++ b/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
+@@ -1,6 +1,7 @@
+ config ARCH_LS1012A
+ 	bool
+ 	select ARMV8_SET_SMPEN
++	select ARM_ERRATA_855873
+ 	select FSL_LSCH2
+ 	select SYS_FSL_DDR_BE
+ 	select SYS_FSL_MMDC
+@@ -15,6 +16,7 @@ config ARCH_LS1012A
+ config ARCH_LS1043A
+ 	bool
+ 	select ARMV8_SET_SMPEN
++	select ARM_ERRATA_855873
+ 	select FSL_LSCH2
+ 	select SYS_FSL_DDR
+ 	select SYS_FSL_DDR_BE
+@@ -65,6 +67,7 @@ config ARCH_LS1046A
+ config ARCH_LS1088A
+ 	bool
+ 	select ARMV8_SET_SMPEN
++	select ARM_ERRATA_855873
+ 	select FSL_LSCH3
+ 	select SYS_FSL_DDR
+ 	select SYS_FSL_DDR_LE
+diff --git a/arch/arm/cpu/armv8/start.S b/arch/arm/cpu/armv8/start.S
+index 5c500be..6a1fbbb 100644
+--- a/arch/arm/cpu/armv8/start.S
++++ b/arch/arm/cpu/armv8/start.S
+@@ -170,7 +170,10 @@ reset_sctrl:
+ WEAK(apply_core_errata)
+ 
+ 	mov	x29, lr			/* Save LR */
+-	/* For now, we support Cortex-A57 specific errata only */
++	/* For now, we support Cortex-A53, Cortex-A57 specific errata */
++
++	/* Check if we are running on a Cortex-A53 core */
++	branch_if_a53_core x0, apply_a53_core_errata
+ 
+ 	/* Check if we are running on a Cortex-A57 core */
+ 	branch_if_a57_core x0, apply_a57_core_errata
+@@ -178,6 +181,25 @@ WEAK(apply_core_errata)
+ 	mov	lr, x29			/* Restore LR */
+ 	ret
+ 
++apply_a53_core_errata:
++
++#ifdef CONFIG_ARM_ERRATA_855873
++	mrs	x0, midr_el1
++	tst	x0, #(0xf << 20)
++	b.ne	0b
++
++	mrs	x0, midr_el1
++	and	x0, x0, #0xf
++	cmp	x0, #3
++	b.lt	0b
++
++	mrs	x0, S3_1_c15_c2_0	/* cpuactlr_el1 */
++	/* Enable data cache clean as data cache clean/invalidate */
++	orr	x0, x0, #1 << 44
++	msr	S3_1_c15_c2_0, x0	/* cpuactlr_el1 */
++#endif
++	b 0b
++
+ apply_a57_core_errata:
+ 
+ #ifdef CONFIG_ARM_ERRATA_828024
+-- 
+1.7.1
+
