@@ -1,0 +1,65 @@
+From 0aa31c03a192e935852f20aa79732e99f60a8fb7 Mon Sep 17 00:00:00 2001
+From: Vinitha Pillai-B57223 <vinitha.pillai@nxp.com>
+Date: Tue, 9 Jan 2018 10:30:50 +0530
+Subject: [PATCH 065/129] ls1088aqds: Enable IFC and QIXIS in SPL image
+
+Signed-off-by: Sumit Garg <sumit.garg@nxp.com>
+Signed-off-by: Vinitha V Pillai <vinitha.pillai@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/soc.c |    2 +-
+ board/freescale/ls1088a/ls1088a.c       |    4 +++-
+ include/configs/ls1088a_common.h        |    2 +-
+ 3 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/soc.c b/arch/arm/cpu/armv8/fsl-layerscape/soc.c
+index 0f6bf17..69e091a 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/soc.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/soc.c
+@@ -311,7 +311,7 @@ void fsl_lsch3_early_init_f(void)
+ {
+ 	erratum_rcw_src();
+ #ifdef CONFIG_FSL_IFC
+-#ifndef CONFIG_SPL_BUILD
++#if !defined(CONFIG_SPL_BUILD) || defined(CONFIG_FSL_QIXIS)
+ 	init_early_memctl_regs();	/* tighten IFC timing */
+ #endif
+ #endif
+diff --git a/board/freescale/ls1088a/ls1088a.c b/board/freescale/ls1088a/ls1088a.c
+index c0c425d..d12bcae 100644
+--- a/board/freescale/ls1088a/ls1088a.c
++++ b/board/freescale/ls1088a/ls1088a.c
+@@ -31,7 +31,7 @@ int board_early_init_f(void)
+ 	return 0;
+ }
+ 
+-#if !defined(CONFIG_SPL_BUILD)
++#ifdef CONFIG_FSL_QIXIS
+ unsigned long long get_qixis_addr(void)
+ {
+ 	unsigned long long addr;
+@@ -49,7 +49,9 @@ unsigned long long get_qixis_addr(void)
+ 
+ 	return addr;
+ }
++#endif
+ 
++#if !defined(CONFIG_SPL_BUILD)
+ int checkboard(void)
+ {
+ 	char buf[64];
+diff --git a/include/configs/ls1088a_common.h b/include/configs/ls1088a_common.h
+index 85d304b..ed6909e 100644
+--- a/include/configs/ls1088a_common.h
++++ b/include/configs/ls1088a_common.h
+@@ -88,7 +88,7 @@
+ #define CONFIG_BAUDRATE			115200
+ #define CONFIG_SYS_BAUDRATE_TABLE	{ 9600, 19200, 38400, 57600, 115200 }
+ 
+-#ifndef SPL_NO_IFC
++#if !defined(SPL_NO_IFC) || defined(CONFIG_TARGET_LS1088AQDS)
+ /* IFC */
+ #define CONFIG_FSL_IFC
+ #endif
+-- 
+1.7.1
+

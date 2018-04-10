@@ -1,0 +1,61 @@
+From 9159734223b19e8d2068e13388e9d14fee986620 Mon Sep 17 00:00:00 2001
+From: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+Date: Thu, 23 Nov 2017 16:51:41 +0530
+Subject: [PATCH 046/129] arm: Add support of updating dts before fix-up
+
+"ethernet" node fix-up for device tree happens before Linux boot.
+
+There can be requirement of updating "ethernet" node even before
+fix-up. So, add support of updating "ethernet" node.
+
+Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+Reviewed-by: York Sun <york.sun@nxp.com>
+---
+ arch/arm/lib/bootm-fdt.c |   12 ++++++++++++
+ include/fdt_support.h    |    3 +++
+ 2 files changed, 15 insertions(+), 0 deletions(-)
+
+diff --git a/arch/arm/lib/bootm-fdt.c b/arch/arm/lib/bootm-fdt.c
+index eaa817b..fcc2a0e 100644
+--- a/arch/arm/lib/bootm-fdt.c
++++ b/arch/arm/lib/bootm-fdt.c
+@@ -25,6 +25,13 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++#ifdef CONFIG_FMAN_ENET
++__weak int fdt_update_ethernet_dt(void *blob)
++{
++	return 0;
++}
++#endif
++
+ int arch_fixup_fdt(void *blob)
+ {
+ 	int ret = 0;
+@@ -64,5 +71,10 @@ int arch_fixup_fdt(void *blob)
+ #endif
+ #endif
+ 
++#ifdef CONFIG_FMAN_ENET
++	ret = fdt_update_ethernet_dt(blob);
++	if (ret)
++		return ret;
++#endif
+ 	return 0;
+ }
+diff --git a/include/fdt_support.h b/include/fdt_support.h
+index 2bca4d7..1e1f8f7 100644
+--- a/include/fdt_support.h
++++ b/include/fdt_support.h
+@@ -272,4 +272,7 @@ int fdt_overlay_apply_verbose(void *fdt, void *fdto);
+ int fdtdec_get_int(const void *blob, int node, const char *prop_name,
+ 		int default_val);
+ #endif
++#ifdef CONFIG_FMAN_ENET
++int fdt_update_ethernet_dt(void *blob);
++#endif
+ #endif /* ifndef __FDT_SUPPORT_H */
+-- 
+1.7.1
+

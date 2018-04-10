@@ -1,0 +1,280 @@
+From 344badd84b079639ba51af9a5591df12fbe2cfa3 Mon Sep 17 00:00:00 2001
+From: Calvin Johnson <calvin.johnson@nxp.com>
+Date: Tue, 16 Jan 2018 11:22:16 +0530
+Subject: [PATCH 093/129] configs: ls1012a: add pfe configuration for LS1012A
+
+Add configurations for PFE.
+
+Signed-off-by: Calvin Johnson <calvin.johnson@nxp.com>
+Signed-off-by: Anjaneyulu Jagarlmudi <anji.jagarlmudi@nxp.com>
+
+Changes in v2:
+-Moved SYS_LS_PFE_FW_ADDR from pfe Kconfig to board Kconfigs
+-Add "pfe stop" to ls1012a rdb, frdm and 2g5rdb config files
+---
+ board/freescale/ls1012afrdm/Kconfig |    6 ++++++
+ board/freescale/ls1012aqds/Kconfig  |    6 ++++++
+ board/freescale/ls1012ardb/Kconfig  |    6 ++++++
+ configs/ls1012afrdm_qspi_defconfig  |    1 +
+ configs/ls1012aqds_qspi_defconfig   |    1 +
+ configs/ls1012ardb_qspi_defconfig   |    1 +
+ drivers/net/Kconfig                 |    1 +
+ drivers/net/Makefile                |    1 +
+ drivers/net/pfe_eth/Kconfig         |   19 ++++++++++++++++++-
+ include/configs/ls1012a2g5rdb.h     |    2 +-
+ include/configs/ls1012a_common.h    |    6 +++---
+ include/configs/ls1012afrdm.h       |    9 ++++++++-
+ include/configs/ls1012aqds.h        |   14 ++++++++++++++
+ include/configs/ls1012ardb.h        |   10 +++++++++-
+ 14 files changed, 76 insertions(+), 7 deletions(-)
+
+diff --git a/board/freescale/ls1012afrdm/Kconfig b/board/freescale/ls1012afrdm/Kconfig
+index 38bd91b..5481361 100644
+--- a/board/freescale/ls1012afrdm/Kconfig
++++ b/board/freescale/ls1012afrdm/Kconfig
+@@ -12,6 +12,12 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1012afrdm"
+ 
++if FSL_PFE
++config SYS_LS_PFE_FW_ADDR
++	hex "Flash address of PFE firmware"
++	default 0x40a00000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+diff --git a/board/freescale/ls1012aqds/Kconfig b/board/freescale/ls1012aqds/Kconfig
+index fc9250b..582793e 100644
+--- a/board/freescale/ls1012aqds/Kconfig
++++ b/board/freescale/ls1012aqds/Kconfig
+@@ -12,6 +12,12 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1012aqds"
+ 
++if FSL_PFE
++config SYS_LS_PFE_FW_ADDR
++	hex "Flash address of PFE firmware"
++	default 0x40a00000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+diff --git a/board/freescale/ls1012ardb/Kconfig b/board/freescale/ls1012ardb/Kconfig
+index d13b08e..f1f2d3c 100644
+--- a/board/freescale/ls1012ardb/Kconfig
++++ b/board/freescale/ls1012ardb/Kconfig
+@@ -12,6 +12,12 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1012ardb"
+ 
++if FSL_PFE
++config SYS_LS_PFE_FW_ADDR
++	hex "Flash address of PFE firmware"
++	default 0x40a00000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+diff --git a/configs/ls1012afrdm_qspi_defconfig b/configs/ls1012afrdm_qspi_defconfig
+index 42acff0..6bc9fa0 100644
+--- a/configs/ls1012afrdm_qspi_defconfig
++++ b/configs/ls1012afrdm_qspi_defconfig
+@@ -35,6 +35,7 @@ CONFIG_DM_SPI_FLASH=y
+ CONFIG_SPI_FLASH=y
+ CONFIG_NETDEVICES=y
+ CONFIG_E1000=y
++CONFIG_FSL_PFE=y
+ CONFIG_PCI=y
+ CONFIG_DM_PCI=y
+ CONFIG_DM_PCI_COMPAT=y
+diff --git a/configs/ls1012aqds_qspi_defconfig b/configs/ls1012aqds_qspi_defconfig
+index 4073db6..ce74144 100644
+--- a/configs/ls1012aqds_qspi_defconfig
++++ b/configs/ls1012aqds_qspi_defconfig
+@@ -40,6 +40,7 @@ CONFIG_DM_SPI_FLASH=y
+ CONFIG_SPI_FLASH=y
+ CONFIG_NETDEVICES=y
+ CONFIG_E1000=y
++CONFIG_FSL_PFE=y
+ CONFIG_PCI=y
+ CONFIG_DM_PCI=y
+ CONFIG_DM_PCI_COMPAT=y
+diff --git a/configs/ls1012ardb_qspi_defconfig b/configs/ls1012ardb_qspi_defconfig
+index 39d7a54..0965695 100644
+--- a/configs/ls1012ardb_qspi_defconfig
++++ b/configs/ls1012ardb_qspi_defconfig
+@@ -38,6 +38,7 @@ CONFIG_DM_SPI_FLASH=y
+ CONFIG_SPI_FLASH=y
+ CONFIG_NETDEVICES=y
+ CONFIG_E1000=y
++CONFIG_FSL_PFE=y
+ CONFIG_PCI=y
+ CONFIG_DM_PCI=y
+ CONFIG_DM_PCI_COMPAT=y
+diff --git a/drivers/net/Kconfig b/drivers/net/Kconfig
+index 49f78fc..4de7ae1 100644
+--- a/drivers/net/Kconfig
++++ b/drivers/net/Kconfig
+@@ -1,4 +1,5 @@
+ source "drivers/net/phy/Kconfig"
++source "drivers/net/pfe_eth/Kconfig"
+ 
+ config DM_ETH
+ 	bool "Enable Driver Model for Ethernet drivers"
+diff --git a/drivers/net/Makefile b/drivers/net/Makefile
+index ac5443c..102e65a 100644
+--- a/drivers/net/Makefile
++++ b/drivers/net/Makefile
+@@ -75,3 +75,4 @@ obj-$(CONFIG_FSL_MEMAC) += fm/memac_phy.o
+ obj-$(CONFIG_VSC9953) += vsc9953.o
+ obj-$(CONFIG_PIC32_ETH) += pic32_mdio.o pic32_eth.o
+ obj-$(CONFIG_DWC_ETH_QOS) += dwc_eth_qos.o
++obj-$(CONFIG_FSL_PFE) += pfe_eth/
+diff --git a/drivers/net/pfe_eth/Kconfig b/drivers/net/pfe_eth/Kconfig
+index b9996df..28ec00a 100644
+--- a/drivers/net/pfe_eth/Kconfig
++++ b/drivers/net/pfe_eth/Kconfig
+@@ -1,8 +1,25 @@
++menuconfig FSL_PFE
++	bool "Freescale PFE driver"
++	help
++	  This driver provides support for Freescale PFE.
++
++if FSL_PFE
++
+ config UTIL_PE_DISABLED
+ 	bool
+ 	help
+ 	  Disable UTIL processor engine of PFE
+ 
+-config SYS_FSL_PPFE_ADDR
++config SYS_FSL_PFE_ADDR
+ 	hex "PFE base address"
+ 	default 0x04000000
++
++config DDR_PFE_PHYS_BASEADDR
++	hex "PFE DDR physical base address"
++	default 0x03800000
++
++config DDR_PFE_BASEADDR
++	hex "PFE DDR base address"
++	default 0x83800000
++
++endif
+diff --git a/include/configs/ls1012a2g5rdb.h b/include/configs/ls1012a2g5rdb.h
+index 25df103..2d18f3c 100644
+--- a/include/configs/ls1012a2g5rdb.h
++++ b/include/configs/ls1012a2g5rdb.h
+@@ -110,7 +110,7 @@
+ 
+ #undef CONFIG_BOOTCOMMAND
+ #if defined(CONFIG_QSPI_BOOT) || defined(CONFIG_SD_BOOT_QSPI)
+-#define CONFIG_BOOTCOMMAND "run distro_bootcmd; run qspi_bootcmd; " \
++#define CONFIG_BOOTCOMMAND "pfe stop;run distro_bootcmd; run qspi_bootcmd; " \
+ 			   "env exists secureboot && esbc_halt;"
+ #endif
+ 
+diff --git a/include/configs/ls1012a_common.h b/include/configs/ls1012a_common.h
+index 73731ac..f13162f 100644
+--- a/include/configs/ls1012a_common.h
++++ b/include/configs/ls1012a_common.h
+@@ -120,9 +120,9 @@
+ 	"kernel_size=0x2800000\0"		\
+ 
+ #undef CONFIG_BOOTCOMMAND
+-#define CONFIG_BOOTCOMMAND		"sf probe 0:0; sf read $kernel_load "\
+-					"$kernel_start $kernel_size && "\
+-					"bootm $kernel_load"
++#define CONFIG_BOOTCOMMAND	"pfe stop; sf probe 0:0; sf read $kernel_load "\
++				"$kernel_start $kernel_size && "\
++				"bootm $kernel_load"
+ 
+ /* Monitor Command Prompt */
+ #define CONFIG_SYS_CBSIZE		512	/* Console I/O Buffer Size */
+diff --git a/include/configs/ls1012afrdm.h b/include/configs/ls1012afrdm.h
+index 297c057..f54021e 100644
+--- a/include/configs/ls1012afrdm.h
++++ b/include/configs/ls1012afrdm.h
+@@ -9,6 +9,13 @@
+ 
+ #include "ls1012a_common.h"
+ 
++#ifdef CONFIG_FSL_PFE
++#define EMAC1_PHY_ADDR          0x2
++#define EMAC2_PHY_ADDR          0x1
++#define CONFIG_PHYLIB
++#define CONFIG_PHY_REALTEK
++#endif
++
+ /* DDR */
+ #define CONFIG_DIMM_SLOTS_PER_CTLR	1
+ #define CONFIG_CHIP_SELECTS_PER_CTRL	1
+@@ -68,7 +75,7 @@
+ 		"$kernel_addr $kernel_size && bootm $load_addr#$board\0"
+ 
+ #undef CONFIG_BOOTCOMMAND
+-#define CONFIG_BOOTCOMMAND "run distro_bootcmd;run qspi_bootcmd"
++#define CONFIG_BOOTCOMMAND "pfe stop;run distro_bootcmd;run qspi_bootcmd"
+ 
+ #define CONFIG_CMD_MEMINFO
+ #define CONFIG_CMD_MEMTEST
+diff --git a/include/configs/ls1012aqds.h b/include/configs/ls1012aqds.h
+index e1767ef..f6c2650 100644
+--- a/include/configs/ls1012aqds.h
++++ b/include/configs/ls1012aqds.h
+@@ -9,6 +9,20 @@
+ 
+ #include "ls1012a_common.h"
+ 
++/* PFE Ethernet */
++#ifdef CONFIG_FSL_PFE
++#define EMAC1_PHY_ADDR          0x1e
++#define EMAC2_PHY_ADDR          0x1
++#define	SGMII_2500_PHY1_ADDR	0x1
++#define	SGMII_2500_PHY2_ADDR	0x2
++#define CONFIG_PHYLIB
++#define CONFIG_PHY_VITESSE
++#define CONFIG_PHY_REALTEK
++#define	CONFIG_PHY_AQUANTIA
++#define	CONFIG_PHYLIB_10G
++#define RGMII_RESET_WA
++#endif
++
+ /* DDR */
+ #define CONFIG_DIMM_SLOTS_PER_CTLR	1
+ #define CONFIG_CHIP_SELECTS_PER_CTRL	1
+diff --git a/include/configs/ls1012ardb.h b/include/configs/ls1012ardb.h
+index e3b020f..efcfa3d 100644
+--- a/include/configs/ls1012ardb.h
++++ b/include/configs/ls1012ardb.h
+@@ -9,6 +9,14 @@
+ 
+ #include "ls1012a_common.h"
+ 
++/* PFE Ethernet */
++#ifdef CONFIG_FSL_PFE
++#define EMAC1_PHY_ADDR          0x2
++#define EMAC2_PHY_ADDR          0x1
++#define CONFIG_PHYLIB
++#define CONFIG_PHY_REALTEK
++#endif
++
+ /* DDR */
+ #define CONFIG_DIMM_SLOTS_PER_CTLR	1
+ #define CONFIG_CHIP_SELECTS_PER_CTRL	1
+@@ -116,7 +124,7 @@
+ 		"bootm $load_addr#$board\0"
+ 
+ #undef CONFIG_BOOTCOMMAND
+-#define CONFIG_BOOTCOMMAND "run distro_bootcmd; run qspi_bootcmd; "	\
++#define CONFIG_BOOTCOMMAND "pfe stop;run distro_bootcmd; run qspi_bootcmd;"\
+ 			   "env exists secureboot && esbc_halt;"
+ 
+ #include <asm/fsl_secure_boot.h>
+-- 
+1.7.1
+

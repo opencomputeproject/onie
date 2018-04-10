@@ -1,0 +1,300 @@
+From c25fd2073f699f906b6d7e79cc23f9dc5e7b0919 Mon Sep 17 00:00:00 2001
+From: Ahmed Mansour <ahmed.mansour@nxp.com>
+Date: Tue, 3 Oct 2017 17:39:17 -0400
+Subject: [PATCH 052/129] Move SYS_DPAA_QBMAN to Kconfig
+
+The CONFIG_SYS_DPAA_QBMAN define is used by DPAA1 freescale SOCs to
+add device tree fixups that allow deep sleep in Linux. The define was
+placed in header files included by a number of boards, but was not
+explicitly documented in any of the Kconfigs. A description was added
+to the drivers/networking menuconfig and default selection for
+current SOCs that have this part
+
+Signed-off-by: Ahmed Mansour <ahmed.mansour@nxp.com>
+
+Series-version: 5
+
+Series-changes: 4
+- Add QBMan support in Kconfig auto select for B4420 and T4160 SOCs
+
+Series-changes: 5
+- Add net device to T1024QDS_DDR4_defconfig to enable QBMan fixup
+- Remove QBMan define in kmp204x-common.h and rely on SOC auto select
+
+Cover-letter:
+arm: ppc: Share DPAA1 fixups between ARCHs
+- Support DPAA1 QBMan device tree fixups in a shared location for both
+  arm and ppc architectures
+- cleanup a define from header files and add as Kconfig with auto
+  selection based on SOC
+END
+
+Series-to: Joe Hershberger <joe.hershberger@ni.com>
+Series-to: York Sun <york.sun@nxp.com>
+Series-to: Roy Pledge <roy.pledge@nxp.com>
+Series-to: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+---
+ configs/T1024QDS_DDR4_defconfig     |    1 +
+ drivers/net/Kconfig                 |   24 ++++++++++++++++++++++++
+ include/configs/B4860QDS.h          |    1 -
+ include/configs/P1023RDB.h          |    1 -
+ include/configs/P2041RDB.h          |    1 -
+ include/configs/T102xQDS.h          |    1 -
+ include/configs/T102xRDB.h          |    1 -
+ include/configs/T1040QDS.h          |    1 -
+ include/configs/T104xRDB.h          |    1 -
+ include/configs/T208xQDS.h          |    1 -
+ include/configs/T208xRDB.h          |    1 -
+ include/configs/T4240QDS.h          |    1 -
+ include/configs/T4240RDB.h          |    1 -
+ include/configs/corenet_ds.h        |    1 -
+ include/configs/cyrus.h             |    1 -
+ include/configs/km/kmp204x-common.h |    1 -
+ include/configs/ls1043a_common.h    |    2 --
+ include/configs/ls1046a_common.h    |    4 ----
+ 18 files changed, 25 insertions(+), 20 deletions(-)
+
+diff --git a/configs/T1024QDS_DDR4_defconfig b/configs/T1024QDS_DDR4_defconfig
+index b8e083c..4a09a5c 100644
+--- a/configs/T1024QDS_DDR4_defconfig
++++ b/configs/T1024QDS_DDR4_defconfig
+@@ -34,6 +34,7 @@ CONFIG_SPI_FLASH_EON=y
+ CONFIG_SPI_FLASH_STMICRO=y
+ CONFIG_SPI_FLASH_SST=y
+ CONFIG_PHYLIB=y
++CONFIG_NETDEVICES=y
+ CONFIG_SYS_NS16550=y
+ CONFIG_FSL_ESPI=y
+ CONFIG_USB=y
+diff --git a/drivers/net/Kconfig b/drivers/net/Kconfig
+index 52555da..49f78fc 100644
+--- a/drivers/net/Kconfig
++++ b/drivers/net/Kconfig
+@@ -365,4 +365,28 @@ config FEC2_PHY_NORXERR
+ 	  The PHY does not have a RXERR line (RMII only).
+ 	  (so program the FEC to ignore it).
+ 
++config SYS_DPAA_QBMAN
++	bool "Device tree fixup for QBMan on freescale SOCs"
++	depends on (ARM || PPC) && !SPL_BUILD
++	default y if ARCH_B4860 || \
++		     ARCH_B4420 || \
++		     ARCH_P1023 || \
++		     ARCH_P2041 || \
++		     ARCH_T1023 || \
++		     ARCH_T1024 || \
++		     ARCH_T1040 || \
++		     ARCH_T1042 || \
++		     ARCH_T2080 || \
++		     ARCH_T2081 || \
++		     ARCH_T4240 || \
++		     ARCH_T4160 || \
++		     ARCH_P4080 || \
++		     ARCH_P3041 || \
++		     ARCH_P5040 || \
++		     ARCH_P5020 || \
++		     ARCH_LS1043A || \
++		     ARCH_LS1046A
++	help
++	  QBman fixups to allow deep sleep in DPAA 1 SOCs
++
+ endif # NETDEVICES
+diff --git a/include/configs/B4860QDS.h b/include/configs/B4860QDS.h
+index 661bc8b..7f9482d 100644
+--- a/include/configs/B4860QDS.h
++++ b/include/configs/B4860QDS.h
+@@ -572,7 +572,6 @@ unsigned long get_board_ddr_clk(void);
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	25
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #ifdef CONFIG_PHYS_64BIT
+diff --git a/include/configs/P1023RDB.h b/include/configs/P1023RDB.h
+index 1b78a4f..56e3f48 100644
+--- a/include/configs/P1023RDB.h
++++ b/include/configs/P1023RDB.h
+@@ -272,7 +272,6 @@ extern unsigned long get_clock_freq(void);
+ #define CONFIG_LOADADDR		1000000
+ 
+ /* Qman/Bman */
+-#define CONFIG_SYS_DPAA_QBMAN		/* support Q/Bman */
+ #define CONFIG_SYS_QMAN_MEM_BASE	0xff000000
+ #define CONFIG_SYS_QMAN_MEM_PHYS	CONFIG_SYS_QMAN_MEM_BASE
+ #define CONFIG_SYS_QMAN_MEM_SIZE	0x00200000
+diff --git a/include/configs/P2041RDB.h b/include/configs/P2041RDB.h
+index 6008237..5f7ebe7 100644
+--- a/include/configs/P2041RDB.h
++++ b/include/configs/P2041RDB.h
+@@ -438,7 +438,6 @@ unsigned long get_board_sys_clk(unsigned long dummy);
+ #define CONFIG_SYS_PCIE3_IO_SIZE	0x00010000	/* 64k */
+ 
+ /* Qman/Bman */
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #ifdef CONFIG_PHYS_64BIT
+diff --git a/include/configs/T102xQDS.h b/include/configs/T102xQDS.h
+index 259e8a0..13f4c92 100644
+--- a/include/configs/T102xQDS.h
++++ b/include/configs/T102xQDS.h
+@@ -644,7 +644,6 @@ unsigned long get_board_ddr_clk(void);
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #ifdef CONFIG_PHYS_64BIT
+diff --git a/include/configs/T102xRDB.h b/include/configs/T102xRDB.h
+index 7dee2f0..e1f2196 100644
+--- a/include/configs/T102xRDB.h
++++ b/include/configs/T102xRDB.h
+@@ -649,7 +649,6 @@ unsigned long get_board_ddr_clk(void);
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #ifdef CONFIG_PHYS_64BIT
+diff --git a/include/configs/T1040QDS.h b/include/configs/T1040QDS.h
+index c694e50..c186d15 100644
+--- a/include/configs/T1040QDS.h
++++ b/include/configs/T1040QDS.h
+@@ -535,7 +535,6 @@ unsigned long get_board_ddr_clk(void);
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #define CONFIG_SYS_BMAN_MEM_PHYS	0xff4000000ull
+diff --git a/include/configs/T104xRDB.h b/include/configs/T104xRDB.h
+index 9d82e1b..e94983a 100644
+--- a/include/configs/T104xRDB.h
++++ b/include/configs/T104xRDB.h
+@@ -645,7 +645,6 @@ $(SRCTREE)/board/freescale/t104xrdb/t1042d4_sd_rcw.cfg
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #define CONFIG_SYS_BMAN_MEM_PHYS	0xff4000000ull
+diff --git a/include/configs/T208xQDS.h b/include/configs/T208xQDS.h
+index 41926f7..15d1f5f 100644
+--- a/include/configs/T208xQDS.h
++++ b/include/configs/T208xQDS.h
+@@ -584,7 +584,6 @@ unsigned long get_board_ddr_clk(void);
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	18
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #define CONFIG_SYS_BMAN_MEM_PHYS	0xff4000000ull
+diff --git a/include/configs/T208xRDB.h b/include/configs/T208xRDB.h
+index d2ddb17..eb9fe8d 100644
+--- a/include/configs/T208xRDB.h
++++ b/include/configs/T208xRDB.h
+@@ -522,7 +522,6 @@ unsigned long get_board_ddr_clk(void);
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	18
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #define CONFIG_SYS_BMAN_MEM_PHYS	0xff4000000ull
+diff --git a/include/configs/T4240QDS.h b/include/configs/T4240QDS.h
+index 885dc77..9843db2 100644
+--- a/include/configs/T4240QDS.h
++++ b/include/configs/T4240QDS.h
+@@ -381,7 +381,6 @@ unsigned long get_board_ddr_clk(void);
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	50
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #define CONFIG_SYS_BMAN_MEM_PHYS	0xff4000000ull
+diff --git a/include/configs/T4240RDB.h b/include/configs/T4240RDB.h
+index 625130a..bdb9322 100644
+--- a/include/configs/T4240RDB.h
++++ b/include/configs/T4240RDB.h
+@@ -546,7 +546,6 @@ unsigned long get_board_ddr_clk(void);
+ 
+ /* Qman/Bman */
+ #ifndef CONFIG_NOBQFMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	50
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #define CONFIG_SYS_BMAN_MEM_PHYS	0xff4000000ull
+diff --git a/include/configs/corenet_ds.h b/include/configs/corenet_ds.h
+index 0dbf149..2344bd3 100644
+--- a/include/configs/corenet_ds.h
++++ b/include/configs/corenet_ds.h
+@@ -454,7 +454,6 @@
+ #define CONFIG_SYS_PCIE4_IO_SIZE	0x00010000	/* 64k */
+ 
+ /* Qman/Bman */
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #ifdef CONFIG_PHYS_64BIT
+diff --git a/include/configs/cyrus.h b/include/configs/cyrus.h
+index 1b20d85..610c2d3 100644
+--- a/include/configs/cyrus.h
++++ b/include/configs/cyrus.h
+@@ -317,7 +317,6 @@
+ #define CONFIG_SYS_PCIE4_IO_SIZE	0x00010000	/* 64k */
+ 
+ /* Qman/Bman */
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #ifdef CONFIG_PHYS_64BIT
+diff --git a/include/configs/km/kmp204x-common.h b/include/configs/km/kmp204x-common.h
+index 6aa2b9d..a0c932a 100644
+--- a/include/configs/km/kmp204x-common.h
++++ b/include/configs/km/kmp204x-common.h
+@@ -296,7 +296,6 @@ int get_scl(void);
+ #define CONFIG_SYS_PCIE3_IO_SIZE	0x00010000	/* 64k */
+ 
+ /* Qman/Bman */
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+ #define CONFIG_SYS_BMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_BMAN_MEM_BASE	0xf4000000
+ #define CONFIG_SYS_BMAN_MEM_PHYS	0xff4000000ull
+diff --git a/include/configs/ls1043a_common.h b/include/configs/ls1043a_common.h
+index 1a7ff56..67b5ea7 100644
+--- a/include/configs/ls1043a_common.h
++++ b/include/configs/ls1043a_common.h
+@@ -194,8 +194,6 @@
+ #endif
+ #endif
+ 
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+-
+ /* FMan ucode */
+ #ifndef SPL_NO_FMAN
+ #define CONFIG_SYS_DPAA_FMAN
+diff --git a/include/configs/ls1046a_common.h b/include/configs/ls1046a_common.h
+index 3f9438f..7bce49f 100644
+--- a/include/configs/ls1046a_common.h
++++ b/include/configs/ls1046a_common.h
+@@ -169,10 +169,6 @@
+ #endif
+ #endif
+ 
+-#ifndef SPL_NO_QBMAN
+-#define CONFIG_SYS_DPAA_QBMAN		/* Support Q/Bman */
+-#endif
+-
+ /* FMan ucode */
+ #ifndef SPL_NO_FMAN
+ #define CONFIG_SYS_DPAA_FMAN
+-- 
+1.7.1
+
