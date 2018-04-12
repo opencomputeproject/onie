@@ -1,6 +1,6 @@
 Add to support onie-syseeprom command.
 
-Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2013,2018 Curt Brune <curt@cumulusnetworks.com>
 Copyright (C) 2014,2016,2017 david_yang <david_yang@accton.com>
 Copyright (C) 2015 Ellen Wang <ellen@cumulusnetworks.com>
 
@@ -1675,10 +1675,10 @@ index 000000000000..5cf646322444
 +}
 diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
 new file mode 100644
-index 000000000000..3003bd634ce9
+index 000000000000..e34abf59782e
 --- /dev/null
 +++ b/miscutils/sys_eeprom.c
-@@ -0,0 +1,181 @@
+@@ -0,0 +1,185 @@
 +#include "libbb.h"
 +#include "onie_tlvinfo.h"
 +#include <getopt.h>
@@ -1738,7 +1738,7 @@ index 000000000000..3003bd634ce9
 +    const size_t tlv_code_count = sizeof(tlv_code_list) /
 +	sizeof(tlv_code_list[0]);
 +
-+    char *tokens[tlv_code_count + 1];
++    char *tokens[(tlv_code_count*2) + 1];
 +    const char *short_options = "hels:g:";
 +    const struct option long_options[] = {
 +	{"help",    no_argument,          0,    'h'},
@@ -1750,10 +1750,13 @@ index 000000000000..3003bd634ce9
 +    };
 +
 +    for (i = 0; i < tlv_code_count; i++) {
-+	    tokens[i] = (char *) malloc(6);
-+	    sprintf(tokens[i], "0x%x", tlv_code_list[i].m_code);
++	    tokens[i*2] = malloc(6);
++	    snprintf(tokens[(i*2)], 6,     "0x%x", tlv_code_list[i].m_code);
++	    /* Allow for uppercase hex digits as well */
++	    tokens[(i*2) + 1] = malloc(6);
++	    snprintf(tokens[(i*2) + 1], 6, "0x%X", tlv_code_list[i].m_code);
 +    }
-+    tokens[tlv_code_count] = NULL;
++    tokens[tlv_code_count*2] = NULL;
 +
 +    while (TRUE) {
 +	c = getopt_long(argc, argv, short_options,
@@ -1856,7 +1859,8 @@ index 000000000000..3003bd634ce9
 +    }
 +syseeprom_err:
 +    for (i = 0; i < tlv_code_count; i++) {
-+	free(tokens[i]);
++	free(tokens[i*2]);
++	free(tokens[(i*2) + 1]);
 +    }
 +    return  (err == 0) ? 0 : 1;
 +}
