@@ -82,20 +82,25 @@ some general comments regarding patch submission:
      Copyright (C) 2010  Josephine Hacker <jh@hackers.foomatic.com>
      SPDX-License-Identifier:        GPL-2.0
 
-#. To upstream patches please use GitHub `git pull requests
-   <https://help.github.com/articles/using-pull-requests>`_.  The ONIE
-   project is following the *fork and pull* model.
+#. The ONIE project uses the GitHub `Flow Model
+   <https://guides.github.com/introduction/flow/>`_.
+
+   - Create feature branches from master
+
+   - Open a pull request against master
+
+   - Rebase onto master if necessary
 
    Note: The author must be a real person with a valid email address.
-   No anonymous github user IDs.
+   No anonymous github user IDs please.
 
-   Please do not create pull requests using your master branch. You
-   should create a topic branch and make a pull request from that branch.
+   Further reading:
 
-   This is described here: `Creating a Pull Request
-   <https://help.github.com/articles/creating-a-pull-request/>`_ and
-   `Using Pull Requests
-   <https://help.github.com/articles/using-pull-requests/>`_.
+   - `Creating a Pull Request
+     <https://help.github.com/articles/creating-a-pull-request/>`_
+
+   - `Using Pull Requests
+     <https://help.github.com/articles/using-pull-requests/>`_.
 
    As it says in the article "These changes are proposed in a branch,
    which ensures that the master branch is kept clean and tidy."
