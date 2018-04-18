@@ -1,5 +1,5 @@
-.. Copyright (C) 2015,2016,2017 Carlos Cardenas <carlos@cumulusnetworks.com>
-   Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2017,2018 Curt Brune <curt@cumulusnetworks.com>
+   Copyright (C) 2015,2016,2017 Carlos Cardenas <carlos@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
 ****************
@@ -11,7 +11,8 @@ Testing Overview
 Testing Environment
 ===================
 
-In order to test an ONIE device, the following is required:
+In order to test an ONIE device, the following are required:
+
 * ONIE device (referred to as Device Under Test or DUT)
 
 * Vendor provided serial console cable (for device interaction and recording of session)
@@ -32,9 +33,10 @@ Recommended environment - Linux
   * 115200 baud 8N1, no flow control (unless otherwise specified by DUT)
   * Logging enabled
 
-* ISC DHCP Server
+* DHCP Server
 
-  * Example `config file <https://github.com/onie/onie/blob/master/contrib/isc-dhcpd/dhcpd.conf>`_
+  * `ISC DHCP Server <https://www.isc.org/downloads/dhcp>`_
+  * `dnsmasq <https://en.wikipedia.org/wiki/Dnsmasq>`_
 
 * Web Server
 
@@ -71,9 +73,8 @@ Recommended environment - Windows
 Dead on Arrival Testing
 =======================
 
-Prior to the start of the testing the ONIE device, the ONIE
-Certification lab will be performing the following functionality
-testing:
+Prior to the start of the testing the ONIE device, perform the
+following functionality checks:
 
 #. Power on the switch, perform any vendor diagnostic test, if
    applicable.
