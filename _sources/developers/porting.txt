@@ -1,4 +1,4 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -7,7 +7,7 @@ Porting Guide
 
 This section describes requirements and general guidelines to follow
 when porting ONIE to a new platform.  Also, the
-:ref:`testing_certification` guide should be used to validate the ONIE
+:ref:`unit_testing` guide *must* be used to validate the ONIE
 implementation.
 
 Porting U-Boot
