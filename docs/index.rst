@@ -52,7 +52,7 @@ Read more :ref:`news`
    News <news/index>
    user-guide/index
    design-spec/index
-   testing-certification/index
+   testing/index
    developers/index
    cli/index
    faq/index
