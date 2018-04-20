@@ -1,4 +1,4 @@
-.. Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2013,2014,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2013-2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -25,9 +25,10 @@ This environment forms an interface between ONIE and the NOS.
 NOS Installer
 =============
 
-The only requirement ONIE has for the NOS installer is that the
-installer **must** update the boot environment so that the NOS boots
-at the next reboot.
+ONIE puts a small number of requirements on the NOS installer.
+
+First, the installer **must** update the boot environment so that the
+NOS boots at the next reboot.
 
 How this is done depends on the specific CPU architecture.  See these
 sections for the corresponding CPU architectures:
@@ -35,6 +36,10 @@ sections for the corresponding CPU architectures:
 - :ref:`uboot_nos_intf_installer`
 
 - :ref:`x86_nos_intf_installer`
+
+Second, at the conclusion of a successful NOS install, the install
+*should* call ``onie-nos-mode -s``.  This allows ONIE to be more "user
+friendly" on subsequent boots.  See :ref:`cli_onie_nos_mode`.
 
 Other than that, the NOS installer can do whatever is necessary to
 persistently install the operating system into the hardware; the

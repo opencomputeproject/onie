@@ -1,4 +1,4 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2018 Curt Brune <curt@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
 **********************
@@ -267,6 +267,57 @@ Display all information::
   ONIE:/ # onie-sysinfo -a
   fake-serial-0123456789 00:04:9F:02:80:A4 2014.08-dirty 33118 fsl_p2020rdbpca 0 powerpc-fsl_p2020rdbpca-r0 powerpc 0 unknown 2014-10-08T13:50-0700
 
+.. _cli_onie_nos_mode:
+
+``onie-nos-mode``
+=================
+
+SYNOPSIS
+--------
+``onie-nos-mode [-s] [-c] [-g] [-v] [-h]``
+
+DESCRIPTION
+-----------
+
+Get, set or clear the ONIE NOS mode.  When set, NOS mode indicates
+that a NOS is installed.  When clear, NOS mode indicates that no NOS
+is installed.
+
+The intent is that a NOS installer sets the NOS mode at the conclusion
+of a successful NOS install.  This allows ONIE to be more "user
+friendly" on subsequent boots.
+
+When ONIE NOS mode is set, entering install mode is no longer
+sticky. I.e. entering install mode is no longer a one-way trap door.
+This helps prevent user from accidentally removing their installed
+NOS.
+
+Furthermore, for GRUB architectures, the default GRUB menu item now
+defaults to "rescue" mode, instead of "install" mode.  With a NOS
+installed, users expect to enter ONIE, poke around and then reboot
+back into their installed NOS.
+
+The idea here is make the default GRUB menu item and the "install"
+mode more forgiving when a NOS is installed.
+
+COMMAND LINE OPTIONS
+--------------------
+
+.. csv-table::
+  :header: "Option", "Description"
+  :widths: 1, 3
+  :delim: |
+
+  -h | Help.  Print a help message.
+  -v | Be verbose.  Print what is happening.
+  -c | Clear the NOS mode.
+  -s | Set the NOS mode.
+  -g | Get the current NOS mode.  This is the default.
+
+SEE ALSO
+--------
+
+See :ref:`cli_onie_nos_install`.
 
 Deprecated Commands
 ===================
@@ -282,6 +333,8 @@ are simply symbolic links to the corresponding command listed above.
   install_url | :ref:`cli_onie_nos_install`
   update_url | :ref:`cli_onie_self_update`
   support | :ref:`cli_onie_support`
+  onie-discovery-start | :ref:`cli_onie_discovery_start`
+  onie-discovery-stop | :ref:`cli_onie_discovery_stop`
 
 x86 Architecture Specific Commands
 ==================================
