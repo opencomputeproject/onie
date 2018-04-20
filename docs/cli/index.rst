@@ -12,12 +12,12 @@ architectures.
 
 .. _cli_onie_discovery_start:
 
-``onie-discovery-start``
+``onie-start``
 ========================
 
 SYNOPSIS
 --------
-``onie-discovery-start``
+``onie-start``
 
 DESCRIPTION
 -----------
@@ -35,12 +35,12 @@ See :ref:`cli_onie_discovery_stop`.
 
 .. _cli_onie_discovery_stop:
 
-``onie-discovery-stop``
+``onie-stop``
 ========================
 
 SYNOPSIS
 --------
-``onie-discovery-stop``
+``onie-stop``
 
 DESCRIPTION
 -----------
