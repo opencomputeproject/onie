@@ -1,4 +1,4 @@
-.. Copyright (C) 2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2015,2016,2017,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -18,13 +18,19 @@ additional information about a particular platform.
 Preparing a New Build Machine
 -----------------------------
 
-To prepare a new build machine for compiling, ONIE must first install a
-number of standard development packages.
+The ONIE build environment requires a number of standard development
+packages.
 
 For a `Debian-based system <http://www.debian.org/>`_, a Makefile
 target exists that installs the required packages on your build machine.
 
-The ONIE project will maintain this target for the current stable
+For other distributions, a Debian Docker image is available to use as
+a starting point.
+
+Debian Systems
+^^^^^^^^^^^^^^
+
+The ONIE project maintains a Makefile target for the current stable
 version of Debian.  This target requires the use of ``sudo(8)``, since
 package installation requires root privileges::
 
@@ -33,9 +39,21 @@ package installation requires root privileges::
   $ sudo apt-get install build-essential
   $ make debian-prepare-build-host
 
-For a different Linux distribution, look at the Makefile and the
-``$(DEBIAN_BUILD_HOST_PACKAGES)`` variable.  Then install packages for
-your distribution that provide the same tools.
+Docker Image
+^^^^^^^^^^^^
+
+As a starting point, the ONIE project provides a Debian build
+environment as a Docker image.  For more info, see the `Docker image
+README
+<https://github.com/opencomputeproject/onie/tree/master/contrib/build-env>`_.
+
+That is a good starting point, but for long term development you may
+want to install the development packages natively on your system.
+Have a look at the top-level ``Makefile`` and the
+``$(DEBIAN_BUILD_HOST_PACKAGES)`` variable.  Then install the
+corresponding packages for your distribution that provide the same
+tools.
+
 
 Preparing a New Build User Account
 ----------------------------------
