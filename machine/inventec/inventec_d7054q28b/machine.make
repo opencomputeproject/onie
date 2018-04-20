@@ -24,7 +24,7 @@ I2CTOOLS_ENABLE = yes
 
 # Set the desired kernel version.
 LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 80
+LINUX_MINOR_VERSION	= 95
 
 # Use gcc-6.3.0
 GCC_VERSION = 6.3.0
