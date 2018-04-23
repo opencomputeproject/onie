@@ -1,10 +1,10 @@
 Add onie-syseeprom support for Celestica switch
 
 diff --git a/include/24cXX.h b/include/24cXX.h
-index c304273..ee87431 100644
+index 5fb4641379ea..14c6e377ecfb 100644
 --- a/include/24cXX.h
 +++ b/include/24cXX.h
-@@ -28,30 +28,4 @@ struct eeprom
+@@ -37,30 +37,4 @@ struct eeprom
  	int fd;		// file descriptor
  	int type; 	// eeprom type
  };
@@ -37,7 +37,7 @@ index c304273..ee87431 100644
  #endif
 diff --git a/include/cpld.h b/include/cpld.h
 new file mode 100755
-index 0000000..12ccb44
+index 000000000000..12ccb44f1c95
 --- /dev/null
 +++ b/include/cpld.h
 @@ -0,0 +1,57 @@
@@ -100,7 +100,7 @@ index 0000000..12ccb44
 +#endif
 diff --git a/include/debug_util.h b/include/debug_util.h
 new file mode 100755
-index 0000000..83b2801
+index 000000000000..83b280185649
 --- /dev/null
 +++ b/include/debug_util.h
 @@ -0,0 +1,16 @@
@@ -122,7 +122,7 @@ index 0000000..83b2801
 +#endif  
 diff --git a/include/i2c_chips.h b/include/i2c_chips.h
 new file mode 100755
-index 0000000..baa96cc
+index 000000000000..baa96ccd6cbc
 --- /dev/null
 +++ b/include/i2c_chips.h
 @@ -0,0 +1,56 @@
@@ -184,7 +184,7 @@ index 0000000..baa96cc
 +#endif
 diff --git a/include/i2c_dev.h b/include/i2c_dev.h
 new file mode 100755
-index 0000000..6b389a5
+index 000000000000..6b389a589c3a
 --- /dev/null
 +++ b/include/i2c_dev.h
 @@ -0,0 +1,156 @@
@@ -345,7 +345,7 @@ index 0000000..6b389a5
 +#endif
 +
 diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 72ddcd1..96742a5 100644
+index 72ddcd1ce9bf..96742a587ec9 100644
 --- a/miscutils/Kbuild.src
 +++ b/miscutils/Kbuild.src
 @@ -52,7 +52,7 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
@@ -359,7 +359,7 @@ index 72ddcd1..96742a5 100644
  lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
 diff --git a/miscutils/cpld_ops.c b/miscutils/cpld_ops.c
 new file mode 100755
-index 0000000..bce009b
+index 000000000000..bce009b46679
 --- /dev/null
 +++ b/miscutils/cpld_ops.c
 @@ -0,0 +1,816 @@
@@ -1181,7 +1181,7 @@ index 0000000..bce009b
 +
 diff --git a/miscutils/i2c_chips.c b/miscutils/i2c_chips.c
 new file mode 100755
-index 0000000..6d5b682
+index 000000000000..6d5b6823ddb2
 --- /dev/null
 +++ b/miscutils/i2c_chips.c
 @@ -0,0 +1,655 @@
@@ -1842,7 +1842,7 @@ index 0000000..6d5b682
 +
 diff --git a/miscutils/i2c_dev.c b/miscutils/i2c_dev.c
 new file mode 100755
-index 0000000..6170b08
+index 000000000000..6170b08d376a
 --- /dev/null
 +++ b/miscutils/i2c_dev.c
 @@ -0,0 +1,502 @@
@@ -2349,7 +2349,7 @@ index 0000000..6170b08
 +	return i2c_write_3b(addr, buf);
 +}
 diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
-index 3003bd6..17d7281 100644
+index e34abf59782e..1e1cb43bd908 100644
 --- a/miscutils/sys_eeprom.c
 +++ b/miscutils/sys_eeprom.c
 @@ -1,8 +1,31 @@
@@ -2396,18 +2396,18 @@ index 3003bd6..17d7281 100644
 @@ -58,11 +83,12 @@ int onie_syseeprom_main(int argc, char **argv)
  	sizeof(tlv_code_list[0]);
  
-     char *tokens[tlv_code_count + 1];
+     char *tokens[(tlv_code_count*2) + 1];
 -    const char *short_options = "hels:g:";
 +    const char *short_options = "helrs:g:";
      const struct option long_options[] = {
  	{"help",    no_argument,          0,    'h'},
  	{"list",    no_argument,          0,    'l'},
  	{"erase",   no_argument,          0,    'e'},
-+	{"restore",	no_argument,	  0,	'r'},
++	{"restore", no_argument,	  0,	'r'},
  	{"set",     required_argument,    0,    's'},
  	{"get",     required_argument,    0,    'g'},
  	{0,         0,                    0,      0},
-@@ -99,6 +125,27 @@ int onie_syseeprom_main(int argc, char **argv)
+@@ -102,6 +128,27 @@ int onie_syseeprom_main(int argc, char **argv)
  	    update = 1;
  	    break;
  
@@ -2436,7 +2436,7 @@ index 3003bd6..17d7281 100644
  	    subopts = optarg;
  	    while (*subopts != '\0' && !err) {
 diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
-index ed3235b..207f93d 100644
+index ed3235bcc1c8..207f93d023c4 100644
 --- a/miscutils/sys_eeprom_i2c.c
 +++ b/miscutils/sys_eeprom_i2c.c
 @@ -1,8 +1,17 @@
