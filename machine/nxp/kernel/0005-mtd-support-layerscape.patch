@@ -1,6 +1,6 @@
-From a3ec0bbee3f8a7909b9de12b29af280d4bde6f3f Mon Sep 17 00:00:00 2001
+From ecf2935d8d81855473b021bf581a81c4035f3d92 Mon Sep 17 00:00:00 2001
 From: Yangbo Lu <yangbo.lu@nxp.com>
-Date: Mon, 25 Sep 2017 10:17:28 +0800
+Date: Mon, 23 Apr 2018 11:34:51 +0800
 Subject: [PATCH 05/30] mtd: support layerscape
 
 This is a integrated patch for layerscape ifc-nor-nand support.
@@ -13,12 +13,12 @@ Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
  drivers/memory/fsl_ifc.c        | 263 ++++++++++++++++++++++++++++++++++++++++
  drivers/mtd/maps/physmap_of.c   |   4 +
  drivers/mtd/nand/Kconfig        |   2 +-
- drivers/mtd/nand/fsl_ifc_nand.c |   5 +-
+ drivers/mtd/nand/fsl_ifc_nand.c |   2 +-
  include/linux/fsl_ifc.h         |   7 ++
- 6 files changed, 280 insertions(+), 3 deletions(-)
+ 6 files changed, 277 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/memory/Kconfig b/drivers/memory/Kconfig
-index 4b4c0c3c3d2f..820f55907185 100644
+index 4b4c0c3..820f559 100644
 --- a/drivers/memory/Kconfig
 +++ b/drivers/memory/Kconfig
 @@ -115,7 +115,7 @@ config FSL_CORENET_CF
@@ -31,7 +31,7 @@ index 4b4c0c3c3d2f..820f55907185 100644
  config JZ4780_NEMC
  	bool "Ingenic JZ4780 SoC NEMC driver"
 diff --git a/drivers/memory/fsl_ifc.c b/drivers/memory/fsl_ifc.c
-index 1b182b117f9c..10d2a5f8b06a 100644
+index 1b182b1..10d2a5f 100644
 --- a/drivers/memory/fsl_ifc.c
 +++ b/drivers/memory/fsl_ifc.c
 @@ -24,6 +24,7 @@
@@ -330,7 +330,7 @@ index 1b182b117f9c..10d2a5f8b06a 100644
  	.probe       = fsl_ifc_ctrl_probe,
  	.remove      = fsl_ifc_ctrl_remove,
 diff --git a/drivers/mtd/maps/physmap_of.c b/drivers/mtd/maps/physmap_of.c
-index 3fad35942895..f720a9683944 100644
+index 3fad359..f720a96 100644
 --- a/drivers/mtd/maps/physmap_of.c
 +++ b/drivers/mtd/maps/physmap_of.c
 @@ -20,6 +20,7 @@
@@ -352,7 +352,7 @@ index 3fad35942895..f720a9683944 100644
  		info->list[i].map.virt = ioremap(info->list[i].map.phys,
  						 info->list[i].map.size);
 diff --git a/drivers/mtd/nand/Kconfig b/drivers/mtd/nand/Kconfig
-index b254090b8a1b..961f1aa17e63 100644
+index b254090..961f1aa 100644
 --- a/drivers/mtd/nand/Kconfig
 +++ b/drivers/mtd/nand/Kconfig
 @@ -438,7 +438,7 @@ config MTD_NAND_FSL_ELBC
@@ -365,10 +365,10 @@ index b254090b8a1b..961f1aa17e63 100644
  	select MEMORY
  	help
 diff --git a/drivers/mtd/nand/fsl_ifc_nand.c b/drivers/mtd/nand/fsl_ifc_nand.c
-index d1570f512f0b..785e9ee025d8 100644
+index 2f6b552..79c815d 100644
 --- a/drivers/mtd/nand/fsl_ifc_nand.c
 +++ b/drivers/mtd/nand/fsl_ifc_nand.c
-@@ -904,9 +904,12 @@ static int fsl_ifc_chip_init(struct fsl_ifc_mtd *priv)
+@@ -898,7 +898,7 @@ static int fsl_ifc_chip_init(struct fsl_ifc_mtd *priv)
  		chip->ecc.algo = NAND_ECC_HAMMING;
  	}
  
@@ -376,14 +376,9 @@ index d1570f512f0b..785e9ee025d8 100644
 +	if (ctrl->version >= FSL_IFC_VERSION_1_1_0)
  		fsl_ifc_sram_init(priv);
  
-+	if (ctrl->version >= FSL_IFC_VERSION_2_0_0)
-+		priv->bufnum_mask = (priv->bufnum_mask * 2) + 1;
-+
- 	return 0;
- }
- 
+ 	/*
 diff --git a/include/linux/fsl_ifc.h b/include/linux/fsl_ifc.h
-index c332f0a45607..a41d21b69121 100644
+index 3fdfede..d6aea24 100644
 --- a/include/linux/fsl_ifc.h
 +++ b/include/linux/fsl_ifc.h
 @@ -274,6 +274,8 @@
@@ -395,7 +390,7 @@ index c332f0a45607..a41d21b69121 100644
  /* Addressing Mode-ROW0+n/COL0 */
  #define IFC_NAND_NCFGR_ADDR_MODE_RC0	0x00000000
  /* Addressing Mode-ROW0+n/COL0+n */
-@@ -861,6 +863,11 @@ struct fsl_ifc_ctrl {
+@@ -857,6 +859,11 @@ struct fsl_ifc_ctrl {
  	u32 nand_stat;
  	wait_queue_head_t nand_wait;
  	bool little_endian;
@@ -408,5 +403,5 @@ index c332f0a45607..a41d21b69121 100644
  
  extern struct fsl_ifc_ctrl *fsl_ifc_ctrl_dev;
 -- 
-2.14.1
+2.7.4
 
