@@ -1,9 +1,9 @@
-From 460e811f61fa8383eaa4eb97ff48df8de0e8e2dd Mon Sep 17 00:00:00 2001
+From cd04c5121d42a2efbff0db78e8cd18c38a4872b2 Mon Sep 17 00:00:00 2001
 From: Yangbo Lu <yangbo.lu@nxp.com>
-Date: Mon, 25 Sep 2017 12:13:29 +0800
-Subject: [PATCH 23/30] irqchip: support layerscape
+Date: Wed, 17 Jan 2018 15:36:28 +0800
+Subject: [PATCH 23/33] irqchip: support layerscape
 
-This is a integrated patch for layerscape gic support.
+This is an integrated patch for layerscape gic support.
 
 Signed-off-by: Eric Auger <eric.auger@redhat.com>
 Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
@@ -17,7 +17,7 @@ Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
  5 files changed, 79 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/irqchip/Makefile b/drivers/irqchip/Makefile
-index e4dbfc85abdb..53d2cd54d57f 100644
+index e4dbfc8..53d2cd5 100644
 --- a/drivers/irqchip/Makefile
 +++ b/drivers/irqchip/Makefile
 @@ -74,3 +74,4 @@ obj-$(CONFIG_LS_SCFG_MSI)		+= irq-ls-scfg-msi.o
@@ -26,10 +26,10 @@ index e4dbfc85abdb..53d2cd54d57f 100644
  obj-$(CONFIG_STM32_EXTI) 		+= irq-stm32-exti.o
 +obj-$(CONFIG_QUICC_ENGINE)		+= irq-qeic.o
 diff --git a/drivers/irqchip/irq-gic-v3-its.c b/drivers/irqchip/irq-gic-v3-its.c
-index acb9d250a905..2f1c8826d91c 100644
+index ac15e5d..0b495ba 100644
 --- a/drivers/irqchip/irq-gic-v3-its.c
 +++ b/drivers/irqchip/irq-gic-v3-its.c
-@@ -1659,6 +1659,7 @@ static int its_init_domain(struct fwnode_handle *handle, struct its_node *its)
+@@ -1658,6 +1658,7 @@ static int its_init_domain(struct fwnode_handle *handle, struct its_node *its)
  
  	inner_domain->parent = its_parent;
  	inner_domain->bus_token = DOMAIN_BUS_NEXUS;
@@ -38,7 +38,7 @@ index acb9d250a905..2f1c8826d91c 100644
  	info->data = its;
  	inner_domain->host_data = info;
 diff --git a/include/linux/irqdomain.h b/include/linux/irqdomain.h
-index ffb84604c1de..188eced6813e 100644
+index ffb8460..188eced 100644
 --- a/include/linux/irqdomain.h
 +++ b/include/linux/irqdomain.h
 @@ -183,6 +183,12 @@ enum {
@@ -106,14 +106,13 @@ index ffb84604c1de..188eced6813e 100644
  
  #else /* CONFIG_IRQ_DOMAIN */
 diff --git a/kernel/irq/irqdomain.c b/kernel/irq/irqdomain.c
-index b59e6768c5e9..31805f237396 100644
+index b59e676..31805f2 100644
 --- a/kernel/irq/irqdomain.c
 +++ b/kernel/irq/irqdomain.c
-@@ -277,6 +277,31 @@ struct irq_domain *irq_find_matching_fwspec(struct irq_fwspec *fwspec,
- }
+@@ -278,6 +278,31 @@ struct irq_domain *irq_find_matching_fwspec(struct irq_fwspec *fwspec,
  EXPORT_SYMBOL_GPL(irq_find_matching_fwspec);
  
-+/**
+ /**
 + * irq_domain_check_msi_remap - Check whether all MSI irq domains implement
 + * IRQ remapping
 + *
@@ -138,9 +137,10 @@ index b59e6768c5e9..31805f237396 100644
 +}
 +EXPORT_SYMBOL_GPL(irq_domain_check_msi_remap);
 +
- /**
++/**
   * irq_set_default_host() - Set a "default" irq domain
   * @domain: default domain pointer
+  *
 @@ -1408,6 +1433,20 @@ static void irq_domain_check_hierarchy(struct irq_domain *domain)
  	if (domain->ops->alloc)
  		domain->flags |= IRQ_DOMAIN_FLAG_HIERARCHY;
@@ -163,7 +163,7 @@ index b59e6768c5e9..31805f237396 100644
  /**
   * irq_domain_get_irq_data - Get irq_data associated with @virq and @domain
 diff --git a/kernel/irq/msi.c b/kernel/irq/msi.c
-index 8a3e872798f3..2e2b2c45b8b0 100644
+index 8a3e872..2e2b2c4 100644
 --- a/kernel/irq/msi.c
 +++ b/kernel/irq/msi.c
 @@ -272,8 +272,8 @@ struct irq_domain *msi_create_irq_domain(struct fwnode_handle *fwnode,
@@ -178,5 +178,5 @@ index 8a3e872798f3..2e2b2c45b8b0 100644
  
  int msi_domain_prepare_irqs(struct irq_domain *domain, struct device *dev,
 -- 
-2.14.1
+2.7.4
 

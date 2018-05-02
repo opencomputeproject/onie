@@ -1,21 +1,21 @@
-From ecf2935d8d81855473b021bf581a81c4035f3d92 Mon Sep 17 00:00:00 2001
+From 9c3d7120451bce97f7301c3e0c0d32e5e083dc11 Mon Sep 17 00:00:00 2001
 From: Yangbo Lu <yangbo.lu@nxp.com>
-Date: Mon, 23 Apr 2018 11:34:51 +0800
-Subject: [PATCH 05/30] mtd: support layerscape
+Date: Wed, 2 May 2018 11:08:59 +0800
+Subject: [PATCH 05/33] mtd: support layerscape
 
-This is a integrated patch for layerscape ifc-nor-nand support.
+This is an integrated patch for layerscape ifc-nor-nand support.
 
 Signed-off-by: Alison Wang <b18965@freescale.com>
 Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
 Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
 ---
- drivers/memory/Kconfig          |   2 +-
- drivers/memory/fsl_ifc.c        | 263 ++++++++++++++++++++++++++++++++++++++++
- drivers/mtd/maps/physmap_of.c   |   4 +
- drivers/mtd/nand/Kconfig        |   2 +-
- drivers/mtd/nand/fsl_ifc_nand.c |   2 +-
- include/linux/fsl_ifc.h         |   7 ++
- 6 files changed, 277 insertions(+), 3 deletions(-)
+ drivers/memory/Kconfig        |   2 +-
+ drivers/memory/fsl_ifc.c      | 263 ++++++++++++++++++++++++++++++++++++++++++
+ drivers/mtd/devices/m25p80.c  |   3 +-
+ drivers/mtd/maps/physmap_of.c |   4 +
+ drivers/mtd/nand/Kconfig      |   2 +-
+ include/linux/fsl_ifc.h       |   7 ++
+ 6 files changed, 278 insertions(+), 3 deletions(-)
 
 diff --git a/drivers/memory/Kconfig b/drivers/memory/Kconfig
 index 4b4c0c3..820f559 100644
@@ -329,6 +329,20 @@ index 1b182b1..10d2a5f 100644
  	},
  	.probe       = fsl_ifc_ctrl_probe,
  	.remove      = fsl_ifc_ctrl_remove,
+diff --git a/drivers/mtd/devices/m25p80.c b/drivers/mtd/devices/m25p80.c
+index 9cf7fcd..16a7df2 100644
+--- a/drivers/mtd/devices/m25p80.c
++++ b/drivers/mtd/devices/m25p80.c
+@@ -172,7 +172,8 @@ static ssize_t m25p80_read(struct spi_nor *nor, loff_t from, size_t len,
+ 
+ 	t[1].rx_buf = buf;
+ 	t[1].rx_nbits = m25p80_rx_nbits(nor);
+-	t[1].len = min(len, spi_max_transfer_size(spi));
++	t[1].len = min3(len, spi_max_transfer_size(spi),
++			spi_max_message_size(spi) - t[0].len);
+ 	spi_message_add_tail(&t[1], &m);
+ 
+ 	ret = spi_sync(spi, &m);
 diff --git a/drivers/mtd/maps/physmap_of.c b/drivers/mtd/maps/physmap_of.c
 index 3fad359..f720a96 100644
 --- a/drivers/mtd/maps/physmap_of.c
@@ -364,19 +378,6 @@ index b254090..961f1aa 100644
  	select FSL_IFC
  	select MEMORY
  	help
-diff --git a/drivers/mtd/nand/fsl_ifc_nand.c b/drivers/mtd/nand/fsl_ifc_nand.c
-index 2f6b552..79c815d 100644
---- a/drivers/mtd/nand/fsl_ifc_nand.c
-+++ b/drivers/mtd/nand/fsl_ifc_nand.c
-@@ -898,7 +898,7 @@ static int fsl_ifc_chip_init(struct fsl_ifc_mtd *priv)
- 		chip->ecc.algo = NAND_ECC_HAMMING;
- 	}
- 
--	if (ctrl->version == FSL_IFC_VERSION_1_1_0)
-+	if (ctrl->version >= FSL_IFC_VERSION_1_1_0)
- 		fsl_ifc_sram_init(priv);
- 
- 	/*
 diff --git a/include/linux/fsl_ifc.h b/include/linux/fsl_ifc.h
 index 3fdfede..d6aea24 100644
 --- a/include/linux/fsl_ifc.h

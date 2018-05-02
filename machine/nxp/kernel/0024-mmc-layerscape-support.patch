@@ -1,9 +1,9 @@
-From 736d6b58cc5ac0d46ec63639801fcf310bf50e50 Mon Sep 17 00:00:00 2001
+From e770ae8715a3fd591f8c382f2cc79171f3f1e2d3 Mon Sep 17 00:00:00 2001
 From: Yangbo Lu <yangbo.lu@nxp.com>
-Date: Mon, 23 Apr 2018 11:42:14 +0800
-Subject: [PATCH 24/30] mmc: layerscape support
+Date: Wed, 2 May 2018 11:19:12 +0800
+Subject: [PATCH 24/33] mmc: layerscape support
 
-This is a integrated patch for layerscape mmc support.
+This is an integrated patch for layerscape mmc support.
 
 Adrian Hunter <adrian.hunter@intel.com>
 Jaehoon Chung <jh80.chung@samsung.com>
@@ -11,11 +11,11 @@ Masahiro Yamada <yamada.masahiro@socionext.com>
 Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
 ---
  drivers/mmc/host/Kconfig          |   1 +
- drivers/mmc/host/sdhci-esdhc.h    |  52 ++++++---
- drivers/mmc/host/sdhci-of-esdhc.c | 237 ++++++++++++++++++++++++++++++++++++--
- drivers/mmc/host/sdhci.c          |  45 ++++----
+ drivers/mmc/host/sdhci-esdhc.h    |  52 +++++---
+ drivers/mmc/host/sdhci-of-esdhc.c | 251 ++++++++++++++++++++++++++++++++++++--
+ drivers/mmc/host/sdhci.c          |  45 ++++---
  drivers/mmc/host/sdhci.h          |   3 +
- 5 files changed, 292 insertions(+), 46 deletions(-)
+ 5 files changed, 306 insertions(+), 46 deletions(-)
 
 diff --git a/drivers/mmc/host/Kconfig b/drivers/mmc/host/Kconfig
 index 5274f50..a1135a9 100644
@@ -99,7 +99,7 @@ index de132e2..98898a3 100644
  
  #endif /* _DRIVERS_MMC_SDHCI_ESDHC_H */
 diff --git a/drivers/mmc/host/sdhci-of-esdhc.c b/drivers/mmc/host/sdhci-of-esdhc.c
-index a51d636..4b0f375 100644
+index a51d636..ae3fee6 100644
 --- a/drivers/mmc/host/sdhci-of-esdhc.c
 +++ b/drivers/mmc/host/sdhci-of-esdhc.c
 @@ -16,8 +16,12 @@
@@ -239,9 +239,16 @@ index a51d636..4b0f375 100644
  
  	/* Workaround to start pre_div at 2 for VNN < VENDOR_V_23 */
  	if (esdhc->vendor_ver < VENDOR_V_23)
-@@ -455,8 +503,8 @@ static void esdhc_of_set_clock(struct sdhci_host *host, unsigned int clock)
+@@ -454,9 +502,15 @@ static void esdhc_of_set_clock(struct sdhci_host *host, unsigned int clock)
+ 			clock -= 5000000;
  	}
  
++	/* Workaround to reduce the clock frequency for ls1021a esdhc */
++	if (of_find_compatible_node(NULL, NULL, "fsl,ls1021a-esdhc")) {
++		if (clock == 50000000)
++			clock = 46500000;
++	}
++
  	temp = sdhci_readl(host, ESDHC_SYSTEM_CONTROL);
 -	temp &= ~(ESDHC_CLOCK_IPGEN | ESDHC_CLOCK_HCKEN | ESDHC_CLOCK_PEREN
 -		| ESDHC_CLOCK_MASK);
@@ -250,7 +257,7 @@ index a51d636..4b0f375 100644
  	sdhci_writel(host, temp, ESDHC_SYSTEM_CONTROL);
  
  	while (host->max_clk / pre_div / 16 > clock && pre_div < 256)
-@@ -476,7 +524,20 @@ static void esdhc_of_set_clock(struct sdhci_host *host, unsigned int clock)
+@@ -476,7 +530,20 @@ static void esdhc_of_set_clock(struct sdhci_host *host, unsigned int clock)
  		| (div << ESDHC_DIVIDER_SHIFT)
  		| (pre_div << ESDHC_PREDIV_SHIFT));
  	sdhci_writel(host, temp, ESDHC_SYSTEM_CONTROL);
@@ -272,7 +279,7 @@ index a51d636..4b0f375 100644
  }
  
  static void esdhc_pltfm_set_bus_width(struct sdhci_host *host, int width)
-@@ -501,6 +562,33 @@ static void esdhc_pltfm_set_bus_width(struct sdhci_host *host, int width)
+@@ -501,12 +568,136 @@ static void esdhc_pltfm_set_bus_width(struct sdhci_host *host, int width)
  	sdhci_writel(host, ctrl, ESDHC_PROCTL);
  }
  
@@ -305,11 +312,20 @@ index a51d636..4b0f375 100644
 +
  static void esdhc_reset(struct sdhci_host *host, u8 mask)
  {
++	u32 val;
++
  	sdhci_reset(host, mask);
-@@ -509,6 +597,95 @@ static void esdhc_reset(struct sdhci_host *host, u8 mask)
- 	sdhci_writel(host, host->ier, SDHCI_SIGNAL_ENABLE);
- }
  
+ 	sdhci_writel(host, host->ier, SDHCI_INT_ENABLE);
+ 	sdhci_writel(host, host->ier, SDHCI_SIGNAL_ENABLE);
++
++	if (mask & SDHCI_RESET_ALL) {
++		val = sdhci_readl(host, ESDHC_TBCTL);
++		val &= ~ESDHC_TB_EN;
++		sdhci_writel(host, val, ESDHC_TBCTL);
++	}
++}
++
 +/* The SCFG, Supplemental Configuration Unit, provides SoC specific
 + * configuration and status registers for the device. There is a
 + * SDHC IO VSEL control register on SCFG for some platforms. It's
@@ -397,12 +413,10 @@ index a51d636..4b0f375 100644
 +	esdhc_clock_enable(host, true);
 +
 +	return sdhci_execute_tuning(mmc, opcode);
-+}
-+
+ }
+ 
  #ifdef CONFIG_PM_SLEEP
- static u32 esdhc_proctl;
- static int esdhc_of_suspend(struct device *dev)
-@@ -589,10 +766,19 @@ static const struct sdhci_pltfm_data sdhci_esdhc_le_pdata = {
+@@ -589,10 +780,19 @@ static const struct sdhci_pltfm_data sdhci_esdhc_le_pdata = {
  	.ops = &sdhci_esdhc_le_ops,
  };
  
@@ -422,7 +436,7 @@ index a51d636..4b0f375 100644
  	u16 host_ver;
  
  	pltfm_host = sdhci_priv(host);
-@@ -602,6 +788,36 @@ static void esdhc_init(struct platform_device *pdev, struct sdhci_host *host)
+@@ -602,6 +802,36 @@ static void esdhc_init(struct platform_device *pdev, struct sdhci_host *host)
  	esdhc->vendor_ver = (host_ver & SDHCI_VENDOR_VER_MASK) >>
  			     SDHCI_VENDOR_VER_SHIFT;
  	esdhc->spec_ver = host_ver & SDHCI_SPEC_VER_MASK;
@@ -459,7 +473,7 @@ index a51d636..4b0f375 100644
  }
  
  static int sdhci_esdhc_probe(struct platform_device *pdev)
-@@ -624,6 +840,11 @@ static int sdhci_esdhc_probe(struct platform_device *pdev)
+@@ -624,6 +854,11 @@ static int sdhci_esdhc_probe(struct platform_device *pdev)
  	if (IS_ERR(host))
  		return PTR_ERR(host);
  
