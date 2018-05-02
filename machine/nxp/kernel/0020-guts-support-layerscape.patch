@@ -1,56 +1,23 @@
-From e865c0910f109d7ec7fd31c2c9d64cb0ff73a40a Mon Sep 17 00:00:00 2001
+From ab3356c6e4bb8cbad875fe64cfa7f3881222005f Mon Sep 17 00:00:00 2001
 From: Yangbo Lu <yangbo.lu@nxp.com>
-Date: Mon, 25 Sep 2017 12:19:34 +0800
-Subject: [PATCH 20/30] guts: support layerscape
+Date: Wed, 17 Jan 2018 15:34:22 +0800
+Subject: [PATCH 20/33] guts: support layerscape
 
-This is a integrated patch for layerscape guts support.
+This is an integrated patch for layerscape guts support.
 
 Signed-off-by: Roy Pledge <roy.pledge@nxp.com>
 Signed-off-by: Geert Uytterhoeven <geert+renesas@glider.be>
 Signed-off-by: Amrita Kumari <amrita.kumari@nxp.com>
 Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
 ---
- drivers/base/soc.c       |  12 ++-
  drivers/soc/fsl/guts.c   | 238 +++++++++++++++++++++++++++++++++++++++++++++++
  include/linux/fsl/guts.h | 125 +++++++++++++++----------
- 3 files changed, 323 insertions(+), 52 deletions(-)
+ 2 files changed, 315 insertions(+), 48 deletions(-)
  create mode 100644 drivers/soc/fsl/guts.c
 
-diff --git a/drivers/base/soc.c b/drivers/base/soc.c
-index 0c5cf872948b..0e701e22f366 100644
---- a/drivers/base/soc.c
-+++ b/drivers/base/soc.c
-@@ -167,19 +167,23 @@ static int soc_device_match_one(struct device *dev, void *arg)
- 	const struct soc_device_attribute *match = arg;
- 
- 	if (match->machine &&
--	    !glob_match(match->machine, soc_dev->attr->machine))
-+	    (!soc_dev->attr->machine ||
-+	     !glob_match(match->machine, soc_dev->attr->machine)))
- 		return 0;
- 
- 	if (match->family &&
--	    !glob_match(match->family, soc_dev->attr->family))
-+	    (!soc_dev->attr->family ||
-+	     !glob_match(match->family, soc_dev->attr->family)))
- 		return 0;
- 
- 	if (match->revision &&
--	    !glob_match(match->revision, soc_dev->attr->revision))
-+	    (!soc_dev->attr->revision ||
-+	     !glob_match(match->revision, soc_dev->attr->revision)))
- 		return 0;
- 
- 	if (match->soc_id &&
--	    !glob_match(match->soc_id, soc_dev->attr->soc_id))
-+	    (!soc_dev->attr->soc_id ||
-+	     !glob_match(match->soc_id, soc_dev->attr->soc_id)))
- 		return 0;
- 
- 	return 1;
 diff --git a/drivers/soc/fsl/guts.c b/drivers/soc/fsl/guts.c
 new file mode 100644
-index 000000000000..7d28784aa308
+index 0000000..7d28784
 --- /dev/null
 +++ b/drivers/soc/fsl/guts.c
 @@ -0,0 +1,238 @@
@@ -293,7 +260,7 @@ index 000000000000..7d28784aa308
 +}
 +module_exit(fsl_guts_exit);
 diff --git a/include/linux/fsl/guts.h b/include/linux/fsl/guts.h
-index 649e9171a9b3..3efa3b861d44 100644
+index 649e917..3efa3b8 100644
 --- a/include/linux/fsl/guts.h
 +++ b/include/linux/fsl/guts.h
 @@ -29,83 +29,112 @@
@@ -458,5 +425,5 @@ index 649e9171a9b3..3efa3b861d44 100644
  /* Alternate function signal multiplex control */
  #define MPC85xx_PMUXCR_QE(x) (0x8000 >> (x))
 -- 
-2.14.1
+2.7.4
 
