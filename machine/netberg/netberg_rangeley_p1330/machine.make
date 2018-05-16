@@ -16,7 +16,7 @@ endif
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
 # Netberg IANA number
-VENDOR_ID = 47294
+VENDOR_ID = 50424
 
 I2CTOOLS_ENABLE = yes
 I2CTOOLS_SYSEEPROM = no
