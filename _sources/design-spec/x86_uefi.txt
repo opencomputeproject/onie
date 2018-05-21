@@ -357,10 +357,134 @@ The initial ONIE GRUB menu looks like this::
   |                                             |
   +---------------------------------------------+
 
+.. _x86_uefi_secure_boot:
+
+UEFI x86 Secure Boot
+====================
+
+The ONIE build system supports the `Linux shim
+<https://github.com/rhboot/shim>`_ method of x86 UEFI Secure Boot.  It
+is recommended to familiarized yourself with this `UEFI Secure Boot
+Guide
+<https://docs-old.fedoraproject.org/en-US/Fedora/18/html-single/UEFI_Secure_Boot_Guide/index.html#chap-UEFI_Secure_Boot_Guide-What_is_Secure_Boot>`_
+from the Fedora Project to understand the important concepts of:
+
+- ``shimx64.efi`` -- contains HW vendor public certificate. This EFI
+  binary is signed by Microsoft.
+
+- ``grubx64.efi`` -- EFI binary signed by HW vendor *private* key
+
+- kernel -- EFI binary signed by HW vendor *private* key
+
+This sections describes how to integrate the Microsoft signed
+``shimx64.efi`` and the HW vendor private key and public certificates into
+the ONIE build process to generate UEFI Secure Boot enabled ONIE
+images.
+
+Prerequisites
+^^^^^^^^^^^^^
+
+The following are required to boot ONIE with UEFI Secure Boot enabled:
+
+#. 2048-bit RSA public/private key pair in PEM format
+
+#. x509 public certificate in PEM format, associated with the 2048-bit
+   RSA public/private key pair
+
+#. ``shimx64.efi`` signed by Microsoft
+
+For examples of how to generate the keys and certificate, see the
+``x509`` sub-directory of the kvm_x86 machine definition.
+
+Building Secure Boot ONIE Install Images
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Building a Secure Boot ONIE image is a four step process:
+
+#. compile ``shimx64.efi`` with the HW vendor public certificate embedded inside
+
+#. submit ``shimx64.efi`` to Microsoft for code signing
+
+#. submit shim source code for open source community peer review
+
+#. build an ONIE installer that incorporates the signed ``shimx64.efi``
+
+Compiling shimx64.efi with HW vendor certificate
+''''''''''''''''''''''''''''''''''''''''''''''''
+
+Compiling ``shimx64.efi`` requires the HW vendor certificate in .DER
+format.  To compile ``shimx64.efi`` use this command line::
+
+  linux:~/onie/build-config$ make -j8 SECURE_BOOT_ENABLE=yes \
+  	ONIE_VENDOR_CERT_DER=/home/build/my-cert.der \
+	MACHINEROOT=../machine/vendor MACHINE=vendor_machine \
+	shim
+
+.. note::
+
+  ``SECURE_BOOT_ENABLE=yes`` can be specified in ``machine.make`` for
+  convenience.
+
+``ONIE_VENDOR_CERT_DER`` is a Makefile variable that contains the path
+to the HW vendor's x509 certificate in DER format.
+
+The output is available in ``../build/vendor_machine-r0/shim/install``::
+
+  monster-08:~/onie/build-config$ ls -l ../build/vendor_machine-r0/shim/install
+  -rw-r--r-- 1 build Development   80312 May 21 11:49 fbx64.efi
+  -rw-r--r-- 1 build Development 1152776 May 21 11:49 mmx64.efi
+  -rw-r--r-- 1 build Development 1198040 May 21 11:49 shimx64.efi
+
+Submit shimx64.efi to Microsoft for Code Signing
+''''''''''''''''''''''''''''''''''''''''''''''''
+
+Follow the the `Microsoft UEFI Firmware Signing
+<https://docs.microsoft.com/en-us/windows-hardware/drivers/dashboard/uefi-firmware-signing>`_
+instructions to submit the ``shimx64.efi`` binary for code signing.
+
+Microsoft requires that the shim source code also undergo `community
+peer review <https://github.com/rhboot/shim-review>`_.
+
+Build ONIE Installer Using Signed shimx64.efi
+'''''''''''''''''''''''''''''''''''''''''''''
+
+With the signed shim back from Microsoft, build the final ONIE
+installer image.  This will contain:
+
+- ``shimx64.efi`` - signed by Microsoft
+
+- Linux kernel - signed by HW vendor secret key
+
+- ``grubx64.efi`` - signed by HW vendor secret key
+
+First place the signed ``shimx64.efi``, along with the other shim
+project binaries ``mmx64.efi`` and ``fbx64.efi``, into a directory,
+outside of the ONIE build tree.  For example use ``/tmp/my-shim``.
+
+To build the image use the following command line, adjusted for your
+specific file paths::
+
+  linux:~/onie/build-config$ make -j8 SECURE_BOOT_ENABLE=yes \
+	ONIE_VENDOR_SECRET_KEY_PEM=/home/build/my-secret-key.pem \
+  	ONIE_VENDOR_CERT_PEM=/home/build/my-cert.pem \
+	MACHINEROOT=../machine/vendor MACHINE=vendor_machine \
+	SHIM_PREBUILT_DIR=/tmp/my-shim \
+	all
+
+``ONIE_VENDOR_SECRET_KEY_PEM`` is a Makefile variable that contains
+the path to a private RSA key in PEM format.
+
+``ONIE_VENDOR_CERT_PEM`` is a Makefile variable that contains the path
+to an x509 certificate in PEM format.  This is the same data as
+``ONIE_VENDOR_CERT_DER``, but in PEM format.
+
+The resulting ONIE installer can now be installed on UEFI Secure Boot
+enabled system.
+
 NOS Installer
 =============
 
-Continuing the example above, this section examines the
+Continuing the previous above, this section examines the
 responsibilities and operations of a NOS installer.  The NOS installer
 operations are very similar to the ONIE installer case, except that
 the ESP already exists at this time.

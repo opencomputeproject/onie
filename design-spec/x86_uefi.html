@@ -134,6 +134,16 @@
 <li><a class="reference internal" href="#initial-onie-install">Initial ONIE Install</a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#uefi-x86-secure-boot">UEFI x86 Secure Boot</a><ul>
+<li><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li><a class="reference internal" href="#building-secure-boot-onie-install-images">Building Secure Boot ONIE Install Images</a><ul>
+<li><a class="reference internal" href="#compiling-shimx64-efi-with-hw-vendor-certificate">Compiling shimx64.efi with HW vendor certificate</a></li>
+<li><a class="reference internal" href="#submit-shimx64-efi-to-microsoft-for-code-signing">Submit shimx64.efi to Microsoft for Code Signing</a></li>
+<li><a class="reference internal" href="#build-onie-installer-using-signed-shimx64-efi">Build ONIE Installer Using Signed shimx64.efi</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li><a class="reference internal" href="#nos-installer">NOS Installer</a></li>
 <li><a class="reference internal" href="#chainloading-onie">Chainloading ONIE</a></li>
 <li><a class="reference internal" href="#uefi-onie-nos-interface">UEFI ONIE NOS Interface</a><ul>
@@ -535,9 +545,110 @@ directory structure of the ESP.</p>
 </div>
 </div>
 </div>
+<div class="section" id="uefi-x86-secure-boot">
+<span id="x86-uefi-secure-boot"></span><h2>UEFI x86 Secure Boot<a class="headerlink" href="#uefi-x86-secure-boot" title="Permalink to this headline">¶</a></h2>
+<p>The ONIE build system supports the <a class="reference external" href="https://github.com/rhboot/shim">Linux shim</a> method of x86 UEFI Secure Boot.  It
+is recommended to familiarized yourself with this <a class="reference external" href="https://docs-old.fedoraproject.org/en-US/Fedora/18/html-single/UEFI_Secure_Boot_Guide/index.html#chap-UEFI_Secure_Boot_Guide-What_is_Secure_Boot">UEFI Secure Boot
+Guide</a>
+from the Fedora Project to understand the important concepts of:</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">shimx64.efi</span></code> -- contains HW vendor public certificate. This EFI
+binary is signed by Microsoft.</li>
+<li><code class="docutils literal"><span class="pre">grubx64.efi</span></code> -- EFI binary signed by HW vendor <em>private</em> key</li>
+<li>kernel -- EFI binary signed by HW vendor <em>private</em> key</li>
+</ul>
+<p>This sections describes how to integrate the Microsoft signed
+<code class="docutils literal"><span class="pre">shimx64.efi</span></code> and the HW vendor private key and public certificates into
+the ONIE build process to generate UEFI Secure Boot enabled ONIE
+images.</p>
+<div class="section" id="prerequisites">
+<h3>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this headline">¶</a></h3>
+<p>The following are required to boot ONIE with UEFI Secure Boot enabled:</p>
+<ol class="arabic simple">
+<li>2048-bit RSA public/private key pair in PEM format</li>
+<li>x509 public certificate in PEM format, associated with the 2048-bit
+RSA public/private key pair</li>
+<li><code class="docutils literal"><span class="pre">shimx64.efi</span></code> signed by Microsoft</li>
+</ol>
+<p>For examples of how to generate the keys and certificate, see the
+<code class="docutils literal"><span class="pre">x509</span></code> sub-directory of the kvm_x86 machine definition.</p>
+</div>
+<div class="section" id="building-secure-boot-onie-install-images">
+<h3>Building Secure Boot ONIE Install Images<a class="headerlink" href="#building-secure-boot-onie-install-images" title="Permalink to this headline">¶</a></h3>
+<p>Building a Secure Boot ONIE image is a four step process:</p>
+<ol class="arabic simple">
+<li>compile <code class="docutils literal"><span class="pre">shimx64.efi</span></code> with the HW vendor public certificate embedded inside</li>
+<li>submit <code class="docutils literal"><span class="pre">shimx64.efi</span></code> to Microsoft for code signing</li>
+<li>submit shim source code for open source community peer review</li>
+<li>build an ONIE installer that incorporates the signed <code class="docutils literal"><span class="pre">shimx64.efi</span></code></li>
+</ol>
+<div class="section" id="compiling-shimx64-efi-with-hw-vendor-certificate">
+<h4>Compiling shimx64.efi with HW vendor certificate<a class="headerlink" href="#compiling-shimx64-efi-with-hw-vendor-certificate" title="Permalink to this headline">¶</a></h4>
+<p>Compiling <code class="docutils literal"><span class="pre">shimx64.efi</span></code> requires the HW vendor certificate in .DER
+format.  To compile <code class="docutils literal"><span class="pre">shimx64.efi</span></code> use this command line:</p>
+<div class="highlight-python"><div class="highlight"><pre>linux:~/onie/build-config$ make -j8 SECURE_BOOT_ENABLE=yes \
+      ONIE_VENDOR_CERT_DER=/home/build/my-cert.der \
+      MACHINEROOT=../machine/vendor MACHINE=vendor_machine \
+      shim
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last"><code class="docutils literal"><span class="pre">SECURE_BOOT_ENABLE=yes</span></code> can be specified in <code class="docutils literal"><span class="pre">machine.make</span></code> for
+convenience.</p>
+</div>
+<p><code class="docutils literal"><span class="pre">ONIE_VENDOR_CERT_DER</span></code> is a Makefile variable that contains the path
+to the HW vendor's x509 certificate in DER format.</p>
+<p>The output is available in <code class="docutils literal"><span class="pre">../build/vendor_machine-r0/shim/install</span></code>:</p>
+<div class="highlight-python"><div class="highlight"><pre>monster-08:~/onie/build-config$ ls -l ../build/vendor_machine-r0/shim/install
+-rw-r--r-- 1 build Development   80312 May 21 11:49 fbx64.efi
+-rw-r--r-- 1 build Development 1152776 May 21 11:49 mmx64.efi
+-rw-r--r-- 1 build Development 1198040 May 21 11:49 shimx64.efi
+</pre></div>
+</div>
+</div>
+<div class="section" id="submit-shimx64-efi-to-microsoft-for-code-signing">
+<h4>Submit shimx64.efi to Microsoft for Code Signing<a class="headerlink" href="#submit-shimx64-efi-to-microsoft-for-code-signing" title="Permalink to this headline">¶</a></h4>
+<p>Follow the the <a class="reference external" href="https://docs.microsoft.com/en-us/windows-hardware/drivers/dashboard/uefi-firmware-signing">Microsoft UEFI Firmware Signing</a>
+instructions to submit the <code class="docutils literal"><span class="pre">shimx64.efi</span></code> binary for code signing.</p>
+<p>Microsoft requires that the shim source code also undergo <a class="reference external" href="https://github.com/rhboot/shim-review">community
+peer review</a>.</p>
+</div>
+<div class="section" id="build-onie-installer-using-signed-shimx64-efi">
+<h4>Build ONIE Installer Using Signed shimx64.efi<a class="headerlink" href="#build-onie-installer-using-signed-shimx64-efi" title="Permalink to this headline">¶</a></h4>
+<p>With the signed shim back from Microsoft, build the final ONIE
+installer image.  This will contain:</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">shimx64.efi</span></code> - signed by Microsoft</li>
+<li>Linux kernel - signed by HW vendor secret key</li>
+<li><code class="docutils literal"><span class="pre">grubx64.efi</span></code> - signed by HW vendor secret key</li>
+</ul>
+<p>First place the signed <code class="docutils literal"><span class="pre">shimx64.efi</span></code>, along with the other shim
+project binaries <code class="docutils literal"><span class="pre">mmx64.efi</span></code> and <code class="docutils literal"><span class="pre">fbx64.efi</span></code>, into a directory,
+outside of the ONIE build tree.  For example use <code class="docutils literal"><span class="pre">/tmp/my-shim</span></code>.</p>
+<p>To build the image use the following command line, adjusted for your
+specific file paths:</p>
+<div class="highlight-python"><div class="highlight"><pre>linux:~/onie/build-config$ make -j8 SECURE_BOOT_ENABLE=yes \
+      ONIE_VENDOR_SECRET_KEY_PEM=/home/build/my-secret-key.pem \
+      ONIE_VENDOR_CERT_PEM=/home/build/my-cert.pem \
+      MACHINEROOT=../machine/vendor MACHINE=vendor_machine \
+      SHIM_PREBUILT_DIR=/tmp/my-shim \
+      all
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">ONIE_VENDOR_SECRET_KEY_PEM</span></code> is a Makefile variable that contains
+the path to a private RSA key in PEM format.</p>
+<p><code class="docutils literal"><span class="pre">ONIE_VENDOR_CERT_PEM</span></code> is a Makefile variable that contains the path
+to an x509 certificate in PEM format.  This is the same data as
+<code class="docutils literal"><span class="pre">ONIE_VENDOR_CERT_DER</span></code>, but in PEM format.</p>
+<p>The resulting ONIE installer can now be installed on UEFI Secure Boot
+enabled system.</p>
+</div>
+</div>
+</div>
 <div class="section" id="nos-installer">
 <h2>NOS Installer<a class="headerlink" href="#nos-installer" title="Permalink to this headline">¶</a></h2>
-<p>Continuing the example above, this section examines the
+<p>Continuing the previous above, this section examines the
 responsibilities and operations of a NOS installer.  The NOS installer
 operations are very similar to the ONIE installer case, except that
 the ESP already exists at this time.</p>
