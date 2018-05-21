@@ -289,7 +289,7 @@ friendly" on subsequent boots.
 
 When ONIE NOS mode is set, entering install mode is no longer
 sticky. I.e. entering install mode is no longer a one-way trap door.
-This helps prevent user from accidentally removing their installed
+This helps prevent users from accidentally removing their installed
 NOS.
 
 Furthermore, for GRUB architectures, the default GRUB menu item now
