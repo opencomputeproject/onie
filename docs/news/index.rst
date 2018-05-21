@@ -8,6 +8,9 @@ Project News
 ************
 
 May 16, 2018
+  Version ``2018.05`` now supports :ref:`x86_uefi_secure_boot`
+
+May 16, 2018
   Released version `2018.05
   <http://lists.opencompute.org/pipermail/opencompute-onie/2018-May/001688.html>`_
 
