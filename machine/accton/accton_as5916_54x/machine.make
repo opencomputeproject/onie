@@ -36,8 +36,8 @@ MACHINE_BUSYBOX_DIR = $(MACHINEDIR)/busybox/r$(MACHINE_REV)
 CONSOLE_DEV = 0
 
 # Specify Linux kernel version -- comment out to use the default
-LINUX_VERSION = 4.1
-LINUX_MINOR_VERSION = 38
+LINUX_VERSION = 4.9
+LINUX_MINOR_VERSION = 95
 
 GCC_VERSION = 4.9.2
 
