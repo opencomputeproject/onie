@@ -61,58 +61,7 @@ Within the running ONIE context, an installer often needs to know
 various information about the running system.  ONIE provides the
 ``onie-sysinfo`` command for this purpose.
 
-For details, here is the complete help for ``onie-sysinfo`` follows::
-
-  ONIE:/ # onie-sysinfo -h
-  onie-sysinfo [-sevimrpcfdat]
-  Dump ONIE system information.
-   
-  COMMAND LINE OPTIONS
-   
-          The default is to dump the ONIE platform (-p).
-   
-          -h
-                  Help.  Print this message.
-   
-          -s
-                  Serial Number
-   
-          -e
-                  Management Ethernet MAC address
-   
-          -v
-                  ONIE version string
-   
-          -i
-                  ONIE vendor ID.  Print the ONIE vendor's IANA enterprise number.
-   
-          -m
-                  ONIE machine string
-   
-          -r
-                  ONIE machine revision string
-   
-          -p
-                  ONIE platform string.  This is the default.
-   
-          -c
-                  ONIE CPU architecture
-   
-          -f
-                  ONIE configuration version
-   
-          -d
-                  ONIE build date
-   
-          -t
-                  ONIE partition type
-   
-          -S
-                  ONIE silicon switch vendor
-  
-          -a
-                  Dump all information.
-
+For details, see :ref:`cli_onie_sysinfo`.
 
 .. _nos_intf_reinstaller:
 
