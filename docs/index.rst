@@ -23,6 +23,10 @@ Open Network Install Environment
 News
 ====
 
+May 16, 2018
+  Released version `2018.05
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-May/001688.html>`_
+
 March 27-28, 2018
   OCP U.S. Summit 2018 Presentation `Video
   <https://www.youtube.com/watch?v=FCJJxzRtVro>`_ and `Slides
@@ -35,10 +39,6 @@ February 13, 2018
 January 15, 2018
   Comments on `Meltdown and Spectre
   <http://lists.opencompute.org/pipermail/opencompute-onie/2018-January/001610.html>`_
-
-November 15, 2017
-  Release version `2017.11
-  <http://lists.opencompute.org/pipermail/opencompute-onie/2017-November/001572.html>`_
 
 Read more :ref:`news`
 

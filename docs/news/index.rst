@@ -7,6 +7,10 @@
 Project News
 ************
 
+May 16, 2018
+  Released version `2018.05
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-May/001688.html>`_
+
 March 27-28, 2018
   OCP U.S. Summit 2018 Presentation `Video
   <https://www.youtube.com/watch?v=FCJJxzRtVro>`_ and `Slides
