@@ -1,0 +1,111 @@
+access eeprom via ipmi
+
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index 72ddcd1..be7bcb2 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -52,7 +52,7 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
+ lib-$(CONFIG_VOLNAME)     += volname.o
+ lib-$(CONFIG_WATCHDOG)    += watchdog.o
+ lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
+-lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
++lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_alt.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
+ lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
+diff --git a/miscutils/sys_eeprom_alt.c b/miscutils/sys_eeprom_alt.c
+new file mode 100644
+index 0000000..1b8534a
+--- /dev/null
++++ b/miscutils/sys_eeprom_alt.c
+@@ -0,0 +1,90 @@
++#include "libbb.h"
++#include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
++
++#define DATA_SIZE (128)
++#define EEPROM_READ "ipmitool raw 0x34 0x18"
++#define EEPROM_WRITE "ipmitool raw 0x34 0x19"
++char cmd[sizeof(EEPROM_READ) + 10 + 5*DATA_SIZE + 1];
++size_t cmd_length = sizeof(cmd);
++
++int read_sys_eeprom(void *eeprom_data, int offset, int len)
++{
++    int i;
++    int read_len;
++    int ipmi_offset;
++    int ipmi_len;
++    FILE *fd;
++    char *c = eeprom_data;
++    unsigned int data;
++
++    read_len = 0;
++    while (read_len < len) {
++        ipmi_offset = offset + SYS_EEPROM_OFFSET + read_len;
++        ipmi_len = len - read_len;
++        if (ipmi_len > DATA_SIZE) {
++            ipmi_len = DATA_SIZE;
++        }
++        memset(cmd, 0, cmd_length);
++        sprintf(cmd, "%s 0x%x 0x%x", EEPROM_READ, ipmi_offset, ipmi_len);
++
++        fd = popen(cmd, "r");
++        if (fd == NULL) {
++            fprintf(stderr, "Cannot open file: %s\n", strerror(errno));
++            return -1;
++        }
++        i = 0;
++        while (i < ipmi_len) {
++            fscanf(fd, "%2x", &data);
++            if (feof(fd)) {
++                break;
++            }
++            *c = data;
++            i++; c++;
++        }
++        pclose(fd);
++        if (i != ipmi_len) {
++            fprintf(stderr, "ERROR: expected length: %d; read length: %d\n", ipmi_len, i);
++            fprintf(stderr, "%s\n", cmd);
++            return -1;
++        }
++        read_len += i;
++    }
++
++    return 0;
++}
++
++int write_sys_eeprom(void *eeprom_data, int len)
++{
++    int i;
++    int write_len;
++    int ipmi_offset;
++    int ipmi_len;
++    char *c = eeprom_data;
++    char *cmd_p;
++
++    write_len = 0;
++    while (write_len < len) {
++        ipmi_offset = SYS_EEPROM_OFFSET + write_len;
++        ipmi_len = len - write_len;
++        if (ipmi_len > DATA_SIZE) {
++            ipmi_len = DATA_SIZE;
++        }
++        memset(cmd, 0, cmd_length);
++        sprintf(cmd, "%s 0x%x 0x%x", EEPROM_WRITE, ipmi_offset, ipmi_len);
++        i = 0;
++        cmd_p = cmd + strlen(cmd);
++        while (i < ipmi_len) {
++            sprintf(cmd_p, " 0x%02x", *c);
++            i++; c++; cmd_p += 5;
++        }
++        write_len += i;
++        if (system(cmd) != 0) {
++            fprintf(stderr, "Write error: %s\n", strerror(errno));
++            fprintf(stderr, "%s\n", cmd);
++            return -1;
++        }
++    }
++
++    return 0;
++}
