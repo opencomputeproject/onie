@@ -1,0 +1,439 @@
+From 161db237f4af49bc0160d6c5f76ab906acab1a5a Mon Sep 17 00:00:00 2001
+From: Bhaskar Upadhaya <Bhaskar.Upadhaya@nxp.com>
+Date: Tue, 9 Jan 2018 11:40:10 +0530
+Subject: [PATCH 076/129] board: ls1012a: LS1012A-2G5RDB board support
+
+LS1012A-2G5RDB belongs to LS1012A family with features
+2 2.5G SGMII PFE MAC, SATA, USB 2.0/3.0, WiFi
+DDR, eMMC, QuadSPI, UART
+
+Signed-off-by: Bhaskar Upadhaya <Bhaskar.Upadhaya@nxp.com>
+---
+ arch/arm/Kconfig                        |   12 +++
+ arch/arm/cpu/armv8/Kconfig              |    2 +-
+ arch/arm/dts/Makefile                   |    1 +
+ arch/arm/dts/fsl-ls1012a-2g5rdb.dts     |   43 +++++++++++
+ board/freescale/ls1012ardb/Kconfig      |   18 +++++
+ board/freescale/ls1012ardb/MAINTAINERS  |    7 ++
+ board/freescale/ls1012ardb/README       |   43 +++++++++++
+ board/freescale/ls1012ardb/ls1012ardb.c |    7 ++-
+ configs/ls1012a2g5rdb_qspi_defconfig    |   40 ++++++++++
+ include/configs/ls1012a2g5rdb.h         |  122 +++++++++++++++++++++++++++++++
+ 10 files changed, 293 insertions(+), 2 deletions(-)
+ create mode 100644 arch/arm/dts/fsl-ls1012a-2g5rdb.dts
+ create mode 100644 configs/ls1012a2g5rdb_qspi_defconfig
+ create mode 100644 include/configs/ls1012a2g5rdb.h
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 91ad5e8..d77bc6e 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -918,6 +918,18 @@ config TARGET_LS1012ARDB
+ 	  development platform that supports the QorIQ LS1012A
+ 	  Layerscape Architecture processor.
+ 
++config TARGET_LS1012A2G5RDB
++	bool "Support ls1012a2g5rdb"
++	select ARCH_LS1012A
++	select ARM64
++	select BOARD_LATE_INIT
++	imply SCSI
++	help
++	  Support for Freescale LS1012A2G5RDB platform.
++	  The LS1012A 2G5 Reference design board (RDB) is a high-performance
++	  development platform that supports the QorIQ LS1012A
++	  Layerscape Architecture processor.
++
+ config TARGET_LS1012AFRDM
+ 	bool "Support ls1012afrdm"
+ 	select ARCH_LS1012A
+diff --git a/arch/arm/cpu/armv8/Kconfig b/arch/arm/cpu/armv8/Kconfig
+index 51f48e1..3a0e129 100644
+--- a/arch/arm/cpu/armv8/Kconfig
++++ b/arch/arm/cpu/armv8/Kconfig
+@@ -90,7 +90,7 @@ config PSCI_RESET
+ 		   !TARGET_LS2080ARDB && !TARGET_LS2080A_EMU && \
+ 		   !TARGET_LS1088ARDB && !TARGET_LS1088AQDS && \
+ 		   !TARGET_LS1012ARDB && !TARGET_LS1012AFRDM && \
+-		   !TARGET_LS1012AQDS && \
++		   !TARGET_LS1012A2G5RDB && !TARGET_LS1012AQDS && \
+ 		   !TARGET_LS1043ARDB && !TARGET_LS1043AQDS && \
+ 		   !TARGET_LS1046ARDB && !TARGET_LS1046AQDS && \
+ 		   !TARGET_LS2081ARDB && \
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 6db64f9..9e49b7d 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -200,6 +200,7 @@ dtb-$(CONFIG_FSL_LSCH2) += fsl-ls1043a-qds-duart.dtb \
+ 	fsl-ls1046a-rdb.dtb \
+ 	fsl-ls1012a-qds.dtb \
+ 	fsl-ls1012a-rdb.dtb \
++	fsl-ls1012a-2g5rdb.dtb \
+ 	fsl-ls1012a-frdm.dtb
+ 
+ dtb-$(CONFIG_ARCH_SNAPDRAGON) += dragonboard410c.dtb
+diff --git a/arch/arm/dts/fsl-ls1012a-2g5rdb.dts b/arch/arm/dts/fsl-ls1012a-2g5rdb.dts
+new file mode 100644
+index 0000000..dbe01dd
+--- /dev/null
++++ b/arch/arm/dts/fsl-ls1012a-2g5rdb.dts
+@@ -0,0 +1,43 @@
++/*
++ * NXP ls1012a 2G5RDB board device tree source
++ *
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++/dts-v1/;
++#include "fsl-ls1012a.dtsi"
++
++/ {
++	model = "LS1012A 2G5RDB Board";
++
++	aliases {
++		spi0 = &qspi;
++	};
++
++	chosen {
++		stdout-path = &duart0;
++	};
++};
++
++&qspi {
++	bus-num = <0>;
++	status = "okay";
++
++	qflash0: s25fl128s@0 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "spi-flash";
++		spi-max-frequency = <20000000>;
++		reg = <0>;
++	};
++};
++
++&i2c0 {
++	status = "okay";
++};
++
++&duart0 {
++	status = "okay";
++};
+diff --git a/board/freescale/ls1012ardb/Kconfig b/board/freescale/ls1012ardb/Kconfig
+index 98231f9..d13b08e 100644
+--- a/board/freescale/ls1012ardb/Kconfig
++++ b/board/freescale/ls1012ardb/Kconfig
+@@ -15,3 +15,21 @@ config SYS_CONFIG_NAME
+ source "board/freescale/common/Kconfig"
+ 
+ endif
++
++if TARGET_LS1012A2G5RDB
++
++config SYS_BOARD
++        default "ls1012ardb"
++
++config SYS_VENDOR
++        default "freescale"
++
++config SYS_SOC
++        default "fsl-layerscape"
++
++config SYS_CONFIG_NAME
++        default "ls1012a2g5rdb"
++
++source "board/freescale/common/Kconfig"
++
++endif
+diff --git a/board/freescale/ls1012ardb/MAINTAINERS b/board/freescale/ls1012ardb/MAINTAINERS
+index 2cb38e7..a0a0d8d 100644
+--- a/board/freescale/ls1012ardb/MAINTAINERS
++++ b/board/freescale/ls1012ardb/MAINTAINERS
+@@ -8,3 +8,10 @@ F:	configs/ls1012ardb_qspi_defconfig
+ M:	Sumit Garg <sumit.garg@nxp.com>
+ S:	Maintained
+ F:	configs/ls1012ardb_qspi_SECURE_BOOT_defconfig
++
++LS1012A2G5RDB BOARD
++M:      Bhaskar Upadhaya <bhaskar.upadhaya@nxp.com>
++S:      Maintained
++F:      board/freescale/ls1012ardb/
++F:      include/configs/ls1012a2g5rdb.h
++F:      configs/ls1012a2g5rdb_qspi_defconfig
+diff --git a/board/freescale/ls1012ardb/README b/board/freescale/ls1012ardb/README
+index 453b432..572fd8c 100644
+--- a/board/freescale/ls1012ardb/README
++++ b/board/freescale/ls1012ardb/README
+@@ -52,3 +52,46 @@ U-boot 		| 1MB	| 0x4010_0000
+ U-boot Env 	| 1MB	| 0x4020_0000
+ PPA FIT image	| 2MB	| 0x4050_0000
+ Linux ITB	| ~53MB | 0x40A0_0000
++
++LS1012A2G5RDB board Overview
++-----------------------
++ - SERDES Connections, 3 lanes supporting:
++      - SGMII, SGMII 2.5
++      - SATA 3.0
++ - DDR Controller
++     - 16-bit, 1 GB DDR3L SDRAM memory, running at data rates up to 1 GT/s
++ -QSPI: A dual 1:3 switch, NX3L4357GM,115 (U35) drives the QSPI chip-select
++ signals to
++    - QSPI NOR flash memory
++ - USB 3.0
++    - one high-speed USB 2.0/3.0 port.
++ - SDIO WiFi, SPI
++ - 2 I2C controllers
++ - One SATA onboard connectors
++ - UART
++   - The LS1012A processor consists of two UART controllers,
++   out of which only UART1 is used on 2G5RDB.
++ - ARM JTAG support
++
++Major Difference between LS1012ARDB and LS1012A-2G5RDB
++------------------------------------------------------
++1. LS1012A-2G5RDB has Type C USB connector unlike USB Type A/B of LS1012ARDB
++2. LS1012A-2G5RDB has 2 2.5G AQR PHY unlike 2 1G Realtek RTL8211FS PHYs
++   of LS1012ARDB
++3. LS1012A-2G5RDB is not having Arduino header
++4. LS1012A-2G5RDB doesn't have PCI slot
++
++Booting Options
++---------------
++QSPI Flash
++
++QSPI flash map
++--------------
++Images		| Size	|QSPI Flash Address
++------------------------------------------
++RCW + PBI	| 1MB	| 0x4000_0000
++U-boot 		| 1MB	| 0x4010_0000
++U-boot Env 	| 1MB	| 0x4030_0000
++PPA FIT image	| 2MB	| 0x4040_0000
++PFE firmware	| 20K	| 0x00a0_0000
++Linux ITB	| ~53MB | 0x4100_0000
+diff --git a/board/freescale/ls1012ardb/ls1012ardb.c b/board/freescale/ls1012ardb/ls1012ardb.c
+index 286f9d8..c9557bb 100644
+--- a/board/freescale/ls1012ardb/ls1012ardb.c
++++ b/board/freescale/ls1012ardb/ls1012ardb.c
+@@ -28,6 +28,7 @@ DECLARE_GLOBAL_DATA_PTR;
+ 
+ int checkboard(void)
+ {
++#ifdef CONFIG_TARGET_LS1012ARDB
+ 	u8 in1;
+ 
+ 	puts("Board: LS1012ARDB ");
+@@ -77,7 +78,10 @@ int checkboard(void)
+ 		puts(": bank2\n");
+ 	else
+ 		puts("unknown\n");
++#else
+ 
++	puts("Board: LS1012A2G5RDB ");
++#endif
+ 	return 0;
+ }
+ 
+@@ -150,6 +154,7 @@ int board_init(void)
+ 	return 0;
+ }
+ 
++#ifdef CONFIG_TARGET_LS1012ARDB
+ int esdhc_status_fixup(void *blob, const char *compat)
+ {
+ 	char esdhc1_path[] = "/soc/esdhc@1580000";
+@@ -193,7 +198,6 @@ int esdhc_status_fixup(void *blob, const char *compat)
+ 		if (mux_sdhc2 == 2 || mux_sdhc2 == 0)
+ 			sdhc2_en = true;
+ 	}
+-
+ 	if (sdhc2_en)
+ 		do_fixup_by_path(blob, esdhc1_path, "status", "okay",
+ 				 sizeof("okay"), 1);
+@@ -202,6 +206,7 @@ int esdhc_status_fixup(void *blob, const char *compat)
+ 				 sizeof("disabled"), 1);
+ 	return 0;
+ }
++#endif
+ 
+ int ft_board_setup(void *blob, bd_t *bd)
+ {
+diff --git a/configs/ls1012a2g5rdb_qspi_defconfig b/configs/ls1012a2g5rdb_qspi_defconfig
+new file mode 100644
+index 0000000..140a4e1
+--- /dev/null
++++ b/configs/ls1012a2g5rdb_qspi_defconfig
+@@ -0,0 +1,40 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1012A2G5RDB=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_QSPI_AHB_INIT=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1012a-2g5rdb"
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_OF_STDOUT_VIA_ALIAS=y
++CONFIG_SYS_EXTRA_OPTIONS="QSPI_BOOT"
++CONFIG_QSPI_BOOT=y
++CONFIG_BOOTDELAY=10
++CONFIG_USE_BOOTARGS=y
++CONFIG_BOOTARGS="console=ttyS0,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0500 quiet lpj=250000"
++# CONFIG_DISPLAY_BOARDINFO is not set
++CONFIG_CMD_GREPENV=y
++CONFIG_CMD_GPT=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_USB=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_CMD_CACHE=y
++CONFIG_OF_CONTROL=y
++CONFIG_ENV_IS_IN_SPI_FLASH=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++# CONFIG_BLK is not set
++CONFIG_DM_MMC=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_NETDEVICES=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_STORAGE=y
+diff --git a/include/configs/ls1012a2g5rdb.h b/include/configs/ls1012a2g5rdb.h
+new file mode 100644
+index 0000000..25df103
+--- /dev/null
++++ b/include/configs/ls1012a2g5rdb.h
+@@ -0,0 +1,122 @@
++/*
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __LS1012A2G5RDB_H__
++#define __LS1012A2G5RDB_H__
++
++#include "ls1012a_common.h"
++
++/* PFE Ethernet */
++#ifdef CONFIG_FSL_PFE
++#define EMAC1_PHY_ADDR          0x2
++#define EMAC2_PHY_ADDR          0x1
++#define CONFIG_PHYLIB
++#define CONFIG_PHYLIB_10G
++#define CONFIG_PHY_AQUANTIA
++#endif
++
++/* DDR */
++#define CONFIG_DIMM_SLOTS_PER_CTLR	1
++#define CONFIG_CHIP_SELECTS_PER_CTRL	1
++#define CONFIG_NR_DRAM_BANKS		2
++#define CONFIG_SYS_SDRAM_SIZE		0x40000000
++#define CONFIG_CMD_MEMINFO
++#define CONFIG_CMD_MEMTEST
++#define CONFIG_SYS_MEMTEST_START	0x80000000
++#define CONFIG_SYS_MEMTEST_END		0x9fffffff
++
++/*  MMC  */
++#ifdef CONFIG_MMC
++#define CONFIG_FSL_ESDHC
++#define CONFIG_SYS_FSL_MMC_HAS_CAPBLT_VS33
++#endif
++
++/* SATA */
++#define CONFIG_LIBATA
++#define CONFIG_SCSI_AHCI
++#define CONFIG_SCSI_AHCI_PLAT
++
++#define CONFIG_SYS_SATA				AHCI_BASE_ADDR
++
++#define CONFIG_SYS_SCSI_MAX_SCSI_ID		1
++#define CONFIG_SYS_SCSI_MAX_LUN			1
++#define CONFIG_SYS_SCSI_MAX_DEVICE		(CONFIG_SYS_SCSI_MAX_SCSI_ID * \
++						CONFIG_SYS_SCSI_MAX_LUN)
++#define CONFIG_NET_MULTI
++
++#define CONFIG_CMD_MEMINFO
++#define CONFIG_CMD_MEMTEST
++#define CONFIG_SYS_MEMTEST_START	0x80000000
++#define CONFIG_SYS_MEMTEST_END		0x9fffffff
++
++#undef CONFIG_EXTRA_ENV_SETTINGS
++#define CONFIG_EXTRA_ENV_SETTINGS		\
++	"verify=no\0"				\
++	"fdt_high=0xffffffffffffffff\0"		\
++	"initrd_high=0xffffffffffffffff\0"	\
++	"fdt_addr=0x00f00000\0"			\
++	"kernel_addr=0x01000000\0"		\
++	"kernelheader_addr=0x800000\0"		\
++	"scriptaddr=0x80000000\0"		\
++	"scripthdraddr=0x80080000\0"		\
++	"fdtheader_addr_r=0x80100000\0"		\
++	"kernelheader_addr_r=0x80200000\0"	\
++	"kernel_addr_r=0x81000000\0"		\
++	"fdt_addr_r=0x90000000\0"		\
++	"load_addr=0xa0000000\0"		\
++	"kernel_size=0x2800000\0"		\
++	"kernelheader_size=0x40000\0"		\
++	"console=ttyS0,115200\0"		\
++	BOOTENV					\
++	"boot_scripts=ls1012ardb_boot.scr\0"	\
++	"boot_script_hdr=hdr_ls1012ardb_bs.out\0"	\
++	"scan_dev_for_boot_part="		\
++	     "part list ${devtype} ${devnum} devplist; "	\
++	     "env exists devplist || setenv devplist 1; "	\
++	     "for distro_bootpart in ${devplist}; do "		\
++		  "if fstype ${devtype} "			\
++		      "${devnum}:${distro_bootpart} "		\
++		      "bootfstype; then "			\
++		      "run scan_dev_for_boot; "	\
++		  "fi; "			\
++	      "done\0"				\
++	"scan_dev_for_boot="				  \
++		"echo Scanning ${devtype} "		  \
++				"${devnum}:${distro_bootpart}...; "  \
++		"for prefix in ${boot_prefixes}; do "	  \
++			"run scan_dev_for_scripts; "	  \
++		"done;"					  \
++		"\0"					  \
++	"boot_a_script="				  \
++		"load ${devtype} ${devnum}:${distro_bootpart} "  \
++			"${scriptaddr} ${prefix}${script}; "    \
++		"env exists secureboot && load ${devtype} "     \
++			"${devnum}:${distro_bootpart} "		\
++			"${scripthdraddr} ${prefix}${boot_script_hdr} " \
++			"&& esbc_validate ${scripthdraddr};"    \
++		"source ${scriptaddr}\0"	  \
++	"installer=load mmc 0:2 $load_addr "	\
++		   "/flex_installer_arm64.itb; "	\
++		   "bootm $load_addr#$board\0"	\
++	"qspi_bootcmd=echo Trying load from qspi..;"	\
++		"sf probe && sf read $load_addr "	\
++		"$kernel_addr $kernel_size; env exists secureboot "	\
++		"&& sf read $kernelheader_addr_r $kernelheader_addr "	\
++		"$kernelheader_size && esbc_validate ${kernelheader_addr_r}; " \
++		"bootm $load_addr#$board\0"
++
++#undef CONFIG_BOOTCOMMAND
++#if defined(CONFIG_QSPI_BOOT) || defined(CONFIG_SD_BOOT_QSPI)
++#define CONFIG_BOOTCOMMAND "run distro_bootcmd; run qspi_bootcmd; " \
++			   "env exists secureboot && esbc_halt;"
++#endif
++
++#define DEFAULT_PFE_MDIO_NAME "PFE_MDIO"
++#define DEFAULT_PFE_MDIO1_NAME "PFE_MDIO1"
++
++#include <asm/fsl_secure_boot.h>
++
++#endif /* __LS1012A2G5RDB_H__ */
+-- 
+1.7.1
+

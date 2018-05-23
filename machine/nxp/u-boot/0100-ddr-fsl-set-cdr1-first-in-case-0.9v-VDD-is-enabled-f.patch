@@ -1,0 +1,40 @@
+From 55540f32f937416ae2e1879663d354a264939584 Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Thu, 30 Nov 2017 12:00:54 +0530
+Subject: [PATCH 100/129] ddr: fsl: set cdr1 first in case 0.9v VDD is enabled for some SoCs
+
+Sets DDR configuration parameter cdr1 before all other settings
+to support case 0.9v VDD is enabled for some SoCs
+
+Signed-off-by: Ashish Kumar <Ashish.Kumar@nxp.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Signed-off-by: Pankit Garg <pankit.garg@nxp.com>
+---
+ drivers/ddr/fsl/fsl_ddr_gen4.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/ddr/fsl/fsl_ddr_gen4.c b/drivers/ddr/fsl/fsl_ddr_gen4.c
+index 058c9b9..b3a27ec 100644
+--- a/drivers/ddr/fsl/fsl_ddr_gen4.c
++++ b/drivers/ddr/fsl/fsl_ddr_gen4.c
+@@ -95,6 +95,9 @@ void fsl_ddr_set_memctl_regs(const fsl_ddr_cfg_regs_t *regs,
+ 	if (step == 2)
+ 		goto step2;
+ 
++	/* Set cdr1 first in case 0.9v VDD is enabled for some SoCs*/
++	ddr_out32(&ddr->ddr_cdr1, regs->ddr_cdr1);
++
+ 	if (regs->ddr_eor)
+ 		ddr_out32(&ddr->eor, regs->ddr_eor);
+ 
+@@ -183,7 +186,6 @@ void fsl_ddr_set_memctl_regs(const fsl_ddr_cfg_regs_t *regs,
+ 	ddr_out32(&ddr->ddr_sdram_rcw_4, regs->ddr_sdram_rcw_4);
+ 	ddr_out32(&ddr->ddr_sdram_rcw_5, regs->ddr_sdram_rcw_5);
+ 	ddr_out32(&ddr->ddr_sdram_rcw_6, regs->ddr_sdram_rcw_6);
+-	ddr_out32(&ddr->ddr_cdr1, regs->ddr_cdr1);
+ #ifdef CONFIG_DEEP_SLEEP
+ 	if (is_warm_boot()) {
+ 		ddr_out32(&ddr->sdram_cfg_2,
+-- 
+1.7.1
+

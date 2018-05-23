@@ -1,0 +1,47 @@
+From 299be7fac7c6fec85394d1e3078467b93d378334 Mon Sep 17 00:00:00 2001
+From: Peng Fan <peng.fan@nxp.com>
+Date: Tue, 28 Nov 2017 10:31:28 +0800
+Subject: [PATCH 016/129] armv8: mmu: fix page table mapping
+
+To page mapping the lowest 2 bits needs to be 0x3.
+If not fix this, the final lowest 3 bits for page mapping is 0x1
+which is marked as reserved.
+
+Signed-off-by: Peng Fan <peng.fan@nxp.com>
+Reviewed-by: York Sun <york.sun@nxp.com>
+---
+ arch/arm/cpu/armv8/cache_v8.c    |    5 ++++-
+ arch/arm/include/asm/armv8/mmu.h |    1 +
+ 2 files changed, 5 insertions(+), 1 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/cache_v8.c b/arch/arm/cpu/armv8/cache_v8.c
+index adc7e17..6548f3c 100644
+--- a/arch/arm/cpu/armv8/cache_v8.c
++++ b/arch/arm/cpu/armv8/cache_v8.c
+@@ -230,7 +230,10 @@ static void add_map(struct mm_region *map)
+ 				/* Page fits, create block PTE */
+ 				debug("Setting PTE %p to block virt=%llx\n",
+ 				      pte, virt);
+-				*pte = phys | attrs;
++				if (level == 3)
++					*pte = phys | attrs | PTE_TYPE_PAGE;
++				else
++					*pte = phys | attrs;
+ 				virt += blocksize;
+ 				phys += blocksize;
+ 				size -= blocksize;
+diff --git a/arch/arm/include/asm/armv8/mmu.h b/arch/arm/include/asm/armv8/mmu.h
+index 6121aab..765914c 100644
+--- a/arch/arm/include/asm/armv8/mmu.h
++++ b/arch/arm/include/asm/armv8/mmu.h
+@@ -43,6 +43,7 @@
+ #define PTE_TYPE_MASK		(3 << 0)
+ #define PTE_TYPE_FAULT		(0 << 0)
+ #define PTE_TYPE_TABLE		(3 << 0)
++#define PTE_TYPE_PAGE		(3 << 0)
+ #define PTE_TYPE_BLOCK		(1 << 0)
+ #define PTE_TYPE_VALID		(1 << 0)
+ 
+-- 
+1.7.1
+

@@ -1,9 +1,9 @@
-From 34a29484a7ba44469107773095e59be8f002f00e Mon Sep 17 00:00:00 2001
+From 49fcd33ae21abc88d7794d4082f87713c0aeaed5 Mon Sep 17 00:00:00 2001
 From: Yangbo Lu <yangbo.lu@nxp.com>
-Date: Wed, 27 Sep 2017 10:34:46 +0800
-Subject: [PATCH 30/30] vfio: support layerscape
+Date: Wed, 17 Jan 2018 15:48:47 +0800
+Subject: [PATCH 30/33] vfio: support layerscape
 
-This is a integrated patch for layerscape vfio support.
+This is an integrated patch for layerscape vfio support.
 
 Signed-off-by: Bharat Bhushan <Bharat.Bhushan@nxp.com>
 Signed-off-by: Eric Auger <eric.auger@redhat.com>
@@ -28,7 +28,7 @@ Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
  create mode 100644 drivers/vfio/fsl-mc/vfio_fsl_mc_private.h
 
 diff --git a/drivers/vfio/Kconfig b/drivers/vfio/Kconfig
-index da6e2ce77495..8a8a33e045c1 100644
+index da6e2ce..8a8a33e 100644
 --- a/drivers/vfio/Kconfig
 +++ b/drivers/vfio/Kconfig
 @@ -48,4 +48,5 @@ menuconfig VFIO_NOIOMMU
@@ -38,7 +38,7 @@ index da6e2ce77495..8a8a33e045c1 100644
 +source "drivers/vfio/fsl-mc/Kconfig"
  source "virt/lib/Kconfig"
 diff --git a/drivers/vfio/Makefile b/drivers/vfio/Makefile
-index 7b8a31f63fea..560f0c671c24 100644
+index 7b8a31f..560f0c6 100644
 --- a/drivers/vfio/Makefile
 +++ b/drivers/vfio/Makefile
 @@ -7,3 +7,4 @@ obj-$(CONFIG_VFIO_IOMMU_SPAPR_TCE) += vfio_iommu_spapr_tce.o
@@ -48,7 +48,7 @@ index 7b8a31f63fea..560f0c671c24 100644
 +obj-$(CONFIG_VFIO_FSL_MC) += fsl-mc/
 diff --git a/drivers/vfio/fsl-mc/Kconfig b/drivers/vfio/fsl-mc/Kconfig
 new file mode 100644
-index 000000000000..b1a527d6b6f2
+index 0000000..b1a527d
 --- /dev/null
 +++ b/drivers/vfio/fsl-mc/Kconfig
 @@ -0,0 +1,9 @@
@@ -63,7 +63,7 @@ index 000000000000..b1a527d6b6f2
 +	  If you don't know what to do here, say N.
 diff --git a/drivers/vfio/fsl-mc/Makefile b/drivers/vfio/fsl-mc/Makefile
 new file mode 100644
-index 000000000000..2aca75af95d7
+index 0000000..2aca75a
 --- /dev/null
 +++ b/drivers/vfio/fsl-mc/Makefile
 @@ -0,0 +1,2 @@
@@ -71,7 +71,7 @@ index 000000000000..2aca75af95d7
 +obj-$(CONFIG_VFIO_FSL_MC) += vfio_fsl_mc.o vfio_fsl_mc_intr.o
 diff --git a/drivers/vfio/fsl-mc/vfio_fsl_mc.c b/drivers/vfio/fsl-mc/vfio_fsl_mc.c
 new file mode 100644
-index 000000000000..9dc32d273812
+index 0000000..9dc32d2
 --- /dev/null
 +++ b/drivers/vfio/fsl-mc/vfio_fsl_mc.c
 @@ -0,0 +1,753 @@
@@ -830,7 +830,7 @@ index 000000000000..9dc32d273812
 +MODULE_DESCRIPTION(DRIVER_DESC);
 diff --git a/drivers/vfio/fsl-mc/vfio_fsl_mc_intr.c b/drivers/vfio/fsl-mc/vfio_fsl_mc_intr.c
 new file mode 100644
-index 000000000000..eb244bb03408
+index 0000000..eb244bb
 --- /dev/null
 +++ b/drivers/vfio/fsl-mc/vfio_fsl_mc_intr.c
 @@ -0,0 +1,199 @@
@@ -1035,7 +1035,7 @@ index 000000000000..eb244bb03408
 +}
 diff --git a/drivers/vfio/fsl-mc/vfio_fsl_mc_private.h b/drivers/vfio/fsl-mc/vfio_fsl_mc_private.h
 new file mode 100644
-index 000000000000..34e757546e59
+index 0000000..34e7575
 --- /dev/null
 +++ b/drivers/vfio/fsl-mc/vfio_fsl_mc_private.h
 @@ -0,0 +1,55 @@
@@ -1095,7 +1095,7 @@ index 000000000000..34e757546e59
 +			       void *data);
 +#endif /* VFIO_PCI_PRIVATE_H */
 diff --git a/drivers/vfio/vfio_iommu_type1.c b/drivers/vfio/vfio_iommu_type1.c
-index 1d48e62f4f52..f0a39331b66e 100644
+index 1d48e62..f0a3933 100644
 --- a/drivers/vfio/vfio_iommu_type1.c
 +++ b/drivers/vfio/vfio_iommu_type1.c
 @@ -36,6 +36,8 @@
@@ -1176,7 +1176,7 @@ index 1d48e62f4f52..f0a39331b66e 100644
  
  	mutex_unlock(&iommu->lock);
 diff --git a/include/uapi/linux/vfio.h b/include/uapi/linux/vfio.h
-index 255a2113f53c..1bbaa13d1a96 100644
+index 255a211..1bbaa13 100644
 --- a/include/uapi/linux/vfio.h
 +++ b/include/uapi/linux/vfio.h
 @@ -198,6 +198,7 @@ struct vfio_device_info {
@@ -1188,5 +1188,5 @@ index 255a2113f53c..1bbaa13d1a96 100644
  	__u32	num_irqs;	/* Max IRQ index + 1 */
  };
 -- 
-2.14.1
+2.7.4
 

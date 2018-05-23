@@ -1,0 +1,299 @@
+From 099f4093a59c7620841de863d431eab578f5fb24 Mon Sep 17 00:00:00 2001
+From: Ashish Kumar <Ashish.Kumar@nxp.com>
+Date: Mon, 6 Nov 2017 13:18:43 +0530
+Subject: [PATCH 005/129] armv8: ls1088ardb: Add SD boot support for ls1088
+
+Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+Signed-off-by: Ashish Kumar <Ashish.Kumar@nxp.com>
+Signed-off-by: Raghav Dogra <raghav.dogra@nxp.com>
+Reviewed-by: York Sun <york.sun@nxp.com>
+---
+ arch/arm/Kconfig                                   |    1 +
+ arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch3 |   44 ++++++++++++++++++++
+ board/freescale/ls1088a/MAINTAINERS                |    1 +
+ board/freescale/ls1088a/ddr.c                      |    5 ++-
+ configs/ls1088ardb_sdcard_qspi_defconfig           |   41 ++++++++++++++++++
+ include/configs/ls1088a_common.h                   |   25 +++++++++++
+ include/configs/ls1088ardb.h                       |   30 ++++++++++++-
+ 7 files changed, 144 insertions(+), 3 deletions(-)
+ create mode 100644 configs/ls1088ardb_sdcard_qspi_defconfig
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 30e71b2..20d60b1 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -931,6 +931,7 @@ config TARGET_LS1088ARDB
+ 	select ARMV8_MULTIENTRY
+ 	select ARCH_MISC_INIT
+ 	select BOARD_LATE_INIT
++	select SUPPORT_SPL
+ 	help
+ 	  Support for NXP LS1088ARDB platform.
+ 	  The LS1088A Reference design board (RDB) is a high-performance
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch3 b/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch3
+index 7867c37..522760b 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch3
++++ b/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch3
+@@ -201,6 +201,50 @@ nand write <u-boot image in memory> 80000 <size of u-boot image>
+ Notice the difference from QDS is SRC, SRC_ADDR and the offset of u-boot image
+ to match board NAND device with 4KB/page, block size 512KB.
+ 
++Booting from SD/eMMC
++-------------------
++Booting from SD/eMMC requires two images, RCW and u-boot-with-spl.bin.
++The difference between SD boot RCW image and QSPI-NOR boot image is the
++PBI command sequence. Below is one example for PBI commands for RDB
++and QDS which uses SD device with block size 512. Block location can be
++calculated by dividing offset with block size.
++
++1) Block Copy: SRC=0x0040, SRC_ADDR=0x00100000, DEST_ADDR=0x1800a000,
++BLOCK_SIZE=0x00016000
++
++This command copies u-boot image from SD device into OCRAM. The values
++need to adjust accordingly for SD/eMMC
++
++SRC		should match the cfg_rcw_src, the reset config pins.
++		The value for source(SRC) can be 0x0040 or 0x0041
++		depending upon SD or eMMC.
++SRC_ADDR	is the offset of u-boot-with-spl.bin image in SD device.
++		In the example above, 1MB. This is same as QSPI-NOR.
++DEST_ADDR	is configured at 0x1800a000, matching bootloc set above.
++BLOCK_SIZE	is the size to be copied by PBI.
++
++2) CCSR 4-byte write to 0x01e00404, data=0x00000000
++3) CCSR 4-byte write to 0x01e00400, data=0x1800a000
++The above two commands set bootloc register to 0x00000000_1800a000 where
++the u-boot code will be running in OCRAM.
++
++
++RCW image should be written at 8th block of device(SD/eMMC). Example of
++using u-boot command
++
++mmc erase 0x8 0x10
++mmc write <rcw image in memory> 0x8 <size of rcw in block count typical value=10>
++
++To form the SD-Boot image, build u-boot with SD config, for example,
++ls1088ardb_sdcard_qspi_defconfig. The image needed is u-boot-with-spl.bin.
++The u-boot image should be written to match SRC_ADDR, in above example
++offset 0x100000 in other work it means block location 0x800
++
++mmc erase 0x800 0x1800
++mmc write <u-boot image in memory> 0x800 <size of u-boot image in block count>
++
++With these two images in SD/eMMC device, the board can boot from SD/eMMC.
++
+ MMU Translation Tables
+ ======================
+ 
+diff --git a/board/freescale/ls1088a/MAINTAINERS b/board/freescale/ls1088a/MAINTAINERS
+index e1e6d4b..68f23d6 100644
+--- a/board/freescale/ls1088a/MAINTAINERS
++++ b/board/freescale/ls1088a/MAINTAINERS
+@@ -5,6 +5,7 @@ S:	Maintained
+ F:	board/freescale/ls1088a/
+ F:	include/configs/ls1088ardb.h
+ F:	configs/ls1088ardb_qspi_defconfig
++F:	configs/ls1088ardb_sdcard_qspi_defconfig
+ 
+ LS1088AQDS BOARD
+ M:	Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+diff --git a/board/freescale/ls1088a/ddr.c b/board/freescale/ls1088a/ddr.c
+index 0ecfd65..e24bfd5 100644
+--- a/board/freescale/ls1088a/ddr.c
++++ b/board/freescale/ls1088a/ddr.c
+@@ -96,7 +96,10 @@ int fsl_initdram(void)
+ {
+ 	puts("Initializing DDR....using SPD\n");
+ 
++#if defined(CONFIG_SPL) && !defined(CONFIG_SPL_BUILD)
++	gd->ram_size = fsl_ddr_sdram_size();
++#else
+ 	gd->ram_size = fsl_ddr_sdram();
+-
++#endif
+ 	return 0;
+ }
+diff --git a/configs/ls1088ardb_sdcard_qspi_defconfig b/configs/ls1088ardb_sdcard_qspi_defconfig
+new file mode 100644
+index 0000000..8abc313
+--- /dev/null
++++ b/configs/ls1088ardb_sdcard_qspi_defconfig
+@@ -0,0 +1,41 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088ARDB=y
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_SPL_LIBGENERIC_SUPPORT=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_SPL_MMC_SUPPORT=y
++CONFIG_SPL_SERIAL_SUPPORT=y
++CONFIG_SPL_DRIVERS_MISC_SUPPORT=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-rdb"
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_PARTITIONS=y
++CONFIG_SYS_EXTRA_OPTIONS="SD_BOOT_QSPI"
++CONFIG_SD_BOOT=y
++# CONFIG_DISPLAY_BOARDINFO is not set
++CONFIG_SPL=y
++CONFIG_SPL_BUILD=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x8b0
++CONFIG_SPL_ENV_SUPPORT=y
++CONFIG_SPL_I2C_SUPPORT=y
++CONFIG_SPL_MPC8XXX_INIT_DDR_SUPPORT=y
++CONFIG_HUSH_PARSER=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_CMD_DHCP=y
++CONFIG_CMD_PING=y
++CONFIG_OF_CONTROL=y
++CONFIG_ENV_IS_IN_MMC=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_FSL_DSPI=y
+diff --git a/include/configs/ls1088a_common.h b/include/configs/ls1088a_common.h
+index 7cfdc96..6b71d47 100644
+--- a/include/configs/ls1088a_common.h
++++ b/include/configs/ls1088a_common.h
+@@ -20,18 +20,24 @@
+ #define CONFIG_SYS_INIT_SP_ADDR		(CONFIG_SYS_FSL_OCRAM_BASE + 0xfff0)
+ 
+ /* Link Definitions */
++#ifdef CONFIG_SPL
++#define CONFIG_SYS_TEXT_BASE		0x80400000
++#else
+ #ifdef CONFIG_QSPI_BOOT
+ #define CONFIG_SYS_TEXT_BASE            0x20100000
+ #else
+ #define CONFIG_SYS_TEXT_BASE		0x30100000
+ #endif
++#endif
+ 
+ #define CONFIG_SUPPORT_RAW_INITRD
+ 
+ 
+ #define CONFIG_SKIP_LOWLEVEL_INIT
+ 
++#if !defined(CONFIG_SD_BOOT)
+ #define CONFIG_FSL_DDR_INTERACTIVE	/* Interactive debugging */
++#endif
+ 
+ #define CONFIG_VERY_BIG_RAM
+ #define CONFIG_SYS_DDR_SDRAM_BASE	0x80000000UL
+@@ -200,6 +206,11 @@ unsigned long long get_qixis_addr(void);
+ 				" fsl_mc apply dpl 0x80200000 &&" \
+ 				" sf read $kernel_load $kernel_start" \
+ 				" $kernel_size && bootm $kernel_load"
++#elif defined(CONFIG_SD_BOOT)
++#define CONFIG_BOOTCOMMAND	"mmcinfo;mmc read 0x80200000 0x6800 0x800;"\
++				" fsl_mc apply dpl 0x80200000 &&" \
++				" mmc read $kernel_load $kernel_start" \
++				" $kernel_size && bootm $kernel_load"
+ #else /* NOR BOOT*/
+ #define CONFIG_BOOTCOMMAND	"fsl_mc apply dpl 0x580d00000 &&" \
+ 				" cp.b $kernel_start $kernel_load" \
+@@ -219,6 +230,20 @@ unsigned long long get_qixis_addr(void);
+ 
+ #define CONFIG_PANIC_HANG	/* do not reset board on panic */
+ 
++#ifdef CONFIG_SPL
++#define CONFIG_SPL_BSS_START_ADDR      0x80100000
++#define CONFIG_SPL_BSS_MAX_SIZE                0x00100000
++#define CONFIG_SPL_FRAMEWORK
++#define CONFIG_SPL_LDSCRIPT "arch/arm/cpu/armv8/u-boot-spl.lds"
++#define CONFIG_SPL_MAX_SIZE            0x16000
++#define CONFIG_SPL_STACK               (CONFIG_SYS_FSL_OCRAM_BASE + 0x9ff0)
++#define CONFIG_SPL_TARGET              "u-boot-with-spl.bin"
++#define CONFIG_SPL_TEXT_BASE           0x1800a000
++
++#define CONFIG_SYS_SPL_MALLOC_SIZE     0x00100000
++#define CONFIG_SYS_SPL_MALLOC_START    0x80200000
++#define CONFIG_SYS_MONITOR_LEN         (512 * 1024)
++#endif
+ #define CONFIG_SYS_BOOTM_LEN   (64 << 20)      /* Increase max gunzip size */
+ 
+ #endif /* __LS1088_COMMON_H */
+diff --git a/include/configs/ls1088ardb.h b/include/configs/ls1088ardb.h
+index 958d472..eef9a07 100644
+--- a/include/configs/ls1088ardb.h
++++ b/include/configs/ls1088ardb.h
+@@ -15,6 +15,10 @@
+ #define CONFIG_ENV_SIZE			0x2000          /* 8KB */
+ #define CONFIG_ENV_OFFSET		0x300000        /* 3MB */
+ #define CONFIG_ENV_SECT_SIZE		0x40000
++#elif defined(CONFIG_SD_BOOT)
++#define CONFIG_ENV_OFFSET		(3 * 1024 * 1024)
++#define CONFIG_SYS_MMC_ENV_DEV		0
++#define CONFIG_ENV_SIZE			0x2000
+ #else
+ #define CONFIG_ENV_IS_IN_FLASH
+ #define CONFIG_ENV_ADDR			(CONFIG_SYS_FLASH_BASE + 0x300000)
+@@ -22,9 +26,10 @@
+ #define CONFIG_ENV_SIZE			0x20000
+ #endif
+ 
+-#if defined(CONFIG_QSPI_BOOT)
++#if defined(CONFIG_QSPI_BOOT) || defined(CONFIG_SD_BOOT_QSPI)
+ #define CONFIG_QIXIS_I2C_ACCESS
+ #define SYS_NO_FLASH
++#undef CONFIG_CMD_IMLS
+ #endif
+ 
+ #define CONFIG_SYS_CLK_FREQ		100000000
+@@ -232,7 +237,7 @@
+ #define CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS	5
+ 
+ /* QSPI device */
+-#if defined(CONFIG_QSPI_BOOT)
++#if defined(CONFIG_QSPI_BOOT) || defined(CONFIG_SD_BOOT_QSPI)
+ #define CONFIG_FSL_QSPI
+ #define FSL_QSPI_FLASH_SIZE		(1 << 26)
+ #define FSL_QSPI_FLASH_NUM		2
+@@ -243,7 +248,11 @@
+ #define CONFIG_SYS_MEMTEST_START	0x80000000
+ #define CONFIG_SYS_MEMTEST_END		0x9fffffff
+ 
++#ifdef CONFIG_SPL_BUILD
++#define CONFIG_SYS_MONITOR_BASE CONFIG_SPL_TEXT_BASE
++#else
+ #define CONFIG_SYS_MONITOR_BASE CONFIG_SYS_TEXT_BASE
++#endif
+ 
+ #define CONFIG_FSL_MEMAC
+ 
+@@ -265,6 +274,23 @@
+ 	"sf read 0x80100000 0xE00000 0x100000;" \
+ 	"fsl_mc start mc 0x80000000 0x80100000\0"	\
+ 	"mcmemsize=0x70000000 \0"
++#elif defined(CONFIG_SD_BOOT)
++#undef CONFIG_EXTRA_ENV_SETTINGS
++#define CONFIG_EXTRA_ENV_SETTINGS		\
++	"hwconfig=fsl_ddr:bank_intlv=auto\0"	\
++	"loadaddr=0x90100000\0"			\
++	"kernel_addr=0x800\0"			\
++	"ramdisk_addr=0x800000\0"		\
++	"ramdisk_size=0x2000000\0"		\
++	"fdt_high=0xa0000000\0"			\
++	"initrd_high=0xffffffffffffffff\0"	\
++	"kernel_start=0x8000\0"			\
++	"kernel_load=0xa0000000\0"		\
++	"kernel_size=0x14000\0"			\
++	"mcinitcmd=mmcinfo;mmc read 0x80000000 0x5000 0x800;"	\
++	"mmc read 0x80100000 0x7000 0x800;"	\
++	"fsl_mc start mc 0x80000000 0x80100000\0"	\
++	"mcmemsize=0x70000000 \0"
+ 
+ #endif
+ 
+-- 
+1.7.1
+

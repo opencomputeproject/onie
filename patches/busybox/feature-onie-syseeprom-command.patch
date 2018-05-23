@@ -1,6 +1,6 @@
 Add to support onie-syseeprom command.
 
-Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
+Copyright (C) 2013,2018 Curt Brune <curt@cumulusnetworks.com>
 Copyright (C) 2014,2016,2017 david_yang <david_yang@accton.com>
 Copyright (C) 2015 Ellen Wang <ellen@cumulusnetworks.com>
 
@@ -8,7 +8,7 @@ SPDX-License-Identifier:     GPL-2.0
 
 diff --git a/include/24cXX.h b/include/24cXX.h
 new file mode 100644
-index 0000000..5fb4641
+index 000000000000..5fb4641379ea
 --- /dev/null
 +++ b/include/24cXX.h
 @@ -0,0 +1,66 @@
@@ -79,7 +79,7 @@ index 0000000..5fb4641
 +
 +#endif
 diff --git a/include/applets.src.h b/include/applets.src.h
-index b9df5a1..71b8cbd 100644
+index b9df5a1b3449..71b8cbd94b87 100644
 --- a/include/applets.src.h
 +++ b/include/applets.src.h
 @@ -344,6 +344,7 @@ IF_WC(APPLET(wc, BB_DIR_USR_BIN, BB_SUID_DROP))
@@ -92,7 +92,7 @@ index b9df5a1..71b8cbd 100644
  	&& !defined(MAKE_LINKS) && !defined(MAKE_SUID)
 diff --git a/include/i2c-dev.h b/include/i2c-dev.h
 new file mode 100644
-index 0000000..23f7c2c
+index 000000000000..23f7c2cf071c
 --- /dev/null
 +++ b/include/i2c-dev.h
 @@ -0,0 +1,330 @@
@@ -428,7 +428,7 @@ index 0000000..23f7c2c
 +#endif /* _LINUX_I2C_DEV_H */
 diff --git a/include/onie_tlvinfo.h b/include/onie_tlvinfo.h
 new file mode 100644
-index 0000000..b602736
+index 000000000000..b602736287ec
 --- /dev/null
 +++ b/include/onie_tlvinfo.h
 @@ -0,0 +1,172 @@
@@ -606,7 +606,7 @@ index 0000000..b602736
 +void show_tlv_code_list(void);
 diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
 new file mode 100644
-index 0000000..94dfd5a
+index 000000000000..94dfd5a6ff23
 --- /dev/null
 +++ b/include/sys_eeprom.h
 @@ -0,0 +1,2 @@
@@ -614,7 +614,7 @@ index 0000000..94dfd5a
 +int write_sys_eeprom(void *eeprom_data, int len);
 diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
 new file mode 100644
-index 0000000..ccc0965
+index 000000000000..ccc09652494b
 --- /dev/null
 +++ b/miscutils/24cXX.c
 @@ -0,0 +1,182 @@
@@ -801,7 +801,7 @@ index 0000000..ccc0965
 +	}
 +}
 diff --git a/miscutils/Config.src b/miscutils/Config.src
-index 4d6425f..cdae45b 100644
+index 4d6425f7652f..cdae45b750b1 100644
 --- a/miscutils/Config.src
 +++ b/miscutils/Config.src
 @@ -546,4 +546,108 @@ config WATCHDOG
@@ -914,7 +914,7 @@ index 4d6425f..cdae45b 100644
 +
  endmenu
 diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 9177818..a78273d 100644
+index 917781898d36..a78273de6ca7 100644
 --- a/miscutils/Kbuild.src
 +++ b/miscutils/Kbuild.src
 @@ -51,3 +51,6 @@ lib-$(CONFIG_TTYSIZE)     += ttysize.o
@@ -926,7 +926,7 @@ index 9177818..a78273d 100644
 +lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
 diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
 new file mode 100644
-index 0000000..5cf6463
+index 000000000000..5cf646322444
 --- /dev/null
 +++ b/miscutils/onie_tlvinfo.c
 @@ -0,0 +1,743 @@
@@ -1675,10 +1675,10 @@ index 0000000..5cf6463
 +}
 diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
 new file mode 100644
-index 0000000..3003bd6
+index 000000000000..e34abf59782e
 --- /dev/null
 +++ b/miscutils/sys_eeprom.c
-@@ -0,0 +1,181 @@
+@@ -0,0 +1,185 @@
 +#include "libbb.h"
 +#include "onie_tlvinfo.h"
 +#include <getopt.h>
@@ -1738,7 +1738,7 @@ index 0000000..3003bd6
 +    const size_t tlv_code_count = sizeof(tlv_code_list) /
 +	sizeof(tlv_code_list[0]);
 +
-+    char *tokens[tlv_code_count + 1];
++    char *tokens[(tlv_code_count*2) + 1];
 +    const char *short_options = "hels:g:";
 +    const struct option long_options[] = {
 +	{"help",    no_argument,          0,    'h'},
@@ -1750,10 +1750,13 @@ index 0000000..3003bd6
 +    };
 +
 +    for (i = 0; i < tlv_code_count; i++) {
-+	    tokens[i] = (char *) malloc(6);
-+	    sprintf(tokens[i], "0x%x", tlv_code_list[i].m_code);
++	    tokens[i*2] = malloc(6);
++	    snprintf(tokens[(i*2)], 6,     "0x%x", tlv_code_list[i].m_code);
++	    /* Allow for uppercase hex digits as well */
++	    tokens[(i*2) + 1] = malloc(6);
++	    snprintf(tokens[(i*2) + 1], 6, "0x%X", tlv_code_list[i].m_code);
 +    }
-+    tokens[tlv_code_count] = NULL;
++    tokens[tlv_code_count*2] = NULL;
 +
 +    while (TRUE) {
 +	c = getopt_long(argc, argv, short_options,
@@ -1856,13 +1859,14 @@ index 0000000..3003bd6
 +    }
 +syseeprom_err:
 +    for (i = 0; i < tlv_code_count; i++) {
-+	free(tokens[i]);
++	free(tokens[i*2]);
++	free(tokens[(i*2) + 1]);
 +    }
 +    return  (err == 0) ? 0 : 1;
 +}
 diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
 new file mode 100644
-index 0000000..ed3235b
+index 000000000000..ed3235bcc1c8
 --- /dev/null
 +++ b/miscutils/sys_eeprom_i2c.c
 @@ -0,0 +1,63 @@
@@ -1931,7 +1935,7 @@ index 0000000..ed3235b
 +}
 diff --git a/miscutils/sys_eeprom_mtd.c b/miscutils/sys_eeprom_mtd.c
 new file mode 100644
-index 0000000..119d77c
+index 000000000000..119d77c15c5c
 --- /dev/null
 +++ b/miscutils/sys_eeprom_mtd.c
 @@ -0,0 +1,126 @@

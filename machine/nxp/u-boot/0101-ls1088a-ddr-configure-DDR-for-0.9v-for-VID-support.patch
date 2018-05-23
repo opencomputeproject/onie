@@ -1,0 +1,57 @@
+From d0d1638952c85878c40b6cbb10adccb316d818ac Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Thu, 30 Nov 2017 12:00:55 +0530
+Subject: [PATCH 101/129] ls1088a: ddr: configure DDR for 0.9v for VID support
+
+When VID feature is supported, check the contents of fuse register
+and configure DDR operate at 0.9v.
+
+Signed-off-by: Ashish Kumar <Ashish.Kumar@nxp.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Signed-off-by: Pankit Garg <pankit.garg@nxp.com>
+---
+ board/freescale/ls1088a/ddr.c |   21 +++++++++++++++++++++
+ 1 files changed, 21 insertions(+), 0 deletions(-)
+
+diff --git a/board/freescale/ls1088a/ddr.c b/board/freescale/ls1088a/ddr.c
+index e24bfd5..f3e70b5 100644
+--- a/board/freescale/ls1088a/ddr.c
++++ b/board/freescale/ls1088a/ddr.c
+@@ -13,6 +13,23 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++#if defined(CONFIG_VID) && (!defined(CONFIG_SPL) || defined(CONFIG_SPL_BUILD))
++void fsl_ddr_setup_0v9_volt(memctl_options_t *popts)
++{
++	int vdd;
++
++	vdd = get_core_volt_from_fuse();
++	/* Nothing to do for silicons doesn't support VID */
++	if (vdd < 0)
++		return;
++
++	if (vdd == 900) {
++		popts->ddr_cdr1 |= DDR_CDR1_V0PT9_EN;
++		printf("VID: configure DDR to support 900 mV\n");
++	}
++}
++#endif
++
+ void fsl_ddr_board_options(memctl_options_t *popts,
+ 			   dimm_params_t *pdimm,
+ 			   unsigned int ctrl_num)
+@@ -87,6 +104,10 @@ found:
+ 	popts->addr_hash = 1;
+ 
+ 	popts->ddr_cdr1 = DDR_CDR1_DHC_EN | DDR_CDR1_ODT(DDR_CDR_ODT_60ohm);
++#if defined(CONFIG_VID) && (!defined(CONFIG_SPL) || defined(CONFIG_SPL_BUILD))
++	fsl_ddr_setup_0v9_volt(popts);
++#endif
++
+ 	popts->ddr_cdr2 = DDR_CDR2_ODT(DDR_CDR_ODT_60ohm) |
+ 			  DDR_CDR2_VREF_TRAIN_EN | DDR_CDR2_VREF_RANGE_2;
+ }
+-- 
+1.7.1
+

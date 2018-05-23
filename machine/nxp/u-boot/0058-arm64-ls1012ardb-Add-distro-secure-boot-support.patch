@@ -1,0 +1,125 @@
+From 083fe5a932ff6f147ba3f63ad2847c0205044b17 Mon Sep 17 00:00:00 2001
+From: Vinitha Pillai-B57223 <vinitha.pillai@nxp.com>
+Date: Wed, 3 Jan 2018 11:02:58 +0530
+Subject: [PATCH 058/129] arm64: ls1012ardb: Add distro secure boot support
+
+Enable validation of boot.scr script prior to its execution dependent
+on "secureboot" flag in environment. Enable fall back option to
+qspi boot in case of secure boot.
+
+Signed-off-by: Sumit Garg <sumit.garg@nxp.com>
+Signed-off-by: Vinitha Pillai <vinitha.pillai@nxp.com>
+---
+ configs/ls1012ardb_qspi_SECURE_BOOT_defconfig |    8 +++++++-
+ include/configs/ls1012ardb.h                  |   20 ++++++++++++++++++--
+ 2 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/configs/ls1012ardb_qspi_SECURE_BOOT_defconfig b/configs/ls1012ardb_qspi_SECURE_BOOT_defconfig
+index b6930be..ed7700e 100644
+--- a/configs/ls1012ardb_qspi_SECURE_BOOT_defconfig
++++ b/configs/ls1012ardb_qspi_SECURE_BOOT_defconfig
+@@ -2,6 +2,7 @@ CONFIG_ARM=y
+ CONFIG_TARGET_LS1012ARDB=y
+ CONFIG_SECURE_BOOT=y
+ CONFIG_FSL_LS_PPA=y
++CONFIG_QSPI_AHB_INIT=y
+ CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1012a-rdb"
+ # CONFIG_SYS_MALLOC_F is not set
+ CONFIG_FIT_VERBOSE=y
+@@ -12,6 +13,7 @@ CONFIG_QSPI_BOOT=y
+ CONFIG_BOOTDELAY=10
+ CONFIG_USE_BOOTARGS=y
+ CONFIG_BOOTARGS="console=ttyS0,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0500 quiet lpj=250000"
++# CONFIG_DISPLAY_BOARDINFO is not set
+ CONFIG_HUSH_PARSER=y
+ CONFIG_CMD_GREPENV=y
+ CONFIG_CMD_GPT=y
+@@ -20,7 +22,6 @@ CONFIG_CMD_MMC=y
+ CONFIG_CMD_PCI=y
+ CONFIG_CMD_SF=y
+ CONFIG_CMD_USB=y
+-# CONFIG_CMD_SETEXPR is not set
+ CONFIG_CMD_DHCP=y
+ CONFIG_CMD_MII=y
+ CONFIG_CMD_PING=y
+@@ -28,8 +29,11 @@ CONFIG_CMD_CACHE=y
+ CONFIG_CMD_EXT2=y
+ CONFIG_CMD_FAT=y
+ CONFIG_OF_CONTROL=y
++CONFIG_ENV_IS_IN_SPI_FLASH=y
+ CONFIG_NET_RANDOM_ETHADDR=y
+ CONFIG_DM=y
++# CONFIG_BLK is not set
++CONFIG_DM_MMC=y
+ CONFIG_DM_SPI_FLASH=y
+ CONFIG_SPI_FLASH=y
+ CONFIG_NETDEVICES=y
+@@ -42,8 +46,10 @@ CONFIG_SYS_NS16550=y
+ CONFIG_DM_SPI=y
+ CONFIG_FSL_DSPI=y
+ CONFIG_USB=y
++CONFIG_DM_USB=y
+ CONFIG_USB_XHCI_HCD=y
+ CONFIG_USB_XHCI_DWC3=y
+ CONFIG_USB_STORAGE=y
+ CONFIG_RSA=y
+ CONFIG_RSA_SOFTWARE_EXP=y
++CONFIG_DISTRO_DEFAULTS=y
+diff --git a/include/configs/ls1012ardb.h b/include/configs/ls1012ardb.h
+index edcbbf1..550865b 100644
+--- a/include/configs/ls1012ardb.h
++++ b/include/configs/ls1012ardb.h
+@@ -62,16 +62,20 @@
+ 	"initrd_high=0xffffffffffffffff\0"	\
+ 	"fdt_addr=0x00f00000\0"			\
+ 	"kernel_addr=0x01000000\0"		\
++	"kernelheader_addr=0x800000\0"		\
+ 	"scriptaddr=0x80000000\0"		\
++	"scripthdraddr=0x80080000\0"		\
+ 	"fdtheader_addr_r=0x80100000\0"		\
+ 	"kernelheader_addr_r=0x80200000\0"	\
+ 	"kernel_addr_r=0x81000000\0"		\
+ 	"fdt_addr_r=0x90000000\0"		\
+ 	"load_addr=0xa0000000\0"		\
+ 	"kernel_size=0x2800000\0"		\
++	"kernelheader_size=0x40000\0"		\
+ 	"console=ttyS0,115200\0"		\
+ 	BOOTENV					\
+ 	"boot_scripts=ls1012ardb_boot.scr\0"	\
++	"boot_script_hdr=hdr_ls1012ardb_bs.out\0"	\
+ 	"scan_dev_for_boot_part="		\
+ 	     "part list ${devtype} ${devnum} devplist; "	\
+ 	     "env exists devplist || setenv devplist 1; "	\
+@@ -89,15 +93,27 @@
+ 			"run scan_dev_for_scripts; "	  \
+ 		"done;"					  \
+ 		"\0"					  \
++	"boot_a_script="				  \
++		"load ${devtype} ${devnum}:${distro_bootpart} "  \
++			"${scriptaddr} ${prefix}${script}; "    \
++		"env exists secureboot && load ${devtype} "     \
++			"${devnum}:${distro_bootpart} "		\
++			"${scripthdraddr} ${prefix}${boot_script_hdr} " \
++			"&& esbc_validate ${scripthdraddr};"    \
++		"source ${scriptaddr}\0"	  \
+ 	"installer=load mmc 0:2 $load_addr "	\
+ 		   "/flex_installer_arm64.itb; "	\
+ 		   "bootm $load_addr#$board\0"	\
+ 	"qspi_bootcmd=echo Trying load from qspi..;"	\
+ 		"sf probe && sf read $load_addr "	\
+-		"$kernel_addr $kernel_size && bootm $load_addr#$board\0"
++		"$kernel_addr $kernel_size; env exists secureboot "	\
++		"&& sf read $kernelheader_addr_r $kernelheader_addr "	\
++		"$kernelheader_size && esbc_validate ${kernelheader_addr_r}; " \
++		"bootm $load_addr#$board\0"
+ 
+ #undef CONFIG_BOOTCOMMAND
+-#define CONFIG_BOOTCOMMAND "run distro_bootcmd;run qspi_bootcmd"
++#define CONFIG_BOOTCOMMAND "run distro_bootcmd; run qspi_bootcmd; "	\
++			   "env exists secureboot && esbc_halt;"
+ 
+ #include <asm/fsl_secure_boot.h>
+ 
+-- 
+1.7.1
+

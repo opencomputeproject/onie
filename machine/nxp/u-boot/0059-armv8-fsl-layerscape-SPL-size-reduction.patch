@@ -1,0 +1,95 @@
+From 0024d9b181e0ae902de73f9c51dc4c3385b2f5f9 Mon Sep 17 00:00:00 2001
+From: Vinitha V Pillai <vinitha.pillai@nxp.com>
+Date: Wed, 3 Jan 2018 16:15:50 +0530
+Subject: [PATCH 059/129] armv8: fsl-layerscape: SPL size reduction
+
+Using changes in this patch we were able to reduce approx 4k
+size of u-boot-spl.bin image. Following is breif description of
+changes to reduce SPL size:
+1. Compile-off mp.c and libfdt.c in case of SPL build.
+2. Keep MMU and DCACHE specific variable and functions under
+   CONFIG_SYS_DCACHE_OFF macro.
+3. Compile-off IFC specific funtion call "init_early_memctl_regs"
+   in case of SPL build.
+
+Signed-off-by: Sumit Garg <sumit.garg@nxp.com>
+Signed-off-by: Vinitha V Pillai <vinitha.pillai@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/Makefile |    2 ++
+ arch/arm/cpu/armv8/fsl-layerscape/cpu.c    |    6 ++++++
+ arch/arm/cpu/armv8/fsl-layerscape/soc.c    |    2 ++
+ 3 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/Makefile b/arch/arm/cpu/armv8/fsl-layerscape/Makefile
+index 115c3fc..0cb6d4e 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/Makefile
++++ b/arch/arm/cpu/armv8/fsl-layerscape/Makefile
+@@ -7,8 +7,10 @@
+ obj-y += cpu.o
+ obj-y += lowlevel.o
+ obj-y += soc.o
++ifndef CONFIG_SPL_BUILD
+ obj-$(CONFIG_MP) += mp.o
+ obj-$(CONFIG_OF_LIBFDT) += fdt.o
++endif
+ obj-$(CONFIG_SPL) += spl.o
+ obj-$(CONFIG_$(SPL_)FSL_LS_PPA) += ppa.o
+ 
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/cpu.c b/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
+index 1e0030c..13b828a 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/cpu.c
+@@ -34,7 +34,9 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++#ifndef CONFIG_SYS_DCACHE_OFF
+ struct mm_region *mem_map = early_map;
++#endif
+ 
+ void cpu_name(char *name)
+ {
+@@ -868,6 +870,7 @@ void efi_add_known_memory(void)
+ }
+ #endif
+ 
++#ifndef CONFIG_SYS_DCACHE_OFF
+ /*
+  * Before DDR size is known, early MMU table have DDR mapped as device memory
+  * to avoid speculative access. To relocate U-Boot to DDR, "normal memory"
+@@ -932,14 +935,17 @@ void update_early_mmu_table(void)
+ 		}
+ 	}
+ }
++#endif
+ 
+ __weak int dram_init(void)
+ {
+ 	fsl_initdram();
++#ifndef CONFIG_SYS_DCACHE_OFF
+ #if !defined(CONFIG_SPL) || defined(CONFIG_SPL_BUILD)
+ 	/* This will break-before-make MMU for DDR */
+ 	update_early_mmu_table();
+ #endif
++#endif
+ 
+ 	return 0;
+ }
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/soc.c b/arch/arm/cpu/armv8/fsl-layerscape/soc.c
+index ae57c0e..0f6bf17 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/soc.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/soc.c
+@@ -311,8 +311,10 @@ void fsl_lsch3_early_init_f(void)
+ {
+ 	erratum_rcw_src();
+ #ifdef CONFIG_FSL_IFC
++#ifndef CONFIG_SPL_BUILD
+ 	init_early_memctl_regs();	/* tighten IFC timing */
+ #endif
++#endif
+ #ifdef CONFIG_SYS_FSL_ERRATUM_A009203
+ 	erratum_a009203();
+ #endif
+-- 
+1.7.1
+

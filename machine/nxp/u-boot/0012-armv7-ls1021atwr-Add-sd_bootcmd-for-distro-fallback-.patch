@@ -1,0 +1,57 @@
+From 397a173e9ee50d0517793e662d88856624f1decc Mon Sep 17 00:00:00 2001
+From: Shengzhou Liu <Shengzhou.Liu@nxp.com>
+Date: Thu, 9 Nov 2017 17:57:57 +0800
+Subject: [PATCH 012/129] armv7: ls1021atwr: Add sd_bootcmd for distro fallback in case of sdboot
+
+Signed-off-by: Shengzhou Liu <Shengzhou.Liu@nxp.com>
+Reviewed-by: York Sun <york.sun@nxp.com>
+---
+ include/configs/ls1021atwr.h |   14 ++++++++++----
+ 1 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/include/configs/ls1021atwr.h b/include/configs/ls1021atwr.h
+index 0f20e5e..5be61ad 100644
+--- a/include/configs/ls1021atwr.h
++++ b/include/configs/ls1021atwr.h
+@@ -375,6 +375,8 @@
+ 	"ramdisk_addr_r=0xa0000000\0"	\
+ 	"load_addr=0xa0000000\0"	\
+ 	"kernel_size=0x2800000\0"	\
++	"kernel_addr_sd=0x8000\0"	\
++	"kernel_size_sd=0x14000\0"	\
+ 	BOOTENV				\
+ 	"boot_scripts=ls1021atwr_boot.scr\0"	\
+ 	"boot_script_hdr=hdr_ls1021atwr_bs.out\0"	\
+@@ -456,21 +458,25 @@
+ 			"${scripthdraddr} ${prefix}${boot_script_hdr} " \
+ 			"&& esbc_validate ${scripthdraddr};"    \
+ 		"source ${scriptaddr}\0"	  \
+-	"installer=load mmc 0:2 $load_addr "	\
+-		"/flex_installer_arm32.itb; "		\
+-		"bootm $load_addr#ls1021atwr\0"	\
+ 	"qspi_bootcmd=echo Trying load from qspi..;"	\
+ 		"sf probe && sf read $load_addr "	\
+ 		"$kernel_addr $kernel_size && bootm $load_addr#$board\0"	\
+ 	"nor_bootcmd=echo Trying load from nor..;"	\
+ 		"cp.b $kernel_addr $load_addr "		\
+-		"$kernel_size && bootm $load_addr#$board\0"
++		"$kernel_size && bootm $load_addr#$board\0" \
++	"sd_bootcmd=echo Trying load from SD ..;"       \
++		"mmcinfo && mmc read $load_addr "	\
++		"$kernel_addr_sd $kernel_size_sd && "	\
++		"bootm $load_addr#$board\0"
+ #endif
+ 
+ #undef CONFIG_BOOTCOMMAND
+ #if defined(CONFIG_QSPI_BOOT) || defined(CONFIG_SD_BOOT_QSPI)
+ #define CONFIG_BOOTCOMMAND "run distro_bootcmd; env exists secureboot"	\
+ 			   "&& esbc_halt; run qspi_bootcmd;"
++#elif defined(CONFIG_SD_BOOT)
++#define CONFIG_BOOTCOMMAND "run distro_bootcmd; env exists secureboot"  \
++			   "&& esbc_halt; run sd_bootcmd;"
+ #else
+ #define CONFIG_BOOTCOMMAND "run distro_bootcmd; env exists secureboot"	\
+ 			   "&& esbc_halt; run nor_bootcmd;"
+-- 
+1.7.1
+

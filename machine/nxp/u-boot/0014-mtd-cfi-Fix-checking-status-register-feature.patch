@@ -1,0 +1,56 @@
+From dcda78829d601e8f2fe91382300388edc09fec4f Mon Sep 17 00:00:00 2001
+From: York Sun <york.sun@nxp.com>
+Date: Sat, 18 Nov 2017 11:09:08 -0800
+Subject: [PATCH 014/129] mtd: cfi: Fix checking status register feature
+
+Commit 72443c7f7d21 ("mtd: cfi: Add support for status register
+polling") added a feature check to determine if status register
+is available for certain flash chips. The "lower software bits"
+register used to determine this feature is not backward compati-
+ble. Older flash chips without this feature has reserved value
+0xff. Instead of checking "lower software bits" register, use
+CFI primary vendor-specific extended query. Since CFI version
+1.4, software features can be read from offset 0x53 according to
+document AN201168 from Cypress.
+
+Signed-off-by: York Sun <york.sun@nxp.com>
+CC: Marek Vasut <marek.vasut@gmail.com>
+Tested-by: Marek Vasut <marek.vasut@gmail.com>
+Signed-off-by: Stefan Roese <sr@denx.de>
+---
+ drivers/mtd/cfi_flash.c |   12 +++++++++---
+ 1 files changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/mtd/cfi_flash.c b/drivers/mtd/cfi_flash.c
+index 8a5babe..f096e03 100644
+--- a/drivers/mtd/cfi_flash.c
++++ b/drivers/mtd/cfi_flash.c
+@@ -1694,7 +1694,7 @@ static void cmdset_amd_read_jedec_ids(flash_info_t *info)
+ {
+ 	ushort bankId = 0;
+ 	uchar  manuId;
+-	uchar  lsbits;
++	uchar  feature;
+ 
+ 	flash_write_cmd(info, 0, 0, AMD_CMD_RESET);
+ 	flash_unlock_seq(info, 0);
+@@ -1710,8 +1710,14 @@ static void cmdset_amd_read_jedec_ids(flash_info_t *info)
+ 	}
+ 	info->manufacturer_id = manuId;
+ 
+-	lsbits = flash_read_uchar(info, FLASH_OFFSET_LOWER_SW_BITS);
+-	info->sr_supported = lsbits & BIT(0);
++	debug("info->ext_addr = 0x%x, cfi_version = 0x%x\n",
++	      info->ext_addr, info->cfi_version);
++	if (info->ext_addr && info->cfi_version >= 0x3134) {
++		/* read software feature (at 0x53) */
++		feature = flash_read_uchar(info, info->ext_addr + 0x13);
++		debug("feature = 0x%x\n", feature);
++		info->sr_supported = feature & 0x1;
++	}
+ 
+ 	switch (info->chipwidth){
+ 	case FLASH_CFI_8BIT:
+-- 
+1.7.1
+

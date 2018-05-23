@@ -1,0 +1,139 @@
+From 6cf0730266f5a4d1f851b148ed2b71e3a2141e61 Mon Sep 17 00:00:00 2001
+From: Calvin Johnson <calvin.johnson@nxp.com>
+Date: Tue, 16 Jan 2018 11:16:55 +0530
+Subject: [PATCH 087/129] board: freescale: ls1012afrdm: enable network support on ls1012afrdm
+
+This patch enables ethernet support for ls1012frdm.
+
+Signed-off-by: Calvin Johnson <calvin.johnson@nxp.com>
+
+Changes in v2:
+-split from original patch "board: freescale: ls1012a: enable network
+support on ls1012a platforms"
+---
+ board/freescale/ls1012afrdm/Makefile      |    1 +
+ board/freescale/ls1012afrdm/eth.c         |   86 +++++++++++++++++++++++++++++
+ board/freescale/ls1012afrdm/ls1012afrdm.c |    5 --
+ 3 files changed, 87 insertions(+), 5 deletions(-)
+ create mode 100644 board/freescale/ls1012afrdm/eth.c
+
+diff --git a/board/freescale/ls1012afrdm/Makefile b/board/freescale/ls1012afrdm/Makefile
+index dbfa2ce..1364f22 100644
+--- a/board/freescale/ls1012afrdm/Makefile
++++ b/board/freescale/ls1012afrdm/Makefile
+@@ -5,3 +5,4 @@
+ #
+ 
+ obj-y += ls1012afrdm.o
++obj-y += eth.o
+diff --git a/board/freescale/ls1012afrdm/eth.c b/board/freescale/ls1012afrdm/eth.c
+new file mode 100644
+index 0000000..bc1aae8
+--- /dev/null
++++ b/board/freescale/ls1012afrdm/eth.c
+@@ -0,0 +1,86 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#include <common.h>
++#include <asm/io.h>
++#include <netdev.h>
++#include <fm_eth.h>
++#include <fsl_mdio.h>
++#include <malloc.h>
++#include <fsl_dtsec.h>
++#include <asm/arch/soc.h>
++#include <asm/arch-fsl-layerscape/config.h>
++#include <asm/arch/fsl_serdes.h>
++
++#include <pfe_eth/pfe_eth.h>
++#include <asm/arch-fsl-layerscape/immap_lsch2.h>
++
++#define DEFAULT_PFE_MDIO_NAME "PFE_MDIO"
++#define DEFAULT_PFE_MDIO1_NAME "PFE_MDIO1"
++
++#define MASK_ETH_PHY_RST	0x00000100
++
++void reset_phy(void)
++{
++	unsigned int val;
++	struct ccsr_gpio *pgpio = (void *)(GPIO1_BASE_ADDR);
++
++	setbits_be32(&pgpio->gpdir, MASK_ETH_PHY_RST);
++
++	val = in_be32(&pgpio->gpdat);
++	setbits_be32(&pgpio->gpdat, val & ~MASK_ETH_PHY_RST);
++	mdelay(10);
++
++	val = in_be32(&pgpio->gpdat);
++	setbits_be32(&pgpio->gpdat, val | MASK_ETH_PHY_RST);
++	mdelay(50);
++}
++
++int board_eth_init(bd_t *bis)
++{
++#ifdef CONFIG_FSL_PFE
++	struct mii_dev *bus;
++	struct mdio_info mac1_mdio_info;
++
++	reset_phy();
++
++	init_pfe_scfg_dcfg_regs();
++
++	mac1_mdio_info.reg_base = (void *)EMAC1_BASE_ADDR;
++	mac1_mdio_info.name = DEFAULT_PFE_MDIO_NAME;
++
++	bus = pfe_mdio_init(&mac1_mdio_info);
++	if (!bus) {
++		printf("Failed to register mdio\n");
++		return -1;
++	}
++
++	/* We don't really need this MDIO bus,
++	 * this is called just to initialize EMAC2 MDIO interface
++	 */
++	mac1_mdio_info.reg_base = (void *)0x04220000; /* EMAC2_BASE_ADDR */
++	mac1_mdio_info.name = DEFAULT_PFE_MDIO1_NAME;
++
++	bus = pfe_mdio_init(&mac1_mdio_info);
++	if (!bus) {
++		printf("Failed to register mdio\n");
++		return -1;
++	}
++
++	/* MAC1 */
++	pfe_set_mdio(0, miiphy_get_dev_by_name(DEFAULT_PFE_MDIO_NAME));
++	pfe_set_phy_address_mode(0, EMAC1_PHY_ADDR,
++				 PHY_INTERFACE_MODE_SGMII);
++
++	/* MAC2 */
++	pfe_set_mdio(1, miiphy_get_dev_by_name(DEFAULT_PFE_MDIO_NAME));
++	pfe_set_phy_address_mode(1, EMAC2_PHY_ADDR,
++				 PHY_INTERFACE_MODE_SGMII);
++
++	return cpu_eth_init(bis);
++#endif
++}
+diff --git a/board/freescale/ls1012afrdm/ls1012afrdm.c b/board/freescale/ls1012afrdm/ls1012afrdm.c
+index 9afd1c4..0145886 100644
+--- a/board/freescale/ls1012afrdm/ls1012afrdm.c
++++ b/board/freescale/ls1012afrdm/ls1012afrdm.c
+@@ -57,11 +57,6 @@ int dram_init(void)
+ 	return 0;
+ }
+ 
+-int board_eth_init(bd_t *bis)
+-{
+-	return pci_eth_init(bis);
+-}
+-
+ int board_early_init_f(void)
+ {
+ 	fsl_lsch2_early_init_f();
+-- 
+1.7.1
+

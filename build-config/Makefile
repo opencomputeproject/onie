@@ -514,7 +514,8 @@ DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
 				  libexpat1-dev fakeroot python-sphinx rst2pdf \
 				  libefivar-dev libnss3-tools libnss3-dev libpopt-dev \
-				  libssl-dev sbsigntool uuid-runtime
+				  libssl-dev sbsigntool uuid-runtime uuid-dev cpio \
+				  bsdmainutils
 
 PHONY += debian-prepare-build-host
 debian-prepare-build-host:

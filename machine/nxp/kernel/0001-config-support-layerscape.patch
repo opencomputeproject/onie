@@ -1,12 +1,12 @@
-From 95e91862ebf018e1d0f9b84fd0fb7f3cd0589215 Mon Sep 17 00:00:00 2001
+From 3127f264a91fe73b5ee63dfebe69cdd1f56eb5c5 Mon Sep 17 00:00:00 2001
 From: Yangbo Lu <yangbo.lu@nxp.com>
-Date: Mon, 25 Sep 2017 09:52:26 +0800
-Subject: [PATCH 01/30] config: support layerscape
+Date: Wed, 17 Jan 2018 15:26:46 +0800
+Subject: [PATCH 01/33] config: support layerscape
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-This is a integrated patch for layerscape config/makefile support.
+This is an integrated patch for layerscape config/makefile support.
 
 Signed-off-by: Yuantian Tang <andy.tang@nxp.com>
 Signed-off-by: Zhang Ying-22455 <ying.zhang22455@nxp.com>
@@ -16,38 +16,62 @@ Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
 Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
 Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
 ---
- drivers/base/Kconfig                    |   1 +
- drivers/crypto/Makefile                 |   2 +-
- drivers/net/ethernet/freescale/Kconfig  |   4 +-
- drivers/net/ethernet/freescale/Makefile |   2 +
- drivers/ptp/Kconfig                     |  29 ++++++
- drivers/rtc/Kconfig                     |   8 ++
- drivers/rtc/Makefile                    |   1 +
- drivers/soc/Kconfig                     |   3 +-
- drivers/soc/fsl/Kconfig                 |  22 +++++
- drivers/soc/fsl/Kconfig.arm             |  16 ++++
- drivers/soc/fsl/Makefile                |   4 +
- drivers/soc/fsl/layerscape/Kconfig      |  10 +++
- drivers/soc/fsl/layerscape/Makefile     |   1 +
- drivers/soc/fsl/rcpm.c                  | 154 ++++++++++++++++++++++++++++++++
- drivers/staging/Kconfig                 |   6 ++
- drivers/staging/Makefile                |   3 +
- drivers/staging/fsl-dpaa2/Kconfig       |  41 +++++++++
- drivers/staging/fsl-dpaa2/Makefile      |   9 ++
- 18 files changed, 312 insertions(+), 4 deletions(-)
+ arch/arm/mach-imx/Kconfig               |  1 +
+ arch/arm64/configs/defconfig            |  1 +
+ drivers/base/Kconfig                    |  1 +
+ drivers/crypto/Makefile                 |  2 +-
+ drivers/net/ethernet/freescale/Kconfig  |  4 ++-
+ drivers/net/ethernet/freescale/Makefile |  2 ++
+ drivers/ptp/Kconfig                     | 29 +++++++++++++++++
+ drivers/rtc/Kconfig                     |  8 +++++
+ drivers/rtc/Makefile                    |  1 +
+ drivers/soc/Kconfig                     |  3 +-
+ drivers/soc/fsl/Kconfig                 | 22 +++++++++++++
+ drivers/soc/fsl/Kconfig.arm             | 16 +++++++++
+ drivers/soc/fsl/Makefile                |  4 +++
+ drivers/soc/fsl/layerscape/Kconfig      | 10 ++++++
+ drivers/soc/fsl/layerscape/Makefile     |  1 +
+ drivers/staging/Kconfig                 |  6 ++++
+ drivers/staging/Makefile                |  3 ++
+ drivers/staging/fsl-dpaa2/Kconfig       | 58 +++++++++++++++++++++++++++++++++
+ drivers/staging/fsl-dpaa2/Makefile      |  9 +++++
+ 19 files changed, 177 insertions(+), 4 deletions(-)
  create mode 100644 drivers/soc/fsl/Kconfig
  create mode 100644 drivers/soc/fsl/Kconfig.arm
  create mode 100644 drivers/soc/fsl/layerscape/Kconfig
  create mode 100644 drivers/soc/fsl/layerscape/Makefile
- create mode 100644 drivers/soc/fsl/rcpm.c
  create mode 100644 drivers/staging/fsl-dpaa2/Kconfig
  create mode 100644 drivers/staging/fsl-dpaa2/Makefile
 
+diff --git a/arch/arm/mach-imx/Kconfig b/arch/arm/mach-imx/Kconfig
+index 9155b63..3ded3f9 100644
+--- a/arch/arm/mach-imx/Kconfig
++++ b/arch/arm/mach-imx/Kconfig
+@@ -1,6 +1,7 @@
+ menuconfig ARCH_MXC
+ 	bool "Freescale i.MX family"
+ 	depends on ARCH_MULTI_V4_V5 || ARCH_MULTI_V6_V7 || ARM_SINGLE_ARMV7M
++	select ARCH_DMA_ADDR_T_64BIT if ARM_LPAE
+ 	select ARCH_SUPPORTS_BIG_ENDIAN
+ 	select CLKSRC_IMX_GPT
+ 	select GENERIC_IRQ_CHIP
+diff --git a/arch/arm64/configs/defconfig b/arch/arm64/configs/defconfig
+index dab2cb0..f3b9e4b 100644
+--- a/arch/arm64/configs/defconfig
++++ b/arch/arm64/configs/defconfig
+@@ -125,6 +125,7 @@ CONFIG_VLAN_8021Q_MVRP=y
+ CONFIG_BPF_JIT=y
+ CONFIG_BT=m
+ CONFIG_BT_HIDP=m
++CONFIG_NET_SWITCHDEV=y
+ # CONFIG_BT_HS is not set
+ # CONFIG_BT_LE is not set
+ CONFIG_BT_LEDS=y
 diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
-index d02e7c0f5bfd..2abea876c0a0 100644
+index 0651010..981c86c 100644
 --- a/drivers/base/Kconfig
 +++ b/drivers/base/Kconfig
-@@ -237,6 +237,7 @@ config GENERIC_CPU_AUTOPROBE
+@@ -240,6 +240,7 @@ config GENERIC_CPU_VULNERABILITIES
  
  config SOC_BUS
  	bool
@@ -56,7 +80,7 @@ index d02e7c0f5bfd..2abea876c0a0 100644
  source "drivers/base/regmap/Kconfig"
  
 diff --git a/drivers/crypto/Makefile b/drivers/crypto/Makefile
-index ad7250fa1348..6d788fd792c2 100644
+index ad7250f..6d788fd 100644
 --- a/drivers/crypto/Makefile
 +++ b/drivers/crypto/Makefile
 @@ -3,7 +3,7 @@ obj-$(CONFIG_CRYPTO_DEV_ATMEL_SHA) += atmel-sha.o
@@ -69,7 +93,7 @@ index ad7250fa1348..6d788fd792c2 100644
  obj-$(CONFIG_CRYPTO_DEV_HIFN_795X) += hifn_795x.o
  obj-$(CONFIG_CRYPTO_DEV_IMGTEC_HASH) += img-hash.o
 diff --git a/drivers/net/ethernet/freescale/Kconfig b/drivers/net/ethernet/freescale/Kconfig
-index d1ca45fbb164..74a2864ee565 100644
+index d1ca45f..74a2864 100644
 --- a/drivers/net/ethernet/freescale/Kconfig
 +++ b/drivers/net/ethernet/freescale/Kconfig
 @@ -5,7 +5,7 @@
@@ -89,7 +113,7 @@ index d1ca45fbb164..74a2864ee565 100644
 +source "drivers/net/ethernet/freescale/sdk_dpaa/Kconfig"
  endif # NET_VENDOR_FREESCALE
 diff --git a/drivers/net/ethernet/freescale/Makefile b/drivers/net/ethernet/freescale/Makefile
-index cbe21dc7e37e..a5d4405f22b4 100644
+index cbe21dc..a5d4405 100644
 --- a/drivers/net/ethernet/freescale/Makefile
 +++ b/drivers/net/ethernet/freescale/Makefile
 @@ -21,4 +21,6 @@ gianfar_driver-objs := gianfar.o \
@@ -100,7 +124,7 @@ index cbe21dc7e37e..a5d4405f22b4 100644
 +obj-$(if $(CONFIG_FSL_SDK_DPAA_ETH),y) += sdk_dpaa/
  obj-$(CONFIG_FSL_FMAN) += fman/
 diff --git a/drivers/ptp/Kconfig b/drivers/ptp/Kconfig
-index ee3de3421f2d..4c45beda0e51 100644
+index ee3de34..4c45bed 100644
 --- a/drivers/ptp/Kconfig
 +++ b/drivers/ptp/Kconfig
 @@ -39,6 +39,35 @@ config PTP_1588_CLOCK_GIANFAR
@@ -140,7 +164,7 @@ index ee3de3421f2d..4c45beda0e51 100644
  	tristate "Intel IXP46x as PTP clock"
  	depends on IXP4XX_ETH
 diff --git a/drivers/rtc/Kconfig b/drivers/rtc/Kconfig
-index 0723c97ebea3..df610dcd6089 100644
+index 0723c97..df610dc 100644
 --- a/drivers/rtc/Kconfig
 +++ b/drivers/rtc/Kconfig
 @@ -414,6 +414,14 @@ config RTC_DRV_PCF85063
@@ -159,7 +183,7 @@ index 0723c97ebea3..df610dcd6089 100644
  	tristate "Philips PCF8563/Epson RTC8564"
  	help
 diff --git a/drivers/rtc/Makefile b/drivers/rtc/Makefile
-index 1ac694a330c8..7675b8a73cee 100644
+index 1ac694a..7675b8a 100644
 --- a/drivers/rtc/Makefile
 +++ b/drivers/rtc/Makefile
 @@ -111,6 +111,7 @@ obj-$(CONFIG_RTC_DRV_PCF2127)	+= rtc-pcf2127.o
@@ -171,7 +195,7 @@ index 1ac694a330c8..7675b8a73cee 100644
  obj-$(CONFIG_RTC_DRV_PCF8583)	+= rtc-pcf8583.o
  obj-$(CONFIG_RTC_DRV_PIC32)	+= rtc-pic32.o
 diff --git a/drivers/soc/Kconfig b/drivers/soc/Kconfig
-index e6e90e80519a..f31bceb69c0d 100644
+index e6e90e8..f31bceb 100644
 --- a/drivers/soc/Kconfig
 +++ b/drivers/soc/Kconfig
 @@ -1,8 +1,7 @@
@@ -186,7 +210,7 @@ index e6e90e80519a..f31bceb69c0d 100644
  source "drivers/soc/rockchip/Kconfig"
 diff --git a/drivers/soc/fsl/Kconfig b/drivers/soc/fsl/Kconfig
 new file mode 100644
-index 000000000000..d4cd25f14001
+index 0000000..d4cd25f
 --- /dev/null
 +++ b/drivers/soc/fsl/Kconfig
 @@ -0,0 +1,22 @@
@@ -214,7 +238,7 @@ index 000000000000..d4cd25f14001
 +endif
 diff --git a/drivers/soc/fsl/Kconfig.arm b/drivers/soc/fsl/Kconfig.arm
 new file mode 100644
-index 000000000000..106c9b981ac1
+index 0000000..106c9b9
 --- /dev/null
 +++ b/drivers/soc/fsl/Kconfig.arm
 @@ -0,0 +1,16 @@
@@ -235,7 +259,7 @@ index 000000000000..106c9b981ac1
 +	source "drivers/soc/fsl/layerscape/Kconfig"
 +endif
 diff --git a/drivers/soc/fsl/Makefile b/drivers/soc/fsl/Makefile
-index 75e1f5334821..b8708569154e 100644
+index 75e1f53..b870856 100644
 --- a/drivers/soc/fsl/Makefile
 +++ b/drivers/soc/fsl/Makefile
 @@ -5,3 +5,7 @@
@@ -248,7 +272,7 @@ index 75e1f5334821..b8708569154e 100644
 +obj-$(CONFIG_LS_SOC_DRIVERS)		+= layerscape/
 diff --git a/drivers/soc/fsl/layerscape/Kconfig b/drivers/soc/fsl/layerscape/Kconfig
 new file mode 100644
-index 000000000000..e1373aa1b4ea
+index 0000000..e1373aa
 --- /dev/null
 +++ b/drivers/soc/fsl/layerscape/Kconfig
 @@ -0,0 +1,10 @@
@@ -264,173 +288,13 @@ index 000000000000..e1373aa1b4ea
 +	one FTM can be used in ALARM(FTM 0).
 diff --git a/drivers/soc/fsl/layerscape/Makefile b/drivers/soc/fsl/layerscape/Makefile
 new file mode 100644
-index 000000000000..6299aa1de215
+index 0000000..6299aa1
 --- /dev/null
 +++ b/drivers/soc/fsl/layerscape/Makefile
 @@ -0,0 +1 @@
 +obj-$(CONFIG_FTM_ALARM) += ftm_alarm.o
-diff --git a/drivers/soc/fsl/rcpm.c b/drivers/soc/fsl/rcpm.c
-new file mode 100644
-index 000000000000..a6a31c8715c8
---- /dev/null
-+++ b/drivers/soc/fsl/rcpm.c
-@@ -0,0 +1,154 @@
-+/*
-+ * Run Control and Power Management (RCPM) driver
-+ *
-+ * Copyright 2016 NXP
-+ *
-+ * This program is free software; you can redistribute it and/or modify
-+ * it under the terms of the GNU General Public License as published by
-+ * the Free Software Foundation; either version 2 of the License, or
-+ * (at your option) any later version.
-+ *
-+ * This program is distributed in the hope that it will be useful,
-+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+ * GNU General Public License for more details.
-+ *
-+ */
-+#define pr_fmt(fmt) "RCPM: %s: " fmt, __func__
-+
-+#include <linux/kernel.h>
-+#include <linux/io.h>
-+#include <linux/of_platform.h>
-+#include <linux/of_address.h>
-+#include <linux/suspend.h>
-+
-+/* RCPM register offset */
-+#define RCPM_IPPDEXPCR0			0x140
-+
-+#define RCPM_WAKEUP_CELL_SIZE	2
-+
-+struct rcpm_config {
-+	int ipp_num;
-+	int ippdexpcr_offset;
-+	u32 ippdexpcr[2];
-+	void *rcpm_reg_base;
-+};
-+
-+static struct rcpm_config *rcpm;
-+
-+static inline void rcpm_reg_write(u32 offset, u32 value)
-+{
-+	iowrite32be(value, rcpm->rcpm_reg_base + offset);
-+}
-+
-+static inline u32 rcpm_reg_read(u32 offset)
-+{
-+	return ioread32be(rcpm->rcpm_reg_base + offset);
-+}
-+
-+static void rcpm_wakeup_fixup(struct device *dev, void *data)
-+{
-+	struct device_node *node = dev ? dev->of_node : NULL;
-+	u32 value[RCPM_WAKEUP_CELL_SIZE];
-+	int ret, i;
-+
-+	if (!dev || !node || !device_may_wakeup(dev))
-+		return;
-+
-+	/*
-+	 * Get the values in the "rcpm-wakeup" property.
-+	 * Three values are:
-+	 * The first is a pointer to the RCPM node.
-+	 * The second is the value of the ippdexpcr0 register.
-+	 * The third is the value of the ippdexpcr1 register.
-+	 */
-+	ret = of_property_read_u32_array(node, "fsl,rcpm-wakeup",
-+					 value, RCPM_WAKEUP_CELL_SIZE);
-+	if (ret)
-+		return;
-+
-+	pr_debug("wakeup source: the device %s\n", node->full_name);
-+
-+	for (i = 0; i < rcpm->ipp_num; i++)
-+		rcpm->ippdexpcr[i] |= value[i + 1];
-+}
-+
-+static int rcpm_suspend_prepare(void)
-+{
-+	int i;
-+
-+	BUG_ON(!rcpm);
-+
-+	for (i = 0; i < rcpm->ipp_num; i++)
-+		rcpm->ippdexpcr[i] = 0;
-+
-+	dpm_for_each_dev(NULL, rcpm_wakeup_fixup);
-+
-+	for (i = 0; i < rcpm->ipp_num; i++) {
-+		rcpm_reg_write(rcpm->ippdexpcr_offset + 4 * i,
-+			       rcpm->ippdexpcr[i]);
-+		pr_debug("ippdexpcr%d = 0x%x\n", i, rcpm->ippdexpcr[i]);
-+	}
-+
-+	return 0;
-+}
-+
-+static int rcpm_suspend_notifier_call(struct notifier_block *bl,
-+				      unsigned long state,
-+				      void *unused)
-+{
-+	switch (state) {
-+	case PM_SUSPEND_PREPARE:
-+		rcpm_suspend_prepare();
-+		break;
-+	}
-+
-+	return NOTIFY_DONE;
-+}
-+
-+static struct rcpm_config rcpm_default_config = {
-+	.ipp_num = 1,
-+	.ippdexpcr_offset = RCPM_IPPDEXPCR0,
-+};
-+
-+static const struct of_device_id rcpm_matches[] = {
-+	{
-+		.compatible = "fsl,qoriq-rcpm-2.1",
-+		.data = &rcpm_default_config,
-+	},
-+	{}
-+};
-+
-+static struct notifier_block rcpm_suspend_notifier = {
-+	.notifier_call = rcpm_suspend_notifier_call,
-+};
-+
-+static int __init layerscape_rcpm_init(void)
-+{
-+	const struct of_device_id *match;
-+	struct device_node *np;
-+
-+	np = of_find_matching_node_and_match(NULL, rcpm_matches, &match);
-+	if (!np) {
-+		pr_err("Can't find the RCPM node.\n");
-+		return -EINVAL;
-+	}
-+
-+	if (match->data)
-+		rcpm = (struct rcpm_config *)match->data;
-+	else
-+		return -EINVAL;
-+
-+	rcpm->rcpm_reg_base = of_iomap(np, 0);
-+	of_node_put(np);
-+	if (!rcpm->rcpm_reg_base)
-+		return -ENOMEM;
-+
-+	register_pm_notifier(&rcpm_suspend_notifier);
-+
-+	pr_info("The RCPM driver initialized.\n");
-+
-+	return 0;
-+}
-+
-+subsys_initcall(layerscape_rcpm_init);
 diff --git a/drivers/staging/Kconfig b/drivers/staging/Kconfig
-index 58a7b3504b82..6c69e3bd741d 100644
+index 58a7b35..6c69e3b 100644
 --- a/drivers/staging/Kconfig
 +++ b/drivers/staging/Kconfig
 @@ -94,6 +94,8 @@ source "drivers/staging/fbtft/Kconfig"
@@ -452,7 +316,7 @@ index 58a7b3504b82..6c69e3bd741d 100644
 +
  endif # STAGING
 diff --git a/drivers/staging/Makefile b/drivers/staging/Makefile
-index 2fa9745db614..ee817a5e9998 100644
+index 2fa9745..ee817a5 100644
 --- a/drivers/staging/Makefile
 +++ b/drivers/staging/Makefile
 @@ -36,9 +36,12 @@ obj-$(CONFIG_UNISYSSPAR)	+= unisys/
@@ -470,10 +334,10 @@ index 2fa9745db614..ee817a5e9998 100644
 +obj-$(CONFIG_FSL_PPFE)		+= fsl_ppfe/
 diff --git a/drivers/staging/fsl-dpaa2/Kconfig b/drivers/staging/fsl-dpaa2/Kconfig
 new file mode 100644
-index 000000000000..8042d9ccfd3d
+index 0000000..8d56ec9
 --- /dev/null
 +++ b/drivers/staging/fsl-dpaa2/Kconfig
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,58 @@
 +#
 +# Freescale DataPath Acceleration Architecture Gen2 (DPAA2) drivers
 +#
@@ -510,14 +374,31 @@ index 000000000000..8042d9ccfd3d
 +	default n
 +	---help---
 +	  Enable advanced statistics through debugfs interface.
++
++config FSL_DPAA2_ETH_DCB
++        bool "Data Center Bridging (DCB) Support"
++        default n
++        depends on DCB
++        ---help---
++          Say Y here if you want to use Data Center Bridging (DCB) features
++          (PFC) in the driver.
++
++          If unsure, say N.
 +endif
 +
 +source "drivers/staging/fsl-dpaa2/mac/Kconfig"
 +source "drivers/staging/fsl-dpaa2/evb/Kconfig"
-+source "drivers/staging/fsl-dpaa2/ethsw/Kconfig"
++
++config FSL_DPAA2_ETHSW
++	tristate "Freescale DPAA2 Ethernet Switch"
++	depends on FSL_DPAA2
++	depends on NET_SWITCHDEV
++	---help---
++	Driver for Freescale DPAA2 Ethernet Switch. Select
++	BRIDGE to have support for bridge tools.
 diff --git a/drivers/staging/fsl-dpaa2/Makefile b/drivers/staging/fsl-dpaa2/Makefile
 new file mode 100644
-index 000000000000..cbaa8c20559e
+index 0000000..6b856b2
 --- /dev/null
 +++ b/drivers/staging/fsl-dpaa2/Makefile
 @@ -0,0 +1,9 @@
@@ -528,8 +409,8 @@ index 000000000000..cbaa8c20559e
 +obj-$(CONFIG_FSL_DPAA2_ETH)	+= ethernet/
 +obj-$(CONFIG_FSL_DPAA2_MAC)	+= mac/
 +obj-$(CONFIG_FSL_DPAA2_EVB)	+= evb/
-+obj-$(CONFIG_FSL_DPAA2_ETHSW)	+= ethsw/
 +obj-$(CONFIG_PTP_1588_CLOCK_DPAA2) += rtc/
++obj-$(CONFIG_FSL_DPAA2_ETHSW)	+= ethsw/
 -- 
-2.14.1
+2.7.4
 

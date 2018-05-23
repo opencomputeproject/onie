@@ -1,20 +1,30 @@
-From 159c5f2e1dceb41abf7639d161a06554be4eafb9 Mon Sep 17 00:00:00 2001
+From 4f54139f388ceb2a167c0b796b5810ff86989846 Mon Sep 17 00:00:00 2001
 From: Zhao Qiang <qiang.zhao@nxp.com>
-Date: Thu, 23 Nov 2017 15:25:15 +0800
-Subject: [PATCH 04/30] mtd: spi-nor: support layerscape
+Date: Wed, 11 Apr 2018 15:50:12 +0800
+Subject: [PATCH 04/33] mtd: spi-nor: support layerscape
 
-This is a integrated patch for layerscape qspi support.
+This is an integrated patch for layerscape qspi support.
 
-Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
+Signed-off-by: Suresh Gupta <suresh.gupta@nxp.com>
+Signed-off-by: Yunhui Cui <B56489@freescale.com>
+Signed-off-by: mar.krzeminski <mar.krzeminski@gmail.com>
+Signed-off-by: Alison Wang <b18965@freescale.com>
+Signed-off-by: Nobuhiro Iwamatsu <nobuhiro.iwamatsu.kw@hitachi.com>
+Signed-off-by: LABBE Corentin <clabbe.montjoie@gmail.com>
+Signed-off-by: Yuan Yao <yao.yuan@nxp.com>
+Signed-off-by: Alexander Kurz <akurz@blala.de>
+Signed-off-by: L. D. Pinney <ldpinney@gmail.com>
+Signed-off-by: Ash Benz <ash.benz@bk.ru>
+Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
 ---
  drivers/mtd/mtdchar.c             |   2 +-
  drivers/mtd/spi-nor/fsl-quadspi.c | 327 +++++++++++++++++++++++++++++++-------
- drivers/mtd/spi-nor/spi-nor.c     | 134 +++++++++++++++-
- include/linux/mtd/spi-nor.h       |  50 +++++-
- 4 files changed, 439 insertions(+), 74 deletions(-)
+ drivers/mtd/spi-nor/spi-nor.c     | 133 +++++++++++++++-
+ include/linux/mtd/spi-nor.h       |  12 +-
+ 4 files changed, 406 insertions(+), 68 deletions(-)
 
 diff --git a/drivers/mtd/mtdchar.c b/drivers/mtd/mtdchar.c
-index 2a47a3f0e730..4f21401df60b 100644
+index b4092ea..de829dd 100644
 --- a/drivers/mtd/mtdchar.c
 +++ b/drivers/mtd/mtdchar.c
 @@ -451,7 +451,7 @@ static int mtdchar_readoob(struct file *file, struct mtd_info *mtd,
@@ -27,7 +37,7 @@ index 2a47a3f0e730..4f21401df60b 100644
  	 *
  	 * Note: currently the standard NAND function, nand_read_oob_std,
 diff --git a/drivers/mtd/spi-nor/fsl-quadspi.c b/drivers/mtd/spi-nor/fsl-quadspi.c
-index 5c82e4ef1904..33ecc27a3155 100644
+index 5c82e4e..33ecc27 100644
 --- a/drivers/mtd/spi-nor/fsl-quadspi.c
 +++ b/drivers/mtd/spi-nor/fsl-quadspi.c
 @@ -41,6 +41,8 @@
@@ -646,7 +656,7 @@ index 5c82e4ef1904..33ecc27a3155 100644
  	ret = fsl_qspi_nor_setup_last(q);
  	if (ret)
 diff --git a/drivers/mtd/spi-nor/spi-nor.c b/drivers/mtd/spi-nor/spi-nor.c
-index 21dde5249085..ae75fdf9cf98 100644
+index 21dde52..c014650 100644
 --- a/drivers/mtd/spi-nor/spi-nor.c
 +++ b/drivers/mtd/spi-nor/spi-nor.c
 @@ -40,6 +40,13 @@
@@ -711,7 +721,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  
  	/* Everspin */
  	{ "mr25h256", CAT25_INFO( 32 * 1024, 1, 256, 2, SPI_NOR_NO_ERASE | SPI_NOR_NO_FR) },
-@@ -868,10 +882,14 @@ static const struct flash_info spi_nor_ids[] = {
+@@ -868,6 +882,9 @@ static const struct flash_info spi_nor_ids[] = {
  	{ "mx25l3205d",  INFO(0xc22016, 0, 64 * 1024,  64, SECT_4K) },
  	{ "mx25l3255e",  INFO(0xc29e16, 0, 64 * 1024,  64, SECT_4K) },
  	{ "mx25l6405d",  INFO(0xc22017, 0, 64 * 1024, 128, SECT_4K) },
@@ -721,12 +731,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  	{ "mx25u6435f",  INFO(0xc22537, 0, 64 * 1024, 128, SECT_4K) },
  	{ "mx25l12805d", INFO(0xc22018, 0, 64 * 1024, 256, 0) },
  	{ "mx25l12855e", INFO(0xc22618, 0, 64 * 1024, 256, 0) },
- 	{ "mx25l25635e", INFO(0xc22019, 0, 64 * 1024, 512, 0) },
-+	{ "mx25u25635f", INFO(0xc22539, 0, 64 * 1024, 512, SECT_4K) },
- 	{ "mx25l25655e", INFO(0xc22619, 0, 64 * 1024, 512, 0) },
- 	{ "mx66l51235l", INFO(0xc2201a, 0, 64 * 1024, 1024, SPI_NOR_QUAD_READ) },
- 	{ "mx66l1g55g",  INFO(0xc2261b, 0, 64 * 1024, 2048, SPI_NOR_QUAD_READ) },
-@@ -884,10 +902,11 @@ static const struct flash_info spi_nor_ids[] = {
+@@ -884,10 +901,11 @@ static const struct flash_info spi_nor_ids[] = {
  	{ "n25q128a11",  INFO(0x20bb18, 0, 64 * 1024,  256, SECT_4K | SPI_NOR_QUAD_READ) },
  	{ "n25q128a13",  INFO(0x20ba18, 0, 64 * 1024,  256, SECT_4K | SPI_NOR_QUAD_READ) },
  	{ "n25q256a",    INFO(0x20ba19, 0, 64 * 1024,  512, SECT_4K | SPI_NOR_QUAD_READ) },
@@ -740,7 +745,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  
  	/* PMC */
  	{ "pm25lv512",   INFO(0,        0, 32 * 1024,    2, SECT_4K_PMC) },
-@@ -906,7 +925,11 @@ static const struct flash_info spi_nor_ids[] = {
+@@ -906,7 +924,11 @@ static const struct flash_info spi_nor_ids[] = {
  	{ "s25sl12800", INFO(0x012018, 0x0300, 256 * 1024,  64, 0) },
  	{ "s25sl12801", INFO(0x012018, 0x0301,  64 * 1024, 256, 0) },
  	{ "s25fl128s",	INFO6(0x012018, 0x4d0180, 64 * 1024, 256, SECT_4K | SPI_NOR_QUAD_READ) },
@@ -752,7 +757,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  	{ "s25fl129p1", INFO(0x012018, 0x4d01,  64 * 1024, 256, SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
  	{ "s25sl004a",  INFO(0x010212,      0,  64 * 1024,   8, 0) },
  	{ "s25sl008a",  INFO(0x010213,      0,  64 * 1024,  16, 0) },
-@@ -980,6 +1003,9 @@ static const struct flash_info spi_nor_ids[] = {
+@@ -980,6 +1002,9 @@ static const struct flash_info spi_nor_ids[] = {
  	{ "w25x80", INFO(0xef3014, 0, 64 * 1024,  16, SECT_4K) },
  	{ "w25x16", INFO(0xef3015, 0, 64 * 1024,  32, SECT_4K) },
  	{ "w25x32", INFO(0xef3016, 0, 64 * 1024,  64, SECT_4K) },
@@ -762,7 +767,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  	{ "w25q32", INFO(0xef4016, 0, 64 * 1024,  64, SECT_4K) },
  	{
  		"w25q32dw", INFO(0xef6016, 0, 64 * 1024,  64,
-@@ -1035,6 +1061,53 @@ static const struct flash_info *spi_nor_read_id(struct spi_nor *nor)
+@@ -1035,6 +1060,53 @@ static const struct flash_info *spi_nor_read_id(struct spi_nor *nor)
  		id[0], id[1], id[2]);
  	return ERR_PTR(-ENODEV);
  }
@@ -816,7 +821,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  
  static int spi_nor_read(struct mtd_info *mtd, loff_t from, size_t len,
  			size_t *retlen, u_char *buf)
-@@ -1231,7 +1304,7 @@ static int macronix_quad_enable(struct spi_nor *nor)
+@@ -1231,7 +1303,7 @@ static int macronix_quad_enable(struct spi_nor *nor)
   * Write status Register and configuration register with 2 bytes
   * The first byte will be written to the status register, while the
   * second byte will be written to the configuration register.
@@ -825,7 +830,7 @@ index 21dde5249085..ae75fdf9cf98 100644
   */
  static int write_sr_cr(struct spi_nor *nor, u16 val)
  {
-@@ -1272,6 +1345,24 @@ static int spansion_quad_enable(struct spi_nor *nor)
+@@ -1272,6 +1344,24 @@ static int spansion_quad_enable(struct spi_nor *nor)
  	return 0;
  }
  
@@ -850,7 +855,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  static int set_quad_mode(struct spi_nor *nor, const struct flash_info *info)
  {
  	int status;
-@@ -1367,9 +1458,25 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
+@@ -1367,9 +1457,25 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
  		write_sr(nor, 0);
  		spi_nor_wait_till_ready(nor);
  	}
@@ -876,7 +881,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  	mtd->priv = nor;
  	mtd->type = MTD_NORFLASH;
  	mtd->writesize = 1;
-@@ -1402,6 +1509,8 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
+@@ -1402,6 +1508,8 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
  		nor->flags |= SNOR_F_USE_FSR;
  	if (info->flags & SPI_NOR_HAS_TB)
  		nor->flags |= SNOR_F_HAS_SR_TB;
@@ -885,7 +890,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  
  #ifdef CONFIG_MTD_SPI_NOR_USE_4K_SECTORS
  	/* prefer "small sector" erase if possible */
-@@ -1439,9 +1548,15 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
+@@ -1439,9 +1547,15 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
  	/* Some devices cannot do fast-read, no matter what DT tells us */
  	if (info->flags & SPI_NOR_NO_FR)
  		nor->flash_read = SPI_NOR_NORMAL;
@@ -904,7 +909,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  		ret = set_quad_mode(nor, info);
  		if (ret) {
  			dev_err(dev, "quad mode not supported\n");
-@@ -1454,6 +1569,9 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
+@@ -1454,6 +1568,9 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
  
  	/* Default commands */
  	switch (nor->flash_read) {
@@ -915,7 +920,7 @@ index 21dde5249085..ae75fdf9cf98 100644
  		nor->read_opcode = SPINOR_OP_READ_1_1_4;
  		break;
 diff --git a/include/linux/mtd/spi-nor.h b/include/linux/mtd/spi-nor.h
-index c425c7b4c2a0..ba2c963c6a01 100644
+index c425c7b..cf62c84 100644
 --- a/include/linux/mtd/spi-nor.h
 +++ b/include/linux/mtd/spi-nor.h
 @@ -31,10 +31,10 @@
@@ -931,68 +936,16 @@ index c425c7b4c2a0..ba2c963c6a01 100644
   */
  
  /* Flash opcodes. */
-@@ -43,9 +43,15 @@
- #define SPINOR_OP_WRSR		0x01	/* Write status register 1 byte */
- #define SPINOR_OP_READ		0x03	/* Read data bytes (low frequency) */
+@@ -45,6 +45,8 @@
  #define SPINOR_OP_READ_FAST	0x0b	/* Read data bytes (high frequency) */
--#define SPINOR_OP_READ_1_1_2	0x3b	/* Read data bytes (Dual SPI) */
--#define SPINOR_OP_READ_1_1_4	0x6b	/* Read data bytes (Quad SPI) */
-+#define SPINOR_OP_READ_1_1_2	0x3b	/* Read data bytes (Dual Output SPI) */
-+#define SPINOR_OP_READ_1_2_2	0xbb	/* Read data bytes (Dual I/O SPI) */
-+#define SPINOR_OP_READ_1_1_4	0x6b	/* Read data bytes (Quad Output SPI) */
+ #define SPINOR_OP_READ_1_1_2	0x3b	/* Read data bytes (Dual SPI) */
+ #define SPINOR_OP_READ_1_1_4	0x6b	/* Read data bytes (Quad SPI) */
 +#define SPINOR_OP_READ_1_4_4_D	0xed	/* Read data bytes (DDR Quad SPI) */
-+#define SPINOR_OP_READ_1_4_4	0xeb	/* Read data bytes (Quad I/O SPI) */
 +#define SPINOR_OP_READ4_1_4_4_D	0xee	/* Read data bytes (DDR Quad SPI) */
  #define SPINOR_OP_PP		0x02	/* Page program (up to 256 bytes) */
-+#define SPINOR_OP_PP_1_1_4	0x32	/* Quad page program */
-+#define SPINOR_OP_PP_1_4_4	0x38	/* Quad page program */
  #define SPINOR_OP_BE_4K		0x20	/* Erase 4KiB block */
  #define SPINOR_OP_BE_4K_PMC	0xd7	/* Erase 4KiB block on PMC chips */
- #define SPINOR_OP_BE_32K	0x52	/* Erase 32KiB block */
-@@ -55,12 +61,22 @@
- #define SPINOR_OP_RDCR		0x35	/* Read configuration register */
- #define SPINOR_OP_RDFSR		0x70	/* Read flag status register */
- 
-+#define SPINOR_OP_READ4                0x13    /* Read data bytes (low frequency) */
-+#define SPINOR_OP_READ4_FAST   0x0c    /* Read data bytes (high frequency) */
-+#define SPINOR_OP_READ4_1_1_2  0x3c    /* Read data bytes (Dual SPI) */
- /* 4-byte address opcodes - used on Spansion and some Macronix flashes. */
--#define SPINOR_OP_READ4		0x13	/* Read data bytes (low frequency) */
--#define SPINOR_OP_READ4_FAST	0x0c	/* Read data bytes (high frequency) */
--#define SPINOR_OP_READ4_1_1_2	0x3c	/* Read data bytes (Dual SPI) */
--#define SPINOR_OP_READ4_1_1_4	0x6c	/* Read data bytes (Quad SPI) */
-+#define SPINOR_OP_READ_4B	0x13	/* Read data bytes (low frequency) */
-+#define SPINOR_OP_READ_FAST_4B	0x0c	/* Read data bytes (high frequency) */
-+#define SPINOR_OP_READ_1_1_2_4B	0x3c	/* Read data bytes (Dual Output SPI) */
-+#define SPINOR_OP_READ_1_2_2_4B	0xbc	/* Read data bytes (Dual I/O SPI) */
-+#define SPINOR_OP_READ_1_1_4_4B	0x6c	/* Read data bytes (Quad Output SPI) */
-+#define SPINOR_OP_READ4_1_1_4  0x6c    /* Read data bytes (Quad SPI) */
-+#define SPINOR_OP_READ_1_4_4_4B	0xec	/* Read data bytes (Quad I/O SPI) */
- #define SPINOR_OP_PP_4B		0x12	/* Page program (up to 256 bytes) */
-+#define SPINOR_OP_PP_1_1_4_4B	0x34	/* Quad page program */
-+#define SPINOR_OP_PP_1_4_4_4B	0x3e	/* Quad page program */
-+#define SPINOR_OP_BE_4K_4B	0x21	/* Erase 4KiB block */
-+#define SPINOR_OP_BE_32K_4B	0x5c	/* Erase 32KiB block */
- #define SPINOR_OP_SE_4B		0xdc	/* Sector erase (usually 64KiB) */
- 
- /* Used for SST flashes only. */
-@@ -68,6 +84,15 @@
- #define SPINOR_OP_WRDI		0x04	/* Write disable */
- #define SPINOR_OP_AAI_WP	0xad	/* Auto address increment word program */
- 
-+/* Used for S3AN flashes only */
-+#define SPINOR_OP_XSE		0x50	/* Sector erase */
-+#define SPINOR_OP_XPP		0x82	/* Page program */
-+#define SPINOR_OP_XRDSR		0xd7	/* Read status register */
-+
-+#define XSR_PAGESIZE		BIT(0)	/* Page size in Po2 or Linear */
-+#define XSR_RDY			BIT(7)	/* Ready */
-+
-+
- /* Used for Macronix and Winbond flashes. */
- #define SPINOR_OP_EN4B		0xb7	/* Enter 4-byte mode */
- #define SPINOR_OP_EX4B		0xe9	/* Exit 4-byte mode */
-@@ -75,6 +100,10 @@
+@@ -75,6 +77,10 @@
  /* Used for Spansion flashes only. */
  #define SPINOR_OP_BRWR		0x17	/* Bank register write */
  
@@ -1003,7 +956,7 @@ index c425c7b4c2a0..ba2c963c6a01 100644
  /* Used for Micron flashes only. */
  #define SPINOR_OP_RD_EVCR      0x65    /* Read EVCR register */
  #define SPINOR_OP_WD_EVCR      0x61    /* Write EVCR register */
-@@ -105,6 +134,7 @@ enum read_mode {
+@@ -105,6 +111,7 @@ enum read_mode {
  	SPI_NOR_FAST,
  	SPI_NOR_DUAL,
  	SPI_NOR_QUAD,
@@ -1011,17 +964,7 @@ index c425c7b4c2a0..ba2c963c6a01 100644
  };
  
  #define SPI_NOR_MAX_CMD_SIZE	8
-@@ -119,6 +149,9 @@ enum spi_nor_ops {
- enum spi_nor_option_flags {
- 	SNOR_F_USE_FSR		= BIT(0),
- 	SNOR_F_HAS_SR_TB	= BIT(1),
-+	SNOR_F_NO_OP_CHIP_ERASE	= BIT(2),
-+	SNOR_F_S3AN_ADDR_DEFAULT = BIT(3),
-+	SNOR_F_READY_XSR_RDY	= BIT(4),
- };
- 
- /**
-@@ -167,6 +200,7 @@ struct spi_nor {
+@@ -167,6 +174,7 @@ struct spi_nor {
  	bool			sst_write_second;
  	u32			flags;
  	u8			cmd_buf[SPI_NOR_MAX_CMD_SIZE];
@@ -1030,5 +973,5 @@ index c425c7b4c2a0..ba2c963c6a01 100644
  	int (*prepare)(struct spi_nor *nor, enum spi_nor_ops ops);
  	void (*unprepare)(struct spi_nor *nor, enum spi_nor_ops ops);
 -- 
-2.14.1
+2.7.4
 
