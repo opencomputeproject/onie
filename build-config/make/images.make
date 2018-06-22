@@ -292,6 +292,7 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	$(Q) echo "onie_switch_asic=$(SWITCH_ASIC_VENDOR)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_skip_ethmgmt_macs=$(SKIP_ETHMGMT_MACS)" >> $(MACHINE_CONF)
 ifeq ($(UEFI_ENABLE),yes)
+	$(Q) echo "onie_grub_image_name=$(UEFI_BOOT_LOADER)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_uefi_boot_loader=$(UEFI_BOOT_LOADER)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_uefi_arch=$(EFI_ARCH)" >> $(MACHINE_CONF)
 endif
