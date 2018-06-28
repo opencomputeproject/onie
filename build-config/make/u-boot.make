@@ -44,7 +44,7 @@ ifeq ($(UBOOT_PBL_ENABLE),yes)
   UBOOT_IMAGE		= $(UBOOT_PBL)
   UBOOT_TARGET		= $(UBOOT_PBL)
 else ifeq ($(UBOOT_DTB_ENABLE),yes)
-  UPDATER_UBOOT_NAME	= u-boot-dtb.bin
+  UPDATER_UBOOT_NAME	= u-boot.bin
   UBOOT_IMAGE		= $(UBOOT_DTB)
   UBOOT_TARGET		= all
 else
