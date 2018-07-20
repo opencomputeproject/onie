@@ -34,7 +34,7 @@ UEFI_ENABLE = yes
 
 # Set Linux kernel version
 LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
+LINUX_MINOR_VERSION	= 113
 
 
 #-------------------------------------------------------------------------------
