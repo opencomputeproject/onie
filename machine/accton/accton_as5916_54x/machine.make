@@ -37,7 +37,7 @@ CONSOLE_DEV = 0
 
 # Specify Linux kernel version -- comment out to use the default
 LINUX_VERSION = 4.9
-LINUX_MINOR_VERSION = 95
+LINUX_MINOR_VERSION = 113
 
 GCC_VERSION = 4.9.2
 
