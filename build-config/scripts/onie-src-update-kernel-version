@@ -1,0 +1,38 @@
+#!/bin/sh
+
+[ -d ./machine ] || {
+    echo "ERROR: run this script from the onie repo root"
+    exit 1
+}
+
+DEBUG="$1"
+TEST_ONLY=no
+if [ -n "$DEBUG" ] ; then
+    TEST_ONLY=yes
+fi
+
+CURRENT_MAJOR=4.9
+CURRENT_MINOR=95
+NEW_MINOR=113
+
+find ./machine -name machine.make \
+     -exec egrep "LINUX_VERSION.*=.*${CURRENT_MAJOR}" '{}' \+ | \
+    sed -e 's/:.*//' | \
+    while read f ; do
+        echo "processing file: $f"
+        if egrep -q "LINUX_MINOR_VERSION.*=.*${CURRENT_MINOR}" $f ; then
+            echo "  MINOR_VERSION $CURRENT_MINOR matches"
+            if [ "$TEST_ONLY" = "no" ] ; then
+                sed -i -E -e "s/(LINUX_MINOR_VERSION.*=.*)${CURRENT_MINOR}/\1$NEW_MINOR/g" "$f"
+                machine="$(basename $(dirname $f))"
+                cat <<EOF > /tmp/commit.msg
+$machine: update kernel version to ${CURRENT_MAJOR}.${NEW_MINOR}
+
+Move forward to current default kernel version.
+
+Signed-off-by: Curt Brune <curt@cumulusnetworks.com>
+EOF
+                git commit -F /tmp/commit.msg "$f"
+            fi
+        fi
+    done

@@ -38,7 +38,7 @@ UBOOT_VERSION = 2017.11
 
 # Specify Linux kernel version -- comment out to use the default
 LINUX_VERSION = 4.9
-LINUX_MINOR_VERSION = 95
+LINUX_MINOR_VERSION = 113
 
 #---------------------------------------------------------
 #
