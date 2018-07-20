@@ -31,7 +31,7 @@ IPMITOOL_ENABLE=yes
 
 # Set Linux kernel version
 LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
+LINUX_MINOR_VERSION	= 113
 
 # Specify uClibc version
 #UCLIBC_VERSION = 0.9.32.1
