@@ -1,6 +1,7 @@
 #!/bin/sh
 
 #  Copyright (C) 2014,2016 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2018 david_yang <david_yang@accton.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -95,7 +96,7 @@ get_ethaddr()
 [ -r $lib_dir/sysinfo-arch ]     && . $lib_dir/sysinfo-arch
 [ -r $lib_dir/sysinfo-platform ] && . $lib_dir/sysinfo-platform
 
-args="hsbSevimrpcfdatP"
+args="hsbSevimrpcfdatPl"
 
 usage()
 {
@@ -152,6 +153,9 @@ COMMAND LINE OPTIONS
 	-S
 		ONIE silicon switch vendor
 
+	-l
+		Boot loader type
+
 	-a
 		Dump all information.
 EOF
@@ -171,6 +175,7 @@ config_version=no
 build_date=no
 partition_type=no
 switch_asic=no
+loader_type=no
 all=no
 
 [ $# -eq 0 ] && platform=yes
@@ -223,6 +228,9 @@ while getopts "$args" a ; do
         t)
             partition_type=yes
             ;;
+        l)
+            loader_type=yes
+            ;;
         a)
             all=yes
             ;;
@@ -232,6 +240,19 @@ while getopts "$args" a ; do
             exit 1
     esac
 done
+
+get_loader_type()
+{
+    if [ -z "$onie_firmware" ] ; then
+        echo "u-boot"
+    else
+        if [ -d /sys/firmware/efi/efivars ] ; then
+            echo "uefi"
+        else
+            echo "bios"
+        fi
+    fi
+}
 
 count=1
 print_val()
@@ -259,6 +280,11 @@ fi
 
 if [ "$mac" = "yes" ] || [ "$all" = "yes" ] ; then
     val=$(get_ethaddr)
+    print_val $val
+fi
+
+if [ "$loader_type" = "yes" ] || [ "$all" = "yes" ] ; then
+    val=$(get_loader_type)
     print_val $val
 fi
 
