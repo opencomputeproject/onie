@@ -186,7 +186,7 @@ Type Code  Length      Description       Format
 0xFD       Variable    Vendor Extension  This type code allows vendors to include extra
                                          information that is specific to the vendor and
                                          cannot be specified using the other type codes.
-                                         The format of this value field is a four byte
+                                         The format of this value field is a four byte big-endian
                                          IANA enterprise number, followed by a vendor
                                          defined string of bytes. The format of the string
                                          of bytes is entirely up to the vendor, except
@@ -195,7 +195,7 @@ Type Code  Length      Description       Format
                                          <http://www.iana.org/assignments/enterprise-numbers/enterprise-numbers>`_. 
                                          If more space is needed, then multiple TLVs with 
                                          this type code can be used.
-0xFE       4 bytes     CRC-32            A four-byte CRC which covers the EEPROM contents
+0xFE       4 bytes     CRC-32            A four-byte big-endian CRC which covers the EEPROM contents
                                          from the first byte of the EEPROM (the "T" in the
                                          "TlvInfo" identification string) to the length
                                          field of this TLV, inclusive.  This CRC uses the
