@@ -1,4 +1,4 @@
-.. Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2017,2018 Curt Brune <curt@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
 .. _news:
@@ -6,6 +6,10 @@
 ************
 Project News
 ************
+
+August 3, 2018
+  Released version `2018.08-rc1
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-August/001713.html>`_
 
 May 16, 2018
   Version ``2018.05`` now supports :ref:`x86_uefi_secure_boot`
