@@ -1,4 +1,4 @@
-.. Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2013,2014,2015,2016,2017,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -23,6 +23,10 @@ Open Network Install Environment
 News
 ====
 
+August 3, 2018
+  Released version `2018.08-rc1
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-August/001713.html>`_
+
 May 16, 2018
   Version ``2018.05`` now supports :ref:`x86_uefi_secure_boot`
 
@@ -38,10 +42,6 @@ March 27-28, 2018
 February 13, 2018
   Released version `2018.02
   <http://lists.opencompute.org/pipermail/opencompute-onie/2018-February/001647.html>`_
-
-January 15, 2018
-  Comments on `Meltdown and Spectre
-  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-January/001610.html>`_
 
 Read more :ref:`news`
 
