@@ -1,0 +1,82 @@
+#!/usr/bin/pypy
+# -*- python -*-
+#
+# Generate a database of commits and major versions they went into.
+#
+# A brute-force quickish way of mapping commits to major versions
+#
+# This code is part of the LWN git data miner.
+#
+# Copyright 2007-13 Eklektix, Inc.
+# Copyright 2007-13 Jonathan Corbet <corbet@lwn.net>
+#
+# This file may be distributed under the terms of the GNU General
+# Public License, version 2.
+#
+import sys
+import re
+import os
+import pickle
+import argparse
+
+#
+# Arg parsing stuff.
+#
+def setupargs():
+    p = argparse.ArgumentParser()
+    #
+    # -d for the database
+    # -l to load it before running
+    #
+    p.add_argument('-d', '--database', help = 'Database name',
+                   required = False, default = 'committags.db')
+    p.add_argument('-l', '--load', help = 'Load database at startup',
+                   default = False, action = 'store_true')
+    #
+    # Where's the repo?
+    #
+    p.add_argument('-r', '--repository', help = 'Repository location',
+                   default = '')
+    p.add_argument('-v', '--version', help = 'Current dev version',
+                   required = True, type = int)
+    return p
+
+
+p = setupargs()
+args = p.parse_args()
+
+#
+# Pull in an existing database if requested.
+#
+if args.load:
+    DB = pickle.load(open(args.database, 'r'))
+else:
+    DB = { }
+out = open(args.database, 'w')
+if args.repository:
+    os.chdir(args.repository)
+
+def GetCommits(range, tag):
+    git = 'git log --pretty=format:%H ' + range
+    input = os.popen(git, 'r')
+    for line in input.readlines():
+        DB[line.strip()] = tag
+    input.close()
+
+initial = '1da177e4c3f41524e886b7f1b8a0c1fc7321cac2'
+DB[initial] = 'v2.6.12'
+GetCommits('1da177e4c3f41524e886b7f1b8a0c1fc7321cac2..v2.6.12', 'v2.6.12')
+for v in range(13, 40):
+    GetCommits('v2.6.%d..v2.6.%d' % (v - 1, v), 'v2.6.%d' % (v))
+GetCommits('v2.6.39..v3.0', 'v3.0')
+for v in range(1, 20):
+    GetCommits('v3.%d..v3.%d' % (v - 1, v), 'v3.%d' % (v))
+GetCommits('v3.19..v4.0', 'v4.0')
+final = args.version
+for v in range(1, final):
+    GetCommits('v4.%d..v4.%d' % (v - 1, v), 'v4.%d' % (v))
+GetCommits('v4.%d..' % (final - 1), 'v4.%d' % (final))
+
+print '\nFound %d commits' % (len(DB.keys()))
+pickle.dump(DB, out)
+out.close()
