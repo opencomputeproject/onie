@@ -1,0 +1,131 @@
+#!/usr/bin/pypy
+# -*- python -*-
+#
+# Go munging through changelogs for interesting info.
+#
+# git log <whatever> | changelogs
+#
+import gitlog
+import sys
+
+#
+# Stats gathering.
+#
+EmptyCulprits = { }
+SingleSSCulprits = { }
+NoSOBCulprits = { }
+
+def LogEmptyCulprit(culprit):
+    try:
+        EmptyCulprits[culprit] += 1
+    except KeyError:
+        EmptyCulprits[culprit] = 1
+
+def LogSSCulprit(culprit):
+    try:
+        SingleSSCulprits[culprit] += 1
+    except KeyError:
+        SingleSSCulprits[culprit] = 1
+
+def LogNoSOBCulprit(culprit):
+    try:
+        NoSOBCulprits[culprit] += 1
+    except KeyError:
+        NoSOBCulprits[culprit] = 1
+
+def SortedCulprits(culprits):
+    def compare(c1, c2):
+        return culprits[c2] - culprits[c1]
+    names = culprits.keys()
+    names.sort(compare)
+    return names
+
+def PrintCulprits(culprits, sorted):
+    for name in sorted:
+        print '\t%30s: %d' % (name, culprits[name])
+#
+# Patch logging
+#
+SSPatches = { }
+EmptyCLPatches = { }
+NoSOBPatches = { }
+
+def LogSSPatch(p):
+    LogSSCulprit(p.author.name)
+    try:
+        SSPatches[p.author.name].append(p)
+    except KeyError:
+        SSPatches[p.author.name] = [p]
+
+def LogECLPatch(p):
+    LogEmptyCulprit(p.author.name)
+    try:
+        EmptyCLPatches[p.author.name].append(p)
+    except KeyError:
+        EmptyCLPatches[p.author.name] = [p]
+
+def LogNoSOB(p):
+    LogNoSOBCulprit(p.author.name)
+    try:
+        NoSOBPatches[p.author.name].append(p)
+    except KeyError:
+        NoSOBPatches[p.author.name] = [p]
+
+LinusURL = 'http://git.kernel.org/linus/'
+def WritePatches(names, patches, file):
+    out = open(file, 'w')
+    for name in names:
+        out.write('<h4>%s</h4>\n<ul>\n' % name)
+        for p in patches[name]:
+            out.write('\t<li><a href="%s%s"><tt>%s</tt></a> %s\n' % (LinusURL,
+                                                                     p.commit,
+                                                                     p.commit,
+                                                                     p.desc))
+        out.write('</ul>\n\n')
+    out.close()                     
+
+#
+# Main program.
+#
+Npatches = 0
+NemptyCL = 0
+
+Nsinglesob = 0
+Nnosob = 0
+Nothers = 0
+
+p = gitlog.grabpatch(sys.stdin)
+while p:
+    #print p.commit, len(p.changelog)
+    Npatches += 1
+    if len(p.changelog) == 0:
+        NemptyCL += 1
+        LogECLPatch(p)
+    if len(p.signoffs) == 0:
+        Nnosob += 1
+        LogNoSOB(p)
+    elif len(p.signoffs) == 1:
+        Nsinglesob += 1
+        if p.othertags == 0:
+            LogSSPatch(p)
+        else:
+            Nothers += 1
+    p = gitlog.grabpatch(sys.stdin)
+
+print '%d patches, %d w/o changelog' % (Npatches, NemptyCL)
+print '  %d w/o signoff, %d w/1 signoff, %d no others, %d SS culprits' % \
+      (Nnosob, Nsinglesob, Nsinglesob - Nothers, len(SingleSSCulprits))
+print '\nMost single signoffs:'
+sorted = SortedCulprits(SingleSSCulprits)[:20]
+PrintCulprits(SingleSSCulprits, sorted)
+WritePatches(sorted, SSPatches, 'sspatches.html')
+
+print '\nMost empty changelogs:'
+sorted = SortedCulprits(EmptyCulprits)[:20]
+PrintCulprits(EmptyCulprits, sorted)
+WritePatches(sorted, EmptyCLPatches, 'emptypatches.html')
+
+print '\nNoSOB:'
+sorted = SortedCulprits(NoSOBCulprits)
+PrintCulprits(NoSOBCulprits, sorted)
+WritePatches(sorted, NoSOBPatches, 'nosobpatches.html')
