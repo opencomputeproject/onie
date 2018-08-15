@@ -1,0 +1,194 @@
+#!/usr/bin/pypy
+# -*- python -*-
+#
+# Crank through the log looking at when developers did their first and
+# last patches.
+#
+# git log | firstlast -v versiondb
+#
+import argparse, pickle
+import sys
+import gitlog
+import database
+import ConfigFile
+from utils import accumulator
+#
+# Arg processing
+#
+def SetupArgs():
+    p = argparse.ArgumentParser()
+    p.add_argument('-v', '--versiondb', help = 'Version database file',
+                   required = False, default = 'committags.db')
+    p.add_argument('-c', '--config', help = 'Configuration file',
+                   required = True)
+    p.add_argument('-d', '--dbdir', help = 'Where to find the config database files',
+                   required = False, default = '')
+    p.add_argument('-f', '--first', help = 'First version for detailed tracking',
+                   required = False, default = '')
+    p.add_argument('-l', '--last', help = 'Last version for detailed tracking',
+                   required = False, default = '')
+    p.add_argument('-m', '--minversions', required = False, default = 1, type = int,
+                   help = 'How many versions an author contributes to for counting')
+    return p.parse_args()
+
+#
+# Try to track the first directory a new developer touches.
+#
+FirstDirs = { }
+
+def TrackFirstDirs(patch):
+    dirs = [ ]
+    for file in patch.files:
+        split = file.split('/')
+        if split[0] in ['arch', 'drivers', 'fs']:
+            track = '/'.join(split[0:2])
+        else:
+            track = split[0]
+        if track not in dirs:
+            dirs.append(track)
+    for dir in dirs:
+        try:
+            FirstDirs[dir] += 1
+        except KeyError:
+            FirstDirs[dir] = 1
+
+def cmpdirs(d1, d2):
+    return FirstDirs[d2] - FirstDirs[d1]
+
+def PrintFirstDirs():
+    print '\nDirectories touched by first commits:'
+    dirs = FirstDirs.keys()
+    dirs.sort(cmpdirs)
+    for dir in dirs[:20]:
+        print '%5d: %s' % (FirstDirs[dir], dir)
+
+#
+# Let's also track who they worked for.
+#
+FirstEmpls = { }
+
+def TrackFirstEmpl(name):
+    try:
+        FirstEmpls[name] += 1
+    except KeyError:
+        FirstEmpls[name] = 1
+
+def cmpempls(e1, e2):
+    return FirstEmpls[e2] - FirstEmpls[e1]
+
+def PrintFirstEmpls():
+    empls = FirstEmpls.keys()
+    empls.sort(cmpempls)
+    print '\nEmployers:'
+    for e in empls[:30]:
+        print '%5d: %s' % (FirstEmpls[e], e)
+    #
+    # We "know" that unknown/none are always the top two...
+    #
+    companies = 0
+    for e in empls[2:]:
+        companies += FirstEmpls[e]
+    print 'Companies: %d' % (companies)
+
+#
+# Version comparison stuff.  Kernel-specific, obviously.
+#
+def die(gripe):
+    sys.stderr.write(gripe + '\n')
+    sys.exit(1)
+
+def versionmap(vers):
+    split = vers.split('.')
+    if not (2 <= len(split) <= 4):
+        die('funky version %s' % (vers))
+    if split[0] in ['v2', '2']:
+        return int(split[2])
+    if split[0] in ['v3', '3']:
+        return 100 + int(split[1])
+    if split[0] in ['v4', '4']:
+        return 120 + int(split[1])
+    die('Funky version %s' % (vers))
+
+T_First = 0
+T_Last = 999999
+
+def SetTrackingVersions(args):
+    global T_First, T_Last
+    if args.first:
+        T_First = versionmap(args.first)
+    if args.last:
+        T_Last = versionmap(args.last)
+
+def TrackingVersion(vers):
+    return T_First <= versionmap(vers) <= T_Last
+
+#
+# Main program.
+#
+args = SetupArgs()
+VDB = pickle.load(open(args.versiondb, 'r'))
+ConfigFile.ConfigFile(args.config, args.dbdir)
+SetTrackingVersions(args)
+
+Firsts = accumulator()
+Lasts = accumulator()
+Singles = accumulator()
+Versions = accumulator()
+#
+# Read through the full patch stream and collect the relevant info.
+#
+patch = gitlog.grabpatch(sys.stdin)
+while patch:
+    try:
+        v = VDB[patch.commit]
+    except KeyError:
+        print 'Funky commit', patch.commit
+        patch = gitlog.grabpatch(sys.stdin)
+        continue
+    #
+    # The first patch we see is the last they committed, since git
+    # lists things in backwards order.
+    #
+    if len(patch.author.patches) == 0:
+        patch.author.lastvers = v
+        Lasts.append(v, patch.author)
+    patch.author.firstvers = v
+    patch.author.addpatch(patch)
+    Versions.append(patch.author.id, v, unique = True)
+    patch = gitlog.grabpatch(sys.stdin)
+
+#
+# Pass over all the hackers we saw and collate stuff.
+#
+for h in database.AllHackers():
+    if len(h.patches) > 0 and len(Versions[h.id]) >= args.minversions:
+        Firsts.append(h.firstvers, h)
+        if h.firstvers == h.lastvers:
+            Singles.incr(h.firstvers)
+        #
+        # Track details, but only for versions we care about
+        #
+        if TrackingVersion(h.firstvers):
+            p = h.patches[-1]
+            TrackFirstDirs(p)
+            try:
+                empl = h.emailemployer(p.email, p.date)
+            except AttributeError:
+                print 'No email on ', p.commit
+                continue
+            if empl.name == '(Unknown)':
+                print 'UNK: %s %s' % (p.email, h.name)
+            TrackFirstEmpl(empl.name)
+
+versions = Lasts.keys()
+
+def cmpvers(v1, v2):
+    return versionmap(v1) - versionmap(v2)  # reverse sort
+versions.sort(cmpvers)
+for v in versions:
+    if args.minversions <= 1:
+        print v, len(Firsts[v]), len(Lasts[v]), Singles[v]
+    else:
+        print v, len(Firsts.get(v, [])), len(Lasts.get(v, []))
+PrintFirstDirs()
+PrintFirstEmpls()

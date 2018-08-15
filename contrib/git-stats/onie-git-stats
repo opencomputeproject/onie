@@ -1,0 +1,94 @@
+#!/bin/sh
+
+#
+# Copyright 2018 Curt Brune <curt@cumulusnetworks.com>
+# All rights reserved.
+#
+
+# Generate git repo statistics based on git commit ranges
+
+exe=$(basename $0)
+usage() {
+    echo "Usage: $exe <git-range> <output-prefix>"
+    echo "example: $exe 2018.02..HEAD quarterly"
+    echo "example: $exe 2017.02..2018.02 yearly"
+}
+
+if [ -n "$1" ] ; then
+    range="$1"
+else
+    echo "Error: expecting a range in the form of a git revision range"
+    usage
+    exit 1
+fi
+shift 1
+
+if [ -n "$1" ] ; then
+    prefix="$1"
+else
+    echo "Error: expecting output file prefix"
+    usage
+    exit 1
+fi
+
+# gitdm executable
+if [ -z "$GITDM" ] ; then
+    GITDM="$(dirname $(realpath $0))/gitdm/gitdm"
+fi
+[ -x "$GITDM" ] || {
+    echo "Error: Unable to find gitdm executable"
+    exit 1
+}
+
+# gitdm configuration
+if [ -z "$GITDM_CFG_DIR" ] ; then
+    GITDM_CFG_DIR="$(dirname $(realpath $0))/gitdm-config"
+fi
+[ -d "$GITDM_CFG_DIR" ] || {
+    echo "Error: Unable to find gitdm configuration directory"
+    exit 1
+}
+
+echo "Using gitdm exe: $GITDM"
+echo "Using gitdm config directory: $GITDM_CFG_DIR"
+
+gitdm_cfg="/tmp/${prefix}-gitdm.cfg"
+cat<<EOF > $gitdm_cfg
+#
+# EmailAliases lets us cope with developers who use more
+# than one address.
+#
+EmailAliases $GITDM_CFG_DIR/aliases
+
+#
+# EmailMap does the main work of mapping addresses onto
+# employers.
+#
+EmailMap $GITDM_CFG_DIR/domain-map
+
+#
+# Use GroupMap to map a file full of addresses to the
+# same employer
+#
+# GroupMap sample-config/illuminati  The Illuminati
+#
+#
+# Use FileTypeMap to map a file types to file names using regular
+# regular expressions.
+#
+FileTypeMap $GITDM_CFG_DIR/filetypes.txt
+EOF
+
+output_txt="/tmp/${prefix}-results.txt"
+output_html="/tmp/${prefix}-results.html"
+
+echo "Generating stats for range: $range ..."
+git log -p -M "$range" | \
+    python $GITDM \
+           -o "$output_txt" \
+           -h "$output_html" \
+           -c $gitdm_cfg
+
+echo "Stats available here:"
+echo "  $output_txt"
+echo "  $output_html"

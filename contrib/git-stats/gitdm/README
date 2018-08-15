@@ -1,0 +1,213 @@
+The code in this directory makes up the "git data miner," a simple hack
+which attempts to figure things out from the revision history in a git
+repository. 
+
+
+INSTALLING GITDM
+
+gitdm is a python script and doesn't need to be proper installed like other
+normal programs. You just have to adjust your PATH variable, pointing it to
+the directory of gitdm or alternatively create a symbolic link of the script
+inside /usr/bin.
+
+Before actually run gitdm you may want also to update the configuration file
+(gitdm.config) with the needed information.
+
+
+RUNNING GITDM
+
+Run it like this:
+
+   git log -p -M [details] | gitdm [options]
+
+Alternatively, you can run with:
+
+   git log --numstat -M [details] | gitdm -n [options]
+
+The [details] tell git which changesets are of interest; the [options] can
+be:
+
+	-a	If a patch contains signoff lines from both Andrew Morton 
+		and Linus Torvalds, omit Linus's.
+
+	-b dir	Specify the base directory to fetch the configuration files.
+
+	-c file Specify the name of the gitdm configuration file.  
+	   	By default, "./gitdm.config" is used.
+
+	-d	Omit the developer reports, giving employer information
+         	only.
+
+	-D	Rather than create the usual statistics, create a file (datelc.csv)
+	    providing lines changed per day, where the first column displays
+	    the changes happened only on that day and the second sums the day it
+	    happnened with the previous ones. This option is suitable for
+	    feeding to a tool like gnuplot.
+
+	-h file	Generate HTML output to the given file
+
+	-l num	Only list the top <num> entries in each report.
+
+    -n  Use --numstat instead of generated patches to get the statistics.
+
+	-o file	Write text output to the given file (default is stdout).
+
+    -p prefix Dump out the database categorized by changeset and by file type.
+	    It requires -n, otherwise it is not possible to get separated results.
+
+	-r pat	Only generate statistics for changes to files whose 
+	   	name matches the given regular expression.
+
+	-s	Ignore Signed-off-by lines which match the author of 
+		each patch.
+
+	-t	Generate a report by type of contribution (code, documentation, etc.).
+	    It requires -n, otherwise this option is ignored silently.
+
+
+	-u 	Group all unknown developers under the "(Unknown)"
+ 	        employer. 
+
+    -x file  Export raw statistics as CSV.
+
+    -w  Aggregate the data by weeks instead of months in the
+        CSV file when -x is used.
+
+	-z 	Dump out the hacker database to "database.dump".
+
+A typical command line used to generate the "who write 2.6.x" LWN articles
+looks like:
+
+    git log -p -M v2.6.19..v2.6.20 | \
+	gitdm -u -s -a -o results -h results.html
+
+or:
+
+    git log --numstat -M v2.6.19..v2.6.20 | \
+	gitdm -u -s -a -n -o results -h results.html
+
+CONFIGURATION FILE
+
+The main purpose of the configuration file is to direct the mapping of
+email addresses onto employers.  Please note that the config file parser is
+exceptionally stupid and unrobust at this point, but it gets the job done.  
+
+Blank lines and lines beginning with "#" are ignored.  Everything else
+specifies a file with some sort of mapping:
+
+EmailAliases file
+
+	Developers often post code under a number of different email
+	addresses, but it can be desirable to group them all together in
+	the statistics.  An EmailAliases file just contains a bunch of
+	lines of the form:
+
+		alias@address  canonical@address
+
+	Any patches originating from alias@address will be treated as if
+	they had come from canonical@address.
+
+    It may happen that some people set their git user data in the
+    following form: "joe.hacker@acme.org <Joe Hacker>". The 
+    "Joe Hacker" is then considered as the email... but gitdm says
+    it is a "Funky" email. An alias line in the following form can
+    be used to alias these commits aliased to the correct email
+    address:
+
+        "Joe Hacker" joe.hacker@acme.org
+
+
+EmailMap file
+
+	Map email addresses onto employers.  These files contain lines
+	like:
+
+		[user@]domain  employer  [< yyyy-mm-dd]
+
+	If the "user@" portion is missing, all email from the given domain
+	will be treated as being associated with the given employer.  If a
+	date is provided, the entry is only valid up to that date;
+	otherwise it is considered valid into the indefinite future.  This
+	feature can be useful for properly tracking developers' work when
+	they change employers but do not change email addresses.
+
+
+GroupMap file employer
+
+	This is a variant of EmailMap provided for convenience; it contains
+	email addresses only, all of which are associated with the given
+	employer.
+
+VirtualEmployer name
+    nn% employer1
+    ...
+end
+
+	This construct (which appears in the main configuration file)
+    	allows causes the creation of a fake employer with the given
+    	"name".  It directs that any contributions attributed to that
+    	employer should be split to other (real) employers using the given
+    	percentages.  The functionality works, but is primitive - there is,
+	for example, no check to ensure that the percentages add up to
+    	something rational.
+
+FileTypeMap file
+
+	Map file names/extensions onto file types.  These files contain lines
+	like:
+
+		order <type1>,<type2>,...,<typeN>
+
+		filetype <type> <regex>
+		...
+
+	This construct allows fine graned reports by type of contribution
+	(build, code, image, multimedia, documentation, etc.)
+
+	Order is important because it is possible to have overlapping between
+	filenames.  For instance, ltmain.sh fits better as 'build' instead of
+	'code' (the filename instead of '\.sh$').  The first element in order
+	has precedence over the next ones.
+
+
+OTHER TOOLS
+
+A few other tools have been added to this repository:
+
+  treeplot
+	Reads a set of commits, then generates a graphviz file charting the
+	flow of patches into the mainline.  Needs to be smarter, but, then,
+	so does everything else in this directory.
+
+  findoldfiles
+	Simple brute-force crawler which outputs the names of any files
+	which have not been touched since the original (kernel) commit.
+
+  committags
+	I needed to be able to quickly associate a given commit with the
+	major release which contains it.  First attempt used 
+	"git tags --contains="; after it ran for a solid week, I concluded
+	there must be a better way.  This tool just reads through the repo,
+	remembering tags, and creating a Python dictionary containing the
+	association.  The result is an ugly 10mb pickle file, but, even so,
+	it's still a better way.
+
+  linetags
+	Crawls through a directory hierarchy, counting how many lines of
+	code are associated with each major release.  Needs the pickle file
+	from committags to get the job done.
+
+
+NOTES AND CREDITS
+
+Gitdm was written by Jonathan Corbet; many useful contributions have come
+from Greg Kroah-Hartman.
+
+Please note that this tool is provided in the hope that it will be useful,
+but it is not put forward as an example of excellence in design or
+implementation.  Hacking on gitdm tends to stop the moment it performs
+whatever task is required of it at the moment.  Patches to make it less
+hacky, less ugly, and more robust are welcome.
+
+Jonathan Corbet
+corbet@lwn.net
