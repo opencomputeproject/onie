@@ -7,6 +7,14 @@
 Project News
 ************
 
+September 5, 2018
+  OCP `Networking Workshop Presentation
+  <https://www.youtube.com/watch?v=p86mMKZqh4g>`_
+
+August 14, 2018
+  Released version `2018.08
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-August/001723.html>`_
+
 August 3, 2018
   Released version `2018.08-rc1
   <http://lists.opencompute.org/pipermail/opencompute-onie/2018-August/001713.html>`_
