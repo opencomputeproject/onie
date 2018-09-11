@@ -1,0 +1,59 @@
+#!/bin/sh
+
+#  Copyright (C) 2017,2018 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+set -e
+
+# Publish html pages to the ONIE github website
+
+# The pages will be available here:
+# https://opencomputeproject.github.io/onie/
+
+ONIE_REPO="git@github.com:opencomputeproject/onie.git"
+
+# Directory containing generated HTML pages
+HTML_DIR="$1"
+
+# Make sure HTML_DIR looks like our output directory
+[ -f "${HTML_DIR}/index.html" -a \
+  -d "${HTML_DIR}/design-spec" ] || {
+    echo "ERROR: HTML_DIR does not look like our source directory: $HTML_DIR"
+    exit 1
+}
+
+# clone onie repo (branch gh-pages) to temp directory
+ONIE_DIR="/tmp/onie-docs"
+
+rm -rf $ONIE_DIR
+git clone --single-branch --branch gh-pages $ONIE_REPO $ONIE_DIR
+
+# remove old files from REPO
+rm -rf ${ONIE_DIR}/*
+
+# copy new files into REPO
+cp -a ${HTML_DIR}/* ${ONIE_DIR}
+
+cd ${ONIE_DIR}
+
+git status
+
+echo "Please review the modified files..."
+read -p "Pushing new docs.  Are you sure? (N/y)" answer
+case "$answer" in
+    Y|y)
+        true
+        ;;
+    *)
+        echo "Aborting...." && exit 1
+esac
+
+git commit -a -m 'updating gh-pages documentation'
+git status | grep -q 'Untracked files:' && {
+    echo "ERROR: Unexpected new files in gh-pages repo, please review"
+    git status
+    exit 1
+}
+
+git push origin gh-pages

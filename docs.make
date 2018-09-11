@@ -1,5 +1,5 @@
 #
-#  Copyright (C) 2013,2014,2017 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2013,2014,2017,2018 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -119,3 +119,6 @@ text: $(GUZZLE_BUILD_STAMP)
 	$(SPHINXBUILD) -b text $(ALLSPHINXOPTS) $(DOCBUILDDIR)/text
 	@echo
 	@echo "Build finished. The text files are in $(DOCBUILDDIR)/text"
+
+publish: html
+	@ $(SCRIPTDIR)/publish-docs $(DOCBUILDDIR)/html
