@@ -62,8 +62,8 @@ sudo /usr/bin/kvm -m $MEM \
     -name "onie" \
     $bios \
     -boot $boot $cdrom \
-    -net nic,model=e1000 \
-    -net tap,ifname=onie0 \
+    -device e1000,netdev=onienet \
+    -netdev user,id=onienet,hostfwd=:0.0.0.0:3040-:22 \
     -vnc 0.0.0.0:$VNC_PORT \
     -vga std \
     -drive file=$DISK,media=disk,if=virtio,index=0 \
