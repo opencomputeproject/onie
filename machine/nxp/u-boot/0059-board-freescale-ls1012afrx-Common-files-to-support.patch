@@ -1,0 +1,774 @@
+From aabf70fcdb1d9e8785ee4c2bd8219dbcecac1c04 Mon Sep 17 00:00:00 2001
+From: Pramod Kumar <pramod.kumar_1@nxp.com>
+Date: Wed, 30 May 2018 16:52:58 +0530
+Subject: [PATCH 059/107] board: freescale: ls1012afrx:Common files to support
+
+LS1012A-FRDM and LS1012A-FRWY board.
+
+1-Move all common files applicable for both boards LS1012A-FRDM
+  and LS1012A-FRWY into board directory ls1012afrx.
+2-Restructure LS1012A-FRDM code. Only board specific files are
+  in LS1012A-FRDM board directory.
+
+Signed-off-by: Pramod Kumar <pramod.kumar_1@nxp.com>
+---
+ arch/arm/Kconfig                          |    2 +
+ board/freescale/ls1012afrdm/Kconfig       |   60 -----------
+ board/freescale/ls1012afrdm/MAINTAINERS   |   12 +--
+ board/freescale/ls1012afrdm/Makefile      |    4 +-
+ board/freescale/ls1012afrdm/eth.c         |  123 ----------------------
+ board/freescale/ls1012afrdm/ls1012afrdm.c |  161 -----------------------------
+ board/freescale/ls1012afrx/Kconfig        |   27 +++++
+ board/freescale/ls1012afrx/eth.c          |  123 ++++++++++++++++++++++
+ board/freescale/ls1012afrx/ls1012afrx.c   |  161 +++++++++++++++++++++++++++++
+ 9 files changed, 316 insertions(+), 357 deletions(-)
+ delete mode 100644 board/freescale/ls1012afrdm/eth.c
+ delete mode 100644 board/freescale/ls1012afrdm/ls1012afrdm.c
+ create mode 100644 board/freescale/ls1012afrx/Kconfig
+ create mode 100644 board/freescale/ls1012afrx/eth.c
+ create mode 100644 board/freescale/ls1012afrx/ls1012afrx.c
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 350653b..c7493e4 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1320,6 +1320,8 @@ source "board/freescale/ls1046ardb/Kconfig"
+ source "board/freescale/ls1012aqds/Kconfig"
+ source "board/freescale/ls1012ardb/Kconfig"
+ source "board/freescale/ls1012afrdm/Kconfig"
++source "board/freescale/ls1012afrx/Kconfig"
++source "board/freescale/ls1012afrwy/Kconfig"
+ source "board/freescale/mx31ads/Kconfig"
+ source "board/freescale/mx31pdk/Kconfig"
+ source "board/freescale/mx35pdk/Kconfig"
+diff --git a/board/freescale/ls1012afrdm/Kconfig b/board/freescale/ls1012afrdm/Kconfig
+index f52a896..58e592d 100644
+--- a/board/freescale/ls1012afrdm/Kconfig
++++ b/board/freescale/ls1012afrdm/Kconfig
+@@ -21,63 +21,3 @@ config SYS_LS_PPA_FW_ADDR
+ 	default 0x40400000
+ 
+ endif
+-
+-if FSL_PFE
+-
+-config BOARD_SPECIFIC_OPTIONS # dummy
+-	def_bool y
+-	select PHYLIB
+-	imply PHY_REALTEK
+-	imply PHY_ATHEROS
+-
+-config DDR_PFE_PHYS_BASEADDR
+-	hex "PFE DDR physical base address"
+-	default 0x03800000
+-
+-config DDR_PFE_BASEADDR
+-	hex "PFE DDR base address"
+-	default 0x83800000
+-
+-config PFE_EMAC1_PHY_ADDR
+-	hex "PFE DDR base address"
+-	default 0x2
+-
+-config PFE_EMAC2_PHY_ADDR
+-	hex "PFE DDR base address"
+-	default 0x1
+-
+-endif
+-
+-if TARGET_LS1012AFRWY
+-
+-config SYS_BOARD
+-	default "ls1012afrdm"
+-
+-config SYS_VENDOR
+-	default "freescale"
+-
+-config SYS_SOC
+-	default "fsl-layerscape"
+-
+-config SYS_CONFIG_NAME
+-	default "ls1012afrwy"
+-
+-config SYS_LS_PFE_FW_ADDR
+-	hex "Flash address of PFE firmware"
+-	default 0x40020000
+-
+-config SYS_LS_PPA_FW_ADDR
+-	hex "PPA Firmware Addr"
+-	default 0x40060000
+-
+-config SYS_LS_PPA_ESBC_ADDR
+-	hex "PPA Firmware HDR Addr"
+-	default 0x401f4000
+-
+-config SYS_LS_PFE_ESBC_ADDR
+-	hex "PFE Firmware HDR Addr"
+-	default 0x401f8000
+-
+-endif
+-
+-source "board/freescale/common/Kconfig"
+diff --git a/board/freescale/ls1012afrdm/MAINTAINERS b/board/freescale/ls1012afrdm/MAINTAINERS
+index f3fcdb8..b618d78 100644
+--- a/board/freescale/ls1012afrdm/MAINTAINERS
++++ b/board/freescale/ls1012afrdm/MAINTAINERS
+@@ -1,17 +1,7 @@
+ LS1012AFRDM BOARD
+ M:	Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+ S:	Maintained
++F:	board/freescale/ls1012afrx/
+ F:	board/freescale/ls1012afrdm/
+ F:	include/configs/ls1012afrdm.h
+ F:	configs/ls1012afrdm_qspi_defconfig
+-
+-LS1012AFRWY BOARD
+-M:      Bhaskar Upadhaya <bhaskar.upadhaya@nxp.com>
+-S:      Maintained
+-F:      board/freescale/ls1012afrwy/
+-F:      include/configs/ls1012afrwy.h
+-F:      configs/ls1012afrwy_qspi_defconfig
+-
+-M:	Vinitha V Pillai <vinitha.pillai@nxp.com>
+-S:	Maintained
+-F:	configs/ls1012afrwy_qspi_SECURE_BOOT_defconfig
+diff --git a/board/freescale/ls1012afrdm/Makefile b/board/freescale/ls1012afrdm/Makefile
+index 1e53c96..a318506 100644
+--- a/board/freescale/ls1012afrdm/Makefile
++++ b/board/freescale/ls1012afrdm/Makefile
+@@ -4,5 +4,5 @@
+ # SPDX-License-Identifier:      GPL-2.0+
+ #
+ 
+-obj-y += ls1012afrdm.o
+-obj-$(CONFIG_FSL_PFE) += eth.o
++obj-y += ../ls1012afrx/ls1012afrx.o
++obj-$(CONFIG_FSL_PFE) += ../ls1012afrx/eth.o
+diff --git a/board/freescale/ls1012afrdm/eth.c b/board/freescale/ls1012afrdm/eth.c
+deleted file mode 100644
+index de3339b..0000000
+--- a/board/freescale/ls1012afrdm/eth.c
++++ /dev/null
+@@ -1,123 +0,0 @@
+-/*
+- * Copyright 2017-2018 NXP
+- *
+- * SPDX-License-Identifier:	GPL-2.0+
+- */
+-
+-#include <common.h>
+-#include <dm.h>
+-#include <asm/io.h>
+-#include <netdev.h>
+-#include <fm_eth.h>
+-#include <fsl_mdio.h>
+-#include <malloc.h>
+-#include <asm/types.h>
+-#include <fsl_dtsec.h>
+-#include <asm/arch/soc.h>
+-#include <asm/arch-fsl-layerscape/config.h>
+-#include <asm/arch-fsl-layerscape/immap_lsch2.h>
+-#include <asm/arch/fsl_serdes.h>
+-#include <net/pfe_eth/pfe_eth.h>
+-#include <dm/platform_data/pfe_dm_eth.h>
+-
+-#define DEFAULT_PFE_MDIO_NAME "PFE_MDIO"
+-#define DEFAULT_PFE_MDIO1_NAME "PFE_MDIO1"
+-
+-#define MASK_ETH_PHY_RST	0x00000100
+-
+-static inline void ls1012afrdm_reset_phy(void)
+-{
+-	unsigned int val;
+-	struct ccsr_gpio *pgpio = (void *)(GPIO1_BASE_ADDR);
+-
+-	setbits_be32(&pgpio->gpdir, MASK_ETH_PHY_RST);
+-
+-	val = in_be32(&pgpio->gpdat);
+-	setbits_be32(&pgpio->gpdat, val & ~MASK_ETH_PHY_RST);
+-	mdelay(10);
+-
+-	val = in_be32(&pgpio->gpdat);
+-	setbits_be32(&pgpio->gpdat, val | MASK_ETH_PHY_RST);
+-	mdelay(50);
+-}
+-
+-int pfe_eth_board_init(struct udevice *dev)
+-{
+-	static int init_done;
+-	struct mii_dev *bus;
+-	struct pfe_mdio_info mac_mdio_info;
+-	struct pfe_eth_dev *priv = dev_get_priv(dev);
+-
+-	if (!init_done) {
+-		ls1012afrdm_reset_phy();
+-
+-		mac_mdio_info.reg_base = (void *)EMAC1_BASE_ADDR;
+-		mac_mdio_info.name = DEFAULT_PFE_MDIO_NAME;
+-
+-		bus = pfe_mdio_init(&mac_mdio_info);
+-		if (!bus) {
+-			printf("Failed to register mdio\n");
+-			return -1;
+-		}
+-
+-		init_done = 1;
+-	}
+-
+-	if (priv->gemac_port) {
+-		mac_mdio_info.reg_base = (void *)EMAC2_BASE_ADDR;
+-		mac_mdio_info.name = DEFAULT_PFE_MDIO1_NAME;
+-		bus = pfe_mdio_init(&mac_mdio_info);
+-		if (!bus) {
+-			printf("Failed to register mdio\n");
+-			return -1;
+-		}
+-	}
+-
+-	pfe_set_mdio(priv->gemac_port,
+-		     miiphy_get_dev_by_name(DEFAULT_PFE_MDIO_NAME));
+-	if (!priv->gemac_port)
+-		/* MAC1 */
+-		pfe_set_phy_address_mode(priv->gemac_port,
+-					 CONFIG_PFE_EMAC1_PHY_ADDR,
+-					 PHY_INTERFACE_MODE_SGMII);
+-	else
+-		/* MAC2 */
+-		pfe_set_phy_address_mode(priv->gemac_port,
+-					 CONFIG_PFE_EMAC2_PHY_ADDR,
+-					 PHY_INTERFACE_MODE_SGMII);
+-	return 0;
+-}
+-
+-static struct pfe_eth_pdata pfe_pdata0 = {
+-	.pfe_eth_pdata_mac = {
+-		.iobase = (phys_addr_t)EMAC1_BASE_ADDR,
+-		.phy_interface = 0,
+-	},
+-
+-	.pfe_ddr_addr = {
+-		.ddr_pfe_baseaddr = (void *)CONFIG_DDR_PFE_BASEADDR,
+-		.ddr_pfe_phys_baseaddr = CONFIG_DDR_PFE_PHYS_BASEADDR,
+-	},
+-};
+-
+-static struct pfe_eth_pdata pfe_pdata1 = {
+-	.pfe_eth_pdata_mac = {
+-		.iobase = (phys_addr_t)EMAC2_BASE_ADDR,
+-		.phy_interface = 1,
+-	},
+-
+-	.pfe_ddr_addr = {
+-		.ddr_pfe_baseaddr = (void *)CONFIG_DDR_PFE_BASEADDR,
+-		.ddr_pfe_phys_baseaddr = CONFIG_DDR_PFE_PHYS_BASEADDR,
+-	},
+-};
+-
+-U_BOOT_DEVICE(ls1012a_pfe0) = {
+-	.name = "pfe_eth",
+-	.platdata = &pfe_pdata0,
+-};
+-
+-U_BOOT_DEVICE(ls1012a_pfe1) = {
+-	.name = "pfe_eth",
+-	.platdata = &pfe_pdata1,
+-};
+diff --git a/board/freescale/ls1012afrdm/ls1012afrdm.c b/board/freescale/ls1012afrdm/ls1012afrdm.c
+deleted file mode 100644
+index 80d869c..0000000
+--- a/board/freescale/ls1012afrdm/ls1012afrdm.c
++++ /dev/null
+@@ -1,161 +0,0 @@
+-/*
+- * Copyright 2017-2018 NXP
+- *
+- * SPDX-License-Identifier:	GPL-2.0+
+- */
+-
+-#include <common.h>
+-#include <i2c.h>
+-#include <asm/io.h>
+-#include <asm/arch/clock.h>
+-#include <asm/arch/fsl_serdes.h>
+-#ifdef CONFIG_FSL_LS_PPA
+-#include <asm/arch/ppa.h>
+-#endif
+-#include <asm/arch/mmu.h>
+-#include <asm/arch/soc.h>
+-#include <fsl_esdhc.h>
+-#include <hwconfig.h>
+-#include <environment.h>
+-#include <fsl_mmdc.h>
+-#include <netdev.h>
+-#include <fsl_sec.h>
+-
+-DECLARE_GLOBAL_DATA_PTR;
+-
+-static inline int get_board_version(void)
+-{
+-	struct ccsr_gpio *pgpio = (void *)(GPIO1_BASE_ADDR);
+-	int val;
+-
+-	val = in_be32(&pgpio->gpdat);
+-
+-	return val;
+-}
+-
+-int checkboard(void)
+-{
+-#ifdef CONFIG_TARGET_LS1012AFRDM
+-	puts("Board: LS1012AFRDM ");
+-#else
+-	int rev;
+-
+-	rev = get_board_version();
+-
+-	puts("Board: FRWY-LS1012A ");
+-
+-	puts("Version");
+-
+-	switch (rev) {
+-	case BOARD_REV_A:
+-		puts(": RevA ");
+-		break;
+-	case BOARD_REV_B:
+-		puts(": RevB ");
+-		break;
+-	default:
+-		puts(": unknown");
+-		break;
+-	}
+-#endif
+-	return 0;
+-}
+-
+-#ifdef CONFIG_TARGET_LS1012AFRWY
+-int esdhc_status_fixup(void *blob, const char *compat)
+-{
+-	char esdhc0_path[] = "/soc/esdhc@1560000";
+-	char esdhc1_path[] = "/soc/esdhc@1580000";
+-
+-	do_fixup_by_path(blob, esdhc0_path, "status", "okay",
+-			 sizeof("okay"), 1);
+-
+-	do_fixup_by_path(blob, esdhc1_path, "status", "disabled",
+-			 sizeof("disabled"), 1);
+-	return 0;
+-}
+-#endif
+-
+-int dram_init(void)
+-{
+-#ifdef CONFIG_TARGET_LS1012AFRWY
+-	int board_rev;
+-#endif
+-	struct fsl_mmdc_info mparam = {
+-		0x04180000,	/* mdctl */
+-		0x00030035,	/* mdpdc */
+-		0x12554000,	/* mdotc */
+-		0xbabf7954,	/* mdcfg0 */
+-		0xdb328f64,	/* mdcfg1 */
+-		0x01ff00db,	/* mdcfg2 */
+-		0x00001680,	/* mdmisc */
+-		0x0f3c8000,	/* mdref */
+-		0x00002000,	/* mdrwd */
+-		0x00bf1023,	/* mdor */
+-		0x0000003f,	/* mdasp */
+-		0x0000022a,	/* mpodtctrl */
+-		0xa1390003,	/* mpzqhwctrl */
+-	};
+-
+-#ifdef CONFIG_TARGET_LS1012AFRWY
+-	board_rev = get_board_version();
+-
+-	if (board_rev & BOARD_REV_B) {
+-		mparam.mdctl = 0x05180000;
+-		gd->ram_size = SYS_SDRAM_SIZE_1024;
+-	} else {
+-		gd->ram_size = SYS_SDRAM_SIZE_512;
+-	}
+-#else
+-	gd->ram_size = CONFIG_SYS_SDRAM_SIZE;
+-#endif
+-
+-	mmdc_init(&mparam);
+-#if !defined(CONFIG_SPL) || defined(CONFIG_SPL_BUILD)
+-	/* This will break-before-make MMU for DDR */
+-	update_early_mmu_table();
+-#endif
+-
+-	return 0;
+-}
+-
+-int board_early_init_f(void)
+-{
+-	fsl_lsch2_early_init_f();
+-
+-	return 0;
+-}
+-
+-int board_init(void)
+-{
+-	struct ccsr_cci400 *cci = (struct ccsr_cci400 *)(CONFIG_SYS_IMMR +
+-					CONFIG_SYS_CCI400_OFFSET);
+-
+-	/*
+-	 * Set CCI-400 control override register to enable barrier
+-	 * transaction
+-	 */
+-	out_le32(&cci->ctrl_ord, CCI400_CTRLORD_EN_BARRIER);
+-
+-#ifdef CONFIG_ENV_IS_NOWHERE
+-	gd->env_addr = (ulong)&default_environment[0];
+-#endif
+-
+-#ifdef CONFIG_FSL_CAAM
+-	sec_init();
+-#endif
+-
+-#ifdef CONFIG_FSL_LS_PPA
+-	ppa_init();
+-#endif
+-	return 0;
+-}
+-
+-int ft_board_setup(void *blob, bd_t *bd)
+-{
+-	arch_fixup_fdt(blob);
+-
+-	ft_cpu_setup(blob, bd);
+-
+-	return 0;
+-}
+diff --git a/board/freescale/ls1012afrx/Kconfig b/board/freescale/ls1012afrx/Kconfig
+new file mode 100644
+index 0000000..a2884e5
+--- /dev/null
++++ b/board/freescale/ls1012afrx/Kconfig
+@@ -0,0 +1,27 @@
++if FSL_PFE
++
++config BOARD_SPECIFIC_OPTIONS # dummy
++	def_bool y
++	select PHYLIB
++	imply PHY_REALTEK
++	imply PHY_ATHEROS
++
++config DDR_PFE_PHYS_BASEADDR
++	hex "PFE DDR physical base address"
++	default 0x03800000
++
++config DDR_PFE_BASEADDR
++	hex "PFE DDR base address"
++	default 0x83800000
++
++config PFE_EMAC1_PHY_ADDR
++	hex "PFE DDR base address"
++	default 0x2
++
++config PFE_EMAC2_PHY_ADDR
++	hex "PFE DDR base address"
++	default 0x1
++
++endif
++
++source "board/freescale/common/Kconfig"
+diff --git a/board/freescale/ls1012afrx/eth.c b/board/freescale/ls1012afrx/eth.c
+new file mode 100644
+index 0000000..de3339b
+--- /dev/null
++++ b/board/freescale/ls1012afrx/eth.c
+@@ -0,0 +1,123 @@
++/*
++ * Copyright 2017-2018 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#include <common.h>
++#include <dm.h>
++#include <asm/io.h>
++#include <netdev.h>
++#include <fm_eth.h>
++#include <fsl_mdio.h>
++#include <malloc.h>
++#include <asm/types.h>
++#include <fsl_dtsec.h>
++#include <asm/arch/soc.h>
++#include <asm/arch-fsl-layerscape/config.h>
++#include <asm/arch-fsl-layerscape/immap_lsch2.h>
++#include <asm/arch/fsl_serdes.h>
++#include <net/pfe_eth/pfe_eth.h>
++#include <dm/platform_data/pfe_dm_eth.h>
++
++#define DEFAULT_PFE_MDIO_NAME "PFE_MDIO"
++#define DEFAULT_PFE_MDIO1_NAME "PFE_MDIO1"
++
++#define MASK_ETH_PHY_RST	0x00000100
++
++static inline void ls1012afrdm_reset_phy(void)
++{
++	unsigned int val;
++	struct ccsr_gpio *pgpio = (void *)(GPIO1_BASE_ADDR);
++
++	setbits_be32(&pgpio->gpdir, MASK_ETH_PHY_RST);
++
++	val = in_be32(&pgpio->gpdat);
++	setbits_be32(&pgpio->gpdat, val & ~MASK_ETH_PHY_RST);
++	mdelay(10);
++
++	val = in_be32(&pgpio->gpdat);
++	setbits_be32(&pgpio->gpdat, val | MASK_ETH_PHY_RST);
++	mdelay(50);
++}
++
++int pfe_eth_board_init(struct udevice *dev)
++{
++	static int init_done;
++	struct mii_dev *bus;
++	struct pfe_mdio_info mac_mdio_info;
++	struct pfe_eth_dev *priv = dev_get_priv(dev);
++
++	if (!init_done) {
++		ls1012afrdm_reset_phy();
++
++		mac_mdio_info.reg_base = (void *)EMAC1_BASE_ADDR;
++		mac_mdio_info.name = DEFAULT_PFE_MDIO_NAME;
++
++		bus = pfe_mdio_init(&mac_mdio_info);
++		if (!bus) {
++			printf("Failed to register mdio\n");
++			return -1;
++		}
++
++		init_done = 1;
++	}
++
++	if (priv->gemac_port) {
++		mac_mdio_info.reg_base = (void *)EMAC2_BASE_ADDR;
++		mac_mdio_info.name = DEFAULT_PFE_MDIO1_NAME;
++		bus = pfe_mdio_init(&mac_mdio_info);
++		if (!bus) {
++			printf("Failed to register mdio\n");
++			return -1;
++		}
++	}
++
++	pfe_set_mdio(priv->gemac_port,
++		     miiphy_get_dev_by_name(DEFAULT_PFE_MDIO_NAME));
++	if (!priv->gemac_port)
++		/* MAC1 */
++		pfe_set_phy_address_mode(priv->gemac_port,
++					 CONFIG_PFE_EMAC1_PHY_ADDR,
++					 PHY_INTERFACE_MODE_SGMII);
++	else
++		/* MAC2 */
++		pfe_set_phy_address_mode(priv->gemac_port,
++					 CONFIG_PFE_EMAC2_PHY_ADDR,
++					 PHY_INTERFACE_MODE_SGMII);
++	return 0;
++}
++
++static struct pfe_eth_pdata pfe_pdata0 = {
++	.pfe_eth_pdata_mac = {
++		.iobase = (phys_addr_t)EMAC1_BASE_ADDR,
++		.phy_interface = 0,
++	},
++
++	.pfe_ddr_addr = {
++		.ddr_pfe_baseaddr = (void *)CONFIG_DDR_PFE_BASEADDR,
++		.ddr_pfe_phys_baseaddr = CONFIG_DDR_PFE_PHYS_BASEADDR,
++	},
++};
++
++static struct pfe_eth_pdata pfe_pdata1 = {
++	.pfe_eth_pdata_mac = {
++		.iobase = (phys_addr_t)EMAC2_BASE_ADDR,
++		.phy_interface = 1,
++	},
++
++	.pfe_ddr_addr = {
++		.ddr_pfe_baseaddr = (void *)CONFIG_DDR_PFE_BASEADDR,
++		.ddr_pfe_phys_baseaddr = CONFIG_DDR_PFE_PHYS_BASEADDR,
++	},
++};
++
++U_BOOT_DEVICE(ls1012a_pfe0) = {
++	.name = "pfe_eth",
++	.platdata = &pfe_pdata0,
++};
++
++U_BOOT_DEVICE(ls1012a_pfe1) = {
++	.name = "pfe_eth",
++	.platdata = &pfe_pdata1,
++};
+diff --git a/board/freescale/ls1012afrx/ls1012afrx.c b/board/freescale/ls1012afrx/ls1012afrx.c
+new file mode 100644
+index 0000000..80d869c
+--- /dev/null
++++ b/board/freescale/ls1012afrx/ls1012afrx.c
+@@ -0,0 +1,161 @@
++/*
++ * Copyright 2017-2018 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#include <common.h>
++#include <i2c.h>
++#include <asm/io.h>
++#include <asm/arch/clock.h>
++#include <asm/arch/fsl_serdes.h>
++#ifdef CONFIG_FSL_LS_PPA
++#include <asm/arch/ppa.h>
++#endif
++#include <asm/arch/mmu.h>
++#include <asm/arch/soc.h>
++#include <fsl_esdhc.h>
++#include <hwconfig.h>
++#include <environment.h>
++#include <fsl_mmdc.h>
++#include <netdev.h>
++#include <fsl_sec.h>
++
++DECLARE_GLOBAL_DATA_PTR;
++
++static inline int get_board_version(void)
++{
++	struct ccsr_gpio *pgpio = (void *)(GPIO1_BASE_ADDR);
++	int val;
++
++	val = in_be32(&pgpio->gpdat);
++
++	return val;
++}
++
++int checkboard(void)
++{
++#ifdef CONFIG_TARGET_LS1012AFRDM
++	puts("Board: LS1012AFRDM ");
++#else
++	int rev;
++
++	rev = get_board_version();
++
++	puts("Board: FRWY-LS1012A ");
++
++	puts("Version");
++
++	switch (rev) {
++	case BOARD_REV_A:
++		puts(": RevA ");
++		break;
++	case BOARD_REV_B:
++		puts(": RevB ");
++		break;
++	default:
++		puts(": unknown");
++		break;
++	}
++#endif
++	return 0;
++}
++
++#ifdef CONFIG_TARGET_LS1012AFRWY
++int esdhc_status_fixup(void *blob, const char *compat)
++{
++	char esdhc0_path[] = "/soc/esdhc@1560000";
++	char esdhc1_path[] = "/soc/esdhc@1580000";
++
++	do_fixup_by_path(blob, esdhc0_path, "status", "okay",
++			 sizeof("okay"), 1);
++
++	do_fixup_by_path(blob, esdhc1_path, "status", "disabled",
++			 sizeof("disabled"), 1);
++	return 0;
++}
++#endif
++
++int dram_init(void)
++{
++#ifdef CONFIG_TARGET_LS1012AFRWY
++	int board_rev;
++#endif
++	struct fsl_mmdc_info mparam = {
++		0x04180000,	/* mdctl */
++		0x00030035,	/* mdpdc */
++		0x12554000,	/* mdotc */
++		0xbabf7954,	/* mdcfg0 */
++		0xdb328f64,	/* mdcfg1 */
++		0x01ff00db,	/* mdcfg2 */
++		0x00001680,	/* mdmisc */
++		0x0f3c8000,	/* mdref */
++		0x00002000,	/* mdrwd */
++		0x00bf1023,	/* mdor */
++		0x0000003f,	/* mdasp */
++		0x0000022a,	/* mpodtctrl */
++		0xa1390003,	/* mpzqhwctrl */
++	};
++
++#ifdef CONFIG_TARGET_LS1012AFRWY
++	board_rev = get_board_version();
++
++	if (board_rev & BOARD_REV_B) {
++		mparam.mdctl = 0x05180000;
++		gd->ram_size = SYS_SDRAM_SIZE_1024;
++	} else {
++		gd->ram_size = SYS_SDRAM_SIZE_512;
++	}
++#else
++	gd->ram_size = CONFIG_SYS_SDRAM_SIZE;
++#endif
++
++	mmdc_init(&mparam);
++#if !defined(CONFIG_SPL) || defined(CONFIG_SPL_BUILD)
++	/* This will break-before-make MMU for DDR */
++	update_early_mmu_table();
++#endif
++
++	return 0;
++}
++
++int board_early_init_f(void)
++{
++	fsl_lsch2_early_init_f();
++
++	return 0;
++}
++
++int board_init(void)
++{
++	struct ccsr_cci400 *cci = (struct ccsr_cci400 *)(CONFIG_SYS_IMMR +
++					CONFIG_SYS_CCI400_OFFSET);
++
++	/*
++	 * Set CCI-400 control override register to enable barrier
++	 * transaction
++	 */
++	out_le32(&cci->ctrl_ord, CCI400_CTRLORD_EN_BARRIER);
++
++#ifdef CONFIG_ENV_IS_NOWHERE
++	gd->env_addr = (ulong)&default_environment[0];
++#endif
++
++#ifdef CONFIG_FSL_CAAM
++	sec_init();
++#endif
++
++#ifdef CONFIG_FSL_LS_PPA
++	ppa_init();
++#endif
++	return 0;
++}
++
++int ft_board_setup(void *blob, bd_t *bd)
++{
++	arch_fixup_fdt(blob);
++
++	ft_cpu_setup(blob, bd);
++
++	return 0;
++}
+-- 
+1.7.1
+

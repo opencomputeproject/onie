@@ -1,0 +1,56 @@
+From 0223cfa1d82c33cfde22486d7845caf1548675a7 Mon Sep 17 00:00:00 2001
+From: Ran Wang <ran.wang_1@nxp.com>
+Date: Tue, 3 Jul 2018 13:10:55 +0800
+Subject: [PATCH 069/107] armv8: layerscape: Enable EHCI access for LS1012A
+
+Program Central Security Unit (CSU) to grant access
+permission for USB 2.0 controller, otherwiase EHCI funciton will down.
+
+Signed-off-by: Ran Wang <ran.wang_1@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/soc.c            |    9 +++++++++
+ .../include/asm/arch-fsl-layerscape/ns_access.h    |    1 +
+ 2 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/soc.c b/arch/arm/cpu/armv8/fsl-layerscape/soc.c
+index 6a56269..d8c3083 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/soc.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/soc.c
+@@ -14,6 +14,7 @@
+ #include <asm/io.h>
+ #include <asm/global_data.h>
+ #include <asm/arch-fsl-layerscape/config.h>
++#include <asm/arch-fsl-layerscape/ns_access.h>
+ #ifdef CONFIG_LAYERSCAPE_NS_ACCESS
+ #include <fsl_csu.h>
+ #endif
+@@ -668,6 +669,14 @@ void fsl_lsch2_early_init_f(void)
+ 			 CCI400_DVM_MESSAGE_REQ_EN | CCI400_SNOOP_REQ_EN);
+ 	}
+ 
++	/*
++	 * Program Central Security Unit (CSU) to grant access
++	 * permission for USB 2.0 controller
++	 */
++#if defined(CONFIG_ARCH_LS1012A) && defined(CONFIG_USB_EHCI_FSL)
++	if (current_el() == 3)
++		set_devices_ns_access(CSU_CSLX_USB_2, CSU_ALL_RW);
++#endif
+ 	/* Erratum */
+ 	erratum_a008850_early(); /* part 1 of 2 */
+ 	erratum_a009929();
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/ns_access.h b/arch/arm/include/asm/arch-fsl-layerscape/ns_access.h
+index fe97a93..d1b8efa 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/ns_access.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/ns_access.h
+@@ -40,6 +40,7 @@ enum csu_cslx_ind {
+ 	CSU_CSLX_ESDHC,
+ 	CSU_CSLX_IFC = 45,
+ 	CSU_CSLX_I2C1,
++	CSU_CSLX_USB_2,
+ 	CSU_CSLX_I2C3 = 48,
+ 	CSU_CSLX_I2C2,
+ 	CSU_CSLX_DUART2 = 50,
+-- 
+1.7.1
+

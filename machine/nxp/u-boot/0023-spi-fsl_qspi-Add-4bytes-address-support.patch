@@ -1,0 +1,44 @@
+From 0bbcee9fb54390e4642780a37e9094cf2ced37df Mon Sep 17 00:00:00 2001
+From: Suresh Gupta <suresh.gupta@nxp.com>
+Date: Tue, 25 Apr 2017 13:08:48 +0530
+Subject: [PATCH 023/107] spi: fsl_qspi: Add 4bytes address support
+
+The QSPI support the direct 4bytes address command for flash
+read/write/erase.
+And the address can cover the whole QSPI memory space.
+
+signed-off-by: Yuan Yao <yao.yuan@nxp.com>
+---
+ drivers/spi/fsl_qspi.c |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/spi/fsl_qspi.c b/drivers/spi/fsl_qspi.c
+index 5dc69a6..d3b3b43 100644
+--- a/drivers/spi/fsl_qspi.c
++++ b/drivers/spi/fsl_qspi.c
+@@ -27,7 +27,9 @@ DECLARE_GLOBAL_DATA_PTR;
+ #define TX_BUFFER_SIZE		0x40
+ #endif
+ 
+-#define OFFSET_BITS_MASK	GENMASK(23, 0)
++#define OFFSET_BITS_MASK       ((FSL_QSPI_FLASH_SIZE  > SZ_16M) ? \
++					GENMASK(27, 0) : GENMASK(23, 0))
++
+ 
+ #define FLASH_STATUS_WEL	0x02
+ 
+@@ -769,7 +771,10 @@ int qspi_xfer(struct fsl_qspi_priv *priv, unsigned int bitlen,
+ 	if (dout) {
+ 		if (flags & SPI_XFER_BEGIN) {
+ 			priv->cur_seqid = *(u8 *)dout;
+-			memcpy(&txbuf, dout, 4);
++			if (FSL_QSPI_FLASH_SIZE  > SZ_16M && bytes > 4)
++				memcpy(&txbuf, dout + 1, 4);
++			else
++				memcpy(&txbuf, dout, 4);
+ 		}
+ 
+ 		if (flags == SPI_XFER_END) {
+-- 
+1.7.1
+

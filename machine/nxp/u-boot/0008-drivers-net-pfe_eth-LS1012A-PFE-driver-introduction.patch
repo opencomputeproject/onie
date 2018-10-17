@@ -1,0 +1,2526 @@
+From 06d363e99d90625ee7c1752f285ed6ebadbcddf1 Mon Sep 17 00:00:00 2001
+From: Calvin Johnson <calvin.johnson@nxp.com>
+Date: Thu, 8 Mar 2018 15:30:25 +0530
+Subject: [PATCH 008/107] drivers: net: pfe_eth: LS1012A PFE driver introduction
+
+This patch adds PFE driver to U-Boot
+
+Following are the main driver files:-
+pfe_hw.c: provides low level helper functions to initialize PFE
+internal processor engines and other hardware blocks
+pfe_driver.c: provides initialization functions
+and packet send and receive functions
+pfe_eth.c: provides high level gemac initialization functions
+pfe_firmware.c: provides functions to load firmware into PFE
+internal processor engines.
+pfe_mdio.c: provides functions to initialize phy and mdio.
+
+Signed-off-by: Calvin Johnson <calvin.johnson@nxp.com>
+Signed-off-by: Anjaneyulu Jagarlmudi <anji.jagarlmudi@nxp.com>
+Acked-by: Joe Hershberger <joe.hershberger@ni.com>
+---
+ drivers/net/pfe_eth/pfe_driver.c   |  643 +++++++++++++++++++++++
+ drivers/net/pfe_eth/pfe_eth.c      |  297 +++++++++++
+ drivers/net/pfe_eth/pfe_firmware.c |  230 +++++++++
+ drivers/net/pfe_eth/pfe_hw.c       |  999 ++++++++++++++++++++++++++++++++++++
+ drivers/net/pfe_eth/pfe_mdio.c     |  291 +++++++++++
+ 5 files changed, 2460 insertions(+), 0 deletions(-)
+ create mode 100644 drivers/net/pfe_eth/pfe_driver.c
+ create mode 100644 drivers/net/pfe_eth/pfe_eth.c
+ create mode 100644 drivers/net/pfe_eth/pfe_firmware.c
+ create mode 100644 drivers/net/pfe_eth/pfe_hw.c
+ create mode 100644 drivers/net/pfe_eth/pfe_mdio.c
+
+diff --git a/drivers/net/pfe_eth/pfe_driver.c b/drivers/net/pfe_eth/pfe_driver.c
+new file mode 100644
+index 0000000..a9991f5
+--- /dev/null
++++ b/drivers/net/pfe_eth/pfe_driver.c
+@@ -0,0 +1,643 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#include <net/pfe_eth/pfe_eth.h>
++#include <net/pfe_eth/pfe_firmware.h>
++
++static struct tx_desc_s *g_tx_desc;
++static struct rx_desc_s *g_rx_desc;
++
++/*
++ * HIF Rx interface function
++ * Reads the rx descriptor from the current location (rx_to_read).
++ * - If the descriptor has a valid data/pkt, then get the data pointer
++ * - check for the input rx phy number
++ * - increment the rx data pointer by pkt_head_room_size
++ * - decrement the data length by pkt_head_room_size
++ * - handover the packet to caller.
++ *
++ * @param[out] pkt_ptr - Pointer to store rx packet
++ * @param[out] phy_port - Pointer to store recv phy port
++ *
++ * @return -1 if no packet, else return length of packet.
++ */
++int pfe_recv(uchar **pkt_ptr, int *phy_port)
++{
++	struct rx_desc_s *rx_desc = g_rx_desc;
++	struct buf_desc *bd;
++	int len = 0;
++
++	struct hif_header_s *hif_header;
++
++	bd = rx_desc->rx_base + rx_desc->rx_to_read;
++
++	if (readl(&bd->ctrl) & BD_CTRL_DESC_EN)
++		return len; /* No pending Rx packet */
++
++	/* this len include hif_header(8 bytes) */
++	len = readl(&bd->ctrl) & 0xFFFF;
++
++	hif_header = (struct hif_header_s *)DDR_PFE_TO_VIRT(readl(&bd->data));
++
++	/* Get the receive port info from the packet */
++	debug("Pkt received:");
++	debug(" Pkt ptr(%p), len(%d), gemac_port(%d) status(%08x)\n",
++	      hif_header, len, hif_header->port_no, readl(&bd->status));
++#ifdef DEBUG
++	{
++		int i;
++		unsigned char *p = (unsigned char *)hif_header;
++
++		for (i = 0; i < len; i++) {
++			if (!(i % 16))
++				printf("\n");
++			printf(" %02x", p[i]);
++		}
++		printf("\n");
++	}
++#endif
++
++	*pkt_ptr = (uchar *)(hif_header + 1);
++	*phy_port = hif_header->port_no;
++	len -= sizeof(struct hif_header_s);
++
++	return len;
++}
++
++/*
++ * HIF function to check the Rx done
++ * This function will check the rx done indication of the current rx_to_read
++ * locations
++ * if success, moves the rx_to_read to next location.
++ */
++int pfe_eth_free_pkt(struct udevice *dev, uchar *packet, int length)
++{
++	struct rx_desc_s *rx_desc = g_rx_desc;
++	struct buf_desc *bd;
++
++	debug("%s:rx_base: %p, rx_to_read: %d\n", __func__, rx_desc->rx_base,
++	      rx_desc->rx_to_read);
++
++	bd = rx_desc->rx_base + rx_desc->rx_to_read;
++
++	/* reset the control field */
++	writel((MAX_FRAME_SIZE | BD_CTRL_LIFM | BD_CTRL_DESC_EN
++		    | BD_CTRL_DIR), &bd->ctrl);
++	writel(0, &bd->status);
++
++	debug("Rx Done : status: %08x, ctrl: %08x\n", readl(&bd->status),
++	      readl(&bd->ctrl));
++
++	/* Give START_STROBE to BDP to fetch the descriptor __NOW__,
++	 * BDP need not wait for rx_poll_cycle time to fetch the descriptor,
++	 * In idle state (ie., no rx pkt), BDP will not fetch
++	 * the descriptor even if strobe is given.
++	 */
++	writel((readl(HIF_RX_CTRL) | HIF_CTRL_BDP_CH_START_WSTB), HIF_RX_CTRL);
++
++	/* increment the rx_to_read index to next location */
++	rx_desc->rx_to_read = (rx_desc->rx_to_read + 1)
++			       & (rx_desc->rx_ring_size - 1);
++
++	debug("Rx next pkt location: %d\n", rx_desc->rx_to_read);
++
++	return 0;
++}
++
++/*
++ * HIF Tx interface function
++ * This function sends a single packet to PFE from HIF interface.
++ * - No interrupt indication on tx completion.
++ * - Data is copied to tx buffers before tx descriptor is updated
++ *   and TX DMA is enabled.
++ *
++ * @param[in] phy_port	Phy port number to send out this packet
++ * @param[in] data	Pointer to the data
++ * @param[in] length	Length of the ethernet packet to be transferred.
++ *
++ * @return -1 if tx Q is full, else returns the tx location where the pkt is
++ * placed.
++ */
++int pfe_send(int phy_port, void *data, int length)
++{
++	struct tx_desc_s *tx_desc = g_tx_desc;
++	struct buf_desc *bd;
++	struct hif_header_s hif_header;
++	u8 *tx_buf_va;
++
++	debug("%s:pkt: %p, len: %d, tx_base: %p, tx_to_send: %d\n", __func__,
++	      data, length, tx_desc->tx_base, tx_desc->tx_to_send);
++
++	bd = tx_desc->tx_base + tx_desc->tx_to_send;
++
++	/* check queue-full condition */
++	if (readl(&bd->ctrl) & BD_CTRL_DESC_EN)
++		return -1;
++
++	/* PFE checks for min pkt size */
++	if (length < MIN_PKT_SIZE)
++		length = MIN_PKT_SIZE;
++
++	tx_buf_va = (void *)DDR_PFE_TO_VIRT(readl(&bd->data));
++	debug("%s: tx_buf_va: %p, tx_buf_pa: %08x\n", __func__, tx_buf_va,
++	      readl(&bd->data));
++
++	/* Fill the gemac/phy port number to send this packet out */
++	memset(&hif_header, 0, sizeof(struct hif_header_s));
++	hif_header.port_no = phy_port;
++
++	memcpy(tx_buf_va, (u8 *)&hif_header, sizeof(struct hif_header_s));
++	memcpy(tx_buf_va + sizeof(struct hif_header_s), data, length);
++	length += sizeof(struct hif_header_s);
++
++#ifdef DEBUG
++	{
++		int i;
++		unsigned char *p = (unsigned char *)tx_buf_va;
++
++		for (i = 0; i < length; i++) {
++			if (!(i % 16))
++				printf("\n");
++			printf("%02x ", p[i]);
++		}
++	}
++#endif
++
++	debug("Tx Done: status: %08x, ctrl: %08x\n", readl(&bd->status),
++	      readl(&bd->ctrl));
++
++	/* fill the tx desc */
++	writel((u32)(BD_CTRL_DESC_EN | BD_CTRL_LIFM | (length & 0xFFFF)),
++	       &bd->ctrl);
++	writel(0, &bd->status);
++
++	writel((HIF_CTRL_DMA_EN | HIF_CTRL_BDP_CH_START_WSTB), HIF_TX_CTRL);
++
++	udelay(100);
++
++	return tx_desc->tx_to_send;
++}
++
++/*
++ * HIF function to check the Tx done
++ *  This function will check the tx done indication of the current tx_to_send
++ *  locations
++ *  if success, moves the tx_to_send to next location.
++ *
++ * @return -1 if TX ownership bit is not cleared by hw.
++ * else on success (tx done completion) return zero.
++ */
++int pfe_tx_done(void)
++{
++	struct tx_desc_s *tx_desc = g_tx_desc;
++	struct buf_desc *bd;
++
++	debug("%s:tx_base: %p, tx_to_send: %d\n", __func__, tx_desc->tx_base,
++	      tx_desc->tx_to_send);
++
++	bd = tx_desc->tx_base + tx_desc->tx_to_send;
++
++	/* check queue-full condition */
++	if (readl(&bd->ctrl) & BD_CTRL_DESC_EN)
++		return -1;
++
++	/* reset the control field */
++	writel(0, &bd->ctrl);
++	writel(0, &bd->status);
++
++	debug("Tx Done : status: %08x, ctrl: %08x\n", readl(&bd->status),
++	      readl(&bd->ctrl));
++
++	/* increment the txtosend index to next location */
++	tx_desc->tx_to_send = (tx_desc->tx_to_send + 1)
++			       & (tx_desc->tx_ring_size - 1);
++
++	debug("Tx next pkt location: %d\n", tx_desc->tx_to_send);
++
++	return 0;
++}
++
++/*
++ * Helper function to dump Rx descriptors.
++ */
++static inline void hif_rx_desc_dump(void)
++{
++	struct buf_desc *bd_va;
++	int i;
++	struct rx_desc_s *rx_desc;
++
++	if (!g_rx_desc) {
++		printf("%s: HIF Rx desc no init\n", __func__);
++		return;
++	}
++
++	rx_desc = g_rx_desc;
++	bd_va = rx_desc->rx_base;
++
++	debug("HIF rx desc: base_va: %p, base_pa: %08x\n", rx_desc->rx_base,
++	      rx_desc->rx_base_pa);
++	for (i = 0; i < rx_desc->rx_ring_size; i++) {
++		debug("status: %08x, ctrl: %08x, data: %08x, next: 0x%08x\n",
++		      readl(&bd_va->status),
++		      readl(&bd_va->ctrl),
++		      readl(&bd_va->data),
++		      readl(&bd_va->next));
++		bd_va++;
++	}
++}
++
++/*
++ * This function mark all Rx descriptors as LAST_BD.
++ */
++void hif_rx_desc_disable(void)
++{
++	int i;
++	struct rx_desc_s *rx_desc;
++	struct buf_desc *bd_va;
++
++	if (!g_rx_desc) {
++		printf("%s: HIF Rx desc not initialized\n", __func__);
++		return;
++	}
++
++	rx_desc = g_rx_desc;
++	bd_va = rx_desc->rx_base;
++
++	for (i = 0; i < rx_desc->rx_ring_size; i++) {
++		writel(readl(&bd_va->ctrl) | BD_CTRL_LAST_BD, &bd_va->ctrl);
++		bd_va++;
++	}
++}
++
++/*
++ * HIF Rx Desc initialization function.
++ */
++static int hif_rx_desc_init(struct pfe_ddr_address *pfe_addr)
++{
++	u32 ctrl;
++	struct buf_desc *bd_va;
++	struct buf_desc *bd_pa;
++	struct rx_desc_s *rx_desc;
++	u32 rx_buf_pa;
++	int i;
++
++	/* sanity check */
++	if (g_rx_desc) {
++		printf("%s: HIF Rx desc re-init request\n", __func__);
++		return 0;
++	}
++
++	rx_desc = (struct rx_desc_s *)malloc(sizeof(struct rx_desc_s));
++	if (!rx_desc) {
++		printf("%s: Memory allocation failure\n", __func__);
++		return -ENOMEM;
++	}
++	memset(rx_desc, 0, sizeof(struct rx_desc_s));
++
++	/* init: Rx ring buffer */
++	rx_desc->rx_ring_size = HIF_RX_DESC_NT;
++
++	/* NOTE: must be 64bit aligned  */
++	bd_va = (struct buf_desc *)(pfe_addr->ddr_pfe_baseaddr
++		 + RX_BD_BASEADDR);
++	bd_pa = (struct buf_desc *)(pfe_addr->ddr_pfe_phys_baseaddr
++				    + RX_BD_BASEADDR);
++
++	rx_desc->rx_base = bd_va;
++	rx_desc->rx_base_pa = (unsigned long)bd_pa;
++
++	rx_buf_pa = pfe_addr->ddr_pfe_phys_baseaddr + HIF_RX_PKT_DDR_BASEADDR;
++
++	debug("%s: Rx desc base: %p, base_pa: %08x, desc_count: %d\n",
++	      __func__, rx_desc->rx_base, rx_desc->rx_base_pa,
++	      rx_desc->rx_ring_size);
++
++	memset(bd_va, 0, sizeof(struct buf_desc) * rx_desc->rx_ring_size);
++
++	ctrl = (MAX_FRAME_SIZE | BD_CTRL_DESC_EN | BD_CTRL_DIR | BD_CTRL_LIFM);
++
++	for (i = 0; i < rx_desc->rx_ring_size; i++) {
++		writel((unsigned long)(bd_pa + 1), &bd_va->next);
++		writel(ctrl, &bd_va->ctrl);
++		writel(rx_buf_pa + (i * MAX_FRAME_SIZE), &bd_va->data);
++		bd_va++;
++		bd_pa++;
++	}
++	--bd_va;
++	writel((u32)rx_desc->rx_base_pa, &bd_va->next);
++
++	writel(rx_desc->rx_base_pa, HIF_RX_BDP_ADDR);
++	writel((readl(HIF_RX_CTRL) | HIF_CTRL_BDP_CH_START_WSTB), HIF_RX_CTRL);
++
++	g_rx_desc = rx_desc;
++
++	return 0;
++}
++
++/*
++ * Helper function to dump Tx Descriptors.
++ */
++static inline void hif_tx_desc_dump(void)
++{
++	struct tx_desc_s *tx_desc;
++	int i;
++	struct buf_desc *bd_va;
++
++	if (!g_tx_desc) {
++		printf("%s: HIF Tx desc no init\n", __func__);
++		return;
++	}
++
++	tx_desc = g_tx_desc;
++	bd_va = tx_desc->tx_base;
++
++	debug("HIF tx desc: base_va: %p, base_pa: %08x\n", tx_desc->tx_base,
++	      tx_desc->tx_base_pa);
++
++	for (i = 0; i < tx_desc->tx_ring_size; i++)
++		bd_va++;
++}
++
++/*
++ * HIF Tx descriptor initialization function.
++ */
++static int hif_tx_desc_init(struct pfe_ddr_address *pfe_addr)
++{
++	struct buf_desc *bd_va;
++	struct buf_desc *bd_pa;
++	int i;
++	struct tx_desc_s *tx_desc;
++	u32 tx_buf_pa;
++
++	/* sanity check */
++	if (g_tx_desc) {
++		printf("%s: HIF Tx desc re-init request\n", __func__);
++		return 0;
++	}
++
++	tx_desc = (struct tx_desc_s *)malloc(sizeof(struct tx_desc_s));
++	if (!tx_desc) {
++		printf("%s:%d:Memory allocation failure\n", __func__,
++		       __LINE__);
++		return -ENOMEM;
++	}
++	memset(tx_desc, 0, sizeof(struct tx_desc_s));
++
++	/* init: Tx ring buffer */
++	tx_desc->tx_ring_size = HIF_TX_DESC_NT;
++
++	/* NOTE: must be 64bit aligned  */
++	bd_va = (struct buf_desc *)(pfe_addr->ddr_pfe_baseaddr
++		 + TX_BD_BASEADDR);
++	bd_pa = (struct buf_desc *)(pfe_addr->ddr_pfe_phys_baseaddr
++				    + TX_BD_BASEADDR);
++
++	tx_desc->tx_base_pa = (unsigned long)bd_pa;
++	tx_desc->tx_base = bd_va;
++
++	debug("%s: Tx desc_base: %p, base_pa: %08x, desc_count: %d\n",
++	      __func__, tx_desc->tx_base, tx_desc->tx_base_pa,
++	      tx_desc->tx_ring_size);
++
++	memset(bd_va, 0, sizeof(struct buf_desc) * tx_desc->tx_ring_size);
++
++	tx_buf_pa = pfe_addr->ddr_pfe_phys_baseaddr + HIF_TX_PKT_DDR_BASEADDR;
++
++	for (i = 0; i < tx_desc->tx_ring_size; i++) {
++		writel((unsigned long)(bd_pa + 1), &bd_va->next);
++		writel(tx_buf_pa + (i * MAX_FRAME_SIZE), &bd_va->data);
++		bd_va++;
++		bd_pa++;
++	}
++	--bd_va;
++	writel((u32)tx_desc->tx_base_pa, &bd_va->next);
++
++	writel(tx_desc->tx_base_pa, HIF_TX_BDP_ADDR);
++
++	g_tx_desc = tx_desc;
++
++	return 0;
++}
++
++/*
++ * PFE/Class initialization.
++ */
++static void pfe_class_init(struct pfe_ddr_address *pfe_addr)
++{
++	struct class_cfg class_cfg = {
++		.route_table_baseaddr = pfe_addr->ddr_pfe_phys_baseaddr +
++					ROUTE_TABLE_BASEADDR,
++		.route_table_hash_bits = ROUTE_TABLE_HASH_BITS,
++	};
++
++	class_init(&class_cfg);
++
++	debug("class init complete\n");
++}
++
++/*
++ * PFE/TMU initialization.
++ */
++static void pfe_tmu_init(struct pfe_ddr_address *pfe_addr)
++{
++	struct tmu_cfg tmu_cfg = {
++		.llm_base_addr = pfe_addr->ddr_pfe_phys_baseaddr
++				 + TMU_LLM_BASEADDR,
++		.llm_queue_len = TMU_LLM_QUEUE_LEN,
++	};
++
++	tmu_init(&tmu_cfg);
++
++	debug("tmu init complete\n");
++}
++
++/*
++ * PFE/BMU (both BMU1 & BMU2) initialization.
++ */
++static void pfe_bmu_init(struct pfe_ddr_address *pfe_addr)
++{
++	struct bmu_cfg bmu1_cfg = {
++		.baseaddr = CBUS_VIRT_TO_PFE(LMEM_BASE_ADDR +
++						BMU1_LMEM_BASEADDR),
++		.count = BMU1_BUF_COUNT,
++		.size = BMU1_BUF_SIZE,
++	};
++
++	struct bmu_cfg bmu2_cfg = {
++		.baseaddr = pfe_addr->ddr_pfe_phys_baseaddr + BMU2_DDR_BASEADDR,
++		.count = BMU2_BUF_COUNT,
++		.size = BMU2_BUF_SIZE,
++	};
++
++	bmu_init(BMU1_BASE_ADDR, &bmu1_cfg);
++	debug("bmu1 init: done\n");
++
++	bmu_init(BMU2_BASE_ADDR, &bmu2_cfg);
++	debug("bmu2 init: done\n");
++}
++
++/*
++ * PFE/GPI initialization function.
++ *  - egpi1, egpi2, egpi3, hgpi
++ */
++static void pfe_gpi_init(struct pfe_ddr_address *pfe_addr)
++{
++	struct gpi_cfg egpi1_cfg = {
++		.lmem_rtry_cnt = EGPI1_LMEM_RTRY_CNT,
++		.tmlf_txthres = EGPI1_TMLF_TXTHRES,
++		.aseq_len = EGPI1_ASEQ_LEN,
++	};
++
++	struct gpi_cfg egpi2_cfg = {
++		.lmem_rtry_cnt = EGPI2_LMEM_RTRY_CNT,
++		.tmlf_txthres = EGPI2_TMLF_TXTHRES,
++		.aseq_len = EGPI2_ASEQ_LEN,
++	};
++
++	struct gpi_cfg hgpi_cfg = {
++		.lmem_rtry_cnt = HGPI_LMEM_RTRY_CNT,
++		.tmlf_txthres = HGPI_TMLF_TXTHRES,
++		.aseq_len = HGPI_ASEQ_LEN,
++	};
++
++	gpi_init(EGPI1_BASE_ADDR, &egpi1_cfg);
++	debug("GPI1 init complete\n");
++
++	gpi_init(EGPI2_BASE_ADDR, &egpi2_cfg);
++	debug("GPI2 init complete\n");
++
++	gpi_init(HGPI_BASE_ADDR, &hgpi_cfg);
++	debug("HGPI init complete\n");
++}
++
++/*
++ * PFE/HIF initialization function.
++ */
++static int pfe_hif_init(struct pfe_ddr_address *pfe_addr)
++{
++	int ret = 0;
++
++	hif_tx_disable();
++	hif_rx_disable();
++
++	ret = hif_tx_desc_init(pfe_addr);
++	if (ret)
++		return ret;
++	ret = hif_rx_desc_init(pfe_addr);
++	if (ret)
++		return ret;
++
++	hif_init();
++
++	hif_tx_enable();
++	hif_rx_enable();
++
++	hif_rx_desc_dump();
++	hif_tx_desc_dump();
++
++	debug("HIF init complete\n");
++	return ret;
++}
++
++/*
++ * PFE initialization
++ * - Firmware loading (CLASS-PE and TMU-PE)
++ * - BMU1 and BMU2 init
++ * - GEMAC init
++ * - GPI init
++ * - CLASS-PE init
++ * - TMU-PE init
++ * - HIF tx and rx descriptors init
++ *
++ * @param[in]	edev	Pointer to eth device structure.
++ *
++ * @return 0, on success.
++ */
++static int pfe_hw_init(struct pfe_ddr_address *pfe_addr)
++{
++	int ret = 0;
++
++	debug("%s: start\n", __func__);
++
++	writel(0x3, CLASS_PE_SYS_CLK_RATIO);
++	writel(0x3, TMU_PE_SYS_CLK_RATIO);
++	writel(0x3, UTIL_PE_SYS_CLK_RATIO);
++	udelay(10);
++
++	pfe_class_init(pfe_addr);
++
++	pfe_tmu_init(pfe_addr);
++
++	pfe_bmu_init(pfe_addr);
++
++	pfe_gpi_init(pfe_addr);
++
++	ret = pfe_hif_init(pfe_addr);
++	if (ret)
++		return ret;
++
++	bmu_enable(BMU1_BASE_ADDR);
++	debug("bmu1 enabled\n");
++
++	bmu_enable(BMU2_BASE_ADDR);
++	debug("bmu2 enabled\n");
++
++	debug("%s: done\n", __func__);
++
++	return ret;
++}
++
++/*
++ * PFE driver init function.
++ * - Initializes pfe_lib
++ * - pfe hw init
++ * - fw loading and enables PEs
++ * - should be executed once.
++ *
++ * @param[in] pfe  Pointer the pfe control block
++ */
++int pfe_drv_init(struct pfe_ddr_address  *pfe_addr)
++{
++	int ret = 0;
++
++	pfe_lib_init();
++
++	ret = pfe_hw_init(pfe_addr);
++	if (ret)
++		return ret;
++
++	/* Load the class,TM, Util fw.
++	 * By now pfe is:
++	 * - out of reset + disabled + configured.
++	 * Fw loading should be done after pfe_hw_init()
++	 */
++	/* It loads default inbuilt sbl firmware */
++	pfe_firmware_init();
++
++	return ret;
++}
++
++/*
++ * PFE remove function
++ *  - stops PEs
++ *  - frees tx/rx descriptor resources
++ *  - should be called once.
++ *
++ * @param[in] pfe Pointer to pfe control block.
++ */
++int pfe_eth_remove(struct udevice *dev)
++{
++	if (g_tx_desc)
++		free(g_tx_desc);
++
++	if (g_rx_desc)
++		free(g_rx_desc);
++
++	pfe_firmware_exit();
++
++	return 0;
++}
+diff --git a/drivers/net/pfe_eth/pfe_eth.c b/drivers/net/pfe_eth/pfe_eth.c
+new file mode 100644
+index 0000000..e6c6c8c
+--- /dev/null
++++ b/drivers/net/pfe_eth/pfe_eth.c
+@@ -0,0 +1,297 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#include <common.h>
++#include <dm.h>
++#include <dm/platform_data/pfe_dm_eth.h>
++#include <net.h>
++#include <net/pfe_eth/pfe_eth.h>
++#include <net/pfe_eth/pfe_mdio.h>
++
++struct gemac_s gem_info[] = {
++	/* PORT_0 configuration */
++	{
++		/* GEMAC config */
++		.gemac_speed = PFE_MAC_SPEED_1000M,
++		.gemac_duplex = DUPLEX_FULL,
++
++		/* phy iface */
++		.phy_address = CONFIG_PFE_EMAC1_PHY_ADDR,
++		.phy_mode = PHY_INTERFACE_MODE_SGMII,
++	},
++	/* PORT_1 configuration */
++	{
++		/* GEMAC config */
++		.gemac_speed = PFE_MAC_SPEED_1000M,
++		.gemac_duplex = DUPLEX_FULL,
++
++		/* phy iface */
++		.phy_address = CONFIG_PFE_EMAC2_PHY_ADDR,
++		.phy_mode = PHY_INTERFACE_MODE_RGMII_TXID,
++	},
++};
++
++static inline void pfe_gemac_enable(void *gemac_base)
++{
++	writel(readl(gemac_base + EMAC_ECNTRL_REG) |
++		EMAC_ECNTRL_ETHER_EN, gemac_base + EMAC_ECNTRL_REG);
++}
++
++static inline void pfe_gemac_disable(void *gemac_base)
++{
++	writel(readl(gemac_base + EMAC_ECNTRL_REG) &
++		~EMAC_ECNTRL_ETHER_EN, gemac_base + EMAC_ECNTRL_REG);
++}
++
++static inline void pfe_gemac_set_speed(void *gemac_base, u32 speed)
++{
++	struct ccsr_scfg *scfg = (struct ccsr_scfg *)CONFIG_SYS_FSL_SCFG_ADDR;
++	u32 ecr = readl(gemac_base + EMAC_ECNTRL_REG) & ~EMAC_ECNTRL_SPEED;
++	u32 rcr = readl(gemac_base + EMAC_RCNTRL_REG) & ~EMAC_RCNTRL_RMII_10T;
++	u32 rgmii_pcr = in_be32(&scfg->rgmiipcr) &
++			~(SCFG_RGMIIPCR_SETSP_1000M | SCFG_RGMIIPCR_SETSP_10M);
++
++	if (speed == _1000BASET) {
++		ecr |= EMAC_ECNTRL_SPEED;
++		rgmii_pcr |= SCFG_RGMIIPCR_SETSP_1000M;
++	} else if (speed != _100BASET) {
++		rcr |= EMAC_RCNTRL_RMII_10T;
++		rgmii_pcr |= SCFG_RGMIIPCR_SETSP_10M;
++	}
++
++	writel(ecr, gemac_base + EMAC_ECNTRL_REG);
++	out_be32(&scfg->rgmiipcr, rgmii_pcr | SCFG_RGMIIPCR_SETFD);
++
++	/* remove loop back */
++	rcr &= ~EMAC_RCNTRL_LOOP;
++	/* enable flow control */
++	rcr |= EMAC_RCNTRL_FCE;
++
++	/* Enable MII mode */
++	rcr |= EMAC_RCNTRL_MII_MODE;
++
++	writel(rcr, gemac_base + EMAC_RCNTRL_REG);
++
++	/* Enable Tx full duplex */
++	writel(readl(gemac_base + EMAC_TCNTRL_REG) | EMAC_TCNTRL_FDEN,
++	       gemac_base + EMAC_TCNTRL_REG);
++}
++
++static int pfe_eth_write_hwaddr(struct udevice *dev)
++{
++	struct pfe_eth_dev *priv = dev_get_priv(dev);
++	struct gemac_s *gem = priv->gem;
++	struct eth_pdata *pdata = dev_get_platdata(dev);
++	uchar *mac = pdata->enetaddr;
++
++	writel((mac[0] << 24) + (mac[1] << 16) + (mac[2] << 8) + mac[3],
++	       gem->gemac_base + EMAC_PHY_ADDR_LOW);
++	writel((mac[4] << 24) + (mac[5] << 16) + 0x8808, gem->gemac_base +
++	       EMAC_PHY_ADDR_HIGH);
++	return 0;
++}
++
++/** Stops or Disables GEMAC pointing to this eth iface.
++ *
++ * @param[in]   edev    Pointer to eth device structure.
++ *
++ * @return      none
++ */
++static inline void pfe_eth_stop(struct udevice *dev)
++{
++	struct pfe_eth_dev *priv = dev_get_priv(dev);
++
++	pfe_gemac_disable(priv->gem->gemac_base);
++
++	gpi_disable(priv->gem->egpi_base);
++}
++
++static int pfe_eth_start(struct udevice *dev)
++{
++	struct pfe_eth_dev *priv = dev_get_priv(dev);
++	struct gemac_s *gem = priv->gem;
++	int speed;
++
++	/* set ethernet mac address */
++	pfe_eth_write_hwaddr(dev);
++
++	writel(EMAC_TFWR, gem->gemac_base + EMAC_TFWR_STR_FWD);
++	writel(EMAC_RX_SECTION_FULL_32, gem->gemac_base + EMAC_RX_SECTIOM_FULL);
++	writel(EMAC_TRUNC_FL_16K, gem->gemac_base + EMAC_TRUNC_FL);
++	writel(EMAC_TX_SECTION_EMPTY_30, gem->gemac_base
++	       + EMAC_TX_SECTION_EMPTY);
++	writel(EMAC_MIBC_NO_CLR_NO_DIS, gem->gemac_base
++	       + EMAC_MIB_CTRL_STS_REG);
++
++#ifdef CONFIG_PHYLIB
++	/* Start up the PHY */
++	if (phy_startup(priv->phydev)) {
++		printf("Could not initialize PHY %s\n",
++		       priv->phydev->dev->name);
++		return -1;
++	}
++	speed = priv->phydev->speed;
++	printf("Speed detected %x\n", speed);
++	if (priv->phydev->duplex == DUPLEX_HALF) {
++		printf("Half duplex not supported\n");
++		return -1;
++	}
++#endif
++
++	pfe_gemac_set_speed(gem->gemac_base, speed);
++
++	/* Enable GPI */
++	gpi_enable(gem->egpi_base);
++
++	/* Enable GEMAC */
++	pfe_gemac_enable(gem->gemac_base);
++
++	return 0;
++}
++
++static int pfe_eth_send(struct udevice *dev, void *packet, int length)
++{
++	struct pfe_eth_dev *priv = (struct pfe_eth_dev *)dev->priv;
++
++	int rc;
++	int i = 0;
++
++	rc = pfe_send(priv->gemac_port, packet, length);
++
++	if (rc < 0) {
++		printf("Tx Queue full\n");
++		return rc;
++	}
++
++	while (1) {
++		rc = pfe_tx_done();
++		if (rc == 0)
++			break;
++
++		udelay(100);
++		i++;
++		if (i == 30000)
++			printf("Tx timeout, send failed\n");
++		break;
++	}
++
++	return 0;
++}
++
++static int pfe_eth_recv(struct udevice *dev, int flags, uchar **packetp)
++{
++	struct pfe_eth_dev *priv = dev_get_priv(dev);
++	uchar *pkt_buf;
++	int len;
++	int phy_port;
++
++	len = pfe_recv(&pkt_buf, &phy_port);
++
++	if (len == 0)
++		return -EAGAIN; /* no packet in rx */
++	else if  (len < 0)
++		return -EAGAIN;
++
++	debug("Rx pkt: pkt_buf(0x%p), phy_port(%d), len(%d)\n", pkt_buf,
++	      phy_port, len);
++	if (phy_port != priv->gemac_port)  {
++		printf("Rx pkt not on expected port\n");
++		return -EAGAIN;
++	}
++
++	*packetp = pkt_buf;
++
++	return len;
++}
++
++static int pfe_eth_probe(struct udevice *dev)
++{
++	struct pfe_eth_dev *priv = dev_get_priv(dev);
++	struct pfe_ddr_address *pfe_addr;
++	struct pfe_eth_pdata *pdata = dev_get_platdata(dev);
++	int ret = 0;
++	static int init_done;
++
++	if (!init_done) {
++		pfe_addr = (struct pfe_ddr_address *)malloc(sizeof
++						    (struct pfe_ddr_address));
++		if (!pfe_addr)
++			return -ENOMEM;
++
++		pfe_addr->ddr_pfe_baseaddr =
++				(void *)pdata->pfe_ddr_addr.ddr_pfe_baseaddr;
++		pfe_addr->ddr_pfe_phys_baseaddr =
++		(unsigned long)pdata->pfe_ddr_addr.ddr_pfe_phys_baseaddr;
++
++		debug("ddr_pfe_baseaddr: %p, ddr_pfe_phys_baseaddr: %08x\n",
++		      pfe_addr->ddr_pfe_baseaddr,
++		      (u32)pfe_addr->ddr_pfe_phys_baseaddr);
++
++		ret = pfe_drv_init(pfe_addr);
++		if (ret)
++			return ret;
++
++		init_pfe_scfg_dcfg_regs();
++		init_done = 1;
++	}
++
++	priv->gemac_port = pdata->pfe_eth_pdata_mac.phy_interface;
++	priv->gem = &gem_info[priv->gemac_port];
++	priv->dev = dev;
++
++	switch (priv->gemac_port)  {
++	case EMAC_PORT_0:
++	default:
++		priv->gem->gemac_base = EMAC1_BASE_ADDR;
++		priv->gem->egpi_base = EGPI1_BASE_ADDR;
++		break;
++	case EMAC_PORT_1:
++		priv->gem->gemac_base = EMAC2_BASE_ADDR;
++		priv->gem->egpi_base = EGPI2_BASE_ADDR;
++		break;
++	}
++
++	ret = pfe_eth_board_init(dev);
++	if (ret)
++		return ret;
++
++#if defined(CONFIG_PHYLIB)
++	ret = pfe_phy_configure(priv, pdata->pfe_eth_pdata_mac.phy_interface,
++				gem_info[priv->gemac_port].phy_address);
++#endif
++	return ret;
++}
++
++static int pfe_eth_bind(struct udevice *dev)
++{
++	struct pfe_eth_pdata *pdata = dev_get_platdata(dev);
++	char name[20];
++
++	sprintf(name, "pfe_eth%u", pdata->pfe_eth_pdata_mac.phy_interface);
++
++	return device_set_name(dev, name);
++}
++
++static const struct eth_ops pfe_eth_ops = {
++	.start		= pfe_eth_start,
++	.send		= pfe_eth_send,
++	.recv		= pfe_eth_recv,
++	.free_pkt	= pfe_eth_free_pkt,
++	.stop		= pfe_eth_stop,
++	.write_hwaddr	= pfe_eth_write_hwaddr,
++};
++
++U_BOOT_DRIVER(pfe_eth) = {
++	.name	= "pfe_eth",
++	.id	= UCLASS_ETH,
++	.bind	= pfe_eth_bind,
++	.probe	= pfe_eth_probe,
++	.remove = pfe_eth_remove,
++	.ops	= &pfe_eth_ops,
++	.priv_auto_alloc_size = sizeof(struct pfe_eth_dev),
++	.platdata_auto_alloc_size = sizeof(struct pfe_eth_pdata)
++};
+diff --git a/drivers/net/pfe_eth/pfe_firmware.c b/drivers/net/pfe_eth/pfe_firmware.c
+new file mode 100644
+index 0000000..9dc063d
+--- /dev/null
++++ b/drivers/net/pfe_eth/pfe_firmware.c
+@@ -0,0 +1,230 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++/*
++ * @file
++ *  Contains all the functions to handle parsing and loading of PE firmware
++ * files.
++ */
++
++#include <net/pfe_eth/pfe_eth.h>
++#include <net/pfe_eth/pfe_firmware.h>
++
++#define PFE_FIRMEWARE_FIT_CNF_NAME	"config@1"
++
++static const void *pfe_fit_addr = (void *)CONFIG_SYS_LS_PFE_FW_ADDR;
++
++/*
++ * PFE elf firmware loader.
++ * Loads an elf firmware image into a list of PE's (specified using a bitmask)
++ *
++ * @param pe_mask	Mask of PE id's to load firmware to
++ * @param pfe_firmware	Pointer to the firmware image
++ *
++ * @return		0 on success, a negative value on error
++ */
++static int pfe_load_elf(int pe_mask, uint8_t *pfe_firmware)
++{
++	Elf32_Ehdr *elf_hdr = (Elf32_Ehdr *)pfe_firmware;
++	Elf32_Half sections = be16_to_cpu(elf_hdr->e_shnum);
++	Elf32_Shdr *shdr = (Elf32_Shdr *)(pfe_firmware +
++						be32_to_cpu(elf_hdr->e_shoff));
++	int id, section;
++	int ret;
++
++	debug("%s: no of sections: %d\n", __func__, sections);
++
++	/* Some sanity checks */
++	if (strncmp((char *)&elf_hdr->e_ident[EI_MAG0], ELFMAG, SELFMAG)) {
++		printf("%s: incorrect elf magic number\n", __func__);
++		return -1;
++	}
++
++	if (elf_hdr->e_ident[EI_CLASS] != ELFCLASS32) {
++		printf("%s: incorrect elf class(%x)\n", __func__,
++		       elf_hdr->e_ident[EI_CLASS]);
++		return -1;
++	}
++
++	if (elf_hdr->e_ident[EI_DATA] != ELFDATA2MSB) {
++		printf("%s: incorrect elf data(%x)\n", __func__,
++		       elf_hdr->e_ident[EI_DATA]);
++		return -1;
++	}
++
++	if (be16_to_cpu(elf_hdr->e_type) != ET_EXEC) {
++		printf("%s: incorrect elf file type(%x)\n", __func__,
++		       be16_to_cpu(elf_hdr->e_type));
++		return -1;
++	}
++
++	for (section = 0; section < sections; section++, shdr++) {
++		if (!(be32_to_cpu(shdr->sh_flags) & (SHF_WRITE | SHF_ALLOC |
++			SHF_EXECINSTR)))
++			continue;
++		for (id = 0; id < MAX_PE; id++)
++			if (pe_mask & BIT(id)) {
++				ret = pe_load_elf_section(id,
++							  pfe_firmware, shdr);
++				if (ret < 0)
++					goto err;
++			}
++	}
++	return 0;
++
++err:
++	return ret;
++}
++
++/*
++ * Get PFE firmware from FIT image
++ *
++ * @param data pointer to PFE firmware
++ * @param size pointer to size of the firmware
++ * @param fw_name pfe firmware name, either class or tmu
++ *
++ * @return 0 on success, a negative value on error
++ */
++static int pfe_get_fw(const void **data,
++		      size_t *size, char *fw_name)
++{
++	int conf_node_off, fw_node_off;
++	char *conf_node_name = NULL;
++	char *desc;
++	int ret = 0;
++
++	conf_node_name = PFE_FIRMEWARE_FIT_CNF_NAME;
++
++	conf_node_off = fit_conf_get_node(pfe_fit_addr, conf_node_name);
++	if (conf_node_off < 0) {
++		printf("PFE Firmware: %s: no such config\n", conf_node_name);
++		return -ENOENT;
++	}
++
++	fw_node_off = fit_conf_get_prop_node(pfe_fit_addr, conf_node_off,
++					     fw_name);
++	if (fw_node_off < 0) {
++		printf("PFE Firmware: No '%s' in config\n",
++		       fw_name);
++		return -ENOLINK;
++	}
++
++	if (!(fit_image_verify(pfe_fit_addr, fw_node_off))) {
++		printf("PFE Firmware: Bad firmware image (bad CRC)\n");
++		return -EINVAL;
++	}
++
++	if (fit_image_get_data(pfe_fit_addr, fw_node_off, data, size)) {
++		printf("PFE Firmware: Can't get %s subimage data/size",
++		       fw_name);
++		return -ENOENT;
++	}
++
++	ret = fit_get_desc(pfe_fit_addr, fw_node_off, &desc);
++	if (ret)
++		printf("PFE Firmware: Can't get description\n");
++	else
++		printf("%s\n", desc);
++
++	return ret;
++}
++
++/*
++ * Check PFE FIT image
++ *
++ * @return 0 on success, a negative value on error
++ */
++static int pfe_fit_check(void)
++{
++	int ret = 0;
++
++	ret = fdt_check_header(pfe_fit_addr);
++	if (ret) {
++		printf("PFE Firmware: Bad firmware image (not a FIT image)\n");
++		return ret;
++	}
++
++	if (!fit_check_format(pfe_fit_addr)) {
++		printf("PFE Firmware: Bad firmware image (bad FIT header)\n");
++		ret = -1;
++		return ret;
++	}
++
++	return ret;
++}
++
++/*
++ * PFE firmware initialization.
++ * Loads different firmware files from FIT image.
++ * Initializes PE IMEM/DMEM and UTIL-PE DDR
++ * Initializes control path symbol addresses (by looking them up in the elf
++ * firmware files
++ * Takes PE's out of reset
++ *
++ * @return 0 on success, a negative value on error
++ */
++int pfe_firmware_init(void)
++{
++	char *pfe_firmware_name;
++	const void *raw_image_addr;
++	size_t raw_image_size = 0;
++	u8 *pfe_firmware;
++	int ret = 0;
++	int fw_count;
++
++	ret = pfe_fit_check();
++	if (ret)
++		goto err;
++
++	for (fw_count = 0; fw_count < 2; fw_count++) {
++		if (fw_count == 0)
++			pfe_firmware_name = "class";
++		else if (fw_count == 1)
++			pfe_firmware_name = "tmu";
++
++		pfe_get_fw(&raw_image_addr, &raw_image_size, pfe_firmware_name);
++		pfe_firmware = malloc(raw_image_size);
++		if (!pfe_firmware)
++			return -ENOMEM;
++		memcpy((void *)pfe_firmware, (void *)raw_image_addr,
++		       raw_image_size);
++
++		if (fw_count == 0)
++			ret = pfe_load_elf(CLASS_MASK, pfe_firmware);
++		else if (fw_count == 1)
++			ret = pfe_load_elf(TMU_MASK, pfe_firmware);
++
++		if (ret < 0) {
++			printf("%s: %s firmware load failed\n", __func__,
++			       pfe_firmware_name);
++			goto err;
++		}
++		debug("%s: %s firmware loaded\n", __func__, pfe_firmware_name);
++		free(pfe_firmware);
++	}
++
++	tmu_enable(0xb);
++	class_enable();
++	gpi_enable(HGPI_BASE_ADDR);
++
++err:
++	return ret;
++}
++
++/*
++ * PFE firmware cleanup
++ * Puts PE's in reset
++ */
++void pfe_firmware_exit(void)
++{
++	debug("%s\n", __func__);
++
++	class_disable();
++	tmu_disable(0xf);
++	hif_tx_disable();
++	hif_rx_disable();
++}
+diff --git a/drivers/net/pfe_eth/pfe_hw.c b/drivers/net/pfe_eth/pfe_hw.c
+new file mode 100644
+index 0000000..12bb0da
+--- /dev/null
++++ b/drivers/net/pfe_eth/pfe_hw.c
+@@ -0,0 +1,999 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:GPL-2.0+
++ */
++#include <net/pfe_eth/pfe_eth.h>
++#include <net/pfe_eth/pfe/pfe_hw.h>
++
++static struct pe_info pe[MAX_PE];
++
++/*
++ * Initializes the PFE library.
++ * Must be called before using any of the library functions.
++ */
++void pfe_lib_init(void)
++{
++	int pfe_pe_id;
++
++	for (pfe_pe_id = CLASS0_ID; pfe_pe_id <= CLASS_MAX_ID; pfe_pe_id++) {
++		pe[pfe_pe_id].dmem_base_addr =
++			(u32)CLASS_DMEM_BASE_ADDR(pfe_pe_id);
++		pe[pfe_pe_id].pmem_base_addr =
++			(u32)CLASS_IMEM_BASE_ADDR(pfe_pe_id);
++		pe[pfe_pe_id].pmem_size = (u32)CLASS_IMEM_SIZE;
++		pe[pfe_pe_id].mem_access_wdata =
++			(void *)CLASS_MEM_ACCESS_WDATA;
++		pe[pfe_pe_id].mem_access_addr = (void *)CLASS_MEM_ACCESS_ADDR;
++		pe[pfe_pe_id].mem_access_rdata = (void *)CLASS_MEM_ACCESS_RDATA;
++	}
++
++	for (pfe_pe_id = TMU0_ID; pfe_pe_id <= TMU_MAX_ID; pfe_pe_id++) {
++		if (pfe_pe_id == TMU2_ID)
++			continue;
++		pe[pfe_pe_id].dmem_base_addr =
++			(u32)TMU_DMEM_BASE_ADDR(pfe_pe_id - TMU0_ID);
++		pe[pfe_pe_id].pmem_base_addr =
++			(u32)TMU_IMEM_BASE_ADDR(pfe_pe_id - TMU0_ID);
++		pe[pfe_pe_id].pmem_size = (u32)TMU_IMEM_SIZE;
++		pe[pfe_pe_id].mem_access_wdata = (void *)TMU_MEM_ACCESS_WDATA;
++		pe[pfe_pe_id].mem_access_addr = (void *)TMU_MEM_ACCESS_ADDR;
++		pe[pfe_pe_id].mem_access_rdata = (void *)TMU_MEM_ACCESS_RDATA;
++	}
++}
++
++/*
++ * Writes a buffer to PE internal memory from the host
++ * through indirect access registers.
++ *
++ * @param[in] id	       PE identification (CLASS0_ID, ..., TMU0_ID,
++ *				..., UTIL_ID)
++ * @param[in] mem_access_addr	DMEM destination address (must be 32bit
++ *				aligned)
++ * @param[in] src		Buffer source address
++ * @param[in] len		Number of bytes to copy
++ */
++static void pe_mem_memcpy_to32(int id, u32 mem_access_addr, const void *src,
++			       unsigned int len)
++{
++	u32 offset = 0, val, addr;
++	unsigned int len32 = len >> 2;
++	int i;
++
++	addr = mem_access_addr | PE_MEM_ACCESS_WRITE |
++		PE_MEM_ACCESS_BYTE_ENABLE(0, 4);
++
++	for (i = 0; i < len32; i++, offset += 4, src += 4) {
++		val = *(u32 *)src;
++		writel(cpu_to_be32(val), pe[id].mem_access_wdata);
++		writel(addr + offset, pe[id].mem_access_addr);
++	}
++
++	len = (len & 0x3);
++	if (len) {
++		val = 0;
++
++		addr = (mem_access_addr | PE_MEM_ACCESS_WRITE |
++			PE_MEM_ACCESS_BYTE_ENABLE(0, len)) + offset;
++
++		for (i = 0; i < len; i++, src++)
++			val |= (*(u8 *)src) << (8 * i);
++
++		writel(cpu_to_be32(val), pe[id].mem_access_wdata);
++		writel(addr, pe[id].mem_access_addr);
++	}
++}
++
++/*
++ * Writes a buffer to PE internal data memory (DMEM) from the host
++ * through indirect access registers.
++ * @param[in] id	PE identification (CLASS0_ID, ..., TMU0_ID,
++ *			..., UTIL_ID)
++ * @param[in] dst	DMEM destination address (must be 32bit
++ *			aligned)
++ * @param[in] src	Buffer source address
++ * @param[in] len	Number of bytes to copy
++ */
++static void pe_dmem_memcpy_to32(int id, u32 dst, const void *src,
++				unsigned int len)
++{
++	pe_mem_memcpy_to32(id, pe[id].dmem_base_addr | dst | PE_MEM_ACCESS_DMEM,
++			   src, len);
++}
++
++/*
++ * Writes a buffer to PE internal program memory (PMEM) from the host
++ * through indirect access registers.
++ * @param[in] id	PE identification (CLASS0_ID, ..., TMU0_ID,
++ *			..., TMU3_ID)
++ * @param[in] dst	PMEM destination address (must be 32bit
++ *			aligned)
++ * @param[in] src	Buffer source address
++ * @param[in] len	Number of bytes to copy
++ */
++static void pe_pmem_memcpy_to32(int id, u32 dst, const void *src,
++				unsigned int len)
++{
++	pe_mem_memcpy_to32(id, pe[id].pmem_base_addr | (dst & (pe[id].pmem_size
++				- 1)) | PE_MEM_ACCESS_IMEM, src, len);
++}
++
++/*
++ * Reads PE internal program memory (IMEM) from the host
++ * through indirect access registers.
++ * @param[in] id		PE identification (CLASS0_ID, ..., TMU0_ID,
++ *				..., TMU3_ID)
++ * @param[in] addr		PMEM read address (must be aligned on size)
++ * @param[in] size		Number of bytes to read (maximum 4, must not
++ *				cross 32bit boundaries)
++ * @return			the data read (in PE endianness, i.e BE).
++ */
++u32 pe_pmem_read(int id, u32 addr, u8 size)
++{
++	u32 offset = addr & 0x3;
++	u32 mask = 0xffffffff >> ((4 - size) << 3);
++	u32 val;
++
++	addr = pe[id].pmem_base_addr | ((addr & ~0x3) & (pe[id].pmem_size - 1))
++		| PE_MEM_ACCESS_READ | PE_MEM_ACCESS_IMEM |
++		PE_MEM_ACCESS_BYTE_ENABLE(offset, size);
++
++	writel(addr, pe[id].mem_access_addr);
++	val = be32_to_cpu(readl(pe[id].mem_access_rdata));
++
++	return (val >> (offset << 3)) & mask;
++}
++
++/*
++ * Writes PE internal data memory (DMEM) from the host
++ * through indirect access registers.
++ * @param[in] id	PE identification (CLASS0_ID, ..., TMU0_ID,
++ *			..., UTIL_ID)
++ * @param[in] val	Value to write (in PE endianness, i.e BE)
++ * @param[in] addr	DMEM write address (must be aligned on size)
++ * @param[in] size	Number of bytes to write (maximum 4, must not
++ *			cross 32bit boundaries)
++ */
++void pe_dmem_write(int id, u32 val, u32 addr, u8 size)
++{
++	u32 offset = addr & 0x3;
++
++	addr = pe[id].dmem_base_addr | (addr & ~0x3) | PE_MEM_ACCESS_WRITE |
++		PE_MEM_ACCESS_DMEM | PE_MEM_ACCESS_BYTE_ENABLE(offset, size);
++
++	/* Indirect access interface is byte swapping data being written */
++	writel(cpu_to_be32(val << (offset << 3)), pe[id].mem_access_wdata);
++	writel(addr, pe[id].mem_access_addr);
++}
++
++/*
++ * Reads PE internal data memory (DMEM) from the host
++ * through indirect access registers.
++ * @param[in] id		PE identification (CLASS0_ID, ..., TMU0_ID,
++ *				..., UTIL_ID)
++ * @param[in] addr		DMEM read address (must be aligned on size)
++ * @param[in] size		Number of bytes to read (maximum 4, must not
++ *				cross 32bit boundaries)
++ * @return			the data read (in PE endianness, i.e BE).
++ */
++u32 pe_dmem_read(int id, u32 addr, u8 size)
++{
++	u32 offset = addr & 0x3;
++	u32 mask = 0xffffffff >> ((4 - size) << 3);
++	u32 val;
++
++	addr = pe[id].dmem_base_addr | (addr & ~0x3) | PE_MEM_ACCESS_READ |
++		PE_MEM_ACCESS_DMEM | PE_MEM_ACCESS_BYTE_ENABLE(offset, size);
++
++	writel(addr, pe[id].mem_access_addr);
++
++	/* Indirect access interface is byte swapping data being read */
++	val = be32_to_cpu(readl(pe[id].mem_access_rdata));
++
++	return (val >> (offset << 3)) & mask;
++}
++
++/*
++ * This function is used to write to CLASS internal bus peripherals (ccu,
++ * pe-lem) from the host
++ * through indirect access registers.
++ * @param[in]	val	value to write
++ * @param[in]	addr	Address to write to (must be aligned on size)
++ * @param[in]	size	Number of bytes to write (1, 2 or 4)
++ *
++ */
++static void class_bus_write(u32 val, u32 addr, u8 size)
++{
++	u32 offset = addr & 0x3;
++
++	writel((addr & CLASS_BUS_ACCESS_BASE_MASK), CLASS_BUS_ACCESS_BASE);
++
++	addr = (addr & ~CLASS_BUS_ACCESS_BASE_MASK) | PE_MEM_ACCESS_WRITE |
++		(size << 24);
++
++	writel(cpu_to_be32(val << (offset << 3)), CLASS_BUS_ACCESS_WDATA);
++	writel(addr, CLASS_BUS_ACCESS_ADDR);
++}
++
++/*
++ * Reads from CLASS internal bus peripherals (ccu, pe-lem) from the host
++ * through indirect access registers.
++ * @param[in] addr	Address to read from (must be aligned on size)
++ * @param[in] size	Number of bytes to read (1, 2 or 4)
++ * @return		the read data
++ */
++static u32 class_bus_read(u32 addr, u8 size)
++{
++	u32 offset = addr & 0x3;
++	u32 mask = 0xffffffff >> ((4 - size) << 3);
++	u32 val;
++
++	writel((addr & CLASS_BUS_ACCESS_BASE_MASK), CLASS_BUS_ACCESS_BASE);
++
++	addr = (addr & ~CLASS_BUS_ACCESS_BASE_MASK) | (size << 24);
++
++	writel(addr, CLASS_BUS_ACCESS_ADDR);
++	val = be32_to_cpu(readl(CLASS_BUS_ACCESS_RDATA));
++
++	return (val >> (offset << 3)) & mask;
++}
++
++/*
++ * Writes data to the cluster memory (PE_LMEM)
++ * @param[in] dst	PE LMEM destination address (must be 32bit aligned)
++ * @param[in] src	Buffer source address
++ * @param[in] len	Number of bytes to copy
++ */
++static void class_pe_lmem_memcpy_to32(u32 dst, const void *src,
++				      unsigned int len)
++{
++	u32 len32 = len >> 2;
++	int i;
++
++	for (i = 0; i < len32; i++, src += 4, dst += 4)
++		class_bus_write(*(u32 *)src, dst, 4);
++
++	if (len & 0x2) {
++		class_bus_write(*(u16 *)src, dst, 2);
++		src += 2;
++		dst += 2;
++	}
++
++	if (len & 0x1) {
++		class_bus_write(*(u8 *)src, dst, 1);
++		src++;
++		dst++;
++	}
++}
++
++/*
++ * Writes value to the cluster memory (PE_LMEM)
++ * @param[in] dst	PE LMEM destination address (must be 32bit aligned)
++ * @param[in] val	Value to write
++ * @param[in] len	Number of bytes to write
++ */
++static void class_pe_lmem_memset(u32 dst, int val, unsigned int len)
++{
++	u32 len32 = len >> 2;
++	int i;
++
++	val = val | (val << 8) | (val << 16) | (val << 24);
++
++	for (i = 0; i < len32; i++, dst += 4)
++		class_bus_write(val, dst, 4);
++
++	if (len & 0x2) {
++		class_bus_write(val, dst, 2);
++		dst += 2;
++	}
++
++	if (len & 0x1) {
++		class_bus_write(val, dst, 1);
++		dst++;
++	}
++}
++
++/*
++ * Reads data from the cluster memory (PE_LMEM)
++ * @param[out] dst	pointer to the source buffer data are copied to
++ * @param[in] len	length in bytes of the amount of data to read
++ *			from cluster memory
++ * @param[in] offset	offset in bytes in the cluster memory where data are
++ *			read from
++ */
++void pe_lmem_read(u32 *dst, u32 len, u32 offset)
++{
++	u32 len32 = len >> 2;
++	int i = 0;
++
++	for (i = 0; i < len32; dst++, i++, offset += 4)
++		*dst = class_bus_read(PE_LMEM_BASE_ADDR + offset, 4);
++
++	if (len & 0x03)
++		*dst = class_bus_read(PE_LMEM_BASE_ADDR + offset, (len & 0x03));
++}
++
++/*
++ * Writes data to the cluster memory (PE_LMEM)
++ * @param[in] src	pointer to the source buffer data are copied from
++ * @param[in] len	length in bytes of the amount of data to write to the
++ *				cluster memory
++ * @param[in] offset	offset in bytes in the cluster memory where data are
++ *				written to
++ */
++void pe_lmem_write(u32 *src, u32 len, u32 offset)
++{
++	u32 len32 = len >> 2;
++	int i = 0;
++
++	for (i = 0; i < len32; src++, i++, offset += 4)
++		class_bus_write(*src, PE_LMEM_BASE_ADDR + offset, 4);
++
++	if (len & 0x03)
++		class_bus_write(*src, PE_LMEM_BASE_ADDR + offset, (len &
++					0x03));
++}
++
++/*
++ * Loads an elf section into pmem
++ * Code needs to be at least 16bit aligned and only PROGBITS sections are
++ * supported
++ *
++ * @param[in] id	PE identification (CLASS0_ID, ..., TMU0_ID, ...,
++ *					TMU3_ID)
++ * @param[in] data	pointer to the elf firmware
++ * @param[in] shdr	pointer to the elf section header
++ */
++static int pe_load_pmem_section(int id, const void *data, Elf32_Shdr *shdr)
++{
++	u32 offset = be32_to_cpu(shdr->sh_offset);
++	u32 addr = be32_to_cpu(shdr->sh_addr);
++	u32 size = be32_to_cpu(shdr->sh_size);
++	u32 type = be32_to_cpu(shdr->sh_type);
++
++	if (((unsigned long)(data + offset) & 0x3) != (addr & 0x3)) {
++		printf(
++			"%s: load address(%x) and elf file address(%lx) don't have the same alignment\n",
++			__func__, addr, (unsigned long)data + offset);
++
++		return -1;
++	}
++
++	if (addr & 0x1) {
++		printf("%s: load address(%x) is not 16bit aligned\n",
++		       __func__, addr);
++		return -1;
++	}
++
++	if (size & 0x1) {
++		printf("%s: load size(%x) is not 16bit aligned\n", __func__,
++		       size);
++		return -1;
++	}
++
++		debug("pmem pe%d @%x len %d\n", id, addr, size);
++	switch (type) {
++	case SHT_PROGBITS:
++		pe_pmem_memcpy_to32(id, addr, data + offset, size);
++		break;
++
++	default:
++		printf("%s: unsupported section type(%x)\n", __func__, type);
++		return -1;
++	}
++
++	return 0;
++}
++
++/*
++ * Loads an elf section into dmem
++ * Data needs to be at least 32bit aligned, NOBITS sections are correctly
++ * initialized to 0
++ *
++ * @param[in] id	PE identification (CLASS0_ID, ..., TMU0_ID,
++ *			..., UTIL_ID)
++ * @param[in] data	pointer to the elf firmware
++ * @param[in] shdr	pointer to the elf section header
++ */
++static int pe_load_dmem_section(int id, const void *data, Elf32_Shdr *shdr)
++{
++	u32 offset = be32_to_cpu(shdr->sh_offset);
++	u32 addr = be32_to_cpu(shdr->sh_addr);
++	u32 size = be32_to_cpu(shdr->sh_size);
++	u32 type = be32_to_cpu(shdr->sh_type);
++	u32 size32 = size >> 2;
++	int i;
++
++	if (((unsigned long)(data + offset) & 0x3) != (addr & 0x3)) {
++		printf(
++			"%s: load address(%x) and elf file address(%lx) don't have the same alignment\n",
++			__func__, addr, (unsigned long)data + offset);
++
++		return -1;
++	}
++
++	if (addr & 0x3) {
++		printf("%s: load address(%x) is not 32bit aligned\n",
++		       __func__, addr);
++		return -1;
++	}
++
++	switch (type) {
++	case SHT_PROGBITS:
++		debug("dmem pe%d @%x len %d\n", id, addr, size);
++		pe_dmem_memcpy_to32(id, addr, data + offset, size);
++		break;
++
++	case SHT_NOBITS:
++		debug("dmem zero pe%d @%x len %d\n", id, addr, size);
++		for (i = 0; i < size32; i++, addr += 4)
++			pe_dmem_write(id, 0, addr, 4);
++
++		if (size & 0x3)
++			pe_dmem_write(id, 0, addr, size & 0x3);
++
++		break;
++
++	default:
++		printf("%s: unsupported section type(%x)\n", __func__, type);
++		return -1;
++	}
++
++	return 0;
++}
++
++/*
++ * Loads an elf section into DDR
++ * Data needs to be at least 32bit aligned, NOBITS sections are correctly
++ *		initialized to 0
++ *
++ * @param[in] id	PE identification (CLASS0_ID, ..., TMU0_ID,
++ *			..., UTIL_ID)
++ * @param[in] data	pointer to the elf firmware
++ * @param[in] shdr	pointer to the elf section header
++ */
++static int pe_load_ddr_section(int id, const void *data, Elf32_Shdr *shdr)
++{
++	u32 offset = be32_to_cpu(shdr->sh_offset);
++	u32 addr = be32_to_cpu(shdr->sh_addr);
++	u32 size = be32_to_cpu(shdr->sh_size);
++	u32 type = be32_to_cpu(shdr->sh_type);
++	u32 flags = be32_to_cpu(shdr->sh_flags);
++
++	switch (type) {
++	case SHT_PROGBITS:
++		debug("ddr  pe%d @%x len %d\n", id, addr, size);
++		if (flags & SHF_EXECINSTR) {
++			if (id <= CLASS_MAX_ID) {
++				/* DO the loading only once in DDR */
++				if (id == CLASS0_ID) {
++					debug(
++						"%s: load address(%x) and elf file address(%lx) rcvd\n"
++						, __func__, addr,
++						(unsigned long)data + offset);
++					if (((unsigned long)(data + offset)
++						& 0x3) != (addr & 0x3)) {
++						printf(
++							"%s: load address(%x) and elf file address(%lx) don't have the same alignment\n",
++							__func__, addr,
++							(unsigned long)data +
++							offset);
++
++						return -1;
++					}
++
++					if (addr & 0x1) {
++						printf(
++							"%s: load address(%x) is not 16bit aligned\n"
++							, __func__, addr);
++						return -1;
++					}
++
++					if (size & 0x1) {
++						printf(
++							"%s: load length(%x) is not 16bit aligned\n"
++							, __func__, size);
++						return -1;
++					}
++
++					memcpy((void *)DDR_PFE_TO_VIRT(addr),
++					       data + offset, size);
++				}
++			} else {
++				printf(
++					"%s: unsupported ddr section type(%x) for PE(%d)\n"
++					, __func__, type, id);
++				return -1;
++			}
++
++		} else {
++			memcpy((void *)DDR_PFE_TO_VIRT(addr), data + offset,
++			       size);
++		}
++
++		break;
++
++	case SHT_NOBITS:
++		debug("ddr zero pe%d @%x len %d\n", id, addr, size);
++		memset((void *)DDR_PFE_TO_VIRT(addr), 0, size);
++
++		break;
++
++	default:
++		printf("%s: unsupported section type(%x)\n", __func__, type);
++		return -1;
++	}
++
++	return 0;
++}
++
++/*
++ * Loads an elf section into pe lmem
++ * Data needs to be at least 32bit aligned, NOBITS sections are correctly
++ * initialized to 0
++ *
++ * @param[in] id	PE identification (CLASS0_ID,..., CLASS5_ID)
++ * @param[in] data	pointer to the elf firmware
++ * @param[in] shdr	pointer to the elf section header
++ */
++static int pe_load_pe_lmem_section(int id, const void *data, Elf32_Shdr *shdr)
++{
++	u32 offset = be32_to_cpu(shdr->sh_offset);
++	u32 addr = be32_to_cpu(shdr->sh_addr);
++	u32 size = be32_to_cpu(shdr->sh_size);
++	u32 type = be32_to_cpu(shdr->sh_type);
++
++	if (id > CLASS_MAX_ID) {
++		printf("%s: unsupported pe-lmem section type(%x) for PE(%d)\n",
++		       __func__, type, id);
++		return -1;
++	}
++
++	if (((unsigned long)(data + offset) & 0x3) != (addr & 0x3)) {
++		printf(
++			"%s: load address(%x) and elf file address(%lx) don't have the same alignment\n",
++			__func__, addr, (unsigned long)data + offset);
++
++		return -1;
++	}
++
++	if (addr & 0x3) {
++		printf("%s: load address(%x) is not 32bit aligned\n",
++		       __func__, addr);
++		return -1;
++	}
++
++	debug("lmem  pe%d @%x len %d\n", id, addr, size);
++
++	switch (type) {
++	case SHT_PROGBITS:
++		class_pe_lmem_memcpy_to32(addr, data + offset, size);
++		break;
++
++	case SHT_NOBITS:
++		class_pe_lmem_memset(addr, 0, size);
++		break;
++
++	default:
++		printf("%s: unsupported section type(%x)\n", __func__, type);
++		return -1;
++	}
++
++	return 0;
++}
++
++/*
++ * Loads an elf section into a PE
++ * For now only supports loading a section to dmem (all PE's), pmem (class and
++ * tmu PE's), DDDR (util PE code)
++ * @param[in] id PE identification (CLASS0_ID, ..., TMU0_ID,
++ * ..., UTIL_ID)
++ * @param[in] data	pointer to the elf firmware
++ * @param[in] shdr	pointer to the elf section header
++ */
++int pe_load_elf_section(int id, const void *data, Elf32_Shdr *shdr)
++{
++	u32 addr = be32_to_cpu(shdr->sh_addr);
++	u32 size = be32_to_cpu(shdr->sh_size);
++
++	if (IS_DMEM(addr, size))
++		return pe_load_dmem_section(id, data, shdr);
++	else if (IS_PMEM(addr, size))
++		return pe_load_pmem_section(id, data, shdr);
++	else if (IS_PFE_LMEM(addr, size))
++		return 0;
++	else if (IS_PHYS_DDR(addr, size))
++		return pe_load_ddr_section(id, data, shdr);
++	else if (IS_PE_LMEM(addr, size))
++		return pe_load_pe_lmem_section(id, data, shdr);
++
++	printf("%s: unsupported memory range(%x)\n", __func__, addr);
++
++	return 0;
++}
++
++/**************************** BMU ***************************/
++/*
++ * Resets a BMU block.
++ * @param[in] base	BMU block base address
++ */
++static inline void bmu_reset(void *base)
++{
++	writel(CORE_SW_RESET, base + BMU_CTRL);
++
++	/* Wait for self clear */
++	while (readl(base + BMU_CTRL) & CORE_SW_RESET)
++		;
++}
++
++/*
++ * Enabled a BMU block.
++ * @param[in] base	BMU block base address
++ */
++void bmu_enable(void *base)
++{
++	writel(CORE_ENABLE, base + BMU_CTRL);
++}
++
++/*
++ * Disables a BMU block.
++ * @param[in] base	BMU block base address
++ */
++static inline void bmu_disable(void *base)
++{
++	writel(CORE_DISABLE, base + BMU_CTRL);
++}
++
++/*
++ * Sets the configuration of a BMU block.
++ * @param[in] base	BMU block base address
++ * @param[in] cfg	BMU configuration
++ */
++static inline void bmu_set_config(void *base, struct bmu_cfg *cfg)
++{
++	writel(cfg->baseaddr, base + BMU_UCAST_BASE_ADDR);
++	writel(cfg->count & 0xffff, base + BMU_UCAST_CONFIG);
++	writel(cfg->size & 0xffff, base + BMU_BUF_SIZE);
++
++	/* Interrupts are never used */
++	writel(0x0, base + BMU_INT_ENABLE);
++}
++
++/*
++ * Initializes a BMU block.
++ * @param[in] base	BMU block base address
++ * @param[in] cfg	BMU configuration
++ */
++void bmu_init(void *base, struct bmu_cfg *cfg)
++{
++	bmu_disable(base);
++
++	bmu_set_config(base, cfg);
++
++	bmu_reset(base);
++}
++
++/**************************** GPI ***************************/
++/*
++ * Resets a GPI block.
++ * @param[in] base	GPI base address
++ */
++static inline void gpi_reset(void *base)
++{
++	writel(CORE_SW_RESET, base + GPI_CTRL);
++}
++
++/*
++ * Enables a GPI block.
++ * @param[in] base	GPI base address
++ */
++void gpi_enable(void *base)
++{
++	writel(CORE_ENABLE, base + GPI_CTRL);
++}
++
++/*
++ * Disables a GPI block.
++ * @param[in] base	GPI base address
++ */
++void gpi_disable(void *base)
++{
++	writel(CORE_DISABLE, base + GPI_CTRL);
++}
++
++/*
++ * Sets the configuration of a GPI block.
++ * @param[in] base	GPI base address
++ * @param[in] cfg	GPI configuration
++ */
++static inline void gpi_set_config(void *base, struct gpi_cfg *cfg)
++{
++	writel(CBUS_VIRT_TO_PFE(BMU1_BASE_ADDR + BMU_ALLOC_CTRL), base
++	       + GPI_LMEM_ALLOC_ADDR);
++	writel(CBUS_VIRT_TO_PFE(BMU1_BASE_ADDR + BMU_FREE_CTRL), base
++	       + GPI_LMEM_FREE_ADDR);
++	writel(CBUS_VIRT_TO_PFE(BMU2_BASE_ADDR + BMU_ALLOC_CTRL), base
++	       + GPI_DDR_ALLOC_ADDR);
++	writel(CBUS_VIRT_TO_PFE(BMU2_BASE_ADDR + BMU_FREE_CTRL), base
++	       + GPI_DDR_FREE_ADDR);
++	writel(CBUS_VIRT_TO_PFE(CLASS_INQ_PKTPTR), base + GPI_CLASS_ADDR);
++	writel(DDR_HDR_SIZE, base + GPI_DDR_DATA_OFFSET);
++	writel(LMEM_HDR_SIZE, base + GPI_LMEM_DATA_OFFSET);
++	writel(0, base + GPI_LMEM_SEC_BUF_DATA_OFFSET);
++	writel(0, base + GPI_DDR_SEC_BUF_DATA_OFFSET);
++	writel((DDR_HDR_SIZE << 16) | LMEM_HDR_SIZE, base + GPI_HDR_SIZE);
++	writel((DDR_BUF_SIZE << 16) | LMEM_BUF_SIZE, base + GPI_BUF_SIZE);
++
++	writel(((cfg->lmem_rtry_cnt << 16) | (GPI_DDR_BUF_EN << 1) |
++		GPI_LMEM_BUF_EN), base + GPI_RX_CONFIG);
++	writel(cfg->tmlf_txthres, base + GPI_TMLF_TX);
++	writel(cfg->aseq_len, base + GPI_DTX_ASEQ);
++
++	/*Make GPI AXI transactions non-bufferable */
++	writel(0x1, base + GPI_AXI_CTRL);
++}
++
++/*
++ * Initializes a GPI block.
++ * @param[in] base	GPI base address
++ * @param[in] cfg	GPI configuration
++ */
++void gpi_init(void *base, struct gpi_cfg *cfg)
++{
++	gpi_reset(base);
++
++	gpi_disable(base);
++
++	gpi_set_config(base, cfg);
++}
++
++/**************************** CLASSIFIER ***************************/
++/*
++ * Resets CLASSIFIER block.
++ */
++static inline void class_reset(void)
++{
++	writel(CORE_SW_RESET, CLASS_TX_CTRL);
++}
++
++/*
++ * Enables all CLASS-PE's cores.
++ */
++void class_enable(void)
++{
++	writel(CORE_ENABLE, CLASS_TX_CTRL);
++}
++
++/*
++ * Disables all CLASS-PE's cores.
++ */
++void class_disable(void)
++{
++	writel(CORE_DISABLE, CLASS_TX_CTRL);
++}
++
++/*
++ * Sets the configuration of the CLASSIFIER block.
++ * @param[in] cfg	CLASSIFIER configuration
++ */
++static inline void class_set_config(struct class_cfg *cfg)
++{
++	if (PLL_CLK_EN == 0) {
++		/* Clock ratio: for 1:1 the value is 0 */
++		writel(0x0, CLASS_PE_SYS_CLK_RATIO);
++	} else {
++		/* Clock ratio: for 1:2 the value is 1 */
++		writel(0x1, CLASS_PE_SYS_CLK_RATIO);
++	}
++	writel((DDR_HDR_SIZE << 16) | LMEM_HDR_SIZE, CLASS_HDR_SIZE);
++	writel(LMEM_BUF_SIZE, CLASS_LMEM_BUF_SIZE);
++	writel(CLASS_ROUTE_ENTRY_SIZE(CLASS_ROUTE_SIZE) |
++		CLASS_ROUTE_HASH_SIZE(cfg->route_table_hash_bits),
++		CLASS_ROUTE_HASH_ENTRY_SIZE);
++	writel(HASH_CRC_PORT_IP | QB2BUS_LE, CLASS_ROUTE_MULTI);
++
++	writel(cfg->route_table_baseaddr, CLASS_ROUTE_TABLE_BASE);
++	memset((void *)DDR_PFE_TO_VIRT(cfg->route_table_baseaddr), 0,
++	       ROUTE_TABLE_SIZE);
++
++	writel(CLASS_PE0_RO_DM_ADDR0_VAL, CLASS_PE0_RO_DM_ADDR0);
++	writel(CLASS_PE0_RO_DM_ADDR1_VAL, CLASS_PE0_RO_DM_ADDR1);
++	writel(CLASS_PE0_QB_DM_ADDR0_VAL, CLASS_PE0_QB_DM_ADDR0);
++	writel(CLASS_PE0_QB_DM_ADDR1_VAL, CLASS_PE0_QB_DM_ADDR1);
++	writel(CBUS_VIRT_TO_PFE(TMU_PHY_INQ_PKTPTR), CLASS_TM_INQ_ADDR);
++
++	writel(23, CLASS_AFULL_THRES);
++	writel(23, CLASS_TSQ_FIFO_THRES);
++
++	writel(24, CLASS_MAX_BUF_CNT);
++	writel(24, CLASS_TSQ_MAX_CNT);
++
++	/*Make Class AXI transactions non-bufferable */
++	writel(0x1, CLASS_AXI_CTRL);
++
++	/*Make Util AXI transactions non-bufferable */
++	/*Util is disabled in U-boot, do it from here */
++	writel(0x1, UTIL_AXI_CTRL);
++}
++
++/*
++ * Initializes CLASSIFIER block.
++ * @param[in] cfg	CLASSIFIER configuration
++ */
++void class_init(struct class_cfg *cfg)
++{
++	class_reset();
++
++	class_disable();
++
++	class_set_config(cfg);
++}
++
++/**************************** TMU ***************************/
++/*
++ * Enables TMU-PE cores.
++ * @param[in] pe_mask	TMU PE mask
++ */
++void tmu_enable(u32 pe_mask)
++{
++	writel(readl(TMU_TX_CTRL) | (pe_mask & 0xF), TMU_TX_CTRL);
++}
++
++/*
++ * Disables TMU cores.
++ * @param[in] pe_mask	TMU PE mask
++ */
++void tmu_disable(u32 pe_mask)
++{
++	writel(readl(TMU_TX_CTRL) & ~(pe_mask & 0xF), TMU_TX_CTRL);
++}
++
++/*
++ * Initializes TMU block.
++ * @param[in] cfg	TMU configuration
++ */
++void tmu_init(struct tmu_cfg *cfg)
++{
++	int q, phyno;
++
++	/* keep in soft reset */
++	writel(SW_RESET, TMU_CTRL);
++
++	/*Make Class AXI transactions non-bufferable */
++	writel(0x1, TMU_AXI_CTRL);
++
++	/* enable EMAC PHY ports */
++	writel(0x3, TMU_SYS_GENERIC_CONTROL);
++
++	writel(750, TMU_INQ_WATERMARK);
++
++	writel(CBUS_VIRT_TO_PFE(EGPI1_BASE_ADDR + GPI_INQ_PKTPTR),
++	       TMU_PHY0_INQ_ADDR);
++	writel(CBUS_VIRT_TO_PFE(EGPI2_BASE_ADDR + GPI_INQ_PKTPTR),
++	       TMU_PHY1_INQ_ADDR);
++
++	writel(CBUS_VIRT_TO_PFE(HGPI_BASE_ADDR + GPI_INQ_PKTPTR),
++	       TMU_PHY3_INQ_ADDR);
++	writel(CBUS_VIRT_TO_PFE(HIF_NOCPY_RX_INQ0_PKTPTR), TMU_PHY4_INQ_ADDR);
++	writel(CBUS_VIRT_TO_PFE(UTIL_INQ_PKTPTR), TMU_PHY5_INQ_ADDR);
++	writel(CBUS_VIRT_TO_PFE(BMU2_BASE_ADDR + BMU_FREE_CTRL),
++	       TMU_BMU_INQ_ADDR);
++
++	/* enabling all 10 schedulers [9:0] of each TDQ  */
++	writel(0x3FF, TMU_TDQ0_SCH_CTRL);
++	writel(0x3FF, TMU_TDQ1_SCH_CTRL);
++	writel(0x3FF, TMU_TDQ3_SCH_CTRL);
++
++	if (PLL_CLK_EN == 0) {
++		/* Clock ratio: for 1:1 the value is 0 */
++		writel(0x0, TMU_PE_SYS_CLK_RATIO);
++	} else {
++		/* Clock ratio: for 1:2 the value is 1 */
++		writel(0x1, TMU_PE_SYS_CLK_RATIO);
++	}
++
++	/* Extra packet pointers will be stored from this address onwards */
++	debug("TMU_LLM_BASE_ADDR %x\n", cfg->llm_base_addr);
++	writel(cfg->llm_base_addr, TMU_LLM_BASE_ADDR);
++
++	debug("TMU_LLM_QUE_LEN %x\n", cfg->llm_queue_len);
++	writel(cfg->llm_queue_len,	TMU_LLM_QUE_LEN);
++
++	writel(5, TMU_TDQ_IIFG_CFG);
++	writel(DDR_BUF_SIZE, TMU_BMU_BUF_SIZE);
++
++	writel(0x0, TMU_CTRL);
++
++	/* MEM init */
++	writel(MEM_INIT, TMU_CTRL);
++
++	while (!(readl(TMU_CTRL) & MEM_INIT_DONE))
++		;
++
++	/* LLM init */
++	writel(LLM_INIT, TMU_CTRL);
++
++	while (!(readl(TMU_CTRL) & LLM_INIT_DONE))
++		;
++
++	/* set up each queue for tail drop */
++	for (phyno = 0; phyno < 4; phyno++) {
++		if (phyno == 2)
++			continue;
++		for (q = 0; q < 16; q++) {
++			u32 qmax;
++
++			writel((phyno << 8) | q, TMU_TEQ_CTRL);
++			writel(BIT(22), TMU_TEQ_QCFG);
++
++			if (phyno == 3)
++				qmax = DEFAULT_TMU3_QDEPTH;
++			else
++				qmax = (q == 0) ? DEFAULT_Q0_QDEPTH :
++					DEFAULT_MAX_QDEPTH;
++
++			writel(qmax << 18, TMU_TEQ_HW_PROB_CFG2);
++			writel(qmax >> 14, TMU_TEQ_HW_PROB_CFG3);
++		}
++	}
++	writel(0x05, TMU_TEQ_DISABLE_DROPCHK);
++	writel(0, TMU_CTRL);
++}
++
++/**************************** HIF ***************************/
++/*
++ * Enable hif tx DMA and interrupt
++ */
++void hif_tx_enable(void)
++{
++	writel(HIF_CTRL_DMA_EN, HIF_TX_CTRL);
++}
++
++/*
++ * Disable hif tx DMA and interrupt
++ */
++void hif_tx_disable(void)
++{
++	u32 hif_int;
++
++	writel(0, HIF_TX_CTRL);
++
++	hif_int = readl(HIF_INT_ENABLE);
++	hif_int &= HIF_TXPKT_INT_EN;
++	writel(hif_int, HIF_INT_ENABLE);
++}
++
++/*
++ * Enable hif rx DMA and interrupt
++ */
++void hif_rx_enable(void)
++{
++	writel((HIF_CTRL_DMA_EN | HIF_CTRL_BDP_CH_START_WSTB), HIF_RX_CTRL);
++}
++
++/*
++ * Disable hif rx DMA and interrupt
++ */
++void hif_rx_disable(void)
++{
++	u32 hif_int;
++
++	writel(0, HIF_RX_CTRL);
++
++	hif_int = readl(HIF_INT_ENABLE);
++	hif_int &= HIF_RXPKT_INT_EN;
++	writel(hif_int, HIF_INT_ENABLE);
++}
++
++/*
++ * Initializes HIF copy block.
++ */
++void hif_init(void)
++{
++	/* Initialize HIF registers */
++	writel(HIF_RX_POLL_CTRL_CYCLE << 16 | HIF_TX_POLL_CTRL_CYCLE,
++	       HIF_POLL_CTRL);
++	/* Make HIF AXI transactions non-bufferable */
++	writel(0x1, HIF_AXI_CTRL);
++}
+diff --git a/drivers/net/pfe_eth/pfe_mdio.c b/drivers/net/pfe_eth/pfe_mdio.c
+new file mode 100644
+index 0000000..a78a4d6
+--- /dev/null
++++ b/drivers/net/pfe_eth/pfe_mdio.c
+@@ -0,0 +1,291 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++#include <common.h>
++#include <dm.h>
++#include <dm/platform_data/pfe_dm_eth.h>
++#include <net.h>
++#include <net/pfe_eth/pfe_eth.h>
++
++extern struct gemac_s gem_info[];
++#if defined(CONFIG_PHYLIB)
++
++#define MDIO_TIMEOUT    5000
++static int pfe_write_addr(struct mii_dev *bus, int phy_addr, int dev_addr,
++			  int reg_addr)
++{
++	void *reg_base = bus->priv;
++	u32 devadr;
++	u32 phy;
++	u32 reg_data;
++	int timeout = MDIO_TIMEOUT;
++
++	devadr = ((dev_addr & EMAC_MII_DATA_RA_MASK) << EMAC_MII_DATA_RA_SHIFT);
++	phy = ((phy_addr & EMAC_MII_DATA_PA_MASK) << EMAC_MII_DATA_PA_SHIFT);
++
++	reg_data = (EMAC_MII_DATA_TA | phy | devadr | reg_addr);
++
++	writel(reg_data, reg_base + EMAC_MII_DATA_REG);
++
++	/*
++	 * wait for the MII interrupt
++	 */
++	while (!(readl(reg_base + EMAC_IEVENT_REG) & EMAC_IEVENT_MII)) {
++		if (timeout-- <= 0) {
++			printf("Phy MDIO read/write timeout\n");
++			return -1;
++		}
++	}
++
++	/*
++	 * clear MII interrupt
++	 */
++	writel(EMAC_IEVENT_MII, reg_base + EMAC_IEVENT_REG);
++
++	return 0;
++}
++
++static int pfe_phy_read(struct mii_dev *bus, int phy_addr, int dev_addr,
++			int reg_addr)
++{
++	void *reg_base = bus->priv;
++	u32 reg;
++	u32 phy;
++	u32 reg_data;
++	u16 val;
++	int timeout = MDIO_TIMEOUT;
++
++	if (dev_addr == MDIO_DEVAD_NONE) {
++		reg = ((reg_addr & EMAC_MII_DATA_RA_MASK) <<
++			EMAC_MII_DATA_RA_SHIFT);
++	} else {
++		pfe_write_addr(bus, phy_addr, dev_addr, reg_addr);
++		reg = ((dev_addr & EMAC_MII_DATA_RA_MASK) <<
++		       EMAC_MII_DATA_RA_SHIFT);
++	}
++
++	phy = ((phy_addr & EMAC_MII_DATA_PA_MASK) << EMAC_MII_DATA_PA_SHIFT);
++
++	if (dev_addr == MDIO_DEVAD_NONE)
++		reg_data = (EMAC_MII_DATA_ST | EMAC_MII_DATA_OP_RD |
++			    EMAC_MII_DATA_TA | phy | reg);
++	else
++		reg_data = (EMAC_MII_DATA_OP_CL45_RD | EMAC_MII_DATA_TA |
++			    phy | reg);
++
++	writel(reg_data, reg_base + EMAC_MII_DATA_REG);
++
++	/*
++	 * wait for the MII interrupt
++	 */
++	while (!(readl(reg_base + EMAC_IEVENT_REG) & EMAC_IEVENT_MII)) {
++		if (timeout-- <= 0) {
++			printf("Phy MDIO read/write timeout\n");
++			return -1;
++		}
++	}
++
++	/*
++	 * clear MII interrupt
++	 */
++	writel(EMAC_IEVENT_MII, reg_base + EMAC_IEVENT_REG);
++
++	/*
++	 * it's now safe to read the PHY's register
++	 */
++	val = (u16)readl(reg_base + EMAC_MII_DATA_REG);
++	debug("%s: %p phy: 0x%x reg:0x%08x val:%#x\n", __func__, reg_base,
++	      phy_addr, reg_addr, val);
++
++	return val;
++}
++
++static int pfe_phy_write(struct mii_dev *bus, int phy_addr, int dev_addr,
++			 int reg_addr, u16 data)
++{
++	void *reg_base = bus->priv;
++	u32 reg;
++	u32 phy;
++	u32 reg_data;
++	int timeout = MDIO_TIMEOUT;
++	int val;
++
++	if (dev_addr == MDIO_DEVAD_NONE) {
++		reg = ((reg_addr & EMAC_MII_DATA_RA_MASK) <<
++		       EMAC_MII_DATA_RA_SHIFT);
++	} else {
++		pfe_write_addr(bus, phy_addr, dev_addr, reg_addr);
++		reg = ((dev_addr & EMAC_MII_DATA_RA_MASK) <<
++		       EMAC_MII_DATA_RA_SHIFT);
++	}
++
++	phy = ((phy_addr & EMAC_MII_DATA_PA_MASK) << EMAC_MII_DATA_PA_SHIFT);
++
++	if (dev_addr == MDIO_DEVAD_NONE)
++		reg_data = (EMAC_MII_DATA_ST | EMAC_MII_DATA_OP_WR |
++			    EMAC_MII_DATA_TA | phy | reg | data);
++	else
++		reg_data = (EMAC_MII_DATA_OP_CL45_WR | EMAC_MII_DATA_TA |
++			    phy | reg | data);
++
++	writel(reg_data, reg_base + EMAC_MII_DATA_REG);
++
++	/*
++	 * wait for the MII interrupt
++	 */
++	while (!(readl(reg_base + EMAC_IEVENT_REG) & EMAC_IEVENT_MII)) {
++		if (timeout-- <= 0) {
++			printf("Phy MDIO read/write timeout\n");
++			return -1;
++		}
++	}
++
++	/*
++	 * clear MII interrupt
++	 */
++	writel(EMAC_IEVENT_MII, reg_base + EMAC_IEVENT_REG);
++
++	debug("%s: phy: %02x reg:%02x val:%#x\n", __func__, phy_addr,
++	      reg_addr, data);
++
++	return val;
++}
++
++static void pfe_configure_serdes(struct pfe_eth_dev *priv)
++{
++	struct mii_dev bus;
++	int value, sgmii_2500 = 0;
++	struct gemac_s *gem = priv->gem;
++
++	if (gem->phy_mode == PHY_INTERFACE_MODE_SGMII_2500)
++		sgmii_2500 = 1;
++
++	printf("%s %d\n", __func__, priv->gemac_port);
++
++	/* PCS configuration done with corresponding GEMAC */
++	bus.priv = gem_info[priv->gemac_port].gemac_base;
++
++	pfe_phy_read(&bus, 0, MDIO_DEVAD_NONE, 0x0);
++	pfe_phy_read(&bus, 0, MDIO_DEVAD_NONE, 0x1);
++	pfe_phy_read(&bus, 0, MDIO_DEVAD_NONE, 0x2);
++	pfe_phy_read(&bus, 0, MDIO_DEVAD_NONE, 0x3);
++
++	/* Reset serdes */
++	pfe_phy_write(&bus, 0, MDIO_DEVAD_NONE, 0x0, 0x8000);
++
++	/* SGMII IF mode + AN enable only for 1G SGMII, not for 2.5G */
++	value = PHY_SGMII_IF_MODE_SGMII;
++	if (!sgmii_2500)
++		value |= PHY_SGMII_IF_MODE_AN;
++	else
++		value |= PHY_SGMII_IF_MODE_SGMII_GBT;
++
++	pfe_phy_write(&bus, 0, MDIO_DEVAD_NONE, 0x14, value);
++
++	/* Dev ability according to SGMII specification */
++	value = PHY_SGMII_DEV_ABILITY_SGMII;
++	pfe_phy_write(&bus, 0, MDIO_DEVAD_NONE, 0x4, value);
++
++	/* These values taken from validation team */
++	if (!sgmii_2500) {
++		pfe_phy_write(&bus, 0, MDIO_DEVAD_NONE, 0x13, 0x0);
++		pfe_phy_write(&bus, 0, MDIO_DEVAD_NONE, 0x12, 0x400);
++	} else {
++		pfe_phy_write(&bus, 0, MDIO_DEVAD_NONE, 0x13, 0x7);
++		pfe_phy_write(&bus, 0, MDIO_DEVAD_NONE, 0x12, 0xa120);
++	}
++
++	/* Restart AN */
++	value = PHY_SGMII_CR_DEF_VAL;
++	if (!sgmii_2500)
++		value |= PHY_SGMII_CR_RESET_AN;
++	/* Disable Auto neg for 2.5G SGMII as it doesn't support auto neg*/
++	if (sgmii_2500)
++		value &= ~PHY_SGMII_ENABLE_AN;
++	pfe_phy_write(&bus, 0, MDIO_DEVAD_NONE, 0, value);
++}
++
++int pfe_phy_configure(struct pfe_eth_dev *priv, int dev_id, int phy_id)
++{
++	struct phy_device *phydev = NULL;
++	struct udevice *dev = priv->dev;
++	struct gemac_s *gem = priv->gem;
++	struct ccsr_scfg *scfg = (struct ccsr_scfg *)CONFIG_SYS_FSL_SCFG_ADDR;
++
++	if (!gem->bus)
++		return -1;
++
++	/* Configure SGMII  PCS */
++	if (gem->phy_mode == PHY_INTERFACE_MODE_SGMII ||
++	    gem->phy_mode == PHY_INTERFACE_MODE_SGMII_2500) {
++		out_be32(&scfg->mdioselcr, 0x00000000);
++		pfe_configure_serdes(priv);
++	}
++
++	mdelay(100);
++
++	/* By this time on-chip SGMII initialization is done
++	 * we can switch mdio interface to external PHYs
++	 */
++	out_be32(&scfg->mdioselcr, 0x80000000);
++
++	phydev = phy_connect(gem->bus, phy_id, dev, gem->phy_mode);
++	if (!phydev) {
++		printf("phy_connect failed\n");
++		return -ENODEV;
++	}
++
++	phy_config(phydev);
++
++	priv->phydev = phydev;
++
++	return 0;
++}
++#endif
++
++struct mii_dev *pfe_mdio_init(struct pfe_mdio_info *mdio_info)
++{
++	struct mii_dev *bus;
++	int ret;
++	u32 mdio_speed;
++	u32 pclk = 250000000;
++
++	bus = mdio_alloc();
++	if (!bus) {
++		printf("mdio_alloc failed\n");
++		return NULL;
++	}
++	bus->read = pfe_phy_read;
++	bus->write = pfe_phy_write;
++
++	/* MAC1 MDIO used to communicate with external PHYS */
++	bus->priv = mdio_info->reg_base;
++	sprintf(bus->name, mdio_info->name);
++
++	/* configure mdio speed */
++	mdio_speed = (DIV_ROUND_UP(pclk, 4000000) << EMAC_MII_SPEED_SHIFT);
++	mdio_speed |= EMAC_HOLDTIME(0x5);
++	writel(mdio_speed, mdio_info->reg_base + EMAC_MII_CTRL_REG);
++
++	ret = mdio_register(bus);
++	if (ret) {
++		printf("mdio_register failed\n");
++		free(bus);
++		return NULL;
++	}
++	return bus;
++}
++
++void pfe_set_mdio(int dev_id, struct mii_dev *bus)
++{
++	gem_info[dev_id].bus = bus;
++}
++
++void pfe_set_phy_address_mode(int dev_id, int phy_id, int phy_mode)
++{
++	gem_info[dev_id].phy_address = phy_id;
++	gem_info[dev_id].phy_mode  = phy_mode;
++}
+-- 
+1.7.1
+

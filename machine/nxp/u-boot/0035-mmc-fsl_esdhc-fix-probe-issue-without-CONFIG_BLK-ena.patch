@@ -1,0 +1,77 @@
+From 5ecc2f55e5e8deb46a33cdbad488904692a7dc97 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@nxp.com>
+Date: Fri, 2 Mar 2018 17:24:48 +0800
+Subject: [PATCH 035/107] mmc: fsl_esdhc: fix probe issue without CONFIG_BLK enabled
+
+u-boot is trying to make CONFIG_BLK as a hard requirement
+for DM_MMC. But now it's still not.
+
+config BLK
+	bool "Support block devices"
+	depends on DM
+	default y if DM_MMC
+
+When fsl_esdhc driver was reworked for DM_MMC support, DM_MMC
+without CONFIG_BLK enabled wasn't considered. This patch is to
+fix probe issue without CONFIG_BLK enabled.
+
+Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
+---
+ drivers/mmc/fsl_esdhc.c |   27 +++++++++++++++++++++++++++
+ 1 files changed, 27 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/mmc/fsl_esdhc.c b/drivers/mmc/fsl_esdhc.c
+index 6018f84..f32b622 100644
+--- a/drivers/mmc/fsl_esdhc.c
++++ b/drivers/mmc/fsl_esdhc.c
+@@ -25,6 +25,10 @@
+ #include <asm-generic/gpio.h>
+ #include <dm/pinctrl.h>
+ 
++#if !CONFIG_IS_ENABLED(BLK)
++#include "mmc_private.h"
++#endif
++
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+ #define SDHCI_IRQ_EN_BITS		(IRQSTATEN_CC | IRQSTATEN_TC | \
+@@ -1366,6 +1370,9 @@ static int fsl_esdhc_probe(struct udevice *dev)
+ 	fdt_addr_t addr;
+ 	unsigned int val;
+ 	struct mmc *mmc;
++#if !CONFIG_IS_ENABLED(BLK)
++	struct blk_desc *bdesc;
++#endif
+ 	int ret;
+ 
+ 	addr = dev_read_addr(dev);
+@@ -1478,6 +1485,26 @@ static int fsl_esdhc_probe(struct udevice *dev)
+ 	mmc = &plat->mmc;
+ 	mmc->cfg = &plat->cfg;
+ 	mmc->dev = dev;
++#if !CONFIG_IS_ENABLED(BLK)
++	mmc->priv = priv;
++
++	/* Setup dsr related values */
++	mmc->dsr_imp = 0;
++	mmc->dsr = 0xffffffff;
++	/* Setup the universal parts of the block interface just once */
++	bdesc = mmc_get_blk_desc(mmc);
++	bdesc->if_type = IF_TYPE_MMC;
++	bdesc->removable = 1;
++	bdesc->devnum = mmc_get_next_devnum();
++	bdesc->block_read = mmc_bread;
++	bdesc->block_write = mmc_bwrite;
++	bdesc->block_erase = mmc_berase;
++
++	/* setup initial part type */
++	bdesc->part_type = mmc->cfg->part_type;
++	mmc_list_add(mmc);
++#endif
++
+ 	upriv->mmc = mmc;
+ 
+ 	return esdhc_init_common(priv, mmc);
+-- 
+1.7.1
+
