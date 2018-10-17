@@ -1,0 +1,40 @@
+From ad074ad393ce2f437e86c4920e6d760fd2be6ff6 Mon Sep 17 00:00:00 2001
+From: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+Date: Thu, 16 Aug 2018 11:45:09 +0530
+Subject: [PATCH 089/107] driver: net: fsl-mc: Memset MC reserve red memory before usage
+
+It is not necessary for MC memory to be always clean. It may have
+garbage
+value causing indeterministic behavior during MC initialization and run.
+
+So memset memory reserved for MC before any usage.
+
+Signed-off-by: Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+---
+ drivers/net/fsl-mc/mc.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/net/fsl-mc/mc.c b/drivers/net/fsl-mc/mc.c
+index 511a82c..1ca7f1f 100644
+--- a/drivers/net/fsl-mc/mc.c
++++ b/drivers/net/fsl-mc/mc.c
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright 2014 Freescale Semiconductor, Inc.
+- * Copyright 2017 NXP
++ * Copyright 2017-2018 NXP
+  *
+  * SPDX-License-Identifier:	GPL-2.0+
+  */
+@@ -845,6 +845,8 @@ u64 mc_get_dram_addr(void)
+ {
+ 	size_t mc_ram_size = mc_get_dram_block_size();
+ 
++	memset((void *)gd->arch.resv_ram, 0, mc_ram_size);
++
+ 	return (gd->arch.resv_ram + mc_ram_size - 1) &
+ 		MC_RAM_BASE_ADDR_ALIGNMENT_MASK;
+ }
+-- 
+1.7.1
+

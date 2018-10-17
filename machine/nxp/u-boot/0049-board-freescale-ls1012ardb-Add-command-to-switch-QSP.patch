@@ -1,0 +1,116 @@
+From 4d94f28a3e34bf2090b70bf5a828aae17321ff58 Mon Sep 17 00:00:00 2001
+From: Jagdish Gediya <jagdish.gediya@nxp.com>
+Date: Wed, 11 Apr 2018 06:08:35 +0530
+Subject: [PATCH 049/107] board: freescale: ls1012ardb: Add command to switch QSPI bank
+
+Add command "boot_bank X" to switch the boot bank to either
+1 or 2.
+
+Signed-off-by: Jagdish Gediya <jagdish.gediya@nxp.com>
+---
+ board/freescale/ls1012ardb/ls1012ardb.c |   85 +++++++++++++++++++++++++++++++
+ 1 files changed, 85 insertions(+), 0 deletions(-)
+
+diff --git a/board/freescale/ls1012ardb/ls1012ardb.c b/board/freescale/ls1012ardb/ls1012ardb.c
+index ed5a8e6..4d4f6fb 100644
+--- a/board/freescale/ls1012ardb/ls1012ardb.c
++++ b/board/freescale/ls1012ardb/ls1012ardb.c
+@@ -26,6 +26,9 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++#define BOOT_FROM_UPPER_BANK	0x2
++#define BOOT_FROM_LOWER_BANK	0x1
++
+ int checkboard(void)
+ {
+ #ifdef CONFIG_TARGET_LS1012ARDB
+@@ -212,3 +215,85 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 
+ 	return 0;
+ }
++
++static int switch_to_bank1(void)
++{
++	u8 data;
++	int ret;
++
++	i2c_set_bus_num(0);
++
++	data = 0xf4;
++	ret = i2c_write(0x24, 0x3, 1, &data, 1);
++	if (ret) {
++		printf("i2c write error to chip : %u, addr : %u, data : %u\n",
++		       0x24, 0x3, data);
++	}
++
++	return ret;
++}
++
++static int switch_to_bank2(void)
++{
++	u8 data;
++	int ret;
++
++	i2c_set_bus_num(0);
++
++	data = 0xfc;
++	ret = i2c_write(0x24, 0x7, 1, &data, 1);
++	if (ret) {
++		printf("i2c write error to chip : %u, addr : %u, data : %u\n",
++		       0x24, 0x7, data);
++		goto err;
++	}
++
++	data = 0xf5;
++	ret = i2c_write(0x24, 0x3, 1, &data, 1);
++	if (ret) {
++		printf("i2c write error to chip : %u, addr : %u, data : %u\n",
++		       0x24, 0x3, data);
++	}
++err:
++	return ret;
++}
++
++static int convert_flash_bank(int bank)
++{
++	int ret = 0;
++
++	switch (bank) {
++	case BOOT_FROM_UPPER_BANK:
++		ret = switch_to_bank2();
++		break;
++	case BOOT_FROM_LOWER_BANK:
++		ret = switch_to_bank1();
++		break;
++	default:
++		ret = CMD_RET_USAGE;
++		break;
++	};
++
++	return ret;
++}
++
++static int flash_bank_cmd(cmd_tbl_t *cmdtp, int flag, int argc,
++			  char * const argv[])
++{
++	if (argc != 2)
++		return CMD_RET_USAGE;
++	if (strcmp(argv[1], "1") == 0)
++		convert_flash_bank(BOOT_FROM_LOWER_BANK);
++	else if (strcmp(argv[1], "2") == 0)
++		convert_flash_bank(BOOT_FROM_UPPER_BANK);
++	else
++		return CMD_RET_USAGE;
++
++	return 0;
++}
++
++U_BOOT_CMD(
++	boot_bank, 2, 0, flash_bank_cmd,
++	"Flash bank Selection Control",
++	"bank[1-lower bank/2-upper bank] (e.g. boot_bank 1)"
++);
+-- 
+1.7.1
+

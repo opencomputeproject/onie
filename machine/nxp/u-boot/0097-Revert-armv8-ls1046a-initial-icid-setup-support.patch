@@ -1,0 +1,336 @@
+From 342682ebfec19789cc906430e8dab0c8fef0c8cf Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Tue, 21 Aug 2018 15:09:18 +0300
+Subject: [PATCH 097/107] Revert "armv8: ls1046a: initial icid setup support"
+
+This reverts commit 8d421a81831607004c327da2f71a19f424cf4e9e.
+
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/Makefile         |    1 -
+ arch/arm/cpu/armv8/fsl-layerscape/icid.c           |  110 --------------------
+ arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c     |   29 -----
+ arch/arm/cpu/armv8/fsl-layerscape/soc.c            |    3 -
+ .../arm/include/asm/arch-fsl-layerscape/fsl_icid.h |   80 --------------
+ board/freescale/ls1046aqds/ls1046aqds.c            |    3 -
+ board/freescale/ls1046ardb/ls1046ardb.c            |    3 -
+ 7 files changed, 0 insertions(+), 229 deletions(-)
+ delete mode 100644 arch/arm/cpu/armv8/fsl-layerscape/icid.c
+ delete mode 100644 arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
+ delete mode 100644 arch/arm/include/asm/arch-fsl-layerscape/fsl_icid.h
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/Makefile b/arch/arm/cpu/armv8/fsl-layerscape/Makefile
+index 73330a7..0cb6d4e 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/Makefile
++++ b/arch/arm/cpu/armv8/fsl-layerscape/Makefile
+@@ -39,7 +39,6 @@ endif
+ 
+ ifneq ($(CONFIG_ARCH_LS1046A),)
+ obj-$(CONFIG_SYS_HAS_SERDES) += ls1046a_serdes.o
+-obj-y += icid.o ls1046_ids.o
+ endif
+ 
+ ifneq ($(CONFIG_ARCH_LS1088A),)
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/icid.c b/arch/arm/cpu/armv8/fsl-layerscape/icid.c
+deleted file mode 100644
+index ae3b8da..0000000
+--- a/arch/arm/cpu/armv8/fsl-layerscape/icid.c
++++ /dev/null
+@@ -1,110 +0,0 @@
+-// SPDX-License-Identifier: GPL-2.0+
+-/*
+- * Copyright 2018 NXP
+- */
+-
+-#include <common.h>
+-#include <linux/libfdt.h>
+-#include <fdt_support.h>
+-
+-#include <asm/io.h>
+-#include <asm/processor.h>
+-#include <asm/arch-fsl-layerscape/fsl_icid.h>
+-
+-static void set_icid(struct icid_id_table *tbl, int size)
+-{
+-	int i;
+-
+-	for (i = 0; i < size; i++)
+-		out_be32((u32 *)(tbl[i].reg_addr), tbl[i].reg);
+-}
+-
+-void set_icids(void)
+-{
+-	/* setup general icid offsets */
+-	set_icid(icid_tbl, icid_tbl_sz);
+-}
+-
+-int fdt_set_iommu_prop(void *blob, int off, int smmu_ph, u32 *ids, int num_ids)
+-{
+-	int i, ret;
+-	u32 prop[8];
+-
+-	/*
+-	 * Note: The "iommus" property definition mentions Stream IDs while
+-	 * this code handles ICIDs. The current implementation assumes that
+-	 * ICIDs and Stream IDs are equal.
+-	 */
+-	for (i = 0; i < num_ids; i++) {
+-		prop[i * 2] = cpu_to_fdt32(smmu_ph);
+-		prop[i * 2 + 1] = cpu_to_fdt32(ids[i]);
+-	}
+-	ret = fdt_setprop(blob, off, "iommus",
+-			  prop, sizeof(u32) * num_ids * 2);
+-	if (ret) {
+-		printf("WARNING unable to set iommus: %s\n", fdt_strerror(ret));
+-		return ret;
+-	}
+-
+-	return 0;
+-}
+-
+-int fdt_fixup_icid_tbl(void *blob, int smmu_ph,
+-		       struct icid_id_table *tbl, int size)
+-{
+-	int i, err, off;
+-
+-	for (i = 0; i < size; i++) {
+-		if (!tbl[i].compat)
+-			continue;
+-
+-		off = fdt_node_offset_by_compat_reg(blob,
+-						    tbl[i].compat,
+-						    tbl[i].compat_addr);
+-		if (off > 0) {
+-			err = fdt_set_iommu_prop(blob, off, smmu_ph,
+-						 &tbl[i].id, 1);
+-			if (err)
+-				return err;
+-		} else {
+-			printf("WARNING could not find node %s: %s.\n",
+-			       tbl[i].compat, fdt_strerror(off));
+-		}
+-	}
+-
+-	return 0;
+-}
+-
+-int fdt_get_smmu_phandle(void *blob)
+-{
+-	int noff, smmu_ph;
+-
+-	noff = fdt_node_offset_by_compatible(blob, -1, "arm,mmu-500");
+-	if (noff < 0) {
+-		printf("WARNING failed to get smmu node: %s\n",
+-		       fdt_strerror(noff));
+-		return noff;
+-	}
+-
+-	smmu_ph = fdt_get_phandle(blob, noff);
+-	if (!smmu_ph) {
+-		smmu_ph = fdt_create_phandle(blob, noff);
+-		if (!smmu_ph) {
+-			printf("WARNING failed to get smmu phandle\n");
+-			return -1;
+-		}
+-	}
+-
+-	return smmu_ph;
+-}
+-
+-void fdt_fixup_icid(void *blob)
+-{
+-	int smmu_ph;
+-
+-	smmu_ph = fdt_get_smmu_phandle(blob);
+-	if (smmu_ph < 0)
+-		return;
+-
+-	fdt_fixup_icid_tbl(blob, smmu_ph, icid_tbl, icid_tbl_sz);
+-}
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c b/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
+deleted file mode 100644
+index 1c528ab..0000000
+--- a/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
++++ /dev/null
+@@ -1,29 +0,0 @@
+-// SPDX-License-Identifier: GPL-2.0+
+-/*
+- * Copyright 2018 NXP
+- */
+-
+-#include <common.h>
+-#include <asm/arch-fsl-layerscape/immap_lsch2.h>
+-#include <asm/arch-fsl-layerscape/fsl_icid.h>
+-
+-struct icid_id_table icid_tbl[] = {
+-#ifdef CONFIG_SYS_DPAA_QBMAN
+-	SET_QMAN_ICID(FSL_DPAA1_STREAM_ID_START),
+-	SET_BMAN_ICID(FSL_DPAA1_STREAM_ID_START + 1),
+-#endif
+-
+-	SET_SDHC_ICID(FSL_SDHC_STREAM_ID),
+-
+-	SET_USB_ICID(1, "snps,dwc3", FSL_USB1_STREAM_ID),
+-	SET_USB_ICID(2, "snps,dwc3", FSL_USB2_STREAM_ID),
+-	SET_USB_ICID(3, "snps,dwc3", FSL_USB3_STREAM_ID),
+-
+-	SET_SATA_ICID("fsl,ls1046a-ahci", FSL_SATA_STREAM_ID),
+-	SET_QDMA_ICID("fsl,ls1046a-qdma", FSL_QDMA_STREAM_ID),
+-	SET_EDMA_ICID(FSL_EDMA_STREAM_ID),
+-	SET_ETR_ICID(FSL_ETR_STREAM_ID),
+-	SET_DEBUG_ICID(FSL_DEBUG_STREAM_ID),
+-};
+-
+-int icid_tbl_sz = ARRAY_SIZE(icid_tbl);
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/soc.c b/arch/arm/cpu/armv8/fsl-layerscape/soc.c
+index 01193c3..b8738d9 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/soc.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/soc.c
+@@ -14,7 +14,6 @@
+ #include <asm/io.h>
+ #include <asm/global_data.h>
+ #include <asm/arch-fsl-layerscape/config.h>
+-#include <asm/arch-fsl-layerscape/fsl_icid.h>
+ #ifdef CONFIG_LAYERSCAPE_NS_ACCESS
+ #include <fsl_csu.h>
+ #endif
+@@ -686,8 +685,6 @@ void fsl_lsch2_early_init_f(void)
+ 	erratum_a009798();
+ 	erratum_a008997();
+ 	erratum_a009007();
+-
+-	set_icids();
+ }
+ #endif
+ 
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/fsl_icid.h b/arch/arm/include/asm/arch-fsl-layerscape/fsl_icid.h
+deleted file mode 100644
+index 5790939..0000000
+--- a/arch/arm/include/asm/arch-fsl-layerscape/fsl_icid.h
++++ /dev/null
+@@ -1,80 +0,0 @@
+-/* SPDX-License-Identifier: GPL-2.0+ */
+-/*
+- * Copyright 2018 NXP
+- */
+-
+-#ifndef _FSL_ICID_H_
+-#define _FSL_ICID_H_
+-
+-#include <asm/types.h>
+-#include <fsl_qbman.h>
+-
+-struct icid_id_table {
+-	const char *compat;
+-	u32 id;
+-	u32 reg;
+-	phys_addr_t compat_addr;
+-	phys_addr_t reg_addr;
+-};
+-
+-u32 get_ppid_icid(int ppid_tbl_idx, int ppid);
+-int fdt_get_smmu_phandle(void *blob);
+-int fdt_set_iommu_prop(void *blob, int off, int smmu_ph, u32 *ids, int num_ids);
+-void set_icids(void);
+-void fdt_fixup_icid(void *blob);
+-
+-#define SET_ICID_ENTRY(name, idA, regA, addr, compataddr) \
+-	{ .compat = name, \
+-	  .id = idA, \
+-	  .reg = regA, \
+-	  .compat_addr = compataddr, \
+-	  .reg_addr = addr, \
+-	}
+-
+-#define SET_SCFG_ICID(compat, streamid, name, compataddr) \
+-	SET_ICID_ENTRY(compat, streamid, (((streamid) << 24) | (1 << 23)), \
+-		offsetof(struct ccsr_scfg, name) + CONFIG_SYS_FSL_SCFG_ADDR, \
+-		compataddr)
+-
+-#define SET_USB_ICID(usb_num, compat, streamid) \
+-	SET_SCFG_ICID(compat, streamid, usb##usb_num##_icid,\
+-		CONFIG_SYS_XHCI_USB##usb_num##_ADDR)
+-
+-#define SET_SATA_ICID(compat, streamid) \
+-	SET_SCFG_ICID(compat, streamid, sata_icid,\
+-		AHCI_BASE_ADDR)
+-
+-#define SET_SDHC_ICID(streamid) \
+-	SET_SCFG_ICID("fsl,esdhc", streamid, sdhc_icid,\
+-		CONFIG_SYS_FSL_ESDHC_ADDR)
+-
+-#define SET_QDMA_ICID(compat, streamid) \
+-	SET_SCFG_ICID(compat, streamid, dma_icid,\
+-		QDMA_BASE_ADDR)
+-
+-#define SET_EDMA_ICID(streamid) \
+-	SET_SCFG_ICID("fsl,vf610-edma", streamid, edma_icid,\
+-		EDMA_BASE_ADDR)
+-
+-#define SET_ETR_ICID(streamid) \
+-	SET_SCFG_ICID(NULL, streamid, etr_icid, 0)
+-
+-#define SET_DEBUG_ICID(streamid) \
+-	SET_SCFG_ICID(NULL, streamid, debug_icid, 0)
+-
+-#define SET_QMAN_ICID(streamid) \
+-	SET_ICID_ENTRY("fsl,qman", streamid, streamid, \
+-		offsetof(struct ccsr_qman, liodnr) + \
+-		CONFIG_SYS_FSL_QMAN_ADDR, \
+-		CONFIG_SYS_FSL_QMAN_ADDR)
+-
+-#define SET_BMAN_ICID(streamid) \
+-	SET_ICID_ENTRY("fsl,bman", streamid, streamid, \
+-		offsetof(struct ccsr_bman, liodnr) + \
+-		CONFIG_SYS_FSL_BMAN_ADDR, \
+-		CONFIG_SYS_FSL_BMAN_ADDR)
+-
+-extern struct icid_id_table icid_tbl[];
+-extern int icid_tbl_sz;
+-
+-#endif
+diff --git a/board/freescale/ls1046aqds/ls1046aqds.c b/board/freescale/ls1046aqds/ls1046aqds.c
+index 0b875b5..883abf7 100644
+--- a/board/freescale/ls1046aqds/ls1046aqds.c
++++ b/board/freescale/ls1046aqds/ls1046aqds.c
+@@ -15,7 +15,6 @@
+ #include <asm/arch/fdt.h>
+ #include <asm/arch/mmu.h>
+ #include <asm/arch/soc.h>
+-#include <asm/arch-fsl-layerscape/fsl_icid.h>
+ #include <ahci.h>
+ #include <hwconfig.h>
+ #include <mmc.h>
+@@ -311,8 +310,6 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 	fdt_fixup_board_enet(blob);
+ #endif
+ 
+-	fdt_fixup_icid(blob);
+-
+ 	reg = QIXIS_READ(brdcfg[0]);
+ 	reg = (reg & QIXIS_LBMAP_MASK) >> QIXIS_LBMAP_SHIFT;
+ 
+diff --git a/board/freescale/ls1046ardb/ls1046ardb.c b/board/freescale/ls1046ardb/ls1046ardb.c
+index 0f63e06..33f1afd 100644
+--- a/board/freescale/ls1046ardb/ls1046ardb.c
++++ b/board/freescale/ls1046ardb/ls1046ardb.c
+@@ -12,7 +12,6 @@
+ #include <asm/arch/fsl_serdes.h>
+ #include <asm/arch/ppa.h>
+ #include <asm/arch/soc.h>
+-#include <asm/arch-fsl-layerscape/fsl_icid.h>
+ #include <hwconfig.h>
+ #include <ahci.h>
+ #include <mmc.h>
+@@ -176,8 +175,6 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 	fdt_fixup_fman_ethernet(blob);
+ #endif
+ 
+-	fdt_fixup_icid(blob);
+-
+ 	return 0;
+ }
+ #endif
+-- 
+1.7.1
+

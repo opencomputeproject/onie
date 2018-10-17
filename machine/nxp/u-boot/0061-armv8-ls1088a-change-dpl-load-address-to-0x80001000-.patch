@@ -1,0 +1,82 @@
+From ec7f4b3cce96fefd49ee4e043e94e5c8362ddf64 Mon Sep 17 00:00:00 2001
+From: Jagdish Gediya <jagdish.gediya@nxp.com>
+Date: Tue, 5 Jun 2018 07:51:20 +0530
+Subject: [PATCH 061/107] armv8: ls1088a: change dpl load address to 0x80001000 from 0x80000000
+
+dpl gets corrupted at 0x80000000 because boot.scr is loaded at the
+same address so change dpl load addr to 0x80001000 from 0x80000000.
+
+Signed-off-by: Jagdish Gediya <jagdish.gediya@nxp.com>
+---
+ include/configs/ls1088a_common.h |    8 ++++----
+ include/configs/ls1088ardb.h     |   12 ++++++------
+ 2 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/include/configs/ls1088a_common.h b/include/configs/ls1088a_common.h
+index 40d7835..b56a4f0 100644
+--- a/include/configs/ls1088a_common.h
++++ b/include/configs/ls1088a_common.h
+@@ -203,13 +203,13 @@ unsigned long long get_qixis_addr(void);
+ 
+ #if defined(CONFIG_QSPI_BOOT)
+ #define CONFIG_BOOTCOMMAND	"sf probe 0:0;" \
+-				"sf read 0x80000000 0xd00000 0x100000;"\
+-				" fsl_mc lazyapply dpl 0x80000000 &&" \
++				"sf read 0x80001000 0xd00000 0x100000;"\
++				" fsl_mc lazyapply dpl 0x80001000 &&" \
+ 				" sf read $kernel_load $kernel_start" \
+ 				" $kernel_size && bootm $kernel_load"
+ #elif defined(CONFIG_SD_BOOT)
+-#define CONFIG_BOOTCOMMAND	"mmcinfo;mmc read 0x80000000 0x6800 0x800;"\
+-				" fsl_mc lazyapply dpl 0x80000000 &&" \
++#define CONFIG_BOOTCOMMAND	"mmcinfo;mmc read 0x80001000 0x6800 0x800;"\
++				" fsl_mc lazyapply dpl 0x80001000 &&" \
+ 				" mmc read $kernel_load $kernel_start" \
+ 				" $kernel_size && bootm $kernel_load"
+ #else /* NOR BOOT*/
+diff --git a/include/configs/ls1088ardb.h b/include/configs/ls1088ardb.h
+index 2bb4b63..e629814 100644
+--- a/include/configs/ls1088ardb.h
++++ b/include/configs/ls1088ardb.h
+@@ -386,8 +386,8 @@
+ 	"installer=load mmc 0:2 $load_addr "			\
+ 		"/flex_installer_arm64.itb; "			\
+ 		"env exists mcinitcmd && run mcinitcmd && "	\
+-		"mmc read 0x80000000 0x6800 0x800;"		\
+-		"fsl_mc lazyapply dpl 0x80000000;"			\
++		"mmc read 0x80001000 0x6800 0x800;"		\
++		"fsl_mc lazyapply dpl 0x80001000;"			\
+ 		"bootm $load_addr#ls1088ardb\0"			\
+ 	"qspi_bootcmd=echo Trying load from qspi..;"		\
+ 		"sf probe && sf read $load_addr "		\
+@@ -407,11 +407,11 @@
+ #if defined(CONFIG_QSPI_BOOT)
+ /* Try to boot an on-QSPI kernel first, then do normal distro boot */
+ #define CONFIG_BOOTCOMMAND                                      \
+-		"sf read 0x80000000 0xd00000 0x100000;"		\
++		"sf read 0x80001000 0xd00000 0x100000;"		\
+ 		"env exists mcinitcmd && env exists secureboot "	\
+ 		" && sf read 0x80780000 0x780000 0x100000 "	\
+ 		"&& esbc_validate 0x80780000;env exists mcinitcmd "	\
+-		"&& fsl_mc lazyapply dpl 0x80000000;"		\
++		"&& fsl_mc lazyapply dpl 0x80001000;"		\
+ 		"run distro_bootcmd;run qspi_bootcmd;"		\
+ 		"env exists secureboot && esbc_halt;"
+ 
+@@ -419,11 +419,11 @@
+ #elif defined(CONFIG_SD_BOOT)
+ #define CONFIG_BOOTCOMMAND                                      \
+ 		"env exists mcinitcmd && mmcinfo; "		\
+-		"mmc read 0x80000000 0x6800 0x800; "		\
++		"mmc read 0x80001000 0x6800 0x800; "		\
+ 		"env exists mcinitcmd && env exists secureboot "	\
+ 		" && mmc read 0x80780000 0x3800 0x10 "		\
+ 		"&& esbc_validate 0x80780000;env exists mcinitcmd "	\
+-		"&& fsl_mc lazyapply dpl 0x80000000;"		\
++		"&& fsl_mc lazyapply dpl 0x80001000;"		\
+ 		"run distro_bootcmd;run sd_bootcmd;"		\
+ 		"env exists secureboot && esbc_halt;"
+ #endif
+-- 
+1.7.1
+
