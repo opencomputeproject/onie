@@ -1,4 +1,4 @@
-.. Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2014,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
@@ -76,7 +76,77 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  2017.08 | Wed, Jul 19, 2017 | Wed, Aug 16, 2017
-  2017.11 | Wed, Oct 18, 2017 | Wed, Nov 15, 2017
-  2018.02 | Wed, Jan 17, 2018 | Wed, Feb 14, 2018
-  2018.05 | Wed, Apr 18, 2018 | Wed, May 16, 2018
+  2018.08 | Wed, Jul 18, 2018 | Wed, Aug 15, 2018
+  2018.11 | Wed, Oct 17, 2018 | Wed, Nov 14, 2018
+  2019.02 | Wed, Jan 16, 2019 | Wed, Feb 13, 2019
+  2019.05 | Wed, Apr 17, 2019 | Wed, May 15, 2019
+
+Making a Release
+----------------
+
+Making a release entails the following:
+
+#. Verify various boards compile
+#. Create release notes
+#. Create a release branch and tag it
+#. Send off email to the community
+
+Release Notes
+^^^^^^^^^^^^^
+
+Some guidelines for creating release notes.  First look at a `previous
+set of release notes
+<https://github.com/opencomputeproject/onie/releases/tag/2018.05>`_. for
+inspiration.  Things to include:
+
+- major changes
+- major features
+- new hardware platforms
+- new build infrastructure
+- bug fixes related to hw platforms
+- bug fixes related to ONIE or build system
+
+Looking at the list of commits from the previous release up to the
+current HEAD can be inspiring::
+
+  $ git log --oneline 2018.05..HEAD
+  092ff43a98ed grub-arch: show BIOS mode during booting up
+  c1d259c9b5e0 NXP arm64 add TLV mtd hw-info partitions for onie-syseeprom
+  5f619890b179 installer/u-boot-arch/install-arch: update_uboot_env support arm64
+  aa5036caeee1 u-boot.make: UPDATER_UBOOT_NAME should still be u-boot.bin even with dtb enable
+  c602a421609a Adding newline to delta/ag9064 busybox config. This fix ensures, that the file is properly parsed.
+  ....
+
+Release Branch
+^^^^^^^^^^^^^^
+
+Creating the release branch and tag is automated using the
+``build-config/scripts/create-release`` script.  The usage follows::
+
+  linux:$ ./build-config/scripts/create-release <X.Y.Z version> <release_notes_file>
+
+The script will:
+
+- create a branch called ``<version>br``
+- add a new file, ``build-config/conf/onie-release``, containing the
+  supplied version string
+- create a tag called ``<version>`` (without the 'br' suffix)
+- push both the branch and the tag to the upstream ONIE repo
+
+Release Statistics
+^^^^^^^^^^^^^^^^^^
+
+For fun, generate some release statistics for sharing with the
+community.  See the description of the `statistics scripts
+<https://github.com/opencomputeproject/onie/tree/master/contrib/git-stats>`_.
+
+
+Send Email
+^^^^^^^^^^
+
+Notify the community via the mailing list, including the URL of the
+github release, the git statistics and the complete release notes.
+
+Add anything else that is worthy of highlighting towards the top.
+Look at a previous email for an `example
+<http://lists.opencompute.org/pipermail/opencompute-onie/2018-May/001688.html>`_.
