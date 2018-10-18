@@ -1,0 +1,99 @@
+From 4aefbb94af024e0c06056210a617a24785922ad6 Mon Sep 17 00:00:00 2001
+From: Ioana Ciornei <ioana.ciornei@nxp.com>
+Date: Fri, 23 Mar 2018 10:38:58 -0500
+Subject: [PATCH 285/448] bus: fsl-mc: add bus rescan attribute
+
+Introduce the rescan attribute as a bus attribute to
+synchronize the fsl-mc bus objects and the MC firmware.
+
+To rescan the fsl-mc bus, e.g.,
+echo 1 > /sys/bus/fsl-mc/rescan
+
+Signed-off-by: Ioana Ciornei <ioana.ciornei@nxp.com>
+---
+ Documentation/ABI/stable/sysfs-bus-fsl-mc |    7 ++++
+ drivers/bus/fsl-mc/fsl-mc-bus.c           |   48 +++++++++++++++++++++++++++++
+ 2 files changed, 55 insertions(+), 0 deletions(-)
+
+diff --git a/Documentation/ABI/stable/sysfs-bus-fsl-mc b/Documentation/ABI/stable/sysfs-bus-fsl-mc
+index e530e8c..0663fbd 100644
+--- a/Documentation/ABI/stable/sysfs-bus-fsl-mc
++++ b/Documentation/ABI/stable/sysfs-bus-fsl-mc
+@@ -4,3 +4,10 @@ KernelVersion:	4.16
+ Contact:	Ioana Ciornei <ioana.ciornei@nxp.com>
+ Description:	Root dprc rescan attribute
+ Users:		Userspace drivers and management tools
++
++What:		/sys/bus/fsl-mc/rescan
++Date:		March. 2018
++KernelVersion:	4.16
++Contact:	Ioana Ciornei <ioana.ciornei@nxp.com>
++Description:	Bus rescan attribute
++Users:		Userspace drivers and management tools
+diff --git a/drivers/bus/fsl-mc/fsl-mc-bus.c b/drivers/bus/fsl-mc/fsl-mc-bus.c
+index 9d02984..80010d1 100644
+--- a/drivers/bus/fsl-mc/fsl-mc-bus.c
++++ b/drivers/bus/fsl-mc/fsl-mc-bus.c
+@@ -172,11 +172,59 @@ static ssize_t rescan_store(struct device *dev,
+ 
+ ATTRIBUTE_GROUPS(fsl_mc_dev);
+ 
++static int scan_fsl_mc_bus(struct device *dev, void *data)
++{
++	struct fsl_mc_device *root_mc_dev;
++	struct fsl_mc_bus *root_mc_bus;
++
++	if (!fsl_mc_is_root_dprc(dev))
++		goto exit;
++
++	root_mc_dev = to_fsl_mc_device(dev);
++	root_mc_bus = to_fsl_mc_bus(root_mc_dev);
++	mutex_lock(&root_mc_bus->scan_mutex);
++	dprc_scan_objects(root_mc_dev, NULL);
++	mutex_unlock(&root_mc_bus->scan_mutex);
++
++exit:
++	return 0;
++}
++
++static ssize_t bus_rescan_store(struct bus_type *bus,
++				const char *buf, size_t count)
++{
++	unsigned long val;
++
++	if (kstrtoul(buf, 0, &val) < 0)
++		return -EINVAL;
++
++	if (val)
++		bus_for_each_dev(bus, NULL, NULL, scan_fsl_mc_bus);
++
++	return count;
++}
++static BUS_ATTR(rescan, 0220, NULL, bus_rescan_store);
++
++static struct attribute *fsl_mc_bus_attrs[] = {
++	&bus_attr_rescan.attr,
++	NULL,
++};
++
++static const struct attribute_group fsl_mc_bus_group = {
++	.attrs = fsl_mc_bus_attrs,
++};
++
++static const struct attribute_group *fsl_mc_bus_groups[] = {
++	&fsl_mc_bus_group,
++	NULL,
++};
++
+ struct bus_type fsl_mc_bus_type = {
+ 	.name = "fsl-mc",
+ 	.match = fsl_mc_bus_match,
+ 	.uevent = fsl_mc_bus_uevent,
+ 	.dev_groups = fsl_mc_dev_groups,
++	.bus_groups = fsl_mc_bus_groups,
+ };
+ EXPORT_SYMBOL_GPL(fsl_mc_bus_type);
+ 
+-- 
+1.7.1
+

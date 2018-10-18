@@ -1,0 +1,85 @@
+From aa2bb0ab2b40429985c08f277c0e8ecbd16e6d00 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 10 Nov 2017 17:55:33 +0200
+Subject: [PATCH 185/448] staging: fsl-dpaa2/eth: Add counter for skb reallocs
+
+Add a counter for the number of egress frames that need to be
+realloc'ed due to insufficient headroom space.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ .../staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c |    7 ++++---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c     |    1 +
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h     |    1 +
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c |    1 +
+ 4 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+index 933412e..c916c02 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+@@ -47,14 +47,14 @@ static int dpaa2_dbg_cpu_show(struct seq_file *file, void *offset)
+ 	int i;
+ 
+ 	seq_printf(file, "Per-CPU stats for %s\n", priv->net_dev->name);
+-	seq_printf(file, "%s%16s%16s%16s%16s%16s%16s%16s%16s\n",
++	seq_printf(file, "%s%16s%16s%16s%16s%16s%16s%16s%16s%16s\n",
+ 		   "CPU", "Rx", "Rx Err", "Rx SG", "Tx", "Tx Err", "Tx conf",
+-		   "Tx SG", "Enq busy");
++		   "Tx SG", "Tx realloc", "Enq busy");
+ 
+ 	for_each_online_cpu(i) {
+ 		stats = per_cpu_ptr(priv->percpu_stats, i);
+ 		extras = per_cpu_ptr(priv->percpu_extras, i);
+-		seq_printf(file, "%3d%16llu%16llu%16llu%16llu%16llu%16llu%16llu%16llu\n",
++		seq_printf(file, "%3d%16llu%16llu%16llu%16llu%16llu%16llu%16llu%16llu%16llu\n",
+ 			   i,
+ 			   stats->rx_packets,
+ 			   stats->rx_errors,
+@@ -63,6 +63,7 @@ static int dpaa2_dbg_cpu_show(struct seq_file *file, void *offset)
+ 			   stats->tx_errors,
+ 			   extras->tx_conf_frames,
+ 			   extras->tx_sg_frames,
++			   extras->tx_reallocs,
+ 			   extras->tx_portal_busy);
+ 	}
+ 
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index aea80f0..b70f2f1 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -834,6 +834,7 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 			percpu_stats->tx_dropped++;
+ 			goto err_alloc_headroom;
+ 		}
++		percpu_extras->tx_reallocs++;
+ 		dev_kfree_skb(skb);
+ 		skb = ns;
+ 	}
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index e33d173..5736bab 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -288,6 +288,7 @@ struct dpaa2_eth_drv_stats {
+ 	__u64	tx_conf_bytes;
+ 	__u64	tx_sg_frames;
+ 	__u64	tx_sg_bytes;
++	__u64	tx_reallocs;
+ 	__u64	rx_sg_frames;
+ 	__u64	rx_sg_bytes;
+ 	/* Enqueues retried due to portal busy */
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+index 926e29f..1309782 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+@@ -62,6 +62,7 @@
+ 	"[drv] tx conf bytes",
+ 	"[drv] tx sg frames",
+ 	"[drv] tx sg bytes",
++	"[drv] tx realloc frames",
+ 	"[drv] rx sg frames",
+ 	"[drv] rx sg bytes",
+ 	"[drv] enqueue portal busy",
+-- 
+1.7.1
+

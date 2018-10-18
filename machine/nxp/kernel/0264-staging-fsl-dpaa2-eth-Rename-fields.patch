@@ -1,0 +1,148 @@
+From 1c73f4d26f0002d161a2b71aa69eb8e7227287f9 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 30 Mar 2018 22:36:21 +0300
+Subject: [PATCH 264/448] staging: fsl-dpaa2/eth: Rename fields
+
+The header fields can be used both for hash and for flow steering
+keys, so replace the "hash" part with "dist" which is more neutral.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c     |   18 +++++++++---------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h     |    9 ++++++---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c |   14 +++++++-------
+ 3 files changed, 22 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 5f78ed4..9ddc5e7 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2536,7 +2536,7 @@ static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
+ #endif
+ 
+ /* default hash key fields */
+-static struct dpaa2_eth_hash_fields default_hash_fields[] = {
++static struct dpaa2_eth_dist_fields default_dist_fields[] = {
+ 	{
+ 		/* L2 header */
+ 		.rxnfc_field = RXH_L2DA,
+@@ -2649,7 +2649,7 @@ static int config_dist_key(struct dpaa2_eth_priv *priv, dma_addr_t key_iova)
+ 	return 0;
+ }
+ 
+-static int dpaa2_eth_set_hash(struct dpaa2_eth_priv *priv)
++static int dpaa2_eth_set_dist_keys(struct dpaa2_eth_priv *priv)
+ {
+ 	struct device *dev = priv->net_dev->dev.parent;
+ 	struct dpkg_profile_cfg cls_cfg;
+@@ -2659,17 +2659,17 @@ static int dpaa2_eth_set_hash(struct dpaa2_eth_priv *priv)
+ 
+ 	memset(&cls_cfg, 0, sizeof(cls_cfg));
+ 
+-	for (i = 0; i < priv->num_hash_fields; i++) {
++	for (i = 0; i < priv->num_dist_fields; i++) {
+ 		struct dpkg_extract *key =
+ 			&cls_cfg.extracts[cls_cfg.num_extracts];
+ 
+ 		key->type = DPKG_EXTRACT_FROM_HDR;
+-		key->extract.from_hdr.prot = priv->hash_fields[i].cls_prot;
++		key->extract.from_hdr.prot = priv->dist_fields[i].cls_prot;
+ 		key->extract.from_hdr.type = DPKG_FULL_FIELD;
+-		key->extract.from_hdr.field = priv->hash_fields[i].cls_field;
++		key->extract.from_hdr.field = priv->dist_fields[i].cls_field;
+ 		cls_cfg.num_extracts++;
+ 
+-		priv->rx_hash_fields |= priv->hash_fields[i].rxnfc_field;
++		priv->rx_hash_fields |= priv->dist_fields[i].rxnfc_field;
+ 	}
+ 
+ 	key_mem = kzalloc(DPAA2_CLASSIFIER_DMA_SIZE, GFP_KERNEL);
+@@ -2731,15 +2731,15 @@ static int bind_dpni(struct dpaa2_eth_priv *priv)
+ 	/* Verify classification options and disable hashing and/or
+ 	 * flow steering support in case of invalid configuration values
+ 	 */
+-	priv->hash_fields = default_hash_fields;
+-	priv->num_hash_fields = ARRAY_SIZE(default_hash_fields);
++	priv->dist_fields = default_dist_fields;
++	priv->num_dist_fields = ARRAY_SIZE(default_dist_fields);
+ 	check_cls_support(priv);
+ 
+ 	/* have the interface implicitly distribute traffic based on
+ 	 * a static hash key
+ 	 */
+ 	if (dpaa2_eth_hash_enabled(priv)) {
+-		err = dpaa2_eth_set_hash(priv);
++		err = dpaa2_eth_set_dist_keys(priv);
+ 		if (err) {
+ 			dev_err(dev, "Failed to configure hashing\n");
+ 			return err;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 779757a..19847cc 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -370,7 +370,7 @@ struct dpaa2_eth_cls_rule {
+ 	bool in_use;
+ };
+ 
+-struct dpaa2_eth_hash_fields {
++struct dpaa2_eth_dist_fields {
+ 	u64 rxnfc_field;
+ 	enum net_prot cls_prot;
+ 	int cls_field;
+@@ -423,8 +423,11 @@ struct dpaa2_eth_priv {
+ 	bool do_link_poll;
+ 	struct task_struct *poll_thread;
+ 
+-	struct dpaa2_eth_hash_fields *hash_fields;
+-	u8 num_hash_fields;
++	/* Rx distribution (hash and flow steering) header fields
++	 * supported by the driver
++	 */
++	struct dpaa2_eth_dist_fields *dist_fields;
++	u8 num_dist_fields;
+ 	/* enabled ethtool hashing bits */
+ 	u64 rx_hash_fields;
+ #ifdef CONFIG_FSL_DPAA2_ETH_DEBUGFS
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+index d4fdcee..c721b98 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+@@ -389,11 +389,11 @@ static int cls_key_off(struct dpaa2_eth_priv *priv, int prot, int field)
+ {
+ 	int i, off = 0;
+ 
+-	for (i = 0; i < priv->num_hash_fields; i++) {
+-		if (priv->hash_fields[i].cls_prot == prot &&
+-		    priv->hash_fields[i].cls_field == field)
++	for (i = 0; i < priv->num_dist_fields; i++) {
++		if (priv->dist_fields[i].cls_prot == prot &&
++		    priv->dist_fields[i].cls_field == field)
+ 			return off;
+-		off += priv->hash_fields[i].size;
++		off += priv->dist_fields[i].size;
+ 	}
+ 
+ 	return -1;
+@@ -403,8 +403,8 @@ static u8 cls_key_size(struct dpaa2_eth_priv *priv)
+ {
+ 	u8 i, size = 0;
+ 
+-	for (i = 0; i < priv->num_hash_fields; i++)
+-		size += priv->hash_fields[i].size;
++	for (i = 0; i < priv->num_dist_fields; i++)
++		size += priv->dist_fields[i].size;
+ 
+ 	return size;
+ }
+@@ -421,7 +421,7 @@ void check_cls_support(struct dpaa2_eth_priv *priv)
+ 				 key_size);
+ 			goto disable_fs;
+ 		}
+-		if (priv->num_hash_fields > DPKG_MAX_NUM_OF_EXTRACTS) {
++		if (priv->num_dist_fields > DPKG_MAX_NUM_OF_EXTRACTS) {
+ 			dev_info(dev, "Too many key fields (max = %d). Hashing and steering are disabled\n",
+ 				 DPKG_MAX_NUM_OF_EXTRACTS);
+ 			goto disable_fs;
+-- 
+1.7.1
+

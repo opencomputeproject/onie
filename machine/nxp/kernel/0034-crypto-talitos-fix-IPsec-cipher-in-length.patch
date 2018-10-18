@@ -1,0 +1,39 @@
+From 9b154d939f20b12b33e6245e1e16db7f07bc8e19 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Fri, 9 Mar 2018 20:59:17 +0200
+Subject: [PATCH 034/448] crypto: talitos - fix IPsec cipher in length
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+For SEC 2.x+, cipher in length must contain only the ciphertext length.
+In case of using hardware ICV checking, the ICV length is provided via
+the "extent" field of the descriptor pointer.
+
+Fixes: 549bd8bc5987 ("crypto: talitos - Implement AEAD for SEC1 using HMAC_SNOOP_NO_AFEU")
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/talitos.c |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/crypto/talitos.c b/drivers/crypto/talitos.c
+index 42c060c..614713f 100644
+--- a/drivers/crypto/talitos.c
++++ b/drivers/crypto/talitos.c
+@@ -1240,6 +1240,13 @@ static int ipsec_esp(struct talitos_edesc *edesc, struct aead_request *areq,
+ 	ret = talitos_sg_map(dev, areq->src, sg_link_tbl_len, edesc,
+ 			     &desc->ptr[4], sg_count, areq->assoclen, tbl_off);
+ 
++	/*
++	 * In case of SEC 2.x+, cipher in len must include only the ciphertext,
++	 * while extent is used for ICV len.
++	 */
++	if (is_ipsec_esp && (desc->hdr & DESC_HDR_MODE1_MDEU_CICV))
++		desc->ptr[4].len = cpu_to_be16(cryptlen);
++
+ 	if (ret > 1) {
+ 		tbl_off += ret;
+ 		sync_needed = true;
+-- 
+1.7.1
+

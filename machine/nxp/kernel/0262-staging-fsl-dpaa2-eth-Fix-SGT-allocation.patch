@@ -1,0 +1,33 @@
+From 74f9acb4a8ded909b75a5badf8cfa683b79612e6 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 23 Mar 2018 08:44:12 -0500
+Subject: [PATCH 262/448] staging: fsl-dpaa2/eth: Fix SGT allocation
+
+We mistakenly allocate space for too many entries in the
+scatter-gather table of multi buffer egress frames.
+
+While it doesn't have a negative impact from a functional
+point of view, it wastes resources so fix it.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index d17fc4e..02df2d0 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -605,7 +605,7 @@ static int build_sg_fd(struct dpaa2_eth_priv *priv,
+ 
+ 	/* Prepare the HW SGT structure */
+ 	sgt_buf_size = priv->tx_data_offset +
+-		       sizeof(struct dpaa2_sg_entry) * (1 + num_dma_bufs);
++		       sizeof(struct dpaa2_sg_entry) *  num_dma_bufs;
+ 	sgt_buf = kzalloc(sgt_buf_size + DPAA2_ETH_TX_BUF_ALIGN, GFP_ATOMIC);
+ 	if (unlikely(!sgt_buf)) {
+ 		err = -ENOMEM;
+-- 
+1.7.1
+

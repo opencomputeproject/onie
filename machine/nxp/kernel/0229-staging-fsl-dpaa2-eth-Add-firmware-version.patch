@@ -1,0 +1,120 @@
+From 1895e904ed2e39978f234a277c357333cf642131 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 11 Oct 2017 08:29:51 -0500
+Subject: [PATCH 229/448] staging: fsl-dpaa2/eth: Add firmware version
+
+Include firmware version in the driver information exported
+through ethtool.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c |   14 ++++++++-
+ drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h      |    5 +++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.c          |   32 ++++++++++++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h          |    5 +++
+ 4 files changed, 55 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+index 1309782..77b22d7 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+@@ -86,10 +86,22 @@
+ static void dpaa2_eth_get_drvinfo(struct net_device *net_dev,
+ 				  struct ethtool_drvinfo *drvinfo)
+ {
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	u16 fw_major, fw_minor;
++	int err;
++
+ 	strlcpy(drvinfo->driver, KBUILD_MODNAME, sizeof(drvinfo->driver));
+ 	strlcpy(drvinfo->version, dpaa2_eth_drv_version,
+ 		sizeof(drvinfo->version));
+-	strlcpy(drvinfo->fw_version, "N/A", sizeof(drvinfo->fw_version));
++
++	err =  dpni_get_api_version(priv->mc_io, 0, &fw_major, &fw_minor);
++	if (!err)
++		snprintf(drvinfo->fw_version, sizeof(drvinfo->fw_version),
++			 "%u.%u", fw_major, fw_minor);
++	else
++		strlcpy(drvinfo->fw_version, "N/A",
++			sizeof(drvinfo->fw_version));
++
+ 	strlcpy(drvinfo->bus_info, dev_name(net_dev->dev.parent->parent),
+ 		sizeof(drvinfo->bus_info));
+ }
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+index 3a56569..c52416c 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+@@ -610,6 +610,11 @@ struct dpni_rsp_get_taildrop {
+ 	__le32 threshold;
+ };
+ 
++struct dpni_rsp_get_api_version {
++	u16 major;
++	u16 minor;
++};
++
+ #define DPNI_DEST_TYPE_SHIFT		0
+ #define DPNI_DEST_TYPE_SIZE		4
+ #define DPNI_CONG_UNITS_SHIFT		4
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.c b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+index 5aa172a..33c08a6 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+@@ -1933,3 +1933,35 @@ int dpni_get_taildrop(struct fsl_mc_io *mc_io,
+ 
+ 	return 0;
+ }
++
++/**
++ * dpni_get_api_version() - Get Data Path Network Interface API version
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @major_ver:	Major version of data path network interface API
++ * @minor_ver:	Minor version of data path network interface API
++ *
++ * Return:	'0' on Success; Error code otherwise.
++ */
++int dpni_get_api_version(struct fsl_mc_io *mc_io,
++			 u32 cmd_flags,
++			 u16 *major_ver,
++			 u16 *minor_ver)
++{
++	struct dpni_rsp_get_api_version *rsp_params;
++	struct mc_command cmd = { 0 };
++	int err;
++
++	cmd.header = mc_encode_cmd_header(DPNI_CMDID_GET_API_VERSION,
++					  cmd_flags, 0);
++
++	err = mc_send_command(mc_io, &cmd);
++	if (err)
++		return err;
++
++	rsp_params = (struct dpni_rsp_get_api_version *)cmd.params;
++	*major_ver = le16_to_cpu(rsp_params->major);
++	*minor_ver = le16_to_cpu(rsp_params->minor);
++
++	return 0;
++}
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index 07d9dca..23e7f75 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -978,6 +978,11 @@ struct dpni_rule_cfg {
+ 	u8	key_size;
+ };
+ 
++int dpni_get_api_version(struct fsl_mc_io *mc_io,
++			 u32 cmd_flags,
++			 u16 *major_ver,
++			 u16 *minor_ver);
++
+ int dpni_add_qos_entry(struct fsl_mc_io *mc_io,
+ 		       u32 cmd_flags,
+ 		       u16 token,
+-- 
+1.7.1
+

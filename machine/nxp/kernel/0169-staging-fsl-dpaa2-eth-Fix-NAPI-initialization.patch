@@ -1,0 +1,64 @@
+From c8e87f3cdf29cb8083ec160ca885d87e51548a51 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 19 Sep 2017 14:21:41 +0300
+Subject: [PATCH 169/448] staging: fsl-dpaa2/eth: Fix NAPI initialization
+
+Make sure the NAPI instances are enabled only after all other
+device initialization is done, to avoid accessing uninit vars.
+
+Mirror that change on device remove routine.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 3e01047..3336c8e 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -3418,10 +3418,6 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
+ 	if (err)
+ 		goto err_bind;
+ 
+-	/* Add a NAPI context for each channel */
+-	add_ch_napi(priv);
+-	enable_ch_napi(priv);
+-
+ 	/* Percpu statistics */
+ 	priv->percpu_stats = alloc_percpu(*priv->percpu_stats);
+ 	if (!priv->percpu_stats) {
+@@ -3460,6 +3456,10 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
+ 	priv->dcbx_mode = DCB_CAP_DCBX_HOST | DCB_CAP_DCBX_VER_IEEE;
+ #endif
+ 
++	/* Add a NAPI context for each channel */
++	add_ch_napi(priv);
++	enable_ch_napi(priv);
++
+ 	err = setup_irqs(dpni_dev);
+ 	if (err) {
+ 		netdev_warn(net_dev, "Failed to set link interrupt, fall back to polling\n");
+@@ -3522,6 +3522,9 @@ static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
+ #endif
+ 	dpaa2_eth_sysfs_remove(&net_dev->dev);
+ 
++	disable_ch_napi(priv);
++	del_ch_napi(priv);
++
+ 	unregister_netdev(net_dev);
+ 	dev_info(net_dev->dev.parent, "Removed interface %s\n", net_dev->name);
+ 
+@@ -3533,9 +3536,6 @@ static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
+ 	free_rings(priv);
+ 	free_percpu(priv->percpu_stats);
+ 	free_percpu(priv->percpu_extras);
+-
+-	disable_ch_napi(priv);
+-	del_ch_napi(priv);
+ 	free_dpbp(priv);
+ 	free_dpio(priv);
+ 	free_dpni(priv);
+-- 
+1.7.1
+

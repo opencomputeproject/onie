@@ -1,0 +1,32 @@
+From 29beaddedd4ceed0c450bdfa0cfd5944ac97ebcd Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 11 Oct 2017 08:29:46 -0500
+Subject: [PATCH 252/448] staging: fsl-dpaa2/eth: Check if notification rearm is successful
+
+In case dpaa2_io_service_rearm() fails with an error other then
+EBUSY, it will do so silently; add a check for this and a warning
+message, as a failure here means we're unable to receive any
+more traffic on the current cpu.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 49c0c0b..380431c 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1182,6 +1182,8 @@ static int dpaa2_eth_poll(struct napi_struct *napi, int budget)
+ 		err = dpaa2_io_service_rearm(ch->dpio, &ch->nctx);
+ 		cpu_relax();
+ 	} while (err == -EBUSY);
++		WARN_ONCE(err, "CDAN notifications rearm failed on core %d",
++			  ch->nctx.desired_cpu);
+ 
+ 	return max(rx_cleaned, 1);
+ }
+-- 
+1.7.1
+

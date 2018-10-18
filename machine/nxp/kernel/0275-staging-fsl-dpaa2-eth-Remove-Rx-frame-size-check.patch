@@ -1,0 +1,77 @@
+From 0961d0e56959106fab8259387e546102286df65a Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 16 May 2018 17:11:02 +0300
+Subject: [PATCH 275/448] staging: fsl-dpaa2/eth: Remove Rx frame size check
+
+Most Ethernet drivers don't enforce the MTU value as upper limit
+for ingress frames. We too support receiving frames larger than MTU,
+so allow that.
+
+Remove our ndo_change_mtu implementation, letting the default
+stack implementation handle things. Also, set the max frame length
+allowed by hardware only once at probe time, with the largest
+possible value.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   29 +++++------------------
+ 1 files changed, 7 insertions(+), 22 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index ebcf787..94f4a50 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1413,25 +1413,6 @@ static void dpaa2_eth_get_stats(struct net_device *net_dev,
+ 	}
+ }
+ 
+-static int dpaa2_eth_change_mtu(struct net_device *net_dev, int mtu)
+-{
+-	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+-	int err;
+-
+-	/* Set the maximum Rx frame length to match the transmit side;
+-	 * account for L2 headers when computing the MFL
+-	 */
+-	err = dpni_set_max_frame_length(priv->mc_io, 0, priv->mc_token,
+-					(u16)DPAA2_ETH_L2_MAX_FRM(mtu));
+-	if (err) {
+-		netdev_err(net_dev, "dpni_set_max_frame_length() failed\n");
+-		return err;
+-	}
+-
+-	net_dev->mtu = mtu;
+-	return 0;
+-}
+-
+ /* Copy mac unicast addresses from @net_dev to @priv.
+  * Its sole purpose is to make dpaa2_eth_set_rx_mode() more readable.
+  */
+@@ -1767,7 +1748,6 @@ static int dpaa2_eth_xdp(struct net_device *dev, struct netdev_xdp *xdp)
+ 	.ndo_init = dpaa2_eth_init,
+ 	.ndo_set_mac_address = dpaa2_eth_set_addr,
+ 	.ndo_get_stats64 = dpaa2_eth_get_stats,
+-	.ndo_change_mtu = dpaa2_eth_change_mtu,
+ 	.ndo_set_rx_mode = dpaa2_eth_set_rx_mode,
+ 	.ndo_set_features = dpaa2_eth_set_features,
+ 	.ndo_do_ioctl = dpaa2_eth_ioctl,
+@@ -2991,9 +2971,14 @@ static int netdev_init(struct net_device *net_dev)
+ 		return err;
+ 	}
+ 
+-	/* Set MTU limits */
+-	net_dev->min_mtu = 68;
++	/* Set MTU upper limit; lower limit is default (68B) */
+ 	net_dev->max_mtu = DPAA2_ETH_MAX_MTU;
++	err = dpni_set_max_frame_length(priv->mc_io, 0, priv->mc_token,
++					(u16)DPAA2_ETH_MFL);
++	if (err) {
++		dev_err(dev, "dpni_set_max_frame_length() failed\n");
++		return err;
++	}
+ 
+ 	/* Set actual number of queues in the net device */
+ 	num_queues = dpaa2_eth_queue_count(priv);
+-- 
+1.7.1
+

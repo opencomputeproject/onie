@@ -1,0 +1,31 @@
+From 85ec4bd6ff3269daf5191defeb7e715ee646d3a2 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 23 Nov 2017 14:51:14 +0200
+Subject: [PATCH 193/448] staging: fsl-dpaa2/eth: Configure HWA on XDP_TX FD
+
+Explicitly reserve a hardware annotation area of 128B in the XDP_TX FD,
+since we write to the HWA[FAEAD] field to disable Tx confirmations.
+
+We don't actually use the software annotation area, but since we reuse
+the Rx FD and buffer, let the hardware know the SWA is reserved.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 1649521..f3fb46c 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -236,6 +236,7 @@ static int dpaa2_eth_xdp_tx(struct dpaa2_eth_priv *priv,
+ 	/* Mark the egress frame annotation area as valid */
+ 	frc = dpaa2_fd_get_frc(fd);
+ 	dpaa2_fd_set_frc(fd, frc | DPAA2_FD_FRC_FAEADV);
++	dpaa2_fd_set_ctrl(fd, DPAA2_FD_CTRL_PTA | DPAA2_FD_CTRL_ASAL);
+ 
+ 	ctrl = DPAA2_FAEAD_A4V | DPAA2_FAEAD_A2V | DPAA2_FAEAD_EBDDV;
+ 	faead = dpaa2_get_faead(buf_start);
+-- 
+1.7.1
+

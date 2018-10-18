@@ -1,0 +1,191 @@
+From 15e17569e6cdb01ea95bb56cd5747216128a6fc1 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 29 Mar 2018 19:13:47 +0300
+Subject: [PATCH 249/448] staging: fsl-dpaa2/eth: Add new FS/hash key configuration API
+
+MC 10.7.0 adds new APIs for configuring the distribution keys
+for hash and flow steering tables.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h |   25 ++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.c     |   74 +++++++++++++++++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h     |   41 ++++++++++++++
+ 3 files changed, 140 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+index 7f12833..e1e8dd8 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+@@ -117,6 +117,9 @@
+ #define DPNI_CMDID_GET_OFFLOAD				DPNI_CMD(0x26B)
+ #define DPNI_CMDID_SET_OFFLOAD				DPNI_CMD(0x26C)
+ 
++#define DPNI_CMDID_SET_RX_FS_DIST			DPNI_CMD(0x273)
++#define DPNI_CMDID_SET_RX_HASH_DIST			DPNI_CMD(0x274)
++
+ /* Macros for accessing command fields smaller than 1byte */
+ #define DPNI_MASK(field)	\
+ 	GENMASK(DPNI_##field##_SHIFT + DPNI_##field##_SIZE - 1, \
+@@ -691,4 +694,26 @@ struct dpni_rsp_get_congestion_notification {
+ 	__le32 threshold_entry;
+ 	__le32 threshold_exit;
+ };
++
++#define DPNI_RX_FS_DIST_ENABLE_SHIFT	0
++#define DPNI_RX_FS_DIST_ENABLE_SIZE	1
++struct dpni_cmd_set_rx_fs_dist {
++	__le16 dist_size;
++	u8 enable;
++	u8 tc;
++	__le16 miss_flow_id;
++	__le16 pad;
++	__le64 key_cfg_iova;
++};
++
++#define DPNI_RX_HASH_DIST_ENABLE_SHIFT	0
++#define DPNI_RX_HASH_DIST_ENABLE_SIZE	1
++struct dpni_cmd_set_rx_hash_dist {
++	__le16 dist_size;
++	u8 enable;
++	u8 tc;
++	__le32 pad;
++	__le64 key_cfg_iova;
++};
++
+ #endif /* _FSL_DPNI_CMD_H */
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.c b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+index 4351330..a3e12dc 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+@@ -2036,3 +2036,77 @@ int dpni_get_api_version(struct fsl_mc_io *mc_io,
+ 
+ 	return 0;
+ }
++
++/**
++ * dpni_set_rx_fs_dist() - Set Rx traffic class FS distribution
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:	Token of DPNI object
++ * @cfg: Distribution configuration
++ * If the FS is already enabled with a previous call the classification
++ * key will be changed but all the table rules are kept. If the
++ * existing rules do not match the key the results will not be
++ * predictable. It is the user responsibility to keep key integrity.
++ * If cfg.enable is set to 1 the command will create a flow steering table
++ * and will classify packets according to this table. The packets that
++ * miss all the table rules will be classified according to settings
++ * made in dpni_set_rx_hash_dist()
++ * If cfg.enable is set to 0 the command will clear flow steering table.
++ * The packets will be classified according to settings made in
++ * dpni_set_rx_hash_dist()
++ */
++int dpni_set_rx_fs_dist(struct fsl_mc_io *mc_io,
++			u32 cmd_flags,
++			u16 token,
++			const struct dpni_rx_dist_cfg *cfg)
++{
++	struct dpni_cmd_set_rx_fs_dist *cmd_params;
++	struct fsl_mc_command cmd = { 0 };
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(DPNI_CMDID_SET_RX_FS_DIST,
++					  cmd_flags,
++					  token);
++	cmd_params = (struct dpni_cmd_set_rx_fs_dist *)cmd.params;
++	cmd_params->dist_size = le16_to_cpu(cfg->dist_size);
++	dpni_set_field(cmd_params->enable, RX_FS_DIST_ENABLE, cfg->enable);
++	cmd_params->tc = cfg->tc;
++	cmd_params->miss_flow_id = le16_to_cpu(cfg->fs_miss_flow_id);
++	cmd_params->key_cfg_iova = le64_to_cpu(cfg->key_cfg_iova);
++
++	/* send command to mc*/
++	return mc_send_command(mc_io, &cmd);
++}
++
++/**
++ * dpni_set_rx_hash_dist() - Set Rx traffic class HASH distribution
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:	Token of DPNI object
++ * @cfg: Distribution configuration
++ * If cfg.enable is set to 1 the packets will be classified using a hash
++ * function based on the key received in cfg.key_cfg_iova parameter.
++ * If cfg.enable is set to 0 the packets will be sent to the queue configured
++ * in dpni_set_rx_dist_default_queue() call
++ */
++int dpni_set_rx_hash_dist(struct fsl_mc_io *mc_io,
++			  u32 cmd_flags,
++			  u16 token,
++			  const struct dpni_rx_dist_cfg *cfg)
++{
++	struct dpni_cmd_set_rx_hash_dist *cmd_params;
++	struct fsl_mc_command cmd = { 0 };
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(DPNI_CMDID_SET_RX_HASH_DIST,
++					  cmd_flags,
++					  token);
++	cmd_params = (struct dpni_cmd_set_rx_hash_dist *)cmd.params;
++	cmd_params->dist_size = le16_to_cpu(cfg->dist_size);
++	dpni_set_field(cmd_params->enable, RX_FS_DIST_ENABLE, cfg->enable);
++	cmd_params->tc = cfg->tc;
++	cmd_params->key_cfg_iova = le64_to_cpu(cfg->key_cfg_iova);
++
++	/* send command to mc*/
++	return mc_send_command(mc_io, &cmd);
++}
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index cbf1e1d..886b902 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -1128,4 +1128,45 @@ int dpni_remove_fs_entry(struct fsl_mc_io *mc_io,
+ 			 u8 tc_id,
+ 			 const struct dpni_rule_cfg *cfg);
+ 
++/**
++ * When used for queue_idx in function dpni_set_rx_dist_default_queue
++ * will signal to dpni to drop all unclassified frames
++ */
++#define DPNI_FS_MISS_DROP		((uint16_t)-1)
++
++/**
++ * struct dpni_rx_dist_cfg - distribution configuration
++ * @dist_size:	distribution size; supported values: 1,2,3,4,6,7,8,
++ *		12,14,16,24,28,32,48,56,64,96,112,128,192,224,256,384,448,
++ *		512,768,896,1024
++ * @key_cfg_iova: I/O virtual address of 256 bytes DMA-able memory filled with
++ *		the extractions to be used for the distribution key by calling
++ *		dpkg_prepare_key_cfg() relevant only when enable!=0 otherwise
++ *		it can be '0'
++ * @enable: enable/disable the distribution.
++ * @tc: TC id for which distribution is set
++ * @fs_miss_flow_id: when packet misses all rules from flow steering table and
++ *		hash is disabled it will be put into this queue id; use
++ *		DPNI_FS_MISS_DROP to drop frames. The value of this field is
++ *		used only when flow steering distribution is enabled and hash
++ *		distribution is disabled
++ */
++struct dpni_rx_dist_cfg {
++	u16 dist_size;
++	u64 key_cfg_iova;
++	u8 enable;
++	u8 tc;
++	u16 fs_miss_flow_id;
++};
++
++int dpni_set_rx_fs_dist(struct fsl_mc_io *mc_io,
++			u32 cmd_flags,
++			u16 token,
++			const struct dpni_rx_dist_cfg *cfg);
++
++int dpni_set_rx_hash_dist(struct fsl_mc_io *mc_io,
++			  u32 cmd_flags,
++			  u16 token,
++			  const struct dpni_rx_dist_cfg *cfg);
++
+ #endif /* __FSL_DPNI_H */
+-- 
+1.7.1
+

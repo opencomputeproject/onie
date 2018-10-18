@@ -1,0 +1,32 @@
+From 1d679cbac9fe6090a84bc01a67cfcc8d1e5e1ee2 Mon Sep 17 00:00:00 2001
+From: Camelia Groza <camelia.groza@nxp.com>
+Date: Mon, 17 Sep 2018 12:39:24 +0300
+Subject: [PATCH 440/448] sdk_dpaa: ls1043a errata: align skb_shinfo
+
+Make sure the skb shared info is cache-line aligned when realigning
+egress frames.
+
+Signed-off-by: Camelia Groza <camelia.groza@nxp.com>
+---
+ .../net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c  |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c
+index c0b7253..c47b323 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_sg.c
+@@ -830,8 +830,10 @@ static bool a010022_check_skb(struct sk_buff *skb, struct dpa_priv_s *priv)
+ 
+ 	/* For the new skb we only need the old one's data (both non-paged and
+ 	 * paged). We can skip the old tailroom.
++	 *
++	 * Make sure the skb_shinfo is cache-line aligned.
+ 	 */
+-	nsize = headroom + skb->len +
++	nsize = SMP_CACHE_BYTES + DPA_SKB_SIZE(headroom + skb->len) +
+ 		SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+ 
+ 	/* Reserve enough memory to accommodate Jumbo frames */
+-- 
+1.7.1
+

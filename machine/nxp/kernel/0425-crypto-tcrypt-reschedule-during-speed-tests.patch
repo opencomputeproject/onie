@@ -1,0 +1,76 @@
+From 3b0850a17ace3eef72d8780dfecba9479622a8e0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Mon, 23 Jul 2018 17:18:48 +0300
+Subject: [PATCH 425/448] crypto: tcrypt - reschedule during speed tests
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Avoid RCU stalls in the case of non-preemptible kernel and lengthy
+speed tests by rescheduling when advancing from one block size
+to another.
+
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+Signed-off-by: Herbert Xu <herbert@gondor.apana.org.au>
+(cherry picked from commit 2af632996b898687d382f2b52e820141aba72d63)
+---
+ crypto/tcrypt.c |   18 ++++++++++++------
+ 1 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/crypto/tcrypt.c b/crypto/tcrypt.c
+index 2a6f11a..d4c4321 100644
+--- a/crypto/tcrypt.c
++++ b/crypto/tcrypt.c
+@@ -357,11 +357,13 @@ static void test_aead_speed(const char *algo, int enc, unsigned int secs,
+ 					       iv);
+ 			aead_request_set_ad(req, aad_size);
+ 
+-			if (secs)
++			if (secs) {
+ 				ret = test_aead_jiffies(req, enc, *b_size,
+ 							secs);
+-			else
++				cond_resched();
++			} else {
+ 				ret = test_aead_cycles(req, enc, *b_size);
++			}
+ 
+ 			if (ret) {
+ 				pr_err("%s() failed return code=%d\n", e, ret);
+@@ -735,12 +737,14 @@ static void test_ahash_speed_common(const char *algo, unsigned int secs,
+ 
+ 		ahash_request_set_crypt(req, sg, output, speed[i].plen);
+ 
+-		if (secs)
++		if (secs) {
+ 			ret = test_ahash_jiffies(req, speed[i].blen,
+ 						 speed[i].plen, output, secs);
+-		else
++			cond_resched();
++		} else {
+ 			ret = test_ahash_cycles(req, speed[i].blen,
+ 						speed[i].plen, output);
++		}
+ 
+ 		if (ret) {
+ 			pr_err("hashing failed ret=%d\n", ret);
+@@ -958,12 +962,14 @@ static void test_skcipher_speed(const char *algo, int enc, unsigned int secs,
+ 
+ 			skcipher_request_set_crypt(req, sg, sg, *b_size, iv);
+ 
+-			if (secs)
++			if (secs) {
+ 				ret = test_acipher_jiffies(req, enc,
+ 							   *b_size, secs);
+-			else
++				cond_resched();
++			} else {
+ 				ret = test_acipher_cycles(req, enc,
+ 							  *b_size);
++			}
+ 
+ 			if (ret) {
+ 				pr_err("%s() failed flags=%x\n", e,
+-- 
+1.7.1
+

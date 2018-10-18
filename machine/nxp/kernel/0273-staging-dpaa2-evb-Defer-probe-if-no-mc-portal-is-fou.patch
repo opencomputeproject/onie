@@ -1,0 +1,34 @@
+From 727a8f639d7e72d9ad5482b424d6938a76868136 Mon Sep 17 00:00:00 2001
+From: Razvan Stefanescu <razvan.stefanescu@nxp.com>
+Date: Mon, 30 Apr 2018 11:27:27 +0300
+Subject: [PATCH 273/448] staging: dpaa2-evb: Defer probe if no mc portal is found
+
+Signed-off-by: Razvan Stefanescu <razvan.stefanescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/evb/evb.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/evb/evb.c b/drivers/staging/fsl-dpaa2/evb/evb.c
+index cfbd5d0..37612db 100644
+--- a/drivers/staging/fsl-dpaa2/evb/evb.c
++++ b/drivers/staging/fsl-dpaa2/evb/evb.c
+@@ -1204,10 +1204,14 @@ static int evb_probe(struct fsl_mc_device *evb_dev)
+ 
+ 	err = fsl_mc_portal_allocate(evb_dev, FSL_MC_IO_ATOMIC_CONTEXT_PORTAL,
+ 				     &priv->mc_io);
+-	if (unlikely(err)) {
+-		dev_err(dev, "fsl_mc_portal_allocate err %d\n", err);
++	if (err) {
++		if (err == -ENXIO)
++			err = -EPROBE_DEFER;
++		else
++			dev_err(dev, "fsl_mc_portal_allocate err %d\n", err);
+ 		goto err_free_netdev;
+ 	}
++
+ 	if (!priv->mc_io) {
+ 		dev_err(dev, "fsl_mc_portal_allocate returned null handle but no error\n");
+ 		err = -EFAULT;
+-- 
+1.7.1
+

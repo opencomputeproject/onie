@@ -1,0 +1,133 @@
+From c63e4f9c85371a165f51f203a227c9b479d395d8 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 30 Mar 2018 21:05:37 +0300
+Subject: [PATCH 250/448] staging: fsl-dpaa2/eth: Refactor hash code
+
+Refactor the code setting the RX hash and flow steering key.
+Split the function doing the actual key configuration to another
+function.
+
+No functional changes yet.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   79 +++++++++++++-----------
+ 1 files changed, 43 insertions(+), 36 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index d3167ab..fd94b91 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2575,14 +2575,39 @@ static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
+ };
+ 
+ /* Set RX hash options */
++static int config_dist_key(struct dpaa2_eth_priv *priv, dma_addr_t key_iova)
++{
++	struct dpni_rx_tc_dist_cfg dist_cfg;
++	int i, err;
++
++	memset(&dist_cfg, 0, sizeof(dist_cfg));
++
++	dist_cfg.key_cfg_iova = key_iova;
++	dist_cfg.dist_size = dpaa2_eth_queue_count(priv);
++	if (dpaa2_eth_fs_enabled(priv)) {
++		dist_cfg.dist_mode = DPNI_DIST_MODE_FS;
++		dist_cfg.fs_cfg.miss_action = DPNI_FS_MISS_HASH;
++	} else {
++		dist_cfg.dist_mode = DPNI_DIST_MODE_HASH;
++	}
++
++	for (i = 0; i < dpaa2_eth_tc_count(priv); i++) {
++		err = dpni_set_rx_tc_dist(priv->mc_io, 0, priv->mc_token, i,
++					  &dist_cfg);
++		if (err)
++			return err;
++	}
++
++	return 0;
++}
++
+ static int dpaa2_eth_set_hash(struct dpaa2_eth_priv *priv)
+ {
+ 	struct device *dev = priv->net_dev->dev.parent;
+ 	struct dpkg_profile_cfg cls_cfg;
+-	struct dpni_rx_tc_dist_cfg dist_cfg;
+-	u8 *dma_mem;
+-	int i;
+-	int err = 0;
++	dma_addr_t key_iova;
++	u8 *key_mem;
++	int i, err;
+ 
+ 	memset(&cls_cfg, 0, sizeof(cls_cfg));
+ 
+@@ -2599,51 +2624,33 @@ static int dpaa2_eth_set_hash(struct dpaa2_eth_priv *priv)
+ 		priv->rx_hash_fields |= priv->hash_fields[i].rxnfc_field;
+ 	}
+ 
+-	dma_mem = kzalloc(DPAA2_CLASSIFIER_DMA_SIZE, GFP_KERNEL);
+-	if (!dma_mem)
++	key_mem = kzalloc(DPAA2_CLASSIFIER_DMA_SIZE, GFP_KERNEL);
++	if (!key_mem)
+ 		return -ENOMEM;
+ 
+-	err = dpni_prepare_key_cfg(&cls_cfg, dma_mem);
++	err = dpni_prepare_key_cfg(&cls_cfg, key_mem);
+ 	if (err) {
+ 		dev_err(dev, "dpni_prepare_key_cfg error %d\n", err);
+-		goto err_prep_key;
++		goto free_key;
+ 	}
+ 
+-	memset(&dist_cfg, 0, sizeof(dist_cfg));
+-
+-	/* Prepare for setting the rx dist */
+-	dist_cfg.key_cfg_iova = dma_map_single(dev, dma_mem,
+-					       DPAA2_CLASSIFIER_DMA_SIZE,
+-					       DMA_TO_DEVICE);
+-	if (dma_mapping_error(dev, dist_cfg.key_cfg_iova)) {
++	key_iova = dma_map_single(dev, key_mem, DPAA2_CLASSIFIER_DMA_SIZE,
++				  DMA_TO_DEVICE);
++	if (dma_mapping_error(dev, key_iova)) {
+ 		dev_err(dev, "DMA mapping failed\n");
+ 		err = -ENOMEM;
+-		goto err_dma_map;
++		goto free_key;
+ 	}
+ 
+-	dist_cfg.dist_size = dpaa2_eth_queue_count(priv);
+-	if (dpaa2_eth_fs_enabled(priv)) {
+-		dist_cfg.dist_mode = DPNI_DIST_MODE_FS;
+-		dist_cfg.fs_cfg.miss_action = DPNI_FS_MISS_HASH;
+-	} else {
+-		dist_cfg.dist_mode = DPNI_DIST_MODE_HASH;
+-	}
++	err = config_dist_key(priv, key_iova);
+ 
+-	for (i = 0; i < dpaa2_eth_tc_count(priv); i++) {
+-		err = dpni_set_rx_tc_dist(priv->mc_io, 0, priv->mc_token, i,
+-					  &dist_cfg);
+-		if (err)
+-			break;
+-	}
+-
+-	dma_unmap_single(dev, dist_cfg.key_cfg_iova,
+-			 DPAA2_CLASSIFIER_DMA_SIZE, DMA_TO_DEVICE);
++	dma_unmap_single(dev, key_iova, DPAA2_CLASSIFIER_DMA_SIZE,
++			 DMA_TO_DEVICE);
+ 	if (err)
+-		dev_err(dev, "dpni_set_rx_tc_dist() error %d\n", err);
++		dev_err(dev, "Distribution key config failed\n");
+ 
+-err_dma_map:
+-err_prep_key:
+-	kfree(dma_mem);
++free_key:
++	kfree(key_mem);
+ 	return err;
+ }
+ 
+-- 
+1.7.1
+

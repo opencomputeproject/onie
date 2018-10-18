@@ -1,0 +1,34 @@
+From 1f20ff1231698df1a256b3ddd9a04ee555937fab Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 6 Jun 2017 10:00:31 -0500
+Subject: [PATCH 108/448] staging: fsl-dpaa2/eth: Always call napi_gro_receive()
+
+The function itself checks whether GRO support is enabled
+and acts accordingly, so we don't need to verify it in the
+driver as well.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    5 +----
+ 1 files changed, 1 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 57628cd..d3ec384 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -273,10 +273,7 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 	percpu_stats->rx_packets++;
+ 	percpu_stats->rx_bytes += dpaa2_fd_get_len(fd);
+ 
+-	if (priv->net_dev->features & NETIF_F_GRO)
+-		napi_gro_receive(napi, skb);
+-	else
+-		netif_receive_skb(skb);
++	napi_gro_receive(napi, skb);
+ 
+ 	return;
+ 
+-- 
+1.7.1
+

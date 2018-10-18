@@ -1,0 +1,33 @@
+From c46370129c2b98599aeb15fa49353f7861a198c5 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Thu, 20 Jul 2017 10:58:37 +0000
+Subject: [PATCH 123/448] staging: fsl-dpaa2/eth: Fix skb use after free
+
+Once a Tx frame descriptor is enqueued, an interrupt might be triggered
+to process the Tx confirmation and free the skb, hitting a memory use
+after free when updating the tx_bytes statistic based on skb->len.
+
+Use the frame descriptor length instead.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 122e395..83981ad 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -616,7 +616,7 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 		free_tx_fd(priv, &fd, NULL);
+ 	} else {
+ 		percpu_stats->tx_packets++;
+-		percpu_stats->tx_bytes += skb->len;
++		percpu_stats->tx_bytes += dpaa2_fd_get_len(&fd);
+ 	}
+ 
+ 	return NETDEV_TX_OK;
+-- 
+1.7.1
+

@@ -1,0 +1,75 @@
+From a2575a3d7d2f3ee9595e5851613ca584e0021ff7 Mon Sep 17 00:00:00 2001
+From: Camelia Groza <camelia.groza@nxp.com>
+Date: Tue, 22 May 2018 11:34:16 +0800
+Subject: [PATCH 307/448] sdk_dpaa: ceetm: avoid use-after-free scenarios
+
+[context adjustment]
+
+Once the pfiofo qdiscs are grafted to the netdev queues, they are destroyed
+by the kernel when required. Remove references to the pfifo qdiscs after
+grafting, in order to avoid double free scenarios.
+
+Signed-off-by: Camelia Groza <camelia.groza@nxp.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ .../ethernet/freescale/sdk_dpaa/dpaa_eth_ceetm.c   |   23 +++++++++++++++++--
+ 1 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_ceetm.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_ceetm.c
+index b090db1..f3d4cb7 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_ceetm.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_ceetm.c
+@@ -475,7 +475,9 @@ static void ceetm_destroy(struct Qdisc *sch)
+ 		if (!priv->root.qdiscs)
+ 			break;
+ 
+-		/* Remove the pfifo qdiscs */
++		/* Destroy the pfifo qdiscs in case they haven't been attached
++		 * to the netdev queues yet.
++		 */
+ 		for (ntx = 0; ntx < dev->num_tx_queues; ntx++)
+ 			if (priv->root.qdiscs[ntx])
+ 				qdisc_destroy(priv->root.qdiscs[ntx]);
+@@ -605,7 +607,16 @@ static int ceetm_init_root(struct Qdisc *sch, struct ceetm_qdisc *priv,
+ 		goto err_init_root;
+ 	}
+ 
+-	/* pre-allocate underlying pfifo qdiscs */
++	/* Pre-allocate underlying pfifo qdiscs.
++	 *
++	 * We want to offload shaping and scheduling decisions to the hardware.
++	 * The pfifo qdiscs will be attached to the netdev queues and will
++	 * guide the traffic from the IP stack down to the driver with minimum
++	 * interference.
++	 *
++	 * The CEETM qdiscs and classes will be crossed when the traffic
++	 * reaches the driver.
++	 */
+ 	priv->root.qdiscs = kcalloc(dev->num_tx_queues,
+ 				    sizeof(priv->root.qdiscs[0]),
+ 				    GFP_KERNEL);
+@@ -1273,7 +1284,10 @@ static int ceetm_change(struct Qdisc *sch, struct nlattr *opt)
+ 	return ret;
+ }
+ 
+-/* Attach the underlying pfifo qdiscs */
++/* Graft the underlying pfifo qdiscs to the netdev queues.
++ * It's safe to remove our references at this point, since the kernel will
++ * destroy the qdiscs on its own and no cleanup from our part is required.
++ */
+ static void ceetm_attach(struct Qdisc *sch)
+ {
+ 	struct net_device *dev = qdisc_dev(sch);
+@@ -1289,6 +1303,9 @@ static void ceetm_attach(struct Qdisc *sch)
+ 		if (old_qdisc)
+ 			qdisc_destroy(old_qdisc);
+ 	}
++
++	kfree(priv->root.qdiscs);
++	priv->root.qdiscs = NULL;
+ }
+ 
+ static unsigned long ceetm_cls_get(struct Qdisc *sch, u32 classid)
+-- 
+1.7.1
+

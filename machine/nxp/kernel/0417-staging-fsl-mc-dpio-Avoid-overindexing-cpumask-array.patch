@@ -1,0 +1,51 @@
+From 9e17b91e57691df3ce7e75d1c755c281180e14c1 Mon Sep 17 00:00:00 2001
+From: Roy Pledge <roy.pledge@nxp.com>
+Date: Thu, 10 May 2018 16:37:54 -0400
+Subject: [PATCH 417/448] staging: fsl-mc/dpio: Avoid overindexing cpumask arrays
+
+Make sure cpumask arrays do not overindex by checking the cpu ID
+against the nr_cpu_ids value.  This fixes an issue detected by
+stackprotector when the number of CPUs on the system is less than
+the number of DPIOs probed.
+
+Signed-off-by: Roy Pledge <roy.pledge@nxp.com>
+---
+ drivers/staging/fsl-mc/bus/dpio/dpio-driver.c |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-mc/bus/dpio/dpio-driver.c b/drivers/staging/fsl-mc/bus/dpio/dpio-driver.c
+index 6a211db..a85bc5f 100644
+--- a/drivers/staging/fsl-mc/bus/dpio/dpio-driver.c
++++ b/drivers/staging/fsl-mc/bus/dpio/dpio-driver.c
+@@ -89,6 +89,7 @@ static int dpaa2_dpio_probe(struct fsl_mc_device *dpio_dev)
+ 	int err = -ENOMEM;
+ 	struct device *dev = &dpio_dev->dev;
+ 	static int next_cpu = -1;
++	int possible_next_cpu;
+ 
+ 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+ 	if (!priv)
+@@ -137,16 +138,16 @@ static int dpaa2_dpio_probe(struct fsl_mc_device *dpio_dev)
+ 
+ 	/* get the cpu to use for the affinity hint */
+ 	if (next_cpu == -1)
+-		next_cpu = cpumask_first(cpu_online_mask);
++		possible_next_cpu = cpumask_first(cpu_online_mask);
+ 	else
+-		next_cpu = cpumask_next(next_cpu, cpu_online_mask);
++		possible_next_cpu = cpumask_next(next_cpu, cpu_online_mask);
+ 
+-	if (!cpu_possible(next_cpu)) {
++	if (possible_next_cpu >= nr_cpu_ids) {
+ 		dev_err(dev, "probe failed. Number of DPIOs exceeds NR_CPUS.\n");
+ 		err = -ERANGE;
+ 		goto err_allocate_irqs;
+ 	}
+-	desc.cpu = next_cpu;
++	desc.cpu = next_cpu = possible_next_cpu;
+ 
+ 	/*
+ 	 * Set the CENA regs to be the cache enabled area of the portal to
+-- 
+1.7.1
+

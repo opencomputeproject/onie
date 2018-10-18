@@ -1,0 +1,55 @@
+From 1b27f8c37f1cf87109f1ea41f515eedabe2d3a20 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 11 Oct 2017 08:29:49 -0500
+Subject: [PATCH 254/448] staging: fsl-dpaa2/eth: Use implicit clear of link interrupt
+
+dpni_get_irq_status() also looks at the input value of its
+status parameter, and if not null it automatically clears
+from pending state the bits that are set there.
+
+Use this feature to avoid a separate MC command for clearing
+the interrupt event bits after reading the status.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   12 +++---------
+ 1 files changed, 3 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 2829f04..61992ff 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2926,7 +2926,7 @@ static irqreturn_t dpni_irq0_handler(int irq_num, void *arg)
+ 
+ static irqreturn_t dpni_irq0_handler_thread(int irq_num, void *arg)
+ {
+-	u32 status = 0, clear = 0;
++	u32 status = ~0;
+ 	struct device *dev = (struct device *)arg;
+ 	struct fsl_mc_device *dpni_dev = to_fsl_mc_device(dev);
+ 	struct net_device *net_dev = dev_get_drvdata(dev);
+@@ -2936,18 +2936,12 @@ static irqreturn_t dpni_irq0_handler_thread(int irq_num, void *arg)
+ 				  DPNI_IRQ_INDEX, &status);
+ 	if (unlikely(err)) {
+ 		netdev_err(net_dev, "Can't get irq status (err %d)\n", err);
+-		clear = 0xffffffff;
+-		goto out;
++		return IRQ_HANDLED;
+ 	}
+ 
+-	if (status & DPNI_IRQ_EVENT_LINK_CHANGED) {
+-		clear |= DPNI_IRQ_EVENT_LINK_CHANGED;
++	if (status & DPNI_IRQ_EVENT_LINK_CHANGED)
+ 		link_state_update(netdev_priv(net_dev));
+-	}
+ 
+-out:
+-	dpni_clear_irq_status(dpni_dev->mc_io, 0, dpni_dev->mc_handle,
+-			      DPNI_IRQ_INDEX, clear);
+ 	return IRQ_HANDLED;
+ }
+ 
+-- 
+1.7.1
+

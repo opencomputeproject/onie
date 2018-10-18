@@ -1,0 +1,38 @@
+From 02c23847dc6f8699a297b04fdf5263cbf9c029a7 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 15 Jun 2017 03:55:06 -0500
+Subject: [PATCH 368/448] staging: fsl-mc/dpio: Propagate error code
+
+dpaa2_io_service_register() returns zero even if
+qbman_swp_CDAN_set() encountered an error. Fix this
+by propagating the error code so the caller is informed
+data availability notifications are not properly set
+for a channel.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Acked-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-mc/bus/dpio/dpio-service.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/staging/fsl-mc/bus/dpio/dpio-service.c b/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
+index 0570e16..7212525 100644
+--- a/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
++++ b/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
+@@ -274,9 +274,9 @@ int dpaa2_io_service_register(struct dpaa2_io *d,
+ 
+ 	/* Enable the generation of CDAN notifications */
+ 	if (ctx->is_cdan)
+-		qbman_swp_CDAN_set_context_enable(d->swp,
+-						  (u16)ctx->id,
+-						  ctx->qman64);
++		return qbman_swp_CDAN_set_context_enable(d->swp,
++							 (u16)ctx->id,
++							 ctx->qman64);
+ 	return 0;
+ }
+ EXPORT_SYMBOL_GPL(dpaa2_io_service_register);
+-- 
+1.7.1
+
