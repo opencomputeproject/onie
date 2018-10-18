@@ -1,0 +1,44 @@
+From 2445defa1ffbbdec08833ea15f01e506950c7344 Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Tue, 26 Jul 2016 15:43:43 +0300
+Subject: [PATCH 334/448] arm64: KVM: support flushing device memory
+
+In the current implementation, trying to flush
+memory not covered by the linear map (e.g. device
+memory) causes a crash. Add support for flushing
+"non-normal" memory by explicitly ioremap()-ing
+it when such a case appears and do the cache flush
+through this temporary mapping.
+This allows dropping the special checks for qman
+cacheable region when doing cache flushes.
+
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+---
+ arch/arm64/include/asm/kvm_mmu.h |   11 +++++++++--
+ 1 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/include/asm/kvm_mmu.h b/arch/arm64/include/asm/kvm_mmu.h
+index 80bf337..9b638c6 100644
+--- a/arch/arm64/include/asm/kvm_mmu.h
++++ b/arch/arm64/include/asm/kvm_mmu.h
+@@ -254,8 +254,15 @@ static inline void __coherent_cache_guest_page(struct kvm_vcpu *vcpu,
+ 
+ static inline void __kvm_flush_dcache_pte(pte_t pte)
+ {
+-	struct page *page = pte_page(pte);
+-	kvm_flush_dcache_to_poc(page_address(page), PAGE_SIZE);
++	if (pfn_valid(pte_pfn(pte))) {
++		struct page *page = pte_page(pte);
++		kvm_flush_dcache_to_poc(page_address(page), PAGE_SIZE);
++	} else {
++		void __iomem *va = ioremap_cache_ns(pte_pfn(pte) << PAGE_SHIFT, PAGE_SIZE);
++
++		kvm_flush_dcache_to_poc(va, PAGE_SIZE);
++		iounmap(va);
++	}
+ }
+ 
+ static inline void __kvm_flush_dcache_pmd(pmd_t pmd)
+-- 
+1.7.1
+

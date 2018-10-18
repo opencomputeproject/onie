@@ -1,0 +1,122 @@
+From 83846a021deb6e9c2bcfcd9e34eaea729362aba4 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 16 Nov 2017 13:01:02 +0200
+Subject: [PATCH 191/448] staging: fsl-dpaa2/eth: Compute needed headroom per frame
+
+Not all Tx frames require the same amount of headroom (e.g., only
+those for which timestamping is enabled need to reserve HWA), so
+decide the headroom size on a frame by frame basis.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   10 ++++---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |   33 +++++++++++++++++++----
+ 2 files changed, 33 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 9d49c9d..fdf6c55 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -664,7 +664,8 @@ static int build_single_fd(struct dpaa2_eth_priv *priv,
+ 	struct dpaa2_eth_swa *swa;
+ 	dma_addr_t addr;
+ 
+-	buffer_start = PTR_ALIGN(skb->data - dpaa2_eth_tx_headroom(priv),
++	buffer_start = PTR_ALIGN(skb->data -
++				 dpaa2_eth_needed_headroom(priv, skb),
+ 				 DPAA2_ETH_TX_BUF_ALIGN);
+ 
+ 	/* Store a backpointer to the skb at the beginning of the buffer
+@@ -772,6 +773,7 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 	struct dpaa2_fd fd;
+ 	struct rtnl_link_stats64 *percpu_stats;
+ 	struct dpaa2_eth_drv_stats *percpu_extras;
++	unsigned int needed_headroom;
+ 	struct dpaa2_eth_fq *fq;
+ 	u16 queue_mapping;
+ 	int err, i;
+@@ -793,11 +795,11 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 	percpu_extras = this_cpu_ptr(priv->percpu_extras);
+ 
+ 	/* For non-linear skb we don't need a minimum headroom */
+-	if (skb_headroom(skb) < dpaa2_eth_tx_headroom(priv) &&
+-	    !skb_is_nonlinear(skb)) {
++	needed_headroom = dpaa2_eth_needed_headroom(priv, skb);
++	if (skb_headroom(skb) < needed_headroom) {
+ 		struct sk_buff *ns;
+ 
+-		ns = skb_realloc_headroom(skb, dpaa2_eth_tx_headroom(priv));
++		ns = skb_realloc_headroom(skb, needed_headroom);
+ 		if (unlikely(!ns)) {
+ 			percpu_stats->tx_dropped++;
+ 			goto err_alloc_headroom;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 4abf888..586fb93 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -98,6 +98,7 @@
+ 
+ /* Hardware requires alignment for ingress/egress buffer addresses */
+ #define DPAA2_ETH_TX_BUF_ALIGN		64
++
+ /* Due to a limitation in WRIOP 1.0.0, the RX buffer data must be aligned
+  * to 256B. For newer revisions, the requirement is only for 64B alignment
+  */
+@@ -111,8 +112,9 @@
+ /* PTP nominal frequency 1GHz */
+ #define DPAA2_PTP_NOMINAL_FREQ_PERIOD_NS 1
+ 
+-/* Hardware annotation area in RX buffers */
++/* Hardware annotation area in RX/TX buffers */
+ #define DPAA2_ETH_RX_HWA_SIZE		64
++#define DPAA2_ETH_TX_HWA_SIZE		128
+ 
+ /* We are accommodating a skb backpointer and some S/G info
+  * in the frame's software annotation. The hardware
+@@ -463,19 +465,38 @@ static inline unsigned int dpaa2_eth_buf_raw_size(struct dpaa2_eth_priv *priv)
+ }
+ 
+ /* Total headroom needed by the hardware in Tx frame buffers */
+-static inline unsigned int dpaa2_eth_tx_headroom(struct dpaa2_eth_priv *priv)
++static inline unsigned int
++dpaa2_eth_needed_headroom(struct dpaa2_eth_priv *priv, struct sk_buff *skb)
+ {
+-	return priv->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN;
++	unsigned int headroom = DPAA2_ETH_SWA_SIZE + DPAA2_ETH_TX_BUF_ALIGN;
++
++	/* If we don't have an skb (e.g. XDP buffer), we only need space for
++	 * the software annotation area
++	 */
++	if (!skb)
++		return headroom;
++
++	/* For non-linear skbs we have no headroom requirement, as we build a
++	 * SG frame with a newly allocated SGT buffer
++	 */
++	if (skb_is_nonlinear(skb))
++		return 0;
++
++	/* If we have Tx timestamping, need 128B hardware annotation */
++	if (priv->ts_tx_en && skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)
++		headroom += DPAA2_ETH_TX_HWA_SIZE;
++
++	return headroom;
+ }
+ 
+ /* Extra headroom space requested to hardware, in order to make sure there's
+  * no realloc'ing in forwarding scenarios. We need to reserve enough space
+- * such that we can accommodate the required Tx offset and alignment in the
+- * ingress frame buffer
++ * such that we can accommodate the maximum required Tx offset and alignment
++ * in the ingress frame buffer
+  */
+ static inline unsigned int dpaa2_eth_rx_headroom(struct dpaa2_eth_priv *priv)
+ {
+-	return dpaa2_eth_tx_headroom(priv) -
++	return priv->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN -
+ 	       (DPAA2_ETH_SWA_SIZE + DPAA2_ETH_RX_HWA_SIZE);
+ }
+ 
+-- 
+1.7.1
+

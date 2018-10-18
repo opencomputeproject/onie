@@ -1,0 +1,102 @@
+From b7a103fd5fc3a94a0671b6246697a09d7f12a85e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Wed, 25 Jul 2018 09:49:25 +0300
+Subject: [PATCH 438/448] crypto: caam - fix DMA mapping direction for RSA forms 2 & 3
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Crypto engine needs some temporary locations in external memory for
+running RSA decrypt forms 2 and 3 (CRT).
+These are named "tmp1" and "tmp2" in the PDB.
+
+Update DMA mapping direction of tmp1 and tmp2 from TO_DEVICE to
+BIDIRECTIONAL, since engine needs r/w access.
+
+Cc: <stable@vger.kernel.org> # 4.13+
+Fixes: 52e26d77b8b3 ("crypto: caam - add support for RSA key form 2")
+Fixes: 4a651b122adb ("crypto: caam - add support for RSA key form 3")
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/caam/caampkc.c |   20 ++++++++++----------
+ 1 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/crypto/caam/caampkc.c b/drivers/crypto/caam/caampkc.c
+index 4fcb378..e835b61 100644
+--- a/drivers/crypto/caam/caampkc.c
++++ b/drivers/crypto/caam/caampkc.c
+@@ -71,8 +71,8 @@ static void rsa_priv_f2_unmap(struct device *dev, struct rsa_edesc *edesc,
+ 	dma_unmap_single(dev, pdb->d_dma, key->d_sz, DMA_TO_DEVICE);
+ 	dma_unmap_single(dev, pdb->p_dma, p_sz, DMA_TO_DEVICE);
+ 	dma_unmap_single(dev, pdb->q_dma, q_sz, DMA_TO_DEVICE);
+-	dma_unmap_single(dev, pdb->tmp1_dma, p_sz, DMA_TO_DEVICE);
+-	dma_unmap_single(dev, pdb->tmp2_dma, q_sz, DMA_TO_DEVICE);
++	dma_unmap_single(dev, pdb->tmp1_dma, p_sz, DMA_BIDIRECTIONAL);
++	dma_unmap_single(dev, pdb->tmp2_dma, q_sz, DMA_BIDIRECTIONAL);
+ }
+ 
+ static void rsa_priv_f3_unmap(struct device *dev, struct rsa_edesc *edesc,
+@@ -90,8 +90,8 @@ static void rsa_priv_f3_unmap(struct device *dev, struct rsa_edesc *edesc,
+ 	dma_unmap_single(dev, pdb->dp_dma, p_sz, DMA_TO_DEVICE);
+ 	dma_unmap_single(dev, pdb->dq_dma, q_sz, DMA_TO_DEVICE);
+ 	dma_unmap_single(dev, pdb->c_dma, p_sz, DMA_TO_DEVICE);
+-	dma_unmap_single(dev, pdb->tmp1_dma, p_sz, DMA_TO_DEVICE);
+-	dma_unmap_single(dev, pdb->tmp2_dma, q_sz, DMA_TO_DEVICE);
++	dma_unmap_single(dev, pdb->tmp1_dma, p_sz, DMA_BIDIRECTIONAL);
++	dma_unmap_single(dev, pdb->tmp2_dma, q_sz, DMA_BIDIRECTIONAL);
+ }
+ 
+ /* RSA Job Completion handler */
+@@ -364,13 +364,13 @@ static int set_rsa_priv_f2_pdb(struct akcipher_request *req,
+ 		goto unmap_p;
+ 	}
+ 
+-	pdb->tmp1_dma = dma_map_single(dev, key->tmp1, p_sz, DMA_TO_DEVICE);
++	pdb->tmp1_dma = dma_map_single(dev, key->tmp1, p_sz, DMA_BIDIRECTIONAL);
+ 	if (dma_mapping_error(dev, pdb->tmp1_dma)) {
+ 		dev_err(dev, "Unable to map RSA tmp1 memory\n");
+ 		goto unmap_q;
+ 	}
+ 
+-	pdb->tmp2_dma = dma_map_single(dev, key->tmp2, q_sz, DMA_TO_DEVICE);
++	pdb->tmp2_dma = dma_map_single(dev, key->tmp2, q_sz, DMA_BIDIRECTIONAL);
+ 	if (dma_mapping_error(dev, pdb->tmp2_dma)) {
+ 		dev_err(dev, "Unable to map RSA tmp2 memory\n");
+ 		goto unmap_tmp1;
+@@ -398,7 +398,7 @@ static int set_rsa_priv_f2_pdb(struct akcipher_request *req,
+ 	return 0;
+ 
+ unmap_tmp1:
+-	dma_unmap_single(dev, pdb->tmp1_dma, p_sz, DMA_TO_DEVICE);
++	dma_unmap_single(dev, pdb->tmp1_dma, p_sz, DMA_BIDIRECTIONAL);
+ unmap_q:
+ 	dma_unmap_single(dev, pdb->q_dma, q_sz, DMA_TO_DEVICE);
+ unmap_p:
+@@ -451,13 +451,13 @@ static int set_rsa_priv_f3_pdb(struct akcipher_request *req,
+ 		goto unmap_dq;
+ 	}
+ 
+-	pdb->tmp1_dma = dma_map_single(dev, key->tmp1, p_sz, DMA_TO_DEVICE);
++	pdb->tmp1_dma = dma_map_single(dev, key->tmp1, p_sz, DMA_BIDIRECTIONAL);
+ 	if (dma_mapping_error(dev, pdb->tmp1_dma)) {
+ 		dev_err(dev, "Unable to map RSA tmp1 memory\n");
+ 		goto unmap_qinv;
+ 	}
+ 
+-	pdb->tmp2_dma = dma_map_single(dev, key->tmp2, q_sz, DMA_TO_DEVICE);
++	pdb->tmp2_dma = dma_map_single(dev, key->tmp2, q_sz, DMA_BIDIRECTIONAL);
+ 	if (dma_mapping_error(dev, pdb->tmp2_dma)) {
+ 		dev_err(dev, "Unable to map RSA tmp2 memory\n");
+ 		goto unmap_tmp1;
+@@ -485,7 +485,7 @@ static int set_rsa_priv_f3_pdb(struct akcipher_request *req,
+ 	return 0;
+ 
+ unmap_tmp1:
+-	dma_unmap_single(dev, pdb->tmp1_dma, p_sz, DMA_TO_DEVICE);
++	dma_unmap_single(dev, pdb->tmp1_dma, p_sz, DMA_BIDIRECTIONAL);
+ unmap_qinv:
+ 	dma_unmap_single(dev, pdb->c_dma, p_sz, DMA_TO_DEVICE);
+ unmap_dq:
+-- 
+1.7.1
+

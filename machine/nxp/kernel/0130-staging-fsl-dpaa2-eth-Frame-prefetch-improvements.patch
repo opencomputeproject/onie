@@ -1,0 +1,39 @@
+From 3e39e05776fa63fbb2134f5c4a362c1a0f1aa636 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 13 Apr 2017 18:11:03 +0300
+Subject: [PATCH 130/448] staging: fsl-dpaa2/eth: Frame prefetch improvements
+
+Besides prefetching frame annotation and data on the Rx path, also
+prefetch frame annotation on Tx conf path and the frame descriptor
+itself.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 89d3c38..54a3c87 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -315,6 +315,8 @@ static int consume_frames(struct dpaa2_eth_channel *ch)
+ 		}
+ 
+ 		fd = dpaa2_dq_fd(dq);
++		prefetch(fd);
++
+ 		fq = (struct dpaa2_eth_fq *)dpaa2_dq_fqd_ctx(dq);
+ 		fq->stats.frames++;
+ 
+@@ -504,6 +506,7 @@ static void free_tx_fd(const struct dpaa2_eth_priv *priv,
+ 	fd_addr = dpaa2_fd_get_addr(fd);
+ 	skbh = dpaa2_iova_to_virt(priv->iommu_domain, fd_addr);
+ 	fas = dpaa2_get_fas(skbh);
++	prefetch(fas);
+ 
+ 	if (fd_format == dpaa2_fd_single) {
+ 		skb = *skbh;
+-- 
+1.7.1
+

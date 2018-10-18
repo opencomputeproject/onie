@@ -1,0 +1,92 @@
+From 66b6cf792745936b94b14cbfcc2fcb3dd45208ef Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 23 Nov 2017 22:36:11 +0200
+Subject: [PATCH 195/448] staging: fsl-dpaa2/eth: Remove SWA on Rx
+
+We don't use the software annotation for anything in Rx buffers,
+so just remove it from the buffer layout.
+
+Now all accesses to Rx buffers HWA is done assuming no SWA in place;
+also, for XDP_TX we reuse the Rx FD and buffer, so no SWA there either.
+
+Rx extra headroom increases, since the same total headroom size is
+required for Rx frames.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   12 ++++++------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    2 +-
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index e661613..9b84dc2 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -236,10 +236,10 @@ static int dpaa2_eth_xdp_tx(struct dpaa2_eth_priv *priv,
+ 	/* Mark the egress frame annotation area as valid */
+ 	frc = dpaa2_fd_get_frc(fd);
+ 	dpaa2_fd_set_frc(fd, frc | DPAA2_FD_FRC_FAEADV);
+-	dpaa2_fd_set_ctrl(fd, DPAA2_FD_CTRL_PTA | DPAA2_FD_CTRL_ASAL);
++	dpaa2_fd_set_ctrl(fd, DPAA2_FD_CTRL_ASAL);
+ 
+ 	ctrl = DPAA2_FAEAD_A4V | DPAA2_FAEAD_A2V | DPAA2_FAEAD_EBDDV;
+-	faead = dpaa2_get_faead(buf_start, true);
++	faead = dpaa2_get_faead(buf_start, false);
+ 	faead->ctrl = cpu_to_le32(ctrl);
+ 	faead->conf_fqid = 0;
+ 
+@@ -329,7 +329,7 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 	dma_sync_single_for_cpu(dev, addr, DPAA2_ETH_RX_BUF_SIZE,
+ 				DMA_BIDIRECTIONAL);
+ 
+-	fas = dpaa2_get_fas(vaddr, true);
++	fas = dpaa2_get_fas(vaddr, false);
+ 	prefetch(fas);
+ 	buf_data = vaddr + dpaa2_fd_get_offset(fd);
+ 	prefetch(buf_data);
+@@ -397,7 +397,7 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 	/* Get the timestamp value */
+ 	if (priv->ts_rx_en) {
+ 		struct skb_shared_hwtstamps *shhwtstamps = skb_hwtstamps(skb);
+-		u64 *ns = dpaa2_get_ts(vaddr, true);
++		u64 *ns = dpaa2_get_ts(vaddr, false);
+ 
+ 		*ns = DPAA2_PTP_NOMINAL_FREQ_PERIOD_NS * le64_to_cpup(ns);
+ 		memset(shhwtstamps, 0, sizeof(*shhwtstamps));
+@@ -465,7 +465,7 @@ static void dpaa2_eth_rx_err(struct dpaa2_eth_priv *priv,
+ 
+ 	/* check frame errors in the FAS field */
+ 	if (has_fas_errors) {
+-		fas = dpaa2_get_fas(vaddr, true);
++		fas = dpaa2_get_fas(vaddr, false);
+ 		status = le32_to_cpu(fas->status);
+ 		if (net_ratelimit())
+ 			netdev_dbg(priv->net_dev, "Rx frame FAS err: 0x%08x\n",
+@@ -1663,10 +1663,10 @@ static int set_buffer_layout(struct dpaa2_eth_priv *priv)
+ 	buf_layout.pass_frame_status = true;
+ 	buf_layout.pass_parser_result = true;
+ 	buf_layout.data_align = priv->rx_buf_align;
++	buf_layout.private_data_size = 0;
+ 	buf_layout.data_head_room = dpaa2_eth_rx_headroom(priv);
+ 	buf_layout.options = DPNI_BUF_LAYOUT_OPT_PARSER_RESULT |
+ 			     DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
+-			     DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE |
+ 			     DPNI_BUF_LAYOUT_OPT_DATA_ALIGN |
+ 			     DPNI_BUF_LAYOUT_OPT_DATA_HEAD_ROOM |
+ 			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index b9ff943..1bbced5 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -508,7 +508,7 @@ static inline unsigned int dpaa2_eth_buf_raw_size(struct dpaa2_eth_priv *priv)
+ static inline unsigned int dpaa2_eth_rx_headroom(struct dpaa2_eth_priv *priv)
+ {
+ 	return priv->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN -
+-	       (DPAA2_ETH_SWA_SIZE + DPAA2_ETH_RX_HWA_SIZE);
++	       DPAA2_ETH_RX_HWA_SIZE;
+ }
+ 
+ static inline int dpaa2_eth_queue_count(struct dpaa2_eth_priv *priv)
+-- 
+1.7.1
+

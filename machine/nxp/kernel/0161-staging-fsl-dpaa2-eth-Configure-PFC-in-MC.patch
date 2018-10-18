@@ -1,0 +1,126 @@
+From f4969d04040b81b50536c7f0cc65322bd64ed9d7 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Tue, 8 Aug 2017 12:15:07 +0000
+Subject: [PATCH 161/448] staging: fsl-dpaa2/eth: Configure PFC in MC
+
+Implement the following:
+- Enable PFC in DPNI options.
+- Set queue taildrops for priorities (traffic classes) that are not PFC
+  enabled (pause frames are not sent in case of congestion). Since the
+  buffer pool is shared, we can't risk other traffic to consume all
+  available buffers.
+- Configure Rx congestion notifications for PFC enabled priorities.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   58 +++++++++++++++++++++++-
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h      |   10 ++++
+ 2 files changed, 67 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 485bceb..3c8e41a 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -3042,14 +3042,70 @@ static int dpaa2_eth_dcbnl_ieee_setpfc(struct net_device *net_dev,
+ 				       struct ieee_pfc *pfc)
+ {
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+-	int err;
++	struct dpni_congestion_notification_cfg notification_cfg = {0};
++	struct dpni_link_state state = {0};
++	struct dpni_link_cfg cfg = {0};
++	int err = 0, i;
++
++	if (priv->pfc.pfc_en == pfc->pfc_en)
++		/* Same enabled mask, nothing to be done */
++		return 0;
+ 
+ 	err = set_vlan_qos(priv);
+ 	if (err)
+ 		return err;
+ 
++	err = dpni_get_link_state(priv->mc_io, 0, priv->mc_token, &state);
++	if (err) {
++		netdev_err(net_dev, "ERROR %d getting link state", err);
++		return err;
++	}
++
++	cfg.rate = state.rate;
++	cfg.options = state.options;
++	if (pfc->pfc_en)
++		cfg.options |= DPNI_LINK_OPT_PFC_PAUSE;
++	else
++		cfg.options &= ~DPNI_LINK_OPT_PFC_PAUSE;
++
++	err = dpni_set_link_cfg(priv->mc_io, 0, priv->mc_token, &cfg);
++	if (err) {
++		netdev_err(net_dev, "ERROR %d setting link cfg", err);
++		return err;
++	}
++
+ 	memcpy(&priv->pfc, pfc, sizeof(priv->pfc));
+ 
++	err = set_rx_taildrop(priv);
++	if (err)
++		return err;
++
++	/* configure congestion notifications */
++	notification_cfg.notification_mode = DPNI_CONG_OPT_FLOW_CONTROL;
++	notification_cfg.units = DPNI_CONGESTION_UNIT_FRAMES;
++	notification_cfg.message_iova = 0ULL;
++	notification_cfg.message_ctx = 0ULL;
++
++	for (i = 0; i < dpaa2_eth_tc_count(priv); i++) {
++		if (dpaa2_eth_is_pfc_enabled(priv, i)) {
++			notification_cfg.threshold_entry = NAPI_POLL_WEIGHT;
++			notification_cfg.threshold_exit = NAPI_POLL_WEIGHT / 2;
++		} else {
++			notification_cfg.threshold_entry = 0;
++			notification_cfg.threshold_exit = 0;
++		}
++
++		err = dpni_set_congestion_notification(priv->mc_io, 0,
++						       priv->mc_token,
++						       DPNI_QUEUE_RX,
++						       i, &notification_cfg);
++		if (err) {
++			netdev_err(net_dev, "Error %d setting congestion notif",
++				   err);
++			return err;
++		}
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index b982121..888a089 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -519,6 +519,10 @@ int dpni_reset_statistics(struct fsl_mc_io *mc_io,
+  * Enable a-symmetric pause frames
+  */
+ #define DPNI_LINK_OPT_ASYM_PAUSE	0x0000000000000008ULL
++/**
++ * Enable priority flow control pause frames
++ */
++#define DPNI_LINK_OPT_PFC_PAUSE		0x0000000000000010ULL
+ 
+ /**
+  * struct - Structure representing DPNI link configuration
+@@ -880,6 +884,12 @@ struct dpni_dest_cfg {
+  * sw-portal's DQRR, the DQRI interrupt is asserted immediately (if enabled)
+  */
+ #define DPNI_CONG_OPT_INTR_COALESCING_DISABLED  0x00000020
++/**
++ * This congestion will trigger flow control or priority flow control.
++ * This will have effect only if flow control is enabled with
++ * dpni_set_link_cfg().
++ */
++#define DPNI_CONG_OPT_FLOW_CONTROL	0x00000040
+ 
+ /**
+  * struct dpni_congestion_notification_cfg - congestion notification
+-- 
+1.7.1
+

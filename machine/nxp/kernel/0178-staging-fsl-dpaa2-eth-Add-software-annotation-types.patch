@@ -1,0 +1,158 @@
+From 1e70cd0133f384b0c67f9bf65a4af840837d085f Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 17 Oct 2017 19:02:50 +0300
+Subject: [PATCH 178/448] staging: fsl-dpaa2/eth: Add software annotation types
+
+We write different metadata information in the software annotation
+area of Tx frames, depending on frame type. Make this more explicit
+by introducing a type field and separate structures for single buffer
+and scatter-gather frames.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   39 ++++++++++++-----------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |   24 ++++++++++++--
+ 2 files changed, 40 insertions(+), 23 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index f77194a..8439317 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -632,10 +632,11 @@ static int build_sg_fd(struct dpaa2_eth_priv *priv,
+ 	 * all of them on Tx Conf.
+ 	 */
+ 	swa = (struct dpaa2_eth_swa *)sgt_buf;
+-	swa->skb = skb;
+-	swa->scl = scl;
+-	swa->num_sg = num_sg;
+-	swa->num_dma_bufs = num_dma_bufs;
++	swa->type = DPAA2_ETH_SWA_SG;
++	swa->sg.skb = skb;
++	swa->sg.scl = scl;
++	swa->sg.num_sg = num_sg;
++	swa->sg.num_dma_bufs = num_dma_bufs;
+ 
+ 	/* Separately map the SGT buffer */
+ 	addr = dma_map_single(dev, sgt_buf, sgt_buf_size, DMA_BIDIRECTIONAL);
+@@ -672,7 +673,7 @@ static int build_single_fd(struct dpaa2_eth_priv *priv,
+ 	struct device *dev = priv->net_dev->dev.parent;
+ 	u8 *buffer_start;
+ 	struct dpaa2_fas *fas;
+-	struct sk_buff **skbh;
++	struct dpaa2_eth_swa *swa;
+ 	dma_addr_t addr;
+ 
+ 	buffer_start = PTR_ALIGN(skb->data - priv->tx_data_offset -
+@@ -691,8 +692,9 @@ static int build_single_fd(struct dpaa2_eth_priv *priv,
+ 	 * (in the private data area) such that we can release it
+ 	 * on Tx confirm
+ 	 */
+-	skbh = (struct sk_buff **)buffer_start;
+-	*skbh = skb;
++	swa = (struct dpaa2_eth_swa *)buffer_start;
++	swa->type = DPAA2_ETH_SWA_SINGLE;
++	swa->single.skb = skb;
+ 
+ 	addr = dma_map_single(dev, buffer_start,
+ 			      skb_tail_pointer(skb) - buffer_start,
+@@ -728,7 +730,7 @@ static void free_tx_fd(struct dpaa2_eth_priv *priv,
+ {
+ 	struct device *dev = priv->net_dev->dev.parent;
+ 	dma_addr_t fd_addr;
+-	struct sk_buff **skbh, *skb;
++	struct sk_buff *skb;
+ 	unsigned char *buffer_start;
+ 	int unmap_size;
+ 	struct scatterlist *scl;
+@@ -738,13 +740,13 @@ static void free_tx_fd(struct dpaa2_eth_priv *priv,
+ 	struct dpaa2_fas *fas;
+ 
+ 	fd_addr = dpaa2_fd_get_addr(fd);
+-	skbh = dpaa2_iova_to_virt(priv->iommu_domain, fd_addr);
+-	fas = dpaa2_get_fas(skbh);
++	buffer_start = dpaa2_iova_to_virt(priv->iommu_domain, fd_addr);
++	fas = dpaa2_get_fas(buffer_start);
+ 	prefetch(fas);
++	swa = (struct dpaa2_eth_swa *)buffer_start;
+ 
+ 	if (fd_format == dpaa2_fd_single) {
+-		skb = *skbh;
+-		buffer_start = (unsigned char *)skbh;
++		skb = swa->single.skb;
+ 		/* Accessing the skb buffer is safe before dma unmap, because
+ 		 * we didn't map the actual skb shell.
+ 		 */
+@@ -752,11 +754,10 @@ static void free_tx_fd(struct dpaa2_eth_priv *priv,
+ 				 skb_tail_pointer(skb) - buffer_start,
+ 				 DMA_BIDIRECTIONAL);
+ 	} else if (fd_format == dpaa2_fd_sg) {
+-		swa = (struct dpaa2_eth_swa *)skbh;
+-		skb = swa->skb;
+-		scl = swa->scl;
+-		num_sg = swa->num_sg;
+-		num_dma_bufs = swa->num_dma_bufs;
++		skb = swa->sg.skb;
++		scl = swa->sg.scl;
++		num_sg = swa->sg.num_sg;
++		num_dma_bufs = swa->sg.num_dma_bufs;
+ 
+ 		/* Unmap the scatterlist */
+ 		dma_unmap_sg(dev, scl, num_sg, DMA_BIDIRECTIONAL);
+@@ -780,7 +781,7 @@ static void free_tx_fd(struct dpaa2_eth_priv *priv,
+ 
+ 		memset(&shhwtstamps, 0, sizeof(shhwtstamps));
+ 
+-		ns = dpaa2_get_ts(skbh);
++		ns = dpaa2_get_ts(buffer_start);
+ 		*ns = DPAA2_PTP_NOMINAL_FREQ_PERIOD_NS * le64_to_cpup(ns);
+ 		shhwtstamps.hwtstamp = ns_to_ktime(*ns);
+ 		skb_tstamp_tx(skb, &shhwtstamps);
+@@ -795,7 +796,7 @@ static void free_tx_fd(struct dpaa2_eth_priv *priv,
+ 
+ 	/* Free SGT buffer kmalloc'ed on tx */
+ 	if (fd_format != dpaa2_fd_single)
+-		kfree(skbh);
++		kfree(buffer_start);
+ 
+ 	/* Move on with skb release */
+ 	dev_kfree_skb(skb);
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 86956b7..08b8265 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -135,12 +135,28 @@
+ 	(DPAA2_ETH_TX_HWA_SIZE - DPAA2_ETH_RX_HWA_SIZE + \
+ 	 DPAA2_ETH_TX_BUF_ALIGN)
+ 
++/* We store different information in the software annotation area of a Tx frame
++ * based on what type of frame it is
++ */
++enum dpaa2_eth_swa_type {
++	DPAA2_ETH_SWA_SINGLE,
++	DPAA2_ETH_SWA_SG,
++};
++
+ /* Must keep this struct smaller than DPAA2_ETH_SWA_SIZE */
+ struct dpaa2_eth_swa {
+-	struct sk_buff *skb;
+-	struct scatterlist *scl;
+-	int num_sg;
+-	int num_dma_bufs;
++	enum dpaa2_eth_swa_type type;
++	union {
++		struct {
++			struct sk_buff *skb;
++		} single;
++		struct {
++			struct sk_buff *skb;
++			struct scatterlist *scl;
++			int num_sg;
++			int num_dma_bufs;
++		} sg;
++	};
+ };
+ 
+ /* Annotation valid bits in FD FRC */
+-- 
+1.7.1
+

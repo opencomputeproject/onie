@@ -1,0 +1,205 @@
+From 1271594248e021e29ad6f040b9388783360a9ab4 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 28 Apr 2017 16:51:33 +0300
+Subject: [PATCH 135/448] staging: fsl-dpaa2/eth: Add congestion notification API
+
+The hardware can issue a notification when the frames
+enqueued in a specified queue or set of queues go beyond
+a certain threshold.
+
+Add the DPNI object API for configuring this functionality.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h |   25 ++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.c     |   46 ++++++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h     |   82 +++++++++++++++++++++++++
+ 3 files changed, 153 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+index 57df222..d6ec520 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+@@ -538,4 +538,29 @@ struct dpni_rsp_get_taildrop {
+ 	__le32 threshold;
+ };
+ 
++#define DPNI_DEST_TYPE_SHIFT		0
++#define DPNI_DEST_TYPE_SIZE		4
++#define DPNI_CONG_UNITS_SHIFT		4
++#define DPNI_CONG_UNITS_SIZE		2
++
++struct dpni_cmd_set_congestion_notification {
++	/* cmd word 0 */
++	u8 qtype;
++	u8 tc;
++	u8 pad[6];
++	/* cmd word 1 */
++	u32 dest_id;
++	u16 notification_mode;
++	u8 dest_priority;
++	/* from LSB: dest_type: 4 units:2 */
++	u8 type_units;
++	/* cmd word 2 */
++	u64 message_iova;
++	/* cmd word 3 */
++	u64 message_ctx;
++	/* cmd word 4 */
++	u32 threshold_entry;
++	u32 threshold_exit;
++};
++
+ #endif /* _FSL_DPNI_CMD_H */
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.c b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+index 67f0623..9bab833 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+@@ -1347,6 +1347,52 @@ int dpni_set_rx_tc_dist(struct fsl_mc_io *mc_io,
+ }
+ 
+ /**
++ * dpni_set_congestion_notification() - Set traffic class congestion
++ *					notification configuration
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:	Token of DPNI object
++ * @qtype:	Type of queue - Rx, Tx and Tx confirm types are supported
++ * @tc_id:	Traffic class selection (0-7)
++ * @cfg:	Congestion notification configuration
++ *
++ * Return:	'0' on Success; error code otherwise.
++ */
++int dpni_set_congestion_notification(
++			struct fsl_mc_io *mc_io,
++			u32 cmd_flags,
++			u16 token,
++			enum dpni_queue_type qtype,
++			u8 tc_id,
++			const struct dpni_congestion_notification_cfg *cfg)
++{
++	struct dpni_cmd_set_congestion_notification *cmd_params;
++	struct mc_command cmd = { 0 };
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(
++			DPNI_CMDID_SET_CONGESTION_NOTIFICATION,
++			cmd_flags,
++			token);
++	cmd_params = (struct dpni_cmd_set_congestion_notification *)cmd.params;
++	cmd_params->qtype = qtype;
++	cmd_params->tc = tc_id;
++	cmd_params->dest_id = cpu_to_le32(cfg->dest_cfg.dest_id);
++	cmd_params->notification_mode = cpu_to_le16(cfg->notification_mode);
++	cmd_params->dest_priority = cfg->dest_cfg.priority;
++	dpni_set_field(cmd_params->type_units, DEST_TYPE,
++		       cfg->dest_cfg.dest_type);
++	dpni_set_field(cmd_params->type_units, CONG_UNITS, cfg->units);
++	cmd_params->message_iova = cpu_to_le64(cfg->message_iova);
++	cmd_params->message_ctx = cpu_to_le64(cfg->message_ctx);
++	cmd_params->threshold_entry = cpu_to_le32(cfg->threshold_entry);
++	cmd_params->threshold_exit = cpu_to_le32(cfg->threshold_exit);
++
++	/* send command to mc*/
++	return mc_send_command(mc_io, &cmd);
++}
++
++/**
+  * dpni_set_queue() - Set queue parameters
+  * @mc_io:	Pointer to MC portal's I/O object
+  * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index 282e5e8..8d9e43b 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -784,6 +784,88 @@ enum dpni_congestion_point {
+ };
+ 
+ /**
++ * struct dpni_dest_cfg - Structure representing DPNI destination parameters
++ * @dest_type:	Destination type
++ * @dest_id:	Either DPIO ID or DPCON ID, depending on the destination type
++ * @priority:	Priority selection within the DPIO or DPCON channel; valid
++ *		values are 0-1 or 0-7, depending on the number of priorities
++ *		in that channel; not relevant for 'DPNI_DEST_NONE' option
++ */
++struct dpni_dest_cfg {
++	enum dpni_dest dest_type;
++	int dest_id;
++	u8 priority;
++};
++
++/* DPNI congestion options */
++
++/**
++ * CSCN message is written to message_iova once entering a
++ * congestion state (see 'threshold_entry')
++ */
++#define DPNI_CONG_OPT_WRITE_MEM_ON_ENTER        0x00000001
++/**
++ * CSCN message is written to message_iova once exiting a
++ * congestion state (see 'threshold_exit')
++ */
++#define DPNI_CONG_OPT_WRITE_MEM_ON_EXIT         0x00000002
++/**
++ * CSCN write will attempt to allocate into a cache (coherent write);
++ * valid only if 'DPNI_CONG_OPT_WRITE_MEM_<X>' is selected
++ */
++#define DPNI_CONG_OPT_COHERENT_WRITE            0x00000004
++/**
++ * if 'dest_cfg.dest_type != DPNI_DEST_NONE' CSCN message is sent to
++ * DPIO/DPCON's WQ channel once entering a congestion state
++ * (see 'threshold_entry')
++ */
++#define DPNI_CONG_OPT_NOTIFY_DEST_ON_ENTER      0x00000008
++/**
++ * if 'dest_cfg.dest_type != DPNI_DEST_NONE' CSCN message is sent to
++ * DPIO/DPCON's WQ channel once exiting a congestion state
++ * (see 'threshold_exit')
++ */
++#define DPNI_CONG_OPT_NOTIFY_DEST_ON_EXIT       0x00000010
++/**
++ * if 'dest_cfg.dest_type != DPNI_DEST_NONE' when the CSCN is written to the
++ * sw-portal's DQRR, the DQRI interrupt is asserted immediately (if enabled)
++ */
++#define DPNI_CONG_OPT_INTR_COALESCING_DISABLED  0x00000020
++
++/**
++ * struct dpni_congestion_notification_cfg - congestion notification
++ *					configuration
++ * @units: Units type
++ * @threshold_entry: Above this threshold we enter a congestion state.
++ *		set it to '0' to disable it
++ * @threshold_exit: Below this threshold we exit the congestion state.
++ * @message_ctx: The context that will be part of the CSCN message
++ * @message_iova: I/O virtual address (must be in DMA-able memory),
++ *		must be 16B aligned; valid only if 'DPNI_CONG_OPT_WRITE_MEM_<X>'
++ *		is contained in 'options'
++ * @dest_cfg: CSCN can be send to either DPIO or DPCON WQ channel
++ * @notification_mode: Mask of available options; use 'DPNI_CONG_OPT_<X>' values
++ */
++
++struct dpni_congestion_notification_cfg {
++	enum dpni_congestion_unit units;
++	u32 threshold_entry;
++	u32 threshold_exit;
++	u64 message_ctx;
++	u64 message_iova;
++	struct dpni_dest_cfg dest_cfg;
++	u16 notification_mode;
++};
++
++int dpni_set_congestion_notification(
++			struct fsl_mc_io *mc_io,
++			u32 cmd_flags,
++			u16 token,
++			enum dpni_queue_type qtype,
++			u8 tc_id,
++			const struct dpni_congestion_notification_cfg *cfg);
++
++/**
+  * struct dpni_taildrop - Structure representing the taildrop
+  * @enable:	Indicates whether the taildrop is active or not.
+  * @units:	Indicates the unit of THRESHOLD. Queue taildrop only supports
+-- 
+1.7.1
+

@@ -1,0 +1,574 @@
+From 577cd492770d3ad2ccd583d32ff34a7d35bb0e93 Mon Sep 17 00:00:00 2001
+From: Thomas Gleixner <tglx@linutronix.de>
+Date: Tue, 20 Jun 2017 01:37:17 +0200
+Subject: [PATCH 322/448] genirq/debugfs: Add proper debugfs interface
+
+Debugging (hierarchical) interupt domains is tedious as there is no
+information about the hierarchy and no information about states of
+interrupts in the various domain levels.
+
+Add a debugfs directory 'irq' and subdirectories 'domains' and 'irqs'.
+
+The domains directory contains the domain files. The content is information
+about the domain. If the domain is part of a hierarchy then the parent
+domains are printed as well.
+
+# ls /sys/kernel/debug/irq/domains/
+default     INTEL-IR-2	    INTEL-IR-MSI-2  IO-APIC-IR-2  PCI-MSI
+DMAR-MSI    INTEL-IR-3	    INTEL-IR-MSI-3  IO-APIC-IR-3  unknown-1
+INTEL-IR-0  INTEL-IR-MSI-0  IO-APIC-IR-0    IO-APIC-IR-4  VECTOR
+INTEL-IR-1  INTEL-IR-MSI-1  IO-APIC-IR-1    PCI-HT
+
+# cat /sys/kernel/debug/irq/domains/VECTOR
+name:   VECTOR
+ size:   0
+ mapped: 216
+ flags:  0x00000041
+
+# cat /sys/kernel/debug/irq/domains/IO-APIC-IR-0
+name:   IO-APIC-IR-0
+ size:   24
+ mapped: 19
+ flags:  0x00000041
+ parent: INTEL-IR-3
+    name:   INTEL-IR-3
+     size:   65536
+     mapped: 167
+     flags:  0x00000041
+     parent: VECTOR
+        name:   VECTOR
+         size:   0
+         mapped: 216
+         flags:  0x00000041
+
+Unfortunately there is no per cpu information about the VECTOR domain (yet).
+
+The irqs directory contains detailed information about mapped interrupts.
+
+# cat /sys/kernel/debug/irq/irqs/3
+handler:  handle_edge_irq
+status:   0x00004000
+istate:   0x00000000
+ddepth:   1
+wdepth:   0
+dstate:   0x01018000
+            IRQD_IRQ_DISABLED
+            IRQD_SINGLE_TARGET
+            IRQD_MOVE_PCNTXT
+node:     0
+affinity: 0-143
+effectiv: 0
+pending:
+domain:  IO-APIC-IR-0
+ hwirq:   0x3
+ chip:    IR-IO-APIC
+  flags:   0x10
+             IRQCHIP_SKIP_SET_WAKE
+ parent:
+    domain:  INTEL-IR-3
+     hwirq:   0x20000
+     chip:    INTEL-IR
+      flags:   0x0
+     parent:
+        domain:  VECTOR
+         hwirq:   0x3
+         chip:    APIC
+          flags:   0x0
+
+This was developed to simplify the debugging of the managed affinity
+changes.
+
+Signed-off-by: Thomas Gleixner <tglx@linutronix.de>
+Acked-by: Marc Zyngier <marc.zyngier@arm.com>
+Cc: Jens Axboe <axboe@kernel.dk>
+Cc: Michael Ellerman <mpe@ellerman.id.au>
+Cc: Keith Busch <keith.busch@intel.com>
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Christoph Hellwig <hch@lst.de>
+Link: http://lkml.kernel.org/r/20170619235444.537566163@linutronix.de
+Signed-off-by: Thomas Gleixner <tglx@linutronix.de>
+---
+ include/linux/irqdesc.h   |    4 +
+ include/linux/irqdomain.h |    4 +
+ kernel/irq/Kconfig        |   11 +++
+ kernel/irq/Makefile       |    1 +
+ kernel/irq/debugfs.c      |  215 +++++++++++++++++++++++++++++++++++++++++++++
+ kernel/irq/internals.h    |   22 +++++
+ kernel/irq/irqdesc.c      |    1 +
+ kernel/irq/irqdomain.c    |   85 ++++++++++++++++++
+ kernel/irq/manage.c       |    1 +
+ 9 files changed, 344 insertions(+), 0 deletions(-)
+ create mode 100644 kernel/irq/debugfs.c
+
+diff --git a/include/linux/irqdesc.h b/include/linux/irqdesc.h
+index c9be579..d425a3a 100644
+--- a/include/linux/irqdesc.h
++++ b/include/linux/irqdesc.h
+@@ -46,6 +46,7 @@
+  * @rcu:		rcu head for delayed free
+  * @kobj:		kobject used to represent this struct in sysfs
+  * @dir:		/proc/irq/ procfs entry
++ * @debugfs_file:	dentry for the debugfs file
+  * @name:		flow handler name for /proc/interrupts output
+  */
+ struct irq_desc {
+@@ -88,6 +89,9 @@ struct irq_desc {
+ #ifdef CONFIG_PROC_FS
+ 	struct proc_dir_entry	*dir;
+ #endif
++#ifdef CONFIG_GENERIC_IRQ_DEBUGFS
++	struct dentry		*debugfs_file;
++#endif
+ #ifdef CONFIG_SPARSE_IRQ
+ 	struct rcu_head		rcu;
+ 	struct kobject		kobj;
+diff --git a/include/linux/irqdomain.h b/include/linux/irqdomain.h
+index 188eced..1ab38ff 100644
+--- a/include/linux/irqdomain.h
++++ b/include/linux/irqdomain.h
+@@ -138,6 +138,7 @@ struct irq_domain_ops {
+  *      setting up one or more generic chips for interrupt controllers
+  *      drivers using the generic chip library which uses this pointer.
+  * @parent: Pointer to parent irq_domain to support hierarchy irq_domains
++ * @debugfs_file: dentry for the domain debugfs file
+  *
+  * Revmap data, used internally by irq_domain
+  * @revmap_direct_max_irq: The largest hwirq that can be set for controllers that
+@@ -160,6 +161,9 @@ struct irq_domain {
+ #ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
+ 	struct irq_domain *parent;
+ #endif
++#ifdef CONFIG_GENERIC_IRQ_DEBUGFS
++	struct dentry		*debugfs_file;
++#endif
+ 
+ 	/* reverse map data. The linear map gets appended to the irq_domain */
+ 	irq_hw_number_t hwirq_max;
+diff --git a/kernel/irq/Kconfig b/kernel/irq/Kconfig
+index 3bbfd6a..8d9498e 100644
+--- a/kernel/irq/Kconfig
++++ b/kernel/irq/Kconfig
+@@ -108,4 +108,15 @@ config SPARSE_IRQ
+ 
+ 	  If you don't know what to do here, say N.
+ 
++config GENERIC_IRQ_DEBUGFS
++	bool "Expose irq internals in debugfs"
++	depends on DEBUG_FS
++	default n
++	---help---
++
++	  Exposes internal state information through debugfs. Mostly for
++	  developers and debugging of hard to diagnose interrupt problems.
++
++	  If you don't know what to do here, say N.
++
+ endmenu
+diff --git a/kernel/irq/Makefile b/kernel/irq/Makefile
+index 1d3ee31..c61fc9c 100644
+--- a/kernel/irq/Makefile
++++ b/kernel/irq/Makefile
+@@ -10,3 +10,4 @@ obj-$(CONFIG_PM_SLEEP) += pm.o
+ obj-$(CONFIG_GENERIC_MSI_IRQ) += msi.o
+ obj-$(CONFIG_GENERIC_IRQ_IPI) += ipi.o
+ obj-$(CONFIG_SMP) += affinity.o
++obj-$(CONFIG_GENERIC_IRQ_DEBUGFS) += debugfs.o
+diff --git a/kernel/irq/debugfs.c b/kernel/irq/debugfs.c
+new file mode 100644
+index 0000000..50ee2f6
+--- /dev/null
++++ b/kernel/irq/debugfs.c
+@@ -0,0 +1,215 @@
++/*
++ * Copyright 2017 Thomas Gleixner <tglx@linutronix.de>
++ *
++ * This file is licensed under the GPL V2.
++ */
++#include <linux/debugfs.h>
++#include <linux/irqdomain.h>
++#include <linux/irq.h>
++
++#include "internals.h"
++
++static struct dentry *irq_dir;
++
++struct irq_bit_descr {
++	unsigned int	mask;
++	char		*name;
++};
++#define BIT_MASK_DESCR(m)	{ .mask = m, .name = #m }
++
++static void irq_debug_show_bits(struct seq_file *m, int ind, unsigned int state,
++				const struct irq_bit_descr *sd, int size)
++{
++	int i;
++
++	for (i = 0; i < size; i++, sd++) {
++		if (state & sd->mask)
++			seq_printf(m, "%*s%s\n", ind + 12, "", sd->name);
++	}
++}
++
++#ifdef CONFIG_SMP
++static void irq_debug_show_masks(struct seq_file *m, struct irq_desc *desc)
++{
++	struct irq_data *data = irq_desc_get_irq_data(desc);
++	struct cpumask *msk;
++
++	msk = irq_data_get_affinity_mask(data);
++	seq_printf(m, "affinity: %*pbl\n", cpumask_pr_args(msk));
++#ifdef CONFIG_GENERIC_PENDING_IRQ
++	msk = desc->pending_mask;
++	seq_printf(m, "pending:  %*pbl\n", cpumask_pr_args(msk));
++#endif
++}
++#else
++static void irq_debug_show_masks(struct seq_file *m, struct irq_desc *desc) { }
++#endif
++
++static const struct irq_bit_descr irqchip_flags[] = {
++	BIT_MASK_DESCR(IRQCHIP_SET_TYPE_MASKED),
++	BIT_MASK_DESCR(IRQCHIP_EOI_IF_HANDLED),
++	BIT_MASK_DESCR(IRQCHIP_MASK_ON_SUSPEND),
++	BIT_MASK_DESCR(IRQCHIP_ONOFFLINE_ENABLED),
++	BIT_MASK_DESCR(IRQCHIP_SKIP_SET_WAKE),
++	BIT_MASK_DESCR(IRQCHIP_ONESHOT_SAFE),
++	BIT_MASK_DESCR(IRQCHIP_EOI_THREADED),
++};
++
++static void
++irq_debug_show_chip(struct seq_file *m, struct irq_data *data, int ind)
++{
++	struct irq_chip *chip = data->chip;
++
++	if (!chip) {
++		seq_printf(m, "chip: None\n");
++		return;
++	}
++	seq_printf(m, "%*schip:    %s\n", ind, "", chip->name);
++	seq_printf(m, "%*sflags:   0x%lx\n", ind + 1, "", chip->flags);
++	irq_debug_show_bits(m, ind, chip->flags, irqchip_flags,
++			    ARRAY_SIZE(irqchip_flags));
++}
++
++static void
++irq_debug_show_data(struct seq_file *m, struct irq_data *data, int ind)
++{
++	seq_printf(m, "%*sdomain:  %s\n", ind, "",
++		   data->domain ? data->domain->name : "");
++	seq_printf(m, "%*shwirq:   0x%lx\n", ind + 1, "", data->hwirq);
++	irq_debug_show_chip(m, data, ind + 1);
++#ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
++	if (!data->parent_data)
++		return;
++	seq_printf(m, "%*sparent:\n", ind + 1, "");
++	irq_debug_show_data(m, data->parent_data, ind + 4);
++#endif
++}
++
++static const struct irq_bit_descr irqdata_states[] = {
++	BIT_MASK_DESCR(IRQ_TYPE_EDGE_RISING),
++	BIT_MASK_DESCR(IRQ_TYPE_EDGE_FALLING),
++	BIT_MASK_DESCR(IRQ_TYPE_LEVEL_HIGH),
++	BIT_MASK_DESCR(IRQ_TYPE_LEVEL_LOW),
++	BIT_MASK_DESCR(IRQD_LEVEL),
++
++	BIT_MASK_DESCR(IRQD_ACTIVATED),
++	BIT_MASK_DESCR(IRQD_IRQ_STARTED),
++	BIT_MASK_DESCR(IRQD_IRQ_DISABLED),
++	BIT_MASK_DESCR(IRQD_IRQ_MASKED),
++	BIT_MASK_DESCR(IRQD_IRQ_INPROGRESS),
++
++	BIT_MASK_DESCR(IRQD_PER_CPU),
++	BIT_MASK_DESCR(IRQD_NO_BALANCING),
++
++	BIT_MASK_DESCR(IRQD_MOVE_PCNTXT),
++	BIT_MASK_DESCR(IRQD_AFFINITY_SET),
++	BIT_MASK_DESCR(IRQD_SETAFFINITY_PENDING),
++	BIT_MASK_DESCR(IRQD_AFFINITY_MANAGED),
++	BIT_MASK_DESCR(IRQD_MANAGED_SHUTDOWN),
++
++	BIT_MASK_DESCR(IRQD_FORWARDED_TO_VCPU),
++
++	BIT_MASK_DESCR(IRQD_WAKEUP_STATE),
++	BIT_MASK_DESCR(IRQD_WAKEUP_ARMED),
++};
++
++static const struct irq_bit_descr irqdesc_states[] = {
++	BIT_MASK_DESCR(_IRQ_NOPROBE),
++	BIT_MASK_DESCR(_IRQ_NOREQUEST),
++	BIT_MASK_DESCR(_IRQ_NOTHREAD),
++	BIT_MASK_DESCR(_IRQ_NOAUTOEN),
++	BIT_MASK_DESCR(_IRQ_NESTED_THREAD),
++	BIT_MASK_DESCR(_IRQ_PER_CPU_DEVID),
++	BIT_MASK_DESCR(_IRQ_IS_POLLED),
++	BIT_MASK_DESCR(_IRQ_DISABLE_UNLAZY),
++};
++
++static const struct irq_bit_descr irqdesc_istates[] = {
++	BIT_MASK_DESCR(IRQS_AUTODETECT),
++	BIT_MASK_DESCR(IRQS_SPURIOUS_DISABLED),
++	BIT_MASK_DESCR(IRQS_POLL_INPROGRESS),
++	BIT_MASK_DESCR(IRQS_ONESHOT),
++	BIT_MASK_DESCR(IRQS_REPLAY),
++	BIT_MASK_DESCR(IRQS_WAITING),
++	BIT_MASK_DESCR(IRQS_PENDING),
++	BIT_MASK_DESCR(IRQS_SUSPENDED),
++};
++
++
++static int irq_debug_show(struct seq_file *m, void *p)
++{
++	struct irq_desc *desc = m->private;
++	struct irq_data *data;
++
++	raw_spin_lock_irq(&desc->lock);
++	data = irq_desc_get_irq_data(desc);
++	seq_printf(m, "handler:  %pf\n", desc->handle_irq);
++	seq_printf(m, "status:   0x%08x\n", desc->status_use_accessors);
++	irq_debug_show_bits(m, 0, desc->status_use_accessors, irqdesc_states,
++			    ARRAY_SIZE(irqdesc_states));
++	seq_printf(m, "istate:   0x%08x\n", desc->istate);
++	irq_debug_show_bits(m, 0, desc->istate, irqdesc_istates,
++			    ARRAY_SIZE(irqdesc_istates));
++	seq_printf(m, "ddepth:   %u\n", desc->depth);
++	seq_printf(m, "wdepth:   %u\n", desc->wake_depth);
++	seq_printf(m, "dstate:   0x%08x\n", irqd_get(data));
++	irq_debug_show_bits(m, 0, irqd_get(data), irqdata_states,
++			    ARRAY_SIZE(irqdata_states));
++	seq_printf(m, "node:     %d\n", irq_data_get_node(data));
++	irq_debug_show_masks(m, desc);
++	irq_debug_show_data(m, data, 0);
++	raw_spin_unlock_irq(&desc->lock);
++	return 0;
++}
++
++static int irq_debug_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, irq_debug_show, inode->i_private);
++}
++
++static const struct file_operations dfs_irq_ops = {
++	.open		= irq_debug_open,
++	.read		= seq_read,
++	.llseek		= seq_lseek,
++	.release	= single_release,
++};
++
++void irq_add_debugfs_entry(unsigned int irq, struct irq_desc *desc)
++{
++	char name [10];
++
++	if (!irq_dir || !desc || desc->debugfs_file)
++		return;
++
++	sprintf(name, "%d", irq);
++	desc->debugfs_file = debugfs_create_file(name, 0444, irq_dir, desc,
++						 &dfs_irq_ops);
++}
++
++void irq_remove_debugfs_entry(struct irq_desc *desc)
++{
++	if (desc->debugfs_file)
++		debugfs_remove(desc->debugfs_file);
++}
++
++static int __init irq_debugfs_init(void)
++{
++	struct dentry *root_dir;
++	int irq;
++
++	root_dir = debugfs_create_dir("irq", NULL);
++	if (!root_dir)
++		return -ENOMEM;
++
++	irq_domain_debugfs_init(root_dir);
++
++	irq_dir = debugfs_create_dir("irqs", root_dir);
++
++	irq_lock_sparse();
++	for_each_active_irq(irq)
++		irq_add_debugfs_entry(irq, irq_to_desc(irq));
++	irq_unlock_sparse();
++
++	return 0;
++}
++__initcall(irq_debugfs_init);
+diff --git a/kernel/irq/internals.h b/kernel/irq/internals.h
+index bc226e7..dd69552 100644
+--- a/kernel/irq/internals.h
++++ b/kernel/irq/internals.h
+@@ -169,6 +169,11 @@ struct irq_desc *
+ 
+ #define __irqd_to_state(d) ACCESS_PRIVATE((d)->common, state_use_accessors)
+ 
++static inline unsigned int irqd_get(struct irq_data *d)
++{
++	return __irqd_to_state(d);
++}
++
+ /*
+  * Manipulation functions for irq_data.state
+  */
+@@ -226,3 +231,20 @@ static inline int irq_desc_is_chained(struct irq_desc *desc)
+ static inline void
+ irq_pm_remove_action(struct irq_desc *desc, struct irqaction *action) { }
+ #endif
++
++#ifdef CONFIG_GENERIC_IRQ_DEBUGFS
++void irq_add_debugfs_entry(unsigned int irq, struct irq_desc *desc);
++void irq_remove_debugfs_entry(struct irq_desc *desc);
++# ifdef CONFIG_IRQ_DOMAIN
++void irq_domain_debugfs_init(struct dentry *root);
++# else
++static inline void irq_domain_debugfs_init(struct dentry *root);
++# endif
++#else /* CONFIG_GENERIC_IRQ_DEBUGFS */
++static inline void irq_add_debugfs_entry(unsigned int irq, struct irq_desc *d)
++{
++}
++static inline void irq_remove_debugfs_entry(struct irq_desc *d)
++{
++}
++#endif /* CONFIG_GENERIC_IRQ_DEBUGFS */
+diff --git a/kernel/irq/irqdesc.c b/kernel/irq/irqdesc.c
+index 77977f5..6026b33 100644
+--- a/kernel/irq/irqdesc.c
++++ b/kernel/irq/irqdesc.c
+@@ -394,6 +394,7 @@ static void free_desc(unsigned int irq)
+ {
+ 	struct irq_desc *desc = irq_to_desc(irq);
+ 
++	irq_remove_debugfs_entry(desc);
+ 	unregister_irq_proc(irq, desc);
+ 
+ 	/*
+diff --git a/kernel/irq/irqdomain.c b/kernel/irq/irqdomain.c
+index 31805f2..942bfc7 100644
+--- a/kernel/irq/irqdomain.c
++++ b/kernel/irq/irqdomain.c
+@@ -31,6 +31,14 @@ struct irqchip_fwid {
+ 	void *data;
+ };
+ 
++#ifdef CONFIG_GENERIC_IRQ_DEBUGFS
++static void debugfs_add_domain_dir(struct irq_domain *d);
++static void debugfs_remove_domain_dir(struct irq_domain *d);
++#else
++static inline void debugfs_add_domain_dir(struct irq_domain *d) { }
++static inline void debugfs_remove_domain_dir(struct irq_domain *d) { }
++#endif
++
+ /**
+  * irq_domain_alloc_fwnode - Allocate a fwnode_handle suitable for
+  *                           identifying an irq domain
+@@ -117,6 +125,7 @@ struct irq_domain *__irq_domain_add(struct fwnode_handle *fwnode, int size,
+ 	irq_domain_check_hierarchy(domain);
+ 
+ 	mutex_lock(&irq_domain_mutex);
++	debugfs_add_domain_dir(domain);
+ 	list_add(&domain->link, &irq_domain_list);
+ 	mutex_unlock(&irq_domain_mutex);
+ 
+@@ -136,6 +145,7 @@ struct irq_domain *__irq_domain_add(struct fwnode_handle *fwnode, int size,
+ void irq_domain_remove(struct irq_domain *domain)
+ {
+ 	mutex_lock(&irq_domain_mutex);
++	debugfs_remove_domain_dir(domain);
+ 
+ 	WARN_ON(!radix_tree_empty(&domain->revmap_tree));
+ 
+@@ -1487,3 +1497,78 @@ static void irq_domain_check_hierarchy(struct irq_domain *domain)
+ {
+ }
+ #endif	/* CONFIG_IRQ_DOMAIN_HIERARCHY */
++
++#ifdef CONFIG_GENERIC_IRQ_DEBUGFS
++static struct dentry *domain_dir;
++
++static void
++irq_domain_debug_show_one(struct seq_file *m, struct irq_domain *d, int ind)
++{
++	seq_printf(m, "%*sname:   %s\n", ind, "", d->name);
++	seq_printf(m, "%*ssize:   %u\n", ind + 1, "",
++		   d->revmap_size + d->revmap_direct_max_irq);
++	seq_printf(m, "%*smapped: %u\n", ind + 1, "", d->mapcount);
++	seq_printf(m, "%*sflags:  0x%08x\n", ind +1 , "", d->flags);
++#ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
++	if (!d->parent)
++		return;
++	seq_printf(m, "%*sparent: %s\n", ind + 1, "", d->parent->name);
++	irq_domain_debug_show_one(m, d->parent, ind + 4);
++#endif
++}
++
++static int irq_domain_debug_show(struct seq_file *m, void *p)
++{
++	struct irq_domain *d = m->private;
++
++	/* Default domain? Might be NULL */
++	if (!d) {
++		if (!irq_default_domain)
++			return 0;
++		d = irq_default_domain;
++	}
++	irq_domain_debug_show_one(m, d, 0);
++	return 0;
++}
++
++static int irq_domain_debug_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, irq_domain_debug_show, inode->i_private);
++}
++
++static const struct file_operations dfs_domain_ops = {
++	.open		= irq_domain_debug_open,
++	.read		= seq_read,
++	.llseek		= seq_lseek,
++	.release	= single_release,
++};
++
++static void debugfs_add_domain_dir(struct irq_domain *d)
++{
++	if (!d->name || !domain_dir || d->debugfs_file)
++		return;
++	d->debugfs_file = debugfs_create_file(d->name, 0444, domain_dir, d,
++					      &dfs_domain_ops);
++}
++
++static void debugfs_remove_domain_dir(struct irq_domain *d)
++{
++	if (d->debugfs_file)
++		debugfs_remove(d->debugfs_file);
++}
++
++void __init irq_domain_debugfs_init(struct dentry *root)
++{
++	struct irq_domain *d;
++
++	domain_dir = debugfs_create_dir("domains", root);
++	if (!domain_dir)
++		return;
++
++	debugfs_create_file("default", 0444, domain_dir, NULL, &dfs_domain_ops);
++	mutex_lock(&irq_domain_mutex);
++	list_for_each_entry(d, &irq_domain_list, link)
++		debugfs_add_domain_dir(d);
++	mutex_unlock(&irq_domain_mutex);
++}
++#endif
+diff --git a/kernel/irq/manage.c b/kernel/irq/manage.c
+index 5927da5..683153f 100644
+--- a/kernel/irq/manage.c
++++ b/kernel/irq/manage.c
+@@ -1380,6 +1380,7 @@ static void irq_release_resources(struct irq_desc *desc)
+ 		wake_up_process(new->secondary->thread);
+ 
+ 	register_irq_proc(irq, desc);
++	irq_add_debugfs_entry(irq, desc);
+ 	new->dir = NULL;
+ 	register_handler_proc(irq, new);
+ 	free_cpumask_var(mask);
+-- 
+1.7.1
+

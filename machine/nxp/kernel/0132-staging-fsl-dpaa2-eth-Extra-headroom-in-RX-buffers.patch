@@ -1,0 +1,140 @@
+From 31423d88d6b0389635dbbd5efa2def981178d28e Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 26 Apr 2017 19:10:41 +0300
+Subject: [PATCH 132/448] staging: fsl-dpaa2/eth: Extra headroom in RX buffers
+
+The needed headroom that we ask the stack to reserve for us in TX
+skbs is larger than the headroom available in RX frames, which
+leads to skb reallocations in forwarding scenarios involving two
+DPNI interfaces.
+
+Configure the hardware to reserve some extra space in the RX
+frame headroom to avoid this situation. The value is chosen based
+on the options set in the buffer layout, the Rx buffer alignment
+value and the netdevice required headroom.
+
+This brings a 5-10% performance improvement in IPv4 forwarding
+scenarios using linear skbs.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   24 +++++++++++++++++----
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |   26 ++++++++++++++---------
+ 2 files changed, 35 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index d95fde6..34edac5 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -133,8 +133,7 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ 
+ 	ch->buf_count--;
+ 
+-	skb = build_skb(fd_vaddr, DPAA2_ETH_RX_BUF_SIZE +
+-			SKB_DATA_ALIGN(sizeof(struct skb_shared_info)));
++	skb = build_skb(fd_vaddr, DPAA2_ETH_SKB_SIZE);
+ 	if (unlikely(!skb))
+ 		return NULL;
+ 
+@@ -176,8 +175,7 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ 
+ 		if (i == 0) {
+ 			/* We build the skb around the first data buffer */
+-			skb = build_skb(sg_vaddr, DPAA2_ETH_RX_BUF_SIZE +
+-				SKB_DATA_ALIGN(sizeof(struct skb_shared_info)));
++			skb = build_skb(sg_vaddr, DPAA2_ETH_SKB_SIZE);
+ 			if (unlikely(!skb)) {
+ 				/* We still need to subtract the buffers used
+ 				 * by this FD from our software counter
+@@ -1808,10 +1806,12 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 	buf_layout.pass_frame_status = true;
+ 	buf_layout.private_data_size = DPAA2_ETH_SWA_SIZE;
+ 	buf_layout.data_align = priv->rx_buf_align;
++	buf_layout.data_head_room = DPAA2_ETH_RX_HEAD_ROOM;
+ 	buf_layout.options = DPNI_BUF_LAYOUT_OPT_PARSER_RESULT |
+ 			     DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
+ 			     DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE |
+-			     DPNI_BUF_LAYOUT_OPT_DATA_ALIGN;
++			     DPNI_BUF_LAYOUT_OPT_DATA_ALIGN |
++			     DPNI_BUF_LAYOUT_OPT_DATA_HEAD_ROOM;
+ 	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
+ 				     DPNI_QUEUE_RX, &buf_layout);
+ 	if (err) {
+@@ -2248,6 +2248,7 @@ static int netdev_init(struct net_device *net_dev)
+ {
+ 	struct device *dev = net_dev->dev.parent;
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	u16 rx_headroom, req_headroom;
+ 	u8 bcast_addr[ETH_ALEN];
+ 	u8 num_queues;
+ 	int err;
+@@ -2271,6 +2272,19 @@ static int netdev_init(struct net_device *net_dev)
+ 	 */
+ 	net_dev->needed_headroom = DPAA2_ETH_NEEDED_HEADROOM(priv);
+ 
++	/* If headroom guaranteed by hardware in the Rx frame buffer is
++	 * smaller than the Tx headroom required by the stack, issue a
++	 * one time warning. This will most likely mean skbs forwarded to
++	 * another DPAA2 network interface will get reallocated, with a
++	 * significant performance impact.
++	 */
++	req_headroom = LL_RESERVED_SPACE(net_dev) - ETH_HLEN;
++	rx_headroom = ALIGN(DPAA2_ETH_HWA_SIZE + DPAA2_ETH_SWA_SIZE +
++			    DPAA2_ETH_RX_HEAD_ROOM, priv->rx_buf_align);
++	if (req_headroom > rx_headroom)
++		dev_info_once(dev, "Required headroom (%d) greater than available (%d)\n",
++			      req_headroom, rx_headroom);
++
+ 	/* Set MTU limits */
+ 	net_dev->min_mtu = 68;
+ 	net_dev->max_mtu = DPAA2_ETH_MAX_MTU;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 3e1c41b..e98137a 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -81,10 +81,7 @@
+ #define DPAA2_ETH_REFILL_THRESH	\
+ 	(DPAA2_ETH_NUM_BUFS - DPAA2_ETH_BUFS_PER_CMD)
+ 
+-/* Hardware requires alignment for ingress/egress buffer addresses
+- * and ingress buffer lengths.
+- */
+-#define DPAA2_ETH_RX_BUF_SIZE		2048
++/* Hardware requires alignment for ingress/egress buffer addresses */
+ #define DPAA2_ETH_TX_BUF_ALIGN		64
+ /* Due to a limitation in WRIOP 1.0.0, the RX buffer data must be aligned
+  * to 256B. For newer revisions, the requirement is only for 64B alignment
+@@ -95,14 +92,23 @@
+ #define DPAA2_ETH_NEEDED_HEADROOM(p_priv) \
+ 	((p_priv)->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN)
+ 
+-/* Hardware only sees DPAA2_ETH_RX_BUF_SIZE, but we need to allocate ingress
+- * buffers large enough to allow building an skb around them and also account
+- * for alignment restrictions
++/* Hardware only sees DPAA2_ETH_RX_BUF_SIZE, but the skb built around
++ * the buffer also needs space for its shared info struct, and we need
++ * to allocate enough to accommodate hardware alignment restrictions
+  */
++#define DPAA2_ETH_RX_BUF_SIZE		2048
++#define DPAA2_ETH_SKB_SIZE \
++	(DPAA2_ETH_RX_BUF_SIZE + SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+ #define DPAA2_ETH_BUF_RAW_SIZE(priv) \
+-	(DPAA2_ETH_RX_BUF_SIZE + \
+-	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)) + \
+-	(priv)->rx_buf_align)
++	(DPAA2_ETH_SKB_SIZE + (priv)->rx_buf_align)
++
++/* Extra headroom space requested to hardware, in order to make sure there's
++ * no realloc'ing in forwarding scenarios
++ */
++#define DPAA2_ETH_RX_HEAD_ROOM		192
++
++/* Hardware annotation area in RX buffers is 64B with the current settings */
++#define DPAA2_ETH_HWA_SIZE		64
+ 
+ /* We are accommodating a skb backpointer and some S/G info
+  * in the frame's software annotation. The hardware
+-- 
+1.7.1
+

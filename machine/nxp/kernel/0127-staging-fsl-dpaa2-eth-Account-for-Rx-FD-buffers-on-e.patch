@@ -1,0 +1,63 @@
+From 5852903bdfb6d645cb2c41cc251fdc7648e64f72 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 11 Oct 2017 08:29:44 -0500
+Subject: [PATCH 127/448] staging: fsl-dpaa2/eth: Account for Rx FD buffers on error path
+
+[ Upstream commit cbb3ea40fc495bf04070200b35c1c4cd05d11bd3 ]
+
+On Rx path, if we fail to build an skb from the incoming FD,
+we still need to update the channel buffer count accordingly,
+otherwise we risk depleting the pool while the software counter
+still sees available buffers.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Signed-off-by: Sasha Levin <alexander.levin@verizon.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   15 +++++++++++----
+ 1 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 3f50e1a..89d3c38 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -131,6 +131,8 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ 	u16 fd_offset = dpaa2_fd_get_offset(fd);
+ 	u32 fd_length = dpaa2_fd_get_len(fd);
+ 
++	ch->buf_count--;
++
+ 	skb = build_skb(fd_vaddr, DPAA2_ETH_RX_BUF_SIZE +
+ 			SKB_DATA_ALIGN(sizeof(struct skb_shared_info)));
+ 	if (unlikely(!skb))
+@@ -139,8 +141,6 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ 	skb_reserve(skb, fd_offset);
+ 	skb_put(skb, fd_length);
+ 
+-	ch->buf_count--;
+-
+ 	return skb;
+ }
+ 
+@@ -178,8 +178,15 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ 			/* We build the skb around the first data buffer */
+ 			skb = build_skb(sg_vaddr, DPAA2_ETH_RX_BUF_SIZE +
+ 				SKB_DATA_ALIGN(sizeof(struct skb_shared_info)));
+-			if (unlikely(!skb))
+-				return NULL;
++			if (unlikely(!skb)) {
++				/* We still need to subtract the buffers used
++				 * by this FD from our software counter
++				 */
++				while (!dpaa2_sg_is_final(&sgt[i]) &&
++				       i < DPAA2_ETH_MAX_SG_ENTRIES)
++					i++;
++				break;
++			}
+ 
+ 			sg_offset = dpaa2_sg_get_offset(sge);
+ 			skb_reserve(skb, sg_offset);
+-- 
+1.7.1
+

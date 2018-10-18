@@ -1,0 +1,235 @@
+From 2ae549d793e5a41671924d0ba6eacfa6870c5d08 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Mon, 6 Feb 2017 15:53:22 +0000
+Subject: [PATCH 154/448] staging: fsl-dpaa2/eth: Leave NAPI enabled during ifup/down
+
+The current driver implementation disables each channel's NAPI poll
+routine on ifdown/stop and re-enables it on ifup/open.
+
+This introduces a couple of problems when the interface is under
+traffic:
+- ifdown might hit a busy NAPI poll routine, where the budget is spent
+  entirely, and DPIO interrupts are not rearmed. When bringing the
+  interface back up, Tx conf frames will accumulate and deplete the
+  system's memory.
+- Ingress queues are drained on ifdown, issuing pull requests to DPIO.
+  Even though the NAPI is disabled prior to this call, testing shows
+  that a CDAN might still trigger a poll, causing a second volatile
+  dequeue to overlap, and the system hangs.
+
+In order to address these faults, keep NAPI poll routines enabled during
+the entire lifecycle of the DPAA2 eth driver (enable on probe, disable
+on remove).
+
+This involves a couple of changes:
+- Ingress queues are no longer explicitly drained on ifdown. Disabling
+  the ni stops traffic from being put into queues, leaving the existing
+  frames to be cleanly processed on NAPI poll. This ensures DPIO portal
+  interrupts are properly re-armed when frames are finished.
+- NAPI poll should not refill the buffer pool after the interface is
+  stopped - make this decision based on the driver's refill_thresh internal
+  variable.
+- Channels account buffers based on an internal buf_count. Since the
+  interface might still process frames after it's stopped, reset
+  buf_count on seed, not after draining the buffer pools.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   88 +++++++-----------------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    1 +
+ 2 files changed, 27 insertions(+), 62 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index ec80e16..2c72f14 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -935,6 +935,7 @@ static int seed_pool(struct dpaa2_eth_priv *priv, u16 bpid)
+ 	 */
+ 	preempt_disable();
+ 	for (j = 0; j < priv->num_channels; j++) {
++		priv->channel[j]->buf_count = 0;
+ 		for (i = 0; i < priv->max_bufs_per_ch;
+ 		     i += DPAA2_ETH_BUFS_PER_CMD) {
+ 			new_count = add_bufs(priv, bpid);
+@@ -983,15 +984,10 @@ static void drain_bufs(struct dpaa2_eth_priv *priv, int count)
+ 
+ static void drain_pool(struct dpaa2_eth_priv *priv)
+ {
+-	int i;
+-
+ 	preempt_disable();
+ 	drain_bufs(priv, DPAA2_ETH_BUFS_PER_CMD);
+ 	drain_bufs(priv, 1);
+ 	preempt_enable();
+-
+-	for (i = 0; i < priv->num_channels; i++)
+-		priv->channel[i]->buf_count = 0;
+ }
+ 
+ /* Function is called from softirq context only, so we don't need to guard
+@@ -1003,7 +999,7 @@ static int refill_pool(struct dpaa2_eth_priv *priv,
+ {
+ 	int new_count;
+ 
+-	if (likely(ch->buf_count >= DPAA2_ETH_REFILL_THRESH(priv)))
++	if (likely(ch->buf_count >= priv->refill_thresh))
+ 		return 0;
+ 
+ 	do {
+@@ -1146,28 +1142,30 @@ static int dpaa2_eth_open(struct net_device *net_dev)
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+ 	int err;
+ 
+-	err = seed_pool(priv, priv->bpid);
+-	if (err) {
+-		/* Not much to do; the buffer pool, though not filled up,
+-		 * may still contain some buffers which would enable us
+-		 * to limp on.
+-		 */
+-		netdev_err(net_dev, "Buffer seeding failed for DPBP %d (bpid=%d)\n",
+-			   priv->dpbp_dev->obj_desc.id, priv->bpid);
+-	}
+-
+ 	/* We'll only start the txqs when the link is actually ready; make sure
+ 	 * we don't race against the link up notification, which may come
+ 	 * immediately after dpni_enable();
+ 	 */
+ 	netif_tx_stop_all_queues(net_dev);
+-	enable_ch_napi(priv);
++
+ 	/* Also, explicitly set carrier off, otherwise netif_carrier_ok() will
+ 	 * return true and cause 'ip link show' to report the LOWER_UP flag,
+ 	 * even though the link notification wasn't even received.
+ 	 */
+ 	netif_carrier_off(net_dev);
+ 
++	err = seed_pool(priv, priv->bpid);
++	if (err) {
++		/* Not much to do; the buffer pool, though not filled up,
++		 * may still contain some buffers which would enable us
++		 * to limp on.
++		 */
++		netdev_err(net_dev, "Buffer seeding failed for DPBP %d (bpid=%d)\n",
++			   priv->dpbp_dev->obj_desc.id, priv->bpid);
++	}
++
++	priv->refill_thresh = DPAA2_ETH_REFILL_THRESH(priv);
++
+ 	err = dpni_enable(priv->mc_io, 0, priv->mc_token);
+ 	if (err < 0) {
+ 		netdev_err(net_dev, "dpni_enable() failed\n");
+@@ -1187,48 +1185,16 @@ static int dpaa2_eth_open(struct net_device *net_dev)
+ 
+ link_state_err:
+ enable_err:
+-	disable_ch_napi(priv);
++	priv->refill_thresh = 0;
+ 	drain_pool(priv);
+ 	return err;
+ }
+ 
+-/* The DPIO store must be empty when we call this,
+- * at the end of every NAPI cycle.
+- */
+-static int drain_channel(struct dpaa2_eth_priv *priv,
+-			 struct dpaa2_eth_channel *ch)
+-{
+-	int rx_drained = 0, tx_conf_drained = 0;
+-	bool has_drained;
+-
+-	do {
+-		pull_channel(ch);
+-		has_drained = consume_frames(ch, &rx_drained, &tx_conf_drained);
+-	} while (has_drained);
+-
+-	return rx_drained + tx_conf_drained;
+-}
+-
+-static int drain_ingress_frames(struct dpaa2_eth_priv *priv)
+-{
+-	struct dpaa2_eth_channel *ch;
+-	int i;
+-	int drained = 0;
+-
+-	for (i = 0; i < priv->num_channels; i++) {
+-		ch = priv->channel[i];
+-		drained += drain_channel(priv, ch);
+-	}
+-
+-	return drained;
+-}
+-
+ static int dpaa2_eth_stop(struct net_device *net_dev)
+ {
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+ 	int dpni_enabled;
+-	int retries = 10;
+-	int drained;
++	int retries = 10, i;
+ 
+ 	netif_tx_stop_all_queues(net_dev);
+ 	netif_carrier_off(net_dev);
+@@ -1250,18 +1216,13 @@ static int dpaa2_eth_stop(struct net_device *net_dev)
+ 		 */
+ 	}
+ 
+-	/* Wait for NAPI to complete on every core and disable it.
+-	 * In particular, this will also prevent NAPI from being rescheduled if
+-	 * a new CDAN is serviced, effectively discarding the CDAN. We therefore
+-	 * don't even need to disarm the channels, except perhaps for the case
+-	 * of a huge coalescing value.
+-	 */
+-	disable_ch_napi(priv);
++	priv->refill_thresh = 0;
+ 
+-	 /* Manually drain the Rx and TxConf queues */
+-	drained = drain_ingress_frames(priv);
+-	if (drained)
+-		netdev_dbg(net_dev, "Drained %d frames.\n", drained);
++	/* Wait for all running napi poll routines to finish, so that no
++	 * new refill operations are started
++	 */
++	for (i = 0; i < priv->num_channels; i++)
++		napi_synchronize(&priv->channel[i]->napi);
+ 
+ 	/* Empty the buffer pool */
+ 	drain_pool(priv);
+@@ -2933,6 +2894,7 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
+ 
+ 	/* Add a NAPI context for each channel */
+ 	add_ch_napi(priv);
++	enable_ch_napi(priv);
+ 
+ 	/* Percpu statistics */
+ 	priv->percpu_stats = alloc_percpu(*priv->percpu_stats);
+@@ -2998,6 +2960,7 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
+ err_alloc_percpu_extras:
+ 	free_percpu(priv->percpu_stats);
+ err_alloc_percpu_stats:
++	disable_ch_napi(priv);
+ 	del_ch_napi(priv);
+ err_bind:
+ 	free_dpbp(priv);
+@@ -3041,6 +3004,7 @@ static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
+ 	free_percpu(priv->percpu_stats);
+ 	free_percpu(priv->percpu_extras);
+ 
++	disable_ch_napi(priv);
+ 	del_ch_napi(priv);
+ 	free_dpbp(priv);
+ 	free_dpio(priv);
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 1ed4d13..e514b5c 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -383,6 +383,7 @@ struct dpaa2_eth_priv {
+ 	u16 rx_buf_align;
+ 	struct iommu_domain *iommu_domain;
+ 	u32 max_bufs_per_ch;
++	u32 refill_thresh;
+ 
+ 	void *cscn_mem;	/* Tx congestion notifications are written here */
+ 	void *cscn_unaligned;
+-- 
+1.7.1
+

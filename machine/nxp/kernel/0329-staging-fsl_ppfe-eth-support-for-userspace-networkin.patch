@@ -1,0 +1,164 @@
+From 263c662e6223177d96751508a381aa75cab9ee7d Mon Sep 17 00:00:00 2001
+From: Akhil Goyal <akhil.goyal@nxp.com>
+Date: Fri, 13 Apr 2018 15:41:28 +0530
+Subject: [PATCH 329/448] staging: fsl_ppfe/eth: support for userspace networking
+
+This patch adds the userspace mode support to fsl_ppfe network driver.
+In the new mode, basic hardware initialization is performed in kernel, while
+the datapath and HIF handling is the responsibility of the userspace.
+
+The new command line parameter is added to initialize the ppfe module
+in userspace mode. By default the module remains in kernelspace networking
+mode.
+To enable userspace mode, use "insmod pfe.ko us=1"
+
+Signed-off-by: Akhil Goyal <akhil.goyal@nxp.com>
+Signed-off-by: Gagandeep Singh <g.singh@nxp.com>
+---
+ drivers/staging/fsl_ppfe/pfe_eth.c |   21 +++++++++++++++++++--
+ drivers/staging/fsl_ppfe/pfe_mod.c |   15 +++++++++++++++
+ drivers/staging/fsl_ppfe/pfe_mod.h |    2 ++
+ 3 files changed, 36 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/staging/fsl_ppfe/pfe_eth.c b/drivers/staging/fsl_ppfe/pfe_eth.c
+index 7d4493f..c453093 100644
+--- a/drivers/staging/fsl_ppfe/pfe_eth.c
++++ b/drivers/staging/fsl_ppfe/pfe_eth.c
+@@ -2295,6 +2295,8 @@ static int pfe_eth_init_one(struct pfe *pfe, int id)
+ 		goto err0;
+ 	}
+ 
++	if (us)
++		emac_txq_cnt = EMAC_TXQ_CNT;
+ 	/* Create an ethernet device instance */
+ 	ndev = alloc_etherdev_mq(sizeof(*priv), emac_txq_cnt);
+ 
+@@ -2341,6 +2343,9 @@ static int pfe_eth_init_one(struct pfe *pfe, int id)
+ 		}
+ 	}
+ 
++	if (us)
++		goto phy_init;
++
+ 	ndev->mtu = 1500;
+ 
+ 	/* Set MTU limits */
+@@ -2380,6 +2385,8 @@ static int pfe_eth_init_one(struct pfe *pfe, int id)
+ 		netdev_err(ndev, "register_netdev() failed\n");
+ 		goto err3;
+ 	}
++
++phy_init:
+ 	device_init_wakeup(&ndev->dev, WAKE_MAGIC);
+ 
+ 	if (!(priv->einfo->phy_flags & GEMAC_NO_PHY)) {
+@@ -2391,6 +2398,12 @@ static int pfe_eth_init_one(struct pfe *pfe, int id)
+ 		}
+ 	}
+ 
++	if (us) {
++		if (priv->phydev)
++			phy_start(priv->phydev);
++		return 0;
++	}
++
+ 	netif_carrier_on(ndev);
+ 
+ 	/* Create all the sysfs files */
+@@ -2402,6 +2415,8 @@ static int pfe_eth_init_one(struct pfe *pfe, int id)
+ 
+ 	return 0;
+ err4:
++	if (us)
++		goto err3;
+ 	unregister_netdev(ndev);
+ err3:
+ 	pfe_eth_mdio_exit(priv->mii_bus);
+@@ -2448,9 +2463,11 @@ static void pfe_eth_exit_one(struct pfe_eth_priv_s *priv)
+ {
+ 	netif_info(priv, probe, priv->ndev, "%s\n", __func__);
+ 
+-	pfe_eth_sysfs_exit(priv->ndev);
++	if (!us) {
++		pfe_eth_sysfs_exit(priv->ndev);
+ 
+-	unregister_netdev(priv->ndev);
++		unregister_netdev(priv->ndev);
++	}
+ 
+ 	if (!(priv->einfo->phy_flags & GEMAC_NO_PHY))
+ 		pfe_phy_exit(priv->ndev);
+diff --git a/drivers/staging/fsl_ppfe/pfe_mod.c b/drivers/staging/fsl_ppfe/pfe_mod.c
+index d5ba56a..ca41845 100644
+--- a/drivers/staging/fsl_ppfe/pfe_mod.c
++++ b/drivers/staging/fsl_ppfe/pfe_mod.c
+@@ -19,6 +19,10 @@
+ #include <linux/dma-mapping.h>
+ #include "pfe_mod.h"
+ 
++unsigned int us;
++module_param(us, uint, 0444);
++MODULE_PARM_DESC(us, "0: module enabled for kernel networking (DEFAULT)\n"
++			"1: module enabled for userspace networking\n");
+ struct pfe *pfe;
+ 
+ /*
+@@ -56,6 +60,9 @@ int pfe_probe(struct pfe *pfe)
+ 	if (rc < 0)
+ 		goto err_hw;
+ 
++	if (us)
++		goto firmware_init;
++
+ 	rc = pfe_hif_lib_init(pfe);
+ 	if (rc < 0)
+ 		goto err_hif_lib;
+@@ -64,6 +71,7 @@ int pfe_probe(struct pfe *pfe)
+ 	if (rc < 0)
+ 		goto err_hif;
+ 
++firmware_init:
+ 	rc = pfe_firmware_init(pfe);
+ 	if (rc < 0)
+ 		goto err_firmware;
+@@ -99,6 +107,9 @@ int pfe_probe(struct pfe *pfe)
+ 	pfe_firmware_exit(pfe);
+ 
+ err_firmware:
++	if (us)
++		goto err_hif_lib;
++
+ 	pfe_hif_exit(pfe);
+ 
+ err_hif:
+@@ -131,10 +142,14 @@ int pfe_remove(struct pfe *pfe)
+ #endif
+ 	pfe_firmware_exit(pfe);
+ 
++	if (us)
++		goto hw_exit;
++
+ 	pfe_hif_exit(pfe);
+ 
+ 	pfe_hif_lib_exit(pfe);
+ 
++hw_exit:
+ 	pfe_hw_exit(pfe);
+ 
+ 	return 0;
+diff --git a/drivers/staging/fsl_ppfe/pfe_mod.h b/drivers/staging/fsl_ppfe/pfe_mod.h
+index 3012f17..014ae65 100644
+--- a/drivers/staging/fsl_ppfe/pfe_mod.h
++++ b/drivers/staging/fsl_ppfe/pfe_mod.h
+@@ -22,6 +22,8 @@
+ #include <linux/device.h>
+ #include <linux/elf.h>
+ 
++extern unsigned int us;
++
+ struct pfe;
+ 
+ #include "pfe_hw.h"
+-- 
+1.7.1
+

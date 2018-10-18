@@ -1,0 +1,94 @@
+From 9cc3706f252fd83833ccdb899f1da883ecce4bc9 Mon Sep 17 00:00:00 2001
+From: Ioana Ciornei <ioana.ciornei@nxp.com>
+Date: Fri, 23 Mar 2018 10:38:55 -0500
+Subject: [PATCH 282/448] bus: fsl-mc: move fsl_mc_command struct in a uapi header
+
+Define "struct fsl_mc_command" as a structure that can cross the
+user/kernel boundary. Also change the variable types used with
+the proper ones.
+
+Signed-off-by: Ioana Ciornei <ioana.ciornei@nxp.com>
+---
+ MAINTAINERS                 |    1 +
+ include/linux/fsl/mc.h      |    8 +-------
+ include/uapi/linux/fsl_mc.h |   23 +++++++++++++++++++++++
+ 3 files changed, 25 insertions(+), 7 deletions(-)
+ create mode 100644 include/uapi/linux/fsl_mc.h
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index e6a7034..83d024b 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -5112,6 +5112,7 @@ L:	linux-kernel@vger.kernel.org
+ S:	Maintained
+ F:	drivers/bus/fsl-mc/
+ F:	Documentation/networking/dpaa2/overview.rst
++F:	include/uapi/linux/fsl_mc.h
+ 
+ FREEVXFS FILESYSTEM
+ M:	Christoph Hellwig <hch@infradead.org>
+diff --git a/include/linux/fsl/mc.h b/include/linux/fsl/mc.h
+index f27cb14..19a352b 100644
+--- a/include/linux/fsl/mc.h
++++ b/include/linux/fsl/mc.h
+@@ -12,6 +12,7 @@
+ #include <linux/device.h>
+ #include <linux/mod_devicetable.h>
+ #include <linux/interrupt.h>
++#include <uapi/linux/fsl_mc.h>
+ 
+ #define FSL_MC_VENDOR_FREESCALE	0x1957
+ 
+@@ -198,8 +199,6 @@ struct fsl_mc_device {
+ #define to_fsl_mc_device(_dev) \
+ 	container_of(_dev, struct fsl_mc_device, dev)
+ 
+-#define MC_CMD_NUM_OF_PARAMS	7
+-
+ struct mc_cmd_header {
+ 	u8 src_id;
+ 	u8 flags_hw;
+@@ -209,11 +208,6 @@ struct mc_cmd_header {
+ 	__le16 cmd_id;
+ };
+ 
+-struct fsl_mc_command {
+-	u64 header;
+-	u64 params[MC_CMD_NUM_OF_PARAMS];
+-};
+-
+ enum mc_cmd_status {
+ 	MC_CMD_STATUS_OK = 0x0, /* Completed successfully */
+ 	MC_CMD_STATUS_READY = 0x1, /* Ready to be processed */
+diff --git a/include/uapi/linux/fsl_mc.h b/include/uapi/linux/fsl_mc.h
+new file mode 100644
+index 0000000..54590a2
+--- /dev/null
++++ b/include/uapi/linux/fsl_mc.h
+@@ -0,0 +1,23 @@
++/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
++/*
++ * Management Complex (MC) userspace public interface
++ *
++ * Copyright 2018 NXP
++ *
++ */
++#ifndef _UAPI_FSL_MC_H_
++#define _UAPI_FSL_MC_H_
++
++#define MC_CMD_NUM_OF_PARAMS	7
++
++/**
++ * struct fsl_mc_command - Management Complex (MC) command structure
++ * @header: MC command header
++ * @params: MC command parameters
++ */
++struct fsl_mc_command {
++	__u64 header;
++	__u64 params[MC_CMD_NUM_OF_PARAMS];
++};
++
++#endif /* _UAPI_FSL_MC_H_ */
+-- 
+1.7.1
+

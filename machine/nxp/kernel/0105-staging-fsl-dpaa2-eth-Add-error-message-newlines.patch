@@ -1,0 +1,114 @@
+From b62c23d51ab397d4b64747725403ef7b154695a2 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 6 Jun 2017 10:00:28 -0500
+Subject: [PATCH 105/448] staging: fsl-dpaa2/eth: Add error message newlines
+
+A few error/warning messages lacked a newline at the end
+of the text. Add it for improved consistency and cosmetics.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c     |   14 +++++++-------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c |    6 +++---
+ 2 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index f63054e..c4252f4 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -975,7 +975,7 @@ static int link_state_update(struct dpaa2_eth_priv *priv)
+ 		netif_carrier_off(priv->net_dev);
+ 	}
+ 
+-	netdev_info(priv->net_dev, "Link Event: state %s",
++	netdev_info(priv->net_dev, "Link Event: state %s\n",
+ 		    state.up ? "up" : "down");
+ 
+ 	return 0;
+@@ -1806,7 +1806,7 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 	}
+ 
+ 	if ((priv->tx_data_offset % 64) != 0)
+-		dev_warn(dev, "Tx data offset (%d) not a multiple of 64B",
++		dev_warn(dev, "Tx data offset (%d) not a multiple of 64B\n",
+ 			 priv->tx_data_offset);
+ 
+ 	/* Accommodate software annotation space (SWA) */
+@@ -2002,7 +2002,7 @@ static int dpaa2_eth_set_hash(struct net_device *net_dev, u64 flags)
+ 
+ 	err = dpni_prepare_key_cfg(&cls_cfg, dma_mem);
+ 	if (err) {
+-		dev_err(dev, "dpni_prepare_key_cfg error %d", err);
++		dev_err(dev, "dpni_prepare_key_cfg error %d\n", err);
+ 		goto err_prep_key;
+ 	}
+ 
+@@ -2261,7 +2261,7 @@ static irqreturn_t dpni_irq0_handler_thread(int irq_num, void *arg)
+ 	err = dpni_get_irq_status(dpni_dev->mc_io, 0, dpni_dev->mc_handle,
+ 				  DPNI_IRQ_INDEX, &status);
+ 	if (unlikely(err)) {
+-		netdev_err(net_dev, "Can't get irq status (err %d)", err);
++		netdev_err(net_dev, "Can't get irq status (err %d)\n", err);
+ 		clear = 0xffffffff;
+ 		goto out;
+ 	}
+@@ -2295,21 +2295,21 @@ static int setup_irqs(struct fsl_mc_device *ls_dev)
+ 					IRQF_NO_SUSPEND | IRQF_ONESHOT,
+ 					dev_name(&ls_dev->dev), &ls_dev->dev);
+ 	if (err < 0) {
+-		dev_err(&ls_dev->dev, "devm_request_threaded_irq(): %d", err);
++		dev_err(&ls_dev->dev, "devm_request_threaded_irq(): %d\n", err);
+ 		goto free_mc_irq;
+ 	}
+ 
+ 	err = dpni_set_irq_mask(ls_dev->mc_io, 0, ls_dev->mc_handle,
+ 				DPNI_IRQ_INDEX, DPNI_IRQ_EVENT_LINK_CHANGED);
+ 	if (err < 0) {
+-		dev_err(&ls_dev->dev, "dpni_set_irq_mask(): %d", err);
++		dev_err(&ls_dev->dev, "dpni_set_irq_mask(): %d\n", err);
+ 		goto free_irq;
+ 	}
+ 
+ 	err = dpni_set_irq_enable(ls_dev->mc_io, 0, ls_dev->mc_handle,
+ 				  DPNI_IRQ_INDEX, 1);
+ 	if (err < 0) {
+-		dev_err(&ls_dev->dev, "dpni_set_irq_enable(): %d", err);
++		dev_err(&ls_dev->dev, "dpni_set_irq_enable(): %d\n", err);
+ 		goto free_irq;
+ 	}
+ 
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+index 89888b6..6a331c7 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+@@ -94,7 +94,7 @@ static void dpaa2_eth_get_drvinfo(struct net_device *net_dev,
+ 
+ 	err = dpni_get_link_state(priv->mc_io, 0, priv->mc_token, &state);
+ 	if (err) {
+-		netdev_err(net_dev, "ERROR %d getting link state", err);
++		netdev_err(net_dev, "ERROR %d getting link state\n", err);
+ 		goto out;
+ 	}
+ 
+@@ -147,7 +147,7 @@ static void dpaa2_eth_get_drvinfo(struct net_device *net_dev,
+ 		/* ethtool will be loud enough if we return an error; no point
+ 		 * in putting our own error message on the console by default
+ 		 */
+-		netdev_dbg(net_dev, "ERROR %d setting link cfg", err);
++		netdev_dbg(net_dev, "ERROR %d setting link cfg\n", err);
+ 
+ 	return err;
+ }
+@@ -206,7 +206,7 @@ static void dpaa2_eth_get_ethtool_stats(struct net_device *net_dev,
+ 		err = dpni_get_statistics(priv->mc_io, 0, priv->mc_token,
+ 					  j, &dpni_stats);
+ 		if (err != 0)
+-			netdev_warn(net_dev, "dpni_get_stats(%d) failed", j);
++			netdev_warn(net_dev, "dpni_get_stats(%d) failed\n", j);
+ 		switch (j) {
+ 		case 0:
+ 			num_cnt = sizeof(dpni_stats.page_0) / sizeof(u64);
+-- 
+1.7.1
+

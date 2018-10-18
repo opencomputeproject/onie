@@ -1,0 +1,31 @@
+From be9b0d5e224a6f4d99b0246ab382cc839c64fc72 Mon Sep 17 00:00:00 2001
+From: Roy Pledge <roy.pledge@nxp.com>
+Date: Wed, 8 Aug 2018 17:13:48 -0400
+Subject: [PATCH 420/448] staging/fsl_qbman: Recalcuate cursor after consuming ring
+
+If the dqrr_init() function consumes frames during init
+the cursor needs to be updated before anything starts
+to use the ring.
+
+Signed-off-by: Roy Pledge <roy.pledge@nxp.com>
+---
+ drivers/staging/fsl_qbman/qman_low.h |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl_qbman/qman_low.h b/drivers/staging/fsl_qbman/qman_low.h
+index 4cd7fc5..d58af1b 100644
+--- a/drivers/staging/fsl_qbman/qman_low.h
++++ b/drivers/staging/fsl_qbman/qman_low.h
+@@ -682,6 +682,9 @@ static inline int qm_dqrr_init(struct qm_portal *portal,
+ 		(0 ? 0x10 : 0);				/* Ignore SP */
+ 	qm_out(CFG, cfg);
+ 	qm_dqrr_set_maxfill(portal, max_fill);
++
++	/* Recalculate cursor as we may have consumed frames */
++	dqrr->cursor = dqrr->ring + dqrr->ci;
+ 	return 0;
+ }
+ 
+-- 
+1.7.1
+

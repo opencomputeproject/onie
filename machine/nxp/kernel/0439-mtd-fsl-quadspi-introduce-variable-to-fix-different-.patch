@@ -1,0 +1,94 @@
+From 772fde31a2685a26c4395cdfe6fee812c53af6f1 Mon Sep 17 00:00:00 2001
+From: Suresh Gupta <suresh.gupta@nxp.com>
+Date: Mon, 26 Mar 2018 16:50:11 +0530
+Subject: [PATCH 439/448] mtd: fsl-quadspi: introduce variable to fix different invalid master Id for different platform
+
+Different platforms have different Master with different SourceID on
+AHB bus. The 0X0E Master ID is used by cluster 3 in case of LS2088A.
+So, patch introduce an invalid master id variable to fix invalid
+mastered on different platforms.
+
+Signed-off-by: Suresh Gupta <suresh.gupta@nxp.com>
+---
+ drivers/mtd/spi-nor/fsl-quadspi.c |   14 +++++++++++---
+ 1 files changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/mtd/spi-nor/fsl-quadspi.c b/drivers/mtd/spi-nor/fsl-quadspi.c
+index 33ecc27..af8513f 100644
+--- a/drivers/mtd/spi-nor/fsl-quadspi.c
++++ b/drivers/mtd/spi-nor/fsl-quadspi.c
+@@ -229,6 +229,7 @@ struct fsl_qspi_devtype_data {
+ 	enum fsl_qspi_devtype devtype;
+ 	int rxfifo;
+ 	int txfifo;
++	int invalid_mstrid;
+ 	int ahb_buf_size;
+ 	int driver_data;
+ };
+@@ -237,6 +238,7 @@ struct fsl_qspi_devtype_data {
+ 	.devtype = FSL_QUADSPI_VYBRID,
+ 	.rxfifo = 128,
+ 	.txfifo = 64,
++	.invalid_mstrid = 0xe,
+ 	.ahb_buf_size = 1024,
+ 	.driver_data = QUADSPI_QUIRK_SWAP_ENDIAN,
+ };
+@@ -245,6 +247,7 @@ struct fsl_qspi_devtype_data {
+ 	.devtype = FSL_QUADSPI_IMX6SX,
+ 	.rxfifo = 128,
+ 	.txfifo = 512,
++	.invalid_mstrid = 0xe,
+ 	.ahb_buf_size = 1024,
+ 	.driver_data = QUADSPI_QUIRK_4X_INT_CLK
+ 		       | QUADSPI_QUIRK_TKT245618,
+@@ -254,6 +257,7 @@ struct fsl_qspi_devtype_data {
+ 	.devtype = FSL_QUADSPI_IMX7D,
+ 	.rxfifo = 512,
+ 	.txfifo = 512,
++	.invalid_mstrid = 0xe,
+ 	.ahb_buf_size = 1024,
+ 	.driver_data = QUADSPI_QUIRK_TKT253890
+ 		       | QUADSPI_QUIRK_4X_INT_CLK,
+@@ -263,6 +267,7 @@ struct fsl_qspi_devtype_data {
+ 	.devtype = FSL_QUADSPI_IMX6UL,
+ 	.rxfifo = 128,
+ 	.txfifo = 512,
++	.invalid_mstrid = 0xe,
+ 	.ahb_buf_size = 1024,
+ 	.driver_data = QUADSPI_QUIRK_TKT253890
+ 		       | QUADSPI_QUIRK_4X_INT_CLK,
+@@ -272,6 +277,7 @@ struct fsl_qspi_devtype_data {
+ 	.devtype = FSL_QUADSPI_LS1021A,
+ 	.rxfifo = 128,
+ 	.txfifo = 64,
++	.invalid_mstrid = 0xe,
+ 	.ahb_buf_size = 1024,
+ 	.driver_data = 0,
+ };
+@@ -280,6 +286,7 @@ struct fsl_qspi_devtype_data {
+ 	.devtype = FSL_QUADSPI_LS2080A,
+ 	.rxfifo = 128,
+ 	.txfifo = 64,
++	.invalid_mstrid = 0x0,
+ 	.ahb_buf_size = 1024,
+ 	.driver_data = QUADSPI_AMBA_BASE_INTERNAL | QUADSPI_QUIRK_TKT253890,
+ };
+@@ -860,11 +867,12 @@ static void fsl_qspi_init_abh_read(struct fsl_qspi *q)
+ {
+ 	void __iomem *base = q->iobase;
+ 	int seqid;
++	int invalid_mstrid = q->devtype_data->invalid_mstrid;
+ 
+ 	/* AHB configuration for access buffer 0/1/2 .*/
+-	qspi_writel(q, QUADSPI_BUFXCR_INVALID_MSTRID, base + QUADSPI_BUF0CR);
+-	qspi_writel(q, QUADSPI_BUFXCR_INVALID_MSTRID, base + QUADSPI_BUF1CR);
+-	qspi_writel(q, QUADSPI_BUFXCR_INVALID_MSTRID, base + QUADSPI_BUF2CR);
++	qspi_writel(q, invalid_mstrid, base + QUADSPI_BUF0CR);
++	qspi_writel(q, invalid_mstrid, base + QUADSPI_BUF1CR);
++	qspi_writel(q, invalid_mstrid, base + QUADSPI_BUF2CR);
+ 	/*
+ 	 * Set ADATSZ with the maximum AHB buffer size to improve the
+ 	 * read performance.
+-- 
+1.7.1
+

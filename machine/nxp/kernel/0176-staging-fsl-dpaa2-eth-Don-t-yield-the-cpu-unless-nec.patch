@@ -1,0 +1,49 @@
+From 2772756a24fa124fec60a72d48f356c4e79aa9b9 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 12 Oct 2017 20:52:50 +0300
+Subject: [PATCH 176/448] staging: fsl-dpaa2/eth: Don't yield the cpu unless necessary
+
+When releasing buffers to the hardware pool, don't call
+cpu_relax() unless we are actually waiting for the QBMan
+portal to finish the previous command.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   11 ++++-------
+ 1 files changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 0265436..bf0d578 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -293,12 +293,10 @@ static void release_fd_buf(struct dpaa2_eth_priv *priv,
+ 	if (likely(ch->rel_buf_cnt < DPAA2_ETH_BUFS_PER_CMD))
+ 		return;
+ 
+-	do {
+-		err = dpaa2_io_service_release(NULL, priv->bpid,
++	while ((err = dpaa2_io_service_release(NULL, priv->bpid,
+ 					       ch->rel_buf_array,
+-					       ch->rel_buf_cnt);
++					       ch->rel_buf_cnt)) == -EBUSY)
+ 		cpu_relax();
+-	} while (err == -EBUSY);
+ 
+ 	if (unlikely(err))
+ 		free_bufs(priv, ch->rel_buf_array, ch->rel_buf_cnt);
+@@ -1033,10 +1031,9 @@ static int add_bufs(struct dpaa2_eth_priv *priv, u16 bpid)
+ 
+ release_bufs:
+ 	/* In case the portal is busy, retry until successful */
+-	do {
+-		err = dpaa2_io_service_release(NULL, bpid, buf_array, i);
++	while ((err = dpaa2_io_service_release(NULL, bpid,
++					       buf_array, i)) == -EBUSY)
+ 		cpu_relax();
+-	} while (err == -EBUSY);
+ 
+ 	/* If release command failed, clean up and bail out; not much
+ 	 * else we can do about it
+-- 
+1.7.1
+

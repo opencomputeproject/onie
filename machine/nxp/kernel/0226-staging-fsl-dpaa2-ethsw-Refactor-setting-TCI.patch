@@ -1,0 +1,219 @@
+From 6d31c68b02757d1b9f4b60a6088beb7d2cdad57c Mon Sep 17 00:00:00 2001
+From: Razvan Stefanescu <razvan.stefanescu@nxp.com>
+Date: Mon, 5 Mar 2018 14:48:14 +0200
+Subject: [PATCH 226/448] staging: fsl-dpaa2/ethsw: Refactor setting TCI
+
+Avoid code duplication when configuring TCI on a switch port by using a
+helper function. It makes sure that the port is disabled before setting the
+TCI on a port.
+
+Signed-off-by: Razvan Stefanescu <razvan.stefanescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethsw/ethsw.c |  143 +++++++++++++------------------
+ 1 files changed, 58 insertions(+), 85 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethsw/ethsw.c b/drivers/staging/fsl-dpaa2/ethsw/ethsw.c
+index a4b4fb2..f9dc627 100644
+--- a/drivers/staging/fsl-dpaa2/ethsw/ethsw.c
++++ b/drivers/staging/fsl-dpaa2/ethsw/ethsw.c
+@@ -74,14 +74,60 @@ static int ethsw_add_vlan(struct ethsw_core *ethsw, u16 vid)
+ 	return 0;
+ }
+ 
++static int ethsw_port_set_tci(struct ethsw_port_priv *port_priv,
++			      struct dpsw_tci_cfg *tci_cfg)
++{
++	struct ethsw_core *ethsw = port_priv->ethsw_data;
++	struct net_device *netdev = port_priv->netdev;
++	bool is_oper;
++	int err, ret;
++
++	/* Interface needs to be down to change PVID */
++	is_oper = netif_oper_up(netdev);
++	if (is_oper) {
++		err = dpsw_if_disable(ethsw->mc_io, 0,
++				      ethsw->dpsw_handle,
++				      port_priv->idx);
++		if (err) {
++			netdev_err(netdev, "dpsw_if_disable err %d\n", err);
++			return err;
++		}
++	}
++
++	err = dpsw_if_set_tci(ethsw->mc_io, 0, ethsw->dpsw_handle,
++			      port_priv->idx, tci_cfg);
++	if (err) {
++		netdev_err(netdev, "dpsw_if_set_tci err %d\n", err);
++		goto set_tci_error;
++	}
++
++	/* Delete previous PVID info and mark the new one */
++	if (port_priv->pvid)
++		port_priv->vlans[port_priv->pvid] &= ~ETHSW_VLAN_PVID;
++	port_priv->vlans[tci_cfg->vlan_id] |= ETHSW_VLAN_PVID;
++	port_priv->pvid = tci_cfg->vlan_id;
++
++set_tci_error:
++	if (is_oper) {
++		ret = dpsw_if_enable(ethsw->mc_io, 0,
++				     ethsw->dpsw_handle,
++				     port_priv->idx);
++		if (ret) {
++			netdev_err(netdev, "dpsw_if_enable err %d\n", ret);
++			return ret;
++		}
++	}
++
++	return err;
++}
++
+ static int ethsw_port_add_vlan(struct ethsw_port_priv *port_priv,
+ 			       u16 vid, u16 flags)
+ {
+ 	struct ethsw_core *ethsw = port_priv->ethsw_data;
+ 	struct net_device *netdev = port_priv->netdev;
+ 	struct dpsw_vlan_if_cfg vcfg;
+-	bool is_oper;
+-	int err, ret;
++	int err;
+ 
+ 	if (port_priv->vlans[vid]) {
+ 		netdev_warn(netdev, "VLAN %d already configured\n", vid);
+@@ -117,46 +163,12 @@ static int ethsw_port_add_vlan(struct ethsw_port_priv *port_priv,
+ 			.vlan_id = vid,
+ 		};
+ 
+-		/* Interface needs to be down to change PVID */
+-		is_oper = netif_oper_up(netdev);
+-		if (is_oper) {
+-			err = dpsw_if_disable(ethsw->mc_io, 0,
+-					      ethsw->dpsw_handle,
+-					      port_priv->idx);
+-			if (err) {
+-				netdev_err(netdev,
+-					   "dpsw_if_disable err %d\n", err);
+-				return err;
+-			}
+-		}
+-
+-		err = dpsw_if_set_tci(ethsw->mc_io, 0, ethsw->dpsw_handle,
+-				      port_priv->idx, &tci_cfg);
+-		if (!err) {
+-			/* Delete previous PVID info and mark the new one */
+-			if (port_priv->pvid)
+-				port_priv->vlans[port_priv->pvid]
+-						 &= ~ETHSW_VLAN_PVID;
+-
+-			port_priv->vlans[vid] |= ETHSW_VLAN_PVID;
+-			port_priv->pvid = vid;
+-		} else {
+-			netdev_err(netdev, "dpsw_if_set_tci err %d\n", err);
+-		}
+-
+-		if (is_oper) {
+-			ret = dpsw_if_enable(ethsw->mc_io, 0,
+-					     ethsw->dpsw_handle,
+-					     port_priv->idx);
+-			if (ret) {
+-				netdev_err(netdev,
+-					   "dpsw_if_enable err %d\n", ret);
+-				return ret;
+-			}
+-		}
++		err = ethsw_port_set_tci(port_priv, &tci_cfg);
++		if (err)
++			return err;
+ 	}
+ 
+-	return err;
++	return 0;
+ }
+ 
+ static int ethsw_set_learning(struct ethsw_core *ethsw, u8 flag)
+@@ -781,51 +793,17 @@ static int ethsw_port_del_vlan(struct ethsw_port_priv *port_priv, u16 vid)
+ 	struct ethsw_core *ethsw = port_priv->ethsw_data;
+ 	struct net_device *netdev = port_priv->netdev;
+ 	struct dpsw_vlan_if_cfg vcfg;
+-	int i, err, ret;
+-	bool is_oper;
++	int i, err;
+ 
+ 	if (!port_priv->vlans[vid])
+ 		return -ENOENT;
+ 
+ 	if (port_priv->vlans[vid] & ETHSW_VLAN_PVID) {
+ 		struct dpsw_tci_cfg tci_cfg = { 0 };
+-		/* Interface needs to be down to change PVID */
+-		is_oper = netif_oper_up(netdev);
+-
+-		if (is_oper) {
+-			err = dpsw_if_disable(ethsw->mc_io, 0,
+-					      ethsw->dpsw_handle,
+-					      port_priv->idx);
+-			if (err) {
+-				netdev_err(netdev, "dpsw_if_disable err %d\n",
+-					   err);
+-				goto exit_err;
+-			}
+-		}
+-
+-		err = dpsw_if_set_tci(ethsw->mc_io, 0,
+-				      ethsw->dpsw_handle,
+-				      port_priv->idx, &tci_cfg);
+-		if (!err) {
+-			port_priv->vlans[vid] &= ~ETHSW_VLAN_PVID;
+-			port_priv->pvid = 0;
+-		} else {
+-			netdev_err(netdev, "dpsw_if_set_tci err %d\n", err);
+-		}
+-
+-		if (is_oper) {
+-			ret = dpsw_if_enable(ethsw->mc_io, 0,
+-					     ethsw->dpsw_handle,
+-					     port_priv->idx);
+-			if (ret) {
+-				netdev_err(netdev, "dpsw_if_enable err %d\n",
+-					   ret);
+-				return ret;
+-			}
+-		}
+ 
++		err = ethsw_port_set_tci(port_priv, &tci_cfg);
+ 		if (err)
+-			goto exit_err;
++			return err;
+ 	}
+ 
+ 	vcfg.num_ifs = 1;
+@@ -863,12 +841,10 @@ static int ethsw_port_del_vlan(struct ethsw_port_priv *port_priv, u16 vid)
+ 
+ 		err = ethsw_dellink_switch(ethsw, vid);
+ 		if (err)
+-			goto exit_err;
++			return err;
+ 	}
+ 
+ 	return 0;
+-exit_err:
+-	return err;
+ }
+ 
+ static int port_vlans_del(struct net_device *netdev,
+@@ -1230,12 +1206,9 @@ static int ethsw_port_init(struct ethsw_port_priv *port_priv, u16 port)
+ 		return err;
+ 	}
+ 
+-	err = dpsw_if_set_tci(ethsw->mc_io, 0, ethsw->dpsw_handle,
+-			      port_priv->idx, &tci_cfg);
+-	if (err) {
+-		netdev_err(netdev, "dpsw_if_set_tci err %d\n", err);
++	err = ethsw_port_set_tci(port_priv, &tci_cfg);
++	if (err)
+ 		return err;
+-	}
+ 
+ 	err = dpsw_vlan_remove_if(ethsw->mc_io, 0, ethsw->dpsw_handle,
+ 				  DEFAULT_VLAN_ID, &vcfg);
+-- 
+1.7.1
+

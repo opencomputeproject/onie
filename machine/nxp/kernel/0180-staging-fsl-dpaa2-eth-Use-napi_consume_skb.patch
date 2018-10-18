@@ -1,0 +1,57 @@
+From bf26adff19a81e32ba05338d46c21f4b88f7fde3 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 26 Oct 2017 11:19:00 +0300
+Subject: [PATCH 180/448] staging: fsl-dpaa2/eth: Use napi_consume_skb()
+
+While in NAPI context, free skbs by calling napi_consume_skb()
+instead of dev_kfree_skb(), to take advantage of the bulk freeing
+mechanism.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 8439317..684074d 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -726,7 +726,7 @@ static int build_single_fd(struct dpaa2_eth_priv *priv,
+  */
+ static void free_tx_fd(struct dpaa2_eth_priv *priv,
+ 		       const struct dpaa2_fd *fd,
+-		       u32 *status)
++		       u32 *status, bool in_napi)
+ {
+ 	struct device *dev = priv->net_dev->dev.parent;
+ 	dma_addr_t fd_addr;
+@@ -799,7 +799,7 @@ static void free_tx_fd(struct dpaa2_eth_priv *priv,
+ 		kfree(buffer_start);
+ 
+ 	/* Move on with skb release */
+-	dev_kfree_skb(skb);
++	napi_consume_skb(skb, in_napi);
+ }
+ 
+ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+@@ -880,7 +880,7 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 	if (unlikely(err < 0)) {
+ 		percpu_stats->tx_errors++;
+ 		/* Clean up everything, including freeing the skb */
+-		free_tx_fd(priv, &fd, NULL);
++		free_tx_fd(priv, &fd, NULL, false);
+ 	} else {
+ 		percpu_stats->tx_packets++;
+ 		percpu_stats->tx_bytes += dpaa2_fd_get_len(&fd);
+@@ -937,7 +937,7 @@ static void dpaa2_eth_tx_conf(struct dpaa2_eth_priv *priv,
+ 				   fd_errors);
+ 	}
+ 
+-	free_tx_fd(priv, fd, has_fas_errors ? &status : NULL);
++	free_tx_fd(priv, fd, has_fas_errors ? &status : NULL, true);
+ 
+ 	if (likely(!fd_errors))
+ 		return;
+-- 
+1.7.1
+

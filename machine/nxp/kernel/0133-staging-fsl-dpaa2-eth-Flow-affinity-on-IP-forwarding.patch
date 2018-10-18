@@ -1,0 +1,103 @@
+From 22e1acbe162fa6123544053a9122fc8cf704e53f Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 27 Apr 2017 16:10:44 +0300
+Subject: [PATCH 133/448] staging: fsl-dpaa2/eth: Flow affinity on IP forwarding
+
+The driver egress function chooses a FQ to send the frames based on
+the current processor ID. The network stack itself sets a mapping
+field in the skb based on many things - the default one being a hash
+on packet fiels, which the current driver ignores.
+
+This patch saves the ingress frame flow affinity information in the
+skb. In case of forwarded frames, this info will then be used for Tx
+and Tx confirmation hardware queue selection, ensuring all processing
+of the given frame is done on a single core.
+
+This brings a ~5% performance improvement for IP forwarding between
+two DPNI interfaces.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   21 +++++++++++++++------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    3 ++-
+ 2 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 34edac5..aecbc61 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -221,7 +221,8 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 			 struct dpaa2_eth_channel *ch,
+ 			 const struct dpaa2_fd *fd,
+-			 struct napi_struct *napi)
++			 struct napi_struct *napi,
++			 u16 queue_id)
+ {
+ 	dma_addr_t addr = dpaa2_fd_get_addr(fd);
+ 	u8 fd_format = dpaa2_fd_get_format(fd);
+@@ -273,6 +274,12 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 
+ 	skb->protocol = eth_type_trans(skb, priv->net_dev);
+ 
++	/* Record Rx queue - this will be used when picking a Tx queue to
++	 * forward the frames. We're keeping flow affinity through the
++	 * network stack.
++	 */
++	skb_record_rx_queue(skb, queue_id);
++
+ 	percpu_stats->rx_packets++;
+ 	percpu_stats->rx_bytes += dpaa2_fd_get_len(fd);
+ 
+@@ -318,7 +325,7 @@ static int consume_frames(struct dpaa2_eth_channel *ch)
+ 		fq = (struct dpaa2_eth_fq *)dpaa2_dq_fqd_ctx(dq);
+ 		fq->stats.frames++;
+ 
+-		fq->consume(priv, ch, fd, &ch->napi);
++		fq->consume(priv, ch, fd, &ch->napi, fq->flowid);
+ 		cleaned++;
+ 	} while (!is_last);
+ 
+@@ -606,10 +613,11 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 	/* Tracing point */
+ 	trace_dpaa2_tx_fd(net_dev, &fd);
+ 
+-	/* TxConf FQ selection primarily based on cpu affinity; this is
+-	 * non-migratable context, so it's safe to call smp_processor_id().
++	/* TxConf FQ selection relies on queue id from the stack;
++	 * in case of a forwarded frame from another DPNI interface, we choose
++	 * a queue affined to the same core that processed the Rx frame
+ 	 */
+-	queue_mapping = smp_processor_id() % dpaa2_eth_queue_count(priv);
++	queue_mapping = skb_get_queue_mapping(skb);
+ 	fq = &priv->fq[queue_mapping];
+ 	for (i = 0; i < DPAA2_ETH_ENQUEUE_RETRIES; i++) {
+ 		err = dpaa2_io_service_enqueue_qd(NULL, priv->tx_qdid, 0,
+@@ -640,7 +648,8 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ static void dpaa2_eth_tx_conf(struct dpaa2_eth_priv *priv,
+ 			      struct dpaa2_eth_channel *ch,
+ 			      const struct dpaa2_fd *fd,
+-			      struct napi_struct *napi __always_unused)
++			      struct napi_struct *napi __always_unused,
++			      u16 queue_id __always_unused)
+ {
+ 	struct rtnl_link_stats64 *percpu_stats;
+ 	struct dpaa2_eth_drv_stats *percpu_extras;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index e98137a..2c39023 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -288,7 +288,8 @@ struct dpaa2_eth_fq {
+ 	void (*consume)(struct dpaa2_eth_priv *,
+ 			struct dpaa2_eth_channel *,
+ 			const struct dpaa2_fd *,
+-			struct napi_struct *);
++			struct napi_struct *,
++			u16 queue_id);
+ 	struct dpaa2_eth_fq_stats stats;
+ };
+ 
+-- 
+1.7.1
+

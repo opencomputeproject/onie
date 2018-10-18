@@ -1,0 +1,31 @@
+From cb6b054f4f457f3696b11d3b1c1a5903fa36852f Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Mon, 13 Mar 2017 11:53:48 +0000
+Subject: [PATCH 153/448] staging: fsl-dpaa2/eth: Disable preemption when draining pool
+
+Prevent calling thread to be relocated on different CPU in the middle of
+DPIO buffer acquire commands.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index ea3ae93..ec80e16 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -985,8 +985,10 @@ static void drain_pool(struct dpaa2_eth_priv *priv)
+ {
+ 	int i;
+ 
++	preempt_disable();
+ 	drain_bufs(priv, DPAA2_ETH_BUFS_PER_CMD);
+ 	drain_bufs(priv, 1);
++	preempt_enable();
+ 
+ 	for (i = 0; i < priv->num_channels; i++)
+ 		priv->channel[i]->buf_count = 0;
+-- 
+1.7.1
+
