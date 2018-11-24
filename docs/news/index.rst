@@ -7,6 +7,12 @@
 Project News
 ************
 
+November 14, 2018
+  Released version `2018.11
+  <https://ocp-all.groups.io/g/OCP-ONIE/topic/onie_2018_11_release_is_now/28139886?p=,,,20,0,0,0::recentpostdate%2Fsticky,,,20,2,0,28139886>`_
+  Notes are also available on the old list archives `server
+  <http://lists.opencompute.org/pipermail/opencompute-onie/2018-November/001774.html>`_
+		
 September 5, 2018
   OCP `Networking Workshop Presentation
   <https://www.youtube.com/watch?v=p86mMKZqh4g>`_
