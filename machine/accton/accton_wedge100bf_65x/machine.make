@@ -1,4 +1,4 @@
-# Accton Wedge100BF_32X
+# Accton Wedge100BF_65X
 
 # Vendor's version number can be defined here.
 # Available variable is 'VENDOR_VERSION'.
@@ -30,8 +30,6 @@ VENDOR_ID = 259
 
 UEFI_ENABLE = yes
 PXE_EFI64_ENABLE = yes
-
-I2CTOOLS_ENABLE = yes
 
 # Console parameters
 CONSOLE_DEV = 0

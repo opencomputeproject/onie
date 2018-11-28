@@ -1,0 +1,45 @@
+ubsan-fix-check-empty-string.patch
+
+Fix ubsan compilation error using host gcc version 7.
+
+Take from upstream commit 4d360c3c
+
+  Author: Kirill K. Smirnov <kirill.k.smirnov@gmail.com>
+  Date:   Sat May 27 21:34:09 2017 +0300
+
+    patches: Add patch that fixes gcc6 with gcc7
+
+diff --git a/patches/gcc/6.3.0/1100-ubsan-fix-check-empty-string.patch b/patches/gcc/6.3.0/1100-ubsan-fix-check-empty-string.patch
+new file mode 100644
+index 0000000..c012719
+--- /dev/null
++++ b/patches/gcc/6.3.0/1100-ubsan-fix-check-empty-string.patch
+@@ -0,0 +1,28 @@
++From 8db2cf6353c13f2a84cbe49b689654897906c499 Mon Sep 17 00:00:00 2001
++From: kyukhin <kyukhin@138bc75d-0d04-0410-961f-82ee72b054a4>
++Date: Sat, 3 Sep 2016 10:57:05 +0000
++Subject: [PATCH] gcc/ 	* ubsan.c (ubsan_use_new_style_p): Fix check for empty
++ string.
++
++git-svn-id: svn+ssh://gcc.gnu.org/svn/gcc/trunk@239971 138bc75d-0d04-0410-961f-82ee72b054a4
++
++Upstream-Status: Backport
++Signed-off-by: Joshua Lock <joshua.g.lock@intel.com>
++
++---
++ gcc/ubsan.c   | 2 +-
++ 2 files changed, 5 insertions(+), 1 deletion(-)
++
++Index: gcc-6.3.0/gcc/ubsan.c
++===================================================================
++--- gcc-6.3.0.orig/gcc/ubsan.c
+++++ gcc-6.3.0/gcc/ubsan.c
++@@ -1471,7 +1471,7 @@ ubsan_use_new_style_p (location_t loc)
++ 
++   expanded_location xloc = expand_location (loc);
++   if (xloc.file == NULL || strncmp (xloc.file, "\1", 2) == 0
++-      || xloc.file == '\0' || xloc.file[0] == '\xff'
+++      || xloc.file[0] == '\0' || xloc.file[0] == '\xff'
++       || xloc.file[1] == '\xff')
++     return false;
++ 

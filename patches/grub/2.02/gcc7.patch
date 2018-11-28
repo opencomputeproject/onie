@@ -1,0 +1,23 @@
+When building grub using gcc-7, with -Werror=unused-value enabled, we
+hit this error:
+
+  grub_script.yy.c:19:22: error: statement with no effect [-Werror=unused-value]
+   #define fprintf(...) 0
+
+This patch follows the approach from the gcc manual,
+https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html, and casts the
+0 value to (void).
+
+diff --git a/grub-core/script/yylex.l b/grub-core/script/yylex.l
+index 95b2191..71d288f 100644
+--- a/grub-core/script/yylex.l
++++ b/grub-core/script/yylex.l
+@@ -91,7 +91,7 @@ typedef size_t yy_size_t;
+ #define stdin  0
+ #define stdout 0
+ 
+-#define fprintf(...) 0
++#define fprintf(...) ((void)0)
+ #define exit(...) grub_fatal("fatal error in lexer")
+ #endif
+ 
