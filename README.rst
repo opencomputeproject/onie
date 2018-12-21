@@ -16,5 +16,5 @@ Join the conversation -- send questions, comments and ideas to opencompute-onie@
 
 Subscribe to the list: `https://ocp-all.groups.io/g/OCP-ONIE <https://ocp-all.groups.io/g/OCP-ONIE>`_.
 
-Browse the archives: `https://ocp-all.groups.io/g/OCP-ONIE/topics <https://ocp-all.groups.io/g/OCP-ONIE/topics`_.
+Browse the archives: `https://ocp-all.groups.io/g/OCP-ONIE/topics <https://ocp-all.groups.io/g/OCP-ONIE/topics>`_.
 
