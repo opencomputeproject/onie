@@ -14,7 +14,7 @@ Mailing List and Collaboration
 
 Join the conversation -- send questions, comments and ideas to opencompute-onie@lists.opencompute.org.
 
-Subscribe to the list: `http://lists.opencompute.org/mailman/listinfo/opencompute-onie <http://lists.opencompute.org/mailman/listinfo/opencompute-onie>`_.
+Subscribe to the list: `https://ocp-all.groups.io/g/OCP-ONIE <https://ocp-all.groups.io/g/OCP-ONIE>`_.
 
-Browse the archives: `http://lists.opencompute.org/pipermail/opencompute-onie/ <http://lists.opencompute.org/pipermail/opencompute-onie/>`_.
+Browse the archives: `https://ocp-all.groups.io/g/OCP-ONIE/topics <https://ocp-all.groups.io/g/OCP-ONIE/topics`_.
 
