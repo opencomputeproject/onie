@@ -237,6 +237,7 @@ COMMAND LINE OPTIONS
   -s | Serial Number
   -P | Part Number
   -e | Management Ethernet MAC address
+  -l | Boot loader type
   -v | ONIE version string
   -i | ONIE vendor ID.  Print the ONIE vendor's IANA enterprise number.
   -b | ONIE build machine string
