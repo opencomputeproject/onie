@@ -14,6 +14,11 @@ else
   $(error Unknown VENDOR_REV)
 endif
 
+# The VENDOR_VERSION string is appended to the overal ONIE version
+# string.  HW vendors can use this to appended their own versioning
+# information to the base ONIE version string.
+VENDOR_VERSION = onie_version_1.00.00
+
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
 # AGEMA IANA number
