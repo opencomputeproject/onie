@@ -124,3 +124,5 @@ UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/test-inst
 # Local Variables:
 # mode: makefile-gmake
 # End:
+
+CURL_ENABLE = yes

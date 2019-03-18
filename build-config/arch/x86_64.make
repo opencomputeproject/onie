@@ -138,6 +138,9 @@ LVM2_ENABLE = yes
 # Include ethtool by default
 ETHTOOL_ENABLE ?= yes
 
+# Include curl by default
+CURL_ENABLE ?= yes
+
 # Include dosfstools
 DOSFSTOOLS_ENABLE = yes
 

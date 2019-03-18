@@ -375,6 +375,9 @@ ifeq ($(GPT_ENABLE),yes)
   include make/popt.make
   include make/gptfdisk.make
 endif
+ifeq ($(CURL_ENABLE),yes)
+  include make/curl.make
+endif
 ifeq ($(LVM2_ENABLE),yes)
   include make/lvm2.make
 endif
