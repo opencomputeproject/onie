@@ -97,13 +97,13 @@ config_ethmgmt_fallback()
         local test_ip="169.254.${rnd1}.${rnd2}"
 
         # use arping to check if IP is in use
-        arping -qD -c 5 $test_ip && {
+        arping -qD -c 5 -I $intf $test_ip && {
             # Claim this IP
             ip addr add ${test_ip}/$prefix dev $intf || {
                 log_failure_msg "Problems setting default IPv4 addr: ${intf}: ${test_ip}/$prefix"
                 return 1
             }
-            arping -c 3 -Uq -s $test_ip $test_ip
+            arping -c 3 -Uq -I $intf -s $test_ip $test_ip
             log_console_msg "Using link-local IPv4 addr: ${intf}: ${test_ip}/$prefix"
             break
         }
