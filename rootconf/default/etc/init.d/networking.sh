@@ -84,6 +84,12 @@ config_ethmgmt_fallback()
     local intf=$1
     shift
 
+    local ipaddr=$(ifconfig $intf |grep 'inet '|sed -e 's/:/ /g'|awk '{ print $3 " / " $7 }')
+    if [ -n "$ipaddr" ] ; then
+       log_console_msg "Found already assigned IP address $ipaddr to $intf"
+       return 0
+    fi
+
     # Remove any previously configured, IPv4 addresses
     ip -f inet addr flush dev $intf
 
