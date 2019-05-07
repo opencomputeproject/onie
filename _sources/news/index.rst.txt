@@ -7,6 +7,14 @@
 Project News
 ************
 
+May 7, 2019
+  Released version `2019.05
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/45>`_
+
+February 12, 2019
+  Released version `2019.02
+  <https://ocp-all.groups.io/g/OCP-ONIE/topic/onie_2019_02_is_now_available/29772448?p=,,,20,0,0,0::recentpostdate%2Fsticky,,,20,2,0,29772448>`_
+
 February 12, 2019
   Released version `2019.02
   <https://ocp-all.groups.io/g/OCP-ONIE/topic/onie_2019_02_is_now_available/29772448?p=,,,20,0,0,0::recentpostdate%2Fsticky,,,20,2,0,29772448>`_
