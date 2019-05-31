@@ -1,0 +1,48 @@
+From df68e2ef6d9360a0e9f2b11d7355e004d3baaa79 Mon Sep 17 00:00:00 2001
+From: Bharat Bhushan <Bharat.Bhushan@nxp.com>
+Date: Thu, 31 May 2018 17:25:15 +0800
+Subject: [PATCH 338/448] kvm: arm: Fix to enable qman mmio cacheable mapping hack
+
+[context adjustment]
+
+"ifdef ARM64" must be CONFIG_ARM64.
+
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/kvm/mmu.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/kvm/mmu.c b/arch/arm/kvm/mmu.c
+index 1d9ae29..4354392 100644
+--- a/arch/arm/kvm/mmu.c
++++ b/arch/arm/kvm/mmu.c
+@@ -1039,7 +1039,7 @@ int kvm_phys_addr_ioremap(struct kvm *kvm, phys_addr_t guest_ipa,
+ 	return ret;
+ }
+ 
+-#ifdef ARM64
++#ifdef CONFIG_ARM64
+ static pgprot_t stage1_to_stage2_pgprot(pgprot_t prot)
+ {
+ 	switch (pgprot_val(prot) & PTE_ATTRINDX_MASK) {
+@@ -1322,7 +1322,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
+ 			pte = get_locked_pte(current->mm, memslot->userspace_addr, &ptl);
+ 			prot = stage1_to_stage2_pgprot(__pgprot(pte_val(*pte)));
+ 			pte_unmap_unlock(pte, ptl);
+-#ifdef ARM64
++#ifdef CONFIG_ARM64
+ 			if (pgprot_val(prot) == pgprot_val(PAGE_S2_NS))
+ 				mem_type = PAGE_S2_NS;
+ #endif
+@@ -1364,7 +1364,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
+ 	if (is_error_noslot_pfn(pfn))
+ 		return -EFAULT;
+ 
+-#ifdef ARM64
++#ifdef CONFIG_ARM64
+ 	if (pgprot_val(mem_type) == pgprot_val(PAGE_S2_NS)) {
+ 		flags |= KVM_S2PTE_FLAG_IS_IOMAP;
+ 	} else
+-- 
+1.7.1
+

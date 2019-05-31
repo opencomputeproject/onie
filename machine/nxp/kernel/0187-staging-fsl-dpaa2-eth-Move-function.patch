@@ -1,0 +1,183 @@
+From bf6547d6b3caf4b8928e847a822c8d9c1d94395c Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 9 Nov 2017 17:29:08 +0200
+Subject: [PATCH 187/448] staging: fsl-dpaa2/eth: Move function
+
+Move the declaration of set_buffer_layout() earlier in the file.
+We will need to call it from the XDP program setup routine and
+it's nicer than adding a forward declaration.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |  148 ++++++++++++------------
+ 1 files changed, 74 insertions(+), 74 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 9f51aea..6b9cdbb 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1638,6 +1638,80 @@ static int dpaa2_eth_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+ 	return -EINVAL;
+ }
+ 
++static int set_buffer_layout(struct dpaa2_eth_priv *priv)
++{
++	struct device *dev = priv->net_dev->dev.parent;
++	struct dpni_buffer_layout buf_layout = {0};
++	int err;
++
++	/* We need to check for WRIOP version 1.0.0, but depending on the MC
++	 * version, this number is not always provided correctly on rev1.
++	 * We need to check for both alternatives in this situation.
++	 */
++	if (priv->dpni_attrs.wriop_version == DPAA2_WRIOP_VERSION(0, 0, 0) ||
++	    priv->dpni_attrs.wriop_version == DPAA2_WRIOP_VERSION(1, 0, 0))
++		priv->rx_buf_align = DPAA2_ETH_RX_BUF_ALIGN_REV1;
++	else
++		priv->rx_buf_align = DPAA2_ETH_RX_BUF_ALIGN;
++
++	/* tx buffer */
++	buf_layout.pass_frame_status = true;
++	buf_layout.pass_timestamp = true;
++	buf_layout.private_data_size = DPAA2_ETH_SWA_SIZE;
++	buf_layout.options = DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
++			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP |
++			     DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE;
++	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
++				     DPNI_QUEUE_TX, &buf_layout);
++	if (err) {
++		dev_err(dev, "dpni_set_buffer_layout(TX) failed\n");
++		return err;
++	}
++
++	/* tx-confirm buffer */
++	buf_layout.options = DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
++			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP;
++	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
++				     DPNI_QUEUE_TX_CONFIRM, &buf_layout);
++	if (err) {
++		dev_err(dev, "dpni_set_buffer_layout(TX_CONF) failed\n");
++		return err;
++	}
++
++	/* Now that we've set our tx buffer layout, retrieve the minimum
++	 * required tx data offset.
++	 */
++	err = dpni_get_tx_data_offset(priv->mc_io, 0, priv->mc_token,
++				      &priv->tx_data_offset);
++	if (err) {
++		dev_err(dev, "dpni_get_tx_data_offset() failed\n");
++		return err;
++	}
++
++	if ((priv->tx_data_offset % 64) != 0)
++		dev_warn(dev, "Tx data offset (%d) not a multiple of 64B\n",
++			 priv->tx_data_offset);
++
++	/* rx buffer */
++	buf_layout.pass_parser_result = true;
++	buf_layout.data_align = priv->rx_buf_align;
++	buf_layout.data_head_room = dpaa2_eth_rx_headroom(priv);
++	buf_layout.options = DPNI_BUF_LAYOUT_OPT_PARSER_RESULT |
++			     DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
++			     DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE |
++			     DPNI_BUF_LAYOUT_OPT_DATA_ALIGN |
++			     DPNI_BUF_LAYOUT_OPT_DATA_HEAD_ROOM |
++			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP;
++	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
++				     DPNI_QUEUE_RX, &buf_layout);
++	if (err) {
++		dev_err(dev, "dpni_set_buffer_layout(RX) failed\n");
++		return err;
++	}
++
++	return 0;
++}
++
+ static int dpaa2_eth_set_xdp(struct net_device *net_dev, struct bpf_prog *prog)
+ {
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+@@ -2141,80 +2215,6 @@ static int setup_tx_congestion(struct dpaa2_eth_priv *priv)
+ 	return err;
+ }
+ 
+-static int set_buffer_layout(struct dpaa2_eth_priv *priv)
+-{
+-	struct device *dev = priv->net_dev->dev.parent;
+-	struct dpni_buffer_layout buf_layout = {0};
+-	int err;
+-
+-	/* We need to check for WRIOP version 1.0.0, but depending on the MC
+-	 * version, this number is not always provided correctly on rev1.
+-	 * We need to check for both alternatives in this situation.
+-	 */
+-	if (priv->dpni_attrs.wriop_version == DPAA2_WRIOP_VERSION(0, 0, 0) ||
+-	    priv->dpni_attrs.wriop_version == DPAA2_WRIOP_VERSION(1, 0, 0))
+-		priv->rx_buf_align = DPAA2_ETH_RX_BUF_ALIGN_REV1;
+-	else
+-		priv->rx_buf_align = DPAA2_ETH_RX_BUF_ALIGN;
+-
+-	/* tx buffer */
+-	buf_layout.pass_frame_status = true;
+-	buf_layout.pass_timestamp = true;
+-	buf_layout.private_data_size = DPAA2_ETH_SWA_SIZE;
+-	buf_layout.options = DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
+-			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP |
+-			     DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE;
+-	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
+-				     DPNI_QUEUE_TX, &buf_layout);
+-	if (err) {
+-		dev_err(dev, "dpni_set_buffer_layout(TX) failed\n");
+-		return err;
+-	}
+-
+-	/* tx-confirm buffer */
+-	buf_layout.options = DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
+-			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP;
+-	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
+-				     DPNI_QUEUE_TX_CONFIRM, &buf_layout);
+-	if (err) {
+-		dev_err(dev, "dpni_set_buffer_layout(TX_CONF) failed\n");
+-		return err;
+-	}
+-
+-	/* Now that we've set our tx buffer layout, retrieve the minimum
+-	 * required tx data offset.
+-	 */
+-	err = dpni_get_tx_data_offset(priv->mc_io, 0, priv->mc_token,
+-				      &priv->tx_data_offset);
+-	if (err) {
+-		dev_err(dev, "dpni_get_tx_data_offset() failed\n");
+-		return err;
+-	}
+-
+-	if ((priv->tx_data_offset % 64) != 0)
+-		dev_warn(dev, "Tx data offset (%d) not a multiple of 64B\n",
+-			 priv->tx_data_offset);
+-
+-	/* rx buffer */
+-	buf_layout.pass_parser_result = true;
+-	buf_layout.data_align = priv->rx_buf_align;
+-	buf_layout.data_head_room = dpaa2_eth_rx_headroom(priv);
+-	buf_layout.options = DPNI_BUF_LAYOUT_OPT_PARSER_RESULT |
+-			     DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
+-			     DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE |
+-			     DPNI_BUF_LAYOUT_OPT_DATA_ALIGN |
+-			     DPNI_BUF_LAYOUT_OPT_DATA_HEAD_ROOM |
+-			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP;
+-	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
+-				     DPNI_QUEUE_RX, &buf_layout);
+-	if (err) {
+-		dev_err(dev, "dpni_set_buffer_layout(RX) failed\n");
+-		return err;
+-	}
+-
+-	return 0;
+-}
+-
+ /* Configure the DPNI object this interface is associated with */
+ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ {
+-- 
+1.7.1
+

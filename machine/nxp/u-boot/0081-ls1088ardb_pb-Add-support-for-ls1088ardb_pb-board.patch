@@ -1,0 +1,594 @@
+From 74021711f28b3bb22405a79ab147c504b4ef1efd Mon Sep 17 00:00:00 2001
+From: Pramod Kumar <pramod.kumar_1@nxp.com>
+Date: Thu, 26 Jul 2018 12:01:27 +0530
+Subject: [PATCH 081/107] ls1088ardb_pb: Add support for ls1088ardb_pb board.
+
+ls1088ardb-pb is another varinat of the ls1088ardb.
+This board support two m.2 x2 gen 3 pcie card slot.
+There is no support of sata, pcie standard slot,
+miniPCIE slot and TDM in this board.
+
+Signed-off-by: Pramod Kumar <pramod.kumar_1@nxp.com>
+---
+ arch/arm/Kconfig                                   |   14 +++
+ arch/arm/cpu/armv8/Kconfig                         |    2 +-
+ board/freescale/ls1088a/Kconfig                    |   43 ++++++++++
+ board/freescale/ls1088a/MAINTAINERS                |   18 ++++
+ board/freescale/ls1088a/Makefile                   |    1 +
+ board/freescale/ls1088a/ddr.h                      |    4 +-
+ board/freescale/ls1088a/ls1088a.c                  |   23 ++++-
+ configs/ls1088ardb_pb_qspi_SECURE_BOOT_defconfig   |   51 ++++++++++++
+ configs/ls1088ardb_pb_qspi_defconfig               |   49 +++++++++++
+ ...ls1088ardb_pb_sdcard_qspi_SECURE_BOOT_defconfig |   58 +++++++++++++
+ configs/ls1088ardb_pb_sdcard_qspi_defconfig        |   58 +++++++++++++
+ include/configs/ls1088ardb_pb.h                    |   87 ++++++++++++++++++++
+ 12 files changed, 401 insertions(+), 7 deletions(-)
+ create mode 100644 configs/ls1088ardb_pb_qspi_SECURE_BOOT_defconfig
+ create mode 100644 configs/ls1088ardb_pb_qspi_defconfig
+ create mode 100644 configs/ls1088ardb_pb_sdcard_qspi_SECURE_BOOT_defconfig
+ create mode 100644 configs/ls1088ardb_pb_sdcard_qspi_defconfig
+ create mode 100644 include/configs/ls1088ardb_pb.h
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index c7493e4..e09ad7e 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1005,6 +1005,20 @@ config TARGET_LS1088ARDB
+ 	  development platform that supports the QorIQ LS1088A
+ 	  Layerscape Architecture processor.
+ 
++config TARGET_LS1088ARDB_PB
++	bool "Support ls1088ardb_pb"
++	select ARCH_LS1088A
++	select ARM64
++	select ARMV8_MULTIENTRY
++	select ARCH_MISC_INIT
++	select BOARD_LATE_INIT
++	select SUPPORT_SPL
++	help
++	  Support for NXP LS1088ARDB_PB platform.
++	  The LS1088A Reference design board (RDB_PB) is a high-performance
++	  development platform that supports the QorIQ LS1088A
++	  Layerscape Architecture processor.
++
+ config TARGET_LS1021AQDS
+ 	bool "Support ls1021aqds"
+ 	select BOARD_LATE_INIT
+diff --git a/arch/arm/cpu/armv8/Kconfig b/arch/arm/cpu/armv8/Kconfig
+index 22d2f29..4aabca0 100644
+--- a/arch/arm/cpu/armv8/Kconfig
++++ b/arch/arm/cpu/armv8/Kconfig
+@@ -88,7 +88,7 @@ config PSCI_RESET
+ 	depends on !ARCH_EXYNOS7 && !ARCH_BCM283X && \
+ 		   !TARGET_LS2080A_SIMU && !TARGET_LS2080AQDS && \
+ 		   !TARGET_LS2080ARDB && !TARGET_LS2080A_EMU && \
+-		   !TARGET_LS1088ARDB && !TARGET_LS1088AQDS && \
++		   !TARGET_LS1088ARDB && !TARGET_LS1088ARDB_PB && !TARGET_LS1088AQDS && \
+ 		   !TARGET_LS1012ARDB && !TARGET_LS1012AFRDM && \
+ 		   !TARGET_LS1012A2G5RDB && !TARGET_LS1012AQDS && \
+ 		   !TARGET_LS1012AFRWY && \
+diff --git a/board/freescale/ls1088a/Kconfig b/board/freescale/ls1088a/Kconfig
+index 931367d..629e394 100644
+--- a/board/freescale/ls1088a/Kconfig
++++ b/board/freescale/ls1088a/Kconfig
+@@ -83,3 +83,46 @@ endif
+ 
+ source "board/freescale/common/Kconfig"
+ endif
++
++if TARGET_LS1088ARDB_PB
++
++config SYS_BOARD
++	default "ls1088a"
++
++config SYS_VENDOR
++	default "freescale"
++
++config SYS_SOC
++	default "fsl-layerscape"
++
++config SYS_CONFIG_NAME
++	default "ls1088ardb_pb"
++
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x20400000
++
++if CHAIN_OF_TRUST
++config SYS_LS_PPA_ESBC_ADDR
++	hex "PPA Firmware HDR Addr"
++	default 0x20680000
++endif
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++
++if CHAIN_OF_TRUST
++config SYS_LS_PPA_ESBC_ADDR
++	hex "PPA Firmware HDR Addr"
++	default 0x680000
++endif
++endif
++
++source "board/freescale/common/Kconfig"
++endif
+diff --git a/board/freescale/ls1088a/MAINTAINERS b/board/freescale/ls1088a/MAINTAINERS
+index 4d804d9..5d84107 100644
+--- a/board/freescale/ls1088a/MAINTAINERS
++++ b/board/freescale/ls1088a/MAINTAINERS
+@@ -7,6 +7,14 @@ F:	include/configs/ls1088ardb.h
+ F:	configs/ls1088ardb_qspi_defconfig
+ F:	configs/ls1088ardb_sdcard_qspi_defconfig
+ 
++LS1088ARDB_PB BOARD
++M:	Pramod Kumar <Pramod.Kumar@nxp.com>
++S:	Maintained
++F:	board/freescale/ls1088a/
++F:	include/configs/ls1088ardb_pb.h
++F:	configs/ls1088ardb_pb_qspi_defconfig
++F:	configs/ls1088ardb_pb_sdcard_qspi_defconfig
++
+ LS1088AQDS BOARD
+ M:	Prabhakar Kushwaha <prabhakar.kushwaha@nxp.com>
+ M:	Ashish Kumar <Ashish.Kumar@nxp.com>
+@@ -34,3 +42,13 @@ LS1088ARDB_SD_SECURE_BOOT BOARD
+ M:	Sumit Garg <sumit.garg@nxp.com>
+ S:	Maintained
+ F:	configs/ls1088ardb_sdcard_qspi_SECURE_BOOT_defconfig
++
++LS1088ARDB_PB_QSPI_SECURE_BOOT BOARD
++M:	Udit Agarwal <udit.agarwal@nxp.com>
++S:	Maintained
++F:	configs/ls1088ardb_pb_qspi_SECURE_BOOT_defconfig
++
++LS1088ARDB_PB_SD_SECURE_BOOT BOARD
++M:	Udit Agarwal <udit.agarwal@nxp.com>
++S:	Maintained
++F:	configs/ls1088ardb_pb_sdcard_qspi_SECURE_BOOT_defconfig
+diff --git a/board/freescale/ls1088a/Makefile b/board/freescale/ls1088a/Makefile
+index 0e15031..f9655ae 100644
+--- a/board/freescale/ls1088a/Makefile
++++ b/board/freescale/ls1088a/Makefile
+@@ -8,5 +8,6 @@ obj-y += ls1088a.o
+ obj-y += ddr.o
+ ifndef CONFIG_SPL_BUILD
+ obj-$(CONFIG_TARGET_LS1088ARDB) += eth_ls1088ardb.o
++obj-$(CONFIG_TARGET_LS1088ARDB_PB) += eth_ls1088ardb.o
+ obj-$(CONFIG_TARGET_LS1088AQDS) += eth_ls1088aqds.o
+ endif
+diff --git a/board/freescale/ls1088a/ddr.h b/board/freescale/ls1088a/ddr.h
+index a1ad709..e2b4d89 100644
+--- a/board/freescale/ls1088a/ddr.h
++++ b/board/freescale/ls1088a/ddr.h
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2017 NXP
++ * Copyright 2017-2018 NXP
+  *
+  * SPDX-License-Identifier:	GPL-2.0+
+  */
+@@ -28,7 +28,7 @@ static const struct board_specific_parameters udimm0[] = {
+ 	 *   num|  hi| rank|  clk| wrlvl |   wrlvl   |  wrlvl
+ 	 * ranks| mhz| GB  |adjst| start |   ctl2    |  ctl3
+ 	 */
+-#if defined(CONFIG_TARGET_LS1088ARDB)
++#if defined(CONFIG_TARGET_LS1088ARDB) || defined(CONFIG_TARGET_LS1088ARDB_PB)
+ 
+ 	{2,  1666, 0, 8,     8, 0x090A0B0E, 0x0F10110D,},
+ 	{2,  1900, 0, 4,     7, 0x09090B0D, 0x0E10120B,},
+diff --git a/board/freescale/ls1088a/ls1088a.c b/board/freescale/ls1088a/ls1088a.c
+index eb3fee5..e099048 100644
+--- a/board/freescale/ls1088a/ls1088a.c
++++ b/board/freescale/ls1088a/ls1088a.c
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2017 NXP
++ * Copyright 2017-2018 NXP
+  *
+  * SPDX-License-Identifier:	GPL-2.0+
+  */
+@@ -29,6 +29,15 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++#ifdef CONFIG_TARGET_LS1088ARDB_PB
++int fixup_ls1088ardb_pb_banner(void *fdt)
++{
++	fdt_setprop_string(fdt, 0, "model", "LS1088ARDB-PB Board");
++
++	return 0;
++}
++#endif
++
+ int board_early_init_f(void)
+ {
+ #if defined(CONFIG_SYS_I2C_EARLY_INIT) && defined(CONFIG_TARGET_LS1088AQDS)
+@@ -79,6 +88,9 @@ int checkboard(void)
+ 
+ #ifdef CONFIG_TARGET_LS1088AQDS
+ 	printf("Board: LS1088A-QDS, ");
++
++#elif CONFIG_TARGET_LS1088ARDB_PB
++	printf("Board: LS1088ARDB-PB, ");
+ #else
+ 	printf("Board: LS1088A-RDB, ");
+ #endif
+@@ -328,7 +340,7 @@ void board_retimer_init(void)
+ #ifdef CONFIG_MISC_INIT_R
+ int misc_init_r(void)
+ {
+-#ifdef CONFIG_TARGET_LS1088ARDB
++#if defined(CONFIG_TARGET_LS1088ARDB) || defined(CONFIG_TARGET_LS1088ARDB_PB)
+ 	u8 brdcfg5;
+ 
+ 	if (hwconfig("esdhc-force-sd")) {
+@@ -460,7 +472,7 @@ exit:
+ int board_init(void)
+ {
+ 	init_final_memctl_regs();
+-#if defined(CONFIG_TARGET_LS1088ARDB) && defined(CONFIG_FSL_MC_ENET)
++#if defined(CONFIG_TARGET_LS1088ARDB) || defined(CONFIG_TARGET_LS1088ARDB_PB) && defined(CONFIG_FSL_MC_ENET)
+ 	u32 __iomem *irq_ccsr = (u32 __iomem *)ISC_BASE;
+ #endif
+ 
+@@ -471,7 +483,7 @@ int board_init(void)
+ 	gd->env_addr = (ulong)&default_environment[0];
+ #endif
+ 
+-#if defined(CONFIG_TARGET_LS1088ARDB) && defined(CONFIG_FSL_MC_ENET)
++#if defined(CONFIG_TARGET_LS1088ARDB) || defined(CONFIG_TARGET_LS1088ARDB_PB) && defined(CONFIG_FSL_MC_ENET)
+ 	/* invert AQR105 IRQ pins polarity */
+ 	out_le32(irq_ccsr + IRQCR_OFFSET / 4, AQR105_IRQ_MASK);
+ #endif
+@@ -587,6 +599,9 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 		return err;
+ #endif
+ 
++#ifdef CONFIG_TARGET_LS1088ARDB_PB
++fixup_ls1088ardb_pb_banner(blob);
++#endif
+ 	return 0;
+ }
+ #endif
+diff --git a/configs/ls1088ardb_pb_qspi_SECURE_BOOT_defconfig b/configs/ls1088ardb_pb_qspi_SECURE_BOOT_defconfig
+new file mode 100644
+index 0000000..712ae24
+--- /dev/null
++++ b/configs/ls1088ardb_pb_qspi_SECURE_BOOT_defconfig
+@@ -0,0 +1,51 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088ARDB_PB=y
++CONFIG_SYS_TEXT_BASE=0x20100000
++CONFIG_SECURE_BOOT=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_QSPI_AHB_INIT=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-rdb"
++CONFIG_USE_BOOTARGS=y
++CONFIG_BOOTARGS="console=ttyS0,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0500 ramdisk_size=0x3000000 default_hugepagesz=2m hugepagesz=2m hugepages=256"
++CONFIG_CMD_GREPENV=y
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_OF_STDOUT_VIA_ALIAS=y
++CONFIG_SYS_EXTRA_OPTIONS="SYS_FSL_DDR4, QSPI_BOOT"
++# CONFIG_USE_BOOTCOMMAND is not set
++# CONFIG_DISPLAY_BOARDINFO is not set
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_USB=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_OF_CONTROL=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_SCSI_AHCI=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_SPI_FLASH_SPANSION=y
++CONFIG_FSL_SPI_ALIGNED_TXFIFO=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_DM_PCI_COMPAT=y
++CONFIG_PCIE_LAYERSCAPE=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_FSL_DSPI=y
++CONFIG_FSL_QSPI=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_DWC3=y
++CONFIG_USB_STORAGE=y
++CONFIG_USB_GADGET=y
++CONFIG_RSA=y
++CONFIG_RSA_SOFTWARE_EXP=y
++CONFIG_EFI_LOADER_BOUNCE_BUFFER=y
+diff --git a/configs/ls1088ardb_pb_qspi_defconfig b/configs/ls1088ardb_pb_qspi_defconfig
+new file mode 100644
+index 0000000..19868dc
+--- /dev/null
++++ b/configs/ls1088ardb_pb_qspi_defconfig
+@@ -0,0 +1,49 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088ARDB_PB=y
++CONFIG_SYS_TEXT_BASE=0x20100000
++CONFIG_FSL_LS_PPA=y
++CONFIG_QSPI_AHB_INIT=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-rdb"
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_OF_STDOUT_VIA_ALIAS=y
++CONFIG_SYS_EXTRA_OPTIONS="SYS_FSL_DDR4, QSPI_BOOT"
++# CONFIG_USE_BOOTCOMMAND is not set
++# CONFIG_DISPLAY_BOARDINFO is not set
++CONFIG_USE_BOOTARGS=y
++CONFIG_BOOTARGS="console=ttyS0,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0500 ramdisk_size=0x3000000 default_hugepagesz=2m hugepagesz=2m hugepages=256"
++CONFIG_CMD_GREPENV=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_USB=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_OF_CONTROL=y
++CONFIG_ENV_IS_IN_SPI_FLASH=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_SCSI_AHCI=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_SPI_FLASH_SPANSION=y
++CONFIG_FSL_SPI_ALIGNED_TXFIFO=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_DM_PCI_COMPAT=y
++CONFIG_PCIE_LAYERSCAPE=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_FSL_DSPI=y
++CONFIG_FSL_QSPI=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_DWC3=y
++CONFIG_USB_STORAGE=y
++CONFIG_USB_GADGET=y
++CONFIG_EFI_LOADER_BOUNCE_BUFFER=y
+diff --git a/configs/ls1088ardb_pb_sdcard_qspi_SECURE_BOOT_defconfig b/configs/ls1088ardb_pb_sdcard_qspi_SECURE_BOOT_defconfig
+new file mode 100644
+index 0000000..f8a777d
+--- /dev/null
++++ b/configs/ls1088ardb_pb_sdcard_qspi_SECURE_BOOT_defconfig
+@@ -0,0 +1,58 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088ARDB_PB=y
++CONFIG_SYS_TEXT_BASE=0x80400000
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_SPL_LIBGENERIC_SUPPORT=y
++CONFIG_SECURE_BOOT=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_SPL_MMC_SUPPORT=y
++CONFIG_SPL_SERIAL_SUPPORT=y
++CONFIG_SPL_DRIVERS_MISC_SUPPORT=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-rdb"
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_SYS_EXTRA_OPTIONS="SD_BOOT_QSPI"
++CONFIG_SD_BOOT=y
++# CONFIG_USE_BOOTCOMMAND is not set
++# CONFIG_DISPLAY_BOARDINFO is not set
++CONFIG_USE_BOOTARGS=y
++CONFIG_BOOTARGS="console=ttyS0,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0500 ramdisk_size=0x3000000 default_hugepagesz=2m hugepagesz=2m hugepages=256"
++CONFIG_CMD_GREPENV=y
++CONFIG_SPL=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x8b0
++CONFIG_SPL_CRYPTO_SUPPORT=y
++CONFIG_SPL_HASH_SUPPORT=y
++CONFIG_SPL_ENV_SUPPORT=y
++CONFIG_SPL_I2C_SUPPORT=y
++CONFIG_SPL_MPC8XXX_INIT_DDR_SUPPORT=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_OF_CONTROL=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_SPL_DM=y
++CONFIG_SCSI_AHCI=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_FSL_SPI_ALIGNED_TXFIFO=y
++CONFIG_SPI_FLASH_SPANSION=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_FSL_DSPI=y
++CONFIG_FSL_QSPI=y
++CONFIG_RSA=y
++CONFIG_SPL_RSA=y
++CONFIG_CMD_USB=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_DWC3=y
++CONFIG_USB_STORAGE=y
+diff --git a/configs/ls1088ardb_pb_sdcard_qspi_defconfig b/configs/ls1088ardb_pb_sdcard_qspi_defconfig
+new file mode 100644
+index 0000000..a761b3b
+--- /dev/null
++++ b/configs/ls1088ardb_pb_sdcard_qspi_defconfig
+@@ -0,0 +1,58 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088ARDB_PB=y
++CONFIG_SYS_TEXT_BASE=0x80400000
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_SPL_LIBGENERIC_SUPPORT=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_SPL_MMC_SUPPORT=y
++CONFIG_SPL_SERIAL_SUPPORT=y
++CONFIG_SPL_DRIVERS_MISC_SUPPORT=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-rdb"
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_SYS_EXTRA_OPTIONS="SD_BOOT_QSPI"
++CONFIG_SD_BOOT=y
++# CONFIG_USE_BOOTCOMMAND is not set
++# CONFIG_DISPLAY_BOARDINFO is not set
++CONFIG_USE_BOOTARGS=y
++CONFIG_BOOTARGS="console=ttyS0,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0500 ramdisk_size=0x3000000 default_hugepagesz=2m hugepagesz=2m hugepages=256"
++CONFIG_CMD_GREPENV=y
++CONFIG_SPL=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x8b0
++CONFIG_SPL_ENV_SUPPORT=y
++CONFIG_SPL_I2C_SUPPORT=y
++CONFIG_SPL_MPC8XXX_INIT_DDR_SUPPORT=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_USB=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_OF_CONTROL=y
++CONFIG_ENV_IS_IN_MMC=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_SCSI_AHCI=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_FSL_SPI_ALIGNED_TXFIFO=y
++CONFIG_SPI_FLASH_SPANSION=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_DM_PCI_COMPAT=y
++CONFIG_PCIE_LAYERSCAPE=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_FSL_DSPI=y
++CONFIG_FSL_QSPI=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_DWC3=y
++CONFIG_USB_STORAGE=y
++CONFIG_USB_GADGET=y
+diff --git a/include/configs/ls1088ardb_pb.h b/include/configs/ls1088ardb_pb.h
+new file mode 100644
+index 0000000..24eb573
+--- /dev/null
++++ b/include/configs/ls1088ardb_pb.h
+@@ -0,0 +1,87 @@
++/*
++ * Copyright 2018 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __LS1088A_RDB_PB_H
++#define __LS1088A_RDB_PB_H
++
++#include "ls1088a_common.h"
++#include "ls1088ardb.h"
++
++#undef CONFIG_EXTRA_ENV_SETTINGS
++#define CONFIG_EXTRA_ENV_SETTINGS		\
++	"BOARD=ls1088ardb_pb\0"			\
++	"hwconfig=fsl_ddr:bank_intlv=auto\0"	\
++	"ramdisk_addr=0x800000\0"		\
++	"ramdisk_size=0x2000000\0"		\
++	"fdt_high=0xa0000000\0"			\
++	"initrd_high=0xffffffffffffffff\0"	\
++	"fdt_addr=0x64f00000\0"			\
++	"kernel_addr=0x1000000\0"		\
++	"kernel_addr_sd=0x8000\0"		\
++	"kernelhdr_addr_sd=0x4000\0"		\
++	"kernel_start=0x580100000\0"		\
++	"kernelheader_start=0x580800000\0"	\
++	"scriptaddr=0x80000000\0"		\
++	"scripthdraddr=0x80080000\0"		\
++	"fdtheader_addr_r=0x80100000\0"		\
++	"kernelheader_addr=0x800000\0"		\
++	"kernelheader_addr_r=0x80200000\0"	\
++	"kernel_addr_r=0x81000000\0"		\
++	"kernelheader_size=0x40000\0"		\
++	"fdt_addr_r=0x90000000\0"		\
++	"load_addr=0xa0000000\0"		\
++	"kernel_size=0x2800000\0"		\
++	"kernel_size_sd=0x14000\0"		\
++	"kernelhdr_size_sd=0x10\0"		\
++	MC_INIT_CMD				\
++	BOOTENV					\
++	"boot_scripts=ls1088ardb_boot.scr\0"	\
++	"boot_script_hdr=hdr_ls1088ardb_bs.out\0"	\
++	"scan_dev_for_boot_part="		\
++		"part list ${devtype} ${devnum} devplist; "	\
++		"env exists devplist || setenv devplist 1; "	\
++		"for distro_bootpart in ${devplist}; do "	\
++			"if fstype ${devtype} "			\
++				"${devnum}:${distro_bootpart} "	\
++				"bootfstype; then "		\
++				"run scan_dev_for_boot; "	\
++			"fi; "					\
++		"done\0"					\
++	"scan_dev_for_boot="					\
++		"echo Scanning ${devtype} "			\
++		"${devnum}:${distro_bootpart}...; "		\
++		"for prefix in ${boot_prefixes}; do "		\
++			"run scan_dev_for_scripts; "		\
++		"done;\0"					\
++	"boot_a_script="					\
++		"load ${devtype} ${devnum}:${distro_bootpart} " \
++		"${scriptaddr} ${prefix}${script}; "		\
++	"env exists secureboot && load ${devtype} "		\
++		"${devnum}:${distro_bootpart} "			\
++		"${scripthdraddr} ${prefix}${boot_script_hdr} " \
++		"&& esbc_validate ${scripthdraddr};"		\
++		"source ${scriptaddr}\0"			\
++	"installer=load mmc 0:2 $load_addr "			\
++		"/flex_installer_arm64.itb; "			\
++		"env exists mcinitcmd && run mcinitcmd && "	\
++		"mmc read 0x80001000 0x6800 0x800;"		\
++		"fsl_mc lazyapply dpl 0x80001000;"			\
++		"bootm $load_addr#ls1088ardb\0"			\
++	"qspi_bootcmd=echo Trying load from qspi..;"		\
++		"sf probe && sf read $load_addr "		\
++		"$kernel_addr $kernel_size ; env exists secureboot "	\
++		"&& sf read $kernelheader_addr_r $kernelheader_addr "	\
++		"$kernelheader_size && esbc_validate ${kernelheader_addr_r}; "\
++		"bootm $load_addr#ls1088ardb\0"			\
++		"sd_bootcmd=echo Trying load from sd card..;"		\
++		"mmcinfo; mmc read $load_addr "			\
++		"$kernel_addr_sd $kernel_size_sd ;"		\
++		"env exists secureboot && mmc read $kernelheader_addr_r "\
++		"$kernelhdr_addr_sd $kernelhdr_size_sd "	\
++		" && esbc_validate ${kernelheader_addr_r};"	\
++		"bootm $load_addr#ls1088ardb\0"
++
++#endif /* __LS1088A_RDB_H */
+-- 
+1.7.1
+

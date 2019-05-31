@@ -1,0 +1,388 @@
+From 418072249166ee43868ccb9236778cb7d264fd53 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Tue, 17 Apr 2018 09:10:39 +0300
+Subject: [PATCH 415/448] crypto: caam/qi2 - update DPSECI object to v5.3
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Highlights:
+-add support for 16 queues (only for LX2160A)
+-add support for CCHA and PTHA reporting
+
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/caam/caamalg_qi2.c |    2 +-
+ drivers/crypto/caam/caamalg_qi2.h |    4 +-
+ drivers/crypto/caam/dpseci.c      |   25 ++++++---
+ drivers/crypto/caam/dpseci.h      |   44 +++++++++++++++-
+ drivers/crypto/caam/dpseci_cmd.h  |  100 +++++++++++++++++++++++--------------
+ 5 files changed, 123 insertions(+), 52 deletions(-)
+
+diff --git a/drivers/crypto/caam/caamalg_qi2.c b/drivers/crypto/caam/caamalg_qi2.c
+index 35f5773..ca3321a 100644
+--- a/drivers/crypto/caam/caamalg_qi2.c
++++ b/drivers/crypto/caam/caamalg_qi2.c
+@@ -5490,7 +5490,7 @@ static int __cold dpaa2_dpseci_setup(struct fsl_mc_device *ls_dev)
+ 
+ 	i = 0;
+ 	for_each_online_cpu(cpu) {
+-		dev_info(dev, "prio %d: rx queue %d, tx queue %d\n", i,
++		dev_info(dev, "pair %d: rx queue %d, tx queue %d\n", i,
+ 			 priv->rx_queue_attr[i].fqid,
+ 			 priv->tx_queue_attr[i].fqid);
+ 
+diff --git a/drivers/crypto/caam/caamalg_qi2.h b/drivers/crypto/caam/caamalg_qi2.h
+index 3c5166e..513cc1b 100644
+--- a/drivers/crypto/caam/caamalg_qi2.h
++++ b/drivers/crypto/caam/caamalg_qi2.h
+@@ -79,8 +79,8 @@ struct dpaa2_caam_priv {
+ 
+ 	struct dpseci_attr dpseci_attr;
+ 	struct dpseci_sec_attr sec_attr;
+-	struct dpseci_rx_queue_attr rx_queue_attr[DPSECI_PRIO_NUM];
+-	struct dpseci_tx_queue_attr tx_queue_attr[DPSECI_PRIO_NUM];
++	struct dpseci_rx_queue_attr rx_queue_attr[DPSECI_MAX_QUEUE_NUM];
++	struct dpseci_tx_queue_attr tx_queue_attr[DPSECI_MAX_QUEUE_NUM];
+ 	int num_pairs;
+ 
+ 	/* congestion */
+diff --git a/drivers/crypto/caam/dpseci.c b/drivers/crypto/caam/dpseci.c
+index 7b7ea20..2d87d83 100644
+--- a/drivers/crypto/caam/dpseci.c
++++ b/drivers/crypto/caam/dpseci.c
+@@ -130,6 +130,8 @@ int dpseci_create(struct fsl_mc_io *mc_io, u16 dprc_token, u32 cmd_flags,
+ 	cmd_params = (struct dpseci_cmd_create *)cmd.params;
+ 	for (i = 0; i < 8; i++)
+ 		cmd_params->priorities[i] = cfg->priorities[i];
++	for (i = 0; i < 8; i++)
++		cmd_params->priorities2[i] = cfg->priorities[8 + i];
+ 	cmd_params->num_tx_queues = cfg->num_tx_queues;
+ 	cmd_params->num_rx_queues = cfg->num_rx_queues;
+ 	cmd_params->options = cpu_to_le32(cfg->options);
+@@ -233,7 +235,7 @@ int dpseci_is_enabled(struct fsl_mc_io *mc_io, u32 cmd_flags, u16 token,
+ 		return err;
+ 
+ 	rsp_params = (struct dpseci_rsp_is_enabled *)cmd.params;
+-	*en = le32_to_cpu(rsp_params->is_enabled);
++	*en = dpseci_get_field(rsp_params->is_enabled, ENABLE);
+ 
+ 	return 0;
+ }
+@@ -506,11 +508,12 @@ int dpseci_set_rx_queue(struct fsl_mc_io *mc_io, u32 cmd_flags, u16 token,
+ 	cmd_params->dest_id = cpu_to_le32(cfg->dest_cfg.dest_id);
+ 	cmd_params->priority = cfg->dest_cfg.priority;
+ 	cmd_params->queue = queue;
+-	cmd_params->dest_type = cfg->dest_cfg.dest_type;
++	dpseci_set_field(cmd_params->dest_type, DEST_TYPE,
++			 cfg->dest_cfg.dest_type);
+ 	cmd_params->user_ctx = cpu_to_le64(cfg->user_ctx);
+ 	cmd_params->options = cpu_to_le32(cfg->options);
+-	cmd_params->order_preservation_en =
+-		cpu_to_le32(cfg->order_preservation_en);
++	dpseci_set_field(cmd_params->order_preservation_en, ORDER_PRESERVATION,
++			 cfg->order_preservation_en);
+ 
+ 	return mc_send_command(mc_io, &cmd);
+ }
+@@ -544,11 +547,13 @@ int dpseci_get_rx_queue(struct fsl_mc_io *mc_io, u32 cmd_flags, u16 token,
+ 
+ 	attr->dest_cfg.dest_id = le32_to_cpu(cmd_params->dest_id);
+ 	attr->dest_cfg.priority = cmd_params->priority;
+-	attr->dest_cfg.dest_type = cmd_params->dest_type;
++	attr->dest_cfg.dest_type = dpseci_get_field(cmd_params->dest_type,
++						    DEST_TYPE);
+ 	attr->user_ctx = le64_to_cpu(cmd_params->user_ctx);
+ 	attr->fqid = le32_to_cpu(cmd_params->fqid);
+ 	attr->order_preservation_en =
+-		le32_to_cpu(cmd_params->order_preservation_en);
++		dpseci_get_field(cmd_params->order_preservation_en,
++				 ORDER_PRESERVATION);
+ 
+ 	return 0;
+ }
+@@ -629,6 +634,8 @@ int dpseci_get_sec_attr(struct fsl_mc_io *mc_io, u32 cmd_flags, u16 token,
+ 	attr->arc4_acc_num = rsp_params->arc4_acc_num;
+ 	attr->des_acc_num = rsp_params->des_acc_num;
+ 	attr->aes_acc_num = rsp_params->aes_acc_num;
++	attr->ccha_acc_num = rsp_params->ccha_acc_num;
++	attr->ptha_acc_num = rsp_params->ptha_acc_num;
+ 
+ 	return 0;
+ }
+@@ -761,8 +768,8 @@ int dpseci_get_opr(struct fsl_mc_io *mc_io, u32 cmd_flags, u16 token, u8 index,
+ 		return err;
+ 
+ 	rsp_params = (struct dpseci_rsp_get_opr *)cmd.params;
+-	qry->rip = dpseci_get_field(rsp_params->rip_enable, OPR_RIP);
+-	qry->enable = dpseci_get_field(rsp_params->rip_enable, OPR_ENABLE);
++	qry->rip = dpseci_get_field(rsp_params->flags, OPR_RIP);
++	qry->enable = dpseci_get_field(rsp_params->flags, OPR_ENABLE);
+ 	cfg->oloe = rsp_params->oloe;
+ 	cfg->oeane = rsp_params->oeane;
+ 	cfg->olws = rsp_params->olws;
+@@ -773,7 +780,7 @@ int dpseci_get_opr(struct fsl_mc_io *mc_io, u32 cmd_flags, u16 token, u8 index,
+ 	qry->ea_tseq = le16_to_cpu(rsp_params->ea_tseq);
+ 	qry->tseq_nlis = dpseci_get_field(rsp_params->tseq_nlis, OPR_TSEQ_NLIS);
+ 	qry->ea_hseq = le16_to_cpu(rsp_params->ea_hseq);
+-	qry->hseq_nlis = dpseci_get_field(rsp_params->tseq_nlis, OPR_HSEQ_NLIS);
++	qry->hseq_nlis = dpseci_get_field(rsp_params->hseq_nlis, OPR_HSEQ_NLIS);
+ 	qry->ea_hptr = le16_to_cpu(rsp_params->ea_hptr);
+ 	qry->ea_tptr = le16_to_cpu(rsp_params->ea_tptr);
+ 	qry->opr_vid = le16_to_cpu(rsp_params->opr_vid);
+diff --git a/drivers/crypto/caam/dpseci.h b/drivers/crypto/caam/dpseci.h
+index d37489c..3d0943b 100644
+--- a/drivers/crypto/caam/dpseci.h
++++ b/drivers/crypto/caam/dpseci.h
+@@ -48,9 +48,9 @@
+  */
+ 
+ /**
+- * Maximum number of Tx/Rx priorities per DPSECI object
++ * Maximum number of Tx/Rx queues per DPSECI object
+  */
+-#define DPSECI_PRIO_NUM		8
++#define DPSECI_MAX_QUEUE_NUM		16
+ 
+ /**
+  * All queues considered; see dpseci_set_rx_queue()
+@@ -94,7 +94,7 @@ struct dpseci_cfg {
+ 	u32 options;
+ 	u8 num_tx_queues;
+ 	u8 num_rx_queues;
+-	u8 priorities[DPSECI_PRIO_NUM];
++	u8 priorities[DPSECI_MAX_QUEUE_NUM];
+ };
+ 
+ int dpseci_create(struct fsl_mc_io *mc_io, u16 dprc_token, u32 cmd_flags,
+@@ -288,6 +288,10 @@ int dpseci_get_tx_queue(struct fsl_mc_io *mc_io, u32 cmd_flags, u16 token,
+  *	this version of SEC
+  * @aes_acc_num: The number of copies of the AES module that are implemented in
+  *	this version of SEC
++ * @ccha_acc_num: The number of copies of the ChaCha20 module that are
++ *	implemented in this version of SEC.
++ * @ptha_acc_num: The number of copies of the Poly1305 module that are
++ *	implemented in this version of SEC.
+  **/
+ struct dpseci_sec_attr {
+ 	u16 ip_id;
+@@ -307,6 +311,8 @@ struct dpseci_sec_attr {
+ 	u8 arc4_acc_num;
+ 	u8 des_acc_num;
+ 	u8 aes_acc_num;
++	u8 ccha_acc_num;
++	u8 ptha_acc_num;
+ };
+ 
+ int dpseci_get_sec_attr(struct fsl_mc_io *mc_io, u32 cmd_flags, u16 token,
+@@ -355,11 +361,43 @@ enum dpseci_congestion_unit {
+ 	DPSECI_CONGESTION_UNIT_FRAMES
+ };
+ 
++/**
++ * CSCN message is written to message_iova once entering a
++ * congestion state (see 'threshold_entry')
++ */
+ #define DPSECI_CGN_MODE_WRITE_MEM_ON_ENTER		0x00000001
++
++/**
++ * CSCN message is written to message_iova once exiting a
++ * congestion state (see 'threshold_exit')
++ */
+ #define DPSECI_CGN_MODE_WRITE_MEM_ON_EXIT		0x00000002
++
++/**
++ * CSCN write will attempt to allocate into a cache (coherent write);
++ * valid only if 'DPSECI_CGN_MODE_WRITE_MEM_<X>' is selected
++ */
+ #define DPSECI_CGN_MODE_COHERENT_WRITE			0x00000004
++
++/**
++ * if 'dpseci_dest_cfg.dest_type != DPSECI_DEST_NONE' CSCN message is sent to
++ * DPIO/DPCON's WQ channel once entering a congestion state
++ * (see 'threshold_entry')
++ */
+ #define DPSECI_CGN_MODE_NOTIFY_DEST_ON_ENTER		0x00000008
++
++/**
++ * if 'dpseci_dest_cfg.dest_type != DPSECI_DEST_NONE' CSCN message is sent to
++ * DPIO/DPCON's WQ channel once exiting a congestion state
++ * (see 'threshold_exit')
++ */
+ #define DPSECI_CGN_MODE_NOTIFY_DEST_ON_EXIT		0x00000010
++
++/**
++ * if 'dpseci_dest_cfg.dest_type != DPSECI_DEST_NONE' when the CSCN is written
++ * to the sw-portal's DQRR, the DQRI interrupt is asserted immediately
++ * (if enabled)
++ */
+ #define DPSECI_CGN_MODE_INTR_COALESCING_DISABLED	0x00000020
+ 
+ /**
+diff --git a/drivers/crypto/caam/dpseci_cmd.h b/drivers/crypto/caam/dpseci_cmd.h
+index 7624315..1008b13 100644
+--- a/drivers/crypto/caam/dpseci_cmd.h
++++ b/drivers/crypto/caam/dpseci_cmd.h
+@@ -37,42 +37,55 @@
+ 
+ /* DPSECI Version */
+ #define DPSECI_VER_MAJOR				5
+-#define DPSECI_VER_MINOR				1
++#define DPSECI_VER_MINOR				3
+ 
+ #define DPSECI_VER(maj, min)	(((maj) << 16) | (min))
+ #define DPSECI_VERSION		DPSECI_VER(DPSECI_VER_MAJOR, DPSECI_VER_MINOR)
+ 
+-/* Command IDs */
++/* Command versioning */
++#define DPSECI_CMD_BASE_VERSION		1
++#define DPSECI_CMD_BASE_VERSION_V2	2
++#define DPSECI_CMD_BASE_VERSION_V3	3
++#define DPSECI_CMD_ID_OFFSET		4
++
++#define DPSECI_CMD_V1(id)	(((id) << DPSECI_CMD_ID_OFFSET) | \
++				 DPSECI_CMD_BASE_VERSION)
++
++#define DPSECI_CMD_V2(id)	(((id) << DPSECI_CMD_ID_OFFSET) | \
++				 DPSECI_CMD_BASE_VERSION_V2)
+ 
+-#define DPSECI_CMDID_CLOSE                              0x8001
+-#define DPSECI_CMDID_OPEN                               0x8091
+-#define DPSECI_CMDID_CREATE                             0x9092
+-#define DPSECI_CMDID_DESTROY                            0x9891
+-#define DPSECI_CMDID_GET_API_VERSION                    0xa091
+-
+-#define DPSECI_CMDID_ENABLE                             0x0021
+-#define DPSECI_CMDID_DISABLE                            0x0031
+-#define DPSECI_CMDID_GET_ATTR                           0x0041
+-#define DPSECI_CMDID_RESET                              0x0051
+-#define DPSECI_CMDID_IS_ENABLED                         0x0061
+-
+-#define DPSECI_CMDID_SET_IRQ_ENABLE                     0x0121
+-#define DPSECI_CMDID_GET_IRQ_ENABLE                     0x0131
+-#define DPSECI_CMDID_SET_IRQ_MASK                       0x0141
+-#define DPSECI_CMDID_GET_IRQ_MASK                       0x0151
+-#define DPSECI_CMDID_GET_IRQ_STATUS                     0x0161
+-#define DPSECI_CMDID_CLEAR_IRQ_STATUS                   0x0171
+-
+-#define DPSECI_CMDID_SET_RX_QUEUE                       0x1941
+-#define DPSECI_CMDID_GET_RX_QUEUE                       0x1961
+-#define DPSECI_CMDID_GET_TX_QUEUE                       0x1971
+-#define DPSECI_CMDID_GET_SEC_ATTR                       0x1981
+-#define DPSECI_CMDID_GET_SEC_COUNTERS                   0x1991
+-#define DPSECI_CMDID_SET_OPR				0x19A1
+-#define DPSECI_CMDID_GET_OPR				0x19B1
+-
+-#define DPSECI_CMDID_SET_CONGESTION_NOTIFICATION	0x1701
+-#define DPSECI_CMDID_GET_CONGESTION_NOTIFICATION	0x1711
++#define DPSECI_CMD_V3(id)	(((id) << DPSECI_CMD_ID_OFFSET) | \
++				 DPSECI_CMD_BASE_VERSION_V3)
++
++/* Command IDs */
++#define DPSECI_CMDID_CLOSE				DPSECI_CMD_V1(0x800)
++#define DPSECI_CMDID_OPEN				DPSECI_CMD_V1(0x809)
++#define DPSECI_CMDID_CREATE				DPSECI_CMD_V3(0x909)
++#define DPSECI_CMDID_DESTROY				DPSECI_CMD_V1(0x989)
++#define DPSECI_CMDID_GET_API_VERSION			DPSECI_CMD_V1(0xa09)
++
++#define DPSECI_CMDID_ENABLE				DPSECI_CMD_V1(0x002)
++#define DPSECI_CMDID_DISABLE				DPSECI_CMD_V1(0x003)
++#define DPSECI_CMDID_GET_ATTR				DPSECI_CMD_V1(0x004)
++#define DPSECI_CMDID_RESET				DPSECI_CMD_V1(0x005)
++#define DPSECI_CMDID_IS_ENABLED				DPSECI_CMD_V1(0x006)
++
++#define DPSECI_CMDID_SET_IRQ_ENABLE			DPSECI_CMD_V1(0x012)
++#define DPSECI_CMDID_GET_IRQ_ENABLE			DPSECI_CMD_V1(0x013)
++#define DPSECI_CMDID_SET_IRQ_MASK			DPSECI_CMD_V1(0x014)
++#define DPSECI_CMDID_GET_IRQ_MASK			DPSECI_CMD_V1(0x015)
++#define DPSECI_CMDID_GET_IRQ_STATUS			DPSECI_CMD_V1(0x016)
++#define DPSECI_CMDID_CLEAR_IRQ_STATUS			DPSECI_CMD_V1(0x017)
++
++#define DPSECI_CMDID_SET_RX_QUEUE			DPSECI_CMD_V1(0x194)
++#define DPSECI_CMDID_GET_RX_QUEUE			DPSECI_CMD_V1(0x196)
++#define DPSECI_CMDID_GET_TX_QUEUE			DPSECI_CMD_V1(0x197)
++#define DPSECI_CMDID_GET_SEC_ATTR			DPSECI_CMD_V2(0x198)
++#define DPSECI_CMDID_GET_SEC_COUNTERS			DPSECI_CMD_V1(0x199)
++#define DPSECI_CMDID_SET_OPR				DPSECI_CMD_V1(0x19A)
++#define DPSECI_CMDID_GET_OPR				DPSECI_CMD_V1(0x19B)
++#define DPSECI_CMDID_SET_CONGESTION_NOTIFICATION	DPSECI_CMD_V1(0x170)
++#define DPSECI_CMDID_GET_CONGESTION_NOTIFICATION	DPSECI_CMD_V1(0x171)
+ 
+ /* Macros for accessing command fields smaller than 1 byte */
+ #define DPSECI_MASK(field)	\
+@@ -93,16 +106,21 @@ struct dpseci_cmd_create {
+ 	u8 priorities[8];
+ 	u8 num_tx_queues;
+ 	u8 num_rx_queues;
+-	__le16 pad;
++	u8 pad0[6];
+ 	__le32 options;
++	__le32 pad1;
++	u8 priorities2[8];
+ };
+ 
+ struct dpseci_cmd_destroy {
+ 	__le32 object_id;
+ };
+ 
++#define DPSECI_ENABLE_SHIFT	0
++#define DPSECI_ENABLE_SIZE	1
++
+ struct dpseci_rsp_is_enabled {
+-	__le32 is_enabled;
++	u8 is_enabled;
+ };
+ 
+ struct dpseci_cmd_irq_enable {
+@@ -134,6 +152,12 @@ struct dpseci_rsp_get_attributes {
+ 	__le32 options;
+ };
+ 
++#define DPSECI_DEST_TYPE_SHIFT	0
++#define DPSECI_DEST_TYPE_SIZE	4
++
++#define DPSECI_ORDER_PRESERVATION_SHIFT	0
++#define DPSECI_ORDER_PRESERVATION_SIZE	1
++
+ struct dpseci_cmd_queue {
+ 	__le32 dest_id;
+ 	u8 priority;
+@@ -145,7 +169,7 @@ struct dpseci_cmd_queue {
+ 		__le32 options;
+ 		__le32 fqid;
+ 	};
+-	__le32 order_preservation_en;
++	u8 order_preservation_en;
+ };
+ 
+ struct dpseci_rsp_get_tx_queue {
+@@ -176,6 +200,8 @@ struct dpseci_rsp_get_sec_attr {
+ 	u8 arc4_acc_num;
+ 	u8 des_acc_num;
+ 	u8 aes_acc_num;
++	u8 ccha_acc_num;
++	u8 ptha_acc_num;
+ };
+ 
+ struct dpseci_rsp_get_sec_counters {
+@@ -209,14 +235,14 @@ struct dpseci_cmd_opr {
+ #define DPSECI_OPR_RIP_SIZE		1
+ #define DPSECI_OPR_ENABLE_SHIFT		1
+ #define DPSECI_OPR_ENABLE_SIZE		1
+-#define DPSECI_OPR_TSEQ_NLIS_SHIFT	1
++#define DPSECI_OPR_TSEQ_NLIS_SHIFT	0
+ #define DPSECI_OPR_TSEQ_NLIS_SIZE	1
+-#define DPSECI_OPR_HSEQ_NLIS_SHIFT	1
++#define DPSECI_OPR_HSEQ_NLIS_SHIFT	0
+ #define DPSECI_OPR_HSEQ_NLIS_SIZE	1
+ 
+ struct dpseci_rsp_get_opr {
+ 	__le64 pad;
+-	u8 rip_enable;
++	u8 flags;
+ 	u8 pad0[2];
+ 	u8 oloe;
+ 	u8 oeane;
+-- 
+1.7.1
+

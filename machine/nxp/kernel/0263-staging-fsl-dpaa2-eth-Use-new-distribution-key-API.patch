@@ -1,0 +1,103 @@
+From 7bf37c1b4d644e445edeab163ddc6e8485d27e5b Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 30 Mar 2018 15:32:01 +0300
+Subject: [PATCH 263/448] staging: fsl-dpaa2/eth: Use new distribution key API
+
+MC10.7.0 introduces a new set of APIs for configuring separately
+the hash and flow steering distribution keys.
+
+Use these new API functions, while maintaining backward compatibility
+with older MC versions.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   38 ++++++++++++++++++++++--
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    9 +++++
+ 2 files changed, 44 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 02df2d0..5f78ed4 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2593,8 +2593,8 @@ static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
+ 	},
+ };
+ 
+-/* Set RX hash options */
+-static int config_dist_key(struct dpaa2_eth_priv *priv, dma_addr_t key_iova)
++static int legacy_config_dist_key(struct dpaa2_eth_priv *priv,
++				  dma_addr_t key_iova)
+ {
+ 	struct dpni_rx_tc_dist_cfg dist_cfg;
+ 	int i, err;
+@@ -2620,6 +2620,35 @@ static int config_dist_key(struct dpaa2_eth_priv *priv, dma_addr_t key_iova)
+ 	return 0;
+ }
+ 
++static int config_dist_key(struct dpaa2_eth_priv *priv, dma_addr_t key_iova)
++{
++	struct dpni_rx_dist_cfg dist_cfg;
++	int i, err;
++
++	memset(&dist_cfg, 0, sizeof(dist_cfg));
++
++	dist_cfg.key_cfg_iova = key_iova;
++	dist_cfg.dist_size = dpaa2_eth_queue_count(priv);
++	dist_cfg.enable = true;
++
++	for (i = 0; i < dpaa2_eth_tc_count(priv); i++) {
++		dist_cfg.tc = i;
++		err = dpni_set_rx_hash_dist(priv->mc_io, 0, priv->mc_token,
++					    &dist_cfg);
++		if (err)
++			return err;
++
++		if (dpaa2_eth_fs_enabled(priv)) {
++			err = dpni_set_rx_fs_dist(priv->mc_io, 0,
++						  priv->mc_token, &dist_cfg);
++			if (err)
++				return err;
++		}
++	}
++
++	return 0;
++}
++
+ static int dpaa2_eth_set_hash(struct dpaa2_eth_priv *priv)
+ {
+ 	struct device *dev = priv->net_dev->dev.parent;
+@@ -2661,7 +2690,10 @@ static int dpaa2_eth_set_hash(struct dpaa2_eth_priv *priv)
+ 		goto free_key;
+ 	}
+ 
+-	err = config_dist_key(priv, key_iova);
++	if (dpaa2_eth_has_legacy_dist(priv))
++		err = legacy_config_dist_key(priv, key_iova);
++	else
++		err = config_dist_key(priv, key_iova);
+ 
+ 	dma_unmap_single(dev, key_iova, DPAA2_CLASSIFIER_DMA_SIZE,
+ 			 DMA_TO_DEVICE);
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 5595364..779757a 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -468,6 +468,15 @@ static inline int dpaa2_eth_cmp_dpni_ver(struct dpaa2_eth_priv *priv,
+ 	return priv->dpni_ver_major - ver_major;
+ }
+ 
++#define DPNI_DIST_KEY_VER_MAJOR			7
++#define DPNI_DIST_KEY_VER_MINOR			5
++
++static inline bool dpaa2_eth_has_legacy_dist(struct dpaa2_eth_priv *priv)
++{
++	return (dpaa2_eth_cmp_dpni_ver(priv, DPNI_DIST_KEY_VER_MAJOR,
++				       DPNI_DIST_KEY_VER_MINOR) < 0);
++}
++
+ /* Hardware only sees DPAA2_ETH_RX_BUF_SIZE, but the skb built around
+  * the buffer also needs space for its shared info struct, and we need
+  * to allocate enough to accommodate hardware alignment restrictions
+-- 
+1.7.1
+

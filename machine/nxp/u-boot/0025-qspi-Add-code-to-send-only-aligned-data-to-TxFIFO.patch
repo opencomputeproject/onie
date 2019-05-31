@@ -1,0 +1,69 @@
+From b95074110222d9def33d55677b42f5af61130e2a Mon Sep 17 00:00:00 2001
+From: Rajat Srivastava <rajat.srivastava@nxp.com>
+Date: Mon, 29 Jan 2018 18:26:32 +0530
+Subject: [PATCH 025/107] qspi: Add code to send only aligned data to TxFIFO
+
+Some Freescale QSPI controllers require driver to send only 16 bytes
+aligned data to TxFIFO while performing flash write operation. The extra
+data is not actually written on flash. The patch enables driver to send
+16 bytes aligned data to TxFIFO, provided the config is enabled.
+
+The reason behind this behaviour of controller is still not clear and
+discussion with hardware team is ongoing. The patch will be updated
+before sending it to upstream.
+
+Signed-off-by: Rajat Srivastava <rajat.srivastava@nxp.com>
+---
+ drivers/spi/fsl_qspi.c |   29 ++++++++++++++++++++++-------
+ 1 files changed, 22 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/spi/fsl_qspi.c b/drivers/spi/fsl_qspi.c
+index d3b3b43..a1bf6b9 100644
+--- a/drivers/spi/fsl_qspi.c
++++ b/drivers/spi/fsl_qspi.c
+@@ -668,20 +668,35 @@ static void qspi_op_write(struct fsl_qspi_priv *priv, u8 *txbuf, u32 len)
+ 	tx_size = (len > TX_BUFFER_SIZE) ?
+ 		TX_BUFFER_SIZE : len;
+ 
+-	size = tx_size / 16;
++	size = tx_size / 4;
++	for (i = 0; i < size; i++) {
++		memcpy(&data, txbuf, 4);
++		data = qspi_endian_xchg(data);
++		qspi_write32(priv->flags, &regs->tbdr, data);
++		txbuf += 4;
++	}
++#if defined(CONFIG_FSL_SPI_ALIGNED_TXFIFO)
+ 	/*
+-	 * There must be atleast 128bit data
+-	 * available in TX FIFO for any pop operation
++	 * There must be at least 16 bytes of data
++	 * available in TX FIFO for any POP operation
+ 	 */
+-	if (tx_size % 16)
+-		size++;
+-	for (i = 0; i < size * 4; i++) {
++	size = (((tx_size/16) + 1) * 4) - size;
++	for (i = 0; i < size; i++) {
++		data = 0;
+ 		memcpy(&data, txbuf, 4);
+ 		data = qspi_endian_xchg(data);
+ 		qspi_write32(priv->flags, &regs->tbdr, data);
+ 		txbuf += 4;
+ 	}
+-
++#else
++	size = tx_size % 4;
++	if (size) {
++		data = 0;
++		memcpy(&data, txbuf, size);
++		data = qspi_endian_xchg(data);
++		qspi_write32(priv->flags, &regs->tbdr, data);
++	}
++#endif
+ 	qspi_write32(priv->flags, &regs->ipcr,
+ 		     (seqid << QSPI_IPCR_SEQID_SHIFT) | tx_size);
+ 	while (qspi_read32(priv->flags, &regs->sr) & QSPI_SR_BUSY_MASK)
+-- 
+1.7.1
+

@@ -1,0 +1,88 @@
+From 2b950e7c38d8a73eff8b158b3620d9e1bee60cdd Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Wed, 11 Jul 2018 18:32:55 +0300
+Subject: [PATCH 412/448] crypto: caam/qi - fix IV DMA mapping (for tls)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Commit 3a488aaec6f3 ("crypto: caam/qi - fix IV DMA mapping and updating")
+fixed two IV-related issues for aead and ablkcipher.
+tls needs a similar fix.
+
+Fixes: c6be91244048 ("crypto: caam/qi - add support for TLS 1.0 record")
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/caam/caamalg_qi.c |   28 ++++++++++++++++------------
+ 1 files changed, 16 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/crypto/caam/caamalg_qi.c b/drivers/crypto/caam/caamalg_qi.c
+index ad15027..d454dfb 100644
+--- a/drivers/crypto/caam/caamalg_qi.c
++++ b/drivers/crypto/caam/caamalg_qi.c
+@@ -915,7 +915,7 @@ struct aead_edesc {
+  * @tmp: array of scatterlists used by 'scatterwalk_ffwd'
+  * @qm_sg_dma: bus physical mapped address of h/w link table
+  * @drv_req: driver-specific request structure
+- * @sgt: the h/w link table
++ * @sgt: the h/w link table, followed by IV
+  */
+ struct tls_edesc {
+ 	int src_nents;
+@@ -1376,6 +1376,7 @@ static void tls_done(struct caam_drv_req *drv_req, u32 status)
+ 	struct tls_edesc *edesc;
+ 	dma_addr_t qm_sg_dma, iv_dma = 0;
+ 	int ivsize = 0;
++	u8 *iv;
+ 	int qm_sg_index, qm_sg_ents = 0, qm_sg_bytes;
+ 	int in_len, out_len;
+ 	struct qm_sg_entry *sg_table, *fd_sgt;
+@@ -1395,7 +1396,7 @@ static void tls_done(struct caam_drv_req *drv_req, u32 status)
+ 	if (unlikely(IS_ERR_OR_NULL(drv_ctx)))
+ 		return (struct tls_edesc *)drv_ctx;
+ 
+-	/* allocate space for base edesc and hw desc commands, link tables */
++	/* allocate space for base edesc, link tables and IV */
+ 	edesc = qi_cache_alloc(GFP_DMA | flags);
+ 	if (unlikely(!edesc)) {
+ 		dev_err(qidev, "could not allocate extended descriptor\n");
+@@ -1465,16 +1466,6 @@ static void tls_done(struct caam_drv_req *drv_req, u32 status)
+ 		}
+ 	}
+ 
+-	ivsize = crypto_aead_ivsize(aead);
+-	iv_dma = dma_map_single(qidev, req->iv, ivsize, DMA_TO_DEVICE);
+-	if (dma_mapping_error(qidev, iv_dma)) {
+-		dev_err(qidev, "unable to map IV\n");
+-		caam_unmap(qidev, req->src, dst, src_nents, dst_nents, 0, 0,
+-			   op_type, 0, 0);
+-		qi_cache_free(edesc);
+-		return ERR_PTR(-ENOMEM);
+-	}
+-
+ 	/*
+ 	 * Create S/G table: IV, src, dst.
+ 	 * Input is not contiguous.
+@@ -1484,6 +1475,19 @@ static void tls_done(struct caam_drv_req *drv_req, u32 status)
+ 	sg_table = &edesc->sgt[0];
+ 	qm_sg_bytes = qm_sg_ents * sizeof(*sg_table);
+ 
++	ivsize = crypto_aead_ivsize(aead);
++	iv = (u8 *)(sg_table + qm_sg_ents);
++	/* Make sure IV is located in a DMAable area */
++	memcpy(iv, req->iv, ivsize);
++	iv_dma = dma_map_single(qidev, iv, ivsize, DMA_TO_DEVICE);
++	if (dma_mapping_error(qidev, iv_dma)) {
++		dev_err(qidev, "unable to map IV\n");
++		caam_unmap(qidev, req->src, dst, src_nents, dst_nents, 0, 0, 0,
++			   0, 0);
++		qi_cache_free(edesc);
++		return ERR_PTR(-ENOMEM);
++	}
++
+ 	edesc->src_nents = src_nents;
+ 	edesc->dst_nents = dst_nents;
+ 	edesc->dst = dst;
+-- 
+1.7.1
+

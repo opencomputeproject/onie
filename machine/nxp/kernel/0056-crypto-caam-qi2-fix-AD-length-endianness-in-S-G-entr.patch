@@ -1,0 +1,56 @@
+From 7eec7fb5fbdf8953ab3c8ba24398f8c3708d06f0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Tue, 24 Apr 2018 15:10:07 +0300
+Subject: [PATCH 056/448] crypto: caam/qi2 - fix AD length endianness in S/G entry
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Associated data (AD) length is read by CAAM from an S/G entry
+that is initially filled by the GPP.
+Accordingly, AD length has to be stored in CAAM endianness.
+
+Fixes: 856f06d8d456 ("crypto: caam/qi2 - add DPAA2-CAAM driver")
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/caam/caamalg_qi2.c |    3 ++-
+ drivers/crypto/caam/caamalg_qi2.h |    2 ++
+ 2 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/crypto/caam/caamalg_qi2.c b/drivers/crypto/caam/caamalg_qi2.c
+index 542d2a5..dc3bd70 100644
+--- a/drivers/crypto/caam/caamalg_qi2.c
++++ b/drivers/crypto/caam/caamalg_qi2.c
+@@ -504,7 +504,8 @@ static int aead_setkey(struct crypto_aead *aead, const u8 *key,
+ 	edesc->dst_nents = dst_nents;
+ 	edesc->iv_dma = iv_dma;
+ 
+-	edesc->assoclen_dma = dma_map_single(dev, &req->assoclen, 4,
++	edesc->assoclen = cpu_to_caam32(req->assoclen);
++	edesc->assoclen_dma = dma_map_single(dev, &edesc->assoclen, 4,
+ 					     DMA_TO_DEVICE);
+ 	if (dma_mapping_error(dev, edesc->assoclen_dma)) {
+ 		dev_err(dev, "unable to map assoclen\n");
+diff --git a/drivers/crypto/caam/caamalg_qi2.h b/drivers/crypto/caam/caamalg_qi2.h
+index 87ef74a..2f21bcd 100644
+--- a/drivers/crypto/caam/caamalg_qi2.h
++++ b/drivers/crypto/caam/caamalg_qi2.h
+@@ -154,6 +154,7 @@ struct dpaa2_caam_priv_per_cpu {
+  * @iv_dma: dma address of iv for checking continuity and link table
+  * @qm_sg_bytes: length of dma mapped h/w link table
+  * @qm_sg_dma: bus physical mapped address of h/w link table
++ * @assoclen: associated data length, in CAAM endianness
+  * @assoclen_dma: bus physical mapped address of req->assoclen
+  * @sgt: the h/w link table
+  */
+@@ -163,6 +164,7 @@ struct aead_edesc {
+ 	dma_addr_t iv_dma;
+ 	int qm_sg_bytes;
+ 	dma_addr_t qm_sg_dma;
++	unsigned int assoclen;
+ 	dma_addr_t assoclen_dma;
+ #define CAAM_QI_MAX_AEAD_SG						\
+ 	((CAAM_QI_MEMCACHE_SIZE - offsetof(struct aead_edesc, sgt)) /	\
+-- 
+1.7.1
+

@@ -1,0 +1,70 @@
+From a55dda36d5eccf91f0dbaf4fd506f3c9a2ca6efd Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Fri, 13 Oct 2017 15:45:43 +0000
+Subject: [PATCH 174/448] staging: fsl-dpaa2/eth: Update Rx headroom computation
+
+Instead of the old opaque value, define the Rx buffer headroom size
+based on other frame buffer fields, in accordance to how we expect them
+to be configured by MC.
+
+Based on DPNI_BUF_LAYOUT_OPT_TIMESTAMP, MC will enable an additional
+field in the Tx hardware annotation area, increasing its size to 128.
+Update the driver value to reflect this.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    2 +-
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |   17 ++++++++++-------
+ 2 files changed, 11 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index c760cde..0265436 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2879,7 +2879,7 @@ static int netdev_init(struct net_device *net_dev)
+ 	 * significant performance impact.
+ 	 */
+ 	req_headroom = LL_RESERVED_SPACE(net_dev) - ETH_HLEN;
+-	rx_headroom = ALIGN(DPAA2_ETH_HWA_SIZE + DPAA2_ETH_SWA_SIZE +
++	rx_headroom = ALIGN(DPAA2_ETH_RX_HWA_SIZE + DPAA2_ETH_SWA_SIZE +
+ 			    DPAA2_ETH_RX_HEAD_ROOM, priv->rx_buf_align);
+ 	if (req_headroom > rx_headroom)
+ 		dev_info_once(dev, "Required headroom (%d) greater than available (%d)\n",
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 7b37aa4..aae9422 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -118,13 +118,9 @@
+ /* PTP nominal frequency 1GHz */
+ #define DPAA2_PTP_NOMINAL_FREQ_PERIOD_NS 1
+ 
+-/* Extra headroom space requested to hardware, in order to make sure there's
+- * no realloc'ing in forwarding scenarios
+- */
+-#define DPAA2_ETH_RX_HEAD_ROOM		192
+-
+-/* Hardware annotation area in RX buffers is 64B with the current settings */
+-#define DPAA2_ETH_HWA_SIZE		64
++/* Hardware annotation area in RX / TX  buffers */
++#define DPAA2_ETH_RX_HWA_SIZE		64
++#define DPAA2_ETH_TX_HWA_SIZE		128
+ 
+ /* We are accommodating a skb backpointer and some S/G info
+  * in the frame's software annotation. The hardware
+@@ -132,6 +128,13 @@
+  */
+ #define DPAA2_ETH_SWA_SIZE		64
+ 
++/* Extra headroom space requested to hardware, in order to make sure there's
++ * no realloc'ing in forwarding scenarios
++ */
++#define DPAA2_ETH_RX_HEAD_ROOM \
++	(DPAA2_ETH_TX_HWA_SIZE - DPAA2_ETH_RX_HWA_SIZE + \
++	 DPAA2_ETH_TX_BUF_ALIGN + HH_DATA_MOD)
++
+ /* Must keep this struct smaller than DPAA2_ETH_SWA_SIZE */
+ struct dpaa2_eth_swa {
+ 	struct sk_buff *skb;
+-- 
+1.7.1
+

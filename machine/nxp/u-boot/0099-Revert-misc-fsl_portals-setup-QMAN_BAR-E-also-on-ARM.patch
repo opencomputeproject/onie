@@ -1,0 +1,50 @@
+From 19528d05aeb5c6ad035ec41a9d37aabbecb9b33a Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Tue, 21 Aug 2018 15:09:31 +0300
+Subject: [PATCH 099/107] Revert "misc: fsl_portals: setup QMAN_BAR{E} also on ARM platforms"
+
+This reverts commit c58e1110ae249592f4c07798f7cf1b135feeb9d8.
+
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+---
+ .../include/asm/arch-fsl-layerscape/immap_lsch2.h  |    3 ++-
+ drivers/misc/fsl_portals.c                         |    2 ++
+ 2 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch2.h b/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch2.h
+index 71c69e9..b1f3d22 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch2.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch2.h
+@@ -58,7 +58,8 @@
+ #define CONFIG_SYS_BMAN_SWP_ISDR_REG    0x3E80
+ #define CONFIG_SYS_QMAN_NUM_PORTALS	10
+ #define CONFIG_SYS_QMAN_MEM_BASE	0x500000000
+-#define CONFIG_SYS_QMAN_MEM_PHYS	CONFIG_SYS_QMAN_MEM_BASE
++#define CONFIG_SYS_QMAN_MEM_PHYS	(0xf00000000ull + \
++						CONFIG_SYS_QMAN_MEM_BASE)
+ #define CONFIG_SYS_QMAN_MEM_SIZE	0x08000000
+ #define CONFIG_SYS_QMAN_SP_CENA_SIZE    0x10000
+ #define CONFIG_SYS_QMAN_SP_CINH_SIZE    0x10000
+diff --git a/drivers/misc/fsl_portals.c b/drivers/misc/fsl_portals.c
+index 6fe773b..159dff8 100644
+--- a/drivers/misc/fsl_portals.c
++++ b/drivers/misc/fsl_portals.c
+@@ -25,6 +25,7 @@ void setup_qbman_portals(void)
+ 				CONFIG_SYS_BMAN_SWP_ISDR_REG;
+ 	void __iomem *qpaddr = (void *)CONFIG_SYS_QMAN_CINH_BASE +
+ 				CONFIG_SYS_QMAN_SWP_ISDR_REG;
++#ifdef CONFIG_PPC
+ 	struct ccsr_qman *qman = (void *)CONFIG_SYS_FSL_QMAN_ADDR;
+ 
+ 	/* Set the Qman initiator BAR to match the LAW (for DQRR stashing) */
+@@ -32,6 +33,7 @@ void setup_qbman_portals(void)
+ 	out_be32(&qman->qcsp_bare, (u32)(CONFIG_SYS_QMAN_MEM_PHYS >> 32));
+ #endif
+ 	out_be32(&qman->qcsp_bar, (u32)CONFIG_SYS_QMAN_MEM_PHYS);
++#endif
+ #ifdef CONFIG_FSL_CORENET
+ 	int i;
+ 
+-- 
+1.7.1
+

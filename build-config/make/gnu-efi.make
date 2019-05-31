@@ -88,7 +88,7 @@ $(GNU_EFI_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(GNU_EFI_BUILD_STAMP)
 			install
 	$(Q) touch $@
 
-USERSPACE_CLEAN += gnu-efi-clean
+USER_CLEAN += gnu-efi-clean
 gnu-efi-clean:
 	$(Q) rm -rf $(GNU_EFI_BUILD_DIR)
 	$(Q) rm -f $(GNU_EFI_STAMP)

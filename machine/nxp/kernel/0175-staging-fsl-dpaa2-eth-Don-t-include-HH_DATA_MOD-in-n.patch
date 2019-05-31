@@ -1,0 +1,40 @@
+From b78e224e25ca8ff46cb357a85b9402557a08e4e5 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Mon, 16 Oct 2017 11:04:34 +0000
+Subject: [PATCH 175/448] staging: fsl-dpaa2/eth: Don't include HH_DATA_MOD in needed_headroom
+
+The network stack will take care to reserve space for HH_DATA_MOD when
+building the skb, so there's no need to account for it in the netdevice
+needed headroom. Based on that, decrease the frame buffer headroom for
+ingress frames.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index aae9422..86956b7 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -103,7 +103,7 @@
+ #define DPAA2_ETH_RX_BUF_ALIGN		64
+ 
+ #define DPAA2_ETH_NEEDED_HEADROOM(p_priv) \
+-	((p_priv)->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN)
++	((p_priv)->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN - HH_DATA_MOD)
+ 
+ /* Hardware only sees DPAA2_ETH_RX_BUF_SIZE, but the skb built around
+  * the buffer also needs space for its shared info struct, and we need
+@@ -133,7 +133,7 @@
+  */
+ #define DPAA2_ETH_RX_HEAD_ROOM \
+ 	(DPAA2_ETH_TX_HWA_SIZE - DPAA2_ETH_RX_HWA_SIZE + \
+-	 DPAA2_ETH_TX_BUF_ALIGN + HH_DATA_MOD)
++	 DPAA2_ETH_TX_BUF_ALIGN)
+ 
+ /* Must keep this struct smaller than DPAA2_ETH_SWA_SIZE */
+ struct dpaa2_eth_swa {
+-- 
+1.7.1
+

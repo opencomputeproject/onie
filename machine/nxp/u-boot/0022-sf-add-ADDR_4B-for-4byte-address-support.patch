@@ -1,0 +1,208 @@
+From 3421c7f2d7d040f09bb25c42406bf40734e5e535 Mon Sep 17 00:00:00 2001
+From: Jagdish Gediya <jagdish.gediya@nxp.com>
+Date: Thu, 5 Apr 2018 22:55:46 +0530
+Subject: [PATCH 022/107] sf: add ADDR_4B for 4byte address support
+
+Some new flash don't support bar register but use 4bytes address to
+support exceed 16MB flash size.
+So add flash flag: ADDR_4B
+for some flash which support 4bytes address.
+
+Signed-off-by: Yuan Yao <yao.yuan@nxp.com>
+Signed-off-by: Suresh Gupta <suresh.gupta@nxp.com>
+Signed-off-by: Jagdish Gediya <jagdish.gediya@nxp.com>
+---
+ drivers/mtd/spi/sf_internal.h   |    5 +++-
+ drivers/mtd/spi/spi_flash.c     |   58 +++++++++++++++++++++++---------------
+ drivers/mtd/spi/spi_flash_ids.c |    2 +-
+ include/spi_flash.h             |    1 +
+ 4 files changed, 41 insertions(+), 25 deletions(-)
+
+diff --git a/drivers/mtd/spi/sf_internal.h b/drivers/mtd/spi/sf_internal.h
+index 839cdbe..955426e 100644
+--- a/drivers/mtd/spi/sf_internal.h
++++ b/drivers/mtd/spi/sf_internal.h
+@@ -27,8 +27,10 @@ enum spi_nor_option_flags {
+ };
+ 
+ #define SPI_FLASH_3B_ADDR_LEN		3
+-#define SPI_FLASH_CMD_LEN		(1 + SPI_FLASH_3B_ADDR_LEN)
+ #define SPI_FLASH_16MB_BOUN		0x1000000
++#define SPI_FLASH_4B_ADDR_LEN		4
++#define SPI_FLASH_CMD_MAX_LEN		(1 + SPI_FLASH_4B_ADDR_LEN)
++
+ 
+ /* CFI Manufacture ID's */
+ #define SPI_FLASH_CFI_MFR_SPANSION	0x01
+@@ -131,6 +133,7 @@ struct spi_flash_info {
+ #define RD_DUAL			BIT(5)	/* use Dual Read */
+ #define RD_QUADIO		BIT(6)	/* use Quad IO Read */
+ #define RD_DUALIO		BIT(7)	/* use Dual IO Read */
++#define ADDR_4B			BIT(8)
+ #define RD_FULL			(RD_QUAD | RD_DUAL | RD_QUADIO | RD_DUALIO)
+ };
+ 
+diff --git a/drivers/mtd/spi/spi_flash.c b/drivers/mtd/spi/spi_flash.c
+index 294d9f9..3d24a08 100644
+--- a/drivers/mtd/spi/spi_flash.c
++++ b/drivers/mtd/spi/spi_flash.c
+@@ -22,12 +22,16 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+-static void spi_flash_addr(u32 addr, u8 *cmd)
++static void spi_flash_addr(struct spi_flash *flash, u32 addr, u8 *cmd)
+ {
+ 	/* cmd[0] is actual command */
+-	cmd[1] = addr >> 16;
+-	cmd[2] = addr >> 8;
+-	cmd[3] = addr >> 0;
++	int i;
++
++	for (i = flash->cmd_len - 1; i > 0; i--) {
++		cmd[i] = addr;
++		addr = addr >> 8;
++	}
++
+ }
+ 
+ static int read_sr(struct spi_flash *flash, u8 *rs)
+@@ -315,7 +319,7 @@ int spi_flash_write_common(struct spi_flash *flash, const u8 *cmd,
+ int spi_flash_cmd_erase_ops(struct spi_flash *flash, u32 offset, size_t len)
+ {
+ 	u32 erase_size, erase_addr;
+-	u8 cmd[SPI_FLASH_CMD_LEN];
++	u8 cmd[SPI_FLASH_CMD_MAX_LEN];
+ 	int ret = -1;
+ 
+ 	erase_size = flash->erase_size;
+@@ -345,12 +349,13 @@ int spi_flash_cmd_erase_ops(struct spi_flash *flash, u32 offset, size_t len)
+ 		if (ret < 0)
+ 			return ret;
+ #endif
+-		spi_flash_addr(erase_addr, cmd);
++		spi_flash_addr(flash, erase_addr, cmd);
+ 
+ 		debug("SF: erase %2x %2x %2x %2x (%x)\n", cmd[0], cmd[1],
+ 		      cmd[2], cmd[3], erase_addr);
+ 
+-		ret = spi_flash_write_common(flash, cmd, sizeof(cmd), NULL, 0);
++		ret = spi_flash_write_common(flash, cmd,
++					     flash->cmd_len, NULL, 0);
+ 		if (ret < 0) {
+ 			debug("SF: erase failed\n");
+ 			break;
+@@ -374,7 +379,7 @@ int spi_flash_cmd_write_ops(struct spi_flash *flash, u32 offset,
+ 	unsigned long byte_addr, page_size;
+ 	u32 write_addr;
+ 	size_t chunk_len, actual;
+-	u8 cmd[SPI_FLASH_CMD_LEN];
++	u8 cmd[SPI_FLASH_CMD_MAX_LEN];
+ 	int ret = -1;
+ 
+ 	page_size = flash->page_size;
+@@ -407,12 +412,12 @@ int spi_flash_cmd_write_ops(struct spi_flash *flash, u32 offset,
+ 			chunk_len = min(chunk_len,
+ 					spi->max_write_size - sizeof(cmd));
+ 
+-		spi_flash_addr(write_addr, cmd);
++		spi_flash_addr(flash, write_addr, cmd);
+ 
+ 		debug("SF: 0x%p => cmd = { 0x%02x 0x%02x%02x%02x } chunk_len = %zu\n",
+ 		      buf + actual, cmd[0], cmd[1], cmd[2], cmd[3], chunk_len);
+ 
+-		ret = spi_flash_write_common(flash, cmd, sizeof(cmd),
++		ret = spi_flash_write_common(flash, cmd, flash->cmd_len,
+ 					buf + actual, chunk_len);
+ 		if (ret < 0) {
+ 			debug("SF: write failed\n");
+@@ -488,7 +493,7 @@ int spi_flash_cmd_read_ops(struct spi_flash *flash, u32 offset,
+ 		return 0;
+ 	}
+ 
+-	cmdsz = SPI_FLASH_CMD_LEN + flash->dummy_byte;
++	cmdsz = flash->cmd_len + flash->dummy_byte;
+ 	cmd = calloc(1, cmdsz);
+ 	if (!cmd) {
+ 		debug("SF: Failed to allocate cmd\n");
+@@ -509,8 +514,12 @@ int spi_flash_cmd_read_ops(struct spi_flash *flash, u32 offset,
+ 			return ret;
+ 		bank_sel = flash->bank_curr;
+ #endif
+-		remain_len = ((SPI_FLASH_16MB_BOUN << flash->shift) *
+-				(bank_sel + 1)) - offset;
++		if (flash->cmd_len == 1 + SPI_FLASH_4B_ADDR_LEN)
++			remain_len = flash->size - offset;
++		else
++			remain_len = ((SPI_FLASH_16MB_BOUN
++				       << flash->shift) * (bank_sel + 1))
++				- offset;
+ 		if (len < remain_len)
+ 			read_len = len;
+ 		else
+@@ -519,7 +528,7 @@ int spi_flash_cmd_read_ops(struct spi_flash *flash, u32 offset,
+ 		if (spi->max_read_size)
+ 			read_len = min(read_len, spi->max_read_size);
+ 
+-		spi_flash_addr(read_addr, cmd);
++		spi_flash_addr(flash, read_addr, cmd);
+ 
+ 		ret = spi_flash_read_common(flash, cmd, cmdsz, data, read_len);
+ 		if (ret < 0) {
+@@ -1146,16 +1155,19 @@ int spi_flash_scan(struct spi_flash *flash)
+ 		printf(", mapped at %p", flash->memory_map);
+ 	puts("\n");
+ #endif
+-
++	if (info->flags & ADDR_4B)
++		flash->cmd_len = 1 + SPI_FLASH_4B_ADDR_LEN;
++	else {
++		flash->cmd_len = 1 + SPI_FLASH_3B_ADDR_LEN;
+ #ifndef CONFIG_SPI_FLASH_BAR
+-	if (((flash->dual_flash == SF_SINGLE_FLASH) &&
+-	     (flash->size > SPI_FLASH_16MB_BOUN)) ||
+-	     ((flash->dual_flash > SF_SINGLE_FLASH) &&
+-	     (flash->size > SPI_FLASH_16MB_BOUN << 1))) {
+-		puts("SF: Warning - Only lower 16MiB accessible,");
+-		puts(" Full access #define CONFIG_SPI_FLASH_BAR\n");
+-	}
++		if (((flash->dual_flash == SF_SINGLE_FLASH) &&
++		(flash->size > SPI_FLASH_16MB_BOUN)) ||
++		((flash->dual_flash > SF_SINGLE_FLASH) &&
++		(flash->size > SPI_FLASH_16MB_BOUN << 1))) {
++			puts("SF: Warning - Only lower 16MiB accessible,");
++			puts(" Full access #define CONFIG_SPI_FLASH_BAR\n");
++		}
+ #endif
+-
++	}
+ 	return 0;
+ }
+diff --git a/drivers/mtd/spi/spi_flash_ids.c b/drivers/mtd/spi/spi_flash_ids.c
+index 155baa0..33809c9 100644
+--- a/drivers/mtd/spi/spi_flash_ids.c
++++ b/drivers/mtd/spi/spi_flash_ids.c
+@@ -105,7 +105,7 @@ const struct spi_flash_info spi_flash_ids[] = {
+ 	{"s25fl256s_256k", INFO(0x010219, 0x4d00, 256 * 1024,   128, RD_FULL | WR_QPP) },
+ 	{"s25fs256s_64k",  INFO6(0x010219, 0x4d0181, 64 * 1024, 512, RD_FULL | WR_QPP | SECT_4K) },
+ 	{"s25fl256s_64k",  INFO(0x010219, 0x4d01,  64 * 1024,   512, RD_FULL | WR_QPP) },
+-	{"s25fs512s",      INFO6(0x010220, 0x4d0081, 256 * 1024, 256, RD_FULL | WR_QPP) },
++	{"s25fs512s",      INFO6(0x010220, 0x4d0081, 256 * 1024, 256, RD_FULL | WR_QPP | ADDR_4B) },
+ 	{"s25fl512s_256k", INFO(0x010220, 0x4d00, 256 * 1024,   256, RD_FULL | WR_QPP) },
+ 	{"s25fl512s_64k",  INFO(0x010220, 0x4d01,  64 * 1024,  1024, RD_FULL | WR_QPP) },
+ 	{"s25fl512s_512k", INFO(0x010220, 0x4f00, 256 * 1024,   256, RD_FULL | WR_QPP) },
+diff --git a/include/spi_flash.h b/include/spi_flash.h
+index f3c4e83..736e6ea 100644
+--- a/include/spi_flash.h
++++ b/include/spi_flash.h
+@@ -83,6 +83,7 @@ struct spi_flash {
+ 	u8 read_cmd;
+ 	u8 write_cmd;
+ 	u8 dummy_byte;
++	u8 cmd_len;
+ 
+ 	void *memory_map;
+ 
+-- 
+1.7.1
+

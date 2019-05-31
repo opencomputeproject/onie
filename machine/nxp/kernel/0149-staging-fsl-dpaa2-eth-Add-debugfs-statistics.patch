@@ -1,0 +1,553 @@
+From d45cdbe9148c600fde3fbc0f4f4fc3259b7a57ac Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 9 May 2017 16:05:16 +0300
+Subject: [PATCH 149/448] staging: fsl-dpaa2/eth: Add debugfs statistics
+
+Export detailed driver counters through debugfs.
+Includes per-core, per-FQ and per-channel statistics.
+
+TODO: Find another way to export these, using debugfs
+is discouraged upstream.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/Makefile        |    1 +
+ .../staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c |  350 ++++++++++++++++++++
+ .../staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.h |   60 ++++
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c     |   33 ++-
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h     |    6 +
+ 5 files changed, 448 insertions(+), 2 deletions(-)
+ create mode 100644 drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+ create mode 100644 drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.h
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/Makefile b/drivers/staging/fsl-dpaa2/ethernet/Makefile
+index 77b0b74..e26911d 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/Makefile
++++ b/drivers/staging/fsl-dpaa2/ethernet/Makefile
+@@ -5,6 +5,7 @@
+ obj-$(CONFIG_FSL_DPAA2_ETH) += fsl-dpaa2-eth.o
+ 
+ fsl-dpaa2-eth-objs    := dpaa2-eth.o dpaa2-ethtool.o dpni.o
++fsl-dpaa2-eth-${CONFIG_FSL_DPAA2_ETH_DEBUGFS} += dpaa2-eth-debugfs.o
+ 
+ # Needed by the tracing framework
+ CFLAGS_dpaa2-eth.o := -I$(src)
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+new file mode 100644
+index 0000000..445c5d1
+--- /dev/null
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+@@ -0,0 +1,350 @@
++
++/* Copyright 2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include <linux/module.h>
++#include <linux/debugfs.h>
++#include "dpaa2-eth.h"
++#include "dpaa2-eth-debugfs.h"
++
++#define DPAA2_ETH_DBG_ROOT "dpaa2-eth"
++
++static struct dentry *dpaa2_dbg_root;
++
++static int dpaa2_dbg_cpu_show(struct seq_file *file, void *offset)
++{
++	struct dpaa2_eth_priv *priv = (struct dpaa2_eth_priv *)file->private;
++	struct rtnl_link_stats64 *stats;
++	struct dpaa2_eth_drv_stats *extras;
++	int i;
++
++	seq_printf(file, "Per-CPU stats for %s\n", priv->net_dev->name);
++	seq_printf(file, "%s%16s%16s%16s%16s%16s%16s%16s%16s\n",
++		   "CPU", "Rx", "Rx Err", "Rx SG", "Tx", "Tx Err", "Tx conf",
++		   "Tx SG", "Enq busy");
++
++	for_each_online_cpu(i) {
++		stats = per_cpu_ptr(priv->percpu_stats, i);
++		extras = per_cpu_ptr(priv->percpu_extras, i);
++		seq_printf(file, "%3d%16llu%16llu%16llu%16llu%16llu%16llu%16llu%16llu\n",
++			   i,
++			   stats->rx_packets,
++			   stats->rx_errors,
++			   extras->rx_sg_frames,
++			   stats->tx_packets,
++			   stats->tx_errors,
++			   extras->tx_conf_frames,
++			   extras->tx_sg_frames,
++			   extras->tx_portal_busy);
++	}
++
++	return 0;
++}
++
++static int dpaa2_dbg_cpu_open(struct inode *inode, struct file *file)
++{
++	int err;
++	struct dpaa2_eth_priv *priv = (struct dpaa2_eth_priv *)inode->i_private;
++
++	err = single_open(file, dpaa2_dbg_cpu_show, priv);
++	if (err < 0)
++		netdev_err(priv->net_dev, "single_open() failed\n");
++
++	return err;
++}
++
++static const struct file_operations dpaa2_dbg_cpu_ops = {
++	.open = dpaa2_dbg_cpu_open,
++	.read = seq_read,
++	.llseek = seq_lseek,
++	.release = single_release,
++};
++
++static char *fq_type_to_str(struct dpaa2_eth_fq *fq)
++{
++	switch (fq->type) {
++	case DPAA2_RX_FQ:
++		return "Rx";
++	case DPAA2_TX_CONF_FQ:
++		return "Tx conf";
++	case DPAA2_RX_ERR_FQ:
++		return "Rx err";
++	default:
++		return "N/A";
++	}
++}
++
++static int dpaa2_dbg_fqs_show(struct seq_file *file, void *offset)
++{
++	struct dpaa2_eth_priv *priv = (struct dpaa2_eth_priv *)file->private;
++	struct dpaa2_eth_fq *fq;
++	u32 fcnt, bcnt;
++	int i, err;
++
++	seq_printf(file, "FQ stats for %s:\n", priv->net_dev->name);
++	seq_printf(file, "%s%16s%16s%16s%16s%16s\n",
++		   "VFQID", "CPU", "Type", "Frames", "Pending frames",
++		   "Congestion");
++
++	for (i = 0; i <  priv->num_fqs; i++) {
++		fq = &priv->fq[i];
++		err = dpaa2_io_query_fq_count(NULL, fq->fqid, &fcnt, &bcnt);
++		if (err)
++			fcnt = 0;
++
++		seq_printf(file, "%5d%16d%16s%16llu%16u%16llu\n",
++			   fq->fqid,
++			   fq->target_cpu,
++			   fq_type_to_str(fq),
++			   fq->stats.frames,
++			   fcnt,
++			   fq->stats.congestion_entry);
++	}
++
++	return 0;
++}
++
++static int dpaa2_dbg_fqs_open(struct inode *inode, struct file *file)
++{
++	int err;
++	struct dpaa2_eth_priv *priv = (struct dpaa2_eth_priv *)inode->i_private;
++
++	err = single_open(file, dpaa2_dbg_fqs_show, priv);
++	if (err < 0)
++		netdev_err(priv->net_dev, "single_open() failed\n");
++
++	return err;
++}
++
++static const struct file_operations dpaa2_dbg_fq_ops = {
++	.open = dpaa2_dbg_fqs_open,
++	.read = seq_read,
++	.llseek = seq_lseek,
++	.release = single_release,
++};
++
++static int dpaa2_dbg_ch_show(struct seq_file *file, void *offset)
++{
++	struct dpaa2_eth_priv *priv = (struct dpaa2_eth_priv *)file->private;
++	struct dpaa2_eth_channel *ch;
++	int i;
++
++	seq_printf(file, "Channel stats for %s:\n", priv->net_dev->name);
++	seq_printf(file, "%s%16s%16s%16s%16s%16s\n",
++		   "CHID", "CPU", "Deq busy", "Frames", "CDANs",
++		   "Avg frm/CDAN");
++
++	for (i = 0; i < priv->num_channels; i++) {
++		ch = priv->channel[i];
++		seq_printf(file, "%4d%16d%16llu%16llu%16llu%16llu\n",
++			   ch->ch_id,
++			   ch->nctx.desired_cpu,
++			   ch->stats.dequeue_portal_busy,
++			   ch->stats.frames,
++			   ch->stats.cdan,
++			   ch->stats.frames / ch->stats.cdan);
++	}
++
++	return 0;
++}
++
++static int dpaa2_dbg_ch_open(struct inode *inode, struct file *file)
++{
++	int err;
++	struct dpaa2_eth_priv *priv = (struct dpaa2_eth_priv *)inode->i_private;
++
++	err = single_open(file, dpaa2_dbg_ch_show, priv);
++	if (err < 0)
++		netdev_err(priv->net_dev, "single_open() failed\n");
++
++	return err;
++}
++
++static const struct file_operations dpaa2_dbg_ch_ops = {
++	.open = dpaa2_dbg_ch_open,
++	.read = seq_read,
++	.llseek = seq_lseek,
++	.release = single_release,
++};
++
++static ssize_t dpaa2_dbg_reset_write(struct file *file, const char __user *buf,
++				     size_t count, loff_t *offset)
++{
++	struct dpaa2_eth_priv *priv = file->private_data;
++	struct rtnl_link_stats64 *percpu_stats;
++	struct dpaa2_eth_drv_stats *percpu_extras;
++	struct dpaa2_eth_fq *fq;
++	struct dpaa2_eth_channel *ch;
++	int i;
++
++	for_each_online_cpu(i) {
++		percpu_stats = per_cpu_ptr(priv->percpu_stats, i);
++		memset(percpu_stats, 0, sizeof(*percpu_stats));
++
++		percpu_extras = per_cpu_ptr(priv->percpu_extras, i);
++		memset(percpu_extras, 0, sizeof(*percpu_extras));
++	}
++
++	for (i = 0; i < priv->num_fqs; i++) {
++		fq = &priv->fq[i];
++		memset(&fq->stats, 0, sizeof(fq->stats));
++	}
++
++	for (i = 0; i < priv->num_channels; i++) {
++		ch = priv->channel[i];
++		memset(&ch->stats, 0, sizeof(ch->stats));
++	}
++
++	return count;
++}
++
++static const struct file_operations dpaa2_dbg_reset_ops = {
++	.open = simple_open,
++	.write = dpaa2_dbg_reset_write,
++};
++
++static ssize_t dpaa2_dbg_reset_mc_write(struct file *file,
++					const char __user *buf,
++					size_t count, loff_t *offset)
++{
++	struct dpaa2_eth_priv *priv = file->private_data;
++	int err;
++
++	err = dpni_reset_statistics(priv->mc_io, 0, priv->mc_token);
++	if (err)
++		netdev_err(priv->net_dev,
++			   "dpni_reset_statistics() failed %d\n", err);
++
++	return count;
++}
++
++static const struct file_operations dpaa2_dbg_reset_mc_ops = {
++	.open = simple_open,
++	.write = dpaa2_dbg_reset_mc_write,
++};
++
++void dpaa2_dbg_add(struct dpaa2_eth_priv *priv)
++{
++	if (!dpaa2_dbg_root)
++		return;
++
++	/* Create a directory for the interface */
++	priv->dbg.dir = debugfs_create_dir(priv->net_dev->name,
++					   dpaa2_dbg_root);
++	if (!priv->dbg.dir) {
++		netdev_err(priv->net_dev, "debugfs_create_dir() failed\n");
++		return;
++	}
++
++	/* per-cpu stats file */
++	priv->dbg.cpu_stats = debugfs_create_file("cpu_stats", 0444,
++						  priv->dbg.dir, priv,
++						  &dpaa2_dbg_cpu_ops);
++	if (!priv->dbg.cpu_stats) {
++		netdev_err(priv->net_dev, "debugfs_create_file() failed\n");
++		goto err_cpu_stats;
++	}
++
++	/* per-fq stats file */
++	priv->dbg.fq_stats = debugfs_create_file("fq_stats", 0444,
++						 priv->dbg.dir, priv,
++						 &dpaa2_dbg_fq_ops);
++	if (!priv->dbg.fq_stats) {
++		netdev_err(priv->net_dev, "debugfs_create_file() failed\n");
++		goto err_fq_stats;
++	}
++
++	/* per-fq stats file */
++	priv->dbg.ch_stats = debugfs_create_file("ch_stats", 0444,
++						 priv->dbg.dir, priv,
++						 &dpaa2_dbg_ch_ops);
++	if (!priv->dbg.fq_stats) {
++		netdev_err(priv->net_dev, "debugfs_create_file() failed\n");
++		goto err_ch_stats;
++	}
++
++	/* reset stats */
++	priv->dbg.reset_stats = debugfs_create_file("reset_stats", 0200,
++						    priv->dbg.dir, priv,
++						    &dpaa2_dbg_reset_ops);
++	if (!priv->dbg.reset_stats) {
++		netdev_err(priv->net_dev, "debugfs_create_file() failed\n");
++		goto err_reset_stats;
++	}
++
++	/* reset MC stats */
++	priv->dbg.reset_mc_stats = debugfs_create_file("reset_mc_stats",
++						0222, priv->dbg.dir, priv,
++						&dpaa2_dbg_reset_mc_ops);
++	if (!priv->dbg.reset_mc_stats) {
++		netdev_err(priv->net_dev, "debugfs_create_file() failed\n");
++		goto err_reset_mc_stats;
++	}
++
++	return;
++
++err_reset_mc_stats:
++	debugfs_remove(priv->dbg.reset_stats);
++err_reset_stats:
++	debugfs_remove(priv->dbg.ch_stats);
++err_ch_stats:
++	debugfs_remove(priv->dbg.fq_stats);
++err_fq_stats:
++	debugfs_remove(priv->dbg.cpu_stats);
++err_cpu_stats:
++	debugfs_remove(priv->dbg.dir);
++}
++
++void dpaa2_dbg_remove(struct dpaa2_eth_priv *priv)
++{
++	debugfs_remove(priv->dbg.reset_mc_stats);
++	debugfs_remove(priv->dbg.reset_stats);
++	debugfs_remove(priv->dbg.fq_stats);
++	debugfs_remove(priv->dbg.ch_stats);
++	debugfs_remove(priv->dbg.cpu_stats);
++	debugfs_remove(priv->dbg.dir);
++}
++
++void dpaa2_eth_dbg_init(void)
++{
++	dpaa2_dbg_root = debugfs_create_dir(DPAA2_ETH_DBG_ROOT, NULL);
++	if (!dpaa2_dbg_root) {
++		pr_err("DPAA2-ETH: debugfs create failed\n");
++		return;
++	}
++
++	pr_info("DPAA2-ETH: debugfs created\n");
++}
++
++void __exit dpaa2_eth_dbg_exit(void)
++{
++	debugfs_remove(dpaa2_dbg_root);
++}
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.h
+new file mode 100644
+index 0000000..551e6c4
+--- /dev/null
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.h
+@@ -0,0 +1,60 @@
++/* Copyright 2015 Freescale Semiconductor Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *	 notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *	 notice, this list of conditions and the following disclaimer in the
++ *	 documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *	 names of its contributors may be used to endorse or promote products
++ *	 derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef DPAA2_ETH_DEBUGFS_H
++#define DPAA2_ETH_DEBUGFS_H
++
++#include <linux/dcache.h>
++
++struct dpaa2_eth_priv;
++
++struct dpaa2_debugfs {
++	struct dentry *dir;
++	struct dentry *fq_stats;
++	struct dentry *ch_stats;
++	struct dentry *cpu_stats;
++	struct dentry *reset_stats;
++	struct dentry *reset_mc_stats;
++};
++
++#ifdef CONFIG_FSL_DPAA2_ETH_DEBUGFS
++void dpaa2_eth_dbg_init(void);
++void dpaa2_eth_dbg_exit(void);
++void dpaa2_dbg_add(struct dpaa2_eth_priv *priv);
++void dpaa2_dbg_remove(struct dpaa2_eth_priv *priv);
++#else
++static inline void dpaa2_eth_dbg_init(void) {}
++static inline void dpaa2_eth_dbg_exit(void) {}
++static inline void dpaa2_dbg_add(struct dpaa2_eth_priv *priv) {}
++static inline void dpaa2_dbg_remove(struct dpaa2_eth_priv *priv) {}
++#endif /* CONFIG_FSL_DPAA2_ETH_DEBUGFS */
++
++#endif /* DPAA2_ETH_DEBUGFS_H */
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 2681870..e94c6b6 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -674,8 +674,10 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 	 */
+ 	dma_sync_single_for_cpu(dev, priv->cscn_dma,
+ 				DPAA2_CSCN_SIZE, DMA_FROM_DEVICE);
+-	if (unlikely(dpaa2_cscn_state_congested(priv->cscn_mem)))
++	if (unlikely(dpaa2_cscn_state_congested(priv->cscn_mem))) {
+ 		netif_stop_subqueue(net_dev, queue_mapping);
++		fq->stats.congestion_entry++;
++	}
+ 
+ 	percpu_stats = this_cpu_ptr(priv->percpu_stats);
+ 	percpu_extras = this_cpu_ptr(priv->percpu_extras);
+@@ -2962,6 +2964,9 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
+ 	}
+ 
+ 	dpaa2_eth_sysfs_init(&net_dev->dev);
++#ifdef CONFIG_FSL_DPAA2_ETH_DEBUGFS
++	dpaa2_dbg_add(priv);
++#endif
+ 
+ 	dev_info(dev, "Probed interface %s\n", net_dev->name);
+ 	return 0;
+@@ -3002,6 +3007,9 @@ static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
+ 	net_dev = dev_get_drvdata(dev);
+ 	priv = netdev_priv(net_dev);
+ 
++#ifdef CONFIG_FSL_DPAA2_ETH_DEBUGFS
++	dpaa2_dbg_remove(priv);
++#endif
+ 	dpaa2_eth_sysfs_remove(&net_dev->dev);
+ 
+ 	unregister_netdev(net_dev);
+@@ -3048,4 +3056,25 @@ static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
+ 	.match_id_table = dpaa2_eth_match_id_table
+ };
+ 
+-module_fsl_mc_driver(dpaa2_eth_driver);
++static int __init dpaa2_eth_driver_init(void)
++{
++	int err;
++
++	dpaa2_eth_dbg_init();
++	err = fsl_mc_driver_register(&dpaa2_eth_driver);
++	if (err) {
++		dpaa2_eth_dbg_exit();
++		return err;
++	}
++
++	return 0;
++}
++
++static void __exit dpaa2_eth_driver_exit(void)
++{
++	dpaa2_eth_dbg_exit();
++	fsl_mc_driver_unregister(&dpaa2_eth_driver);
++}
++
++module_init(dpaa2_eth_driver_init);
++module_exit(dpaa2_eth_driver_exit);
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index f82bda2..69f1ea6 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -44,6 +44,7 @@
+ #include "dpni-cmd.h"
+ 
+ #include "dpaa2-eth-trace.h"
++#include "dpaa2-eth-debugfs.h"
+ 
+ #define DPAA2_ETH_STORE_SIZE		16
+ 
+@@ -286,6 +287,8 @@ struct dpaa2_eth_drv_stats {
+ struct dpaa2_eth_fq_stats {
+ 	/* Number of frames received on this queue */
+ 	__u64 frames;
++	/* Number of times this queue entered congestion */
++	__u64 congestion_entry;
+ };
+ 
+ /* Per-channel statistics */
+@@ -405,6 +408,9 @@ struct dpaa2_eth_priv {
+ 	u8 num_hash_fields;
+ 	/* enabled ethtool hashing bits */
+ 	u64 rx_hash_fields;
++#ifdef CONFIG_FSL_DPAA2_ETH_DEBUGFS
++	struct dpaa2_debugfs dbg;
++#endif
+ 	/* array of classification rules */
+ 	struct dpaa2_eth_cls_rule *cls_rule;
+ 	struct dpni_tx_shaping_cfg shaping_cfg;
+-- 
+1.7.1
+

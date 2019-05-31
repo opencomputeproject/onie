@@ -1,0 +1,72 @@
+From 11230cf9984af02db481c60157151e76e676c668 Mon Sep 17 00:00:00 2001
+From: Bart Van Assche <bart.vanassche@sandisk.com>
+Date: Fri, 23 Mar 2018 11:26:53 +0800
+Subject: [PATCH 042/448] treewide: Consolidate set_dma_ops() implementations
+
+[arch part]
+
+Now that all set_dma_ops() implementations are identical (ignoring
+BUG_ON() statements), remove the architecture specific definitions
+and add a definition in <linux/dma-mapping.h>.
+
+Signed-off-by: Bart Van Assche <bart.vanassche@sandisk.com>
+Signed-off-by: Doug Ledford <dledford@redhat.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/include/asm/dma-mapping.h     |    6 ------
+ arch/powerpc/include/asm/dma-mapping.h |    5 -----
+ arch/tile/include/asm/dma-mapping.h    |    5 -----
+ 3 files changed, 0 insertions(+), 16 deletions(-)
+
+diff --git a/arch/arm/include/asm/dma-mapping.h b/arch/arm/include/asm/dma-mapping.h
+index bf02dbd..149ac0f 100644
+--- a/arch/arm/include/asm/dma-mapping.h
++++ b/arch/arm/include/asm/dma-mapping.h
+@@ -31,12 +31,6 @@
+ 		return __generic_dma_ops(dev);
+ }
+ 
+-static inline void set_dma_ops(struct device *dev, struct dma_map_ops *ops)
+-{
+-	BUG_ON(!dev);
+-	dev->archdata.dma_ops = ops;
+-}
+-
+ #define HAVE_ARCH_DMA_SUPPORTED 1
+ extern int dma_supported(struct device *dev, u64 mask);
+ 
+diff --git a/arch/powerpc/include/asm/dma-mapping.h b/arch/powerpc/include/asm/dma-mapping.h
+index 84e3f8d..76fdc45 100644
+--- a/arch/powerpc/include/asm/dma-mapping.h
++++ b/arch/powerpc/include/asm/dma-mapping.h
+@@ -91,11 +91,6 @@ static inline unsigned long device_to_mask(struct device *dev)
+ 	return dev->archdata.dma_ops;
+ }
+ 
+-static inline void set_dma_ops(struct device *dev, struct dma_map_ops *ops)
+-{
+-	dev->archdata.dma_ops = ops;
+-}
+-
+ /*
+  * get_dma_offset()
+  *
+diff --git a/arch/tile/include/asm/dma-mapping.h b/arch/tile/include/asm/dma-mapping.h
+index 01ceb4a..9300879 100644
+--- a/arch/tile/include/asm/dma-mapping.h
++++ b/arch/tile/include/asm/dma-mapping.h
+@@ -59,11 +59,6 @@ static inline phys_addr_t dma_to_phys(struct device *dev, dma_addr_t daddr)
+ 
+ static inline void dma_mark_clean(void *addr, size_t size) {}
+ 
+-static inline void set_dma_ops(struct device *dev, struct dma_map_ops *ops)
+-{
+-	dev->archdata.dma_ops = ops;
+-}
+-
+ static inline bool dma_capable(struct device *dev, dma_addr_t addr, size_t size)
+ {
+ 	if (!dev->dma_mask)
+-- 
+1.7.1
+

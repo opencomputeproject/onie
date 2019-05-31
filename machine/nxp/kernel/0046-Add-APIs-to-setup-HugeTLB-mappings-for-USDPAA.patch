@@ -1,0 +1,62 @@
+From c637cf74acbcb979a836c21f113f362a364d28b4 Mon Sep 17 00:00:00 2001
+From: Roy Pledge <Roy.Pledge@freescale.com>
+Date: Tue, 12 Jan 2016 13:40:26 -0500
+Subject: [PATCH 046/448] Add APIs to setup HugeTLB mappings for USDPAA
+
+---
+ arch/powerpc/mm/fsl_booke_mmu.c |   14 +++++++++++++-
+ arch/powerpc/mm/mmu_decl.h      |    6 ++++++
+ 2 files changed, 19 insertions(+), 1 deletions(-)
+
+diff --git a/arch/powerpc/mm/fsl_booke_mmu.c b/arch/powerpc/mm/fsl_booke_mmu.c
+index 139dec4..cdeb25a 100644
+--- a/arch/powerpc/mm/fsl_booke_mmu.c
++++ b/arch/powerpc/mm/fsl_booke_mmu.c
+@@ -107,7 +107,7 @@ unsigned long p_block_mapped(phys_addr_t pa)
+  * an unsigned long (for example, 32-bit implementations cannot support a 4GB
+  * size).
+  */
+-static void settlbcam(int index, unsigned long virt, phys_addr_t phys,
++void settlbcam(int index, unsigned long virt, phys_addr_t phys,
+ 		unsigned long size, unsigned long flags, unsigned int pid)
+ {
+ 	unsigned int tsize;
+@@ -145,6 +145,18 @@ static void settlbcam(int index, unsigned long virt, phys_addr_t phys,
+ 	tlbcam_addrs[index].phys = phys;
+ }
+ 
++void cleartlbcam(unsigned long virt, unsigned int pid)
++{
++        int i = 0;
++        for (i = 0; i < NUM_TLBCAMS; i++) {
++                if (tlbcam_addrs[i].start == virt) {
++                        TLBCAM[i].MAS1 = 0;
++                        loadcam_entry(i);
++                        return;
++                }
++        }
++}
++
+ unsigned long calc_cam_sz(unsigned long ram, unsigned long virt,
+ 			  phys_addr_t phys)
+ {
+diff --git a/arch/powerpc/mm/mmu_decl.h b/arch/powerpc/mm/mmu_decl.h
+index f988db6..4adc495 100644
+--- a/arch/powerpc/mm/mmu_decl.h
++++ b/arch/powerpc/mm/mmu_decl.h
+@@ -91,6 +91,12 @@ extern void hash_preload(struct mm_struct *mm, unsigned long ea,
+ 
+ #endif /* CONFIG_PPC_MMU_NOHASH */
+ 
++void settlbcam(int index, unsigned long virt, phys_addr_t phys,
++               unsigned long size, unsigned long flags, unsigned int pid);
++
++void cleartlbcam(unsigned long virt, unsigned int pid);
++
++
+ #ifdef CONFIG_PPC32
+ 
+ extern void mapin_ram(void);
+-- 
+1.7.1
+

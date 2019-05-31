@@ -1,0 +1,81 @@
+From cf17a124af9d262355eb4e92b296443709b13e55 Mon Sep 17 00:00:00 2001
+From: Xiaoliang Yang <xiaoliang.yang_1@nxp.com>
+Date: Fri, 11 May 2018 15:48:21 +0800
+Subject: [PATCH 056/107] watchdog: driver support for layerscape
+
+Support watchdog driver for layerscape. If you want to use it,
+please define CONFIG_IMX_WATCHDOG, CONFIG_HW_WATCHDOG,
+define CONFIG_WATCHDOG_TIMEOUT_MSECS to set watchdog timeout.
+
+Signed-off-by: Xiaoliang Yang <xiaoliang.yang_1@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2 |   10 ++++++++++
+ drivers/watchdog/Makefile                          |    2 +-
+ drivers/watchdog/imx_watchdog.c                    |   11 +++++++++++
+ 3 files changed, 22 insertions(+), 1 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2 b/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2
+index a6ef830..87b91eb 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2
++++ b/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2
+@@ -8,3 +8,13 @@ Freescale LayerScape with Chassis Generation 2
+ 
+ This architecture supports Freescale ARMv8 SoCs with Chassis generation 2,
+ for example LS1043A.
++
++Watchdog support Overview
++-------------------
++Support watchdog driver for Layerscape. Use following configs to enable it:
++    #define CONFIG_IMX_WATCHDOG
++    #define CONFIG_HW_WATCHDOG
++Use following config to set watchdog timeout, if this config is not defined,
++the default timeout value is 128s which is the maximum. Set 10 seconds for
++example:
++    #define CONFIG_WATCHDOG_TIMEOUT_MSECS 10000
+diff --git a/drivers/watchdog/Makefile b/drivers/watchdog/Makefile
+index ab6a6b7..86cf94b 100644
+--- a/drivers/watchdog/Makefile
++++ b/drivers/watchdog/Makefile
+@@ -7,7 +7,7 @@
+ 
+ obj-$(CONFIG_AT91SAM9_WATCHDOG) += at91sam9_wdt.o
+ obj-$(CONFIG_FTWDT010_WATCHDOG) += ftwdt010_wdt.o
+-ifneq (,$(filter $(SOC), mx31 mx35 mx5 mx6 mx7 vf610))
++ifneq (,$(filter $(SOC), mx31 mx35 mx5 mx6 mx7 vf610 fsl-layerscape))
+ obj-y += imx_watchdog.o
+ endif
+ obj-$(CONFIG_S5P)               += s5p_wdt.o
+diff --git a/drivers/watchdog/imx_watchdog.c b/drivers/watchdog/imx_watchdog.c
+index 3f826d1..3ad4e55 100644
+--- a/drivers/watchdog/imx_watchdog.c
++++ b/drivers/watchdog/imx_watchdog.c
+@@ -8,6 +8,13 @@
+ #include <asm/io.h>
+ #include <watchdog.h>
+ #include <asm/arch/imx-regs.h>
++#ifdef CONFIG_FSL_LAYERSCAPE
++#ifdef CONFIG_FSL_LSCH3
++#include <asm/arch/immap_lsch3.h>
++#elif defined(CONFIG_FSL_LSCH2)
++#include <asm/arch/immap_lsch2.h>
++#endif
++#endif
+ #include <fsl_wdog.h>
+ 
+ #ifdef CONFIG_IMX_WATCHDOG
+@@ -33,8 +40,12 @@ void hw_watchdog_init(void)
+ #define CONFIG_WATCHDOG_TIMEOUT_MSECS 128000
+ #endif
+ 	timeout = (CONFIG_WATCHDOG_TIMEOUT_MSECS / 500) - 1;
++#ifdef CONFIG_FSL_LAYERSCAPE
++	writew((WCR_WDA | WCR_SRS | WCR_WDE) << 8 | timeout, &wdog->wcr);
++#else
+ 	writew(WCR_WDZST | WCR_WDBG | WCR_WDE | WCR_WDT | WCR_SRS |
+ 		WCR_WDA | SET_WCR_WT(timeout), &wdog->wcr);
++#endif /* CONFIG_FSL_LAYERSCAPE*/
+ 	hw_watchdog_reset();
+ }
+ #endif
+-- 
+1.7.1
+

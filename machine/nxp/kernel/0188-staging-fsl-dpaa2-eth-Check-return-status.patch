@@ -1,0 +1,87 @@
+From 711056cb290b546b3d287c341ab5fafa9603636c Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 21 Nov 2017 17:03:07 +0200
+Subject: [PATCH 188/448] staging: fsl-dpaa2/eth: Check return status
+
+When loading/unloading an XDP program, we do it with the interface
+down. Check return values of dpaa2_eth_stop() and dpaa2_eth_open()
+to make sure there's no errors while bringing the interface down
+and then up.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   24 ++++++++++++++++--------
+ 1 files changed, 16 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 6b9cdbb..2e2d10c 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1313,6 +1313,7 @@ static int dpaa2_eth_stop(struct net_device *net_dev)
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+ 	int dpni_enabled;
+ 	int retries = 10, i;
++	int err = 0;
+ 
+ 	netif_tx_stop_all_queues(net_dev);
+ 	netif_carrier_off(net_dev);
+@@ -1329,9 +1330,10 @@ static int dpaa2_eth_stop(struct net_device *net_dev)
+ 	} while (dpni_enabled && --retries);
+ 	if (!retries) {
+ 		netdev_warn(net_dev, "Retry count exceeded disabling DPNI\n");
+-		/* Must go on and disable NAPI nonetheless, so we don't crash at
+-		 * the next "ifconfig up"
++		/* Must go on and finish processing pending frames, so we don't
++		 * crash at the next "ifconfig up"
+ 		 */
++		err = -ETIMEDOUT;
+ 	}
+ 
+ 	priv->refill_thresh = 0;
+@@ -1345,7 +1347,7 @@ static int dpaa2_eth_stop(struct net_device *net_dev)
+ 	/* Empty the buffer pool */
+ 	drain_pool(priv);
+ 
+-	return 0;
++	return err;
+ }
+ 
+ static int dpaa2_eth_init(struct net_device *net_dev)
+@@ -1717,14 +1719,17 @@ static int dpaa2_eth_set_xdp(struct net_device *net_dev, struct bpf_prog *prog)
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+ 	struct dpaa2_eth_channel *ch;
+ 	struct bpf_prog *old_prog;
+-	int i;
++	int i, err;
+ 
+ 	/* No support for SG frames */
+ 	if (DPAA2_ETH_L2_MAX_FRM(net_dev->mtu) > DPAA2_ETH_RX_BUF_SIZE)
+ 		return -EINVAL;
+ 
+-	if (netif_running(net_dev))
+-		dpaa2_eth_stop(net_dev);
++	if (netif_running(net_dev)) {
++		err = dpaa2_eth_stop(net_dev);
++		if (err)
++			return err;
++	}
+ 
+ 	if (prog) {
+ 		prog = bpf_prog_add(prog, priv->num_channels - 1);
+@@ -1741,8 +1746,11 @@ static int dpaa2_eth_set_xdp(struct net_device *net_dev, struct bpf_prog *prog)
+ 			bpf_prog_put(old_prog);
+ 	}
+ 
+-	if (netif_running(net_dev))
+-		dpaa2_eth_open(net_dev);
++	if (netif_running(net_dev)) {
++		err = dpaa2_eth_open(net_dev);
++		if (err)
++			return err;
++	}
+ 
+ 	return 0;
+ }
+-- 
+1.7.1
+

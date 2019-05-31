@@ -1,0 +1,51 @@
+From 69a7e635efb7abc015a4f67a98529d5cafb2695f Mon Sep 17 00:00:00 2001
+From: Ran Wang <ran.wang_1@nxp.com>
+Date: Wed, 8 Aug 2018 15:29:15 +0800
+Subject: [PATCH 086/107] armv7: ls102xa: Disable QE before enter deep sleep
+
+Otherwise system will hang after executing wfi.
+
+Signed-off-by: Ran Wang <ran.wang_1@nxp.com>
+---
+ arch/arm/cpu/armv7/ls102xa/ls102xa_psci.c         |    4 ++++
+ arch/arm/include/asm/arch-ls102xa/immap_ls102xa.h |    2 ++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/arch/arm/cpu/armv7/ls102xa/ls102xa_psci.c b/arch/arm/cpu/armv7/ls102xa/ls102xa_psci.c
+index 1cbe93c..8ae90f1 100644
+--- a/arch/arm/cpu/armv7/ls102xa/ls102xa_psci.c
++++ b/arch/arm/cpu/armv7/ls102xa/ls102xa_psci.c
+@@ -74,6 +74,7 @@ static void __secure ls1_deepsleep_irq_cfg(void)
+ 	 * read, that is why we don't read it from register ippdexpcr1 itself.
+ 	 */
+ 	ippdexpcr1 = in_le32(&scfg->sparecr[7]);
++	out_be32(&rcpm->ippdexpcr1, ippdexpcr1);
+ 
+ 	if (ippdexpcr0 & RCPM_IPPDEXPCR0_ETSEC)
+ 		pmcintecr |= SCFG_PMCINTECR_ETSECRXG0 |
+@@ -193,6 +194,9 @@ static void __secure ls1_deep_sleep(u32 entry_point)
+ 	setbits_be32(&scfg->dpslpcr, SCFG_DPSLPCR_WDRR_EN);
+ 	setbits_be32(&gur->crstsr, DCFG_CRSTSR_WDRFR);
+ 
++	/* Disable QE */
++	setbits_be32(&gur->devdisr, CCSR_DEVDISR1_QE);
++
+ 	ls1_deepsleep_irq_cfg();
+ 
+ 	psci_v7_flush_dcache_all();
+diff --git a/arch/arm/include/asm/arch-ls102xa/immap_ls102xa.h b/arch/arm/include/asm/arch-ls102xa/immap_ls102xa.h
+index fe0bbb9..d1c78b5 100644
+--- a/arch/arm/include/asm/arch-ls102xa/immap_ls102xa.h
++++ b/arch/arm/include/asm/arch-ls102xa/immap_ls102xa.h
+@@ -87,6 +87,8 @@ struct sys_info {
+ 	unsigned long freq_localbus;
+ };
+ 
++#define CCSR_DEVDISR1_QE	0x00000001
++
+ /* Device Configuration and Pin Control */
+ struct ccsr_gur {
+ 	u32     porsr1;         /* POR status 1 */
+-- 
+1.7.1
+

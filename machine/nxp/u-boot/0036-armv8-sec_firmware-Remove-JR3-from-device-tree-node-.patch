@@ -1,0 +1,67 @@
+From 9c912c7348b44063ae27c8e9fd7bdd98eace8382 Mon Sep 17 00:00:00 2001
+From: Ruchika Gupta <ruchika.gupta@nxp.com>
+Date: Thu, 12 Apr 2018 16:20:41 +0530
+Subject: [PATCH 036/107] armv8: sec_firmware: Remove JR3 from device tree node in all cases
+
+JR3 was getting removed from device tree only if random number generation
+was successful. However, if SEC firmware is present,JR3 should be removed
+from device tree node irrespective of the random seed generation as
+SEC firmware reserves it for it's use. Not removing it in case of random
+number generation failure causes the kernel to crash.
+
+Random number generation was being called twice. This is not required.
+If SEC firmware is running, SIP call can be made to the SEC firmware to
+get the random number. This call itself would return failure if function
+is not supported. Duplicate calling of random number generation function
+has been removed
+
+Signed-off-by: Ruchika Gupta <ruchika.gupta@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/fdt.c |    4 ++--
+ arch/arm/cpu/armv8/sec_firmware.c       |    6 +++---
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/fdt.c b/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
+index 99c5d13..955ef30 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/fdt.c
+@@ -415,8 +415,8 @@ void ft_cpu_setup(void *blob, bd_t *bd)
+ 		ccsr_sec_t __iomem *sec;
+ 
+ #ifdef CONFIG_ARMV8_SEC_FIRMWARE_SUPPORT
+-		if (fdt_fixup_kaslr(blob))
+-			fdt_fixup_remove_jr(blob);
++		fdt_fixup_remove_jr(blob);
++		fdt_fixup_kaslr(blob);
+ #endif
+ 
+ 		sec = (void __iomem *)CONFIG_SYS_FSL_SEC_ADDR;
+diff --git a/arch/arm/cpu/armv8/sec_firmware.c b/arch/arm/cpu/armv8/sec_firmware.c
+index b56ea78..98d7be3 100644
+--- a/arch/arm/cpu/armv8/sec_firmware.c
++++ b/arch/arm/cpu/armv8/sec_firmware.c
+@@ -318,9 +318,7 @@ unsigned int sec_firmware_support_psci_version(void)
+  */
+ bool sec_firmware_support_hwrng(void)
+ {
+-	uint8_t rand[8];
+ 	if (sec_firmware_addr & SEC_FIRMWARE_RUNNING) {
+-		if (!sec_firmware_get_random(rand, 8))
+ 			return true;
+ 	}
+ 
+@@ -429,8 +427,10 @@ int fdt_fixup_kaslr(void *fdt)
+ 
+ #if defined(CONFIG_ARMV8_SEC_FIRMWARE_SUPPORT)
+ 	/* Check if random seed generation is  supported */
+-	if (sec_firmware_support_hwrng() == false)
++	if (sec_firmware_support_hwrng() == false) {
++		printf("WARNING: SEC firmware not running, no kaslr-seed\n");
+ 		return 0;
++	}
+ 
+ 	ret = sec_firmware_get_random(rand, 8);
+ 	if (ret < 0) {
+-- 
+1.7.1
+

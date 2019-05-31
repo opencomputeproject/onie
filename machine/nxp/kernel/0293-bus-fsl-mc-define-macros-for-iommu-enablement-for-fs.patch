@@ -1,0 +1,41 @@
+From 9dcb07b4c4dd5fbeac490c5b812fd3a5b67b604e Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Mon, 16 Apr 2018 11:33:11 +0300
+Subject: [PATCH 293/448] bus: fsl-mc: define macros for iommu enablement for fsl-mc bus
+
+Macros to get coherency and the container device of the devices on
+fsl-mc bus are required to suport SMMU for this bus. This patch
+defines the same.
+
+Signed-off-by: Nipun Gupta <nipun.gupta@nxp.com>
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+---
+ include/linux/fsl/mc.h |   12 ++++++++++++
+ 1 files changed, 12 insertions(+), 0 deletions(-)
+
+diff --git a/include/linux/fsl/mc.h b/include/linux/fsl/mc.h
+index ae0997a..ecfca9e 100644
+--- a/include/linux/fsl/mc.h
++++ b/include/linux/fsl/mc.h
+@@ -347,6 +347,18 @@ struct fsl_mc_io {
+ #define dev_is_fsl_mc(_dev) (0)
+ #endif
+ 
++/* Macro to check if a device is a container device */
++#define fsl_mc_is_cont_dev(_dev) (to_fsl_mc_device(_dev)->flags & \
++	FSL_MC_IS_DPRC)
++
++/* Macro to get the container device of a MC device */
++#define fsl_mc_cont_dev(_dev) (fsl_mc_is_cont_dev(_dev) ? \
++	(_dev) : (_dev)->parent)
++
++#define fsl_mc_is_dev_coherent(_dev) \
++	(!((to_fsl_mc_device(_dev))->obj_desc.flags & \
++	FSL_MC_OBJ_FLAG_NO_MEM_SHAREABILITY))
++
+ /*
+  * module_fsl_mc_driver() - Helper macro for drivers that don't do
+  * anything special in module init/exit.  This eliminates a lot of
+-- 
+1.7.1
+

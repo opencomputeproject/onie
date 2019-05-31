@@ -1,0 +1,216 @@
+From bd85f20795648faa098102ea33d22222f3931b9b Mon Sep 17 00:00:00 2001
+From: Calvin Johnson <calvin.johnson@nxp.com>
+Date: Thu, 8 Mar 2018 15:30:35 +0530
+Subject: [PATCH 018/107] configs: ls1012a: add pfe configuration for LS1012A
+
+Add configurations for PFE.
+
+Signed-off-by: Calvin Johnson <calvin.johnson@nxp.com>
+Signed-off-by: Anjaneyulu Jagarlmudi <anji.jagarlmudi@nxp.com>
+Acked-by: Joe Hershberger <joe.hershberger@ni.com>
+---
+ configs/ls1012a2g5rdb_qspi_defconfig |    2 ++
+ configs/ls1012afrdm_qspi_defconfig   |    2 ++
+ configs/ls1012aqds_qspi_defconfig    |    2 ++
+ configs/ls1012ardb_qspi_defconfig    |    2 ++
+ drivers/net/Kconfig                  |    1 +
+ drivers/net/Makefile                 |    1 +
+ drivers/net/pfe_eth/Kconfig          |   12 ++++++++++++
+ drivers/net/pfe_eth/Makefile         |   12 ++++++++++++
+ include/configs/ls1012a2g5rdb.h      |   11 +----------
+ include/configs/ls1012a_common.h     |    6 +++---
+ include/configs/ls1012afrdm.h        |    2 +-
+ include/configs/ls1012ardb.h         |    2 +-
+ 12 files changed, 40 insertions(+), 15 deletions(-)
+ create mode 100644 drivers/net/pfe_eth/Kconfig
+ create mode 100644 drivers/net/pfe_eth/Makefile
+
+diff --git a/configs/ls1012a2g5rdb_qspi_defconfig b/configs/ls1012a2g5rdb_qspi_defconfig
+index 26dcb1a..af676e2 100644
+--- a/configs/ls1012a2g5rdb_qspi_defconfig
++++ b/configs/ls1012a2g5rdb_qspi_defconfig
+@@ -31,7 +31,9 @@ CONFIG_DM=y
+ CONFIG_DM_MMC=y
+ CONFIG_DM_SPI_FLASH=y
+ CONFIG_SPI_FLASH=y
++CONFIG_DM_ETH=y
+ CONFIG_NETDEVICES=y
++CONFIG_FSL_PFE=y
+ CONFIG_SYS_NS16550=y
+ CONFIG_DM_SPI=y
+ CONFIG_USB=y
+diff --git a/configs/ls1012afrdm_qspi_defconfig b/configs/ls1012afrdm_qspi_defconfig
+index 1164361..c02e520 100644
+--- a/configs/ls1012afrdm_qspi_defconfig
++++ b/configs/ls1012afrdm_qspi_defconfig
+@@ -29,8 +29,10 @@ CONFIG_DM=y
+ # CONFIG_MMC is not set
+ CONFIG_DM_SPI_FLASH=y
+ CONFIG_SPI_FLASH=y
++CONFIG_DM_ETH=y
+ CONFIG_NETDEVICES=y
+ CONFIG_E1000=y
++CONFIG_FSL_PFE=y
+ CONFIG_PCI=y
+ CONFIG_DM_PCI=y
+ CONFIG_DM_PCI_COMPAT=y
+diff --git a/configs/ls1012aqds_qspi_defconfig b/configs/ls1012aqds_qspi_defconfig
+index 9fdf333..25470cb 100644
+--- a/configs/ls1012aqds_qspi_defconfig
++++ b/configs/ls1012aqds_qspi_defconfig
+@@ -36,8 +36,10 @@ CONFIG_SCSI_AHCI=y
+ CONFIG_DM_MMC=y
+ CONFIG_DM_SPI_FLASH=y
+ CONFIG_SPI_FLASH=y
++CONFIG_DM_ETH=y
+ CONFIG_NETDEVICES=y
+ CONFIG_E1000=y
++CONFIG_FSL_PFE=y
+ CONFIG_PCI=y
+ CONFIG_DM_PCI=y
+ CONFIG_DM_PCI_COMPAT=y
+diff --git a/configs/ls1012ardb_qspi_defconfig b/configs/ls1012ardb_qspi_defconfig
+index 4347263..1f62953 100644
+--- a/configs/ls1012ardb_qspi_defconfig
++++ b/configs/ls1012ardb_qspi_defconfig
+@@ -32,8 +32,10 @@ CONFIG_DM=y
+ CONFIG_DM_MMC=y
+ CONFIG_DM_SPI_FLASH=y
+ CONFIG_SPI_FLASH=y
++CONFIG_DM_ETH=y
+ CONFIG_NETDEVICES=y
+ CONFIG_E1000=y
++CONFIG_FSL_PFE=y
+ CONFIG_PCI=y
+ CONFIG_DM_PCI=y
+ CONFIG_DM_PCI_COMPAT=y
+diff --git a/drivers/net/Kconfig b/drivers/net/Kconfig
+index de1947c..f589978 100644
+--- a/drivers/net/Kconfig
++++ b/drivers/net/Kconfig
+@@ -1,4 +1,5 @@
+ source "drivers/net/phy/Kconfig"
++source "drivers/net/pfe_eth/Kconfig"
+ 
+ config DM_ETH
+ 	bool "Enable Driver Model for Ethernet drivers"
+diff --git a/drivers/net/Makefile b/drivers/net/Makefile
+index 4a16c62..95cb7bb 100644
+--- a/drivers/net/Makefile
++++ b/drivers/net/Makefile
+@@ -73,3 +73,4 @@ obj-$(CONFIG_FSL_MEMAC) += fm/memac_phy.o
+ obj-$(CONFIG_VSC9953) += vsc9953.o
+ obj-$(CONFIG_PIC32_ETH) += pic32_mdio.o pic32_eth.o
+ obj-$(CONFIG_DWC_ETH_QOS) += dwc_eth_qos.o
++obj-$(CONFIG_FSL_PFE) += pfe_eth/
+diff --git a/drivers/net/pfe_eth/Kconfig b/drivers/net/pfe_eth/Kconfig
+new file mode 100644
+index 0000000..a13b331
+--- /dev/null
++++ b/drivers/net/pfe_eth/Kconfig
+@@ -0,0 +1,12 @@
++menuconfig FSL_PFE
++	bool "NXP PFE Ethernet driver"
++	help
++	  This driver provides support for NXP's Packet Forwarding Engine.
++
++if FSL_PFE
++
++config SYS_FSL_PFE_ADDR
++	hex "PFE base address"
++	default 0x04000000
++
++endif
+diff --git a/drivers/net/pfe_eth/Makefile b/drivers/net/pfe_eth/Makefile
+new file mode 100644
+index 0000000..6b5248f
+--- /dev/null
++++ b/drivers/net/pfe_eth/Makefile
+@@ -0,0 +1,12 @@
++# Copyright 2015-2016 Freescale Semiconductor, Inc.
++# Copyright 2017 NXP
++#
++# SPDX-License-Identifier:GPL-2.0+
++
++# Layerscape PFE driver
++obj-y += pfe_cmd.o	\
++	 pfe_driver.o	\
++	 pfe_eth.o	\
++	 pfe_firmware.o \
++	 pfe_hw.o	\
++	 pfe_mdio.o
+diff --git a/include/configs/ls1012a2g5rdb.h b/include/configs/ls1012a2g5rdb.h
+index 25df103..dbb0fcc 100644
+--- a/include/configs/ls1012a2g5rdb.h
++++ b/include/configs/ls1012a2g5rdb.h
+@@ -9,15 +9,6 @@
+ 
+ #include "ls1012a_common.h"
+ 
+-/* PFE Ethernet */
+-#ifdef CONFIG_FSL_PFE
+-#define EMAC1_PHY_ADDR          0x2
+-#define EMAC2_PHY_ADDR          0x1
+-#define CONFIG_PHYLIB
+-#define CONFIG_PHYLIB_10G
+-#define CONFIG_PHY_AQUANTIA
+-#endif
+-
+ /* DDR */
+ #define CONFIG_DIMM_SLOTS_PER_CTLR	1
+ #define CONFIG_CHIP_SELECTS_PER_CTRL	1
+@@ -110,7 +101,7 @@
+ 
+ #undef CONFIG_BOOTCOMMAND
+ #if defined(CONFIG_QSPI_BOOT) || defined(CONFIG_SD_BOOT_QSPI)
+-#define CONFIG_BOOTCOMMAND "run distro_bootcmd; run qspi_bootcmd; " \
++#define CONFIG_BOOTCOMMAND "pfe stop;run distro_bootcmd; run qspi_bootcmd; " \
+ 			   "env exists secureboot && esbc_halt;"
+ #endif
+ 
+diff --git a/include/configs/ls1012a_common.h b/include/configs/ls1012a_common.h
+index 46b3566..eda813f 100644
+--- a/include/configs/ls1012a_common.h
++++ b/include/configs/ls1012a_common.h
+@@ -113,9 +113,9 @@
+ 	"kernel_size=0x2800000\0"		\
+ 
+ #undef CONFIG_BOOTCOMMAND
+-#define CONFIG_BOOTCOMMAND		"sf probe 0:0; sf read $kernel_load "\
+-					"$kernel_start $kernel_size && "\
+-					"bootm $kernel_load"
++#define CONFIG_BOOTCOMMAND	"pfe stop; sf probe 0:0; sf read $kernel_load "\
++				"$kernel_start $kernel_size && "\
++				"bootm $kernel_load"
+ 
+ /* Monitor Command Prompt */
+ #define CONFIG_SYS_CBSIZE		512	/* Console I/O Buffer Size */
+diff --git a/include/configs/ls1012afrdm.h b/include/configs/ls1012afrdm.h
+index 297c057..7c080a0 100644
+--- a/include/configs/ls1012afrdm.h
++++ b/include/configs/ls1012afrdm.h
+@@ -68,7 +68,7 @@
+ 		"$kernel_addr $kernel_size && bootm $load_addr#$board\0"
+ 
+ #undef CONFIG_BOOTCOMMAND
+-#define CONFIG_BOOTCOMMAND "run distro_bootcmd;run qspi_bootcmd"
++#define CONFIG_BOOTCOMMAND "pfe stop;run distro_bootcmd;run qspi_bootcmd"
+ 
+ #define CONFIG_CMD_MEMINFO
+ #define CONFIG_CMD_MEMTEST
+diff --git a/include/configs/ls1012ardb.h b/include/configs/ls1012ardb.h
+index 43f6236..442c95e 100644
+--- a/include/configs/ls1012ardb.h
++++ b/include/configs/ls1012ardb.h
+@@ -117,7 +117,7 @@
+ 		"bootm $load_addr#$board\0"
+ 
+ #undef CONFIG_BOOTCOMMAND
+-#define CONFIG_BOOTCOMMAND "run distro_bootcmd; run qspi_bootcmd; "	\
++#define CONFIG_BOOTCOMMAND "pfe stop; run distro_bootcmd; run qspi_bootcmd; "\
+ 			   "env exists secureboot && esbc_halt;"
+ 
+ #include <asm/fsl_secure_boot.h>
+-- 
+1.7.1
+

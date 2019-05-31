@@ -1,0 +1,56 @@
+From 30eb294bfef9fb985775bea74c93a01753877b8c Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Tue, 8 Aug 2017 13:33:13 +0000
+Subject: [PATCH 156/448] staging: fsl-dpaa2/eth: Add fs entries for all tcs
+
+The current MC (10.3.1) design uses a separate flow steering table for
+each traffic class. When adding a flow steering rule, add it for each
+traffic class. The location of the rule is the same in all tables.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c |   21 +++++++++++++------
+ 1 files changed, 14 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+index ece5b66..e32bbc5 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+@@ -653,7 +653,7 @@ static int do_cls(struct net_device *net_dev,
+ 	struct dpni_rule_cfg rule_cfg;
+ 	struct dpni_fs_action_cfg fs_act = { 0 };
+ 	void *dma_mem;
+-	int err = 0;
++	int err = 0, tc;
+ 
+ 	if (!dpaa2_eth_fs_enabled(priv)) {
+ 		netdev_err(net_dev, "dev does not support steering!\n");
+@@ -696,12 +696,19 @@ static int do_cls(struct net_device *net_dev,
+ 	else
+ 		fs_act.flow_id = fs->ring_cookie;
+ 
+-	if (add)
+-		err = dpni_add_fs_entry(priv->mc_io, 0, priv->mc_token,
+-					0, fs->location, &rule_cfg, &fs_act);
+-	else
+-		err = dpni_remove_fs_entry(priv->mc_io, 0, priv->mc_token,
+-					   0, &rule_cfg);
++	for (tc = 0; tc < dpaa2_eth_tc_count(priv); tc++) {
++		if (add)
++			err = dpni_add_fs_entry(priv->mc_io, 0, priv->mc_token,
++						tc, fs->location, &rule_cfg,
++						&fs_act);
++		else
++			err = dpni_remove_fs_entry(priv->mc_io, 0,
++						   priv->mc_token, tc,
++						   &rule_cfg);
++
++		if (err)
++			break;
++	}
+ 
+ 	dma_unmap_single(dev, rule_cfg.key_iova,
+ 			 rule_cfg.key_size * 2, DMA_TO_DEVICE);
+-- 
+1.7.1
+

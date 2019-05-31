@@ -1,0 +1,131 @@
+From 2e09747b091cbeb589b8c3d0bb41c28631c88941 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Mon, 28 Aug 2017 08:10:13 +0000
+Subject: [PATCH 162/448] staging: fsl-dpaa2/eth: Add dpni_get_congestion_notif API
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h |   23 ++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.c     |   54 +++++++++++++++++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h     |    8 ++++
+ 3 files changed, 85 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+index c93add4..dcb5a4c 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+@@ -634,4 +634,27 @@ struct dpni_cmd_set_congestion_notification {
+ 	u32 threshold_exit;
+ };
+ 
++struct dpni_cmd_get_congestion_notification {
++	/* cmd word 0 */
++	u8 qtype;
++	u8 tc;
++};
++
++struct dpni_rsp_get_congestion_notification {
++	/* cmd word 0 */
++	u64 pad;
++	/* cmd word 1 */
++	u32 dest_id;
++	u16 notification_mode;
++	u8 dest_priority;
++	/* from LSB: dest_type: 4 units:2 */
++	u8 type_units;
++	/* cmd word 2 */
++	u64 message_iova;
++	/* cmd word 3 */
++	u64 message_ctx;
++	/* cmd word 4 */
++	u32 threshold_entry;
++	u32 threshold_exit;
++};
+ #endif /* _FSL_DPNI_CMD_H */
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.c b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+index 144958f..fdc01db 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+@@ -1579,6 +1579,60 @@ int dpni_set_congestion_notification(
+ }
+ 
+ /**
++ * dpni_get_congestion_notification() - Get traffic class congestion
++ *	notification configuration
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:	Token of DPNI object
++ * @qtype:	Type of queue - Rx, Tx and Tx confirm types are supported
++ * @tc_id:	Traffic class selection (0-7)
++ * @cfg:	congestion notification configuration
++ *
++ * Return:	'0' on Success; error code otherwise.
++ */
++int dpni_get_congestion_notification(
++			struct fsl_mc_io *mc_io,
++			u32 cmd_flags,
++			u16 token,
++			enum dpni_queue_type qtype,
++			u8 tc_id,
++			struct dpni_congestion_notification_cfg *cfg)
++{
++	struct dpni_rsp_get_congestion_notification *rsp_params;
++	struct dpni_cmd_get_congestion_notification *cmd_params;
++	struct mc_command cmd = { 0 };
++	int err;
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(
++				DPNI_CMDID_GET_CONGESTION_NOTIFICATION,
++				cmd_flags,
++				token);
++	cmd_params = (struct dpni_cmd_get_congestion_notification *)cmd.params;
++	cmd_params->qtype = qtype;
++	cmd_params->tc = tc_id;
++
++	/* send command to mc*/
++	err = mc_send_command(mc_io, &cmd);
++	if (err)
++		return err;
++
++	rsp_params = (struct dpni_rsp_get_congestion_notification *)cmd.params;
++	cfg->units = dpni_get_field(rsp_params->type_units, CONG_UNITS);
++	cfg->threshold_entry = le32_to_cpu(rsp_params->threshold_entry);
++	cfg->threshold_exit = le32_to_cpu(rsp_params->threshold_exit);
++	cfg->message_ctx = le64_to_cpu(rsp_params->message_ctx);
++	cfg->message_iova = le64_to_cpu(rsp_params->message_iova);
++	cfg->notification_mode = le16_to_cpu(rsp_params->notification_mode);
++	cfg->dest_cfg.dest_id = le32_to_cpu(rsp_params->dest_id);
++	cfg->dest_cfg.priority = rsp_params->dest_priority;
++	cfg->dest_cfg.dest_type = dpni_get_field(rsp_params->type_units,
++						 DEST_TYPE);
++
++	return 0;
++}
++
++/**
+  * dpni_set_queue() - Set queue parameters
+  * @mc_io:	Pointer to MC portal's I/O object
+  * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index 888a089..07d9dca 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -924,6 +924,14 @@ int dpni_set_congestion_notification(
+ 			u8 tc_id,
+ 			const struct dpni_congestion_notification_cfg *cfg);
+ 
++int dpni_get_congestion_notification(
++			struct fsl_mc_io *mc_io,
++			u32 cmd_flags,
++			u16 token,
++			enum dpni_queue_type qtype,
++			u8 tc_id,
++			struct dpni_congestion_notification_cfg *cfg);
++
+ /**
+  * struct dpni_taildrop - Structure representing the taildrop
+  * @enable:	Indicates whether the taildrop is active or not.
+-- 
+1.7.1
+

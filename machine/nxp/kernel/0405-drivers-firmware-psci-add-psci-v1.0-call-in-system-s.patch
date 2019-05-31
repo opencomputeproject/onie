@@ -1,0 +1,46 @@
+From 0961020279969672a42d7a08bfd72fb878ebe11c Mon Sep 17 00:00:00 2001
+From: Ran Wang <ran.wang_1@nxp.com>
+Date: Thu, 9 Aug 2018 11:01:44 +0800
+Subject: [PATCH 405/448] drivers: firmware: psci: add psci v1.0 call in system suspend
+
+For most Layerscape SoCs which implement PSCI in PPA(LS1012A, LS1043A..),
+use PSCI 0.2 interface for system sleep enable.
+
+But for LS1021A which implement PSCI function in U-Boot,
+use PSCI 1.0 interface for system sleep enable.
+
+So add PSCI v1.0 call to enable LS1021ATWR deep sleep.
+
+Signed-off-by: Ran Wang <ran.wang_1@nxp.com>
+---
+ drivers/firmware/psci.c |   12 +++++++++---
+ 1 files changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/firmware/psci.c b/drivers/firmware/psci.c
+index e7383d0..3c44e24 100644
+--- a/drivers/firmware/psci.c
++++ b/drivers/firmware/psci.c
+@@ -438,11 +438,17 @@ int psci_cpu_suspend_enter(unsigned long index)
+ static int psci_system_suspend(unsigned long unused)
+ {
+ 	u32 state;
++	u32 ver = psci_get_version();
+ 
+-	state = ( 2 << PSCI_0_2_POWER_STATE_AFFL_SHIFT) |
+-		(1 << PSCI_0_2_POWER_STATE_TYPE_SHIFT);
++	if (PSCI_VERSION_MAJOR(ver) >= 1) {
++		return invoke_psci_fn(PSCI_FN_NATIVE(1_0, SYSTEM_SUSPEND),
++				virt_to_phys(cpu_resume), 0, 0);
++	} else {
++		state = ( 2 << PSCI_0_2_POWER_STATE_AFFL_SHIFT) |
++			(1 << PSCI_0_2_POWER_STATE_TYPE_SHIFT);
+ 
+-	return psci_cpu_suspend(state, virt_to_phys(cpu_resume));
++		return psci_cpu_suspend(state, virt_to_phys(cpu_resume));
++	}
+ }
+ 
+ static int psci_system_suspend_enter(suspend_state_t state)
+-- 
+1.7.1
+

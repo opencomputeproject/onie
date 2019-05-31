@@ -1,0 +1,43 @@
+From 1ca7508b698ad1c944ea26b0ab02a1cef516d161 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 4 May 2017 16:02:20 +0300
+Subject: [PATCH 141/448] staging: fsl-dpaa2/eth: Change link settings while interface up
+
+Starting with MC 10.1.1, DPNI link options can be changed
+while the interface is up. Remove the check.
+
+While here, remove an unnecessary debug message.
+
+TODO: Read DPNI API version and do this conditionally
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c |   11 -----------
+ 1 files changed, 0 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+index f6388cb..44a1734 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+@@ -123,17 +123,6 @@ static void dpaa2_eth_get_drvinfo(struct net_device *net_dev,
+ 	struct dpni_link_cfg cfg = {0};
+ 	int err = 0;
+ 
+-	netdev_dbg(net_dev, "Setting link parameters...");
+-
+-	/* Due to a temporary MC limitation, the DPNI must be down
+-	 * in order to be able to change link settings. Taking steps to let
+-	 * the user know that.
+-	 */
+-	if (netif_running(net_dev)) {
+-		netdev_info(net_dev, "Sorry, interface must be brought down first.\n");
+-		return -EACCES;
+-	}
+-
+ 	/* Need to interrogate link state to get flow control params */
+ 	err = dpni_get_link_state(priv->mc_io, 0, priv->mc_token, &state);
+ 	if (err) {
+-- 
+1.7.1
+

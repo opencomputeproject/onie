@@ -1,0 +1,36 @@
+From a8e877a799d0a003856433c4ca251c4c6441a51f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Wed, 25 Jul 2018 09:44:10 +0300
+Subject: [PATCH 437/448] crypto: caam/jr - fix descriptor DMA unmapping
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Descriptor address needs to be swapped to CPU endianness before being
+DMA unmapped.
+
+Cc: <stable@vger.kernel.org> # 4.8+
+Fixes: 261ea058f016 ("crypto: caam - handle core endianness != caam endianness")
+Reported-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/caam/jr.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/crypto/caam/jr.c b/drivers/crypto/caam/jr.c
+index 00e8709..6da071a 100644
+--- a/drivers/crypto/caam/jr.c
++++ b/drivers/crypto/caam/jr.c
+@@ -200,7 +200,8 @@ static void caam_jr_dequeue(unsigned long devarg)
+ 		BUG_ON(CIRC_CNT(head, tail + i, JOBR_DEPTH) <= 0);
+ 
+ 		/* Unmap just-run descriptor so we can post-process */
+-		dma_unmap_single(dev, jrp->outring[hw_idx].desc,
++		dma_unmap_single(dev,
++				 caam_dma_to_cpu(jrp->outring[hw_idx].desc),
+ 				 jrp->entinfo[sw_idx].desc_size,
+ 				 DMA_TO_DEVICE);
+ 
+-- 
+1.7.1
+

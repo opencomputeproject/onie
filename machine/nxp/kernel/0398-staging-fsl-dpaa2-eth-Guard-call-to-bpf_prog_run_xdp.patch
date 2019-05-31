@@ -1,0 +1,48 @@
+From 47122627dce2def42e5e05e4bb4b3f0cbda2f9fa Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 31 Jul 2018 18:42:26 +0300
+Subject: [PATCH 398/448] staging: fsl-dpaa2/eth: Guard call to bpf_prog_run_xdp
+
+XDP programs must be run with the RCU lock taken.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 94f4a50..d64d91d 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -363,6 +363,8 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 			percpu_stats->rx_packets++;
+ 			percpu_stats->rx_bytes += dpaa2_fd_get_len(fd);
+ 
++			rcu_read_lock();
++
+ 			xdp_act = bpf_prog_run_xdp(xdp_prog, &xdp);
+ 			switch (xdp_act) {
+ 			case XDP_PASS:
+@@ -372,6 +374,7 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 			case XDP_ABORTED:
+ 			case XDP_DROP:
+ 				release_fd_buf(priv, ch, addr);
++				rcu_read_unlock();
+ 				goto drop_cnt;
+ 			case XDP_TX:
+ 				if (dpaa2_eth_xdp_tx(priv, (struct dpaa2_fd *)fd, vaddr,
+@@ -382,8 +385,11 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 					free_rx_fd(priv, fd, vaddr);
+ 					ch->buf_count--;
+ 				}
++				rcu_read_unlock();
+ 				return;
+ 			}
++
++			rcu_read_unlock();
+ 		}
+ 		dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE,
+ 				 DMA_BIDIRECTIONAL);
+-- 
+1.7.1
+

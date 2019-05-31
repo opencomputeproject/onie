@@ -1,0 +1,44 @@
+diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
+index ccc0965..96f4d3f 100644
+--- a/miscutils/24cXX.c
++++ b/miscutils/24cXX.c
+@@ -26,6 +26,8 @@
+ #include <string.h>
+ #include "24cXX.h"
+ 
++#define CONFIG_SYS_EEPROM_I2C_ADDR_NEW 0x57
++
+ static int i2c_write_1b(struct eeprom *e, __u8 buf)
+ {
+ 	int r;
+@@ -70,7 +72,7 @@ static int i2c_write_3b(struct eeprom *e, __u8 buf[3])
+ 
+ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ {
+-	int fd, r;
++	int fd, r, res;
+ 	unsigned long funcs;
+ 	e->fd = e->addr = 0;
+ 	e->dev = 0;
+@@ -95,6 +97,21 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ 	// set working device
+ 	if( ( r = ioctl(fd, I2C_SLAVE, addr)) < 0)
+ 		return r;
++
++    //probe this addr
++    res = i2c_smbus_read_byte (fd);
++    if (res < 0) {
++        addr = CONFIG_SYS_EEPROM_I2C_ADDR_NEW;
++        if( ( r = ioctl(fd, I2C_SLAVE, addr)) < 0) {
++            return r;
++        }
++        res = i2c_smbus_read_byte (fd);
++        if (res < 0) {
++            printf ("addr = 0x%x failed\n", addr);
++            return res;
++        }
++    }
++
+ 	e->fd = fd;
+ 	e->addr = addr;
+ 	e->dev = dev_fqn;

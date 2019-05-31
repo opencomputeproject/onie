@@ -1,0 +1,118 @@
+From 3affd8e569adeeb3a0bf8516c083b978bc7e2b42 Mon Sep 17 00:00:00 2001
+From: Ioana Ciornei <ioana.ciornei@nxp.com>
+Date: Fri, 23 Mar 2018 10:38:57 -0500
+Subject: [PATCH 284/448] bus: fsl-mc: add root dprc rescan attribute
+
+Introduce the rescan attribute as a device attribute to
+synchronize the fsl-mc bus objects and the MC firmware.
+
+To rescan the root dprc only, e.g.
+echo 1 > /sys/bus/fsl-mc/devices/dprc.1/rescan
+
+Signed-off-by: Ioana Ciornei <ioana.ciornei@nxp.com>
+---
+ Documentation/ABI/stable/sysfs-bus-fsl-mc |    6 ++++++
+ MAINTAINERS                               |    1 +
+ drivers/bus/fsl-mc/dprc-driver.c          |    4 ++--
+ drivers/bus/fsl-mc/fsl-mc-bus.c           |   28 ++++++++++++++++++++++++++++
+ drivers/bus/fsl-mc/fsl-mc-private.h       |    3 +++
+ 5 files changed, 40 insertions(+), 2 deletions(-)
+ create mode 100644 Documentation/ABI/stable/sysfs-bus-fsl-mc
+
+diff --git a/Documentation/ABI/stable/sysfs-bus-fsl-mc b/Documentation/ABI/stable/sysfs-bus-fsl-mc
+new file mode 100644
+index 0000000..e530e8c
+--- /dev/null
++++ b/Documentation/ABI/stable/sysfs-bus-fsl-mc
+@@ -0,0 +1,6 @@
++What:		/sys/bus/fsl-mc/devices/dprc.*/rescan
++Date:		March. 2018
++KernelVersion:	4.16
++Contact:	Ioana Ciornei <ioana.ciornei@nxp.com>
++Description:	Root dprc rescan attribute
++Users:		Userspace drivers and management tools
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 83d024b..136a56a 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -5113,6 +5113,7 @@ S:	Maintained
+ F:	drivers/bus/fsl-mc/
+ F:	Documentation/networking/dpaa2/overview.rst
+ F:	include/uapi/linux/fsl_mc.h
++F:	Documentation/ABI/stable/sysfs-bus-fsl-mc
+ 
+ FREEVXFS FILESYSTEM
+ M:	Christoph Hellwig <hch@infradead.org>
+diff --git a/drivers/bus/fsl-mc/dprc-driver.c b/drivers/bus/fsl-mc/dprc-driver.c
+index 52c7e15..be80e3a 100644
+--- a/drivers/bus/fsl-mc/dprc-driver.c
++++ b/drivers/bus/fsl-mc/dprc-driver.c
+@@ -214,8 +214,8 @@ static void dprc_add_new_devices(struct fsl_mc_device *mc_bus_dev,
+  * populated before they can get allocation requests from probe callbacks
+  * of the device drivers for the non-allocatable devices.
+  */
+-static int dprc_scan_objects(struct fsl_mc_device *mc_bus_dev,
+-			     unsigned int *total_irq_count)
++int dprc_scan_objects(struct fsl_mc_device *mc_bus_dev,
++		      unsigned int *total_irq_count)
+ {
+ 	int num_child_objects;
+ 	int dprc_get_obj_failures;
+diff --git a/drivers/bus/fsl-mc/fsl-mc-bus.c b/drivers/bus/fsl-mc/fsl-mc-bus.c
+index 0ade415..9d02984 100644
+--- a/drivers/bus/fsl-mc/fsl-mc-bus.c
++++ b/drivers/bus/fsl-mc/fsl-mc-bus.c
+@@ -137,8 +137,36 @@ static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
+ }
+ static DEVICE_ATTR_RO(modalias);
+ 
++static ssize_t rescan_store(struct device *dev,
++			    struct device_attribute *attr,
++			    const char *buf, size_t count)
++{
++	struct fsl_mc_device *root_mc_dev;
++	struct fsl_mc_bus *root_mc_bus;
++	unsigned long val;
++
++	if (!fsl_mc_is_root_dprc(dev))
++		return -EINVAL;
++
++	root_mc_dev = to_fsl_mc_device(dev);
++	root_mc_bus = to_fsl_mc_bus(root_mc_dev);
++
++	if (kstrtoul(buf, 0, &val) < 0)
++		return -EINVAL;
++
++	if (val) {
++		mutex_lock(&root_mc_bus->scan_mutex);
++		dprc_scan_objects(root_mc_dev, NULL);
++		mutex_unlock(&root_mc_bus->scan_mutex);
++	}
++
++	return count;
++}
++static DEVICE_ATTR_WO(rescan);
++
+ static struct attribute *fsl_mc_dev_attrs[] = {
+ 	&dev_attr_modalias.attr,
++	&dev_attr_rescan.attr,
+ 	NULL,
+ };
+ 
+diff --git a/drivers/bus/fsl-mc/fsl-mc-private.h b/drivers/bus/fsl-mc/fsl-mc-private.h
+index 00cca7d..c1fc80e 100644
+--- a/drivers/bus/fsl-mc/fsl-mc-private.h
++++ b/drivers/bus/fsl-mc/fsl-mc-private.h
+@@ -545,6 +545,9 @@ int __must_check fsl_mc_device_add(struct fsl_mc_obj_desc *obj_desc,
+ 
+ void dprc_driver_exit(void);
+ 
++int dprc_scan_objects(struct fsl_mc_device *mc_bus_dev,
++		      unsigned int *total_irq_count);
++
+ int __init fsl_mc_allocator_driver_init(void);
+ 
+ void fsl_mc_allocator_driver_exit(void);
+-- 
+1.7.1
+

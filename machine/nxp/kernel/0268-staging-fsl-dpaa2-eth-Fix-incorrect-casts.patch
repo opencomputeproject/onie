@@ -1,0 +1,51 @@
+From 206f31d32e83f11d274981e84a5b7c78ab3b1004 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Mon, 26 Feb 2018 10:28:06 -0600
+Subject: [PATCH 268/448] staging: fsl-dpaa2/eth: Fix incorrect casts
+
+The DPAA2 Ethernet driver incorrectly assumes virtual addresses
+are always 64b long, which causes compiler errors when building
+for a 32b platform.
+
+Fix this by using explicit casts to uintptr_t where necessary.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index a9b59d0..146bdbe 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -522,7 +522,7 @@ static bool consume_frames(struct dpaa2_eth_channel *ch, int *rx_cleaned,
+ 		fd = dpaa2_dq_fd(dq);
+ 		prefetch(fd);
+ 
+-		fq = (struct dpaa2_eth_fq *)dpaa2_dq_fqd_ctx(dq);
++		fq = (struct dpaa2_eth_fq *)(uintptr_t)dpaa2_dq_fqd_ctx(dq);
+ 		fq->consume(priv, ch, fd, &ch->napi, fq->flowid);
+ 		cleaned++;
+ 	} while (!is_last);
+@@ -2330,7 +2330,7 @@ static int setup_rx_flow(struct dpaa2_eth_priv *priv,
+ 	queue.destination.id = fq->channel->dpcon_id;
+ 	queue.destination.type = DPNI_DEST_DPCON;
+ 	queue.destination.priority = 1;
+-	queue.user_context = (u64)fq;
++	queue.user_context = (u64)(uintptr_t)fq;
+ 	err = dpni_set_queue(priv->mc_io, 0, priv->mc_token,
+ 			     DPNI_QUEUE_RX, fq->tc, fq->flowid,
+ 			     DPNI_QUEUE_OPT_USER_CTX | DPNI_QUEUE_OPT_DEST,
+@@ -2488,7 +2488,7 @@ static int setup_tx_flow(struct dpaa2_eth_priv *priv,
+ 	queue.destination.id = fq->channel->dpcon_id;
+ 	queue.destination.type = DPNI_DEST_DPCON;
+ 	queue.destination.priority = 0;
+-	queue.user_context = (u64)fq;
++	queue.user_context = (u64)(uintptr_t)fq;
+ 	err = dpni_set_queue(priv->mc_io, 0, priv->mc_token,
+ 			     DPNI_QUEUE_TX_CONFIRM, 0, fq->flowid,
+ 			     DPNI_QUEUE_OPT_USER_CTX | DPNI_QUEUE_OPT_DEST,
+-- 
+1.7.1
+

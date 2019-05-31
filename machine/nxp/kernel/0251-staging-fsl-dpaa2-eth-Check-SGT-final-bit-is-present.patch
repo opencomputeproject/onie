@@ -1,0 +1,35 @@
+From aa3fec84f4351b0a6ec2f9fc32a16ed37f356936 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 11 Oct 2017 08:29:45 -0500
+Subject: [PATCH 251/448] staging: fsl-dpaa2/eth: Check SGT final bit is present
+
+For scatter-gather ingress frames, we expect to receive
+a list of fragments from the hardware, last of which is
+marked with a "final" bit.
+
+Add a check to make sure the Rx frame has this bit set
+correctly; there's not much we can do in case of a
+malformed frame, but at least issue a warning.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index fd94b91..49c0c0b 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -216,6 +216,8 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ 			break;
+ 	}
+ 
++	WARN_ONCE(i == DPAA2_ETH_MAX_SG_ENTRIES, "Final bit not set in SGT");
++
+ 	/* Count all data buffers + SG table buffer */
+ 	ch->buf_count -= i + 2;
+ 
+-- 
+1.7.1
+

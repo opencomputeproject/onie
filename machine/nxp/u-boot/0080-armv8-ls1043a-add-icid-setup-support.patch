@@ -1,0 +1,169 @@
+From dd5ae4bc75d3a8507b4f297aac1c6d1a6711b610 Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Thu, 2 Aug 2018 12:45:08 +0300
+Subject: [PATCH 080/107] armv8: ls1043a: add icid setup support
+
+Reuse the existing ICID setup code done for LS1046A smmu enablement
+and add the equivalent setup for LS1043A chips.
+
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/Makefile     |    1 +
+ arch/arm/cpu/armv8/fsl-layerscape/ls1043_ids.c |   89 ++++++++++++++++++++++++
+ board/freescale/ls1043aqds/ls1043aqds.c        |    3 +
+ board/freescale/ls1043ardb/ls1043ardb.c        |    3 +
+ 4 files changed, 96 insertions(+), 0 deletions(-)
+ create mode 100644 arch/arm/cpu/armv8/fsl-layerscape/ls1043_ids.c
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/Makefile b/arch/arm/cpu/armv8/fsl-layerscape/Makefile
+index 73330a7..c91969e 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/Makefile
++++ b/arch/arm/cpu/armv8/fsl-layerscape/Makefile
+@@ -31,6 +31,7 @@ endif
+ ifneq ($(CONFIG_ARCH_LS1043A),)
+ obj-$(CONFIG_SYS_HAS_SERDES) += ls1043a_serdes.o
+ obj-$(CONFIG_ARMV8_PSCI) += ls1043a_psci.o
++obj-y += icid.o ls1043_ids.o
+ endif
+ 
+ ifneq ($(CONFIG_ARCH_LS1012A),)
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/ls1043_ids.c b/arch/arm/cpu/armv8/fsl-layerscape/ls1043_ids.c
+new file mode 100644
+index 0000000..d47d115
+--- /dev/null
++++ b/arch/arm/cpu/armv8/fsl-layerscape/ls1043_ids.c
+@@ -0,0 +1,89 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Copyright 2018 NXP
++ */
++
++#include <common.h>
++#include <asm/arch-fsl-layerscape/immap_lsch2.h>
++#include <asm/arch-fsl-layerscape/fsl_icid.h>
++#include <asm/arch-fsl-layerscape/fsl_portals.h>
++#include <fsl_sec.h>
++
++#ifdef CONFIG_SYS_DPAA_QBMAN
++struct qportal_info qp_info[CONFIG_SYS_QMAN_NUM_PORTALS] = {
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
++};
++#endif
++
++struct icid_id_table icid_tbl[] = {
++#ifdef CONFIG_SYS_DPAA_QBMAN
++	SET_QMAN_ICID(FSL_DPAA1_STREAM_ID_START),
++	SET_BMAN_ICID(FSL_DPAA1_STREAM_ID_START + 1),
++#endif
++
++	SET_SDHC_ICID(FSL_SDHC_STREAM_ID),
++
++	SET_USB_ICID(1, "snps,dwc3", FSL_USB1_STREAM_ID),
++	SET_USB_ICID(2, "snps,dwc3", FSL_USB2_STREAM_ID),
++	SET_USB_ICID(3, "snps,dwc3", FSL_USB3_STREAM_ID),
++
++	SET_SATA_ICID("fsl,ls1043a-ahci", FSL_SATA_STREAM_ID),
++	SET_QDMA_ICID("fsl,ls1043a-qdma", FSL_QDMA_STREAM_ID),
++	SET_EDMA_ICID(FSL_EDMA_STREAM_ID),
++	SET_ETR_ICID(FSL_ETR_STREAM_ID),
++	SET_DEBUG_ICID(FSL_DEBUG_STREAM_ID),
++#ifdef CONFIG_FSL_CAAM
++	SET_SEC_QI_ICID(FSL_DPAA1_STREAM_ID_START + 2),
++	SET_SEC_JR_ICID_ENTRY(0, FSL_DPAA1_STREAM_ID_START + 3),
++	SET_SEC_JR_ICID_ENTRY(1, FSL_DPAA1_STREAM_ID_START + 4),
++	SET_SEC_JR_ICID_ENTRY(2, FSL_DPAA1_STREAM_ID_START + 5),
++	SET_SEC_JR_ICID_ENTRY(3, FSL_DPAA1_STREAM_ID_START + 6),
++	SET_SEC_RTIC_ICID_ENTRY(0, FSL_DPAA1_STREAM_ID_START + 7),
++	SET_SEC_RTIC_ICID_ENTRY(1, FSL_DPAA1_STREAM_ID_START + 8),
++	SET_SEC_RTIC_ICID_ENTRY(2, FSL_DPAA1_STREAM_ID_START + 9),
++	SET_SEC_RTIC_ICID_ENTRY(3, FSL_DPAA1_STREAM_ID_START + 10),
++	SET_SEC_DECO_ICID_ENTRY(0, FSL_DPAA1_STREAM_ID_START + 11),
++	SET_SEC_DECO_ICID_ENTRY(1, FSL_DPAA1_STREAM_ID_START + 12),
++#endif
++};
++
++int icid_tbl_sz = ARRAY_SIZE(icid_tbl);
++
++#ifdef CONFIG_SYS_DPAA_FMAN
++struct fman_icid_id_table fman_icid_tbl[] = {
++	/* port id, icid */
++	SET_FMAN_ICID_ENTRY(0x02, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x03, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x04, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x05, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x06, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x07, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x08, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x09, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x0a, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x0b, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x0c, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x0d, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x28, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x29, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x2a, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x2b, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x2c, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x2d, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x10, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x11, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x30, FSL_DPAA1_STREAM_ID_END),
++	SET_FMAN_ICID_ENTRY(0x31, FSL_DPAA1_STREAM_ID_END),
++};
++
++int fman_icid_tbl_sz = ARRAY_SIZE(fman_icid_tbl);
++#endif
+diff --git a/board/freescale/ls1043aqds/ls1043aqds.c b/board/freescale/ls1043aqds/ls1043aqds.c
+index 8fbd3a7..1d286f6 100644
+--- a/board/freescale/ls1043aqds/ls1043aqds.c
++++ b/board/freescale/ls1043aqds/ls1043aqds.c
+@@ -15,6 +15,7 @@
+ #include <asm/arch/fdt.h>
+ #include <asm/arch/mmu.h>
+ #include <asm/arch/soc.h>
++#include <asm/arch-fsl-layerscape/fsl_icid.h>
+ #include <ahci.h>
+ #include <hwconfig.h>
+ #include <mmc.h>
+@@ -354,6 +355,8 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 	fdt_fixup_board_enet(blob);
+ #endif
+ 
++	fdt_fixup_icid(blob);
++
+ 	reg = QIXIS_READ(brdcfg[0]);
+ 	reg = (reg & QIXIS_LBMAP_MASK) >> QIXIS_LBMAP_SHIFT;
+ 
+diff --git a/board/freescale/ls1043ardb/ls1043ardb.c b/board/freescale/ls1043ardb/ls1043ardb.c
+index 9dc1cbc..d03c94e 100644
+--- a/board/freescale/ls1043ardb/ls1043ardb.c
++++ b/board/freescale/ls1043ardb/ls1043ardb.c
+@@ -10,6 +10,7 @@
+ #include <asm/arch/clock.h>
+ #include <asm/arch/fsl_serdes.h>
+ #include <asm/arch/soc.h>
++#include <asm/arch-fsl-layerscape/fsl_icid.h>
+ #include <fdt_support.h>
+ #include <hwconfig.h>
+ #include <ahci.h>
+@@ -178,6 +179,8 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 	fdt_fixup_fman_ethernet(blob);
+ #endif
+ 
++	fdt_fixup_icid(blob);
++
+ 	/*
+ 	 * qe-hdlc and usb multi-use the pins,
+ 	 * when set hwconfig to qe-hdlc, delete usb node.
+-- 
+1.7.1
+

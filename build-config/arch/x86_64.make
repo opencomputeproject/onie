@@ -42,7 +42,9 @@ ifndef CONSOLE_PORT
     CONSOLE_PORT = 0x3f8
   else ifeq ($(CONSOLE_DEV), 1)
     CONSOLE_PORT = 0x2f8
-  else
+  else ifeq ($(CONSOLE_DEV), 2)
+    CONSOLE_PORT = 0x3e8
+  else 
     $(error unknown CONSOLE_DEV value $(CONSOLE_DEV))
   endif
 endif

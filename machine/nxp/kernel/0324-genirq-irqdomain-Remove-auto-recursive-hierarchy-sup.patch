@@ -1,0 +1,163 @@
+From 62a7160d43d09d0d61b2831f6b3ee0d4e05759e2 Mon Sep 17 00:00:00 2001
+From: Marc Zyngier <marc.zyngier@arm.com>
+Date: Tue, 20 Jun 2017 22:17:44 +0100
+Subject: [PATCH 324/448] genirq/irqdomain: Remove auto-recursive hierarchy support
+
+It did seem like a good idea at the time, but it never really
+caught on, and auto-recursive domains remain unused 3 years after
+having been introduced.
+
+Oh well, time for a late spring cleanup.
+
+Signed-off-by: Marc Zyngier <marc.zyngier@arm.com>
+Signed-off-by: Thomas Gleixner <tglx@linutronix.de>
+---
+ include/linux/irqdomain.h |    6 ++--
+ kernel/irq/irqdomain.c    |   55 ++++++++++----------------------------------
+ kernel/irq/msi.c          |    2 +-
+ 3 files changed, 17 insertions(+), 46 deletions(-)
+
+diff --git a/include/linux/irqdomain.h b/include/linux/irqdomain.h
+index 4323128..266d012 100644
+--- a/include/linux/irqdomain.h
++++ b/include/linux/irqdomain.h
+@@ -178,8 +178,8 @@ enum {
+ 	/* Irq domain is hierarchical */
+ 	IRQ_DOMAIN_FLAG_HIERARCHY	= (1 << 0),
+ 
+-	/* Core calls alloc/free recursive through the domain hierarchy. */
+-	IRQ_DOMAIN_FLAG_AUTO_RECURSIVE	= (1 << 1),
++	/* Irq domain name was allocated in __irq_domain_add() */
++	IRQ_DOMAIN_NAME_ALLOCATED	= (1 << 6),
+ 
+ 	/* Irq domain is an IPI domain with virq per cpu */
+ 	IRQ_DOMAIN_FLAG_IPI_PER_CPU	= (1 << 2),
+@@ -417,7 +417,7 @@ static inline int irq_domain_alloc_irqs(struct irq_domain *domain,
+ 				       NULL);
+ }
+ 
+-extern int irq_domain_alloc_irqs_recursive(struct irq_domain *domain,
++extern int irq_domain_alloc_irqs_hierarchy(struct irq_domain *domain,
+ 					   unsigned int irq_base,
+ 					   unsigned int nr_irqs, void *arg);
+ extern int irq_domain_set_hwirq_and_chip(struct irq_domain *domain,
+diff --git a/kernel/irq/irqdomain.c b/kernel/irq/irqdomain.c
+index 8a46f80..e6d5ed9 100644
+--- a/kernel/irq/irqdomain.c
++++ b/kernel/irq/irqdomain.c
+@@ -1230,43 +1230,18 @@ void irq_domain_free_irqs_top(struct irq_domain *domain, unsigned int virq,
+ 	irq_domain_free_irqs_common(domain, virq, nr_irqs);
+ }
+ 
+-static bool irq_domain_is_auto_recursive(struct irq_domain *domain)
+-{
+-	return domain->flags & IRQ_DOMAIN_FLAG_AUTO_RECURSIVE;
+-}
+-
+-static void irq_domain_free_irqs_recursive(struct irq_domain *domain,
++static void irq_domain_free_irqs_hierarchy(struct irq_domain *domain,
+ 					   unsigned int irq_base,
+ 					   unsigned int nr_irqs)
+ {
+ 	domain->ops->free(domain, irq_base, nr_irqs);
+-	if (irq_domain_is_auto_recursive(domain)) {
+-		BUG_ON(!domain->parent);
+-		irq_domain_free_irqs_recursive(domain->parent, irq_base,
+-					       nr_irqs);
+-	}
+ }
+ 
+-int irq_domain_alloc_irqs_recursive(struct irq_domain *domain,
++int irq_domain_alloc_irqs_hierarchy(struct irq_domain *domain,
+ 				    unsigned int irq_base,
+ 				    unsigned int nr_irqs, void *arg)
+ {
+-	int ret = 0;
+-	struct irq_domain *parent = domain->parent;
+-	bool recursive = irq_domain_is_auto_recursive(domain);
+-
+-	BUG_ON(recursive && !parent);
+-	if (recursive)
+-		ret = irq_domain_alloc_irqs_recursive(parent, irq_base,
+-						      nr_irqs, arg);
+-	if (ret < 0)
+-		return ret;
+-
+-	ret = domain->ops->alloc(domain, irq_base, nr_irqs, arg);
+-	if (ret < 0 && recursive)
+-		irq_domain_free_irqs_recursive(parent, irq_base, nr_irqs);
+-
+-	return ret;
++	return domain->ops->alloc(domain, irq_base, nr_irqs, arg);
+ }
+ 
+ /**
+@@ -1327,7 +1302,7 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
+ 	}
+ 
+ 	mutex_lock(&irq_domain_mutex);
+-	ret = irq_domain_alloc_irqs_recursive(domain, virq, nr_irqs, arg);
++	ret = irq_domain_alloc_irqs_hierarchy(domain, virq, nr_irqs, arg);
+ 	if (ret < 0) {
+ 		mutex_unlock(&irq_domain_mutex);
+ 		goto out_free_irq_data;
+@@ -1362,7 +1337,7 @@ void irq_domain_free_irqs(unsigned int virq, unsigned int nr_irqs)
+ 	mutex_lock(&irq_domain_mutex);
+ 	for (i = 0; i < nr_irqs; i++)
+ 		irq_domain_remove_irq(virq + i);
+-	irq_domain_free_irqs_recursive(data->domain, virq, nr_irqs);
++	irq_domain_free_irqs_hierarchy(data->domain, virq, nr_irqs);
+ 	mutex_unlock(&irq_domain_mutex);
+ 
+ 	irq_domain_free_irq_data(virq, nr_irqs);
+@@ -1382,15 +1357,11 @@ int irq_domain_alloc_irqs_parent(struct irq_domain *domain,
+ 				 unsigned int irq_base, unsigned int nr_irqs,
+ 				 void *arg)
+ {
+-	/* irq_domain_alloc_irqs_recursive() has called parent's alloc() */
+-	if (irq_domain_is_auto_recursive(domain))
+-		return 0;
++	if (!domain->parent)
++		return -ENOSYS;
+ 
+-	domain = domain->parent;
+-	if (domain)
+-		return irq_domain_alloc_irqs_recursive(domain, irq_base,
+-						       nr_irqs, arg);
+-	return -ENOSYS;
++	return irq_domain_alloc_irqs_hierarchy(domain->parent, irq_base,
++					       nr_irqs, arg);
+ }
+ EXPORT_SYMBOL_GPL(irq_domain_alloc_irqs_parent);
+ 
+@@ -1405,10 +1376,10 @@ int irq_domain_alloc_irqs_parent(struct irq_domain *domain,
+ void irq_domain_free_irqs_parent(struct irq_domain *domain,
+ 				 unsigned int irq_base, unsigned int nr_irqs)
+ {
+-	/* irq_domain_free_irqs_recursive() will call parent's free */
+-	if (!irq_domain_is_auto_recursive(domain) && domain->parent)
+-		irq_domain_free_irqs_recursive(domain->parent, irq_base,
+-					       nr_irqs);
++	if (!domain->parent)
++		return;
++
++	irq_domain_free_irqs_hierarchy(domain->parent, irq_base, nr_irqs);
+ }
+ EXPORT_SYMBOL_GPL(irq_domain_free_irqs_parent);
+ 
+diff --git a/kernel/irq/msi.c b/kernel/irq/msi.c
+index 2e2b2c4..6fa21a8 100644
+--- a/kernel/irq/msi.c
++++ b/kernel/irq/msi.c
+@@ -310,7 +310,7 @@ int msi_domain_populate_irqs(struct irq_domain *domain, struct device *dev,
+ 
+ 		ops->set_desc(arg, desc);
+ 		/* Assumes the domain mutex is held! */
+-		ret = irq_domain_alloc_irqs_recursive(domain, virq, 1, arg);
++		ret = irq_domain_alloc_irqs_hierarchy(domain, virq, 1, arg);
+ 		if (ret)
+ 			break;
+ 
+-- 
+1.7.1
+

@@ -1,0 +1,165 @@
+From 0a725a429050d6c082ebf5063ab2c0850fbf620c Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Tue, 21 Aug 2018 15:07:41 +0300
+Subject: [PATCH 096/107] Revert "armv8: ls1046a: add icid setup for qman portals"
+
+This reverts commit 31c894536689501614e199823e90fd51bbb0d556.
+
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c     |   16 -------
+ .../include/asm/arch-fsl-layerscape/fsl_portals.h  |   24 -----------
+ drivers/misc/fsl_portals.c                         |   42 +++----------------
+ 3 files changed, 7 insertions(+), 75 deletions(-)
+ delete mode 100644 arch/arm/include/asm/arch-fsl-layerscape/fsl_portals.h
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c b/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
+index 80e1cea..1c528ab 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
+@@ -6,22 +6,6 @@
+ #include <common.h>
+ #include <asm/arch-fsl-layerscape/immap_lsch2.h>
+ #include <asm/arch-fsl-layerscape/fsl_icid.h>
+-#include <asm/arch-fsl-layerscape/fsl_portals.h>
+-
+-#ifdef CONFIG_SYS_DPAA_QBMAN
+-struct qportal_info qp_info[CONFIG_SYS_QMAN_NUM_PORTALS] = {
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-	SET_QP_INFO(FSL_DPAA1_STREAM_ID_END, 0),
+-};
+-#endif
+ 
+ struct icid_id_table icid_tbl[] = {
+ #ifdef CONFIG_SYS_DPAA_QBMAN
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/fsl_portals.h b/arch/arm/include/asm/arch-fsl-layerscape/fsl_portals.h
+deleted file mode 100644
+index 1577e93..0000000
+--- a/arch/arm/include/asm/arch-fsl-layerscape/fsl_portals.h
++++ /dev/null
+@@ -1,24 +0,0 @@
+-/* SPDX-License-Identifier: GPL-2.0+ */
+-/*
+- * Copyright 2018 NXP
+- */
+-
+-#ifndef _FSL_PORTALS_H_
+-#define _FSL_PORTALS_H_
+-
+-struct qportal_info {
+-	u16	dicid;	/* DQRR ICID */
+-	u16	ficid;	/* frame data ICID */
+-	u16	icid;
+-	u8	sdest;
+-};
+-
+-#define SET_QP_INFO(streamid, dest) \
+-	{ .dicid = (streamid), .ficid = (streamid), .icid = (streamid), \
+-	.sdest = (dest) }
+-
+-extern struct qportal_info qp_info[];
+-void fdt_portal(void *blob, const char *compat, const char *container,
+-		u64 addr, u32 size);
+-
+-#endif
+diff --git a/drivers/misc/fsl_portals.c b/drivers/misc/fsl_portals.c
+index 2e6f971..6fe773b 100644
+--- a/drivers/misc/fsl_portals.c
++++ b/drivers/misc/fsl_portals.c
+@@ -14,9 +14,6 @@
+ #ifdef CONFIG_PPC
+ #include <asm/fsl_portals.h>
+ #include <asm/fsl_liodn.h>
+-#else
+-#include <asm/arch-fsl-layerscape/fsl_portals.h>
+-#include <asm/arch-fsl-layerscape/fsl_icid.h>
+ #endif
+ #include <fsl_qbman.h>
+ 
+@@ -49,22 +46,6 @@ void setup_qbman_portals(void)
+ 		/* set frame liodn */
+ 		out_be32(&qman->qcsp[i].qcsp_io_cfg, (sdest << 16) | fliodn);
+ 	}
+-#else
+-#ifdef CONFIG_ARM
+-	int i;
+-
+-	for (i = 0; i < CONFIG_SYS_QMAN_NUM_PORTALS; i++) {
+-		u8 sdest = qp_info[i].sdest;
+-		u16 ficid = qp_info[i].ficid;
+-		u16 dicid = qp_info[i].dicid;
+-		u16 icid = qp_info[i].icid;
+-
+-		out_be32(&qman->qcsp[i].qcsp_lio_cfg, (icid << 16) |
+-					dicid);
+-		/* set frame icid */
+-		out_be32(&qman->qcsp[i].qcsp_io_cfg, (sdest << 16) | ficid);
+-	}
+-#endif
+ #endif
+ 
+ 	/* Change default state of BMan ISDR portals to all 1s */
+@@ -198,10 +179,6 @@ void fdt_fixup_qportals(void *blob)
+ 	char compat[64];
+ 	int compat_len;
+ 
+-#ifndef CONFIG_PPC
+-	int smmu_ph = fdt_get_smmu_phandle(blob);
+-#endif
+-
+ 	maj = (rev_1 >> 8) & 0xff;
+ 	min = rev_1 & 0xff;
+ 	ip_cfg = rev_2 & 0xff;
+@@ -212,9 +189,9 @@ void fdt_fixup_qportals(void *blob)
+ 
+ 	off = fdt_node_offset_by_compatible(blob, -1, "fsl,qman-portal");
+ 	while (off != -FDT_ERR_NOTFOUND) {
++#ifdef CONFIG_PPC
+ #ifdef CONFIG_FSL_CORENET
+ 		u32 liodns[2];
+-		int j;
+ #endif
+ 		const int *ci = fdt_getprop(blob, off, "cell-index", &err);
+ 		int i;
+@@ -222,7 +199,12 @@ void fdt_fixup_qportals(void *blob)
+ 		if (!ci)
+ 			goto err;
+ 
+-		i = fdt32_to_cpu(*ci);
++		i = *ci;
++#ifdef CONFIG_SYS_DPAA_FMAN
++		int j;
++#endif
++
++#endif /* CONFIG_PPC */
+ 		err = fdt_setprop(blob, off, "compatible", compat, compat_len);
+ 		if (err < 0)
+ 			goto err;
+@@ -270,16 +252,6 @@ void fdt_fixup_qportals(void *blob)
+ 		if (err < 0)
+ 			goto err;
+ #endif
+-#else
+-		if (smmu_ph >= 0) {
+-			u32 icids[3];
+-
+-			icids[0] = qp_info[i].icid;
+-			icids[1] = qp_info[i].dicid;
+-			icids[2] = qp_info[i].ficid;
+-
+-			fdt_set_iommu_prop(blob, off, smmu_ph, icids, 3);
+-		}
+ #endif /* CONFIG_PPC */
+ 
+ err:
+-- 
+1.7.1
+

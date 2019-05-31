@@ -1,0 +1,89 @@
+From 11cad42b8fa1c50a3a6f9d8478fd83260d9c8f6b Mon Sep 17 00:00:00 2001
+From: Priyanka Jain <priyanka.jain@nxp.com>
+Date: Tue, 30 Jan 2018 11:38:38 +0530
+Subject: [PATCH 019/107] net/phy/cortina.c: Update get_phy_id implementation
+
+Update get_phy_id() implementation in cortina.c to check
+for Cortina_phy by comparing device phy_id with cortina phy_id
+instead of relying on presence of CORTINA macros.
+
+This will allow get_phy_id to work with non-cortina phy devices
+which might have same phy address as Cortina device but on
+different  bus.
+
+Signed-off-by: Priyanka Jain <priyanka.jain@nxp.com>
+Acked-by: Joe Hershberger <joe.hershberger@ni.com>
+---
+ drivers/net/phy/cortina.c |   46 ++++++++++++++++----------------------------
+ 1 files changed, 17 insertions(+), 29 deletions(-)
+
+diff --git a/drivers/net/phy/cortina.c b/drivers/net/phy/cortina.c
+index 637d89a..3ac833d 100644
+--- a/drivers/net/phy/cortina.c
++++ b/drivers/net/phy/cortina.c
+@@ -295,45 +295,33 @@ int phy_cortina_init(void)
+ int get_phy_id(struct mii_dev *bus, int addr, int devad, u32 *phy_id)
+ {
+ 	int phy_reg;
+-	bool is_cortina_phy = false;
+-
+-	switch (addr) {
+-#ifdef CORTINA_PHY_ADDR1
+-	case CORTINA_PHY_ADDR1:
+-#endif
+-#ifdef CORTINA_PHY_ADDR2
+-	case CORTINA_PHY_ADDR2:
+-#endif
+-#ifdef CORTINA_PHY_ADDR3
+-	case CORTINA_PHY_ADDR3:
+-#endif
+-#ifdef CORTINA_PHY_ADDR4
+-	case CORTINA_PHY_ADDR4:
+-#endif
+-		is_cortina_phy = true;
+-		break;
+-	default:
+-		break;
+-	}
+ 
+ 	/* Cortina PHY has non-standard offset of PHY ID registers */
+-	if (is_cortina_phy)
+-		phy_reg = bus->read(bus, addr, 0, VILLA_GLOBAL_CHIP_ID_LSB);
+-	else
+-		phy_reg = bus->read(bus, addr, devad, MII_PHYSID1);
++	phy_reg = bus->read(bus, addr, 0, VILLA_GLOBAL_CHIP_ID_LSB);
++	if (phy_reg < 0)
++		return -EIO;
++	*phy_id = (phy_reg & 0xffff) << 16;
+ 
++	phy_reg = bus->read(bus, addr, 0, VILLA_GLOBAL_CHIP_ID_MSB);
+ 	if (phy_reg < 0)
+ 		return -EIO;
++	*phy_id |= (phy_reg & 0xffff);
+ 
+-	*phy_id = (phy_reg & 0xffff) << 16;
+-	if (is_cortina_phy)
+-		phy_reg = bus->read(bus, addr, 0, VILLA_GLOBAL_CHIP_ID_MSB);
+-	else
+-		phy_reg = bus->read(bus, addr, devad, MII_PHYSID2);
++	if (*phy_id == PHY_UID_CS4340)
++		return 0;
+ 
++	/*
++	 * If Cortina PHY not detected,
++	 * try generic way to find PHY ID registers
++	 */
++	phy_reg = bus->read(bus, addr, devad, MII_PHYSID1);
+ 	if (phy_reg < 0)
+ 		return -EIO;
++	*phy_id = (phy_reg & 0xffff) << 16;
+ 
++	phy_reg = bus->read(bus, addr, devad, MII_PHYSID2);
++	if (phy_reg < 0)
++		return -EIO;
+ 	*phy_id |= (phy_reg & 0xffff);
+ 
+ 	return 0;
+-- 
+1.7.1
+

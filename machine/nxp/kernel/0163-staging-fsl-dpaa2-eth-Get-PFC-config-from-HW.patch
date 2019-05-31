@@ -1,0 +1,59 @@
+From 58921e82b2e340d974369861e1a9934f6c51fc64 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Mon, 28 Aug 2017 08:08:53 +0000
+Subject: [PATCH 163/448] staging: fsl-dpaa2/eth: Get PFC config from HW
+
+The dpaa2-eth PFC configuration is kept in a private driver variable.
+When getting PFC configuration via ieee_getpfc, get it straight from the
+Management Complex based on the Rx congestion notification setup.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   29 ++++++++++++++++++++++++
+ 1 files changed, 29 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 3c8e41a..7e4f716 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2931,8 +2931,37 @@ static int dpaa2_eth_dcbnl_ieee_getpfc(struct net_device *net_dev,
+ 				       struct ieee_pfc *pfc)
+ {
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	struct dpni_congestion_notification_cfg notification_cfg;
++	struct dpni_link_state state;
++	int err, i;
+ 
+ 	pfc->pfc_cap = dpaa2_eth_tc_count(priv);
++
++	err = dpni_get_link_state(priv->mc_io, 0, priv->mc_token, &state);
++	if (err) {
++		netdev_err(net_dev, "ERROR %d getting link state", err);
++		return err;
++	}
++
++	if (!(state.options & DPNI_LINK_OPT_PFC_PAUSE))
++		return 0;
++
++	priv->pfc.pfc_en = 0;
++	for (i = 0; i < dpaa2_eth_tc_count(priv); i++) {
++		err = dpni_get_congestion_notification(priv->mc_io, 0,
++						       priv->mc_token,
++						       DPNI_QUEUE_RX,
++						       i, &notification_cfg);
++		if (err) {
++			netdev_err(net_dev, "Error %d getting congestion notif",
++				   err);
++			return err;
++		}
++
++		if (notification_cfg.threshold_entry)
++			priv->pfc.pfc_en |= 1 << i;
++	}
++
+ 	pfc->pfc_en = priv->pfc.pfc_en;
+ 	pfc->mbc = priv->pfc.mbc;
+ 	pfc->delay = priv->pfc.delay;
+-- 
+1.7.1
+

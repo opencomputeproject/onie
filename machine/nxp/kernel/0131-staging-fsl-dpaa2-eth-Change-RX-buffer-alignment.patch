@@ -1,0 +1,111 @@
+From 0ee9890f517630db7792903ad4e3302dce25f46a Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 14 Apr 2017 16:05:04 +0300
+Subject: [PATCH 131/448] staging: fsl-dpaa2/eth: Change RX buffer alignment
+
+The WRIOP hardware block v1.0.0 (found on LS2080A board)
+requires data in RX buffers to be aligned to 256B, but
+newer revisions (e.g. on LS2088A, LS1088A) only require
+64B alignment.
+
+Check WRIOP version and decide at runtime which alignment
+requirement to configure for ingress buffers.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   16 ++++++++++++----
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |   12 +++++++++---
+ 2 files changed, 21 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 54a3c87..d95fde6 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -743,11 +743,11 @@ static int add_bufs(struct dpaa2_eth_priv *priv, u16 bpid)
+ 		/* Allocate buffer visible to WRIOP + skb shared info +
+ 		 * alignment padding
+ 		 */
+-		buf = napi_alloc_frag(DPAA2_ETH_BUF_RAW_SIZE);
++		buf = napi_alloc_frag(DPAA2_ETH_BUF_RAW_SIZE(priv));
+ 		if (unlikely(!buf))
+ 			goto err_alloc;
+ 
+-		buf = PTR_ALIGN(buf, DPAA2_ETH_RX_BUF_ALIGN);
++		buf = PTR_ALIGN(buf, priv->rx_buf_align);
+ 
+ 		addr = dma_map_single(dev, buf, DPAA2_ETH_RX_BUF_SIZE,
+ 				      DMA_FROM_DEVICE);
+@@ -758,7 +758,7 @@ static int add_bufs(struct dpaa2_eth_priv *priv, u16 bpid)
+ 
+ 		/* tracing point */
+ 		trace_dpaa2_eth_buf_seed(priv->net_dev,
+-					 buf, DPAA2_ETH_BUF_RAW_SIZE,
++					 buf, DPAA2_ETH_BUF_RAW_SIZE(priv),
+ 					 addr, DPAA2_ETH_RX_BUF_SIZE,
+ 					 bpid);
+ 	}
+@@ -1794,12 +1794,20 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 		goto err_get_attr;
+ 	}
+ 
++	/* We need to check for WRIOP version 1.0.0, but MC does not provide
++	 * this number correctly on rev1, so only read the last two digits;
++	 * if they're zero, we're on rev1, otherwise rev2 or above.
++	 */
++	priv->rx_buf_align = priv->dpni_attrs.wriop_version & 0x3FF ?
++			     DPAA2_ETH_RX_BUF_ALIGN :
++			     DPAA2_ETH_RX_BUF_ALIGN_REV1;
++
+ 	/* Configure buffer layouts */
+ 	/* rx buffer */
+ 	buf_layout.pass_parser_result = true;
+ 	buf_layout.pass_frame_status = true;
+ 	buf_layout.private_data_size = DPAA2_ETH_SWA_SIZE;
+-	buf_layout.data_align = DPAA2_ETH_RX_BUF_ALIGN;
++	buf_layout.data_align = priv->rx_buf_align;
+ 	buf_layout.options = DPNI_BUF_LAYOUT_OPT_PARSER_RESULT |
+ 			     DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
+ 			     DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE |
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 97243b5..3e1c41b 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -86,7 +86,12 @@
+  */
+ #define DPAA2_ETH_RX_BUF_SIZE		2048
+ #define DPAA2_ETH_TX_BUF_ALIGN		64
+-#define DPAA2_ETH_RX_BUF_ALIGN		256
++/* Due to a limitation in WRIOP 1.0.0, the RX buffer data must be aligned
++ * to 256B. For newer revisions, the requirement is only for 64B alignment
++ */
++#define DPAA2_ETH_RX_BUF_ALIGN_REV1	256
++#define DPAA2_ETH_RX_BUF_ALIGN		64
++
+ #define DPAA2_ETH_NEEDED_HEADROOM(p_priv) \
+ 	((p_priv)->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN)
+ 
+@@ -94,10 +99,10 @@
+  * buffers large enough to allow building an skb around them and also account
+  * for alignment restrictions
+  */
+-#define DPAA2_ETH_BUF_RAW_SIZE \
++#define DPAA2_ETH_BUF_RAW_SIZE(priv) \
+ 	(DPAA2_ETH_RX_BUF_SIZE + \
+ 	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)) + \
+-	DPAA2_ETH_RX_BUF_ALIGN)
++	(priv)->rx_buf_align)
+ 
+ /* We are accommodating a skb backpointer and some S/G info
+  * in the frame's software annotation. The hardware
+@@ -311,6 +316,7 @@ struct dpaa2_eth_priv {
+ 	u16 tx_data_offset;
+ 	u16 bpid;
+ 	u16 tx_qdid;
++	u16 rx_buf_align;
+ 	struct iommu_domain *iommu_domain;
+ 
+ 	u8 num_fqs;
+-- 
+1.7.1
+

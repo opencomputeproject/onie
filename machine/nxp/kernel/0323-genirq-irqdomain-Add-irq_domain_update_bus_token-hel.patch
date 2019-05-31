@@ -1,0 +1,86 @@
+From cd56a19590fa848b73d9f054da8fbe30b1b74c77 Mon Sep 17 00:00:00 2001
+From: Marc Zyngier <marc.zyngier@arm.com>
+Date: Thu, 22 Jun 2017 11:34:57 +0100
+Subject: [PATCH 323/448] genirq/irqdomain: Add irq_domain_update_bus_token helper
+
+We can have irq domains that are identified by the same fwnode
+(because they are serviced by the same HW), and yet have different
+functionnality (because they serve different busses, for example).
+This is what we use the bus_token field.
+
+Since we don't use this field when generating the domain name,
+all the aliasing domains will get the same name, and the debugfs
+file creation fails. Also, bus_token is updated by individual drivers,
+and the core code is unaware of that update.
+
+In order to sort this mess, let's introduce a helper that takes care
+of updating bus_token, and regenerate the debugfs file.
+
+A separate patch will update all the individual users.
+
+Signed-off-by: Marc Zyngier <marc.zyngier@arm.com>
+Signed-off-by: Thomas Gleixner <tglx@linutronix.de>
+---
+ include/linux/irqdomain.h |    3 +++
+ kernel/irq/irqdomain.c    |   31 +++++++++++++++++++++++++++++++
+ 2 files changed, 34 insertions(+), 0 deletions(-)
+
+diff --git a/include/linux/irqdomain.h b/include/linux/irqdomain.h
+index 1ab38ff..4323128 100644
+--- a/include/linux/irqdomain.h
++++ b/include/linux/irqdomain.h
+@@ -242,6 +242,9 @@ static inline bool is_fwnode_irqchip(struct fwnode_handle *fwnode)
+ 	return fwnode && fwnode->type == FWNODE_IRQCHIP;
+ }
+ 
++extern void irq_domain_update_bus_token(struct irq_domain *domain,
++					enum irq_domain_bus_token bus_token);
++
+ static inline
+ struct irq_domain *irq_find_matching_fwnode(struct fwnode_handle *fwnode,
+ 					    enum irq_domain_bus_token bus_token)
+diff --git a/kernel/irq/irqdomain.c b/kernel/irq/irqdomain.c
+index 942bfc7..8a46f80 100644
+--- a/kernel/irq/irqdomain.c
++++ b/kernel/irq/irqdomain.c
+@@ -166,6 +166,37 @@ void irq_domain_remove(struct irq_domain *domain)
+ }
+ EXPORT_SYMBOL_GPL(irq_domain_remove);
+ 
++void irq_domain_update_bus_token(struct irq_domain *domain,
++				 enum irq_domain_bus_token bus_token)
++{
++	char *name;
++
++	if (domain->bus_token == bus_token)
++		return;
++
++	mutex_lock(&irq_domain_mutex);
++
++	domain->bus_token = bus_token;
++
++	name = kasprintf(GFP_KERNEL, "%s-%d", domain->name, bus_token);
++	if (!name) {
++		mutex_unlock(&irq_domain_mutex);
++		return;
++	}
++
++	debugfs_remove_domain_dir(domain);
++
++	if (domain->flags & IRQ_DOMAIN_NAME_ALLOCATED)
++		kfree(domain->name);
++	else
++		domain->flags |= IRQ_DOMAIN_NAME_ALLOCATED;
++
++	domain->name = name;
++	debugfs_add_domain_dir(domain);
++
++	mutex_unlock(&irq_domain_mutex);
++}
++
+ /**
+  * irq_domain_add_simple() - Register an irq_domain and optionally map a range of irqs
+  * @of_node: pointer to interrupt controller's device tree node.
+-- 
+1.7.1
+

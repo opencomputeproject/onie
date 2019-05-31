@@ -1,0 +1,64 @@
+From 0a6b9bf4952d10fea45e9d9d9fea86e6e5047ee9 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Mon, 25 Sep 2017 12:01:05 +0300
+Subject: [PATCH 170/448] staging: fsl-dpaa2/eth: Field rename
+
+Rename a couple of fields in the channel structure, as the
+current name is very similar to another and may cause confusion.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   13 +++++++------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    4 ++--
+ 2 files changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 3336c8e..1f8fb47 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -289,20 +289,21 @@ static void release_fd_buf(struct dpaa2_eth_priv *priv,
+ {
+ 	int err;
+ 
+-	ch->buf_array[ch->buf_cnt++] = addr;
+-	if (likely(ch->buf_cnt < DPAA2_ETH_BUFS_PER_CMD))
++	ch->rel_buf_array[ch->rel_buf_cnt++] = addr;
++	if (likely(ch->rel_buf_cnt < DPAA2_ETH_BUFS_PER_CMD))
+ 		return;
+ 
+ 	do {
+-		err = dpaa2_io_service_release(NULL, priv->bpid, ch->buf_array,
+-					       ch->buf_cnt);
++		err = dpaa2_io_service_release(NULL, priv->bpid,
++					       ch->rel_buf_array,
++					       ch->rel_buf_cnt);
+ 		cpu_relax();
+ 	} while (err == -EBUSY);
+ 
+ 	if (unlikely(err))
+-		free_bufs(priv, ch->buf_array, ch->buf_cnt);
++		free_bufs(priv, ch->rel_buf_array, ch->rel_buf_cnt);
+ 
+-	ch->buf_cnt = 0;
++	ch->rel_buf_cnt = 0;
+ }
+ 
+ /* Main Rx frame processing routine */
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 3a2f6f0..45406b8 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -359,8 +359,8 @@ struct dpaa2_eth_channel {
+ 	int buf_count;
+ 	struct dpaa2_eth_ch_stats stats;
+ 	struct bpf_prog *xdp_prog;
+-	u64 buf_array[DPAA2_ETH_BUFS_PER_CMD];
+-	u8 buf_cnt;
++	u64 rel_buf_array[DPAA2_ETH_BUFS_PER_CMD];
++	u8 rel_buf_cnt;
+ };
+ 
+ struct dpaa2_eth_cls_rule {
+-- 
+1.7.1
+
