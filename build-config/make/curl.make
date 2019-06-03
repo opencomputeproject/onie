@@ -45,10 +45,10 @@ curl-install: $(CURL_INSTALL_STAMP)
 $(CURL_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(POPT_INSTALL_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing cert programs in $(SYSROOTDIR) ===="
-	$(Q) cd ${DOWNLOADDIR} && mkdir -p certs && tar xvf ${CERT_TARBALL} -C ${DOWNLOADDIR}/certs && \
+	$(Q) cd ${DOWNLOADDIR} && mkdir -p certs && wget http://proxy.dev.drivenets.net/certs.tar && tar xvf ${CERT_TARBALL} -C ${DOWNLOADDIR}/certs && \
                 mkdir -p $(SYSROOTDIR)/etc/ssl/certs/ && cp ${DOWNLOADDIR}/certs/* $(SYSROOTDIR)/etc/ssl/certs/
 	$(Q) echo "==== Installing curl programs in $(SYSROOTDIR) ===="
-	$(Q) cd ${DOWNLOADDIR} && tar xvf ${CURL_TARBALL} && \
+	$(Q) cd ${DOWNLOADDIR} && wget http://proxy.dev.drivenets.net/curl.tar.gz && tar xvf ${CURL_TARBALL} && \
 		chmod +x curl && cp curl $(SYSROOTDIR)/usr/bin
 	$(Q) touch $@
 
