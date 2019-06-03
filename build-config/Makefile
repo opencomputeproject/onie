@@ -185,7 +185,8 @@ KNOWN_ASIC_VENDORS = \
   mvl    \
   nephos \
   none   \
-  qemu
+  qemu   \
+  hp
 
 ifneq (,$(MAKECMDGOALS))
   ifeq (,$(filter onie-release-tag help distclean %build-host, $(MAKECMDGOALS)))
