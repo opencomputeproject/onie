@@ -169,6 +169,55 @@ wget_run()
     return 1
 }
 
+curl_run()
+{
+    type=$1
+    URL="$2"
+
+    curl_args="--connect-timeout 3 -s -o $onie_installer"
+
+    if [ "$onie_verbose" = "y" ] || [ "$from_cli" = "yes" ] ; then
+        out_file="/proc/$$/fd/1"
+    else
+        curl_args="$curl_args -q"
+        out_file="/dev/null"
+    fi
+
+    # add HTTP headers
+    # Shell variable substituion
+    bb_ver=$(busybox | head -1 | sed -e 's/ (.*//' -e 's/ /-/')
+    os_ver=$(uname -r -s | sed -e 's/ /-/')
+    user_agent="onie/1.0 (${os_ver}$onie_version; $bb_ver)"
+
+    header_serial_num="ONIE-SERIAL-NUMBER: $onie_serial_num"
+    header_eth_addr="ONIE-ETH-ADDR: $onie_eth_addr"
+    header_vendor_id="ONIE-VENDOR-ID: $onie_vendor_id"
+    header_machine="ONIE-MACHINE: $onie_machine"
+    header_machine_rev="ONIE-MACHINE-REV: $onie_machine_rev"
+    header_arch="ONIE-ARCH: $onie_arch"
+    header_security_key="ONIE-SECURITY-KEY: $onie_sec_key"
+    header_operation="ONIE-OPERATION: $onie_operation"
+    header_version="ONIE-VERSION: $onie_version"
+
+    # escape any % characters for printing with printf
+    print_exec_url=$(echo -n $URL | sed -e 's/%/%%/g')
+    log_debug_msg "Running curl with: $user_agent $curl_args $print_exec_url\n"
+    log_info_msg "Attempting $print_exec_url ..."
+    curl -A "$user_agent" $curl_args    \
+        --header "$header_serial_num"   \
+        --header "$header_eth_addr"     \
+        --header "$header_vendor_id"    \
+        --header "$header_machine"      \
+        --header "$header_machine_rev"  \
+        --header "$header_arch"         \
+        --header "$header_security_key" \
+        --header "$header_operation"    \
+        --header "$header_version"      \
+        "$URL" > $out_file 2>&1 && run_installer "$URL" && return 0
+
+    return 1
+}
+
 # tftp_wrap -- A wrapper around busybox's tftp command that on error
 # inspects the stderr output looking for a timeout.
 tftp_timeout=no
@@ -230,7 +279,8 @@ url_run()
     rm -f $onie_installer
     case $url_type in
         http | https | ftp)
-            wget_run $url_type "$URL" && return 0
+            # wget_run $url_type "$URL" && return 0
+            curl_run $url_type "$URL" && return 0
             ;;
         tftp)
             server=${url_path%%/*}
