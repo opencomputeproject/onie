@@ -117,7 +117,7 @@ SHIM_SELF_SIGN_PUBLIC_CERT_PEM = $(MACHINEDIR)/x509/sw-vendor-DB-cert.pem
 
 # Include additional files in the installer image.  This is useful to
 # share code between the ONIE run-time and the installer.
-UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/test-install-sharing
+# UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/test-install-sharing
 
 #-------------------------------------------------------------------------------
 #
