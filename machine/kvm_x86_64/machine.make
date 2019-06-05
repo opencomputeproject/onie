@@ -114,6 +114,7 @@ SHIM_SELF_SIGN_PUBLIC_CERT_PEM = $(MACHINEDIR)/x509/sw-vendor-DB-cert.pem
 # values are "rescue" or "embed" (without double-quotes). This
 # parameter defaults to "rescue" mode if not specified here.
 # RECOVERY_DEFAULT_ENTRY = embed
+RECOVERY_DEFAULT_ENTRY = embed
 
 # Include additional files in the installer image.  This is useful to
 # share code between the ONIE run-time and the installer.
