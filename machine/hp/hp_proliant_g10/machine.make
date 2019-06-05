@@ -107,7 +107,6 @@ SHIM_SELF_SIGN_PUBLIC_CERT_PEM = $(MACHINEDIR)/x509/sw-vendor-DB-cert.pem
 # kernel command line in EXTRA_CMDLINE_LINUX env variable. Eg:
 #
 #EXTRA_CMDLINE_LINUX ?= install_url=http://server/path/to/installer debug earlyprintk=serial
-EXTRA_CMDLINE_LINUX = console=tty0
 #
 # NOTE: You can give multiple space separated parameters
 
