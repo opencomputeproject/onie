@@ -126,5 +126,3 @@ RECOVERY_DEFAULT_ENTRY = embed
 # Local Variables:
 # mode: makefile-gmake
 # End:
-
-CURL_ENABLE = yes
