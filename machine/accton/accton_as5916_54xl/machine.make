@@ -1,4 +1,4 @@
-# Accton AS5916_54XKS
+# Accton AS5916_54XL
 
 # Vendor's version number can be defined here.
 # Available variable is 'VENDOR_VERSION'.
