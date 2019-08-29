@@ -79,9 +79,9 @@ $(KERNEL_PATCH_STAMP): $(KERNEL_SRCPATCHDIR)/* $(MACHINE_KERNEL_PATCHDIR)/* $(KE
 	$(Q) touch $@
 
 $(LINUXDIR)/.config : $(LINUX_CONFIG) $(KERNEL_PATCH_STAMP)
-	$(Q) echo "==== Copying $(LINUX_CONFIG) to $(LINUXDIR)/.config ===="
+	$(Q) echo "==== Merging $(LINUX_CONFIG) to $(LINUXDIR)/.config ===="
 	$(Q) cp -v $< $@
-	$(Q) cat $(MACHINE_KERNEL_PATCHDIR)/config >> $(LINUXDIR)/.config
+	$(Q) $(LINUXDIR)/scripts/kconfig/merge_config.sh -r -m $(LINUXDIR)/.config $(MACHINE_KERNEL_PATCHDIR)/config
 
 kernel-old-config: $(LINUXDIR)/.config
 	$(Q) $(MAKE) -C $(LINUXDIR) ARCH=$(KERNEL_ARCH) oldconfig
