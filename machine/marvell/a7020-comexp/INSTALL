@@ -1,0 +1,50 @@
+===================================================================
+Installing ONIE on Marvell Armada-7020 (comexp)
+===================================================================
+
+ONIE development documentation:
+https://opencomputeproject.github.io/onie/developers/building.html
+
+Change directories to "build-config" to compile ONIE.
+
+1. Install debian packages on Ubuntu workstation:
+
+cd build-config
+sudo apt-get update
+make debian-prepare-build-host
+
+2. Cross-compiling toolchain:
+
+The ONIE build process generates and uses a cross-compiling toolchain based on gcc and uClibc.
+The crosstool-NG project is used to manage the build of the toolchain.
+
+For using your own toolchain - add 'XTOOLS_ENABLE=no' to build command and modify 'machine.make'.
+
+3. Run a build:
+
+make -j12 MACHINEROOT=../machine/marvell MACHINE=a7020-comexp clean
+make -j12 MACHINEROOT=../machine/marvell MACHINE=a7020-comexp all demo
+
+
+4. When completed, ONIE binaries will be located in "build/images":
+a7020-comexp-r0.dtb
+a7020-comexp-r0.initrd
+a7020-comexp-r0.itb
+a7020-comexp-r0.u-boot
+a7020-comexp-r0.vmlinuz
+demo-arm-a7020-comexp-r0.itb
+demo-installer-arm-a7020-comexp-r0.bin
+
+
+5. ONIE will continuously try to discover the installer file in TFTP, FTP and SATA in the background.
+   To stop the discovery use below command:
+   ONIE:/ # onie-discovery-stop
+   
+
+6.To download the installer from the server:
+   ONIE:/ # ping <server-ip>   # make sure that you can ping to tftp-server
+   ONIE:/ # onie-nos-install tftp://<server-ip>/demo-installer-arm-a7020-comexp-r0.bin
+
+
+Onie will download demo installer from TFTP server, formats partition and install the image. 
+On successfull installation, system reboots.
