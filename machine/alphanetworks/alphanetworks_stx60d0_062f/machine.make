@@ -39,6 +39,7 @@ LINUX_MINOR_VERSION	= 95
 # Older GCC required for older 3.14.27 kernel
 #GCC_VERSION = 4.9.2
 
+include $(MACHINEDIR)/rootconf/grub-machine.make
 
 #-------------------------------------------------------------------------------
 #
