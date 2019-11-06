@@ -1,0 +1,239 @@
+#!/bin/sh
+
+#  Copyright (C) 2014,2018 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+##
+## Uninstall the system.
+##
+## This assumes the shell is ash/dash.
+##
+
+this_script=$(basename $(realpath $0))
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+
+. $lib_dir/functions
+syslog_tag=onie-uninstall-diag
+
+import_cmdline
+
+diag_volume_label="PEGATRON-DIAG"
+
+# auto-detect whether BIOS or UEFI
+if [ -d "/sys/firmware/efi/efivars" ] ; then
+    firmware="uefi"
+else
+    firmware="bios"
+fi
+
+onie_partition_type=$(onie-sysinfo -t)
+# diag partition size in MB
+diag_part_size=3072
+if [ "$firmware" = "uefi" ] ; then
+    create_diag_partition="create_diag_gpt_partition"
+    should_delete_diag_partition="should_delete_diag_gpt_partition"
+elif [ "$onie_partition_type" = "gpt" ] ; then
+    create_diag_partition="create_diag_gpt_partition"
+    should_delete_diag_partition="should_delete_diag_gpt_partition"
+elif [ "$onie_partition_type" = "msdos" ] ; then
+    create_diag_partition="create_diag_msdos_partition"
+    should_delete_diag_partition="should_delete_diag_msdos_partition"
+else
+    echo "ERROR: Unsupported partition type: $onie_partition_type"
+    exit 1
+fi
+
+if [ "$onie_boot_reason" != "uninstall" -a \
+    "$onie_boot_reason" != "rescue" ] ; then
+    log_failure_msg "$0: OS uninstall unavailable in current ONIE mode: $onie_boot_reason"
+    printf "$0: this operation is available in 'uninstall' and 'rescue' modes only.\n"
+    return 1
+fi
+
+log_pre=
+if [ "$onie_testing" = "y" ] ; then
+    log_pre="Testing: "
+fi
+
+[ -r $lib_dir/uninstall-arch ]     && . $lib_dir/uninstall-arch
+
+create_diag_gpt_partition()
+{
+    blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' |  sed -e 's/[1-9][0-9]*:.*$//' | sed -e 's/\([0-9]\)\(p\)/\1/' | head -n 1)
+
+    # Find next available partition
+    last_part=$(sgdisk -p $blk_dev | grep ONIE-BOOT | awk '{print $1}')
+    diag_part=$(( $last_part - 1 ))
+    onie_start_sector=$(sgdisk -p $blk_dev | grep ONIE-BOOT | awk '{print $2}')
+    grub_end_sector=$(sgdisk -p $blk_dev | grep GRUB-BOOT | awk '{print $3}')
+    diag_start_sector=$(( $grub_end_sector + 1 ))
+    diag_end_sector=$(( $onie_start_sector - 1 ))
+    
+    if [ -z "${diag_start_sector}" ] || [ -z "${diag_end_sector}" ]; then
+       echo "Error: Unable to get diag_start_sector or diag_end_sector on $blk_dev"
+       exit 1;
+    fi
+    
+    # check if we have an mmcblk device
+    blk_suffix=
+    echo ${blk_dev} | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo ${blk_dev} | grep -q nvme && blk_suffix="p"
+
+    # Create new partition
+    echo "Creating new demo partition ${blk_dev}$blk_suffix$diag_part ..."
+
+    attr_bitmask="0x1"
+
+    sgdisk --new=${diag_part}:${diag_start_sector}:${diag_end_sector} \
+        --attributes=${diag_part}:=:$attr_bitmask \
+        --change-name=${diag_part}:$diag_volume_label $blk_dev || {
+        echo "Error: Unable to create partition $diag_part on $blk_dev"
+        exit 1
+    }
+    partprobe
+}
+
+create_diag_msdos_partition()
+{
+    blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' |  sed -e 's/[1-9][0-9]*:.*$//' | sed -e 's/\([0-9]\)\(p\)/\1/' | head -n 1)
+
+    # Find next available partition
+    onie_part_info="$(parted -s -m $blk_dev unit s print | grep ONIE-BOOT)"
+    onie_part_num="$(echo -n $last_part_info | awk -F: '{print $1}')"
+    onie_part_start="$(echo -n $last_part_info | awk -F: '{print $2}')"
+    onie_part_end="$(echo -n $last_part_info | awk -F: '{print $3}')"
+    # Remove trailing 's'
+    onie_part_start=${onie_part_start%s}
+    onie_part_end=${onie_part_end%s}
+    diag_part=$(( $onie_part_num - 1 ))
+    diag_part_start=2048
+    # sectors_per_mb = (1024 * 1024) / 512 = 2048
+    sectors_per_mb=2048
+    diag_part_end=$(( $diag_part_start + ( $diag_part_size * $sectors_per_mb ) - 1 ))
+
+    # Create new partition
+    echo "Creating new demo partition ${blk_dev}$blk_suffix$diag_part ..."
+    parted -s --align optimal $blk_dev unit s \
+      mkpart primary $diag_part_start $diag_part_end set $diag_part boot on || {
+        echo "ERROR: Problems creating demo msdos partition $diag_part on: $blk_dev"
+        exit 1
+    }
+    partprobe
+}
+
+# When deleting partitions this function determines whether or not to
+# keep the specified GPT partition.
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+#
+# Returns 0 to delete the partition.
+should_delete_diag_gpt_partition()
+{
+    # Check for precious GPT Partition GUIDs
+    if [ "$onie_arch" = "x86_64" ] ; then
+        local part_guid="$(sgdisk -i $2 /dev/$1 | grep 'Partition GUID code:')"
+        local part_guid=${part_guid##Partition GUID code: }
+        local part_guid=${part_guid%% *}
+        case "$part_guid" in
+            $uefi_esp_gpt_uuid|$grub_boot_gpt_uuid|$onie_boot_gpt_uuid)
+                # echo "skipping ONIE part"
+                return 1
+                ;;
+            *)
+                ;;
+        esac
+    fi
+
+    # Check for precious GPT Partition names
+    local part_name="$(sgdisk -i $2 /dev/$1 | grep 'Partition name:')"
+    local part_name=${part_name#*"'"}
+    local part_name=${part_name%"'"*}
+    case "$part_name" in
+        *-DIAG)
+            # check system attributes
+            local attr=$(sgdisk -i $2 /dev/$1 | grep 'Attribute flags')
+            attr=${attr##*: }
+            if [ "$attr" = "0000000000000001" ] ; then
+                # system attribute is set, skip this part
+                # echo "skipping DIAG part"
+                return 0
+            fi
+            ;;
+        *)
+            ;;
+    esac
+
+    return 1
+}
+
+# When deleting partitions this function determines whether or not to
+# keep the specified msdos partition.
+#
+# arg $1 - block device without the "/dev"
+# arg $2 - the partition number
+#
+# Returns 0 to delete the partition.
+should_delete_diag_msdos_partition()
+{
+    # check for ONIE-BOOT file system volume label
+    blkid /dev/${1}$2 | egrep -q '(-DIAG)' && return 0
+    return 1
+}
+
+erase_diag_storage()
+{
+    local blk_dev=$1
+    # check if we have an mmcblk device
+    local blk_suffix=
+    echo ${blk_dev} | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo ${blk_dev} | grep -q nvme && blk_suffix="p"
+    local diag_part="$(blkid | grep $diag_volume_label | awk -F: '{print $1}')"
+
+    if ls -d /sys/block/$blk_dev/${blk_dev}* > /dev/null 2>&1 ; then
+        # Wipe out and delete all partitions, except for important ones,
+        # like GRUB, ONIE and possibly a DIAG.
+        ls -d /sys/block/$blk_dev/${blk_dev}* | sed -e "s/^.*$blk_dev$blk_suffix//" | while read part ; do
+            if eval $should_delete_diag_partition $blk_dev $part ; then
+                erase_part $blk_dev $part
+            fi
+        done
+    fi
+}
+
+uninstall_system()
+{
+    # Clean up block device that contains ONIE
+    local blk_dev="$(onie_get_boot_disk | sed -e 's#/dev/##')"
+
+    [ -b "/dev/$blk_dev" ] || {
+        echo "Error: Unable to determine block device of ONIE install"
+        exit 1
+    }
+
+    erase_diag_storage $blk_dev
+    
+    echo "Create Diag Partition"
+    $create_diag_partition
+
+    return 0
+}
+
+uninstall_system || {
+    printf "${log_pre}ERROR: Problems uninstalling system..."
+    exit 1
+}
+
+printf "${log_pre}Uninstall complete.  Rebooting...\n"
+
+if [ "$onie_testing" != "y" ] ; then
+    reboot
+fi
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
