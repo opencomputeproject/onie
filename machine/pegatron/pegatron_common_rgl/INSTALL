@@ -1,0 +1,165 @@
+Add support for Pegatron Common Rangeley CPU board
+
+================================================================================
+  Pegatron Common Rangeley CPU board
+================================================================================
+
+  Pegatron switch which supports modularized CPU board design, have a
+non-programmable H/W component for mother board detection. For motherboard
+detection, please refer to ``rootconf/sysroot-lib-onie/gen-config-platform``
+
+  Supported Platforms
+=======================
+ - Pegatron_fm_6254_rn_f
+   48x10GbE/25GbE SFP28 ports, and 6x40GbE/100GbE QSFP28 ports
+
+ - Pegatron_fb_6032_rn_f
+   32x40GbE/100GbE QSFP28 ports
+
+ - Pegatron_fb_6256_rn_b
+   48x10GbE/25GbE SFP28 ports, and 8x40GbE/100GbE QSFP28 ports
+
+  Specification
+===============
+ - Modularized CPU board design
+ - 1 RJ-45 out-of-band management port (10/100/1000M)
+ - 1 RJ-45 console port
+ - 1 8GB DDR3 SDRAM
+ - 1 MMC 16GB
+ - 1 M.2 SATA SSD
+ - 1 USB 2.0 port
+ 
+=========================================================
+Installing ONIE on Pegatron Common Rangeley CPU board
+=========================================================
+
+Cross-Compiling ONIE
+====================
+
+To compile ONIE change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/pegatron MACHINE=pegatron_common_rgl all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/pegatron MACHINE=pegatron_common_rgl all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-rw-r-- 1 user user 22609920 Dec  1 11:20 onie-recovery-x86_64-pegatron_common_rgl-r0.iso
+-rw-rw-r-- 1 user user  9975671 Dec  1 11:19 onie-updater-x86_64-pegatron_common_rgl-r0
+-rw-rw-r-- 1 user user  6212276 Dec  1 11:19 pegatron_common_rgl-r0.initrd
+-rw-rw-r-- 1 user user  3821648 Dec  1 11:18 pegatron_common_rgl-r0.vmlinuz
+
+
+pegatron_common_rgl-r0.vmlinuz                  -- This is the ONIE kernel image
+
+pegatron_common_rgl-r0.initrd                   -- This is the ONIE initramfs (filesystem)
+
+onie-updater-x86_64-pegatron_common_rgl-r0      -- This is the ONIE self-update image.
+                                                     This image is a self-extracting archive used for installing ONIE.
+
+onie-recovery-x86_64-pegatron_common_rgl-r0.iso -- This is a recovery ISO image
+                                                     that can be install as a CDROM image.
+
+Cross-Compiling the DEMO OS
+===========================
+
+To compile the demo OS first change directories to ``build-config``
+and then type ``"make MACHINEROOT=../maching/pegetron MACHINE=pegatron_common_rgl demo"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/pegatron/ MACHINE=pegatron_common_rgl demo
+
+When complete, the demo OS installer is located in ``build/images``::
+
+-rw-r--r-- 1 lyc lyc 10138888 Sep  6 10:19 demo-diag-installer-x86_64-pegatron_common_rgl-r0.bin
+-rw-r--r-- 1 lyc lyc 10138888 Sep  6 10:19 demo-installer-x86_64-pegatron_common_rgl-r0.bin
+
+Installing ONIE on a Blank Machine
+==================================
+
+To install ONIE on a new machine use one of the onie-recovery images.
+
+An "ONIE recovery image" is used for:
+
+1. installing ONIE on a blank machine, i.e. what manufacturing would
+   use.
+
+2. recovering a destroyed ONIE system.
+
+The recovery image is:
+
+. <machine>.iso       -- a hybrid ISO image.
+
+ISO Recovery Image
+------------------
+
+The .iso image is used to create the usb recovery disk.
+
+You can use the .iso image to create a bootable USB memory stick.
+Use ``dd`` to copy the .iso image to a USB stick and boot from that::
+
+  dd if=onie-recovery-x86_64-pegatron_common_rgl-r0.iso of=/dev/sdX bs=10M
+
+For can find the correct ``/dev/sdX`` by inspecing the ``dmesg``
+output after inserting the USB stick into your work station.
+
+To enable booting from USB in the Coreboot Grub2 payload:
+
+1. Insert the USB stick
+
+2. Power on the Pegatron Rangeley Switch
+
+3. Boot to your coreboot's grub2
+
+4. While seeing ``Loading GRUB2 ...``, press ESC to interrupt
+  You shall see
+
+                     GNU GRUB  version 2.03
+
+ +----------------------------------------------------------------------------+
+ | Scan for grub.cfg on USB drive                                             |
+ | Scan for grub.cfg on SATA drive                                            |
+ | Scan for grub.cfg on ONIE drive                                            |
+ |*ONIE_RECOVERY                                                              |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            | 
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line.
+
+
+5. Choose 'ONIE_RECOVERY' to enter ONIE's ISO menu
+
+                     GNU GRUB  version 2.03
+
+ +----------------------------------------------------------------------------+
+ | ONIE: Rescue                                                               | 
+ |*ONIE: Embed ONIE                                                           |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            | 
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line. ESC to return
+      previous menu.
+
+6. Choose ``ONIE: Embed ONIE``, then ONIE will be ready after reboot.
+
+7. ``ONIE: Rescue`` for ONIE rescue mode on USB disk shall also provide
+  an debugging environment.
