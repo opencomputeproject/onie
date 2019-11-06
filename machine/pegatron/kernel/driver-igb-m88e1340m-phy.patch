@@ -1,0 +1,82 @@
+From 4e6948725d87f7265018945d7311a09ec8bbd244 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Wed, 29 Nov 2017 15:04:17 +0800
+Subject: [PATCH] Enable ethernet driver for Marvell PHY
+
+---
+ drivers/net/ethernet/intel/igb/e1000_82575.c   | 8 ++++++--
+ drivers/net/ethernet/intel/igb/e1000_defines.h | 2 ++
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+index 4a50870..1003313 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c
+@@ -268,6 +268,7 @@ static s32 igb_init_phy_params_82575(struct e1000_hw *hw)
+ 	case M88E1512_E_PHY_ID:
+ 	case I347AT4_E_PHY_ID:
+ 	case M88E1112_E_PHY_ID:
++	case M88E1340M_E_PHY_ID:
+ 	case M88E1111_I_PHY_ID:
+ 		phy->type		= e1000_phy_m88;
+ 		phy->ops.check_polarity	= igb_check_polarity_m88;
+@@ -313,6 +314,7 @@ static s32 igb_init_phy_params_82575(struct e1000_hw *hw)
+ 		}
+ 		break;
+ 	case IGP03E1000_E_PHY_ID:
++	case IGP04E1000_E_PHY_ID:
+ 		phy->type = e1000_phy_igp_3;
+ 		phy->ops.get_phy_info = igb_get_phy_info_igp;
+ 		phy->ops.get_cable_length = igb_get_cable_length_igp_2;
+@@ -404,7 +406,7 @@ static s32 igb_init_nvm_params_82575(struct e1000_hw *hw)
+ 	nvm->ops.validate = igb_validate_nvm_checksum;
+ 	nvm->ops.update = igb_update_nvm_checksum;
+ 	if (nvm->word_size < BIT(15))
+-		nvm->ops.read = igb_read_nvm_eerd;
++		nvm->ops.read = igb_read_nvm_spi;
+ 	else
+ 		nvm->ops.read = igb_read_nvm_spi;
+ 
+@@ -1615,6 +1617,7 @@ static s32 igb_setup_copper_link_82575(struct e1000_hw *hw)
+ 	case e1000_i350:
+ 	case e1000_i210:
+ 	case e1000_i211:
++    case e1000_i354:
+ 		phpm_reg = rd32(E1000_82580_PHY_POWER_MGMT);
+ 		phpm_reg &= ~E1000_82580_PM_GO_LINKD;
+ 		wr32(E1000_82580_PHY_POWER_MGMT, phpm_reg);
+@@ -1643,6 +1646,7 @@ static s32 igb_setup_copper_link_82575(struct e1000_hw *hw)
+ 		switch (hw->phy.id) {
+ 		case I347AT4_E_PHY_ID:
+ 		case M88E1112_E_PHY_ID:
++		case M88E1340M_E_PHY_ID:
+ 		case M88E1543_E_PHY_ID:
+ 		case M88E1512_E_PHY_ID:
+ 		case I210_I_PHY_ID:
+@@ -2543,7 +2547,7 @@ static s32 igb_validate_nvm_checksum_i350(struct e1000_hw *hw)
+ 	u16 j;
+ 	u16 nvm_offset;
+ 
+-	for (j = 0; j < 4; j++) {
++	for (j = 0; j < 1; j++) {
+ 		nvm_offset = NVM_82580_LAN_FUNC_OFFSET(j);
+ 		ret_val = igb_validate_nvm_checksum_with_offset(hw,
+ 								nvm_offset);
+diff --git a/drivers/net/ethernet/intel/igb/e1000_defines.h b/drivers/net/ethernet/intel/igb/e1000_defines.h
+index 2688180..2da7214 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_defines.h
++++ b/drivers/net/ethernet/intel/igb/e1000_defines.h
+@@ -859,8 +859,10 @@
+  */
+ #define M88E1111_I_PHY_ID    0x01410CC0
+ #define M88E1112_E_PHY_ID    0x01410C90
++#define M88E1340M_E_PHY_ID   0x01410DF0
+ #define I347AT4_E_PHY_ID     0x01410DC0
+ #define IGP03E1000_E_PHY_ID  0x02A80390
++#define IGP04E1000_E_PHY_ID  0x02A80391
+ #define I82580_I_PHY_ID      0x015403A0
+ #define I350_I_PHY_ID        0x015403B0
+ #define M88_VENDOR           0x0141
+-- 
+2.7.4
+
