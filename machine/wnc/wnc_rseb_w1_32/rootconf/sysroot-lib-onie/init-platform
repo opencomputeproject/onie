@@ -1,0 +1,30 @@
+# This script fragment is sourced by /etc/init.d/init-arch.sh,
+# which in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+init_platform_post_arch()
+{
+    #Init PCA9541
+    echo pca9541 0x78 > /sys/bus/i2c/devices/i2c-0/new_device
+    echo pca9541 0x79 > /sys/bus/i2c/devices/i2c-1/new_device
+	
+    #Check EEPROM
+    sleep 1.5
+    i=10
+    while true; do
+        if onie-syseeprom >/dev/null 2>&1; then
+            echo "EEPROM device found."
+            break
+        fi
+        if [ $i -le 0 ]; then
+            echo "EEPROM device unavailable."
+            break
+        fi
+        if [ $(($i % 10)) -eq 0 ]; then
+            echo "Waiting for EEPROM device to become" \
+                 "available... $(($i / 10))"
+        fi
+        sleep 0.1
+        i=$(($i - 1))
+    done
+}
