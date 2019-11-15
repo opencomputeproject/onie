@@ -1,0 +1,84 @@
+From a654fcc70e75e3ce56cee2b49a4b6a1b5680d83e Mon Sep 17 00:00:00 2001
+From: Pramod Kumar <pramod.kumar_1@nxp.com>
+Date: Mon, 13 Aug 2018 22:28:53 +0530
+Subject: [PATCH 087/107] ls1012afrwy: Add ls1012afrwy revC board support.
+
+ls1012afrwy support three revisions of the board.
+512MB revA, revB boards and 1GB revC board.
+revision A and B board are collectively identified as revA/B,
+however revision C board is identifies as revC.
+
+Signed-off-by: Pramod Kumar <pramod.kumar_1@nxp.com>
+---
+ board/freescale/ls1012afrx/ls1012afrx.c |   20 ++++++++++++--------
+ include/configs/ls1012afrwy.h           |    6 +++---
+ 2 files changed, 15 insertions(+), 11 deletions(-)
+
+diff --git a/board/freescale/ls1012afrx/ls1012afrx.c b/board/freescale/ls1012afrx/ls1012afrx.c
+index 80d869c..edb47ff 100644
+--- a/board/freescale/ls1012afrx/ls1012afrx.c
++++ b/board/freescale/ls1012afrx/ls1012afrx.c
+@@ -25,11 +25,15 @@ DECLARE_GLOBAL_DATA_PTR;
+ 
+ static inline int get_board_version(void)
+ {
+-	struct ccsr_gpio *pgpio = (void *)(GPIO1_BASE_ADDR);
+-	int val;
++	uint32_t val;
++#ifdef CONFIG_TARGET_LS1012AFRDM
++	val = 0;
++#else
++	struct ccsr_gpio *pgpio = (void *)(GPIO2_BASE_ADDR);
+ 
+-	val = in_be32(&pgpio->gpdat);
++	val = in_be32(&pgpio->gpdat) & BOARD_REV_MASK;/*Get GPIO2 11,12,14*/
+ 
++#endif
+ 	return val;
+ }
+ 
+@@ -47,11 +51,11 @@ int checkboard(void)
+ 	puts("Version");
+ 
+ 	switch (rev) {
+-	case BOARD_REV_A:
+-		puts(": RevA ");
++	case BOARD_REV_A_B:
++		puts(": RevA/B ");
+ 		break;
+-	case BOARD_REV_B:
+-		puts(": RevB ");
++	case BOARD_REV_C:
++		puts(": RevC ");
+ 		break;
+ 	default:
+ 		puts(": unknown");
+@@ -100,7 +104,7 @@ int dram_init(void)
+ #ifdef CONFIG_TARGET_LS1012AFRWY
+ 	board_rev = get_board_version();
+ 
+-	if (board_rev & BOARD_REV_B) {
++	if (board_rev == BOARD_REV_C) {
+ 		mparam.mdctl = 0x05180000;
+ 		gd->ram_size = SYS_SDRAM_SIZE_1024;
+ 	} else {
+diff --git a/include/configs/ls1012afrwy.h b/include/configs/ls1012afrwy.h
+index 770e566..32a0d53 100644
+--- a/include/configs/ls1012afrwy.h
++++ b/include/configs/ls1012afrwy.h
+@@ -10,9 +10,9 @@
+ #include "ls1012a_common.h"
+ 
+ /* Board Rev*/
+-#define BOARD_REV_A			0x0
+-#define BOARD_REV_B			0x200
+-
++#define BOARD_REV_A_B			0x0
++#define BOARD_REV_C			0x00080000
++#define BOARD_REV_MASK			0x001A0000
+ /* DDR */
+ #define CONFIG_DIMM_SLOTS_PER_CTLR	1
+ #define CONFIG_CHIP_SELECTS_PER_CTRL	1
+-- 
+1.7.1
+

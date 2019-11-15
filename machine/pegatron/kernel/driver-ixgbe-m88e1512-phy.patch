@@ -1,0 +1,565 @@
+From 66750656223b5dcf8cba1f50711bb1a8203f169b Mon Sep 17 00:00:00 2001
+From: Jenny Lien <Jenny_Lien@pegatroncorp.com>
+Date: Thu, 15 Nov 2018 16:23:23 +0800
+Subject: [PATCH] 1. Correct OOB PHY Marvell-88e1512 LED behavior, and add it
+ LED control interface.
+
+---
+ drivers/net/ethernet/intel/ixgbe/ixgbe_common.c  | 173 ++++++++++++++++++++---
+ drivers/net/ethernet/intel/ixgbe/ixgbe_ethtool.c |  91 +++++++++++-
+ drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c     |  98 ++++++++++++-
+ drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h     |   6 +
+ drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c    |  39 +++++
+ 5 files changed, 385 insertions(+), 22 deletions(-)
+
+diff --git a/drivers/net/ethernet/intel/ixgbe/ixgbe_common.c b/drivers/net/ethernet/intel/ixgbe/ixgbe_common.c
+index 64429a14..fd055cc9 100644
+--- a/drivers/net/ethernet/intel/ixgbe/ixgbe_common.c
++++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_common.c
+@@ -297,6 +297,10 @@ s32 ixgbe_start_hw_generic(struct ixgbe_hw *hw)
+ 	s32 ret_val;
+ 	u32 ctrl_ext;
+ 	u16 device_caps;
++#if 1 //by hilbert
++    s32 rc;
++    u16 regVal=0;
++#endif
+ 
+ 	/* Set the media type */
+ 	hw->phy.media_type = hw->mac.ops.get_media_type(hw);
+@@ -342,6 +346,67 @@ s32 ixgbe_start_hw_generic(struct ixgbe_hw *hw)
+ 	/* Clear adapter stopped flag */
+ 	hw->adapter_stopped = false;
+ 
++#if 1 /* To modify speed LED polarity and configure led on only for speed 1G in M88E1512
++       * for Porsche2 platform. By hilbert
++       * From 88E1512 datasheet:
++       * Page register: 0x16
++       * LED functon control register: 0x10 in page 3
++       * LED polarity control register: 0x11 in page 3
++       */
++
++    if (hw->mac.type == ixgbe_mac_x550em_a &&
++            (hw->mac.ops.get_media_type(hw) == ixgbe_media_type_copper)) {
++        /* For M88E1512, to select page 3 in register 0x16 */
++        regVal = 0x03;
++        rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "page register write failed, rc:%x\n", rc);
++        }
++#if 0 //for debug
++        /* For M88E1512, read from register 0x16 */
++        regVal = 0x00;
++        rc = hw->phy.ops.read_reg(hw, 0x16, MDIO_MMD_PMAPMD, &regVal);
++        if (rc) {
++           hw_err(hw, "phy register read failed, rc:%x\n", rc);
++        }
++        hw_err(hw, "####read phy register 0x16 again, value:%x\n", regVal);
++#endif
++        /* For M88E1512, read from page 3, register 0x11 */
++        regVal = 0x00;
++        rc = hw->phy.ops.read_reg(hw, 0x11, MDIO_MMD_PMAPMD, &regVal);
++        if (rc) {
++           hw_err(hw, "led polarity register read failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, write to page 3 register 0x11 with polarity bit set */
++        regVal |= 0x01;
++        rc = hw->phy.ops.write_reg(hw, 0x11, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "led polarity register write failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, read from page 3, register 16 */
++        regVal = 0x00;
++        rc = hw->phy.ops.read_reg(hw, 0x10, MDIO_MMD_PMAPMD, &regVal);
++        if (rc) {
++           hw_err(hw, "led function control register read failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, write to page 3 register 16 with only 1000M led on */
++        regVal = (regVal & 0xFFF0) | 0x0007;
++        rc = hw->phy.ops.write_reg(hw, 0x10, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "led function control register write failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, write page 22 back to default 0 */
++        regVal = 0x00;
++        rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "page register write failed, rc:%x\n", rc);
++        }
++    }
++#endif
+ 	return 0;
+ }
+ 
+@@ -827,16 +892,51 @@ s32 ixgbe_init_led_link_act_generic(struct ixgbe_hw *hw)
+  **/
+ s32 ixgbe_led_on_generic(struct ixgbe_hw *hw, u32 index)
+ {
+-	u32 led_reg = IXGBE_READ_REG(hw, IXGBE_LEDCTL);
+-
+-	if (index > 3)
+-		return IXGBE_ERR_PARAM;
+-
+-	/* To turn on the LED, set mode to ON. */
+-	led_reg &= ~IXGBE_LED_MODE_MASK(index);
+-	led_reg |= IXGBE_LED_ON << IXGBE_LED_MODE_SHIFT(index);
+-	IXGBE_WRITE_REG(hw, IXGBE_LEDCTL, led_reg);
+-	IXGBE_WRITE_FLUSH(hw);
++    u32 led_reg = IXGBE_READ_REG(hw, IXGBE_LEDCTL);
++    s32 rc;
++    u16 regVal;
++
++    /* following led behavior was modified by hilbert,
++     * to force led on through C22 MDI command.
++     */
++    if (hw->mac.type == ixgbe_mac_x550em_a) {
++        /* For M88E1512, to select page 3 in register 22 */
++        regVal = 0x03;
++        rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "page register write failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, read from page 3, register 16 */
++        regVal = 0x00;
++        rc = hw->phy.ops.read_reg(hw, 0x10, MDIO_MMD_PMAPMD, &regVal);
++        if (rc) {
++           hw_err(hw, "led function control register read failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, write to page 3 register 16 with force led on */
++        regVal = (regVal & 0xFF00) | 0x0099;
++        rc = hw->phy.ops.write_reg(hw, 0x10, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "led function control register write failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, write page 22 back to default 0 */
++        regVal = 0x00;
++        rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "page register write failed, rc:%x\n", rc);
++        }
++    } else {
++        if (index > 3)
++            return IXGBE_ERR_PARAM;
++
++        /* To turn on the LED, set mode to ON. */
++        led_reg &= ~IXGBE_LED_MODE_MASK(index);
++        led_reg |= IXGBE_LED_ON << IXGBE_LED_MODE_SHIFT(index);
++        IXGBE_WRITE_REG(hw, IXGBE_LEDCTL, led_reg);
++        IXGBE_WRITE_FLUSH(hw);
++    }
+ 
+ 	return 0;
+ }
+@@ -849,15 +949,50 @@ s32 ixgbe_led_on_generic(struct ixgbe_hw *hw, u32 index)
+ s32 ixgbe_led_off_generic(struct ixgbe_hw *hw, u32 index)
+ {
+ 	u32 led_reg = IXGBE_READ_REG(hw, IXGBE_LEDCTL);
+-
+-	if (index > 3)
+-		return IXGBE_ERR_PARAM;
+-
+-	/* To turn off the LED, set mode to OFF. */
+-	led_reg &= ~IXGBE_LED_MODE_MASK(index);
+-	led_reg |= IXGBE_LED_OFF << IXGBE_LED_MODE_SHIFT(index);
+-	IXGBE_WRITE_REG(hw, IXGBE_LEDCTL, led_reg);
+-	IXGBE_WRITE_FLUSH(hw);
++    s32 rc;
++    u16 regVal;
++
++    /* following led behavior was modified by hilbert,
++     * to force led on through C22 MDI command.
++     */
++    if (hw->mac.type == ixgbe_mac_x550em_a) {
++        /* For M88E1512, to select page 3 in register 22 */
++        regVal = 0x03;
++        rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "page register write failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, read from page 3, register 16 */
++        regVal = 0x00;
++        rc = hw->phy.ops.read_reg(hw, 0x10, MDIO_MMD_PMAPMD, &regVal);
++        if (rc) {
++           hw_err(hw, "led function control register read failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, write to page 3 register 16 with force led on */
++        regVal = (regVal & 0xFF00) | 0x0088;
++        rc = hw->phy.ops.write_reg(hw, 0x10, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "led function control register write failed, rc:%x\n", rc);
++        }
++
++        /* For M88E1512, write page 22 back to default 0 */
++        regVal = 0x00;
++        rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++        if (rc) {
++           hw_err(hw, "page register write failed, rc:%x\n", rc);
++        }
++    } else {
++        if (index > 3)
++            return IXGBE_ERR_PARAM;
++
++        /* To turn off the LED, set mode to OFF. */
++        led_reg &= ~IXGBE_LED_MODE_MASK(index);
++        led_reg |= IXGBE_LED_OFF << IXGBE_LED_MODE_SHIFT(index);
++        IXGBE_WRITE_REG(hw, IXGBE_LEDCTL, led_reg);
++        IXGBE_WRITE_FLUSH(hw);
++    }
+ 
+ 	return 0;
+ }
+diff --git a/drivers/net/ethernet/intel/ixgbe/ixgbe_ethtool.c b/drivers/net/ethernet/intel/ixgbe/ixgbe_ethtool.c
+index 22463bfc..6b23b740 100644
+--- a/drivers/net/ethernet/intel/ixgbe/ixgbe_ethtool.c
++++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_ethtool.c
+@@ -496,6 +496,59 @@ static void ixgbe_set_msglevel(struct net_device *netdev, u32 data)
+ {
+ 	struct ixgbe_adapter *adapter = netdev_priv(netdev);
+ 	adapter->msg_enable = data;
++
++	/* 2018/11/14 pega-julia modified start */
++	/* Purpose : Add for light OOB LED static. */
++
++	struct ixgbe_hw *hw = &adapter->hw;
++	u16 regVal;
++	s32 rc;
++
++	/* For M88E1512, write 3 in (page 0,register 22)[Page Address Register] to goto page 3 */
++	regVal = 0x03;
++	rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++	if (rc)
++		hw_err(hw, "page register write failed, rc:%x\n", rc);
++
++	/* For M88E1512, read from (page 3, register 16)[LED Function Control Register] */
++	regVal = 0x00;
++	rc = hw->phy.ops.read_reg(hw, 0x10, MDIO_MMD_PMAPMD, &regVal);
++	/*hw_err(hw, "[Pega Debug] : current register value = 0x%x\n", regVal);*/
++	if (rc)
++		hw_err(hw, "led function control register read failed, rc:%x\n", rc);
++
++	if (data == 0)		/* Turn off OOB LED. */
++	{
++		/* For M88E1512, write to (page 3, register 16) with force led off */
++        regVal = (regVal & 0xFF00) | 0x0088;
++        rc = hw->phy.ops.write_reg(hw, 0x10, MDIO_MMD_PMAPMD, regVal);
++        if (rc)
++			hw_err(hw, "led function control register write failed, rc:%x\n", rc);
++	}
++	else if (data == 1)		/* Turn on OOB LED. */
++	{
++		/* For M88E1512, write to (page 3, register 16) with force led on */
++        regVal = (regVal & 0xFF00) | 0x0099;
++        rc = hw->phy.ops.write_reg(hw, 0x10, MDIO_MMD_PMAPMD, regVal);
++        if (rc)
++			hw_err(hw, "led function control register write failed, rc:%x\n", rc);
++	}
++	else    /* Switch OOB LED back to normal. */
++	{
++		/* For M88E1512, set led back to nornmal in (page 3, register 16). */
++		regVal = (regVal & 0xFF00) | 0x0017;
++		rc = hw->phy.ops.write_reg(hw, 0x10, MDIO_MMD_PMAPMD, regVal);
++        if (rc)
++			hw_err(hw, "led function control register write failed, rc:%x\n", rc);
++	}
++
++	/* For M88E1512, write 0 in (page 0, register 22) to back to page 0 */
++	regVal = 0x00;
++	rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++	if (rc)
++		hw_err(hw, "page register write failed, rc:%x\n", rc);
++
++	/* 2018/11/14 pega-julia modified end */
+ }
+ 
+ static int ixgbe_get_regs_len(struct net_device *netdev)
+@@ -2224,6 +2277,11 @@ static int ixgbe_set_phys_id(struct net_device *netdev,
+ 	struct ixgbe_adapter *adapter = netdev_priv(netdev);
+ 	struct ixgbe_hw *hw = &adapter->hw;
+ 
++    /* Modified by hilbert for C22 MDI directly access */
++    s32 rc;
++    u16 regVal;
++    /* Modified by hilbert done */
++
+ 	if (!hw->mac.ops.led_on || !hw->mac.ops.led_off)
+ 		return -EOPNOTSUPP;
+ 
+@@ -2242,7 +2300,38 @@ static int ixgbe_set_phys_id(struct net_device *netdev,
+ 
+ 	case ETHTOOL_ID_INACTIVE:
+ 		/* Restore LED settings */
+-		IXGBE_WRITE_REG(&adapter->hw, IXGBE_LEDCTL, adapter->led_reg);
++        /* Modified by hilbert for C22 MDI directly access */
++        if (hw->mac.type == ixgbe_mac_x550em_a) {
++            /* For M88E1512, to select page 3 in register 22 */
++            regVal = 0x03;
++            rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++            if (rc) {
++               hw_err(hw, "page register write failed, rc:%x\n", rc);
++            }
++
++            /* For M88E1512, read from page 3, register 16 */
++            regVal = 0x00;
++            rc = hw->phy.ops.read_reg(hw, 0x10, MDIO_MMD_PMAPMD, &regVal);
++            if (rc) {
++               hw_err(hw, "led function control register read failed, rc:%x\n", rc);
++            }
++
++            /* For M88E1512, write to page 3 register 16 with force led on */
++            regVal = (regVal & 0xFF00) | 0x0017;
++            rc = hw->phy.ops.write_reg(hw, 0x10, MDIO_MMD_PMAPMD, regVal);
++            if (rc) {
++               hw_err(hw, "led function control register write failed, rc:%x\n", rc);
++            }
++
++            /* For M88E1512, write page 22 back to default 0 */
++            regVal = 0x00;
++            rc = hw->phy.ops.write_reg(hw, 0x16, MDIO_MMD_PMAPMD, regVal);
++            if (rc) {
++               hw_err(hw, "page register write failed, rc:%x\n", rc);
++            }
++        } else {
++            IXGBE_WRITE_REG(&adapter->hw, IXGBE_LEDCTL, adapter->led_reg);
++        }
+ 		break;
+ 	}
+ 
+diff --git a/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c b/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c
+index 654a402f..d914b407 100644
+--- a/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c
++++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.c
+@@ -254,11 +254,13 @@ static bool ixgbe_probe_phy(struct ixgbe_hw *hw, u16 phy_addr)
+ 	u16 ext_ability = 0;
+ 
+ 	hw->phy.mdio.prtad = phy_addr;
+-	if (mdio45_probe(&hw->phy.mdio, phy_addr) != 0)
++	if (mdio45_probe(&hw->phy.mdio, phy_addr) != 0) {
+ 		return false;
++    }
+ 
+-	if (ixgbe_get_phy_id(hw))
++	if (ixgbe_get_phy_id(hw)) {
+ 		return false;
++    }
+ 
+ 	hw->phy.type = ixgbe_get_phy_type_from_id(hw->phy.id);
+ 
+@@ -485,6 +487,98 @@ s32 ixgbe_reset_phy_generic(struct ixgbe_hw *hw)
+ }
+ 
+ /**
++ *  ixgbe_read_phy_mdio - Reads a value from a specified PHY register without
++ *  the SWFW lock. This Clasue 22 API is patched by Hilbert
++ *  @hw: pointer to hardware structure
++ *  @reg_addr: 32 bit address of PHY register to read
++ *  @phy_data: Pointer to read data from PHY register
++ **/
++s32 ixgbe_read_phy_reg_mdio(struct ixgbe_hw *hw, u32 reg_addr, u32 device_type,
++		       u16 *phy_data)
++{
++	u32 i, data, command;
++
++	/* Setup and write the read command */
++	command = (reg_addr << IXGBE_MSCA_DEV_TYPE_SHIFT) |
++		   (hw->phy.mdio.prtad << IXGBE_MSCA_PHY_ADDR_SHIFT) |
++           IXGBE_MSCA_OLD_PROTOCOL | IXGBE_MSCA_READ_AUTOINC |
++		   IXGBE_MSCA_MDI_COMMAND;
++
++	IXGBE_WRITE_REG(hw, IXGBE_MSCA, command);
++
++	/* Check every 10 usec to see if the address cycle completed.
++	 * The MDI Command bit will clear when the operation is
++	 * complete
++	 */
++	for (i = 0; i < IXGBE_MDIO_COMMAND_TIMEOUT; i++) {
++		udelay(10);
++
++		command = IXGBE_READ_REG(hw, IXGBE_MSCA);
++		if ((command & IXGBE_MSCA_MDI_COMMAND) == 0)
++				break;
++	}
++
++
++	if ((command & IXGBE_MSCA_MDI_COMMAND) != 0) {
++		hw_dbg(hw, "PHY address command did not complete.\n");
++		return IXGBE_ERR_PHY;
++	}
++
++	/* Read operation is complete.  Get the data
++	 * from MSRWD
++	 */
++	data = IXGBE_READ_REG(hw, IXGBE_MSRWD);
++	data >>= IXGBE_MSRWD_READ_DATA_SHIFT;
++	*phy_data = (u16)(data);
++
++	return 0;
++}
++
++/**
++ *  ixgbe_write_phy_reg_mdio - Writes a value to specified PHY register
++ *  without SWFW lock. This Clause 22 API is patched by Hilbert
++ *  @hw: pointer to hardware structure
++ *  @reg_addr: 32 bit PHY register to write
++ *  @device_type: 5 bit device type
++ *  @phy_data: Data to write to the PHY register
++ **/
++s32 ixgbe_write_phy_reg_mdio(struct ixgbe_hw *hw, u32 reg_addr,
++				u32 device_type, u16 phy_data)
++{
++	u32 i, command;
++
++	/* Put the data in the MDI single read and write data register*/
++	IXGBE_WRITE_REG(hw, IXGBE_MSRWD, (u32)phy_data);
++
++	/* Setup and write the write command */
++	command = (reg_addr << IXGBE_MSCA_DEV_TYPE_SHIFT) |
++		   (hw->phy.mdio.prtad << IXGBE_MSCA_PHY_ADDR_SHIFT) |
++           IXGBE_MSCA_OLD_PROTOCOL | IXGBE_MSCA_WRITE |
++		   IXGBE_MSCA_MDI_COMMAND;
++
++	IXGBE_WRITE_REG(hw, IXGBE_MSCA, command);
++
++	/*
++	 * Check every 10 usec to see if the address cycle completed.
++	 * The MDI Command bit will clear when the operation is
++	 * complete
++	 */
++	for (i = 0; i < IXGBE_MDIO_COMMAND_TIMEOUT; i++) {
++		udelay(10);
++
++		command = IXGBE_READ_REG(hw, IXGBE_MSCA);
++		if ((command & IXGBE_MSCA_MDI_COMMAND) == 0)
++			break;
++	}
++
++	if ((command & IXGBE_MSCA_MDI_COMMAND) != 0) {
++		hw_dbg(hw, "PHY write cmd didn't complete\n");
++		return IXGBE_ERR_PHY;
++	}
++
++	return 0;
++}
++/**
+  *  ixgbe_read_phy_mdi - Reads a value from a specified PHY register without
+  *  the SWFW lock
+  *  @hw: pointer to hardware structure
+diff --git a/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h b/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h
+index b0cac961..e9f94ee4 100644
+--- a/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h
++++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_phy.h
+@@ -155,6 +155,12 @@ s32 ixgbe_read_phy_reg_mdi(struct ixgbe_hw *hw, u32 reg_addr,
+ 			   u32 device_type, u16 *phy_data);
+ s32 ixgbe_write_phy_reg_mdi(struct ixgbe_hw *hw, u32 reg_addr,
+ 			    u32 device_type, u16 phy_data);
++#if 1 //by hilbert
++s32 ixgbe_read_phy_reg_mdio(struct ixgbe_hw *hw, u32 reg_addr,
++			   u32 device_type, u16 *phy_data);
++s32 ixgbe_write_phy_reg_mdio(struct ixgbe_hw *hw, u32 reg_addr,
++			    u32 device_type, u16 phy_data);
++#endif
+ s32 ixgbe_setup_phy_link_generic(struct ixgbe_hw *hw);
+ s32 ixgbe_setup_phy_link_speed_generic(struct ixgbe_hw *hw,
+ 				       ixgbe_link_speed speed,
+diff --git a/drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c b/drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c
+index cf6a245d..5815932f 100644
+--- a/drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c
++++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c
+@@ -540,6 +540,8 @@ static s32 ixgbe_get_phy_id_fw(struct ixgbe_hw *hw)
+ 	return 0;
+ }
+ 
++static s32 ixgbe_read_phy_reg_x550a(struct ixgbe_hw *hw, u32 reg_addr,
++				    u32 device_type, u16 *phy_data);
+ /**
+  * ixgbe_identify_phy_fw - Get PHY type based on firmware command
+  * @hw: pointer to hardware structure
+@@ -548,14 +550,26 @@ static s32 ixgbe_get_phy_id_fw(struct ixgbe_hw *hw)
+  */
+ static s32 ixgbe_identify_phy_fw(struct ixgbe_hw *hw)
+ {
++    s32 rc;
++    u16 value=0;
++
+ 	if (hw->bus.lan_id)
+ 		hw->phy.phy_semaphore_mask = IXGBE_GSSR_PHY1_SM;
+ 	else
+ 		hw->phy.phy_semaphore_mask = IXGBE_GSSR_PHY0_SM;
+ 
++#if 0 /* Try also to get PHY ID through MDIO by using C22 in read_reg op.
++       * By hilbert
++       */
++    rc = hw->phy.ops.read_reg(hw, MDIO_DEVID1, MDIO_MMD_PMAPMD, &value);
++    hw_err(hw, "####rc:%x, PHY ID-1:%x\n", rc, value);
++#endif
++
+ 	hw->phy.type = ixgbe_phy_fw;
++#if 0 /* We still need read/write ops later, don't NULL it. By hilbert */
+ 	hw->phy.ops.read_reg = NULL;
+ 	hw->phy.ops.write_reg = NULL;
++#endif
+ 	return ixgbe_get_phy_id_fw(hw);
+ }
+ 
+@@ -3168,6 +3182,18 @@ static void ixgbe_read_mng_if_sel_x550em(struct ixgbe_hw *hw)
+ 		hw->phy.mdio.prtad = (hw->phy.nw_mng_if_sel &
+ 				      IXGBE_NW_MNG_IF_SEL_MDIO_PHY_ADD) >>
+ 				     IXGBE_NW_MNG_IF_SEL_MDIO_PHY_ADD_SHIFT;
++#if 1 /* Since by Intel FW(LEK8),LAN controller 1 default set port 0 use phy address 0
++       * and port 1 use phy address 1, we swap it for Porsche2 platform.
++       * By hilbert.
++       */
++	    if (hw->mac.ops.get_media_type(hw) == ixgbe_media_type_copper) {
++            hw_err(hw, "####swap phy address used for different lan id in LAN conroller-1\n");
++            hw->phy.mdio.prtad = (hw->bus.lan_id == 0) ? (1) : (0);
++            hw_err(hw, "####lan id: %d, phy address:%d\n",
++                   hw->bus.lan_id,
++                   hw->phy.mdio.prtad);
++        }
++#endif
+ 	}
+ }
+ 
+@@ -3775,7 +3801,13 @@ static s32 ixgbe_write_phy_reg_x550a(struct ixgbe_hw *hw, u32 reg_addr,
+ 	if (hw->mac.ops.acquire_swfw_sync(hw, mask))
+ 		return IXGBE_ERR_SWFW_SYNC;
+ 
++#if 0 /* To use C22 MDI access function created by our own.
++       * By hilbert
++       */
+ 	status = ixgbe_write_phy_reg_mdi(hw, reg_addr, device_type, phy_data);
++#else
++	status = hw->phy.ops.write_reg_mdi(hw, reg_addr, device_type, phy_data);
++#endif
+ 	hw->mac.ops.release_swfw_sync(hw, mask);
+ 
+ 	return status;
+@@ -4007,10 +4039,17 @@ static const struct ixgbe_phy_operations phy_ops_x550em_a_fw = {
+ 	.check_overtemp		= ixgbe_check_overtemp_fw,
+ 	.init			= ixgbe_init_phy_ops_X550em,
+ 	.identify		= ixgbe_identify_phy_fw,
++#if 0 /* Declare C22 MDI directly access functions. By hilbert */
+ 	.read_reg		= NULL,
+ 	.write_reg		= NULL,
+ 	.read_reg_mdi		= NULL,
+ 	.write_reg_mdi		= NULL,
++#else
++	.read_reg		    = &ixgbe_read_phy_reg_x550a,
++	.write_reg		    = &ixgbe_write_phy_reg_x550a,
++	.read_reg_mdi		= &ixgbe_read_phy_reg_mdio,
++	.write_reg_mdi		= &ixgbe_write_phy_reg_mdio,
++#endif
+ };
+ 
+ static const struct ixgbe_link_operations link_ops_x550em_x = {
+-- 
+2.11.0
+

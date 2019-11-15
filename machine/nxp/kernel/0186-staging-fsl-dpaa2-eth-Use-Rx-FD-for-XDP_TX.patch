@@ -1,0 +1,57 @@
+From 6834ebfa6c468990ac1bfa145bead6ddda564b9b Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Mon, 30 Oct 2017 18:00:06 +0200
+Subject: [PATCH 186/448] staging: fsl-dpaa2/eth: Use Rx FD for XDP_TX
+
+Discard the const qualifier of the ingress FD structure and
+reuse it on XDP_TX, instead of building a new FD.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   12 ++++--------
+ 1 files changed, 4 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index b70f2f1..9f51aea 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -222,24 +222,20 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ }
+ 
+ static int dpaa2_eth_xdp_tx(struct dpaa2_eth_priv *priv,
+-			    const struct dpaa2_fd *fd,
++			    struct dpaa2_fd *fd,
+ 			    void *buf_start,
+ 			    u16 queue_id)
+ {
+ 	struct dpaa2_eth_fq *fq;
+ 	struct rtnl_link_stats64 *percpu_stats;
+ 	struct dpaa2_eth_drv_stats *percpu_extras;
+-	struct dpaa2_fd tx_fd;
+ 	struct dpaa2_faead *faead;
+ 	u32 ctrl, frc;
+ 	int i, err;
+ 
+-	/* Clone the FD, as we need to make changes to it */
+-	memcpy(&tx_fd, fd, sizeof(tx_fd));
+-
+ 	/* Mark the egress frame annotation area as valid */
+-	frc = dpaa2_fd_get_frc(&tx_fd);
+-	dpaa2_fd_set_frc(&tx_fd, frc | DPAA2_FD_FRC_FAEADV);
++	frc = dpaa2_fd_get_frc(fd);
++	dpaa2_fd_set_frc(fd, frc | DPAA2_FD_FRC_FAEADV);
+ 
+ 	ctrl = DPAA2_FAEAD_A4V | DPAA2_FAEAD_A2V | DPAA2_FAEAD_EBDDV;
+ 	faead = dpaa2_get_faead(buf_start);
+@@ -252,7 +248,7 @@ static int dpaa2_eth_xdp_tx(struct dpaa2_eth_priv *priv,
+ 	fq = &priv->fq[queue_id];
+ 	for (i = 0; i < DPAA2_ETH_ENQUEUE_RETRIES; i++) {
+ 		err = dpaa2_io_service_enqueue_qd(NULL, priv->tx_qdid, 0,
+-						  fq->tx_qdbin, &tx_fd);
++						  fq->tx_qdbin, fd);
+ 		if (err != -EBUSY)
+ 			break;
+ 	}
+-- 
+1.7.1
+

@@ -1,0 +1,1315 @@
+From 9035f2389815d382cf09d732c64a172283a10ffa Mon Sep 17 00:00:00 2001
+From: Calvin Johnson <calvin.johnson@nxp.com>
+Date: Thu, 8 Mar 2018 15:30:27 +0530
+Subject: [PATCH 010/107] drivers: net: pfe_eth: LS1012A PFE headers
+
+Contains all the pfe header files.
+
+Signed-off-by: Calvin Johnson <calvin.johnson@nxp.com>
+Signed-off-by: Anjaneyulu Jagarlmudi <anji.jagarlmudi@nxp.com>
+Acked-by: Joe Hershberger <joe.hershberger@ni.com>
+---
+ include/dm/platform_data/pfe_dm_eth.h    |   21 ++++
+ include/net/pfe_eth/pfe/cbus.h           |   77 +++++++++++++
+ include/net/pfe_eth/pfe/cbus/bmu.h       |   40 +++++++
+ include/net/pfe_eth/pfe/cbus/class_csr.h |  180 ++++++++++++++++++++++++++++++
+ include/net/pfe_eth/pfe/cbus/emac.h      |  140 +++++++++++++++++++++++
+ include/net/pfe_eth/pfe/cbus/gpi.h       |   62 ++++++++++
+ include/net/pfe_eth/pfe/cbus/hif.h       |   68 +++++++++++
+ include/net/pfe_eth/pfe/cbus/hif_nocpy.h |   40 +++++++
+ include/net/pfe_eth/pfe/cbus/tmu_csr.h   |  148 ++++++++++++++++++++++++
+ include/net/pfe_eth/pfe/cbus/util_csr.h  |   47 ++++++++
+ include/net/pfe_eth/pfe/pfe_hw.h         |  163 +++++++++++++++++++++++++++
+ include/net/pfe_eth/pfe_driver.h         |   59 ++++++++++
+ include/net/pfe_eth/pfe_eth.h            |  104 +++++++++++++++++
+ include/net/pfe_eth/pfe_firmware.h       |   17 +++
+ include/net/pfe_eth/pfe_mdio.h           |   13 ++
+ 15 files changed, 1179 insertions(+), 0 deletions(-)
+ create mode 100644 include/dm/platform_data/pfe_dm_eth.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus/bmu.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus/class_csr.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus/emac.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus/gpi.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus/hif.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus/hif_nocpy.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus/tmu_csr.h
+ create mode 100644 include/net/pfe_eth/pfe/cbus/util_csr.h
+ create mode 100644 include/net/pfe_eth/pfe/pfe_hw.h
+ create mode 100644 include/net/pfe_eth/pfe_driver.h
+ create mode 100644 include/net/pfe_eth/pfe_eth.h
+ create mode 100644 include/net/pfe_eth/pfe_firmware.h
+ create mode 100644 include/net/pfe_eth/pfe_mdio.h
+
+diff --git a/include/dm/platform_data/pfe_dm_eth.h b/include/dm/platform_data/pfe_dm_eth.h
+new file mode 100644
+index 0000000..7943c67
+--- /dev/null
++++ b/include/dm/platform_data/pfe_dm_eth.h
+@@ -0,0 +1,21 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __PFE_DM_ETH_H__
++#define __PFE_DM_ETH_H__
++#include <net.h>
++
++struct pfe_ddr_address {
++	void *ddr_pfe_baseaddr;
++	unsigned long ddr_pfe_phys_baseaddr;
++};
++
++struct pfe_eth_pdata {
++	struct eth_pdata pfe_eth_pdata_mac;
++	struct pfe_ddr_address pfe_ddr_addr;
++};
++#endif /* __PFE_DM_ETH_H__ */
+diff --git a/include/net/pfe_eth/pfe/cbus.h b/include/net/pfe_eth/pfe/cbus.h
+new file mode 100644
+index 0000000..002041c
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus.h
+@@ -0,0 +1,77 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _CBUS_H_
++#define _CBUS_H_
++
++#include "cbus/emac.h"
++#include "cbus/gpi.h"
++#include "cbus/bmu.h"
++#include "cbus/hif.h"
++#include "cbus/tmu_csr.h"
++#include "cbus/class_csr.h"
++#include "cbus/hif_nocpy.h"
++#include "cbus/util_csr.h"
++
++#define CBUS_BASE_ADDR		((void *)CONFIG_SYS_FSL_PFE_ADDR)
++
++/* PFE Control and Status Register Desciption */
++#define EMAC1_BASE_ADDR		(CBUS_BASE_ADDR + 0x200000)
++#define EGPI1_BASE_ADDR		(CBUS_BASE_ADDR + 0x210000)
++#define EMAC2_BASE_ADDR		(CBUS_BASE_ADDR + 0x220000)
++#define EGPI2_BASE_ADDR		(CBUS_BASE_ADDR + 0x230000)
++#define BMU1_BASE_ADDR		(CBUS_BASE_ADDR + 0x240000)
++#define BMU2_BASE_ADDR		(CBUS_BASE_ADDR + 0x250000)
++#define ARB_BASE_ADDR		(CBUS_BASE_ADDR + 0x260000)
++#define DDR_CONFIG_BASE_ADDR	(CBUS_BASE_ADDR + 0x270000)
++#define HIF_BASE_ADDR		(CBUS_BASE_ADDR + 0x280000)
++#define HGPI_BASE_ADDR		(CBUS_BASE_ADDR + 0x290000)
++#define LMEM_BASE_ADDR		(CBUS_BASE_ADDR + 0x300000)
++#define LMEM_SIZE		0x10000
++#define LMEM_END		(LMEM_BASE_ADDR + LMEM_SIZE)
++#define TMU_CSR_BASE_ADDR	(CBUS_BASE_ADDR + 0x310000)
++#define CLASS_CSR_BASE_ADDR	(CBUS_BASE_ADDR + 0x320000)
++#define HIF_NOCPY_BASE_ADDR	(CBUS_BASE_ADDR + 0x350000)
++#define UTIL_CSR_BASE_ADDR	(CBUS_BASE_ADDR + 0x360000)
++#define CBUS_GPT_BASE_ADDR	(CBUS_BASE_ADDR + 0x370000)
++
++/*
++ * defgroup XXX_MEM_ACCESS_ADDR PE memory access through CSR
++ * XXX_MEM_ACCESS_ADDR register bit definitions.
++ */
++/* Internal Memory Write. */
++#define PE_MEM_ACCESS_WRITE		BIT(31)
++/* Internal Memory Read. */
++#define PE_MEM_ACCESS_READ		(0 << 31)
++
++#define PE_MEM_ACCESS_IMEM		BIT(15)
++#define PE_MEM_ACCESS_DMEM		BIT(16)
++
++/* Byte Enables of the Internal memory access. These are interpred in BE */
++#define PE_MEM_ACCESS_BYTE_ENABLE(offset, size)	(((((1 << (size)) - 1) << (4 \
++							- (offset) - (size)))\
++							& 0xf) << 24)
++
++/* PFE cores states */
++#define CORE_DISABLE	0x00000000
++#define CORE_ENABLE	0x00000001
++#define CORE_SW_RESET	0x00000002
++
++/* LMEM defines */
++#define LMEM_HDR_SIZE		0x0010
++#define LMEM_BUF_SIZE_LN2	0x7
++#define LMEM_BUF_SIZE		BIT(LMEM_BUF_SIZE_LN2)
++
++/* DDR defines */
++#define DDR_HDR_SIZE		0x0100
++#define DDR_BUF_SIZE_LN2	0xb
++#define DDR_BUF_SIZE		BIT(DDR_BUF_SIZE_LN2)
++
++/* Clock generation through PLL */
++#define PLL_CLK_EN	1
++
++#endif /* _CBUS_H_ */
+diff --git a/include/net/pfe_eth/pfe/cbus/bmu.h b/include/net/pfe_eth/pfe/cbus/bmu.h
+new file mode 100644
+index 0000000..f707cc3
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus/bmu.h
+@@ -0,0 +1,40 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _BMU_H_
++#define _BMU_H_
++
++#define BMU_VERSION		0x000
++#define BMU_CTRL		0x004
++#define BMU_UCAST_CONFIG	0x008
++#define BMU_UCAST_BASE_ADDR	0x00c
++#define BMU_BUF_SIZE		0x010
++#define BMU_BUF_CNT		0x014
++#define BMU_THRES		0x018
++#define BMU_INT_SRC		0x020
++#define BMU_INT_ENABLE		0x024
++#define BMU_ALLOC_CTRL		0x030
++#define BMU_FREE_CTRL		0x034
++#define BMU_FREE_ERR_ADDR	0x038
++#define BMU_CURR_BUF_CNT	0x03c
++#define BMU_MCAST_CNT		0x040
++#define BMU_MCAST_ALLOC_CTRL	0x044
++#define BMU_REM_BUF_CNT		0x048
++#define BMU_LOW_WATERMARK	0x050
++#define BMU_HIGH_WATERMARK	0x054
++#define BMU_INT_MEM_ACCESS	0x100
++
++struct bmu_cfg {
++	u32 baseaddr;
++	u32 count;
++	u32 size;
++};
++
++#define BMU1_BUF_SIZE	LMEM_BUF_SIZE_LN2
++#define BMU2_BUF_SIZE	DDR_BUF_SIZE_LN2
++
++#endif /* _BMU_H_ */
+diff --git a/include/net/pfe_eth/pfe/cbus/class_csr.h b/include/net/pfe_eth/pfe/cbus/class_csr.h
+new file mode 100644
+index 0000000..eeca751
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus/class_csr.h
+@@ -0,0 +1,180 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _CLASS_CSR_H_
++#define _CLASS_CSR_H_
++
++/*
++ * @file class_csr.h.
++ * class_csr - block containing all the classifier control and status register.
++ * Mapped on CBUS and accessible from all PE's and ARM.
++ */
++#define CLASS_VERSION			(CLASS_CSR_BASE_ADDR + 0x000)
++#define CLASS_TX_CTRL			(CLASS_CSR_BASE_ADDR + 0x004)
++#define CLASS_INQ_PKTPTR		(CLASS_CSR_BASE_ADDR + 0x010)
++/* (ddr_hdr_size[24:16], lmem_hdr_size[5:0]) */
++#define CLASS_HDR_SIZE			(CLASS_CSR_BASE_ADDR + 0x014)
++/* LMEM header size for the Classifier block.
++ * Data in the LMEM is written from this offset.
++ */
++#define CLASS_HDR_SIZE_LMEM(off)	((off) & 0x3f)
++/* DDR header size for the Classifier block.
++ * Data in the DDR is written from this offset.
++ */
++#define CLASS_HDR_SIZE_DDR(off)		(((off) & 0x1ff) << 16)
++
++/* DMEM address of first [15:0] and second [31:16] buffers on QB side. */
++#define CLASS_PE0_QB_DM_ADDR0		(CLASS_CSR_BASE_ADDR + 0x020)
++/* DMEM address of third [15:0] and fourth [31:16] buffers on QB side. */
++#define CLASS_PE0_QB_DM_ADDR1		(CLASS_CSR_BASE_ADDR + 0x024)
++
++/* DMEM address of first [15:0] and second [31:16] buffers on RO side. */
++#define CLASS_PE0_RO_DM_ADDR0		(CLASS_CSR_BASE_ADDR + 0x060)
++/* DMEM address of third [15:0] and fourth [31:16] buffers on RO side. */
++#define CLASS_PE0_RO_DM_ADDR1		(CLASS_CSR_BASE_ADDR + 0x064)
++
++/*
++ * @name Class PE memory access. Allows external PE's and HOST to
++ * read/write PMEM/DMEM memory ranges for each classifier PE.
++ */
++#define CLASS_MEM_ACCESS_ADDR		(CLASS_CSR_BASE_ADDR + 0x100)
++/* Internal Memory Access Write Data [31:0] */
++#define CLASS_MEM_ACCESS_WDATA		(CLASS_CSR_BASE_ADDR + 0x104)
++/* Internal Memory Access Read Data [31:0] */
++#define CLASS_MEM_ACCESS_RDATA		(CLASS_CSR_BASE_ADDR + 0x108)
++#define CLASS_TM_INQ_ADDR		(CLASS_CSR_BASE_ADDR + 0x114)
++#define CLASS_PE_STATUS			(CLASS_CSR_BASE_ADDR + 0x118)
++
++#define CLASS_PE_SYS_CLK_RATIO		(CLASS_CSR_BASE_ADDR + 0x200)
++#define CLASS_AFULL_THRES		(CLASS_CSR_BASE_ADDR + 0x204)
++#define CLASS_GAP_BETWEEN_READS		(CLASS_CSR_BASE_ADDR + 0x208)
++#define CLASS_MAX_BUF_CNT		(CLASS_CSR_BASE_ADDR + 0x20c)
++#define CLASS_TSQ_FIFO_THRES		(CLASS_CSR_BASE_ADDR + 0x210)
++#define CLASS_TSQ_MAX_CNT		(CLASS_CSR_BASE_ADDR + 0x214)
++#define CLASS_IRAM_DATA_0		(CLASS_CSR_BASE_ADDR + 0x218)
++#define CLASS_IRAM_DATA_1		(CLASS_CSR_BASE_ADDR + 0x21c)
++#define CLASS_IRAM_DATA_2		(CLASS_CSR_BASE_ADDR + 0x220)
++#define CLASS_IRAM_DATA_3		(CLASS_CSR_BASE_ADDR + 0x224)
++
++#define CLASS_BUS_ACCESS_ADDR		(CLASS_CSR_BASE_ADDR + 0x228)
++/* bit 23:0 of PE peripheral address are stored in CLASS_BUS_ACCESS_ADDR */
++#define CLASS_BUS_ACCESS_ADDR_MASK	(0x0001FFFF)
++
++#define CLASS_BUS_ACCESS_WDATA		(CLASS_CSR_BASE_ADDR + 0x22c)
++#define CLASS_BUS_ACCESS_RDATA		(CLASS_CSR_BASE_ADDR + 0x230)
++
++/*
++ * (route_entry_size[9:0], route_hash_size[23:16]
++ * (this is actually ln2(size)))
++ */
++#define CLASS_ROUTE_HASH_ENTRY_SIZE	(CLASS_CSR_BASE_ADDR + 0x234)
++#define CLASS_ROUTE_ENTRY_SIZE(size)	 ((size) & 0x1ff)
++#define CLASS_ROUTE_HASH_SIZE(hash_bits) (((hash_bits) & 0xff) << 16)
++
++#define CLASS_ROUTE_TABLE_BASE		(CLASS_CSR_BASE_ADDR + 0x238)
++#define CLASS_ROUTE_MULTI		(CLASS_CSR_BASE_ADDR + 0x23c)
++#define CLASS_SMEM_OFFSET		(CLASS_CSR_BASE_ADDR + 0x240)
++#define CLASS_LMEM_BUF_SIZE		(CLASS_CSR_BASE_ADDR + 0x244)
++#define CLASS_VLAN_ID			(CLASS_CSR_BASE_ADDR + 0x248)
++#define CLASS_BMU1_BUF_FREE		(CLASS_CSR_BASE_ADDR + 0x24c)
++#define CLASS_USE_TMU_INQ		(CLASS_CSR_BASE_ADDR + 0x250)
++#define CLASS_VLAN_ID1			(CLASS_CSR_BASE_ADDR + 0x254)
++
++#define CLASS_BUS_ACCESS_BASE		(CLASS_CSR_BASE_ADDR + 0x258)
++/* bit 31:24 of PE peripheral address are stored in CLASS_BUS_ACCESS_BASE */
++#define CLASS_BUS_ACCESS_BASE_MASK	(0xFF000000)
++
++#define CLASS_HIF_PARSE			(CLASS_CSR_BASE_ADDR + 0x25c)
++
++#define CLASS_HOST_PE0_GP		(CLASS_CSR_BASE_ADDR + 0x260)
++#define CLASS_PE0_GP			(CLASS_CSR_BASE_ADDR + 0x264)
++#define CLASS_HOST_PE1_GP		(CLASS_CSR_BASE_ADDR + 0x268)
++#define CLASS_PE1_GP			(CLASS_CSR_BASE_ADDR + 0x26c)
++#define CLASS_HOST_PE2_GP		(CLASS_CSR_BASE_ADDR + 0x270)
++#define CLASS_PE2_GP			(CLASS_CSR_BASE_ADDR + 0x274)
++#define CLASS_HOST_PE3_GP		(CLASS_CSR_BASE_ADDR + 0x278)
++#define CLASS_PE3_GP			(CLASS_CSR_BASE_ADDR + 0x27c)
++#define CLASS_HOST_PE4_GP		(CLASS_CSR_BASE_ADDR + 0x280)
++#define CLASS_PE4_GP			(CLASS_CSR_BASE_ADDR + 0x284)
++#define CLASS_HOST_PE5_GP		(CLASS_CSR_BASE_ADDR + 0x288)
++#define CLASS_PE5_GP			(CLASS_CSR_BASE_ADDR + 0x28c)
++
++#define CLASS_PE_INT_SRC		(CLASS_CSR_BASE_ADDR + 0x290)
++#define CLASS_PE_INT_ENABLE		(CLASS_CSR_BASE_ADDR + 0x294)
++
++#define CLASS_TPID0_TPID1		(CLASS_CSR_BASE_ADDR + 0x298)
++#define CLASS_TPID2			(CLASS_CSR_BASE_ADDR + 0x29c)
++
++#define CLASS_L4_CHKSUM_ADDR		(CLASS_CSR_BASE_ADDR + 0x2a0)
++
++#define CLASS_PE0_DEBUG			(CLASS_CSR_BASE_ADDR + 0x2a4)
++#define CLASS_PE1_DEBUG			(CLASS_CSR_BASE_ADDR + 0x2a8)
++#define CLASS_PE2_DEBUG			(CLASS_CSR_BASE_ADDR + 0x2ac)
++#define CLASS_PE3_DEBUG			(CLASS_CSR_BASE_ADDR + 0x2b0)
++#define CLASS_PE4_DEBUG			(CLASS_CSR_BASE_ADDR + 0x2b4)
++#define CLASS_PE5_DEBUG			(CLASS_CSR_BASE_ADDR + 0x2b8)
++
++#define CLASS_STATE			(CLASS_CSR_BASE_ADDR + 0x2bc)
++#define CLASS_AXI_CTRL			(CLASS_CSR_BASE_ADDR + 0x2d0)
++
++/* CLASS defines */
++#define CLASS_PBUF_SIZE			0x100	/* Fixed by hardware */
++#define CLASS_PBUF_HEADER_OFFSET	0x80	/* Can be configured */
++
++#define CLASS_PBUF0_BASE_ADDR		0x000	/* Can be configured */
++/* Can be configured */
++#define CLASS_PBUF1_BASE_ADDR	(CLASS_PBUF0_BASE_ADDR + CLASS_PBUF_SIZE)
++/* Can be configured */
++#define CLASS_PBUF2_BASE_ADDR	(CLASS_PBUF1_BASE_ADDR + CLASS_PBUF_SIZE)
++/* Can be configured */
++#define CLASS_PBUF3_BASE_ADDR	(CLASS_PBUF2_BASE_ADDR + CLASS_PBUF_SIZE)
++
++#define CLASS_PBUF0_HEADER_BASE_ADDR	(CLASS_PBUF0_BASE_ADDR +\
++						CLASS_PBUF_HEADER_OFFSET)
++#define CLASS_PBUF1_HEADER_BASE_ADDR	(CLASS_PBUF1_BASE_ADDR +\
++						CLASS_PBUF_HEADER_OFFSET)
++#define CLASS_PBUF2_HEADER_BASE_ADDR	(CLASS_PBUF2_BASE_ADDR +\
++						CLASS_PBUF_HEADER_OFFSET)
++#define CLASS_PBUF3_HEADER_BASE_ADDR	(CLASS_PBUF3_BASE_ADDR +\
++						CLASS_PBUF_HEADER_OFFSET)
++
++#define CLASS_PE0_RO_DM_ADDR0_VAL	((CLASS_PBUF1_BASE_ADDR << 16) |\
++						CLASS_PBUF0_BASE_ADDR)
++#define CLASS_PE0_RO_DM_ADDR1_VAL	((CLASS_PBUF3_BASE_ADDR << 16) |\
++						CLASS_PBUF2_BASE_ADDR)
++
++#define CLASS_PE0_QB_DM_ADDR0_VAL	((CLASS_PBUF1_HEADER_BASE_ADDR << 16)\
++						| CLASS_PBUF0_HEADER_BASE_ADDR)
++#define CLASS_PE0_QB_DM_ADDR1_VAL	((CLASS_PBUF3_HEADER_BASE_ADDR << 16)\
++						| CLASS_PBUF2_HEADER_BASE_ADDR)
++
++#define CLASS_ROUTE_SIZE		128
++#define CLASS_ROUTE_HASH_BITS		20
++#define CLASS_ROUTE_HASH_MASK		(BIT(CLASS_ROUTE_HASH_BITS) - 1)
++
++#define TWO_LEVEL_ROUTE		BIT(0)
++#define PHYNO_IN_HASH		BIT(1)
++#define HW_ROUTE_FETCH		BIT(3)
++#define HW_BRIDGE_FETCH		BIT(5)
++#define IP_ALIGNED		BIT(6)
++#define ARC_HIT_CHECK_EN	BIT(7)
++#define CLASS_TOE		BIT(11)
++#define HASH_CRC_PORT		BIT(12)
++#define HASH_CRC_IP		BIT(13)
++#define HASH_CRC_PORT_IP	GENMASK(13, 12)
++#define QB2BUS_LE		BIT(15)
++
++#define	TCP_CHKSUM_DROP		BIT(0)
++#define	UDP_CHKSUM_DROP		BIT(1)
++#define	IPV4_CHKSUM_DROP	BIT(9)
++
++struct class_cfg {
++	u32 route_table_baseaddr;
++	u32 route_table_hash_bits;
++};
++
++#endif /* _CLASS_CSR_H_ */
+diff --git a/include/net/pfe_eth/pfe/cbus/emac.h b/include/net/pfe_eth/pfe/cbus/emac.h
+new file mode 100644
+index 0000000..f74bd96
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus/emac.h
+@@ -0,0 +1,140 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _EMAC_H_
++#define _EMAC_H_
++
++#define EMAC_IEVENT_REG		0x004
++#define EMAC_IMASK_REG		0x008
++#define EMAC_R_DES_ACTIVE_REG	0x010
++#define EMAC_X_DES_ACTIVE_REG	0x014
++#define EMAC_ECNTRL_REG		0x024
++#define EMAC_MII_DATA_REG	0x040
++#define EMAC_MII_CTRL_REG	0x044
++#define EMAC_MIB_CTRL_STS_REG	0x064
++#define EMAC_RCNTRL_REG		0x084
++#define EMAC_TCNTRL_REG		0x0C4
++#define EMAC_PHY_ADDR_LOW	0x0E4
++#define EMAC_PHY_ADDR_HIGH	0x0E8
++#define EMAC_TFWR_STR_FWD	0x144
++#define EMAC_RX_SECTIOM_FULL	0x190
++#define EMAC_TX_SECTION_EMPTY	0x1A0
++#define EMAC_TRUNC_FL		0x1B0
++
++/* GEMAC definitions and settings */
++#define EMAC_PORT_0			0
++#define EMAC_PORT_1			1
++
++/* GEMAC Bit definitions */
++#define EMAC_IEVENT_HBERR                BIT(31)
++#define EMAC_IEVENT_BABR                 BIT(30)
++#define EMAC_IEVENT_BABT                 BIT(29)
++#define EMAC_IEVENT_GRA                  BIT(28)
++#define EMAC_IEVENT_TXF                  BIT(27)
++#define EMAC_IEVENT_TXB                  BIT(26)
++#define EMAC_IEVENT_RXF                  BIT(25)
++#define EMAC_IEVENT_RXB                  BIT(24)
++#define EMAC_IEVENT_MII                  BIT(23)
++#define EMAC_IEVENT_EBERR                BIT(22)
++#define EMAC_IEVENT_LC                   BIT(21)
++#define EMAC_IEVENT_RL                   BIT(20)
++#define EMAC_IEVENT_UN                   BIT(19)
++
++#define EMAC_IMASK_HBERR                 BIT(31)
++#define EMAC_IMASK_BABR                  BIT(30)
++#define EMAC_IMASKT_BABT                 BIT(29)
++#define EMAC_IMASK_GRA                   BIT(28)
++#define EMAC_IMASKT_TXF                  BIT(27)
++#define EMAC_IMASK_TXB                   BIT(26)
++#define EMAC_IMASKT_RXF                  BIT(25)
++#define EMAC_IMASK_RXB                   BIT(24)
++#define EMAC_IMASK_MII                   BIT(23)
++#define EMAC_IMASK_EBERR                 BIT(22)
++#define EMAC_IMASK_LC                    BIT(21)
++#define EMAC_IMASKT_RL                   BIT(20)
++#define EMAC_IMASK_UN                    BIT(19)
++
++#define EMAC_RCNTRL_MAX_FL_SHIFT         16
++#define EMAC_RCNTRL_LOOP                 BIT(0)
++#define EMAC_RCNTRL_DRT                  BIT(1)
++#define EMAC_RCNTRL_MII_MODE             BIT(2)
++#define EMAC_RCNTRL_PROM                 BIT(3)
++#define EMAC_RCNTRL_BC_REJ               BIT(4)
++#define EMAC_RCNTRL_FCE                  BIT(5)
++#define EMAC_RCNTRL_RGMII                BIT(6)
++#define EMAC_RCNTRL_SGMII                BIT(7)
++#define EMAC_RCNTRL_RMII                 BIT(8)
++#define EMAC_RCNTRL_RMII_10T             BIT(9)
++#define EMAC_RCNTRL_CRC_FWD		 BIT(10)
++
++#define EMAC_TCNTRL_GTS                  BIT(0)
++#define EMAC_TCNTRL_HBC                  BIT(1)
++#define EMAC_TCNTRL_FDEN                 BIT(2)
++#define EMAC_TCNTRL_TFC_PAUSE            BIT(3)
++#define EMAC_TCNTRL_RFC_PAUSE            BIT(4)
++
++#define EMAC_ECNTRL_RESET                BIT(0)      /* reset the EMAC */
++#define EMAC_ECNTRL_ETHER_EN             BIT(1)      /* enable the EMAC */
++#define EMAC_ECNTRL_SPEED                BIT(5)
++#define EMAC_ECNTRL_DBSWAP               BIT(8)
++
++#define EMAC_X_WMRK_STRFWD               BIT(8)
++
++#define EMAC_X_DES_ACTIVE_TDAR           BIT(24)
++#define EMAC_R_DES_ACTIVE_RDAR           BIT(24)
++
++#define EMAC_TFWR			(0x4)
++#define EMAC_RX_SECTION_FULL_32		(0x5)
++#define EMAC_TRUNC_FL_16K		(0x3FFF)
++#define EMAC_TX_SECTION_EMPTY_30	(0x30)
++#define EMAC_MIBC_NO_CLR_NO_DIS		(0x0)
++
++/*
++ * The possible operating speeds of the MAC, currently supporting 10, 100 and
++ * 1000Mb modes.
++ */
++enum mac_speed {PFE_MAC_SPEED_10M, PFE_MAC_SPEED_100M, PFE_MAC_SPEED_1000M,
++		PFE_MAC_SPEED_1000M_PCS};
++
++/* MII-related definitios */
++#define EMAC_MII_DATA_ST         0x40000000      /* Start of frame delimiter */
++#define EMAC_MII_DATA_OP_RD      0x20000000      /* Perform a read operation */
++#define EMAC_MII_DATA_OP_CL45_RD 0x30000000      /* Perform a read operation */
++#define EMAC_MII_DATA_OP_WR      0x10000000      /* Perform a write operation */
++#define EMAC_MII_DATA_OP_CL45_WR 0x10000000      /* Perform a write operation */
++#define EMAC_MII_DATA_PA_MSK     0x0f800000      /* PHY Address field mask */
++#define EMAC_MII_DATA_RA_MSK     0x007c0000      /* PHY Register field mask */
++#define EMAC_MII_DATA_TA         0x00020000      /* Turnaround */
++#define EMAC_MII_DATA_DATAMSK    0x0000ffff      /* PHY data field */
++
++#define EMAC_MII_DATA_RA_SHIFT   18      /* MII Register address bits */
++#define EMAC_MII_DATA_RA_MASK	 0x1F      /* MII Register address mask */
++#define EMAC_MII_DATA_PA_SHIFT   23      /* MII PHY address bits */
++#define EMAC_MII_DATA_PA_MASK    0x1F      /* MII PHY address mask */
++
++#define EMAC_MII_DATA_RA(v) ((v & EMAC_MII_DATA_RA_MASK) <<\
++				EMAC_MII_DATA_RA_SHIFT)
++#define EMAC_MII_DATA_PA(v) ((v & EMAC_MII_DATA_RA_MASK) <<\
++				EMAC_MII_DATA_PA_SHIFT)
++#define EMAC_MII_DATA(v)    (v & 0xffff)
++
++#define EMAC_MII_SPEED_SHIFT	1
++#define EMAC_HOLDTIME_SHIFT	8
++#define EMAC_HOLDTIME_MASK	0x7
++#define EMAC_HOLDTIME(v)    ((v & EMAC_HOLDTIME_MASK) << EMAC_HOLDTIME_SHIFT)
++
++/* Internal PHY Registers - SGMII */
++#define PHY_SGMII_CR_PHY_RESET      0x8000
++#define PHY_SGMII_CR_RESET_AN       0x0200
++#define PHY_SGMII_CR_DEF_VAL        0x1140
++#define PHY_SGMII_DEV_ABILITY_SGMII 0x4001
++#define PHY_SGMII_IF_MODE_AN        0x0002
++#define PHY_SGMII_IF_MODE_SGMII     0x0001
++#define PHY_SGMII_IF_MODE_SGMII_GBT 0x0008
++#define PHY_SGMII_ENABLE_AN         0x1000
++
++#endif /* _EMAC_H_ */
+diff --git a/include/net/pfe_eth/pfe/cbus/gpi.h b/include/net/pfe_eth/pfe/cbus/gpi.h
+new file mode 100644
+index 0000000..f86f3f9
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus/gpi.h
+@@ -0,0 +1,62 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _GPI_H_
++#define _GPI_H_
++
++#define GPI_VERSION			0x00
++#define GPI_CTRL			0x04
++#define GPI_RX_CONFIG			0x08
++#define GPI_HDR_SIZE			0x0c
++#define GPI_BUF_SIZE			0x10
++#define GPI_LMEM_ALLOC_ADDR		0x14
++#define GPI_LMEM_FREE_ADDR		0x18
++#define GPI_DDR_ALLOC_ADDR		0x1c
++#define GPI_DDR_FREE_ADDR		0x20
++#define GPI_CLASS_ADDR			0x24
++#define GPI_DRX_FIFO			0x28
++#define GPI_TRX_FIFO			0x2c
++#define GPI_INQ_PKTPTR			0x30
++#define GPI_DDR_DATA_OFFSET		0x34
++#define GPI_LMEM_DATA_OFFSET		0x38
++#define GPI_TMLF_TX			0x4c
++#define GPI_DTX_ASEQ			0x50
++#define GPI_FIFO_STATUS			0x54
++#define GPI_FIFO_DEBUG			0x58
++#define GPI_TX_PAUSE_TIME		0x5c
++#define GPI_LMEM_SEC_BUF_DATA_OFFSET	0x60
++#define GPI_DDR_SEC_BUF_DATA_OFFSET	0x64
++#define GPI_TOE_CHKSUM_EN		0x68
++#define GPI_OVERRUN_DROPCNT		0x6c
++#define GPI_AXI_CTRL			0x70
++
++struct gpi_cfg {
++	u32 lmem_rtry_cnt;
++	u32 tmlf_txthres;
++	u32 aseq_len;
++};
++
++/* GPI commons defines */
++#define GPI_LMEM_BUF_EN		0x1
++#define GPI_DDR_BUF_EN		0x1
++
++/* EGPI 1 defines */
++#define EGPI1_LMEM_RTRY_CNT	0x40
++#define EGPI1_TMLF_TXTHRES	0xBC
++#define EGPI1_ASEQ_LEN		0x50
++
++/* EGPI 2 defines */
++#define EGPI2_LMEM_RTRY_CNT	0x40
++#define EGPI2_TMLF_TXTHRES	0xBC
++#define EGPI2_ASEQ_LEN		0x40
++
++/* HGPI defines */
++#define HGPI_LMEM_RTRY_CNT	0x40
++#define HGPI_TMLF_TXTHRES	0xBC
++#define HGPI_ASEQ_LEN		0x40
++
++#endif /* _GPI_H_ */
+diff --git a/include/net/pfe_eth/pfe/cbus/hif.h b/include/net/pfe_eth/pfe/cbus/hif.h
+new file mode 100644
+index 0000000..4b5cb3c
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus/hif.h
+@@ -0,0 +1,68 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _HIF_H_
++#define _HIF_H_
++
++/*
++ * @file hif.h.
++ * hif - PFE hif block control and status register.
++ * Mapped on CBUS and accessible from all PE's and ARM.
++ */
++#define HIF_VERSION		(HIF_BASE_ADDR + 0x00)
++#define HIF_TX_CTRL		(HIF_BASE_ADDR + 0x04)
++#define HIF_TX_CURR_BD_ADDR	(HIF_BASE_ADDR + 0x08)
++#define HIF_TX_ALLOC		(HIF_BASE_ADDR + 0x0c)
++#define HIF_TX_BDP_ADDR		(HIF_BASE_ADDR + 0x10)
++#define HIF_TX_STATUS		(HIF_BASE_ADDR + 0x14)
++#define HIF_RX_CTRL		(HIF_BASE_ADDR + 0x20)
++#define HIF_RX_BDP_ADDR		(HIF_BASE_ADDR + 0x24)
++#define HIF_RX_STATUS		(HIF_BASE_ADDR + 0x30)
++#define HIF_INT_SRC		(HIF_BASE_ADDR + 0x34)
++#define HIF_INT_ENABLE		(HIF_BASE_ADDR + 0x38)
++#define HIF_POLL_CTRL		(HIF_BASE_ADDR + 0x3c)
++#define HIF_RX_CURR_BD_ADDR	(HIF_BASE_ADDR + 0x40)
++#define HIF_RX_ALLOC		(HIF_BASE_ADDR + 0x44)
++#define HIF_TX_DMA_STATUS	(HIF_BASE_ADDR + 0x48)
++#define HIF_RX_DMA_STATUS	(HIF_BASE_ADDR + 0x4c)
++#define HIF_INT_COAL		(HIF_BASE_ADDR + 0x50)
++#define HIF_AXI_CTRL		(HIF_BASE_ADDR + 0x54)
++
++/* HIF_TX_CTRL bits */
++#define HIF_CTRL_DMA_EN			BIT(0)
++#define HIF_CTRL_BDP_POLL_CTRL_EN	BIT(1)
++#define HIF_CTRL_BDP_CH_START_WSTB	BIT(2)
++
++/* HIF_RX_STATUS bits */
++#define BDP_CSR_RX_DMA_ACTV	BIT(16)
++
++/* HIF_INT_ENABLE bits */
++#define HIF_INT_EN		BIT(0)
++#define HIF_RXBD_INT_EN		BIT(1)
++#define HIF_RXPKT_INT_EN	BIT(2)
++#define HIF_TXBD_INT_EN		BIT(3)
++#define HIF_TXPKT_INT_EN	BIT(4)
++
++/* HIF_POLL_CTRL bits*/
++#define HIF_RX_POLL_CTRL_CYCLE	0x0400
++#define HIF_TX_POLL_CTRL_CYCLE	0x0400
++
++/* Buffer descriptor control bits */
++#define BD_CTRL_BUFLEN_MASK	(0xffff)
++#define BD_BUF_LEN(x)	(x & BD_CTRL_BUFLEN_MASK)
++#define BD_CTRL_CBD_INT_EN	BIT(16)
++#define BD_CTRL_PKT_INT_EN	BIT(17)
++#define BD_CTRL_LIFM		BIT(18)
++#define BD_CTRL_LAST_BD		BIT(19)
++#define BD_CTRL_DIR		BIT(20)
++#define BD_CTRL_PKT_XFER	BIT(24)
++#define BD_CTRL_DESC_EN		BIT(31)
++#define BD_CTRL_PARSE_DISABLE	BIT(25)
++#define BD_CTRL_BRFETCH_DISABLE	BIT(26)
++#define BD_CTRL_RTFETCH_DISABLE	BIT(27)
++
++#endif /* _HIF_H_ */
+diff --git a/include/net/pfe_eth/pfe/cbus/hif_nocpy.h b/include/net/pfe_eth/pfe/cbus/hif_nocpy.h
+new file mode 100644
+index 0000000..c2d6f6d
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus/hif_nocpy.h
+@@ -0,0 +1,40 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _HIF_NOCPY_H_
++#define _HIF_NOCPY_H_
++
++#define HIF_NOCPY_VERSION		(HIF_NOCPY_BASE_ADDR + 0x00)
++#define HIF_NOCPY_TX_CTRL		(HIF_NOCPY_BASE_ADDR + 0x04)
++#define HIF_NOCPY_TX_CURR_BD_ADDR	(HIF_NOCPY_BASE_ADDR + 0x08)
++#define HIF_NOCPY_TX_ALLOC		(HIF_NOCPY_BASE_ADDR + 0x0c)
++#define HIF_NOCPY_TX_BDP_ADDR		(HIF_NOCPY_BASE_ADDR + 0x10)
++#define HIF_NOCPY_TX_STATUS		(HIF_NOCPY_BASE_ADDR + 0x14)
++#define HIF_NOCPY_RX_CTRL		(HIF_NOCPY_BASE_ADDR + 0x20)
++#define HIF_NOCPY_RX_BDP_ADDR		(HIF_NOCPY_BASE_ADDR + 0x24)
++#define HIF_NOCPY_RX_STATUS		(HIF_NOCPY_BASE_ADDR + 0x30)
++#define HIF_NOCPY_INT_SRC		(HIF_NOCPY_BASE_ADDR + 0x34)
++#define HIF_NOCPY_INT_ENABLE		(HIF_NOCPY_BASE_ADDR + 0x38)
++#define HIF_NOCPY_POLL_CTRL		(HIF_NOCPY_BASE_ADDR + 0x3c)
++#define HIF_NOCPY_RX_CURR_BD_ADDR	(HIF_NOCPY_BASE_ADDR + 0x40)
++#define HIF_NOCPY_RX_ALLOC		(HIF_NOCPY_BASE_ADDR + 0x44)
++#define HIF_NOCPY_TX_DMA_STATUS		(HIF_NOCPY_BASE_ADDR + 0x48)
++#define HIF_NOCPY_RX_DMA_STATUS		(HIF_NOCPY_BASE_ADDR + 0x4c)
++#define HIF_NOCPY_RX_INQ0_PKTPTR	(HIF_NOCPY_BASE_ADDR + 0x50)
++#define HIF_NOCPY_RX_INQ1_PKTPTR	(HIF_NOCPY_BASE_ADDR + 0x54)
++#define HIF_NOCPY_TX_PORT_NO		(HIF_NOCPY_BASE_ADDR + 0x60)
++#define HIF_NOCPY_LMEM_ALLOC_ADDR	(HIF_NOCPY_BASE_ADDR + 0x64)
++#define HIF_NOCPY_CLASS_ADDR		(HIF_NOCPY_BASE_ADDR + 0x68)
++#define HIF_NOCPY_TMU_PORT0_ADDR	(HIF_NOCPY_BASE_ADDR + 0x70)
++#define HIF_NOCPY_TMU_PORT1_ADDR	(HIF_NOCPY_BASE_ADDR + 0x74)
++#define HIF_NOCPY_TMU_PORT2_ADDR	(HIF_NOCPY_BASE_ADDR + 0x7c)
++#define HIF_NOCPY_TMU_PORT3_ADDR	(HIF_NOCPY_BASE_ADDR + 0x80)
++#define HIF_NOCPY_TMU_PORT4_ADDR	(HIF_NOCPY_BASE_ADDR + 0x84)
++#define HIF_NOCPY_INT_COAL		(HIF_NOCPY_BASE_ADDR + 0x90)
++#define HIF_NOCPY_AXI_CTRL		(HIF_NOCPY_BASE_ADDR + 0x94)
++
++#endif /* _HIF_NOCPY_H_ */
+diff --git a/include/net/pfe_eth/pfe/cbus/tmu_csr.h b/include/net/pfe_eth/pfe/cbus/tmu_csr.h
+new file mode 100644
+index 0000000..e810b79
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus/tmu_csr.h
+@@ -0,0 +1,148 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _TMU_CSR_H_
++#define _TMU_CSR_H_
++
++#define TMU_VERSION			(TMU_CSR_BASE_ADDR + 0x000)
++#define TMU_INQ_WATERMARK		(TMU_CSR_BASE_ADDR + 0x004)
++#define TMU_PHY_INQ_PKTPTR		(TMU_CSR_BASE_ADDR + 0x008)
++#define TMU_PHY_INQ_PKTINFO		(TMU_CSR_BASE_ADDR + 0x00c)
++#define TMU_PHY_INQ_FIFO_CNT		(TMU_CSR_BASE_ADDR + 0x010)
++#define TMU_SYS_GENERIC_CONTROL		(TMU_CSR_BASE_ADDR + 0x014)
++#define TMU_SYS_GENERIC_STATUS		(TMU_CSR_BASE_ADDR + 0x018)
++#define TMU_SYS_GEN_CON0		(TMU_CSR_BASE_ADDR + 0x01c)
++#define TMU_SYS_GEN_CON1		(TMU_CSR_BASE_ADDR + 0x020)
++#define TMU_SYS_GEN_CON2		(TMU_CSR_BASE_ADDR + 0x024)
++#define TMU_SYS_GEN_CON3		(TMU_CSR_BASE_ADDR + 0x028)
++#define TMU_SYS_GEN_CON4		(TMU_CSR_BASE_ADDR + 0x02c)
++#define TMU_TEQ_DISABLE_DROPCHK		(TMU_CSR_BASE_ADDR + 0x030)
++#define TMU_TEQ_CTRL			(TMU_CSR_BASE_ADDR + 0x034)
++#define TMU_TEQ_QCFG			(TMU_CSR_BASE_ADDR + 0x038)
++#define TMU_TEQ_DROP_STAT		(TMU_CSR_BASE_ADDR + 0x03c)
++#define TMU_TEQ_QAVG			(TMU_CSR_BASE_ADDR + 0x040)
++#define TMU_TEQ_WREG_PROB		(TMU_CSR_BASE_ADDR + 0x044)
++#define TMU_TEQ_TRANS_STAT		(TMU_CSR_BASE_ADDR + 0x048)
++#define TMU_TEQ_HW_PROB_CFG0		(TMU_CSR_BASE_ADDR + 0x04c)
++#define TMU_TEQ_HW_PROB_CFG1		(TMU_CSR_BASE_ADDR + 0x050)
++#define TMU_TEQ_HW_PROB_CFG2		(TMU_CSR_BASE_ADDR + 0x054)
++#define TMU_TEQ_HW_PROB_CFG3		(TMU_CSR_BASE_ADDR + 0x058)
++#define TMU_TEQ_HW_PROB_CFG4		(TMU_CSR_BASE_ADDR + 0x05c)
++#define TMU_TEQ_HW_PROB_CFG5		(TMU_CSR_BASE_ADDR + 0x060)
++#define TMU_TEQ_HW_PROB_CFG6		(TMU_CSR_BASE_ADDR + 0x064)
++#define TMU_TEQ_HW_PROB_CFG7		(TMU_CSR_BASE_ADDR + 0x068)
++#define TMU_TEQ_HW_PROB_CFG8		(TMU_CSR_BASE_ADDR + 0x06c)
++#define TMU_TEQ_HW_PROB_CFG9		(TMU_CSR_BASE_ADDR + 0x070)
++#define TMU_TEQ_HW_PROB_CFG10		(TMU_CSR_BASE_ADDR + 0x074)
++#define TMU_TEQ_HW_PROB_CFG11		(TMU_CSR_BASE_ADDR + 0x078)
++#define TMU_TEQ_HW_PROB_CFG12		(TMU_CSR_BASE_ADDR + 0x07c)
++#define TMU_TEQ_HW_PROB_CFG13		(TMU_CSR_BASE_ADDR + 0x080)
++#define TMU_TEQ_HW_PROB_CFG14		(TMU_CSR_BASE_ADDR + 0x084)
++#define TMU_TEQ_HW_PROB_CFG15		(TMU_CSR_BASE_ADDR + 0x088)
++#define TMU_TEQ_HW_PROB_CFG16		(TMU_CSR_BASE_ADDR + 0x08c)
++#define TMU_TEQ_HW_PROB_CFG17		(TMU_CSR_BASE_ADDR + 0x090)
++#define TMU_TEQ_HW_PROB_CFG18		(TMU_CSR_BASE_ADDR + 0x094)
++#define TMU_TEQ_HW_PROB_CFG19		(TMU_CSR_BASE_ADDR + 0x098)
++#define TMU_TEQ_HW_PROB_CFG20		(TMU_CSR_BASE_ADDR + 0x09c)
++#define TMU_TEQ_HW_PROB_CFG21		(TMU_CSR_BASE_ADDR + 0x0a0)
++#define TMU_TEQ_HW_PROB_CFG22		(TMU_CSR_BASE_ADDR + 0x0a4)
++#define TMU_TEQ_HW_PROB_CFG23		(TMU_CSR_BASE_ADDR + 0x0a8)
++#define TMU_TEQ_HW_PROB_CFG24		(TMU_CSR_BASE_ADDR + 0x0ac)
++#define TMU_TEQ_HW_PROB_CFG25		(TMU_CSR_BASE_ADDR + 0x0b0)
++#define TMU_TDQ_IIFG_CFG		(TMU_CSR_BASE_ADDR + 0x0b4)
++/* [9:0] Scheduler Enable for each of the scheduler in the TDQ.
++ * This is a global Enable for all schedulers in PHY0
++ */
++#define TMU_TDQ0_SCH_CTRL		(TMU_CSR_BASE_ADDR + 0x0b8)
++#define TMU_LLM_CTRL			(TMU_CSR_BASE_ADDR + 0x0bc)
++#define TMU_LLM_BASE_ADDR		(TMU_CSR_BASE_ADDR + 0x0c0)
++#define TMU_LLM_QUE_LEN			(TMU_CSR_BASE_ADDR + 0x0c4)
++#define TMU_LLM_QUE_HEADPTR		(TMU_CSR_BASE_ADDR + 0x0c8)
++#define TMU_LLM_QUE_TAILPTR		(TMU_CSR_BASE_ADDR + 0x0cc)
++#define TMU_LLM_QUE_DROPCNT		(TMU_CSR_BASE_ADDR + 0x0d0)
++#define TMU_INT_EN			(TMU_CSR_BASE_ADDR + 0x0d4)
++#define TMU_INT_SRC			(TMU_CSR_BASE_ADDR + 0x0d8)
++#define TMU_INQ_STAT			(TMU_CSR_BASE_ADDR + 0x0dc)
++#define TMU_CTRL			(TMU_CSR_BASE_ADDR + 0x0e0)
++
++/* [31] Mem Access Command. 0 = Internal Memory Read, 1 = Internal
++ * memory Write [27:24] Byte Enables of the Internal memory access [23:0]
++ * Address of the internal memory. This address is used to access both the
++ * PM and DM of all the PE's
++ */
++#define TMU_MEM_ACCESS_ADDR		(TMU_CSR_BASE_ADDR + 0x0e4)
++
++/* Internal Memory Access Write Data */
++#define TMU_MEM_ACCESS_WDATA		(TMU_CSR_BASE_ADDR + 0x0e8)
++/* Internal Memory Access Read Data. The commands are blocked at the
++ * mem_access only
++ */
++#define TMU_MEM_ACCESS_RDATA		(TMU_CSR_BASE_ADDR + 0x0ec)
++
++/* [31:0] PHY0 in queue address (must be initialized with one of the
++ * xxx_INQ_PKTPTR cbus addresses)
++ */
++#define TMU_PHY0_INQ_ADDR		(TMU_CSR_BASE_ADDR + 0x0f0)
++/* [31:0] PHY1 in queue address (must be initialized with one of the
++ * xxx_INQ_PKTPTR cbus addresses)
++ */
++#define TMU_PHY1_INQ_ADDR		(TMU_CSR_BASE_ADDR + 0x0f4)
++/* [31:0] PHY3 in queue address (must be initialized with one of the
++ * xxx_INQ_PKTPTR cbus addresses)
++ */
++#define TMU_PHY3_INQ_ADDR		(TMU_CSR_BASE_ADDR + 0x0fc)
++#define TMU_BMU_INQ_ADDR		(TMU_CSR_BASE_ADDR + 0x100)
++#define TMU_TX_CTRL			(TMU_CSR_BASE_ADDR + 0x104)
++
++#define TMU_PE_SYS_CLK_RATIO		(TMU_CSR_BASE_ADDR + 0x114)
++#define TMU_PE_STATUS			(TMU_CSR_BASE_ADDR + 0x118)
++#define TMU_TEQ_MAX_THRESHOLD		(TMU_CSR_BASE_ADDR + 0x11c)
++
++/* [31:0] PHY4 in queue address (must be initialized with one of the
++ * xxx_INQ_PKTPTR cbus addresses)
++ */
++#define TMU_PHY4_INQ_ADDR		(TMU_CSR_BASE_ADDR + 0x134)
++
++/* [9:0] Scheduler Enable for each of the scheduler in the TDQ. This
++ * is a global Enable for all schedulers in PHY1
++ */
++#define TMU_TDQ1_SCH_CTRL		(TMU_CSR_BASE_ADDR + 0x138)
++/* [9:0] Scheduler Enable for each of the scheduler in the TDQ. This
++ * is a global Enable for all schedulers in PHY3
++ */
++#define TMU_TDQ3_SCH_CTRL		(TMU_CSR_BASE_ADDR + 0x140)
++
++#define TMU_BMU_BUF_SIZE		(TMU_CSR_BASE_ADDR + 0x144)
++/* [31:0] PHY5 in queue address (must be initialized with one of the
++ * xxx_INQ_PKTPTR cbus addresses)
++ */
++#define TMU_PHY5_INQ_ADDR		(TMU_CSR_BASE_ADDR + 0x148)
++
++#define TMU_AXI_CTRL			(TMU_CSR_BASE_ADDR + 0x17c)
++
++#define SW_RESET		BIT(0) /* Global software reset */
++#define INQ_RESET		BIT(2)
++#define TEQ_RESET		BIT(3)
++#define TDQ_RESET		BIT(4)
++#define PE_RESET		BIT(5)
++#define MEM_INIT		BIT(6)
++#define MEM_INIT_DONE		BIT(7)
++#define LLM_INIT		BIT(8)
++#define LLM_INIT_DONE		BIT(9)
++#define ECC_MEM_INIT_DONE	BIT(10)
++
++struct tmu_cfg {
++	u32 llm_base_addr;
++	u32 llm_queue_len;
++};
++
++/* Not HW related for pfe_ctrl/pfe common defines */
++#define DEFAULT_MAX_QDEPTH	80
++#define DEFAULT_Q0_QDEPTH	511 /* We keep 1 large queue for host tx qos */
++#define DEFAULT_TMU3_QDEPTH	127
++
++#endif /* _TMU_CSR_H_ */
+diff --git a/include/net/pfe_eth/pfe/cbus/util_csr.h b/include/net/pfe_eth/pfe/cbus/util_csr.h
+new file mode 100644
+index 0000000..bac4114
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/cbus/util_csr.h
+@@ -0,0 +1,47 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _UTIL_CSR_H_
++#define _UTIL_CSR_H_
++
++#define UTIL_VERSION			(UTIL_CSR_BASE_ADDR + 0x000)
++#define UTIL_TX_CTRL			(UTIL_CSR_BASE_ADDR + 0x004)
++#define UTIL_INQ_PKTPTR			(UTIL_CSR_BASE_ADDR + 0x010)
++
++#define UTIL_HDR_SIZE			(UTIL_CSR_BASE_ADDR + 0x014)
++
++#define UTIL_PE0_QB_DM_ADDR0		(UTIL_CSR_BASE_ADDR + 0x020)
++#define UTIL_PE0_QB_DM_ADDR1		(UTIL_CSR_BASE_ADDR + 0x024)
++#define UTIL_PE0_RO_DM_ADDR0		(UTIL_CSR_BASE_ADDR + 0x060)
++#define UTIL_PE0_RO_DM_ADDR1		(UTIL_CSR_BASE_ADDR + 0x064)
++
++#define UTIL_MEM_ACCESS_ADDR		(UTIL_CSR_BASE_ADDR + 0x100)
++#define UTIL_MEM_ACCESS_WDATA		(UTIL_CSR_BASE_ADDR + 0x104)
++#define UTIL_MEM_ACCESS_RDATA		(UTIL_CSR_BASE_ADDR + 0x108)
++
++#define UTIL_TM_INQ_ADDR		(UTIL_CSR_BASE_ADDR + 0x114)
++#define UTIL_PE_STATUS			(UTIL_CSR_BASE_ADDR + 0x118)
++
++#define UTIL_PE_SYS_CLK_RATIO		(UTIL_CSR_BASE_ADDR + 0x200)
++#define UTIL_AFULL_THRES		(UTIL_CSR_BASE_ADDR + 0x204)
++#define UTIL_GAP_BETWEEN_READS		(UTIL_CSR_BASE_ADDR + 0x208)
++#define UTIL_MAX_BUF_CNT		(UTIL_CSR_BASE_ADDR + 0x20c)
++#define UTIL_TSQ_FIFO_THRES		(UTIL_CSR_BASE_ADDR + 0x210)
++#define UTIL_TSQ_MAX_CNT		(UTIL_CSR_BASE_ADDR + 0x214)
++#define UTIL_IRAM_DATA_0		(UTIL_CSR_BASE_ADDR + 0x218)
++#define UTIL_IRAM_DATA_1		(UTIL_CSR_BASE_ADDR + 0x21c)
++#define UTIL_IRAM_DATA_2		(UTIL_CSR_BASE_ADDR + 0x220)
++#define UTIL_IRAM_DATA_3		(UTIL_CSR_BASE_ADDR + 0x224)
++
++#define UTIL_BUS_ACCESS_ADDR		(UTIL_CSR_BASE_ADDR + 0x228)
++#define UTIL_BUS_ACCESS_WDATA		(UTIL_CSR_BASE_ADDR + 0x22c)
++#define UTIL_BUS_ACCESS_RDATA		(UTIL_CSR_BASE_ADDR + 0x230)
++
++#define UTIL_INQ_AFULL_THRES		(UTIL_CSR_BASE_ADDR + 0x234)
++#define UTIL_AXI_CTRL			(UTIL_CSR_BASE_ADDR + 0x240)
++
++#endif /* _UTIL_CSR_H_ */
+diff --git a/include/net/pfe_eth/pfe/pfe_hw.h b/include/net/pfe_eth/pfe/pfe_hw.h
+new file mode 100644
+index 0000000..992454f
+--- /dev/null
++++ b/include/net/pfe_eth/pfe/pfe_hw.h
+@@ -0,0 +1,163 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _PFE_H_
++#define _PFE_H_
++
++#include <elf.h>
++#include "cbus.h"
++
++#define PFE_RESET_WA
++
++#define CLASS_DMEM_BASE_ADDR(i)	(0x00000000 | ((i) << 20))
++/* Only valid for mem access register interface */
++#define CLASS_IMEM_BASE_ADDR(i)	(0x00000000 | ((i) << 20))
++#define CLASS_DMEM_SIZE		0x00002000
++#define CLASS_IMEM_SIZE		0x00008000
++
++#define TMU_DMEM_BASE_ADDR(i)	(0x00000000 + ((i) << 20))
++/* Only valid for mem access register interface */
++#define TMU_IMEM_BASE_ADDR(i)	(0x00000000 + ((i) << 20))
++#define TMU_DMEM_SIZE		0x00000800
++#define TMU_IMEM_SIZE		0x00002000
++
++#define UTIL_DMEM_BASE_ADDR	0x00000000
++#define UTIL_DMEM_SIZE		0x00002000
++
++#define PE_LMEM_BASE_ADDR	0xc3010000
++#define PE_LMEM_SIZE		0x8000
++#define PE_LMEM_END		(PE_LMEM_BASE_ADDR + PE_LMEM_SIZE)
++
++#define DMEM_BASE_ADDR		0x00000000
++#define DMEM_SIZE		0x2000		/* TMU has less... */
++#define DMEM_END		(DMEM_BASE_ADDR + DMEM_SIZE)
++
++#define PMEM_BASE_ADDR		0x00010000
++#define PMEM_SIZE		0x8000		/* TMU has less... */
++#define PMEM_END		(PMEM_BASE_ADDR + PMEM_SIZE)
++
++/* Memory ranges check from PE point of view/memory map */
++#define IS_DMEM(addr, len)	(((unsigned long)(addr) >= DMEM_BASE_ADDR) &&\
++					(((unsigned long)(addr) +\
++					(len)) <= DMEM_END))
++#define IS_PMEM(addr, len)	(((unsigned long)(addr) >= PMEM_BASE_ADDR) &&\
++					(((unsigned long)(addr) +\
++					(len)) <= PMEM_END))
++#define IS_PE_LMEM(addr, len)	(((unsigned long)(addr) >= PE_LMEM_BASE_ADDR\
++					) && (((unsigned long)(addr)\
++					+ (len)) <= PE_LMEM_END))
++
++#define IS_PFE_LMEM(addr, len)	(((unsigned long)(addr) >=\
++					CBUS_VIRT_TO_PFE(LMEM_BASE_ADDR)) &&\
++					(((unsigned long)(addr) + (len)) <=\
++					CBUS_VIRT_TO_PFE(LMEM_END)))
++#define IS_PHYS_DDR(addr, len)	(((unsigned long)(addr) >=\
++					PFE_DDR_PHYS_BASE_ADDR) &&\
++					(((unsigned long)(addr) + (len)) <=\
++					PFE_DDR_PHYS_END))
++
++/* Host View Address */
++extern void *ddr_pfe_base_addr;
++
++/* PFE View Address */
++/* DDR physical base address as seen by PE's. */
++#define PFE_DDR_PHYS_BASE_ADDR	0x03800000
++#define PFE_DDR_PHYS_SIZE	0xC000000
++#define PFE_DDR_PHYS_END	(PFE_DDR_PHYS_BASE_ADDR + PFE_DDR_PHYS_SIZE)
++/* CBUS physical base address as seen by PE's. */
++#define PFE_CBUS_PHYS_BASE_ADDR	0xc0000000
++
++/* Host<->PFE Mapping */
++#define DDR_PFE_TO_VIRT(p)	((unsigned long int)((p) + 0x80000000))
++#define CBUS_VIRT_TO_PFE(v)	(((v) - CBUS_BASE_ADDR) +\
++					PFE_CBUS_PHYS_BASE_ADDR)
++#define CBUS_PFE_TO_VIRT(p)	(((p) - PFE_CBUS_PHYS_BASE_ADDR) +\
++					CBUS_BASE_ADDR)
++
++enum {
++	CLASS0_ID = 0,
++	CLASS1_ID,
++	CLASS2_ID,
++	CLASS3_ID,
++	CLASS4_ID,
++	CLASS5_ID,
++
++	TMU0_ID,
++	TMU1_ID,
++	TMU2_ID,
++	TMU3_ID,
++	MAX_PE
++};
++
++#define CLASS_MASK	(BIT(CLASS0_ID) | BIT(CLASS1_ID) | BIT(CLASS2_ID)\
++				| BIT(CLASS3_ID) | BIT(CLASS4_ID) |\
++				BIT(CLASS5_ID))
++#define CLASS_MAX_ID	CLASS5_ID
++
++#define TMU_MASK	(BIT(TMU0_ID) | BIT(TMU1_ID) | BIT(TMU3_ID))
++#define TMU_MAX_ID	TMU3_ID
++
++/*
++ * PE information.
++ * Structure containing PE's specific information. It is used to create
++ * generic C functions common to all PEs.
++ * Before using the library functions this structure needs to be
++ * initialized with the different registers virtual addresses
++ * (according to the ARM MMU mmaping). The default initialization supports a
++ * virtual == physical mapping.
++ *
++ */
++struct pe_info {
++	u32 dmem_base_addr;		/* PE's dmem base address */
++	u32 pmem_base_addr;		/* PE's pmem base address */
++	u32 pmem_size;			/* PE's pmem size */
++
++	void *mem_access_wdata;	       /* PE's _MEM_ACCESS_WDATA
++					* register address
++					*/
++	void *mem_access_addr;	       /* PE's _MEM_ACCESS_ADDR
++					* register address
++					*/
++	void *mem_access_rdata;	       /* PE's _MEM_ACCESS_RDATA
++					* register address
++					*/
++};
++
++void pe_lmem_read(u32 *dst, u32 len, u32 offset);
++void pe_lmem_write(u32 *src, u32 len, u32 offset);
++
++u32 pe_pmem_read(int id, u32 addr, u8 size);
++void pe_dmem_write(int id, u32 val, u32 addr, u8 size);
++u32 pe_dmem_read(int id, u32 addr, u8 size);
++
++int pe_load_elf_section(int id, const void *data, Elf32_Shdr *shdr);
++
++void pfe_lib_init(void);
++
++void bmu_init(void *base, struct bmu_cfg *cfg);
++void bmu_enable(void *base);
++
++void gpi_init(void *base, struct gpi_cfg *cfg);
++void gpi_enable(void *base);
++void gpi_disable(void *base);
++
++void class_init(struct class_cfg *cfg);
++void class_enable(void);
++void class_disable(void);
++
++void tmu_init(struct tmu_cfg *cfg);
++void tmu_enable(u32 pe_mask);
++void tmu_disable(u32 pe_mask);
++
++void hif_init(void);
++void hif_tx_enable(void);
++void hif_tx_disable(void);
++void hif_rx_enable(void);
++void hif_rx_disable(void);
++void hif_rx_desc_disable(void);
++
++#endif /* _PFE_H_ */
+diff --git a/include/net/pfe_eth/pfe_driver.h b/include/net/pfe_eth/pfe_driver.h
+new file mode 100644
+index 0000000..da7d247
+--- /dev/null
++++ b/include/net/pfe_eth/pfe_driver.h
+@@ -0,0 +1,59 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __PFE_DRIVER_H__
++#define __PFE_DRIVER_H__
++
++#include <net/pfe_eth/pfe/pfe_hw.h>
++#include <dm/platform_data/pfe_dm_eth.h>
++
++#define HIF_RX_DESC_NT		64
++#define	HIF_TX_DESC_NT		64
++
++#define RX_BD_BASEADDR		(HIF_DESC_BASEADDR)
++#define TX_BD_BASEADDR		(HIF_DESC_BASEADDR + HIF_TX_DESC_SIZE)
++
++#define MIN_PKT_SIZE		56
++#define MAX_FRAME_SIZE		2048
++
++struct __packed hif_header_s {
++	u8	port_no; /* Carries input port no for host rx packets and
++			  * output port no for tx pkts
++			  */
++	u8 reserved0;
++	u32 reserved2;
++};
++
++struct __packed buf_desc {
++	u32 ctrl;
++	u32 status;
++	u32 data;
++	u32 next;
++};
++
++struct rx_desc_s {
++	struct buf_desc *rx_base;
++	unsigned int rx_base_pa;
++	int rx_to_read;
++	int rx_ring_size;
++};
++
++struct tx_desc_s {
++	struct buf_desc *tx_base;
++	unsigned int tx_base_pa;
++	int tx_to_send;
++	int tx_ring_size;
++};
++
++int pfe_send(int phy_port, void *data, int length);
++int pfe_recv(uchar **pkt_ptr, int *phy_port);
++int pfe_tx_done(void);
++int pfe_eth_free_pkt(struct udevice *dev, uchar *packet, int length);
++int pfe_drv_init(struct pfe_ddr_address  *pfe_addr);
++int pfe_eth_remove(struct udevice *dev);
++
++#endif
+diff --git a/include/net/pfe_eth/pfe_eth.h b/include/net/pfe_eth/pfe_eth.h
+new file mode 100644
+index 0000000..f319365
+--- /dev/null
++++ b/include/net/pfe_eth/pfe_eth.h
+@@ -0,0 +1,104 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef __PFE_ETH_H__
++#define __PFE_ETH_H__
++
++#include <linux/sizes.h>
++#include <asm/io.h>
++#include <miiphy.h>
++#include <malloc.h>
++#include "pfe_driver.h"
++
++#define BMU2_DDR_BASEADDR	0
++#define BMU2_BUF_COUNT		(3 * SZ_1K)
++#define BMU2_DDR_SIZE		(DDR_BUF_SIZE * BMU2_BUF_COUNT)
++
++#define HIF_RX_PKT_DDR_BASEADDR (BMU2_DDR_BASEADDR + BMU2_DDR_SIZE)
++#define HIF_RX_PKT_DDR_SIZE     (HIF_RX_DESC_NT * DDR_BUF_SIZE)
++#define HIF_TX_PKT_DDR_BASEADDR (HIF_RX_PKT_DDR_BASEADDR + HIF_RX_PKT_DDR_SIZE)
++#define HIF_TX_PKT_DDR_SIZE     (HIF_TX_DESC_NT * DDR_BUF_SIZE)
++
++#define HIF_DESC_BASEADDR       (HIF_TX_PKT_DDR_BASEADDR + HIF_TX_PKT_DDR_SIZE)
++#define HIF_RX_DESC_SIZE        (16 * HIF_RX_DESC_NT)
++#define HIF_TX_DESC_SIZE        (16 * HIF_TX_DESC_NT)
++
++#define UTIL_CODE_BASEADDR	0x780000
++#define UTIL_CODE_SIZE		(128 * SZ_1K)
++
++#define UTIL_DDR_DATA_BASEADDR	(UTIL_CODE_BASEADDR + UTIL_CODE_SIZE)
++#define UTIL_DDR_DATA_SIZE	(64 * SZ_1K)
++
++#define CLASS_DDR_DATA_BASEADDR	(UTIL_DDR_DATA_BASEADDR + UTIL_DDR_DATA_SIZE)
++#define CLASS_DDR_DATA_SIZE	(32 * SZ_1K)
++
++#define TMU_DDR_DATA_BASEADDR	(CLASS_DDR_DATA_BASEADDR + CLASS_DDR_DATA_SIZE)
++#define TMU_DDR_DATA_SIZE	(32 * SZ_1K)
++
++#define TMU_LLM_BASEADDR	(TMU_DDR_DATA_BASEADDR + TMU_DDR_DATA_SIZE)
++#define TMU_LLM_QUEUE_LEN	(16 * 256)
++	/* Must be power of two and at least 16 * 8 = 128 bytes */
++#define TMU_LLM_SIZE		(4 * 16 * TMU_LLM_QUEUE_LEN)
++	/* (4 TMU's x 16 queues x queue_len) */
++
++#define ROUTE_TABLE_BASEADDR	0x800000
++#define ROUTE_TABLE_HASH_BITS_MAX	15 /* 32K entries */
++#define ROUTE_TABLE_HASH_BITS		8  /* 256 entries */
++#define ROUTE_TABLE_SIZE	(BIT(ROUTE_TABLE_HASH_BITS_MAX) \
++				* CLASS_ROUTE_SIZE)
++
++#define	PFE_TOTAL_DATA_SIZE	(ROUTE_TABLE_BASEADDR + ROUTE_TABLE_SIZE)
++
++#if PFE_TOTAL_DATA_SIZE > (12 * SZ_1M)
++#error DDR mapping above 12MiB
++#endif
++
++/* LMEM Mapping */
++#define BMU1_LMEM_BASEADDR	0
++#define BMU1_BUF_COUNT		256
++#define BMU1_LMEM_SIZE		(LMEM_BUF_SIZE * BMU1_BUF_COUNT)
++
++struct gemac_s {
++	void *gemac_base;
++	void *egpi_base;
++
++	/* GEMAC config */
++	int gemac_mode;
++	int gemac_speed;
++	int gemac_duplex;
++	int flags;
++	/* phy iface */
++	int phy_address;
++	int phy_mode;
++	struct mii_dev *bus;
++
++};
++
++struct pfe_mdio_info {
++	void *reg_base;
++	char *name;
++};
++
++struct pfe_eth_dev {
++	int gemac_port;
++	struct gemac_s *gem;
++	struct pfe_ddr_address pfe_addr;
++	struct udevice *dev;
++#ifdef CONFIG_PHYLIB
++	struct phy_device *phydev;
++#endif
++};
++
++int pfe_remove(struct pfe_ddr_address *pfe_addr);
++struct mii_dev *pfe_mdio_init(struct pfe_mdio_info *mdio_info);
++void pfe_set_mdio(int dev_id, struct mii_dev *bus);
++void pfe_set_phy_address_mode(int dev_id, int phy_id, int phy_mode);
++int gemac_initialize(bd_t *bis, int dev_id, char *devname);
++int pfe_init(struct pfe_ddr_address *pfe_addr);
++int pfe_eth_board_init(struct udevice *dev);
++
++#endif /* __PFE_ETH_H__ */
+diff --git a/include/net/pfe_eth/pfe_firmware.h b/include/net/pfe_eth/pfe_firmware.h
+new file mode 100644
+index 0000000..588b2ae
+--- /dev/null
++++ b/include/net/pfe_eth/pfe_firmware.h
+@@ -0,0 +1,17 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++/** @file
++ *  Contains all the defines to handle parsing and loading of PE firmware files.
++ */
++#ifndef __PFE_FIRMWARE_H__
++#define __PFE_FIRMWARE_H__
++
++int pfe_firmware_init(void);
++void pfe_firmware_exit(void);
++
++#endif
+diff --git a/include/net/pfe_eth/pfe_mdio.h b/include/net/pfe_eth/pfe_mdio.h
+new file mode 100644
+index 0000000..ab27ec3
+--- /dev/null
++++ b/include/net/pfe_eth/pfe_mdio.h
+@@ -0,0 +1,13 @@
++/*
++ * Copyright 2015-2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
++ *
++ * SPDX-License-Identifier:	GPL-2.0+
++ */
++
++#ifndef _PFE_MDIO_H_
++#define _PFE_MDIO_H_
++
++int pfe_phy_configure(struct pfe_eth_dev *priv, int dev_id, int phy_id);
++
++#endif /* _PFE_MDIO_H_ */
+-- 
+1.7.1
+

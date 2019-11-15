@@ -1,0 +1,146 @@
+From faf6febb61fba5ab0be237db58506df1d110bf5f Mon Sep 17 00:00:00 2001
+From: Nipun Gupta <nipun.gupta@nxp.com>
+Date: Fri, 27 Oct 2017 15:27:30 +0530
+Subject: [PATCH 032/107] u-boot: fixup the iommu-map property of fsl-mc node
+
+The iommu-map property in the fsl-mc node is updated by
+valid stream-ids by u-boot. This patch is to fixup this
+property for LS208x and LS1088.
+
+Signed-off-by: Nipun Gupta <nipun.gupta@nxp.com>
+---
+ .../asm/arch-fsl-layerscape/stream_id_lsch3.h      |    3 ++
+ board/freescale/ls1088a/ls1088a.c                  |    2 +
+ board/freescale/ls2080a/ls2080a.c                  |    2 +
+ board/freescale/ls2080aqds/ls2080aqds.c            |    2 +
+ board/freescale/ls2080ardb/ls2080ardb.c            |    2 +
+ drivers/net/fsl-mc/mc.c                            |   34 ++++++++++++++++++++
+ include/fsl-mc/fsl_mc.h                            |    1 +
+ 7 files changed, 46 insertions(+), 0 deletions(-)
+
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/stream_id_lsch3.h b/arch/arm/include/asm/arch-fsl-layerscape/stream_id_lsch3.h
+index d1891c4..f464dda 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/stream_id_lsch3.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/stream_id_lsch3.h
+@@ -36,6 +36,9 @@
+  *  -DPAA2
+  *     -u-boot will allocate a range of stream IDs to be used by the Management
+  *      Complex for containers and will set these values in the MC DPC image.
++ *     -u-boot will fixup the iommu-map property in the fsl-mc node in the
++ *      device tree (see Documentation/devicetree/bindings/misc/fsl,qoriq-mc.txt
++ *      for more info on the msi-map definition)
+  *     -the MC is responsible for allocating and setting up 'isolation context
+  *      IDs (ICIDs) based on the allocated stream IDs for all DPAA2 devices.
+  *
+diff --git a/board/freescale/ls1088a/ls1088a.c b/board/freescale/ls1088a/ls1088a.c
+index a5fa050..eb3fee5 100644
+--- a/board/freescale/ls1088a/ls1088a.c
++++ b/board/freescale/ls1088a/ls1088a.c
+@@ -576,6 +576,8 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 
+ 	fdt_fixup_memory_banks(blob, base, size, CONFIG_NR_DRAM_BANKS);
+ 
++	fdt_fsl_mc_fixup_iommu_map_entry(blob);
++
+ 	fsl_fdt_fixup_flash(blob);
+ 
+ #ifdef CONFIG_FSL_MC_ENET
+diff --git a/board/freescale/ls2080a/ls2080a.c b/board/freescale/ls2080a/ls2080a.c
+index 2fcbd69..07c7aa7 100644
+--- a/board/freescale/ls2080a/ls2080a.c
++++ b/board/freescale/ls2080a/ls2080a.c
+@@ -128,6 +128,8 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 
+ 	fdt_fixup_memory_banks(blob, base, size, 2);
+ 
++	fdt_fsl_mc_fixup_iommu_map_entry(blob);
++
+ #if defined(CONFIG_FSL_MC_ENET) && !defined(CONFIG_SPL_BUILD)
+ 	fdt_fixup_board_enet(blob);
+ #endif
+diff --git a/board/freescale/ls2080aqds/ls2080aqds.c b/board/freescale/ls2080aqds/ls2080aqds.c
+index 616442f..c298bcc 100644
+--- a/board/freescale/ls2080aqds/ls2080aqds.c
++++ b/board/freescale/ls2080aqds/ls2080aqds.c
+@@ -333,6 +333,8 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 
+ 	fdt_fixup_memory_banks(blob, base, size, 2);
+ 
++	fdt_fsl_mc_fixup_iommu_map_entry(blob);
++
+ 	fsl_fdt_fixup_dr_usb(blob, bd);
+ 
+ #if defined(CONFIG_FSL_MC_ENET) && !defined(CONFIG_SPL_BUILD)
+diff --git a/board/freescale/ls2080ardb/ls2080ardb.c b/board/freescale/ls2080ardb/ls2080ardb.c
+index 2509247..a1311b2 100644
+--- a/board/freescale/ls2080ardb/ls2080ardb.c
++++ b/board/freescale/ls2080ardb/ls2080ardb.c
+@@ -395,6 +395,8 @@ int ft_board_setup(void *blob, bd_t *bd)
+ 
+ 	fdt_fixup_memory_banks(blob, base, size, 2);
+ 
++	fdt_fsl_mc_fixup_iommu_map_entry(blob);
++
+ 	fsl_fdt_fixup_dr_usb(blob, bd);
+ 
+ 	fsl_fdt_fixup_flash(blob);
+diff --git a/drivers/net/fsl-mc/mc.c b/drivers/net/fsl-mc/mc.c
+index ea9ae5b..ea1a5cf 100644
+--- a/drivers/net/fsl-mc/mc.c
++++ b/drivers/net/fsl-mc/mc.c
+@@ -279,6 +279,40 @@ static int mc_fixup_dpl_mac_addr(void *blob, int dpmac_id,
+ 				 MC_FIXUP_DPL);
+ }
+ 
++void fdt_fsl_mc_fixup_iommu_map_entry(void *blob)
++{
++	u32 *prop;
++	u32 iommu_map[4];
++	int offset;
++	int lenp;
++
++	/* find fsl-mc node */
++	offset = fdt_path_offset(blob, "/soc/fsl-mc");
++	if (offset < 0)
++		offset = fdt_path_offset(blob, "/fsl-mc");
++	if (offset < 0) {
++		printf("%s: ERROR: fsl-mc node not found in device tree (error %d)\n",
++			__func__, offset);
++		return;
++	}
++
++	prop = fdt_getprop_w(blob, offset, "iommu-map", &lenp);
++	if (prop == NULL) {
++		debug("\n%s: ERROR: missing iommu-map in fsl-mc bus node\n",
++			__func__);
++		return;
++	}
++
++	iommu_map[0] = cpu_to_fdt32(FSL_DPAA2_STREAM_ID_START);
++	iommu_map[1] = *++prop;
++	iommu_map[2] = cpu_to_fdt32(FSL_DPAA2_STREAM_ID_START);
++	iommu_map[3] = cpu_to_fdt32(FSL_DPAA2_STREAM_ID_END -
++		FSL_DPAA2_STREAM_ID_START + 1);
++
++	fdt_setprop_inplace(blob, offset, "iommu-map",
++		iommu_map, sizeof(iommu_map));
++}
++
+ static int mc_fixup_dpc_mac_addr(void *blob, int dpmac_id,
+ 				 struct eth_device *eth_dev)
+ {
+diff --git a/include/fsl-mc/fsl_mc.h b/include/fsl-mc/fsl_mc.h
+index 60088ec..8301278 100644
+--- a/include/fsl-mc/fsl_mc.h
++++ b/include/fsl-mc/fsl_mc.h
+@@ -52,6 +52,7 @@ struct mc_ccsr_registers {
+ 	u32 reg_error[];
+ };
+ 
++void fdt_fsl_mc_fixup_iommu_map_entry(void *blob);
+ int get_mc_boot_status(void);
+ int get_dpl_apply_status(void);
+ #ifdef CONFIG_SYS_LS_MC_DRAM_AIOP_IMG_OFFSET
+-- 
+1.7.1
+

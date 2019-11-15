@@ -1,0 +1,42 @@
+From 5ad8508446229595ffac2a394e55787bc2f8ae27 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 6 Jun 2017 10:00:32 -0500
+Subject: [PATCH 109/448] staging: fsl-dpaa2/eth: Reset dpbp
+
+Reset the buffer pool object before using it, like we do
+for the other DPAA2 objects.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index d3ec384..fd56fbd 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1687,6 +1687,12 @@ static int setup_dpbp(struct dpaa2_eth_priv *priv)
+ 		goto err_open;
+ 	}
+ 
++	err = dpbp_reset(priv->mc_io, 0, dpbp_dev->mc_handle);
++	if (err) {
++		dev_err(dev, "dpbp_reset() failed\n");
++		goto err_reset;
++	}
++
+ 	err = dpbp_enable(priv->mc_io, 0, dpbp_dev->mc_handle);
+ 	if (err) {
+ 		dev_err(dev, "dpbp_enable() failed\n");
+@@ -1705,6 +1711,7 @@ static int setup_dpbp(struct dpaa2_eth_priv *priv)
+ err_get_attr:
+ 	dpbp_disable(priv->mc_io, 0, dpbp_dev->mc_handle);
+ err_enable:
++err_reset:
+ 	dpbp_close(priv->mc_io, 0, dpbp_dev->mc_handle);
+ err_open:
+ 	fsl_mc_object_free(dpbp_dev);
+-- 
+1.7.1
+

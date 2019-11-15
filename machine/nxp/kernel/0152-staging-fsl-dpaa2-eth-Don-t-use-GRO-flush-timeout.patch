@@ -1,0 +1,47 @@
+From 09f2892c7408fd99541f4a06abf784a5e6d7b738 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 4 Jan 2017 18:38:23 +0200
+Subject: [PATCH 152/448] staging: fsl-dpaa2/eth: Don't use GRO flush timeout
+
+It turns out this causes unnacceptable latency in some
+scenarios. So just go back to using napi_complete() instead of
+napi_complete_done().
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 1ed47d4..ea3ae93 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1047,7 +1047,7 @@ static int pull_channel(struct dpaa2_eth_channel *ch)
+ static int dpaa2_eth_poll(struct napi_struct *napi, int budget)
+ {
+ 	struct dpaa2_eth_channel *ch;
+-	int cleaned, rx_cleaned = 0, tx_conf_cleaned = 0;
++	int rx_cleaned = 0, tx_conf_cleaned = 0;
+ 	bool store_cleaned;
+ 	struct dpaa2_eth_priv *priv;
+ 	int err;
+@@ -1077,14 +1077,13 @@ static int dpaa2_eth_poll(struct napi_struct *napi, int budget)
+ 	/* We didn't consume the entire budget, finish napi and
+ 	 * re-enable data availability notifications
+ 	 */
+-	cleaned = max(rx_cleaned, 1);
+-	napi_complete_done(napi, cleaned);
++	napi_complete(napi);
+ 	do {
+ 		err = dpaa2_io_service_rearm(NULL, &ch->nctx);
+ 		cpu_relax();
+ 	} while (err == -EBUSY);
+ 
+-	return cleaned;
++	return max(rx_cleaned, 1);
+ }
+ 
+ static void enable_ch_napi(struct dpaa2_eth_priv *priv)
+-- 
+1.7.1
+

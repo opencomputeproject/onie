@@ -1,0 +1,41 @@
+From 3f50202f90d0d61f92e64ddc57b116c2fe41edb3 Mon Sep 17 00:00:00 2001
+From: Christophe JAILLET <christophe.jaillet@wanadoo.fr>
+Date: Mon, 6 Nov 2017 22:53:30 +0100
+Subject: [PATCH 064/448] fsl/fman: Remove some useless code
+
+There is no need to release explicitly some devm_ allocated resources.
+If the 'mac_probe()' probe function fails, they will be released
+automatically, as already done in the other error handling paths of
+this function.
+
+Also goto '_return_of_get_parent' as in the other error handling paths.
+This is useless (priv->fixed_link is NULL at this point), but at least
+it is consistent.
+
+Signed-off-by: Christophe JAILLET <christophe.jaillet@wanadoo.fr>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+ drivers/net/ethernet/freescale/fman/mac.c |    7 ++-----
+ 1 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/fman/mac.c b/drivers/net/ethernet/freescale/fman/mac.c
+index 7437b16..4066244 100644
+--- a/drivers/net/ethernet/freescale/fman/mac.c
++++ b/drivers/net/ethernet/freescale/fman/mac.c
+@@ -773,11 +773,8 @@ static int mac_probe(struct platform_device *_of_dev)
+ 	}
+ 
+ 	if (!of_device_is_available(mac_node)) {
+-		devm_iounmap(dev, priv->vaddr);
+-		__devm_release_region(dev, fman_get_mem_region(priv->fman),
+-				      res.start, res.end + 1 - res.start);
+-		devm_kfree(dev, mac_dev);
+-		return -ENODEV;
++		err = -ENODEV;
++		goto _return_of_get_parent;
+ 	}
+ 
+ 	/* Get the cell-index */
+-- 
+1.7.1
+

@@ -1,0 +1,212 @@
+From 8179e34651952e9ed5fd3dc9028d00d6ec8d5c86 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 9 May 2017 11:37:56 +0300
+Subject: [PATCH 146/448] staging: fsl-dpaa2/eth: Add flow steering API
+
+Add DPNI object APIs for adding and removing exact match
+flow steering entries.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h |   27 +++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.c     |   78 +++++++++++++++++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h     |   58 ++++++++++++++++++
+ 3 files changed, 163 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+index cacd56f..a6b81ff 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+@@ -511,6 +511,33 @@ struct dpni_cmd_set_queue {
+ 	__le64 user_context;
+ };
+ 
++struct dpni_cmd_add_fs_entry {
++	/* cmd word 0 */
++	u16 options;
++	u8 tc_id;
++	u8 key_size;
++	u16 index;
++	u16 flow_id;
++	/* cmd word 1 */
++	u64 key_iova;
++	/* cmd word 2 */
++	u64 mask_iova;
++	/* cmd word 3 */
++	u64 flc;
++};
++
++struct dpni_cmd_remove_fs_entry {
++	/* cmd word 0 */
++	__le16 pad0;
++	u8 tc_id;
++	u8 key_size;
++	__le32 pad1;
++	/* cmd word 1 */
++	u64 key_iova;
++	/* cmd word 2 */
++	u64 mask_iova;
++};
++
+ struct dpni_cmd_set_taildrop {
+ 	/* cmd word 0 */
+ 	u8 congestion_point;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.c b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+index 2d2d942..233fff9 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+@@ -1376,6 +1376,84 @@ int dpni_set_rx_tc_dist(struct fsl_mc_io *mc_io,
+ }
+ 
+ /**
++ * dpni_add_fs_entry() - Add Flow Steering entry for a specific traffic class
++ *			(to select a flow ID)
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:	Token of DPNI object
++ * @tc_id:	Traffic class selection (0-7)
++ * @index:	Location in the QoS table where to insert the entry.
++ *		Only relevant if MASKING is enabled for QoS
++ *		classification on this DPNI, it is ignored for exact match.
++ * @cfg:	Flow steering rule to add
++ * @action:	Action to be taken as result of a classification hit
++ *
++ * Return:	'0' on Success; Error code otherwise.
++ */
++int dpni_add_fs_entry(struct fsl_mc_io *mc_io,
++		      u32 cmd_flags,
++		      u16 token,
++		      u8 tc_id,
++		      u16 index,
++		      const struct dpni_rule_cfg *cfg,
++		      const struct dpni_fs_action_cfg *action)
++{
++	struct dpni_cmd_add_fs_entry *cmd_params;
++	struct mc_command cmd = { 0 };
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(DPNI_CMDID_ADD_FS_ENT,
++					  cmd_flags,
++					  token);
++	cmd_params = (struct dpni_cmd_add_fs_entry *)cmd.params;
++	cmd_params->tc_id = tc_id;
++	cmd_params->key_size = cfg->key_size;
++	cmd_params->index = cpu_to_le16(index);
++	cmd_params->key_iova = cpu_to_le64(cfg->key_iova);
++	cmd_params->mask_iova = cpu_to_le64(cfg->mask_iova);
++	cmd_params->options = cpu_to_le16(action->options);
++	cmd_params->flow_id = cpu_to_le16(action->flow_id);
++	cmd_params->flc = cpu_to_le64(action->flc);
++
++	/* send command to mc*/
++	return mc_send_command(mc_io, &cmd);
++}
++
++/**
++ * dpni_remove_fs_entry() - Remove Flow Steering entry from a specific
++ *			    traffic class
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:	Token of DPNI object
++ * @tc_id:	Traffic class selection (0-7)
++ * @cfg:	Flow steering rule to remove
++ *
++ * Return:	'0' on Success; Error code otherwise.
++ */
++int dpni_remove_fs_entry(struct fsl_mc_io *mc_io,
++			 u32 cmd_flags,
++			 u16 token,
++			 u8 tc_id,
++			 const struct dpni_rule_cfg *cfg)
++{
++	struct dpni_cmd_remove_fs_entry *cmd_params;
++	struct mc_command cmd = { 0 };
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(DPNI_CMDID_REMOVE_FS_ENT,
++					  cmd_flags,
++					  token);
++	cmd_params = (struct dpni_cmd_remove_fs_entry *)cmd.params;
++	cmd_params->tc_id = tc_id;
++	cmd_params->key_size = cfg->key_size;
++	cmd_params->key_iova = cpu_to_le64(cfg->key_iova);
++	cmd_params->mask_iova = cpu_to_le64(cfg->mask_iova);
++
++	/* send command to mc*/
++	return mc_send_command(mc_io, &cmd);
++}
++
++/**
+  * dpni_set_congestion_notification() - Set traffic class congestion
+  *					notification configuration
+  * @mc_io:	Pointer to MC portal's I/O object
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index ee42689..c9eb2dc 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -926,4 +926,62 @@ struct dpni_rule_cfg {
+ 	u8	key_size;
+ };
+ 
++/**
++ * Discard matching traffic. If set, this takes precedence over any other
++ * configuration and matching traffic is always discarded.
++ */
++ #define DPNI_FS_OPT_DISCARD            0x1
++
++/**
++ * Set FLC value. If set, flc member of struct dpni_fs_action_cfg is used to
++ * override the FLC value set per queue.
++ * For more details check the Frame Descriptor section in the hardware
++ * documentation.
++ */
++#define DPNI_FS_OPT_SET_FLC            0x2
++
++/*
++ * Indicates whether the 6 lowest significant bits of FLC are used for stash
++ * control. If set, the 6 least significant bits in value are interpreted as
++ * follows:
++ *     - bits 0-1: indicates the number of 64 byte units of context that are
++ *     stashed. FLC value is interpreted as a memory address in this case,
++ *     excluding the 6 LS bits.
++ *     - bits 2-3: indicates the number of 64 byte units of frame annotation
++ *     to be stashed. Annotation is placed at FD[ADDR].
++ *     - bits 4-5: indicates the number of 64 byte units of frame data to be
++ *     stashed. Frame data is placed at FD[ADDR] + FD[OFFSET].
++ * This flag is ignored if DPNI_FS_OPT_SET_FLC is not specified.
++ */
++#define DPNI_FS_OPT_SET_STASH_CONTROL  0x4
++
++/**
++ * struct dpni_fs_action_cfg - Action configuration for table look-up
++ * @flc:	FLC value for traffic matching this rule. Please check the
++ *		Frame Descriptor section in the hardware documentation for
++ *		more information.
++ * @flow_id:	Identifies the Rx queue used for matching traffic. Supported
++ *		values are in range 0 to num_queue-1.
++ * @options:	Any combination of DPNI_FS_OPT_ values.
++ */
++struct dpni_fs_action_cfg {
++	u64 flc;
++	u16 flow_id;
++	u16 options;
++};
++
++int dpni_add_fs_entry(struct fsl_mc_io *mc_io,
++		      u32 cmd_flags,
++		      u16 token,
++		      u8 tc_id,
++		      u16 index,
++		      const struct dpni_rule_cfg *cfg,
++		      const struct dpni_fs_action_cfg *action);
++
++int dpni_remove_fs_entry(struct fsl_mc_io *mc_io,
++			 u32 cmd_flags,
++			 u16 token,
++			 u8 tc_id,
++			 const struct dpni_rule_cfg *cfg);
++
+ #endif /* __FSL_DPNI_H */
+-- 
+1.7.1
+

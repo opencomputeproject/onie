@@ -1,0 +1,52 @@
+From 2f20783ea3fdf2b67aac24a5886f57cfbaa00ee8 Mon Sep 17 00:00:00 2001
+From: Ran Wang <ran.wang_1@nxp.com>
+Date: Thu, 9 Aug 2018 13:49:14 +0800
+Subject: [PATCH 406/448] soc: fsl: Fix flex timer fail to wakeup on LS1021A
+
+Correct the setting on ippdexpcr for flex timer alarm.
+Use scratchpad register to pass setting to boot loader such as U-Boot,
+because register ippdexpcr has defect of fail to return correct data
+when read.
+
+Signed-off-by: Ran Wang <ran.wang_1@nxp.com>
+---
+ drivers/soc/fsl/layerscape/ftm_alarm.c |    9 ++++++++-
+ 1 files changed, 8 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/soc/fsl/layerscape/ftm_alarm.c b/drivers/soc/fsl/layerscape/ftm_alarm.c
+index 49865b0..d0e2c41 100644
+--- a/drivers/soc/fsl/layerscape/ftm_alarm.c
++++ b/drivers/soc/fsl/layerscape/ftm_alarm.c
+@@ -41,6 +41,7 @@
+ 
+ static void __iomem *ftm1_base;
+ static void __iomem *rcpm_ftm_addr;
++static void __iomem *scfg_scrachpad_addr;
+ static u32 alarm_freq;
+ static bool big_endian;
+ 
+@@ -61,7 +62,7 @@ struct rcpm_cfg {
+ 
+ static struct rcpm_cfg ls1021a_rcpm_cfg = {
+ 	.big_endian = BIG_ENDIAN,
+-	.flextimer_set_bit = 0x20000,
++	.flextimer_set_bit = 0x30000000,
+ };
+ 
+ static struct rcpm_cfg ls1043a_rcpm_cfg = {
+@@ -308,6 +309,12 @@ static int ftm_alarm_probe(struct platform_device *pdev)
+ 			iowrite32be(ippdexpcr, rcpm_ftm_addr);
+ 		else
+ 			iowrite32(ippdexpcr, rcpm_ftm_addr);
++
++		r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "scrachpad");
++		if (r) {
++			scfg_scrachpad_addr = devm_ioremap_resource(&pdev->dev, r);
++			iowrite32(ippdexpcr, scfg_scrachpad_addr);
++		}
+ 	}
+ 
+ 	irq = irq_of_parse_and_map(np, 0);
+-- 
+1.7.1
+

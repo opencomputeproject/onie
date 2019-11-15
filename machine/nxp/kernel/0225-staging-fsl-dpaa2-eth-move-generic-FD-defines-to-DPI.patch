@@ -1,0 +1,88 @@
+From a2f627cd423a1b60b5169b688019c0bd42cf4b93 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Wed, 26 Jul 2017 17:33:12 +0300
+Subject: [PATCH 225/448] staging: fsl-dpaa2/eth: move generic FD defines to DPIO (part II)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Previous commits:
+6e2387e8f19e ("staging: fsl-dpaa2/eth: Add Freescale DPAA2 Ethernet driver")
+39163c0ce0f4 ("staging: fsl-dpaa2/eth: Errors checking update")
+have added bits that are not specific to the WRIOP accelerator.
+
+Move these where they belong (in DPIO) such that other accelerators
+can make use of them.
+
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    6 +++---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |   18 +++++-------------
+ 2 files changed, 8 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 59caee2..c6736dd 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -456,7 +456,7 @@ static void dpaa2_eth_rx_err(struct dpaa2_eth_priv *priv,
+ 	/* check frame errors in the FD field */
+ 	fd_errors = dpaa2_fd_get_ctrl(fd) & DPAA2_FD_RX_ERR_MASK;
+ 	if (likely(fd_errors)) {
+-		has_fas_errors = (fd_errors & DPAA2_FD_CTRL_FAERR) &&
++		has_fas_errors = (fd_errors & FD_CTRL_FAERR) &&
+ 				 !!(dpaa2_fd_get_frc(fd) & DPAA2_FD_FRC_FASV);
+ 		if (net_ratelimit())
+ 			netdev_dbg(priv->net_dev, "RX frame FD err: %08x\n",
+@@ -639,7 +639,7 @@ static int build_sg_fd(struct dpaa2_eth_priv *priv,
+ 	dpaa2_fd_set_format(fd, dpaa2_fd_sg);
+ 	dpaa2_fd_set_addr(fd, addr);
+ 	dpaa2_fd_set_len(fd, skb->len);
+-	dpaa2_fd_set_ctrl(fd, DPAA2_FD_CTRL_PTA);
++	dpaa2_fd_set_ctrl(fd, FD_CTRL_PTA);
+ 
+ 	if (priv->ts_tx_en && skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)
+ 		enable_tx_tstamp(fd, sgt_buf);
+@@ -693,7 +693,7 @@ static int build_single_fd(struct dpaa2_eth_priv *priv,
+ 	dpaa2_fd_set_offset(fd, (u16)(skb->data - buffer_start));
+ 	dpaa2_fd_set_len(fd, skb->len);
+ 	dpaa2_fd_set_format(fd, dpaa2_fd_single);
+-	dpaa2_fd_set_ctrl(fd, DPAA2_FD_CTRL_PTA);
++	dpaa2_fd_set_ctrl(fd, FD_CTRL_PTA);
+ 
+ 	if (priv->ts_tx_en && skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)
+ 		enable_tx_tstamp(fd, buffer_start);
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 1bbced5..3267688 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -154,22 +154,14 @@ struct dpaa2_eth_swa {
+ #define DPAA2_FD_FRC_FASWOV		0x0800
+ #define DPAA2_FD_FRC_FAICFDV		0x0400
+ 
+-/* Error bits in FD CTRL */
+-#define DPAA2_FD_CTRL_UFD		0x00000004
+-#define DPAA2_FD_CTRL_SBE		0x00000008
+-#define DPAA2_FD_CTRL_FSE		0x00000020
+-#define DPAA2_FD_CTRL_FAERR		0x00000040
+-
+-#define DPAA2_FD_RX_ERR_MASK		(DPAA2_FD_CTRL_SBE	| \
+-					 DPAA2_FD_CTRL_FAERR)
+-#define DPAA2_FD_TX_ERR_MASK		(DPAA2_FD_CTRL_UFD	| \
+-					 DPAA2_FD_CTRL_SBE	| \
+-					 DPAA2_FD_CTRL_FSE	| \
+-					 DPAA2_FD_CTRL_FAERR)
++#define DPAA2_FD_RX_ERR_MASK		(FD_CTRL_SBE | FD_CTRL_FAERR)
++#define DPAA2_FD_TX_ERR_MASK		(FD_CTRL_UFD	| \
++					 FD_CTRL_SBE	| \
++					 FD_CTRL_FSE	| \
++					 FD_CTRL_FAERR)
+ 
+ /* Annotation bits in FD CTRL */
+ #define DPAA2_FD_CTRL_ASAL		0x00020000	/* ASAL = 128 */
+-#define DPAA2_FD_CTRL_PTA		0x00800000
+ 
+ /* Frame annotation status */
+ struct dpaa2_fas {
+-- 
+1.7.1
+

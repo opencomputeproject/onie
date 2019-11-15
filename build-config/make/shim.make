@@ -148,7 +148,7 @@ $(SHIM_SELF_SIGN_STAMP): $(SHIM_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 		"$(SHIM_INSTALL_DIR)/shim$(EFI_ARCH).efi"
 	$(Q) touch $@
 
-USERSPACE_CLEAN += shim-clean
+MACHINE_CLEAN += shim-clean
 shim-clean:
 	$(Q) rm -rf $(SHIM_BUILD_DIR)
 	$(Q) rm -f $(SHIM_STAMP) $(SHIM_SELF_SIGN_STAMP)

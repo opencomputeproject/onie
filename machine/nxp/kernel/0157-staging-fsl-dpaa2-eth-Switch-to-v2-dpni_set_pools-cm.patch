@@ -1,0 +1,115 @@
+From bb76498e8abb8409bc1252b23f9a03ca95bad58b Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Mon, 7 Aug 2017 07:57:18 +0000
+Subject: [PATCH 157/448] staging: fsl-dpaa2/eth: Switch to v2 dpni_set_pools cmd
+
+The v2 dpni_set_pools command format allows sending an additional
+parameter, the priority mask for the buffer pool. This can be used to
+configure multiple buffer pools for the same dpni, to serve different
+priorities.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    1 +
+ drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h  |   13 ++++++++-----
+ drivers/staging/fsl-dpaa2/ethernet/dpni.c      |    5 ++++-
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h      |    6 ++++--
+ 4 files changed, 17 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 30c5e24..f14ad65 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2414,6 +2414,7 @@ static int bind_dpni(struct dpaa2_eth_priv *priv)
+ 	pools_params.num_dpbp = 1;
+ 	pools_params.pools[0].dpbp_id = priv->dpbp_dev->obj_desc.id;
+ 	pools_params.pools[0].backup_pool = 0;
++	pools_params.pools[0].priority_mask = 0xff;
+ 	pools_params.pools[0].buffer_size = DPAA2_ETH_RX_BUF_SIZE;
+ 	err = dpni_set_pools(priv->mc_io, 0, priv->mc_token, &pools_params);
+ 	if (err) {
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+index 6c5ea64..27c2b50 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+@@ -39,9 +39,11 @@
+ #define DPNI_VER_MAJOR				7
+ #define DPNI_VER_MINOR				0
+ #define DPNI_CMD_BASE_VERSION			1
++#define DPNI_CMD_2ND_VERSION			2
+ #define DPNI_CMD_ID_OFFSET			4
+ 
+ #define DPNI_CMD(id)	(((id) << DPNI_CMD_ID_OFFSET) | DPNI_CMD_BASE_VERSION)
++#define DPNI_CMD_V2(id)	(((id) << DPNI_CMD_ID_OFFSET) | DPNI_CMD_2ND_VERSION)
+ 
+ #define DPNI_CMDID_OPEN					DPNI_CMD(0x801)
+ #define DPNI_CMDID_CLOSE				DPNI_CMD(0x800)
+@@ -64,7 +66,7 @@
+ #define DPNI_CMDID_GET_IRQ_STATUS			DPNI_CMD(0x016)
+ #define DPNI_CMDID_CLEAR_IRQ_STATUS			DPNI_CMD(0x017)
+ 
+-#define DPNI_CMDID_SET_POOLS				DPNI_CMD(0x200)
++#define DPNI_CMDID_SET_POOLS				DPNI_CMD_V2(0x200)
+ #define DPNI_CMDID_SET_ERRORS_BEHAVIOR			DPNI_CMD(0x20B)
+ 
+ #define DPNI_CMDID_GET_QDID				DPNI_CMD(0x210)
+@@ -127,13 +129,14 @@ struct dpni_cmd_open {
+ 
+ #define DPNI_BACKUP_POOL(val, order)	(((val) & 0x1) << (order))
+ struct dpni_cmd_set_pools {
+-	/* cmd word 0 */
+ 	u8 num_dpbp;
+ 	u8 backup_pool_mask;
+ 	__le16 pad;
+-	/* cmd word 0..4 */
+-	__le32 dpbp_id[DPNI_MAX_DPBP];
+-	/* cmd word 4..6 */
++	struct {
++		__le16 dpbp_id;
++		u8 priority_mask;
++		u8 pad;
++	} pool[DPNI_MAX_DPBP];
+ 	__le16 buffer_size[DPNI_MAX_DPBP];
+ };
+ 
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.c b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+index bbf7053..d9add36 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+@@ -199,7 +199,10 @@ int dpni_set_pools(struct fsl_mc_io *mc_io,
+ 	cmd_params = (struct dpni_cmd_set_pools *)cmd.params;
+ 	cmd_params->num_dpbp = cfg->num_dpbp;
+ 	for (i = 0; i < DPNI_MAX_DPBP; i++) {
+-		cmd_params->dpbp_id[i] = cpu_to_le32(cfg->pools[i].dpbp_id);
++		cmd_params->pool[i].dpbp_id =
++			cpu_to_le16(cfg->pools[i].dpbp_id);
++		cmd_params->pool[i].priority_mask =
++			cfg->pools[i].priority_mask;
+ 		cmd_params->buffer_size[i] =
+ 			cpu_to_le16(cfg->pools[i].buffer_size);
+ 		cmd_params->backup_pool_mask |=
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index 701d39b..dff9ef1 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -131,13 +131,15 @@ struct dpni_pools_cfg {
+ 	/**
+ 	 * struct pools - Buffer pools parameters
+ 	 * @dpbp_id: DPBP object ID
++	 * @priority_mask: priorities served by DPBP
+ 	 * @buffer_size: Buffer size
+ 	 * @backup_pool: Backup pool
+ 	 */
+ 	struct {
+-		int	dpbp_id;
++		u16	dpbp_id;
++		u8	priority_mask;
+ 		u16	buffer_size;
+-		int	backup_pool;
++		u8	backup_pool;
+ 	} pools[DPNI_MAX_DPBP];
+ };
+ 
+-- 
+1.7.1
+

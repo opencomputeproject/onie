@@ -1,0 +1,255 @@
+From 9ab0656dd2cd78611eddf6839a3fb41a4ee5caef Mon Sep 17 00:00:00 2001
+From: Ashish Kumar <Ashish.Kumar@nxp.com>
+Date: Mon, 19 Feb 2018 14:16:58 +0530
+Subject: [PATCH 004/107] armv8: ls1088aqds: Add IFC-NOR as boot source for LS1088
+
+IFC-NOR and QSPI-NOR pins are multiplexed on SoC, so they cannot be
+accessed simultaneously. IFC-NOR can be accessed along with SD-BOOT.
+
+Ls1088aqds_sdcard_ifc_defconfig is default config for SD boot and
+IFC-NOR to be used as flash. This allows writing to IFC-NOR flash.
+QSPI and DSPI cannot be accessed in this defconfig.
+IFC-NOR image is generated using ls1088aqds_defconfig.
+
+Signed-off-by: Ashish Kumar <Ashish.Kumar@nxp.com>
+Reviewed-by: York Sun <york.sun@nxp.com>
+---
+ arch/arm/dts/fsl-ls1088a-qds.dts        |   37 +++++++++++++++++++++
+ arch/arm/dts/fsl-ls1088a.dtsi           |    5 +++
+ board/freescale/ls1088a/MAINTAINERS     |    2 +
+ configs/ls1088aqds_defconfig            |   43 ++++++++++++++++++++++++
+ configs/ls1088aqds_sdcard_ifc_defconfig |   54 +++++++++++++++++++++++++++++++
+ include/configs/ls1088aqds.h            |   12 ++++---
+ 6 files changed, 148 insertions(+), 5 deletions(-)
+ create mode 100644 configs/ls1088aqds_defconfig
+ create mode 100644 configs/ls1088aqds_sdcard_ifc_defconfig
+
+diff --git a/arch/arm/dts/fsl-ls1088a-qds.dts b/arch/arm/dts/fsl-ls1088a-qds.dts
+index 225c7c5..02000fc 100644
+--- a/arch/arm/dts/fsl-ls1088a-qds.dts
++++ b/arch/arm/dts/fsl-ls1088a-qds.dts
+@@ -19,6 +19,43 @@
+ 	};
+ };
+ 
++&ifc {
++	#address-cells = <2>;
++	#size-cells = <1>;
++	/* NOR, NAND Flashes and FPGA on board */
++	ranges = <0 0 0x5 0x80000000 0x08000000
++			2 0 0x5 0x30000000 0x00010000
++			3 0 0x5 0x20000000 0x00010000>;
++	status = "okay";
++
++	nor@0,0 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "cfi-flash";
++		reg = <0x0 0x0 0x8000000>;
++		bank-width = <2>;
++		device-width = <1>;
++	};
++
++	nand@2,0 {
++		compatible = "fsl,ifc-nand";
++		#address-cells = <1>;
++		#size-cells = <1>;
++		reg = <0x1 0x0 0x10000>;
++	};
++
++	fpga: board-control@3,0 {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "simple-bus", "fsl,ls1088aqds-fpga",
++				"fsl,fpga-qixis";
++		reg = <0x2 0x0 0x0000100>;
++		bank-width = <1>;
++		device-width = <1>;
++		ranges = <0 2 0 0x100>;
++	};
++};
++
+ &dspi {
+ 	bus-num = <0>;
+ 	status = "okay";
+diff --git a/arch/arm/dts/fsl-ls1088a.dtsi b/arch/arm/dts/fsl-ls1088a.dtsi
+index f8f8654..b4a42cf 100644
+--- a/arch/arm/dts/fsl-ls1088a.dtsi
++++ b/arch/arm/dts/fsl-ls1088a.dtsi
+@@ -75,6 +75,11 @@
+ 		reg-names = "QuadSPI", "QuadSPI-memory";
+ 		num-cs = <4>;
+ 	};
++	ifc: ifc@1530000 {
++		compatible = "fsl,ifc", "simple-bus";
++		reg = <0x0 0x2240000 0x0 0x20000>;
++		interrupts = <0 21 0x4>; /* Level high type */
++	};
+ 
+ 	usb0: usb3@3100000 {
+ 		compatible = "fsl,layerscape-dwc3";
+diff --git a/board/freescale/ls1088a/MAINTAINERS b/board/freescale/ls1088a/MAINTAINERS
+index 371e5db..4d804d9 100644
+--- a/board/freescale/ls1088a/MAINTAINERS
++++ b/board/freescale/ls1088a/MAINTAINERS
+@@ -15,6 +15,8 @@ F:	board/freescale/ls1088a/
+ F:	include/configs/ls1088aqds.h
+ F:	configs/ls1088aqds_qspi_defconfig
+ F:	configs/ls1088aqds_sdcard_qspi_defconfig
++F:	configs/ls1088aqds_defconfig
++F:	configs/ls1088aqds_sdcard_ifc_defconfig
+ 
+ LS1088AQDS_QSPI_SECURE_BOOT BOARD
+ M:	Udit Agarwal <udit.agarwal@nxp.com>
+diff --git a/configs/ls1088aqds_defconfig b/configs/ls1088aqds_defconfig
+new file mode 100644
+index 0000000..acb9d7b
+--- /dev/null
++++ b/configs/ls1088aqds_defconfig
+@@ -0,0 +1,43 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088AQDS=y
++CONFIG_SYS_TEXT_BASE=0x30100000
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_DM_SPI=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-qds"
++CONFIG_FIT=y
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_OF_STDOUT_VIA_ALIAS=y
++CONFIG_SYS_EXTRA_OPTIONS="SYS_FSL_DDR4"
++CONFIG_HUSH_PARSER=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_I2C=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_CMD_DHCP=y
++CONFIG_CMD_PING=y
++CONFIG_OF_CONTROL=y
++CONFIG_FSL_IFC=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_SCSI_AHCI=y
++CONFIG_MTD_NOR_FLASH=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_DM_PCI_COMPAT=y
++CONFIG_PCIE_LAYERSCAPE=y
++CONFIG_SYS_NS16550=y
++CONFIG_ENV_IS_IN_FLASH=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_USB=y
++CONFIG_USB_GADGET=y
++CONFIG_CMD_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_DWC3=y
++CONFIG_USB_STORAGE=y
++# CONFIG_DISPLAY_BOARDINFO is not set
++# CONFIG_USE_BOOTCOMMAND is not set
+diff --git a/configs/ls1088aqds_sdcard_ifc_defconfig b/configs/ls1088aqds_sdcard_ifc_defconfig
+new file mode 100644
+index 0000000..d415026
+--- /dev/null
++++ b/configs/ls1088aqds_sdcard_ifc_defconfig
+@@ -0,0 +1,54 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1088AQDS=y
++CONFIG_SYS_TEXT_BASE=0x80400000
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_SPL_LIBGENERIC_SUPPORT=y
++CONFIG_FSL_LS_PPA=y
++CONFIG_SPL_MMC_SUPPORT=y
++CONFIG_SPL_SERIAL_SUPPORT=y
++CONFIG_SPL_DRIVERS_MISC_SUPPORT=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1088a-qds"
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_PARTITIONS=y
++CONFIG_SYS_EXTRA_OPTIONS="SYS_FSL_DDR4"
++CONFIG_SD_BOOT=y
++# CONFIG_DISPLAY_BOARDINFO is not set
++# CONFIG_USE_BOOTCOMMAND is not set
++CONFIG_SPL=y
++CONFIG_SPL_BUILD=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x8b0
++CONFIG_SPL_ENV_SUPPORT=y
++CONFIG_SPL_I2C_SUPPORT=y
++CONFIG_SPL_MPC8XXX_INIT_DDR_SUPPORT=y
++CONFIG_HUSH_PARSER=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_MTD_NOR_FLASH=y
++CONFIG_FSL_IFC=y
++CONFIG_CMD_USB=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_CMD_DHCP=y
++CONFIG_CMD_PING=y
++CONFIG_OF_CONTROL=y
++CONFIG_ENV_IS_IN_MMC=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++CONFIG_SCSI_AHCI=y
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_DM_PCI_COMPAT=y
++CONFIG_PCIE_LAYERSCAPE=y
++CONFIG_SYS_NS16550=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_DWC3=y
++CONFIG_USB_STORAGE=y
++CONFIG_USB_GADGET=y
+diff --git a/include/configs/ls1088aqds.h b/include/configs/ls1088aqds.h
+index 5de364e..34f991c 100644
+--- a/include/configs/ls1088aqds.h
++++ b/include/configs/ls1088aqds.h
+@@ -27,7 +27,6 @@ unsigned long get_board_ddr_clk(void);
+ #define CONFIG_SYS_MMC_ENV_DEV		0
+ #define CONFIG_ENV_SIZE			0x2000
+ #else
+-#define CONFIG_ENV_IS_IN_FLASH
+ #define CONFIG_ENV_ADDR			(CONFIG_SYS_FLASH_BASE + 0x300000)
+ #define CONFIG_ENV_SECT_SIZE		0x20000
+ #define CONFIG_ENV_SIZE			0x20000
+@@ -41,6 +40,8 @@ unsigned long get_board_ddr_clk(void);
+ #define CONFIG_SYS_CLK_FREQ		100000000
+ #define CONFIG_DDR_CLK_FREQ		100000000
+ #else
++#define CONFIG_QIXIS_I2C_ACCESS
++#define CONFIG_SYS_I2C_EARLY_INIT
+ #define CONFIG_SYS_CLK_FREQ		get_board_sys_clk()
+ #define CONFIG_DDR_CLK_FREQ		get_board_ddr_clk()
+ #endif
+@@ -89,13 +90,14 @@ unsigned long get_board_ddr_clk(void);
+ #define CONFIG_SYS_NOR_CSOR	CSOR_NOR_ADM_SHIFT(12)
+ #define CONFIG_SYS_NOR_FTIM0	(FTIM0_NOR_TACSE(0x4) | \
+ 				FTIM0_NOR_TEADC(0x5) | \
++				FTIM0_NOR_TAVDS(0x6) | \
+ 				FTIM0_NOR_TEAHC(0x5))
+ #define CONFIG_SYS_NOR_FTIM1	(FTIM1_NOR_TACO(0x35) | \
+-				FTIM1_NOR_TRAD_NOR(0x1a) |\
++				FTIM1_NOR_TRAD_NOR(0x1a) | \
+ 				FTIM1_NOR_TSEQRAD_NOR(0x13))
+-#define CONFIG_SYS_NOR_FTIM2	(FTIM2_NOR_TCS(0x4) | \
+-				FTIM2_NOR_TCH(0x4) | \
+-				FTIM2_NOR_TWPH(0x0E) | \
++#define CONFIG_SYS_NOR_FTIM2	(FTIM2_NOR_TCS(0x8) | \
++				FTIM2_NOR_TCH(0x8) | \
++				FTIM2_NOR_TWPH(0xe) | \
+ 				FTIM2_NOR_TWP(0x1c))
+ #define CONFIG_SYS_NOR_FTIM3	0x04000000
+ #define CONFIG_SYS_IFC_CCR	0x01000000
+-- 
+1.7.1
+

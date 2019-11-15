@@ -1,0 +1,64 @@
+From d57d712800adfc4569c5320e4fc29fffe80860c7 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Thu, 31 May 2018 15:08:15 +0800
+Subject: [PATCH] Add Broadcom BCM54616S PHY support to intel igb driver
+
+---
+ drivers/net/ethernet/intel/igb/e1000_82575.c   | 6 ++++++
+ drivers/net/ethernet/intel/igb/e1000_defines.h | 1 +
+ drivers/net/ethernet/intel/igb/e1000_hw.h      | 2 ++
+ 3 files changed, 9 insertions(+)
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+index 1003313..1ea5ffd 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c
+@@ -342,6 +342,9 @@ static s32 igb_init_phy_params_82575(struct e1000_hw *hw)
+ 		phy->ops.set_d3_lplu_state = igb_set_d3_lplu_state_82580;
+ 		phy->ops.force_speed_duplex = igb_phy_force_speed_duplex_m88;
+ 		break;
++	case BCM54616S_E_PHY_ID:
++		phy->type		= e1000_phy_bcm54616s;
++		break;
+ 	default:
+ 		ret_val = -E1000_ERR_PHY;
+ 		goto out;
+@@ -1663,6 +1666,9 @@ static s32 igb_setup_copper_link_82575(struct e1000_hw *hw)
+ 	case e1000_phy_82580:
+ 		ret_val = igb_copper_link_setup_82580(hw);
+ 		break;
++	case e1000_phy_bcm54616s:
++		ret_val = 0;
++		break;
+ 	default:
+ 		ret_val = -E1000_ERR_PHY;
+ 		break;
+diff --git a/drivers/net/ethernet/intel/igb/e1000_defines.h b/drivers/net/ethernet/intel/igb/e1000_defines.h
+index 2da7214..5996310 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_defines.h
++++ b/drivers/net/ethernet/intel/igb/e1000_defines.h
+@@ -869,6 +869,7 @@
+ #define I210_I_PHY_ID        0x01410C00
+ #define M88E1543_E_PHY_ID    0x01410EA0
+ #define M88E1512_E_PHY_ID    0x01410DD0
++#define BCM54616S_E_PHY_ID   0x03625D10
+ 
+ /* M88E1000 Specific Registers */
+ #define M88E1000_PHY_SPEC_CTRL     0x10  /* PHY Specific Control Register */
+diff --git a/drivers/net/ethernet/intel/igb/e1000_hw.h b/drivers/net/ethernet/intel/igb/e1000_hw.h
+index 2fb2213..f3d6e11 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_hw.h
++++ b/drivers/net/ethernet/intel/igb/e1000_hw.h
+@@ -127,7 +127,9 @@ enum e1000_phy_type {
+ 	e1000_phy_igp_3,
+ 	e1000_phy_ife,
+ 	e1000_phy_82580,
++	e1000_phy_vf,
+ 	e1000_phy_i210,
++	e1000_phy_bcm54616s,
+ };
+ 
+ enum e1000_bus_type {
+-- 
+2.7.4
+

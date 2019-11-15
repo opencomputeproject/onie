@@ -1,0 +1,55 @@
+From e11a48a5181c1f3f0ade1f166e7f587166148e05 Mon Sep 17 00:00:00 2001
+From: Colin Ian King <colin.king@canonical.com>
+Date: Thu, 31 Aug 2017 14:24:49 +0100
+Subject: [PATCH 053/448] fsl/fman: make arrays port_ids static, reduces object code size
+
+Don't populate the arrays port_ids on the stack, instead make them static.
+Makes the object code smaller by over 700 bytes:
+
+Before:
+   text	   data	    bss	    dec	    hex	filename
+  28785	   5832	    192	  34809	   87f9	fman.o
+
+After:
+   text	   data	    bss	    dec	    hex	filename
+  27921	   5992	    192	  34105	   8539	fman.o
+
+Signed-off-by: Colin Ian King <colin.king@canonical.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+ drivers/net/ethernet/freescale/fman/fman.c |   14 ++++++++++----
+ 1 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/ethernet/freescale/fman/fman.c b/drivers/net/ethernet/freescale/fman/fman.c
+index dafd9e1..0a8f853 100644
+--- a/drivers/net/ethernet/freescale/fman/fman.c
++++ b/drivers/net/ethernet/freescale/fman/fman.c
+@@ -2405,15 +2405,21 @@ u32 fman_get_qman_channel_id(struct fman *fman, u32 port_id)
+ 	int i;
+ 
+ 	if (fman->state->rev_info.major >= 6) {
+-		u32 port_ids[] = {0x30, 0x31, 0x28, 0x29, 0x2a, 0x2b,
+-				  0x2c, 0x2d, 0x2, 0x3, 0x4, 0x5, 0x7, 0x7};
++		static const u32 port_ids[] = {
++			0x30, 0x31, 0x28, 0x29, 0x2a, 0x2b,
++			0x2c, 0x2d, 0x2, 0x3, 0x4, 0x5, 0x7, 0x7
++		};
++
+ 		for (i = 0; i < fman->state->num_of_qman_channels; i++) {
+ 			if (port_ids[i] == port_id)
+ 				break;
+ 		}
+ 	} else {
+-		u32 port_ids[] = {0x30, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x1,
+-				  0x2, 0x3, 0x4, 0x5, 0x7, 0x7};
++		static const u32 port_ids[] = {
++			0x30, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x1,
++			0x2, 0x3, 0x4, 0x5, 0x7, 0x7
++		};
++
+ 		for (i = 0; i < fman->state->num_of_qman_channels; i++) {
+ 			if (port_ids[i] == port_id)
+ 				break;
+-- 
+1.7.1
+

@@ -1,0 +1,65 @@
+From 9466619f054e5703608dc2be7e5ec43899d944a2 Mon Sep 17 00:00:00 2001
+From: Guanhua Gao <guanhua.gao@nxp.com>
+Date: Mon, 21 May 2018 17:26:16 +0800
+Subject: [PATCH 272/448] staging: fsl-dpaa2/eth: Change max number of Tx queues
+
+We use DPAA2_ETH_MAX_TX_QUEUES to dimension the array holding
+information on Tx queues. At most, we can have one queue per cpu.
+
+Until now we used the NR_CPUS macro to set the upper limit on number
+of Tx queues. However, the platforms that the DPAA2 Ethernet driver
+supports have at most 16 cores, whereas NR_CPUS is Kconfigurable and
+can be much higher.
+
+Avoid allocating memory we'll never use, by setting
+DPAA2_ETH_MAX_TX_QUEUES to 16. Same for DPAA2_ETH_MAX_DPCONS.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    3 ++-
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h      |    4 ++--
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index a051bcd..34c8e5b 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -313,7 +313,6 @@ struct dpaa2_eth_ch_stats {
+ 	__u64 pull_err;
+ };
+ 
+-#define DPAA2_ETH_MAX_DPCONS		NR_CPUS
+ #define DPAA2_ETH_MAX_TCS		8
+ 
+ /* Maximum number of queues associated with a DPNI */
+@@ -324,6 +323,8 @@ struct dpaa2_eth_ch_stats {
+ 					DPAA2_ETH_MAX_TX_QUEUES + \
+ 					DPAA2_ETH_MAX_RX_ERR_QUEUES)
+ 
++#define DPAA2_ETH_MAX_DPCONS		16
++
+ enum dpaa2_eth_fq_type {
+ 	DPAA2_RX_FQ = 0,
+ 	DPAA2_TX_CONF_FQ,
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index 886b902..0dcf103 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -55,11 +55,11 @@
+ /**
+  * Maximum number of senders
+  */
+-#define DPNI_MAX_SENDERS			8
++#define DPNI_MAX_SENDERS			16
+ /**
+  * Maximum distribution size
+  */
+-#define DPNI_MAX_DIST_SIZE			8
++#define DPNI_MAX_DIST_SIZE			16
+ 
+ /**
+  * All traffic classes considered; see dpni_set_queue()
+-- 
+1.7.1
+

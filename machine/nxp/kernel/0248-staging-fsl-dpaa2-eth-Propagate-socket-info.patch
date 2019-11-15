@@ -1,0 +1,43 @@
+From a0aa5cc516af9cf2d2431b29e03338667669d65e Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 25 Apr 2018 17:13:19 +0300
+Subject: [PATCH 248/448] staging: fsl-dpaa2/eth: Propagate socket info
+
+Some skbs on the Tx path may be reallocated by the driver
+due to insufficient headroom, in which case the socket
+value gets lost.
+
+Make sure we propagate the skb ownership information to the
+new skb, since it's needed by the Tx timestamp function in
+the kernel.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index a262e11..d3167ab 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -42,7 +42,7 @@
+ #include <linux/bpf.h>
+ #include <linux/filter.h>
+ #include <linux/atomic.h>
+-
++#include <net/sock.h>
+ #include <linux/fsl/mc.h>
+ #include "dpaa2-eth.h"
+ #include "dpaa2-eth-ceetm.h"
+@@ -813,6 +813,8 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 			goto err_alloc_headroom;
+ 		}
+ 		percpu_extras->tx_reallocs++;
++		if (skb->sk)
++			skb_set_owner_w(ns, skb->sk);
+ 		dev_kfree_skb(skb);
+ 		skb = ns;
+ 	}
+-- 
+1.7.1
+

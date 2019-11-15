@@ -1,0 +1,96 @@
+From 1fa94174032df87f158f4959dbff2f71fb5f296d Mon Sep 17 00:00:00 2001
+From: Sumit Garg <sumit.garg@nxp.com>
+Date: Fri, 12 Jan 2018 02:20:39 +0530
+Subject: [PATCH 041/107] armv8: sec_firmware: Add support for multiple loadables
+
+Enable support for multiple loadable images in SEC firmware FIT image.
+
+Signed-off-by: Sumit Garg <sumit.garg@nxp.com>
+---
+ arch/arm/cpu/armv8/sec_firmware.c |   51 +++++++++++++++++++++++++++++-------
+ 1 files changed, 41 insertions(+), 10 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/sec_firmware.c b/arch/arm/cpu/armv8/sec_firmware.c
+index 98d7be3..9af0a00 100644
+--- a/arch/arm/cpu/armv8/sec_firmware.c
++++ b/arch/arm/cpu/armv8/sec_firmware.c
+@@ -116,11 +116,13 @@ static int sec_firmware_check_copy_loadable(const void *sec_firmware_img,
+ 					    u32 *loadable_l, u32 *loadable_h)
+ {
+ 	phys_addr_t sec_firmware_loadable_addr = 0;
+-	int conf_node_off, ld_node_off;
++	int conf_node_off, ld_node_off, images;
+ 	char *conf_node_name = NULL;
+ 	const void *data;
+ 	size_t size;
+ 	ulong load;
++	const char *name, *str, *type;
++	int len;
+ 
+ 	conf_node_name = SEC_FIRMEWARE_FIT_CNF_NAME;
+ 
+@@ -130,11 +132,32 @@ static int sec_firmware_check_copy_loadable(const void *sec_firmware_img,
+ 	return -ENOENT;
+ 	}
+ 
+-	ld_node_off = fit_conf_get_prop_node(sec_firmware_img, conf_node_off,
+-					     FIT_LOADABLE_PROP);
+-	if (ld_node_off >= 0) {
+-		printf("SEC Firmware: '%s' present in config\n",
+-		       FIT_LOADABLE_PROP);
++	/* find the node holding the images information */
++	images = fdt_path_offset(sec_firmware_img, FIT_IMAGES_PATH);
++	if (images < 0) {
++		debug("%s: Cannot find /images node: %d\n", __func__, images);
++		return -1;
++	}
++
++	type = FIT_LOADABLE_PROP;
++
++	name = fdt_getprop(sec_firmware_img, conf_node_off, type, &len);
++	if (!name) {
++		/* Loadables not present */
++		return 0;
++	}
++
++	printf("SEC Firmware: '%s' present in config\n", type);
++
++	for (str = name; str && ((str - name) < len);
++	     str = strchr(str, '\0') + 1) {
++		printf("%s: '%s'\n", type, str);
++		ld_node_off = fdt_subnode_offset(sec_firmware_img, images, str);
++		if (ld_node_off < 0) {
++			printf("cannot find image node '%s': %d\n", str,
++			       ld_node_off);
++			return -EINVAL;
++		}
+ 
+ 		/* Verify secure firmware image */
+ 		if (!(fit_image_verify(sec_firmware_img, ld_node_off))) {
+@@ -164,11 +187,19 @@ static int sec_firmware_check_copy_loadable(const void *sec_firmware_img,
+ 		memcpy((void *)sec_firmware_loadable_addr, data, size);
+ 		flush_dcache_range(sec_firmware_loadable_addr,
+ 				   sec_firmware_loadable_addr + size);
+-	}
+ 
+-	/* Populate address ptrs for loadable image with loadbale addr */
+-	out_le32(loadable_l, (sec_firmware_loadable_addr & WORD_MASK));
+-	out_le32(loadable_h, (sec_firmware_loadable_addr >> WORD_SHIFT));
++		/* Populate loadable address only for Trusted OS */
++		if (!strcmp(str, "trustedOS@1")) {
++			/*
++			 * Populate address ptrs for loadable image with
++			 * loadbale addr
++			 */
++			out_le32(loadable_l, (sec_firmware_loadable_addr &
++					      WORD_MASK));
++			out_le32(loadable_h, (sec_firmware_loadable_addr >>
++					      WORD_SHIFT));
++		}
++	}
+ 
+ 	return 0;
+ }
+-- 
+1.7.1
+

@@ -1,0 +1,153 @@
+From 1ce6e630e14780c0919f2f3c5d09ea6ebdef8ec5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Mon, 23 Jul 2018 15:51:58 +0300
+Subject: [PATCH 424/448] crypto: caam/qi2 - remove op_type from caam_request
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It makes little sense to carry op_type in caam_request structure
+and update it on the hot path, now that we are left only with
+ENCRYPT and DECRYPT as possible skcipher/aead operations.
+
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/caam/caamalg_qi2.c |   51 ++++++++++++++++++++++++++++--------
+ drivers/crypto/caam/caamalg_qi2.h |    2 -
+ 2 files changed, 39 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/crypto/caam/caamalg_qi2.c b/drivers/crypto/caam/caamalg_qi2.c
+index 2cc3848..dd7a59b 100644
+--- a/drivers/crypto/caam/caamalg_qi2.c
++++ b/drivers/crypto/caam/caamalg_qi2.c
+@@ -1483,7 +1483,6 @@ static int aead_encrypt(struct aead_request *req)
+ 
+ 	caam_req->flc = &ctx->flc[ENCRYPT];
+ 	caam_req->flc_dma = ctx->flc_dma[ENCRYPT];
+-	caam_req->op_type = ENCRYPT;
+ 	caam_req->cbk = aead_encrypt_done;
+ 	caam_req->ctx = &req->base;
+ 	caam_req->edesc = edesc;
+@@ -1512,7 +1511,6 @@ static int aead_decrypt(struct aead_request *req)
+ 
+ 	caam_req->flc = &ctx->flc[DECRYPT];
+ 	caam_req->flc_dma = ctx->flc_dma[DECRYPT];
+-	caam_req->op_type = DECRYPT;
+ 	caam_req->cbk = aead_decrypt_done;
+ 	caam_req->ctx = &req->base;
+ 	caam_req->edesc = edesc;
+@@ -1598,7 +1596,6 @@ static int tls_encrypt(struct aead_request *req)
+ 
+ 	caam_req->flc = &ctx->flc[ENCRYPT];
+ 	caam_req->flc_dma = ctx->flc_dma[ENCRYPT];
+-	caam_req->op_type = ENCRYPT;
+ 	caam_req->cbk = tls_encrypt_done;
+ 	caam_req->ctx = &req->base;
+ 	caam_req->edesc = edesc;
+@@ -1627,7 +1624,6 @@ static int tls_decrypt(struct aead_request *req)
+ 
+ 	caam_req->flc = &ctx->flc[DECRYPT];
+ 	caam_req->flc_dma = ctx->flc_dma[DECRYPT];
+-	caam_req->op_type = DECRYPT;
+ 	caam_req->cbk = tls_decrypt_done;
+ 	caam_req->ctx = &req->base;
+ 	caam_req->edesc = edesc;
+@@ -1657,7 +1653,7 @@ static int ipsec_gcm_decrypt(struct aead_request *req)
+ 	return aead_decrypt(req);
+ }
+ 
+-static void skcipher_done(void *cbk_ctx, u32 status)
++static void skcipher_encrypt_done(void *cbk_ctx, u32 status)
+ {
+ 	struct crypto_async_request *areq = cbk_ctx;
+ 	struct skcipher_request *req = skcipher_request_cast(areq);
+@@ -1692,10 +1688,43 @@ static void skcipher_done(void *cbk_ctx, u32 status)
+ 	 * The crypto API expects us to set the IV (req->iv) to the last
+ 	 * ciphertext block. This is used e.g. by the CTS mode.
+ 	 */
+-	if (req_ctx->op_type == ENCRYPT)
+-		scatterwalk_map_and_copy(req->iv, req->dst, req->cryptlen -
+-					 ivsize, ivsize, 0);
++	scatterwalk_map_and_copy(req->iv, req->dst, req->cryptlen - ivsize,
++				 ivsize, 0);
++
++	qi_cache_free(edesc);
++	skcipher_request_complete(req, ecode);
++}
++
++static void skcipher_decrypt_done(void *cbk_ctx, u32 status)
++{
++	struct crypto_async_request *areq = cbk_ctx;
++	struct skcipher_request *req = skcipher_request_cast(areq);
++	struct caam_request *req_ctx = to_caam_req(areq);
++	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
++	struct caam_ctx *ctx = crypto_skcipher_ctx(skcipher);
++	struct skcipher_edesc *edesc = req_ctx->edesc;
++	int ecode = 0;
++#ifdef DEBUG
++	int ivsize = crypto_skcipher_ivsize(skcipher);
++
++	dev_err(ctx->dev, "%s %d: err 0x%x\n", __func__, __LINE__, status);
++#endif
+ 
++	if (unlikely(status)) {
++		caam_qi2_strstatus(ctx->dev, status);
++		ecode = -EIO;
++	}
++
++#ifdef DEBUG
++	print_hex_dump(KERN_ERR, "dstiv  @" __stringify(__LINE__)": ",
++		       DUMP_PREFIX_ADDRESS, 16, 4, req->iv,
++		       edesc->src_nents > 1 ? 100 : ivsize, 1);
++	caam_dump_sg(KERN_ERR, "dst    @" __stringify(__LINE__)": ",
++		     DUMP_PREFIX_ADDRESS, 16, 4, req->dst,
++		     edesc->dst_nents > 1 ? 100 : req->cryptlen, 1);
++#endif
++
++	skcipher_unmap(ctx->dev, edesc, req);
+ 	qi_cache_free(edesc);
+ 	skcipher_request_complete(req, ecode);
+ }
+@@ -1715,8 +1744,7 @@ static int skcipher_encrypt(struct skcipher_request *req)
+ 
+ 	caam_req->flc = &ctx->flc[ENCRYPT];
+ 	caam_req->flc_dma = ctx->flc_dma[ENCRYPT];
+-	caam_req->op_type = ENCRYPT;
+-	caam_req->cbk = skcipher_done;
++	caam_req->cbk = skcipher_encrypt_done;
+ 	caam_req->ctx = &req->base;
+ 	caam_req->edesc = edesc;
+ 	ret = dpaa2_caam_enqueue(ctx->dev, caam_req);
+@@ -1752,8 +1780,7 @@ static int skcipher_decrypt(struct skcipher_request *req)
+ 
+ 	caam_req->flc = &ctx->flc[DECRYPT];
+ 	caam_req->flc_dma = ctx->flc_dma[DECRYPT];
+-	caam_req->op_type = DECRYPT;
+-	caam_req->cbk = skcipher_done;
++	caam_req->cbk = skcipher_decrypt_done;
+ 	caam_req->ctx = &req->base;
+ 	caam_req->edesc = edesc;
+ 	ret = dpaa2_caam_enqueue(ctx->dev, caam_req);
+diff --git a/drivers/crypto/caam/caamalg_qi2.h b/drivers/crypto/caam/caamalg_qi2.h
+index ef72bd2..cd8880b 100644
+--- a/drivers/crypto/caam/caamalg_qi2.h
++++ b/drivers/crypto/caam/caamalg_qi2.h
+@@ -250,7 +250,6 @@ enum optype {
+  * @fd_flt_dma: DMA address for the frame list table
+  * @flc: Flow Context
+  * @flc_dma: I/O virtual address of Flow Context
+- * @op_type: operation type
+  * @cbk: Callback function to invoke when job is completed
+  * @ctx: arbit context attached with request by the application
+  * @edesc: extended descriptor; points to one of {skcipher,aead}_edesc
+@@ -260,7 +259,6 @@ struct caam_request {
+ 	dma_addr_t fd_flt_dma;
+ 	struct caam_flc *flc;
+ 	dma_addr_t flc_dma;
+-	enum optype op_type;
+ 	void (*cbk)(void *ctx, u32 err);
+ 	void *ctx;
+ 	void *edesc;
+-- 
+1.7.1
+

@@ -1,0 +1,98 @@
+From e14bdd81d516c53a9b9ac5f076165e28510c543b Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 8 Aug 2017 18:54:11 +0300
+Subject: [PATCH 167/448] staging: fsl-dpaa2/eth: Release buffers on XDP_DROP
+
+Instead of freeing the Rx FD buffer, release it
+back into the pool. We wait for the maximum number
+of buffers (7) supported by a single release command
+to accumulate before issuing the command.
+
+Also, don't unmap the Rx buffers at the beginning of
+the Rx routine anymore, since remapping them before
+release adds an unnecessary overhead. Instead, just
+do a DMA sync at first and only unmap if the frame
+is meant for the stack.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   26 +++++++++++++++++++++--
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    2 +
+ 2 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index daab07e..feee934 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -268,6 +268,21 @@ static int dpaa2_eth_xdp_xmit(struct dpaa2_eth_priv *priv,
+ 	return err;
+ }
+ 
++static void release_fd_buf(struct dpaa2_eth_priv *priv,
++			   struct dpaa2_eth_channel *ch,
++			   dma_addr_t addr)
++{
++	ch->buf_array[ch->buf_cnt++] = addr;
++	if (likely(ch->buf_cnt < DPAA2_ETH_BUFS_PER_CMD))
++		return;
++
++	while (dpaa2_io_service_release(NULL, priv->bpid, ch->buf_array,
++					ch->buf_cnt))
++		cpu_relax();
++
++	ch->buf_cnt = 0;
++}
++
+ /* Main Rx frame processing routine */
+ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 			 struct dpaa2_eth_channel *ch,
+@@ -293,7 +308,8 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 	trace_dpaa2_rx_fd(priv->net_dev, fd);
+ 
+ 	vaddr = dpaa2_iova_to_virt(priv->iommu_domain, addr);
+-	dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE, DMA_BIDIRECTIONAL);
++	dma_sync_single_for_cpu(dev, addr, DPAA2_ETH_RX_BUF_SIZE,
++				DMA_BIDIRECTIONAL);
+ 
+ 	fas = dpaa2_get_fas(vaddr);
+ 	prefetch(fas);
+@@ -326,8 +342,8 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 				bpf_warn_invalid_xdp_action(xdp_act);
+ 			case XDP_ABORTED:
+ 			case XDP_DROP:
+-				ch->buf_count--;
+-				goto drop_fd;
++				release_fd_buf(priv, ch, addr);
++				goto drop_cnt;
+ 			case XDP_TX:
+ 				if (dpaa2_eth_xdp_xmit(priv, fd, vaddr,
+ 						       queue_id)) {
+@@ -340,8 +356,12 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 				return;
+ 			}
+ 		}
++		dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE,
++				 DMA_BIDIRECTIONAL);
+ 		skb = build_linear_skb(priv, ch, fd, vaddr);
+ 	} else if (fd_format == dpaa2_fd_sg) {
++		dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE,
++				 DMA_BIDIRECTIONAL);
+ 		skb = build_frag_skb(priv, ch, buf_data);
+ 		skb_free_frag(vaddr);
+ 		percpu_extras->rx_sg_frames++;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 4f4d178..3a2f6f0 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -359,6 +359,8 @@ struct dpaa2_eth_channel {
+ 	int buf_count;
+ 	struct dpaa2_eth_ch_stats stats;
+ 	struct bpf_prog *xdp_prog;
++	u64 buf_array[DPAA2_ETH_BUFS_PER_CMD];
++	u8 buf_cnt;
+ };
+ 
+ struct dpaa2_eth_cls_rule {
+-- 
+1.7.1
+

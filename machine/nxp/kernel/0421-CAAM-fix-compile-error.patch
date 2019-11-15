@@ -1,0 +1,37 @@
+From 987e4ad465d1ac11572addf8fb8013e807e96217 Mon Sep 17 00:00:00 2001
+From: Zhao Qiang <qiang.zhao@nxp.com>
+Date: Tue, 28 Aug 2018 17:27:20 +0800
+Subject: [PATCH 421/448] CAAM: fix compile error
+
+This compile error is caused by backport. In the porting to Linux-4.9,
+ivsize was defined in ablkcipher_givencrypt, but it should be in
+ablkcipher_decrypt.
+
+Signed-off-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ drivers/crypto/caam/caamalg_qi2.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/crypto/caam/caamalg_qi2.c b/drivers/crypto/caam/caamalg_qi2.c
+index 3cdf0b3..c1fb75c 100644
+--- a/drivers/crypto/caam/caamalg_qi2.c
++++ b/drivers/crypto/caam/caamalg_qi2.c
+@@ -1930,7 +1930,6 @@ static int ablkcipher_givencrypt(struct skcipher_givcrypt_request *greq)
+ 	struct crypto_ablkcipher *ablkcipher = crypto_ablkcipher_reqtfm(req);
+ 	struct caam_ctx *ctx = crypto_ablkcipher_ctx(ablkcipher);
+ 	struct caam_request *caam_req = ablkcipher_request_ctx(req);
+-	int ivsize = crypto_ablkcipher_ivsize(ablkcipher);
+ 	int ret;
+ 
+ 	/* allocate extended descriptor */
+@@ -1960,6 +1959,7 @@ static int ablkcipher_decrypt(struct ablkcipher_request *req)
+ 	struct crypto_ablkcipher *ablkcipher = crypto_ablkcipher_reqtfm(req);
+ 	struct caam_ctx *ctx = crypto_ablkcipher_ctx(ablkcipher);
+ 	struct caam_request *caam_req = ablkcipher_request_ctx(req);
++	int ivsize = crypto_ablkcipher_ivsize(ablkcipher);
+ 	int ret;
+ 
+ 	/* allocate extended descriptor */
+-- 
+1.7.1
+

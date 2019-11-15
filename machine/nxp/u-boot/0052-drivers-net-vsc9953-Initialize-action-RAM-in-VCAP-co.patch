@@ -1,0 +1,243 @@
+From c43f05afc548f94dd1c0ac68a36885605503f8e8 Mon Sep 17 00:00:00 2001
+From: Radu Bulie <radu-andrei.bulie@nxp.com>
+Date: Fri, 13 Apr 2018 01:49:48 +0300
+Subject: [PATCH 052/107] drivers/net/vsc9953: Initialize action RAM in VCAP complex
+
+VCAP tables must be initialized even if no advanced classification
+is used. If no initialization is performed, then ECC error will
+be observed by the user when the first packet enters the l2switch.
+The error is marked in MPIC_EISR0 -bit 29 which means - Internal RAM
+multi-bit ECC error.
+This patch fixes the aforementioned ECC error by performing the
+initialization of VCAP tables.
+
+Signed-off-by: Radu Bulie <radu-andrei.bulie@nxp.com>
+---
+ drivers/net/vsc9953.c |  134 +++++++++++++++++++++++++++++++++++++++++++++++++
+ include/vsc9953.h     |   58 +++++++++++++++++++++
+ 2 files changed, 192 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/net/vsc9953.c b/drivers/net/vsc9953.c
+index 2388438..f90181d 100644
+--- a/drivers/net/vsc9953.c
++++ b/drivers/net/vsc9953.c
+@@ -2469,6 +2469,139 @@ void vsc9953_default_configuration(void)
+ 		debug("VSC9953: failed to set default aggregation code mode\n");
+ }
+ 
++static void vcap_entry2cache_init(u32 target, u32 entry_words)
++{
++	int i;
++
++	for (i = 0; i < entry_words; i++) {
++		out_le32((unsigned int *)(VSC9953_OFFSET +
++				VSC9953_VCAP_CACHE_ENTRY_DAT(target, i)), 0x00);
++		out_le32((unsigned int *)(VSC9953_OFFSET +
++				VSC9953_VCAP_CACHE_MASK_DAT(target, i)), 0xFF);
++	}
++
++	out_le32((unsigned int *)(VSC9953_OFFSET +
++				VSC9953_VCAP_CACHE_TG_DAT(target)), 0x00);
++	out_le32((unsigned int *)(VSC9953_OFFSET +
++				  VSC9953_VCAP_CFG_MV_CFG(target)),
++		 VSC9953_VCAP_CFG_MV_CFG_SIZE(entry_words));
++}
++
++static void vcap_action2cache_init(u32 target, u32 action_words,
++				   u32 counter_words)
++{
++	int i;
++
++	for (i = 0; i < action_words; i++)
++		out_le32((unsigned int *)(VSC9953_OFFSET +
++			       VSC9953_VCAP_CACHE_ACTION_DAT(target, i)), 0x00);
++
++	for (i = 0; i < counter_words; i++)
++		out_le32((unsigned int *)(VSC9953_OFFSET +
++				  VSC9953_VCAP_CACHE_CNT_DAT(target, i)), 0x00);
++}
++
++static int vcap_cmd(u32 target, u16 ix, int cmd, int sel, int entry_count)
++{
++	u32 tgt = target;
++	u32 value = (VSC9953_VCAP_UPDATE_CTRL_UPDATE_CMD(cmd) |
++		     VSC9953_VCAP_UPDATE_CTRL_UPDATE_ADDR(ix) |
++		     VSC9953_VCAP_UPDATE_CTRL_UPDATE_SHOT);
++
++	if ((sel & TCAM_SEL_ENTRY) && ix >= entry_count)
++		return CMD_RET_FAILURE;
++
++	if (!(sel & TCAM_SEL_ENTRY))
++		value |= VSC9953_VCAP_UPDATE_CTRL_UPDATE_ENTRY_DIS;
++
++	if (!(sel & TCAM_SEL_ACTION))
++		value |= VSC9953_VCAP_UPDATE_CTRL_UPDATE_ACTION_DIS;
++
++	if (!(sel & TCAM_SEL_COUNTER))
++		value |= VSC9953_VCAP_UPDATE_CTRL_UPDATE_CNT_DIS;
++
++	out_le32((unsigned int *)(VSC9953_OFFSET +
++				VSC9953_VCAP_CFG_UPDATE_CTRL(tgt)), value);
++
++	do {
++		value = in_le32((unsigned int *)(VSC9953_OFFSET +
++				VSC9953_VCAP_CFG_UPDATE_CTRL(tgt)));
++
++	} while (value & VSC9953_VCAP_UPDATE_CTRL_UPDATE_SHOT);
++
++	return CMD_RET_SUCCESS;
++}
++
++static void vsc9953_vcap_init(void)
++{
++	u32 tgt = VSC9953_ES0;
++	int cmd_ret;
++
++	/* write entries */
++	vcap_entry2cache_init(tgt, ENTRY_WORDS_ES0);
++	cmd_ret = vcap_cmd(tgt, 0, TCAM_CMD_INITIALIZE, TCAM_SEL_ENTRY,
++			   ENTRY_WORDS_ES0);
++	if (cmd_ret != CMD_RET_SUCCESS)
++		debug("VSC9953:%d invalid TCAM_SEL_ENTRY\n",
++		      __LINE__);
++
++	/* write actions and counters */
++	vcap_action2cache_init(tgt, BITS_TO_DWORD(91), BITS_TO_DWORD(1));
++	out_le32((unsigned int *)(VSC9953_OFFSET +
++				  VSC9953_VCAP_CFG_MV_CFG(tgt)),
++		 VSC9953_VCAP_CFG_MV_CFG_SIZE(VSC9953_ES0_CNT + VSC9953_PORTS));
++	cmd_ret = vcap_cmd(tgt, 0, TCAM_CMD_INITIALIZE,
++			   TCAM_SEL_ACTION | TCAM_SEL_COUNTER, ENTRY_WORDS_ES0);
++	if (cmd_ret != CMD_RET_SUCCESS)
++		debug("VSC9953:%d invalid TCAM_SEL_ACTION | TCAM_SEL_COUNTER\n",
++		      __LINE__);
++
++	tgt = VSC9953_IS1;
++
++	/* write entries */
++	vcap_entry2cache_init(tgt, ENTRY_WORDS_IS1);
++	cmd_ret = vcap_cmd(tgt, 0, TCAM_CMD_INITIALIZE, TCAM_SEL_ENTRY,
++			   ENTRY_WORDS_IS1);
++	if (cmd_ret != CMD_RET_SUCCESS)
++		debug("VSC9953:%d invalid TCAM_SEL_ENTRY\n",
++		      __LINE__);
++
++	/* write actions and counters */
++	vcap_action2cache_init(tgt, BITS_TO_DWORD(320), BITS_TO_DWORD(4));
++	out_le32((unsigned int *)(VSC9953_OFFSET +
++				  VSC9953_VCAP_CFG_MV_CFG(tgt)),
++		 VSC9953_VCAP_CFG_MV_CFG_SIZE(VSC9953_IS1_CNT + 1));
++	cmd_ret = vcap_cmd(tgt, 0, TCAM_CMD_INITIALIZE,
++			   TCAM_SEL_ACTION | TCAM_SEL_COUNTER, ENTRY_WORDS_IS1);
++	if (cmd_ret != CMD_RET_SUCCESS)
++		debug("VSC9953:%d invalid TCAM_SEL_ACTION | TCAM_SEL_COUNTER\n",
++		      __LINE__);
++
++	tgt = VSC9953_IS2;
++
++	/* write entries */
++	vcap_entry2cache_init(tgt, ENTRY_WORDS_IS2);
++	cmd_ret = vcap_cmd(tgt, 0, TCAM_CMD_INITIALIZE, TCAM_SEL_ENTRY,
++			   ENTRY_WORDS_IS2);
++	if (cmd_ret != CMD_RET_SUCCESS)
++		debug("VSC9953:%d invalid selection: TCAM_SEL_ENTRY\n",
++		      __LINE__);
++
++	/* write actions and counters */
++	vcap_action2cache_init(tgt, BITS_TO_DWORD(103 - 2 *
++						  VSC9953_PORT_OFFSET),
++			       BITS_TO_DWORD(4 * 32));
++	out_le32((unsigned int *)(VSC9953_OFFSET +
++				  VSC9953_VCAP_CFG_MV_CFG(tgt)),
++		 VSC9953_VCAP_CFG_MV_CFG_SIZE(VSC9953_IS2_CNT +
++							    VSC9953_PORTS + 2));
++	cmd_ret = vcap_cmd(tgt, 0, TCAM_CMD_INITIALIZE,
++			   TCAM_SEL_ACTION | TCAM_SEL_COUNTER, ENTRY_WORDS_IS2);
++	if (cmd_ret != CMD_RET_SUCCESS)
++		debug("VSC9953:%d invalid TCAM_SEL_ACTION | TCAM_SEL_COUNTER\n",
++		      __LINE__);
++}
++
+ void vsc9953_init(bd_t *bis)
+ {
+ 	u32 i;
+@@ -2605,6 +2738,7 @@ void vsc9953_init(bd_t *bis)
+ 		}
+ 	}
+ 
++	vsc9953_vcap_init();
+ 	vsc9953_default_configuration();
+ 
+ #ifdef CONFIG_CMD_ETHSW
+diff --git a/include/vsc9953.h b/include/vsc9953.h
+index a2d4554..a1c31ce 100644
+--- a/include/vsc9953.h
++++ b/include/vsc9953.h
+@@ -187,6 +187,64 @@
+ 
+ #define MIIMIND_OPR_PEND		0x00000004
+ 
++#define VSC9953_BIT(x)			(1U << (x))
++#define VSC9953_IO_BASE_OFFSET		0x00000000
++#define VSC9953_IO_OFFSET(offset)	(VSC9953_IO_BASE_OFFSET + offset)
++#define VSC9953_BITMASK(x)		((1U << (x)) - 1)
++#define VSC9953_ENC_BITFIELD(x, o, w)	(((x) & VSC9953_BITMASK(w)) << (o))
++#define VSC9953_IO_ADDR(t, o)		((((t) - VSC9953_IO_BASE_OFFSET)) + \
++		(o << 2))
++
++#define VSC9953_IO_REG(t, o)		(VSC9953_IO_ADDR(t, o))
++#define VSC9953_VCAP_CACHE_ENTRY_DAT(target, ri)  \
++	VSC9953_IO_REG(target, (0x2 + (ri)))
++
++#define VSC9953_VCAP_CACHE_MASK_DAT(target, ri) \
++	VSC9953_IO_REG(target, (0x42 + (ri)))
++
++#define VSC9953_VCAP_CACHE_TG_DAT(target)	VSC9953_IO_REG(target, 0xe2)
++#define VSC9953_VCAP_CFG_MV_CFG(target)	VSC9953_IO_REG(target, 0x1)
++#define VSC9953_VCAP_CFG_MV_CFG_SIZE(x)	VSC9953_ENC_BITFIELD(x, 0, 16)
++#define VSC9953_VCAP_CFG_UPDATE_CTRL(target)	VSC9953_IO_REG(target, 0x0)
++#define VSC9953_VCAP_UPDATE_CTRL_UPDATE_CMD(x)	VSC9953_ENC_BITFIELD(x, 22, 3)
++#define VSC9953_VCAP_UPDATE_CTRL_UPDATE_ADDR(x)	VSC9953_ENC_BITFIELD(x, 3, 16)
++#define VSC9953_VCAP_UPDATE_CTRL_UPDATE_SHOT	VSC9953_BIT(2)
++#define VSC9953_VCAP_UPDATE_CTRL_UPDATE_ENTRY_DIS	VSC9953_BIT(21)
++#define VSC9953_VCAP_UPDATE_CTRL_UPDATE_ACTION_DIS	VSC9953_BIT(20)
++#define VSC9953_VCAP_UPDATE_CTRL_UPDATE_CNT_DIS	VSC9953_BIT(19)
++#define VSC9953_VCAP_CACHE_ACTION_DAT(target, ri) \
++	VSC9953_IO_REG(target, (0x82 + (ri)))
++
++#define VSC9953_VCAP_CACHE_CNT_DAT(target, ri)	\
++	VSC9953_IO_REG(target, (0xc2 + (ri)))
++
++#define VSC9953_PORT_OFFSET		1
++#define VSC9953_IS1_CNT			256
++#define VSC9953_IS2_CNT			1024
++#define VSC9953_ES0_CNT			1024
++
++#define BITS_TO_DWORD(x)		(1 + (((x) - 1) / 32))
++#define ENTRY_WORDS_ES0		BITS_TO_DWORD(29)
++#define ENTRY_WORDS_IS1		BITS_TO_DWORD(376)
++#define ENTRY_WORDS_IS2		BITS_TO_DWORD(376)
++#define VSC9953_PORTS			VSC9953_MAX_PORTS
++
++/* TCAM entries */
++enum tcam_sel {
++	TCAM_SEL_ENTRY   = VSC9953_BIT(0),
++	TCAM_SEL_ACTION  = VSC9953_BIT(1),
++	TCAM_SEL_COUNTER = VSC9953_BIT(2),
++	TCAM_SEL_ALL     = VSC9953_BITMASK(3),
++};
++
++enum tcam_cmd {
++	TCAM_CMD_WRITE      = 0,
++	TCAM_CMD_READ       = 1,
++	TCAM_CMD_MOVE_UP    = 2,
++	TCAM_CMD_MOVE_DOWN  = 3,
++	TCAM_CMD_INITIALIZE = 4,
++};
++
+ struct vsc9953_mdio_info {
+ 	struct vsc9953_mii_mng	*regs;
+ 	char	*name;
+-- 
+1.7.1
+

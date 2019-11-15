@@ -1,0 +1,79 @@
+From 03b465bb0657aaa10d9c8d548d678a4508e4967e Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 9 May 2017 16:36:39 +0300
+Subject: [PATCH 148/448] staging: fsl-dpaa2/eth: Add API for counters reset
+
+Add DPNI object API function for resetting interface
+hardware counters.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h |    1 +
+ drivers/staging/fsl-dpaa2/ethernet/dpni.c     |   23 +++++++++++++++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h     |    4 ++++
+ 3 files changed, 28 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+index a6b81ff..6c5ea64 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+@@ -92,6 +92,7 @@
+ #define DPNI_CMDID_CLR_FS_ENT				DPNI_CMD(0x246)
+ 
+ #define DPNI_CMDID_GET_STATISTICS			DPNI_CMD(0x25D)
++#define DPNI_CMDID_RESET_STATISTICS			DPNI_CMD(0x25E)
+ #define DPNI_CMDID_GET_QUEUE				DPNI_CMD(0x25F)
+ #define DPNI_CMDID_SET_QUEUE				DPNI_CMD(0x260)
+ #define DPNI_CMDID_GET_TAILDROP				DPNI_CMD(0x261)
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.c b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+index 233fff9..bbf7053 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+@@ -1652,6 +1652,29 @@ int dpni_get_statistics(struct fsl_mc_io *mc_io,
+ }
+ 
+ /**
++ * dpni_reset_statistics() - Clears DPNI statistics
++ * @mc_io:		Pointer to MC portal's I/O object
++ * @cmd_flags:		Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:		Token of DPNI object
++ *
++ * Return:  '0' on Success; Error code otherwise.
++ */
++int dpni_reset_statistics(struct fsl_mc_io *mc_io,
++			  u32 cmd_flags,
++			  u16 token)
++{
++	struct mc_command cmd = { 0 };
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(DPNI_CMDID_RESET_STATISTICS,
++					  cmd_flags,
++					  token);
++
++	/* send command to mc*/
++	return mc_send_command(mc_io, &cmd);
++}
++
++/**
+  * dpni_set_taildrop() - Set taildrop per queue or TC
+  * @mc_io:	Pointer to MC portal's I/O object
+  * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index c9eb2dc..bd67903 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -489,6 +489,10 @@ int dpni_get_statistics(struct fsl_mc_io	*mc_io,
+ 			u8			page,
+ 			union dpni_statistics	*stat);
+ 
++int dpni_reset_statistics(struct fsl_mc_io *mc_io,
++			  u32 cmd_flags,
++			  u16 token);
++
+ /**
+  * Enable auto-negotiation
+  */
+-- 
+1.7.1
+

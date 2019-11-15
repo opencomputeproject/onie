@@ -1,0 +1,64 @@
+#!/bin/sh
+
+#
+# Copyright (C) 2018 Curt Brune <curt@cumulusnetworks.com>
+#
+# SPDX-License-Identifier:     GPL-2.0
+#
+
+set -e
+
+usage() {
+    echo "usage: $0 <X.Y.Z version> <release_notes>"
+    echo "must be run from the \$ONIE/build-config directory"
+}
+
+onie_root=$(dirname $(dirname $(realpath $0)))
+version=$1
+release_notes="$(realpath $2)"
+
+[ -d "${onie_root}/scripts" ] || {
+    echo "ERROR:  ONIE scripts directory:  ${onie_root}/scripts"
+    usage
+    exit 1
+}
+
+[ -n "$version" ] || {
+    echo "ERROR: missing ONIE version"
+    usage
+    exit 1
+}
+
+[ -r "$release_notes" ] || {
+    echo "ERROR: unable to read release notes file: $release_notes"
+    usage
+    exit 1
+}
+
+branch="${version}br"
+
+cd ${onie_root}
+git checkout -b "$branch"
+echo $version > conf/onie-release
+git add conf/onie-release
+git commit conf/onie-release -m 'Add release version'
+
+echo "Tagging $version ..."
+git tag -a $version -F "$release_notes"
+
+echo "Please review the branch name, tag name and release notes..."
+echo "branch: $branch"
+echo "tag   : $version"
+echo "Release Notes:"
+cat "$release_notes"
+
+read -p "Pushing new branch and tag.  Are you sure? (N/y)" answer
+case "$answer" in
+    Y|y)
+        true
+        ;;
+    *)
+        echo "Aborting...." && exit 1
+esac
+
+git push origin $branch $version

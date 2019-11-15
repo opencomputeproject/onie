@@ -1,0 +1,48 @@
+patch for compatible with old ipmi eeprom model
+
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index d74a116..ad6ef31 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -41,6 +41,7 @@ cmd_usage()
+     exit(1);
+ }
+ 
++extern int is_bmc_available(void);
+ extern void correct_eeprom_i2c_addr(void);
+ /*
+  *  do_onie_syseeprom
+@@ -79,7 +80,10 @@ int onie_syseeprom_main(int argc, char **argv)
+     }
+     tokens[tlv_code_count*2] = NULL;
+ 
+-    correct_eeprom_i2c_addr();
++    if (is_bmc_available() != 0)
++    {
++        correct_eeprom_i2c_addr();
++    }
+ 
+     while (TRUE) {
+ 	c = getopt_long(argc, argv, short_options,
+diff --git a/miscutils/sys_eeprom_alt.c b/miscutils/sys_eeprom_alt.c
+index 5667b57..44567a9 100644
+--- a/miscutils/sys_eeprom_alt.c
++++ b/miscutils/sys_eeprom_alt.c
+@@ -32,7 +32,7 @@ int ipmi_read_sys_eeprom(void *eeprom_data, int offset, int len)
+             ipmi_len = DATA_SIZE;
+         }
+         memset(cmd, 0, cmd_length);
+-        if (SYS_EEPROM_MAX_SIZE > 256) {
++        if (OLD_SYS_EEPROM_SIZE > 256) {
+             sprintf(cmd, "%s 0x%x 0x%x 0x%x", EEPROM_READ,
+                     (ipmi_offset>>8)&0x0ff, ipmi_offset&0x0ff, ipmi_len);
+         } else {
+@@ -82,7 +82,7 @@ int ipmi_write_sys_eeprom(void *eeprom_data, int len)
+             ipmi_len = DATA_SIZE;
+         }
+         memset(cmd, 0, cmd_length);
+-        if (SYS_EEPROM_MAX_SIZE > 256) {
++        if (OLD_SYS_EEPROM_SIZE > 256) {
+             sprintf(cmd, "%s 0x%x 0x%x 0x%x", EEPROM_WRITE,
+                     (ipmi_offset>>8)&0x0ff, ipmi_offset&0x0ff, ipmi_len);
+         } else {

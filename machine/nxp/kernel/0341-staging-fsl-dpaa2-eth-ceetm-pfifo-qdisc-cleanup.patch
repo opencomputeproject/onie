@@ -1,0 +1,66 @@
+From f03dfbcb2b419649b3761fe81a2374981929ea26 Mon Sep 17 00:00:00 2001
+From: Camelia Groza <camelia.groza@nxp.com>
+Date: Fri, 18 May 2018 11:40:50 +0300
+Subject: [PATCH 341/448] staging: fsl-dpaa2/eth: ceetm: pfifo qdisc cleanup
+
+The pfifo qdiscs are destroyed by the kernel after grafting. If grafting
+doesn't take place, the driver needs to destroy them instead.
+
+Signed-off-by: Camelia Groza <camelia.groza@nxp.com>
+---
+ .../staging/fsl-dpaa2/ethernet/dpaa2-eth-ceetm.c   |   25 +++++++++++++++++++-
+ 1 files changed, 24 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-ceetm.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-ceetm.c
+index 0eb9396..67c0fef 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-ceetm.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-ceetm.c
+@@ -364,6 +364,13 @@ static void dpaa2_ceetm_destroy(struct Qdisc *sch)
+ 		if (!priv->root.qdiscs)
+ 			break;
+ 
++		/* Destroy the pfifo qdiscs in case they haven't been attached
++		 * to the netdev queues yet.
++		 */
++		for (i = 0; i < dev->num_tx_queues; i++)
++			if (priv->root.qdiscs[i])
++				qdisc_destroy(priv->root.qdiscs[i]);
++
+ 		kfree(priv->root.qdiscs);
+ 		break;
+ 
+@@ -529,7 +536,16 @@ static int dpaa2_ceetm_init_root(struct Qdisc *sch,
+ 		return -EINVAL;
+ 	}
+ 
+-	/* pre-allocate underlying pfifo qdiscs */
++	/* Pre-allocate underlying pfifo qdiscs.
++	 *
++	 * We want to offload shaping and scheduling decisions to the hardware.
++	 * The pfifo qdiscs will be attached to the netdev queues and will
++	 * guide the traffic from the IP stack down to the driver with minimum
++	 * interference.
++	 *
++	 * The CEETM qdiscs and classes will be crossed when the traffic
++	 * reaches the driver.
++	 */
+ 	priv->root.qdiscs = kcalloc(dev->num_tx_queues,
+ 				    sizeof(priv->root.qdiscs[0]),
+ 				    GFP_KERNEL);
+@@ -704,6 +720,13 @@ static void dpaa2_ceetm_attach(struct Qdisc *sch)
+ 		if (old_qdisc)
+ 			qdisc_destroy(old_qdisc);
+ 	}
++
++	/* Remove the references to the pfifo qdiscs since the kernel will
++	 * destroy them when needed. No cleanup from our part is required from
++	 * this point on.
++	 */
++	kfree(priv->root.qdiscs);
++	priv->root.qdiscs = NULL;
+ }
+ 
+ static unsigned long dpaa2_ceetm_cls_get(struct Qdisc *sch, u32 classid)
+-- 
+1.7.1
+

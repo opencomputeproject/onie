@@ -1,0 +1,40 @@
+From 22c874b59fab0f6047fa5b2af326701670f03423 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Thu, 19 Apr 2018 16:47:48 +0300
+Subject: [PATCH 054/448] crypto: caam/qi2 - fix non-hmac hashes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Since 6de62f15b581 ("crypto: algif_hash - Require setkey before
+accept(2)"), the AF_ALG interface requires userspace to provide a key
+to any algorithm that has a setkey method.
+More, since 9fa68f620041 ("crypto: hash - prevent using keyed hashes
+without setting key") crypto API started behaving in a similar way.
+
+However, the non-HMAC algorithms are not keyed, so setting a key is
+unnecessary.
+Fix this by removing the setkey method from the non-keyed hash
+algorithms.
+
+Fixes: 254c9ec0b628 ("crypto: caam/qi2 - add support for ahash algorithms")
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/caam/caamalg_qi2.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/crypto/caam/caamalg_qi2.c b/drivers/crypto/caam/caamalg_qi2.c
+index 23db390..51de1de 100644
+--- a/drivers/crypto/caam/caamalg_qi2.c
++++ b/drivers/crypto/caam/caamalg_qi2.c
+@@ -5076,6 +5076,7 @@ static void caam_hash_cra_exit(struct crypto_tfm *tfm)
+ 			 template->name);
+ 		snprintf(alg->cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
+ 			 template->driver_name);
++		t_alg->ahash_alg.setkey = NULL;
+ 	}
+ 	alg->cra_module = THIS_MODULE;
+ 	alg->cra_init = caam_hash_cra_init;
+-- 
+1.7.1
+

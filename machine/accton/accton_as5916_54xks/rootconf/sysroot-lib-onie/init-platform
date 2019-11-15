@@ -1,0 +1,28 @@
+# -*- shell-script -*-
+
+# Demonstration of the init-platform functionality
+
+# This script fragment is sourced by /etc/init.d/init-arch.sh, which
+# in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+# A machine can use this feature to run any early boot scripts needed
+# by the machine.  A typical usage would be to initialize specific
+# hardware devices.
+
+# Use this function to perform any initializations required by the
+# architecture specific initialization.  This function executes before
+# the architecture initializations.
+init_platform_pre_arch()
+{
+    local ipmi_log=$(mktemp)
+    _log_info_msg "Info: Disabling IPMI Watchdog... "
+    ipmitool mc watchdog off >$ipmi_log 2>&1
+    if [ $? -eq 0 ] ; then
+        _log_info_msg "done.\n"
+    else
+        _log_info_msg "failed.\n"
+        cat $ipmi_log
+    fi
+    rm -f $ipmi_log
+}

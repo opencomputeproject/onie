@@ -1,0 +1,48 @@
+From dbaf86cb567ee3e723a8315751b25bc248e7aa6b Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Tue, 5 Dec 2017 17:59:51 +0200
+Subject: [PATCH 198/448] staging: fsl-dpaa2/eth: Remove added entries on set_vlan_qos failure
+
+set_vlan_qos can fail halfway through the dpni_add_qos_entry loop, and
+on a future call, adding the same entries will yield duplicate errors.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   16 +++++++++++++++-
+ 1 files changed, 15 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 0197694..b9051ad 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -3192,12 +3192,26 @@ static int set_vlan_qos(struct dpaa2_eth_priv *priv)
+ 					 &key_params, i, j++);
+ 		if (err) {
+ 			dev_err(dev, "dpni_add_qos_entry failed: %d\n", err);
+-			goto out_cleanup;
++			goto out_remove;
+ 		}
+ 	}
+ 
+ 	priv->vlan_clsf_set = true;
+ 	dev_dbg(dev, "Vlan PCP QoS classification set\n");
++	goto out_cleanup;
++
++out_remove:
++	for (j = 0; j < i; j++) {
++		*key = cpu_to_be16(j << VLAN_PRIO_SHIFT);
++
++		dma_sync_single_for_device(dev, key_params.key_iova, key_size,
++					   DMA_TO_DEVICE);
++
++		err = dpni_remove_qos_entry(priv->mc_io, 0, priv->mc_token,
++					    &key_params);
++		if (err)
++			dev_err(dev, "dpni_remove_qos_entry failed: %d\n", err);
++	}
+ 
+ out_cleanup:
+ 	dma_unmap_single(dev, key_params.key_iova, key_size, DMA_TO_DEVICE);
+-- 
+1.7.1
+

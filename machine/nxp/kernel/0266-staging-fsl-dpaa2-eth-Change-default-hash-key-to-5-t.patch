@@ -1,0 +1,156 @@
+From c3fc407fef9de8e9158260fa6b26d36691b9b98e Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 5 Apr 2018 11:51:55 +0300
+Subject: [PATCH 266/448] staging: fsl-dpaa2/eth: Change default hash key to 5-tuple
+
+Since the FS key is now separate, we can reduce the hash key
+to the most common/expected format:
+{IP src, IP dst, IP proto, L4 port src, L4 port dst}
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   23 +++++++++++++++++++----
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |   19 +++++++++++++++++++
+ 2 files changed, 38 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 32b35c3..fdd3563 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2542,10 +2542,12 @@ static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
+ 		.rxnfc_field = RXH_L2DA,
+ 		.cls_prot = NET_PROT_ETH,
+ 		.cls_field = NH_FLD_ETH_DA,
++		.id = DPAA2_ETH_DIST_ETHDST,
+ 		.size = 6,
+ 	}, {
+ 		.cls_prot = NET_PROT_ETH,
+ 		.cls_field = NH_FLD_ETH_SA,
++		.id = DPAA2_ETH_DIST_ETHSRC,
+ 		.size = 6,
+ 	}, {
+ 		/* This is the last ethertype field parsed:
+@@ -2554,28 +2556,33 @@ static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
+ 		 */
+ 		.cls_prot = NET_PROT_ETH,
+ 		.cls_field = NH_FLD_ETH_TYPE,
++		.id = DPAA2_ETH_DIST_ETHTYPE,
+ 		.size = 2,
+ 	}, {
+ 		/* VLAN header */
+ 		.rxnfc_field = RXH_VLAN,
+ 		.cls_prot = NET_PROT_VLAN,
+ 		.cls_field = NH_FLD_VLAN_TCI,
++		.id = DPAA2_ETH_DIST_VLAN,
+ 		.size = 2,
+ 	}, {
+ 		/* IP header */
+ 		.rxnfc_field = RXH_IP_SRC,
+ 		.cls_prot = NET_PROT_IP,
+ 		.cls_field = NH_FLD_IP_SRC,
++		.id = DPAA2_ETH_DIST_IPSRC,
+ 		.size = 4,
+ 	}, {
+ 		.rxnfc_field = RXH_IP_DST,
+ 		.cls_prot = NET_PROT_IP,
+ 		.cls_field = NH_FLD_IP_DST,
++		.id = DPAA2_ETH_DIST_IPDST,
+ 		.size = 4,
+ 	}, {
+ 		.rxnfc_field = RXH_L3_PROTO,
+ 		.cls_prot = NET_PROT_IP,
+ 		.cls_field = NH_FLD_IP_PROTO,
++		.id = DPAA2_ETH_DIST_IPPROTO,
+ 		.size = 1,
+ 	}, {
+ 		/* Using UDP ports, this is functionally equivalent to raw
+@@ -2584,11 +2591,13 @@ static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
+ 		.rxnfc_field = RXH_L4_B_0_1,
+ 		.cls_prot = NET_PROT_UDP,
+ 		.cls_field = NH_FLD_UDP_PORT_SRC,
++		.id = DPAA2_ETH_DIST_L4SRC,
+ 		.size = 2,
+ 	}, {
+ 		.rxnfc_field = RXH_L4_B_2_3,
+ 		.cls_prot = NET_PROT_UDP,
+ 		.cls_field = NH_FLD_UDP_PORT_DST,
++		.id = DPAA2_ETH_DIST_L4DST,
+ 		.size = 2,
+ 	},
+ };
+@@ -2686,7 +2695,7 @@ static int config_fs_key(struct dpaa2_eth_priv *priv, dma_addr_t key_iova)
+ }
+ 
+ static int dpaa2_eth_set_dist_key(struct dpaa2_eth_priv *priv,
+-				  enum dpaa2_eth_rx_dist type)
++				  enum dpaa2_eth_rx_dist type, u32 key_fields)
+ {
+ 	struct device *dev = priv->net_dev->dev.parent;
+ 	struct dpkg_profile_cfg cls_cfg;
+@@ -2698,6 +2707,9 @@ static int dpaa2_eth_set_dist_key(struct dpaa2_eth_priv *priv,
+ 	memset(&cls_cfg, 0, sizeof(cls_cfg));
+ 
+ 	for (i = 0; i < priv->num_dist_fields; i++) {
++		if (!(key_fields & priv->dist_fields[i].id))
++			continue;
++
+ 		key = &cls_cfg.extracts[cls_cfg.num_extracts];
+ 		key->type = DPKG_EXTRACT_FROM_HDR;
+ 		key->extract.from_hdr.prot = priv->dist_fields[i].cls_prot;
+@@ -2790,10 +2802,13 @@ static int bind_dpni(struct dpaa2_eth_priv *priv)
+ 	 * print its error message and move along.
+ 	 */
+ 	if (dpaa2_eth_has_legacy_dist(priv)) {
+-		dpaa2_eth_set_dist_key(priv, DPAA2_ETH_RX_DIST_LEGACY);
++		dpaa2_eth_set_dist_key(priv, DPAA2_ETH_RX_DIST_LEGACY,
++				       DPAA2_ETH_DIST_ALL);
+ 	} else {
+-		dpaa2_eth_set_dist_key(priv, DPAA2_ETH_RX_DIST_HASH);
+-		dpaa2_eth_set_dist_key(priv, DPAA2_ETH_RX_DIST_FS);
++		dpaa2_eth_set_dist_key(priv, DPAA2_ETH_RX_DIST_HASH,
++				       DPAA2_ETH_DIST_DEFAULT_HASH);
++		dpaa2_eth_set_dist_key(priv, DPAA2_ETH_RX_DIST_FS,
++				       DPAA2_ETH_DIST_ALL);
+ 	}
+ 
+ 	/* Configure handling of error frames */
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 8945b37..076c99d 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -376,6 +376,7 @@ struct dpaa2_eth_dist_fields {
+ 	int cls_field;
+ 	int offset;
+ 	int size;
++	u32 id;
+ };
+ 
+ /* Driver private data */
+@@ -451,6 +452,24 @@ enum dpaa2_eth_rx_dist {
+ 	DPAA2_ETH_RX_DIST_LEGACY
+ };
+ 
++/* Supported Rx distribution field ids */
++#define DPAA2_ETH_DIST_ETHSRC		BIT(0)
++#define DPAA2_ETH_DIST_ETHDST		BIT(1)
++#define DPAA2_ETH_DIST_ETHTYPE		BIT(2)
++#define DPAA2_ETH_DIST_VLAN		BIT(3)
++#define DPAA2_ETH_DIST_IPSRC		BIT(4)
++#define DPAA2_ETH_DIST_IPDST		BIT(5)
++#define DPAA2_ETH_DIST_IPPROTO		BIT(6)
++#define DPAA2_ETH_DIST_L4SRC		BIT(7)
++#define DPAA2_ETH_DIST_L4DST		BIT(8)
++#define DPAA2_ETH_DIST_ALL		(~0U)
++
++/* Default Rx hash key */
++#define DPAA2_ETH_DIST_DEFAULT_HASH \
++	(DPAA2_ETH_DIST_IPPROTO | \
++	 DPAA2_ETH_DIST_IPSRC | DPAA2_ETH_DIST_IPDST | \
++	 DPAA2_ETH_DIST_L4SRC | DPAA2_ETH_DIST_L4DST)
++
+ #define dpaa2_eth_hash_enabled(priv)	\
+ 	((priv)->dpni_attrs.num_queues > 1)
+ 
+-- 
+1.7.1
+

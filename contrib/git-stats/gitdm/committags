@@ -1,0 +1,101 @@
+#!/usr/bin/pypy
+#
+# Generate a database of commits and major versions they went into.
+#
+# This is the painfully slow reworked brute-force version that
+# takes forever to run, but which hopefully gets the right results
+# It has been pretty much superseded by inittags, though.
+#
+# committags [git-args]
+#
+# This code is part of the LWN git data miner.
+#
+# Copyright 2007-13 Eklektix, Inc.
+# Copyright 2007-13 Jonathan Corbet <corbet@lwn.net>
+#
+# This file may be distributed under the terms of the GNU General
+# Public License, version 2.
+#
+import sys
+import re
+import os
+import pickle
+import argparse
+
+#
+# Arg parsing stuff.
+#
+def setupargs():
+    p = argparse.ArgumentParser()
+    #
+    # -d for the database
+    # -l to load it before running
+    #
+    p.add_argument('-d', '--database', help = 'Database name',
+                   required = False, default = 'committags.db')
+    p.add_argument('-l', '--load', help = 'Load database at startup',
+                   default = False, action = 'store_true')
+    #
+    # Args for git?
+    #
+    p.add_argument('-g', '--git', help = 'Arguments to git',
+                   default = '')
+    #
+    # Where's the repo?
+    #
+    p.add_argument('-r', '--repository', help = 'Repository location',
+                   default = '')
+    return p
+
+
+p = setupargs()
+args = p.parse_args()
+
+#
+# Pull in an existing database if requested.
+#
+if args.load:
+    DB = pickle.load(open(args.database, 'r'))
+else:
+    DB = { }
+out = open(args.database, 'w')
+
+#
+# Time to fire up git.
+#
+git = 'git log --pretty=format:%H ' + args.git
+if args.repository:
+    os.chdir(args.repository)
+input = os.popen(git, 'r')
+
+nc = 0
+for line in input.readlines():
+    commit = line.strip()
+    #
+    # If we loaded a database and this commit is already there, we
+    # can quit.
+    #
+    if args.load and DB.has_key(commit):
+        break
+    #
+    # Figure out which version this one came from.
+    #
+    desc = os.popen('git describe --contains --match v\\* ' + commit, 'r')
+    tag = desc.readline().strip()
+    desc.close()
+    dash = tag.find('-')
+    if dash > 0:
+        DB[commit] = tag[:dash]
+    else:
+        DB[commit] = tag
+    #
+    # Give them something to watch.
+    #
+    nc += 1
+    if (nc % 25) == 0:
+        print '%6d %s %s           \r' % (nc, commit[:8], tag),
+        sys.stdout.flush()
+
+print '\nFound %d/%d commits' % (nc, len(DB.keys()))
+pickle.dump(DB, out)
+out.close()

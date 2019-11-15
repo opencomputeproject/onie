@@ -1,0 +1,254 @@
+From 7c4f3c87a719082ba14e0593acffe980a3f029ab Mon Sep 17 00:00:00 2001
+From: Vinitha V Pillai <vinitha.pillai@nxp.com>
+Date: Thu, 3 May 2018 14:43:03 +0530
+Subject: [PATCH 047/107] LS1012AFRWY: Add Secure Boot support
+
+Added the following:
+1. defconfig for LS1012AFRWY Secure boot
+2. PfE Validation support
+
+Signed-off-by: Vinitha V Pillai <vinitha.pillai@nxp.com>
+---
+ arch/arm/Kconfig                               |    1 +
+ board/freescale/ls1012afrdm/Kconfig            |    8 ++++
+ board/freescale/ls1012afrdm/MAINTAINERS        |    4 ++
+ board/freescale/ls1012afrdm/ls1012afrdm.c      |    5 ++
+ configs/ls1012afrwy_qspi_SECURE_BOOT_defconfig |   53 ++++++++++++++++++++++++
+ drivers/net/pfe_eth/pfe_firmware.c             |   29 +++++++++++++
+ include/configs/ls1012afrwy.h                  |   16 +++++++-
+ 7 files changed, 115 insertions(+), 1 deletions(-)
+ create mode 100644 configs/ls1012afrwy_qspi_SECURE_BOOT_defconfig
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 2c6f036..350653b 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -971,6 +971,7 @@ config TARGET_LS1012A2G5RDB
+ config TARGET_LS1012AFRWY
+ 	bool "Support ls1012afrwy"
+ 	select ARCH_LS1012A
++	select BOARD_LATE_INIT
+ 	select ARM64
+ 	imply SCSI
+ 	imply SCSI_AHCI
+diff --git a/board/freescale/ls1012afrdm/Kconfig b/board/freescale/ls1012afrdm/Kconfig
+index 73ad2fe..f52a896 100644
+--- a/board/freescale/ls1012afrdm/Kconfig
++++ b/board/freescale/ls1012afrdm/Kconfig
+@@ -70,6 +70,14 @@ config SYS_LS_PPA_FW_ADDR
+ 	hex "PPA Firmware Addr"
+ 	default 0x40060000
+ 
++config SYS_LS_PPA_ESBC_ADDR
++	hex "PPA Firmware HDR Addr"
++	default 0x401f4000
++
++config SYS_LS_PFE_ESBC_ADDR
++	hex "PFE Firmware HDR Addr"
++	default 0x401f8000
++
+ endif
+ 
+ source "board/freescale/common/Kconfig"
+diff --git a/board/freescale/ls1012afrdm/MAINTAINERS b/board/freescale/ls1012afrdm/MAINTAINERS
+index 36e3e5a..f3fcdb8 100644
+--- a/board/freescale/ls1012afrdm/MAINTAINERS
++++ b/board/freescale/ls1012afrdm/MAINTAINERS
+@@ -11,3 +11,7 @@ S:      Maintained
+ F:      board/freescale/ls1012afrwy/
+ F:      include/configs/ls1012afrwy.h
+ F:      configs/ls1012afrwy_qspi_defconfig
++
++M:	Vinitha V Pillai <vinitha.pillai@nxp.com>
++S:	Maintained
++F:	configs/ls1012afrwy_qspi_SECURE_BOOT_defconfig
+diff --git a/board/freescale/ls1012afrdm/ls1012afrdm.c b/board/freescale/ls1012afrdm/ls1012afrdm.c
+index 140d0c2..80d869c 100644
+--- a/board/freescale/ls1012afrdm/ls1012afrdm.c
++++ b/board/freescale/ls1012afrdm/ls1012afrdm.c
+@@ -19,6 +19,7 @@
+ #include <environment.h>
+ #include <fsl_mmdc.h>
+ #include <netdev.h>
++#include <fsl_sec.h>
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
+@@ -140,6 +141,10 @@ int board_init(void)
+ 	gd->env_addr = (ulong)&default_environment[0];
+ #endif
+ 
++#ifdef CONFIG_FSL_CAAM
++	sec_init();
++#endif
++
+ #ifdef CONFIG_FSL_LS_PPA
+ 	ppa_init();
+ #endif
+diff --git a/configs/ls1012afrwy_qspi_SECURE_BOOT_defconfig b/configs/ls1012afrwy_qspi_SECURE_BOOT_defconfig
+new file mode 100644
+index 0000000..adfec8f
+--- /dev/null
++++ b/configs/ls1012afrwy_qspi_SECURE_BOOT_defconfig
+@@ -0,0 +1,53 @@
++CONFIG_ARM=y
++CONFIG_TARGET_LS1012AFRWY=y
++CONFIG_SECURE_BOOT=y
++CONFIG_SYS_TEXT_BASE=0x40100000
++CONFIG_FSL_LS_PPA=y
++CONFIG_DEFAULT_DEVICE_TREE="fsl-ls1012a-frwy"
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_F is not set
++CONFIG_FIT_VERBOSE=y
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_OF_STDOUT_VIA_ALIAS=y
++CONFIG_SYS_EXTRA_OPTIONS="QSPI_BOOT"
++CONFIG_QSPI_BOOT=y
++CONFIG_BOOTDELAY=10
++CONFIG_USE_BOOTARGS=y
++CONFIG_BOOTARGS="console=ttyS0,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0500 quiet lpj=250000"
++# CONFIG_DISPLAY_BOARDINFO is not set
++CONFIG_CMD_GREPENV=y
++CONFIG_CMD_GPT=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_PCI=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_USB=y
++CONFIG_CMD_CACHE=y
++CONFIG_OF_CONTROL=y
++CONFIG_ENV_IS_IN_SPI_FLASH=y
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_DM=y
++# CONFIG_BLK is not set
++CONFIG_DM_MMC=y
++# CONFIG_DM_MMC_OPS is not set
++CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_DM_ETH=y
++CONFIG_SPI_FLASH_WINBOND=y
++CONFIG_NETDEVICES=y
++CONFIG_E1000=y
++CONFIG_FSL_PFE=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_DM_PCI_COMPAT=y
++CONFIG_PCIE_LAYERSCAPE=y
++CONFIG_SYS_NS16550=y
++CONFIG_DM_SPI=y
++CONFIG_FSL_DSPI=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_STORAGE=y
++CONFIG_RSA=y
++CONFIG_RSA_SOFTWARE_EXP=y
+diff --git a/drivers/net/pfe_eth/pfe_firmware.c b/drivers/net/pfe_eth/pfe_firmware.c
+index 9dc063d..6053d3c 100644
+--- a/drivers/net/pfe_eth/pfe_firmware.c
++++ b/drivers/net/pfe_eth/pfe_firmware.c
+@@ -13,6 +13,9 @@
+ 
+ #include <net/pfe_eth/pfe_eth.h>
+ #include <net/pfe_eth/pfe_firmware.h>
++#ifdef CONFIG_CHAIN_OF_TRUST
++#include <fsl_validate.h>
++#endif
+ 
+ #define PFE_FIRMEWARE_FIT_CNF_NAME	"config@1"
+ 
+@@ -169,10 +172,15 @@ static int pfe_fit_check(void)
+  */
+ int pfe_firmware_init(void)
+ {
++#define PFE_KEY_HASH	NULL
+ 	char *pfe_firmware_name;
+ 	const void *raw_image_addr;
+ 	size_t raw_image_size = 0;
+ 	u8 *pfe_firmware;
++#ifdef CONFIG_CHAIN_OF_TRUST
++	uintptr_t pfe_esbc_hdr = 0;
++	uintptr_t pfe_img_addr = 0;
++#endif
+ 	int ret = 0;
+ 	int fw_count;
+ 
+@@ -180,6 +188,27 @@ int pfe_firmware_init(void)
+ 	if (ret)
+ 		goto err;
+ 
++#ifdef CONFIG_CHAIN_OF_TRUST
++	pfe_esbc_hdr = CONFIG_SYS_LS_PFE_ESBC_ADDR;
++	pfe_img_addr = (uintptr_t)pfe_fit_addr;
++	if (fsl_check_boot_mode_secure() != 0) {
++		/*
++		 * In case of failure in validation, fsl_secboot_validate
++		 * would not return back in case of Production environment
++		 * with ITS=1. In Development environment (ITS=0 and
++		 * SB_EN=1), the function may return back in case of
++		 * non-fatal failures.
++		 */
++		ret = fsl_secboot_validate(pfe_esbc_hdr,
++					   PFE_KEY_HASH,
++					   &pfe_img_addr);
++		if (ret != 0)
++			printf("PFE firmware(s) validation failed\n");
++		else
++			printf("PFE firmware(s) validation Successful\n");
++	}
++#endif
++
+ 	for (fw_count = 0; fw_count < 2; fw_count++) {
+ 		if (fw_count == 0)
+ 			pfe_firmware_name = "class";
+diff --git a/include/configs/ls1012afrwy.h b/include/configs/ls1012afrwy.h
+index 67da6c5..770e566 100644
+--- a/include/configs/ls1012afrwy.h
++++ b/include/configs/ls1012afrwy.h
+@@ -58,11 +58,17 @@
+ 	"initrd_high=0xffffffffffffffff\0"	\
+ 	"fdt_addr=0x00f00000\0"			\
+ 	"kernel_addr=0x01000000\0"		\
++	"kernel_size_sd=0x16000\0"		\
++	"kernelhdr_size_sd=0x10\0"		\
++	"kernel_addr_sd=0x8000\0"		\
++	"kernelhdr_addr_sd=0x4000\0"		\
++	"kernelheader_addr=0x1fc000\0"		\
+ 	"kernelheader_addr=0x1fc000\0"		\
+ 	"scriptaddr=0x80000000\0"		\
+ 	"scripthdraddr=0x80080000\0"		\
+ 	"fdtheader_addr_r=0x80100000\0"		\
+ 	"kernelheader_addr_r=0x80200000\0"	\
++	"kernelheader_size=0x40000\0"		\
+ 	"kernel_addr_r=0x81000000\0"		\
+ 	"fdt_addr_r=0x90000000\0"		\
+ 	"load_addr=0x96000000\0"		\
+@@ -105,10 +111,17 @@
+ 		"$kernel_addr $kernel_size; env exists secureboot "	\
+ 		"&& sf read $kernelheader_addr_r $kernelheader_addr "	\
+ 		"$kernelheader_size && esbc_validate ${kernelheader_addr_r}; " \
++		"bootm $load_addr#$board\0"	\
++	"sd_bootcmd=echo Trying load from sd card..;"		\
++		"mmcinfo; mmc read $load_addr "			\
++		"$kernel_addr_sd $kernel_size_sd ;"		\
++		"env exists secureboot && mmc read $kernelheader_addr_r "\
++		"$kernelhdr_addr_sd $kernelhdr_size_sd "		\
++		" && esbc_validate ${kernelheader_addr_r};"	\
+ 		"bootm $load_addr#$board\0"
+ 
+ #undef CONFIG_BOOTCOMMAND
+-#define CONFIG_BOOTCOMMAND "pfe stop; run distro_bootcmd; run qspi_bootcmd; "\
++#define CONFIG_BOOTCOMMAND "pfe stop; run distro_bootcmd; run sd_bootcmd; "\
+ 			   "env exists secureboot && esbc_halt;"
+ #define CONFIG_CMD_MEMINFO
+ #define CONFIG_CMD_MEMTEST
+@@ -117,4 +130,5 @@
+ 
+ #include <asm/fsl_secure_boot.h>
+ 
++#include <asm/fsl_secure_boot.h>
+ #endif /* __LS1012AFRWY_H__ */
+-- 
+1.7.1
+

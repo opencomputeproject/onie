@@ -1,0 +1,718 @@
+From 5dd2367c2e325584d9bf916eb753040b59a76e6e Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Mon, 8 May 2017 20:33:52 +0300
+Subject: [PATCH 147/448] staging: fsl-dpaa2/eth: Add flow steering support
+
+Implement flow steering, configurable through ethtool.
+Supported fields are a subset of the Rx hashing key (which we
+extend with MAC src, dst and VLAN tag fields).
+Masking is supported as well.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c     |   98 +++--
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h     |   28 +-
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c |  432 ++++++++++++++++++++
+ 3 files changed, 520 insertions(+), 38 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 1b5531d..2681870 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2102,16 +2102,24 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 	if (err)
+ 		goto close;
+ 
++	/* allocate classification rule space */
++	priv->cls_rule = kzalloc(sizeof(*priv->cls_rule) *
++				 dpaa2_eth_fs_count(priv), GFP_KERNEL);
++	if (!priv->cls_rule)
++		goto close;
++
+ 	/* Enable flow control */
+ 	cfg.options = DPNI_LINK_OPT_AUTONEG | DPNI_LINK_OPT_PAUSE;
+ 	err = dpni_set_link_cfg(priv->mc_io, 0, priv->mc_token, &cfg);
+ 	if (err) {
+ 		dev_err(dev, "dpni_set_link_cfg() failed\n");
+-		goto close;
++		goto cls_free;
+ 	}
+ 
+ 	return 0;
+ 
++cls_free:
++	kfree(priv->cls_rule);
+ close:
+ 	dpni_close(priv->mc_io, 0, priv->mc_token);
+ 
+@@ -2130,6 +2138,8 @@ static void free_dpni(struct dpaa2_eth_priv *priv)
+ 
+ 	dpni_close(priv->mc_io, 0, priv->mc_token);
+ 
++	kfree(priv->cls_rule);
++
+ 	dma_unmap_single(dev, priv->cscn_dma, DPAA2_CSCN_SIZE, DMA_FROM_DEVICE);
+ 	kfree(priv->cscn_unaligned);
+ }
+@@ -2275,9 +2285,33 @@ static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
+ }
+ #endif
+ 
+-/* Hash key is a 5-tuple: IPsrc, IPdst, IPnextproto, L4src, L4dst */
+-static const struct dpaa2_eth_hash_fields hash_fields[] = {
++/* default hash key fields */
++static struct dpaa2_eth_hash_fields default_hash_fields[] = {
+ 	{
++		/* L2 header */
++		.rxnfc_field = RXH_L2DA,
++		.cls_prot = NET_PROT_ETH,
++		.cls_field = NH_FLD_ETH_DA,
++		.size = 6,
++	}, {
++		.cls_prot = NET_PROT_ETH,
++		.cls_field = NH_FLD_ETH_SA,
++		.size = 6,
++	}, {
++		/* This is the last ethertype field parsed:
++		 * depending on frame format, it can be the MAC ethertype
++		 * or the VLAN etype.
++		 */
++		.cls_prot = NET_PROT_ETH,
++		.cls_field = NH_FLD_ETH_TYPE,
++		.size = 2,
++	}, {
++		/* VLAN header */
++		.rxnfc_field = RXH_VLAN,
++		.cls_prot = NET_PROT_VLAN,
++		.cls_field = NH_FLD_VLAN_TCI,
++		.size = 2,
++	}, {
+ 		/* IP header */
+ 		.rxnfc_field = RXH_IP_SRC,
+ 		.cls_prot = NET_PROT_IP,
+@@ -2309,45 +2343,29 @@ static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
+ 	},
+ };
+ 
+-/* Set RX hash options
+- * flags is a combination of RXH_ bits
+- */
+-static int dpaa2_eth_set_hash(struct net_device *net_dev, u64 flags)
++/* Set RX hash options */
++static int dpaa2_eth_set_hash(struct dpaa2_eth_priv *priv)
+ {
+-	struct device *dev = net_dev->dev.parent;
+-	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	struct device *dev = priv->net_dev->dev.parent;
+ 	struct dpkg_profile_cfg cls_cfg;
+ 	struct dpni_rx_tc_dist_cfg dist_cfg;
+ 	u8 *dma_mem;
+ 	int i;
+ 	int err = 0;
+ 
+-	if (!dpaa2_eth_hash_enabled(priv)) {
+-		dev_dbg(dev, "Hashing support is not enabled\n");
+-		return 0;
+-	}
+-
+ 	memset(&cls_cfg, 0, sizeof(cls_cfg));
+ 
+-	for (i = 0; i < ARRAY_SIZE(hash_fields); i++) {
++	for (i = 0; i < priv->num_hash_fields; i++) {
+ 		struct dpkg_extract *key =
+ 			&cls_cfg.extracts[cls_cfg.num_extracts];
+ 
+-		if (!(flags & hash_fields[i].rxnfc_field))
+-			continue;
+-
+-		if (cls_cfg.num_extracts >= DPKG_MAX_NUM_OF_EXTRACTS) {
+-			dev_err(dev, "error adding key extraction rule, too many rules?\n");
+-			return -E2BIG;
+-		}
+-
+ 		key->type = DPKG_EXTRACT_FROM_HDR;
+-		key->extract.from_hdr.prot = hash_fields[i].cls_prot;
++		key->extract.from_hdr.prot = priv->hash_fields[i].cls_prot;
+ 		key->extract.from_hdr.type = DPKG_FULL_FIELD;
+-		key->extract.from_hdr.field = hash_fields[i].cls_field;
++		key->extract.from_hdr.field = priv->hash_fields[i].cls_field;
+ 		cls_cfg.num_extracts++;
+ 
+-		priv->rx_hash_fields |= hash_fields[i].rxnfc_field;
++		priv->rx_hash_fields |= priv->hash_fields[i].rxnfc_field;
+ 	}
+ 
+ 	dma_mem = kzalloc(DPAA2_CLASSIFIER_DMA_SIZE, GFP_KERNEL);
+@@ -2373,7 +2391,12 @@ static int dpaa2_eth_set_hash(struct net_device *net_dev, u64 flags)
+ 	}
+ 
+ 	dist_cfg.dist_size = dpaa2_eth_queue_count(priv);
+-	dist_cfg.dist_mode = DPNI_DIST_MODE_HASH;
++	if (dpaa2_eth_fs_enabled(priv)) {
++		dist_cfg.dist_mode = DPNI_DIST_MODE_FS;
++		dist_cfg.fs_cfg.miss_action = DPNI_FS_MISS_HASH;
++	} else {
++		dist_cfg.dist_mode = DPNI_DIST_MODE_HASH;
++	}
+ 
+ 	err = dpni_set_rx_tc_dist(priv->mc_io, 0, priv->mc_token, 0, &dist_cfg);
+ 	dma_unmap_single(dev, dist_cfg.key_cfg_iova,
+@@ -2409,12 +2432,23 @@ static int bind_dpni(struct dpaa2_eth_priv *priv)
+ 		return err;
+ 	}
+ 
+-	/* have the interface implicitly distribute traffic based on supported
+-	 * header fields
++	/* Verify classification options and disable hashing and/or
++	 * flow steering support in case of invalid configuration values
+ 	 */
+-	err = dpaa2_eth_set_hash(net_dev, DPAA2_RXH_SUPPORTED);
+-	if (err)
+-		netdev_err(net_dev, "Failed to configure hashing\n");
++	priv->hash_fields = default_hash_fields;
++	priv->num_hash_fields = ARRAY_SIZE(default_hash_fields);
++	check_cls_support(priv);
++
++	/* have the interface implicitly distribute traffic based on
++	 * a static hash key
++	 */
++	if (dpaa2_eth_hash_enabled(priv)) {
++		err = dpaa2_eth_set_hash(priv);
++		if (err) {
++			dev_err(dev, "Failed to configure hashing\n");
++			return err;
++		}
++	}
+ 
+ 	/* Configure handling of error frames */
+ 	err_cfg.errors = DPAA2_FAS_RX_ERR_MASK;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index cf0f8e0..f82bda2 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -347,10 +347,16 @@ struct dpaa2_eth_channel {
+ 	struct dpaa2_eth_ch_stats stats;
+ };
+ 
++struct dpaa2_eth_cls_rule {
++	struct ethtool_rx_flow_spec fs;
++	bool in_use;
++};
++
+ struct dpaa2_eth_hash_fields {
+ 	u64 rxnfc_field;
+ 	enum net_prot cls_prot;
+ 	int cls_field;
++	int offset;
+ 	int size;
+ };
+ 
+@@ -395,30 +401,40 @@ struct dpaa2_eth_priv {
+ 	bool do_link_poll;
+ 	struct task_struct *poll_thread;
+ 
++	struct dpaa2_eth_hash_fields *hash_fields;
++	u8 num_hash_fields;
+ 	/* enabled ethtool hashing bits */
+ 	u64 rx_hash_fields;
++	/* array of classification rules */
++	struct dpaa2_eth_cls_rule *cls_rule;
+ 	struct dpni_tx_shaping_cfg shaping_cfg;
+ };
+ 
+-/* default Rx hash options, set during probing */
+-#define DPAA2_RXH_SUPPORTED	(RXH_L2DA | RXH_VLAN | RXH_L3_PROTO \
+-				| RXH_IP_SRC | RXH_IP_DST | RXH_L4_B_0_1 \
+-				| RXH_L4_B_2_3)
+-
+ #define dpaa2_eth_hash_enabled(priv)	\
+ 	((priv)->dpni_attrs.num_queues > 1)
+ 
++#define dpaa2_eth_fs_enabled(priv)	\
++	(!((priv)->dpni_attrs.options & DPNI_OPT_NO_FS))
++
++#define dpaa2_eth_fs_mask_enabled(priv)	\
++	((priv)->dpni_attrs.options & DPNI_OPT_HAS_KEY_MASKING)
++
++#define dpaa2_eth_fs_count(priv)	\
++	((priv)->dpni_attrs.fs_entries)
++
+ /* Required by struct dpni_rx_tc_dist_cfg::key_cfg_iova */
+ #define DPAA2_CLASSIFIER_DMA_SIZE 256
+ 
+ extern const struct ethtool_ops dpaa2_ethtool_ops;
+ extern const char dpaa2_eth_drv_version[];
+ 
+-static int dpaa2_eth_queue_count(struct dpaa2_eth_priv *priv)
++static inline int dpaa2_eth_queue_count(struct dpaa2_eth_priv *priv)
+ {
+ 	return priv->dpni_attrs.num_queues;
+ }
+ 
++void check_cls_support(struct dpaa2_eth_priv *priv);
++
+ int set_rx_taildrop(struct dpaa2_eth_priv *priv, bool enable);
+ 
+ #endif	/* __DPAA2_H */
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+index 44a1734..161ea83 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+@@ -317,10 +317,414 @@ static void dpaa2_eth_get_ethtool_stats(struct net_device *net_dev,
+ 	*(data + i++) = dpaa2_cscn_state_congested(priv->cscn_mem);
+ }
+ 
++static int cls_key_off(struct dpaa2_eth_priv *priv, int prot, int field)
++{
++	int i, off = 0;
++
++	for (i = 0; i < priv->num_hash_fields; i++) {
++		if (priv->hash_fields[i].cls_prot == prot &&
++		    priv->hash_fields[i].cls_field == field)
++			return off;
++		off += priv->hash_fields[i].size;
++	}
++
++	return -1;
++}
++
++static u8 cls_key_size(struct dpaa2_eth_priv *priv)
++{
++	u8 i, size = 0;
++
++	for (i = 0; i < priv->num_hash_fields; i++)
++		size += priv->hash_fields[i].size;
++
++	return size;
++}
++
++void check_cls_support(struct dpaa2_eth_priv *priv)
++{
++	u8 key_size = cls_key_size(priv);
++	struct device *dev = priv->net_dev->dev.parent;
++
++	if (dpaa2_eth_hash_enabled(priv)) {
++		if (priv->dpni_attrs.fs_key_size < key_size) {
++			dev_info(dev, "max_dist_key_size = %d, expected %d. Hashing and steering are disabled\n",
++				 priv->dpni_attrs.fs_key_size,
++				 key_size);
++			goto disable_fs;
++		}
++		if (priv->num_hash_fields > DPKG_MAX_NUM_OF_EXTRACTS) {
++			dev_info(dev, "Too many key fields (max = %d). Hashing and steering are disabled\n",
++				 DPKG_MAX_NUM_OF_EXTRACTS);
++			goto disable_fs;
++		}
++	}
++
++	if (dpaa2_eth_fs_enabled(priv)) {
++		if (!dpaa2_eth_hash_enabled(priv)) {
++			dev_info(dev, "Insufficient queues. Steering is disabled\n");
++			goto disable_fs;
++		}
++
++		if (!dpaa2_eth_fs_mask_enabled(priv)) {
++			dev_info(dev, "Key masks not supported. Steering is disabled\n");
++			goto disable_fs;
++		}
++	}
++
++	return;
++
++disable_fs:
++	priv->dpni_attrs.options |= DPNI_OPT_NO_FS;
++	priv->dpni_attrs.options &= ~DPNI_OPT_HAS_KEY_MASKING;
++}
++
++static int prep_l4_rule(struct dpaa2_eth_priv *priv,
++			struct ethtool_tcpip4_spec *l4_value,
++			struct ethtool_tcpip4_spec *l4_mask,
++			void *key, void *mask, u8 l4_proto)
++{
++	int offset;
++
++	if (l4_mask->tos) {
++		netdev_err(priv->net_dev, "ToS is not supported for IPv4 L4\n");
++		return -EOPNOTSUPP;
++	}
++
++	if (l4_mask->ip4src) {
++		offset = cls_key_off(priv, NET_PROT_IP, NH_FLD_IP_SRC);
++		*(u32 *)(key + offset) = l4_value->ip4src;
++		*(u32 *)(mask + offset) = l4_mask->ip4src;
++	}
++
++	if (l4_mask->ip4dst) {
++		offset = cls_key_off(priv, NET_PROT_IP, NH_FLD_IP_DST);
++		*(u32 *)(key + offset) = l4_value->ip4dst;
++		*(u32 *)(mask + offset) = l4_mask->ip4dst;
++	}
++
++	if (l4_mask->psrc) {
++		offset = cls_key_off(priv, NET_PROT_UDP, NH_FLD_UDP_PORT_SRC);
++		*(u32 *)(key + offset) = l4_value->psrc;
++		*(u32 *)(mask + offset) = l4_mask->psrc;
++	}
++
++	if (l4_mask->pdst) {
++		offset = cls_key_off(priv, NET_PROT_UDP, NH_FLD_UDP_PORT_DST);
++		*(u32 *)(key + offset) = l4_value->pdst;
++		*(u32 *)(mask + offset) = l4_mask->pdst;
++	}
++
++	/* Only apply the rule for the user-specified L4 protocol
++	 * and if ethertype matches IPv4
++	 */
++	offset = cls_key_off(priv, NET_PROT_ETH, NH_FLD_ETH_TYPE);
++	*(u16 *)(key + offset) = htons(ETH_P_IP);
++	*(u16 *)(mask + offset) = 0xFFFF;
++
++	offset = cls_key_off(priv, NET_PROT_IP, NH_FLD_IP_PROTO);
++	*(u8 *)(key + offset) = l4_proto;
++	*(u8 *)(mask + offset) = 0xFF;
++
++	/* TODO: check IP version */
++
++	return 0;
++}
++
++static int prep_eth_rule(struct dpaa2_eth_priv *priv,
++			 struct ethhdr *eth_value, struct ethhdr *eth_mask,
++			 void *key, void *mask)
++{
++	int offset;
++
++	if (eth_mask->h_proto) {
++		netdev_err(priv->net_dev, "Ethertype is not supported!\n");
++		return -EOPNOTSUPP;
++	}
++
++	if (!is_zero_ether_addr(eth_mask->h_source)) {
++		offset = cls_key_off(priv, NET_PROT_ETH, NH_FLD_ETH_SA);
++		ether_addr_copy(key + offset, eth_value->h_source);
++		ether_addr_copy(mask + offset, eth_mask->h_source);
++	}
++
++	if (!is_zero_ether_addr(eth_mask->h_dest)) {
++		offset = cls_key_off(priv, NET_PROT_ETH, NH_FLD_ETH_DA);
++		ether_addr_copy(key + offset, eth_value->h_dest);
++		ether_addr_copy(mask + offset, eth_mask->h_dest);
++	}
++
++	return 0;
++}
++
++static int prep_user_ip_rule(struct dpaa2_eth_priv *priv,
++			     struct ethtool_usrip4_spec *uip_value,
++			     struct ethtool_usrip4_spec *uip_mask,
++			     void *key, void *mask)
++{
++	int offset;
++
++	if (uip_mask->tos)
++		return -EOPNOTSUPP;
++
++	if (uip_mask->ip4src) {
++		offset = cls_key_off(priv, NET_PROT_IP, NH_FLD_IP_SRC);
++		*(u32 *)(key + offset) = uip_value->ip4src;
++		*(u32 *)(mask + offset) = uip_mask->ip4src;
++	}
++
++	if (uip_mask->ip4dst) {
++		offset = cls_key_off(priv, NET_PROT_IP, NH_FLD_IP_DST);
++		*(u32 *)(key + offset) = uip_value->ip4dst;
++		*(u32 *)(mask + offset) = uip_mask->ip4dst;
++	}
++
++	if (uip_mask->proto) {
++		offset = cls_key_off(priv, NET_PROT_IP, NH_FLD_IP_PROTO);
++		*(u32 *)(key + offset) = uip_value->proto;
++		*(u32 *)(mask + offset) = uip_mask->proto;
++	}
++	if (uip_mask->l4_4_bytes) {
++		offset = cls_key_off(priv, NET_PROT_UDP, NH_FLD_UDP_PORT_SRC);
++		*(u16 *)(key + offset) = uip_value->l4_4_bytes << 16;
++		*(u16 *)(mask + offset) = uip_mask->l4_4_bytes << 16;
++
++		offset = cls_key_off(priv, NET_PROT_UDP, NH_FLD_UDP_PORT_DST);
++		*(u16 *)(key + offset) = uip_value->l4_4_bytes & 0xFFFF;
++		*(u16 *)(mask + offset) = uip_mask->l4_4_bytes & 0xFFFF;
++	}
++
++	/* Ethertype must be IP */
++	offset = cls_key_off(priv, NET_PROT_ETH, NH_FLD_ETH_TYPE);
++	*(u16 *)(key + offset) = htons(ETH_P_IP);
++	*(u16 *)(mask + offset) = 0xFFFF;
++
++	return 0;
++}
++
++static int prep_ext_rule(struct dpaa2_eth_priv *priv,
++			 struct ethtool_flow_ext *ext_value,
++			 struct ethtool_flow_ext *ext_mask,
++			 void *key, void *mask)
++{
++	int offset;
++
++	if (ext_mask->vlan_etype)
++		return -EOPNOTSUPP;
++
++	if (ext_mask->vlan_tci) {
++		offset = cls_key_off(priv, NET_PROT_VLAN, NH_FLD_VLAN_TCI);
++		*(u16 *)(key + offset) = ext_value->vlan_tci;
++		*(u16 *)(mask + offset) = ext_mask->vlan_tci;
++	}
++
++	return 0;
++}
++
++static int prep_mac_ext_rule(struct dpaa2_eth_priv *priv,
++			     struct ethtool_flow_ext *ext_value,
++			     struct ethtool_flow_ext *ext_mask,
++			     void *key, void *mask)
++{
++	int offset;
++
++	if (!is_zero_ether_addr(ext_mask->h_dest)) {
++		offset = cls_key_off(priv, NET_PROT_ETH, NH_FLD_ETH_DA);
++		ether_addr_copy(key + offset, ext_value->h_dest);
++		ether_addr_copy(mask + offset, ext_mask->h_dest);
++	}
++
++	return 0;
++}
++
++static int prep_cls_rule(struct net_device *net_dev,
++			 struct ethtool_rx_flow_spec *fs,
++			 void *key)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	const u8 key_size = cls_key_size(priv);
++	void *msk = key + key_size;
++	int err;
++
++	memset(key, 0, key_size * 2);
++
++	switch (fs->flow_type & 0xff) {
++	case TCP_V4_FLOW:
++		err = prep_l4_rule(priv, &fs->h_u.tcp_ip4_spec,
++				   &fs->m_u.tcp_ip4_spec, key, msk,
++				   IPPROTO_TCP);
++		break;
++	case UDP_V4_FLOW:
++		err = prep_l4_rule(priv, &fs->h_u.udp_ip4_spec,
++				   &fs->m_u.udp_ip4_spec, key, msk,
++				   IPPROTO_UDP);
++		break;
++	case SCTP_V4_FLOW:
++		err = prep_l4_rule(priv, &fs->h_u.sctp_ip4_spec,
++				   &fs->m_u.sctp_ip4_spec, key, msk,
++				   IPPROTO_SCTP);
++		break;
++	case ETHER_FLOW:
++		err = prep_eth_rule(priv, &fs->h_u.ether_spec,
++				    &fs->m_u.ether_spec, key, msk);
++		break;
++	case IP_USER_FLOW:
++		err = prep_user_ip_rule(priv, &fs->h_u.usr_ip4_spec,
++					&fs->m_u.usr_ip4_spec, key, msk);
++		break;
++	default:
++		/* TODO: AH, ESP */
++		return -EOPNOTSUPP;
++	}
++	if (err)
++		return err;
++
++	if (fs->flow_type & FLOW_EXT) {
++		err = prep_ext_rule(priv, &fs->h_ext, &fs->m_ext, key, msk);
++		if (err)
++			return err;
++	}
++
++	if (fs->flow_type & FLOW_MAC_EXT) {
++		err = prep_mac_ext_rule(priv, &fs->h_ext, &fs->m_ext, key, msk);
++		if (err)
++			return err;
++	}
++
++	return 0;
++}
++
++static int del_cls(struct net_device *net_dev, int location);
++
++static int do_cls(struct net_device *net_dev,
++		  struct ethtool_rx_flow_spec *fs,
++		  bool add)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	struct device *dev = net_dev->dev.parent;
++	const int rule_cnt = dpaa2_eth_fs_count(priv);
++	struct dpni_rule_cfg rule_cfg;
++	struct dpni_fs_action_cfg fs_act = { 0 };
++	void *dma_mem;
++	int err = 0;
++
++	if (!dpaa2_eth_fs_enabled(priv)) {
++		netdev_err(net_dev, "dev does not support steering!\n");
++		/* dev doesn't support steering */
++		return -EOPNOTSUPP;
++	}
++
++	if ((fs->ring_cookie != RX_CLS_FLOW_DISC &&
++	     fs->ring_cookie >= dpaa2_eth_queue_count(priv)) ||
++	     fs->location >= rule_cnt)
++		return -EINVAL;
++
++	/* When adding a new rule, check if location if available
++	 * and if not, free the existing table entry before inserting
++	 * the new one
++	 */
++	if (add && (priv->cls_rule[fs->location].in_use == true))
++		del_cls(net_dev, fs->location);
++
++	memset(&rule_cfg, 0, sizeof(rule_cfg));
++	rule_cfg.key_size = cls_key_size(priv);
++
++	/* allocate twice the key size, for the actual key and for mask */
++	dma_mem = kzalloc(rule_cfg.key_size * 2, GFP_DMA | GFP_KERNEL);
++	if (!dma_mem)
++		return -ENOMEM;
++
++	err = prep_cls_rule(net_dev, fs, dma_mem);
++	if (err)
++		goto err_free_mem;
++
++	rule_cfg.key_iova = dma_map_single(dev, dma_mem,
++					   rule_cfg.key_size * 2,
++					   DMA_TO_DEVICE);
++
++	rule_cfg.mask_iova = rule_cfg.key_iova + rule_cfg.key_size;
++
++	if (fs->ring_cookie == RX_CLS_FLOW_DISC)
++		fs_act.options |= DPNI_FS_OPT_DISCARD;
++	else
++		fs_act.flow_id = fs->ring_cookie;
++
++	if (add)
++		err = dpni_add_fs_entry(priv->mc_io, 0, priv->mc_token,
++					0, fs->location, &rule_cfg, &fs_act);
++	else
++		err = dpni_remove_fs_entry(priv->mc_io, 0, priv->mc_token,
++					   0, &rule_cfg);
++
++	dma_unmap_single(dev, rule_cfg.key_iova,
++			 rule_cfg.key_size * 2, DMA_TO_DEVICE);
++
++	if (err)
++		netdev_err(net_dev, "dpaa2_add/remove_cls() error %d\n", err);
++
++err_free_mem:
++	kfree(dma_mem);
++
++	return err;
++}
++
++static int add_cls(struct net_device *net_dev,
++		   struct ethtool_rx_flow_spec *fs)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	int err;
++
++	err = do_cls(net_dev, fs, true);
++	if (err)
++		return err;
++
++	priv->cls_rule[fs->location].in_use = true;
++	priv->cls_rule[fs->location].fs = *fs;
++
++	return 0;
++}
++
++static int del_cls(struct net_device *net_dev, int location)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	int err;
++
++	err = do_cls(net_dev, &priv->cls_rule[location].fs, false);
++	if (err)
++		return err;
++
++	priv->cls_rule[location].in_use = false;
++
++	return 0;
++}
++
++static int dpaa2_eth_set_rxnfc(struct net_device *net_dev,
++			       struct ethtool_rxnfc *rxnfc)
++{
++	int err = 0;
++
++	switch (rxnfc->cmd) {
++	case ETHTOOL_SRXCLSRLINS:
++		err = add_cls(net_dev, &rxnfc->fs);
++		break;
++
++	case ETHTOOL_SRXCLSRLDEL:
++		err = del_cls(net_dev, rxnfc->fs.location);
++		break;
++
++	default:
++		err = -EOPNOTSUPP;
++	}
++
++	return err;
++}
++
+ static int dpaa2_eth_get_rxnfc(struct net_device *net_dev,
+ 			       struct ethtool_rxnfc *rxnfc, u32 *rule_locs)
+ {
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++	const int rule_cnt = dpaa2_eth_fs_count(priv);
++	int i, j;
+ 
+ 	switch (rxnfc->cmd) {
+ 	case ETHTOOL_GRXFH:
+@@ -333,6 +737,33 @@ static int dpaa2_eth_get_rxnfc(struct net_device *net_dev,
+ 	case ETHTOOL_GRXRINGS:
+ 		rxnfc->data = dpaa2_eth_queue_count(priv);
+ 		break;
++
++	case ETHTOOL_GRXCLSRLCNT:
++		for (i = 0, rxnfc->rule_cnt = 0; i < rule_cnt; i++)
++			if (priv->cls_rule[i].in_use)
++				rxnfc->rule_cnt++;
++		rxnfc->data = rule_cnt;
++		break;
++
++	case ETHTOOL_GRXCLSRULE:
++		if (!priv->cls_rule[rxnfc->fs.location].in_use)
++			return -EINVAL;
++
++		rxnfc->fs = priv->cls_rule[rxnfc->fs.location].fs;
++		break;
++
++	case ETHTOOL_GRXCLSRLALL:
++		for (i = 0, j = 0; i < rule_cnt; i++) {
++			if (!priv->cls_rule[i].in_use)
++				continue;
++			if (j == rxnfc->rule_cnt)
++				return -EMSGSIZE;
++			rule_locs[j++] = i;
++		}
++		rxnfc->rule_cnt = j;
++		rxnfc->data = rule_cnt;
++		break;
++
+ 	default:
+ 		return -EOPNOTSUPP;
+ 	}
+@@ -351,4 +782,5 @@ static int dpaa2_eth_get_rxnfc(struct net_device *net_dev,
+ 	.get_ethtool_stats = dpaa2_eth_get_ethtool_stats,
+ 	.get_strings = dpaa2_eth_get_strings,
+ 	.get_rxnfc = dpaa2_eth_get_rxnfc,
++	.set_rxnfc = dpaa2_eth_set_rxnfc,
+ };
+-- 
+1.7.1
+
