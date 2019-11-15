@@ -1,0 +1,48 @@
+From 5cb88760aba4ed8560f7ed6df31e89996a7944b9 Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Fri, 17 Nov 2017 15:38:26 +0200
+Subject: [PATCH 349/448] staging: fsl-mc/dpio: remove incomplete refcount implementation
+
+There's an unfinished implementation of reference counting for dpaa2_io
+structure using atomics. Since it's unused lets remove it for now and,
+if needed at a later time, make use of krefs instead of rolling our
+own refcounting.
+
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-mc/bus/dpio/dpio-service.c |    4 ----
+ 1 files changed, 0 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-mc/bus/dpio/dpio-service.c b/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
+index 453acd4..d4dbcec 100644
+--- a/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
++++ b/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
+@@ -43,7 +43,6 @@
+ #include "qbman-portal.h"
+ 
+ struct dpaa2_io {
+-	atomic_t refs;
+ 	struct dpaa2_io_desc dpio_desc;
+ 	struct qbman_swp_desc swp_desc;
+ 	struct qbman_swp *swp;
+@@ -147,7 +146,6 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc)
+ 		return NULL;
+ 	}
+ 
+-	atomic_set(&obj->refs, 1);
+ 	obj->dpio_desc = *desc;
+ 	obj->swp_desc.cena_bar = obj->dpio_desc.regs_cena;
+ 	obj->swp_desc.cinh_bar = obj->dpio_desc.regs_cinh;
+@@ -192,8 +190,6 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc)
+  */
+ void dpaa2_io_down(struct dpaa2_io *d)
+ {
+-	if (!atomic_dec_and_test(&d->refs))
+-		return;
+ 	kfree(d);
+ }
+ EXPORT_SYMBOL(dpaa2_io_down);
+-- 
+1.7.1
+

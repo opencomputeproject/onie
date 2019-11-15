@@ -1,0 +1,84 @@
+From 64533f8d23dc1856e7eb8be0f2de899f957ec562 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 26 Jul 2017 16:21:21 +0300
+Subject: [PATCH 165/448] staging: fsl-dpaa2/eth: Map Rx buffers as bidirectional
+
+In order to support XDP programs writing in frame headers,
+we need to DMA map all Rx buffers as bidirectional. We still
+don't support change in header size (e.g. encapsulation).
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index ee0e373..7779a6e 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -114,7 +114,7 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ 		addr = dpaa2_sg_get_addr(&sgt[i]);
+ 		sg_vaddr = dpaa2_iova_to_virt(priv->iommu_domain, addr);
+ 		dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE,
+-				 DMA_FROM_DEVICE);
++				 DMA_BIDIRECTIONAL);
+ 
+ 		skb_free_frag(sg_vaddr);
+ 		if (dpaa2_sg_is_final(&sgt[i]))
+@@ -173,7 +173,7 @@ static void free_rx_fd(struct dpaa2_eth_priv *priv,
+ 		sg_addr = dpaa2_sg_get_addr(sge);
+ 		sg_vaddr = dpaa2_iova_to_virt(priv->iommu_domain, sg_addr);
+ 		dma_unmap_single(dev, sg_addr, DPAA2_ETH_RX_BUF_SIZE,
+-				 DMA_FROM_DEVICE);
++				 DMA_BIDIRECTIONAL);
+ 
+ 		sg_length = dpaa2_sg_get_len(sge);
+ 
+@@ -246,7 +246,7 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 	trace_dpaa2_rx_fd(priv->net_dev, fd);
+ 
+ 	vaddr = dpaa2_iova_to_virt(priv->iommu_domain, addr);
+-	dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE, DMA_FROM_DEVICE);
++	dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE, DMA_BIDIRECTIONAL);
+ 
+ 	fas = dpaa2_get_fas(vaddr);
+ 	prefetch(fas);
+@@ -262,7 +262,7 @@ static void dpaa2_eth_rx(struct dpaa2_eth_priv *priv,
+ 		if (xdp_prog) {
+ 			xdp.data = buf_data;
+ 			xdp.data_end = buf_data + dpaa2_fd_get_len(fd);
+-			/* we don't support header changes for now */
++			/* for now, we don't support changes in header size */
+ 			xdp.data_hard_start = buf_data;
+ 
+ 			/* update stats here, as we won't reach the code
+@@ -356,7 +356,7 @@ static void dpaa2_eth_rx_err(struct dpaa2_eth_priv *priv,
+ 	bool has_fas_errors = false;
+ 
+ 	vaddr = dpaa2_iova_to_virt(priv->iommu_domain, addr);
+-	dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE, DMA_FROM_DEVICE);
++	dma_unmap_single(dev, addr, DPAA2_ETH_RX_BUF_SIZE, DMA_BIDIRECTIONAL);
+ 
+ 	/* check frame errors in the FD field */
+ 	fd_errors = dpaa2_fd_get_ctrl(fd) & DPAA2_FD_RX_ERR_MASK;
+@@ -918,7 +918,7 @@ static int add_bufs(struct dpaa2_eth_priv *priv, u16 bpid)
+ 		buf = PTR_ALIGN(buf, priv->rx_buf_align);
+ 
+ 		addr = dma_map_single(dev, buf, DPAA2_ETH_RX_BUF_SIZE,
+-				      DMA_FROM_DEVICE);
++				      DMA_BIDIRECTIONAL);
+ 		if (unlikely(dma_mapping_error(dev, addr)))
+ 			goto err_map;
+ 
+@@ -1008,7 +1008,7 @@ static void drain_bufs(struct dpaa2_eth_priv *priv, int count)
+ 						   buf_array[i]);
+ 			dma_unmap_single(dev, buf_array[i],
+ 					 DPAA2_ETH_RX_BUF_SIZE,
+-					 DMA_FROM_DEVICE);
++					 DMA_BIDIRECTIONAL);
+ 			skb_free_frag(vaddr);
+ 		}
+ 	} while (ret);
+-- 
+1.7.1
+

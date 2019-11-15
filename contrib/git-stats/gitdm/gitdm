@@ -1,0 +1,571 @@
+#!/usr/bin/pypy
+#-*- coding:utf-8 -*-
+#
+
+#
+# This code is part of the LWN git data miner.
+#
+# Copyright 2007-13 Eklektix, Inc.
+# Copyright 2007-13 Jonathan Corbet <corbet@lwn.net>
+# Copyright 2011 Germán Póo-Caamaño <gpoo@gnome.org>
+#
+# This file may be distributed under the terms of the GNU General
+# Public License, version 2.
+
+
+import database, csvdump, ConfigFile, reports
+import getopt, datetime
+import os, re, sys, rfc822, string, os.path
+import logparser
+from patterns import patterns
+
+Today = datetime.date.today()
+
+#
+# Remember author names we have griped about.
+#
+GripedAuthorNames = [ ]
+
+#
+# Control options.
+#
+MapUnknown = 0
+DevReports = 1
+DateStats = 0
+AuthorSOBs = 1
+FileFilter = None
+CSVFile = None
+CSVPrefix = None
+AkpmOverLt = 0
+DumpDB = 0
+CFName = 'gitdm.config'
+DirName = ''
+Aggregate = 'month'
+Numstat = 0
+ReportByFileType = 0
+ReportUnknowns = False
+CompanyFilter = None
+FileReport = None
+#
+# Options:
+#
+# -a		Andrew Morton's signoffs shadow Linus's
+# -b dir	Specify the base directory to fetch the configuration files
+# -c cfile	Specify a configuration file
+# -C company	Only consider patches from <company>
+# -d		Output individual developer stats
+# -D		Output date statistics
+# -f file	Write touched-files report to <file>
+# -h hfile	HTML output to hfile
+# -l count	Maximum length for output lists
+# -n        Use numstats instead of generated patch from git log
+# -o file	File for text output
+# -p prefix Prefix for CSV output
+# -r pattern	Restrict to files matching pattern
+# -s		Ignore author SOB lines
+# -u		Map unknown employers to '(Unknown)'
+# -U 		Dump unknown hackers in report
+# -x file.csv   Export raw statistics as CSV
+# -w        Aggregrate the raw statistics by weeks instead of months
+# -y            Aggregrate the raw statistics by years instead of months
+# -z		Dump out the hacker database at completion
+
+def ParseOpts():
+    global MapUnknown, DevReports
+    global DateStats, AuthorSOBs, FileFilter, AkpmOverLt, DumpDB
+    global CFName, CSVFile, CSVPrefix,DirName, Aggregate, Numstat
+    global ReportByFileType, ReportUnknowns, CompanyFilter, FileReport
+
+    opts, rest = getopt.getopt(sys.argv[1:], 'ab:dC:c:Df:h:l:no:p:r:stUuwx:yz')
+    for opt in opts:
+        if opt[0] == '-a':
+            AkpmOverLt = 1
+        elif opt[0] == '-b':
+            DirName = opt[1]
+        elif opt[0] == '-C':
+            CompanyFilter = opt[1]
+        elif opt[0] == '-c':
+            CFName = opt[1]
+        elif opt[0] == '-d':
+            DevReports = 0
+        elif opt[0] == '-D':
+            DateStats = 1
+        elif opt[0] == '-f':
+            FileReport = opt[1]
+        elif opt[0] == '-h':
+            reports.SetHTMLOutput(open(opt[1], 'w'))
+        elif opt[0] == '-l':
+            reports.SetMaxList(int(opt[1]))
+        elif opt[0] == '-n':
+            Numstat = 1
+        elif opt[0] == '-o':
+            reports.SetOutput(open(opt[1], 'w'))
+        elif opt[0] == '-p':
+            CSVPrefix = opt[1]
+        elif opt[0] == '-r':
+            print 'Filter on "%s"' % (opt[1])
+            FileFilter = re.compile(opt[1])
+        elif opt[0] == '-s':
+            AuthorSOBs = 0
+        elif opt[0] == '-t':
+            ReportByFileType = 1
+        elif opt[0] == '-u':
+            MapUnknown = 1
+        elif opt[0] == '-U':
+            ReportUnknowns = True
+        elif opt[0] == '-x':
+            CSVFile = open(opt[1], 'w')
+            print "open output file " + opt[1] + "\n"
+        elif opt [0] == '-w':
+            Aggregate = 'week'
+        elif opt [0] == '-y':
+            Aggregate = 'year'
+        elif opt[0] == '-z':
+            DumpDB = 1
+        
+#
+# Tracking for file accesses.
+#
+FileAccesses = { }
+
+def AddAccess(path):
+    try:
+        FileAccesses[path] += 1
+    except KeyError:
+        FileAccesses[path] = 1
+
+def NoteFileAccess(paths):
+    #
+    # Keep separate track of what we've noted in this set so that each level
+    # of the tree only gets a single note from one patch.
+    #
+    noted = [ ]
+    for path in paths:
+        if path.startswith('a/') or path.startswith('b/'):
+            path = path[2:]
+        AddAccess(path)
+        noted.append(path)
+        path, last = os.path.split(path)
+        while path and path not in ['a', 'b', '/']:
+            if path in noted:
+                break
+            noted.append(path)
+            AddAccess(path)
+            path, last = os.path.split(path)
+
+#
+# Local version still, for now
+#
+def LookupStoreHacker(name, email):
+    return database.LookupStoreHacker(name, email, MapUnknown)
+
+#
+# Date tracking.
+#
+
+DateMap = { }
+
+def AddDateLines(date, lines):
+    if lines > 1000000:
+        print 'Skip big patch (%d)' % lines
+        return
+    try:
+        DateMap[date] += lines
+    except KeyError:
+        DateMap[date] = lines
+
+def PrintDateStats():
+    dates = DateMap.keys()
+    dates.sort()
+    total = 0
+    datef = open('datelc.csv', 'w')
+    datef.write('Date,Changed,Total Changed\n')
+    for date in dates:
+        total += DateMap[date]
+        datef.write('%d/%02d/%02d,%d,%d\n' % (date.year, date.month, date.day,
+                                    DateMap[date], total))
+
+
+#
+# Let's slowly try to move some smarts into this class.
+#
+class patch:
+    (ADDED, REMOVED) = range(2)
+
+    def __init__(self, commit):
+        self.commit = commit
+        self.merge = self.added = self.removed = 0
+        self.author = LookupStoreHacker('Unknown hacker', 'unknown@hacker.net')
+        self.email = 'unknown@hacker.net'
+        self.sobs = [ ]
+        self.reviews = [ ]
+        self.testers = [ ]
+        self.reports = [ ]
+        self.filetypes = {}
+        self.files = [ ]
+
+    def addreviewer(self, reviewer):
+        self.reviews.append(reviewer)
+
+    def addtester(self, tester):
+        self.testers.append(tester)
+
+    def addreporter(self, reporter):
+        self.reports.append(reporter)
+
+    def addfiletype(self, filetype, added, removed):
+        if self.filetypes.has_key(filetype):
+            self.filetypes[filetype][self.ADDED] += added
+            self.filetypes[filetype][self.REMOVED] += removed
+        else:
+            self.filetypes[filetype] = [added, removed]
+
+    def addfile(self, name):
+        self.files.append(name)
+
+
+def parse_numstat(line, file_filter):
+    """
+        Receive a line of text, determine if fits a numstat line and
+        parse the added and removed lines as well as the file type.
+    """
+    m = patterns['numstat'].match(line)
+    if m:
+        filename = m.group(3)
+        # If we have a file filter, check for file lines.
+        if file_filter and not file_filter.search(filename):
+            return None, None, None, None
+
+        try:
+            added = int(m.group(1))
+            removed = int(m.group(2))
+        except ValueError:
+            # A binary file (image, etc.) is marked with '-'
+            added = removed = 0
+
+        m = patterns['rename'].match(filename)
+        if m:
+            filename = '%s%s%s' % (m.group(1), m.group(3), m.group(4))
+
+        filetype = database.FileTypes.guess_file_type(os.path.basename(filename))
+        return filename, filetype, added, removed
+    else:
+        return None, None, None, None
+
+#
+# The core hack for grabbing the information about a changeset.
+#
+def grabpatch(logpatch):
+    m = patterns['commit'].match(logpatch[0])
+    if not m:
+        return None
+
+    p = patch(m.group(1))
+    ignore = (FileFilter is not None)
+    need_bline = False
+    for Line in logpatch[1:]:
+        #
+        # Maybe it's an author line?
+        #
+        m = patterns['author'].match(Line)
+        if m:
+            p.email = database.RemapEmail(m.group(2))
+            p.author = LookupStoreHacker(m.group(1), p.email)
+            continue
+        #
+        # Could be a signed-off-by:
+        #
+        m = patterns['signed-off-by'].match(Line)
+        if m:
+            email = database.RemapEmail(m.group(2))
+            sobber = LookupStoreHacker(m.group(1), email)
+            if sobber != p.author or AuthorSOBs:
+                p.sobs.append((email, LookupStoreHacker(m.group(1), m.group(2))))
+            continue
+        #
+        # Various other tags of interest.
+        #
+        m = patterns['reviewed-by'].match(Line)
+        if m:
+            email = database.RemapEmail(m.group(2))
+            p.addreviewer(LookupStoreHacker(m.group(1), email))
+            continue
+        m = patterns['tested-by'].match(Line)
+        if m:
+            email = database.RemapEmail(m.group(2))
+            p.addtester(LookupStoreHacker(m.group(1), email))
+            p.author.testcredit(patch)
+            continue
+        # Reported-by:
+        m = patterns['reported-by'].match(Line)
+        if m:
+            email = database.RemapEmail(m.group(2))
+            p.addreporter(LookupStoreHacker(m.group(1), email))
+            p.author.reportcredit(patch)
+            continue
+        # Reported-and-tested-by:
+        m = patterns['reported-and-tested-by'].match(Line)
+        if m:
+            email = database.RemapEmail(m.group(2))
+            h = LookupStoreHacker(m.group(1), email)
+            p.addreporter(h)
+            p.addtester(h)
+            p.author.reportcredit(patch)
+            p.author.testcredit(patch)
+            continue
+        #
+        # If this one is a merge, make note of the fact.
+        #
+        m = patterns['merge'].match(Line)
+        if m:
+            p.merge = 1
+            continue
+        #
+        # See if it's the date.
+        #
+        m = patterns['date'].match(Line)
+        if m:
+            dt = rfc822.parsedate(m.group(2))
+            p.date = datetime.date(dt[0], dt[1], dt[2])
+            if p.date > Today:
+                sys.stderr.write('Funky date: %s\n' % p.date)
+                p.date = Today
+            continue
+        if not Numstat:
+            #
+            # If we have a file filter, check for file lines.
+            #
+            if FileFilter:
+                ignore = ApplyFileFilter(Line, ignore)
+            #
+            # If we are tracking files touched, look for a relevant line here.
+            #
+            if FileReport and not ignore:
+                m = patterns['filea'].match(Line)
+                if m:
+                    file = m.group(1)
+                    if file == '/dev/null':
+                        need_bline = True
+                        continue
+                    p.addfile(m.group(1))
+                    continue
+                elif need_bline:
+                    m = patterns['fileb'].match(Line)
+                    if m:
+                        p.addfile(m.group(1))
+                    need_bline = False
+                    continue
+            #
+            # OK, maybe it's part of the diff itself.
+            #
+            if not ignore:
+                if patterns['add'].match(Line):
+                    p.added += 1
+                    continue
+                if patterns['rem'].match(Line):
+                    p.removed += 1
+        else:
+            #
+            # Grab data in the numstat format.
+            #
+            (filename, filetype, added, removed) = parse_numstat(Line, FileFilter)
+            if filename:
+                p.added += added
+                p.removed += removed
+                p.addfiletype(filetype, added, removed)
+                p.addfile(filename)
+
+    if '@' in p.author.name:
+        GripeAboutAuthorName(p.author.name)
+
+    return p
+
+def GripeAboutAuthorName(name):
+    if name in GripedAuthorNames:
+        return
+    GripedAuthorNames.append(name)
+    print '%s is an author name, probably not what you want' % (name)
+
+def ApplyFileFilter(line, ignore):
+    #
+    # If this is the first file line (--- a/), set ignore one way
+    # or the other.
+    #
+    m = patterns['filea'].match(line)
+    if m:
+        file = m.group(1)
+        if FileFilter.search(file):
+            return 0
+        return 1
+    #
+    # For the second line, we can turn ignore off, but not on
+    #
+    m = patterns['fileb'].match(line)
+    if m:
+        file = m.group(1)
+        if FileFilter.search(file):
+            return 0
+    return ignore
+
+def is_svntag(logpatch):
+    """
+        This is a workaround for a bug on the migration to Git
+        from Subversion found in GNOME.  It may happen in other
+        repositories as well.
+    """
+
+    for Line in logpatch:
+        m = patterns['svn-tag'].match(Line.strip())
+        if m:
+            sys.stderr.write('(W) detected a commit on a svn tag: %s\n' %
+                              (m.group(0),))
+            return True
+
+    return False
+
+#
+# If this patch is signed off by both Andrew Morton and Linus Torvalds,
+# remove the (redundant) Linus signoff.
+#
+def TrimLTSOBs(p):
+    if AkpmOverLt == 1 and Linus in p.sobs and Akpm in p.sobs:
+        p.sobs.remove(Linus)
+
+
+#
+# Here starts the real program.
+#
+ParseOpts()
+
+#
+# Read the config files.
+#
+ConfigFile.ConfigFile(CFName, DirName)
+
+#
+# Let's pre-seed the database with a couple of hackers
+# we want to remember.
+#
+if AkpmOverLt == 1:
+    Linus = ('torvalds@linux-foundation.org',
+         LookupStoreHacker('Linus Torvalds', 'torvalds@linux-foundation.org'))
+    Akpm = ('akpm@linux-foundation.org',
+        LookupStoreHacker('Andrew Morton', 'akpm@linux-foundation.org'))
+
+TotalChanged = TotalAdded = TotalRemoved = 0
+
+#
+# Snarf changesets.
+#
+print >> sys.stderr, 'Grabbing changesets...\r',
+
+patches = logparser.LogPatchSplitter(sys.stdin)
+printcount = CSCount = 0
+
+for logpatch in patches:
+    if (printcount % 50) == 0:
+        print >> sys.stderr, 'Grabbing changesets...%d\r' % printcount,
+    printcount += 1
+
+    # We want to ignore commits on svn tags since in Subversion
+    # thats mean a copy of the whole repository, which leads to
+    # wrong results.  Some migrations from Subversion to Git does
+    # not catch all this tags/copy and import them just as a new
+    # big changeset.
+    if is_svntag(logpatch):
+        continue
+
+    p = grabpatch(logpatch)
+    if not p:
+        break
+#    if p.added > 100000 or p.removed > 100000:
+#        print 'Skipping massive add', p.commit
+#        continue
+    if FileFilter and p.added == 0 and p.removed == 0:
+        continue
+    #
+    # Apply the company filter if it exists.
+    #
+    empl = p.author.emailemployer(p.email, p.date)
+    if CompanyFilter and empl.name != CompanyFilter:
+        continue
+    #
+    # Now note the file accesses if need be.
+    #
+    if FileReport:
+        NoteFileAccess(p.files)
+    #
+    # Record some global information - but only if this patch had
+    # stuff which wasn't ignored.
+    #
+    if ((p.added + p.removed) > 0 or not FileFilter) and not p.merge:
+        TotalAdded += p.added
+        TotalRemoved += p.removed
+        TotalChanged += max(p.added, p.removed)
+        AddDateLines(p.date, max(p.added, p.removed))
+        empl.AddCSet(p)
+        if AkpmOverLt:
+            TrimLTSOBs(p)
+        for sobemail, sobber in p.sobs:
+            empl = sobber.emailemployer(sobemail, p.date)
+            empl.AddSOB()
+
+    if not p.merge:
+        p.author.addpatch(p)
+        for sobemail, sob in p.sobs:
+            sob.addsob(p)
+        for hacker in p.reviews:
+            hacker.addreview(p)
+        for hacker in p.testers:
+            hacker.addtested(p)
+        for hacker in p.reports:
+            hacker.addreport(p)
+        CSCount += 1
+    csvdump.AccumulatePatch(p, Aggregate)
+    csvdump.store_patch(p)
+print >> sys.stderr, 'Grabbing changesets...done       '
+
+if DumpDB:
+    database.DumpDB()
+database.MixVirtuals()
+
+#
+# Say something
+#
+hlist = database.AllHackers()
+elist = database.AllEmployers()
+ndev = nempl = 0
+for h in hlist:
+    if len(h.patches) > 0:
+        ndev += 1
+for e in elist:
+    if e.count > 0:
+        nempl += 1
+reports.Write('Processed %d csets from %d developers\n' % (CSCount,
+                                                            ndev))
+reports.Write('%d employers found\n' % (nempl))
+reports.Write('A total of %d lines added, %d removed (delta %d)\n' %
+              (TotalAdded, TotalRemoved, TotalAdded - TotalRemoved))
+if TotalChanged == 0:
+    TotalChanged = 1 # HACK to avoid div by zero
+if DateStats:
+    PrintDateStats()
+
+if CSVPrefix:
+    csvdump.save_csv(CSVPrefix)
+
+if CSVFile:
+    csvdump.OutputCSV(CSVFile)
+    CSVFile.close()
+
+if DevReports:
+    reports.DevReports(hlist, TotalChanged, CSCount, TotalRemoved)
+if ReportUnknowns:
+    reports.ReportUnknowns(hlist, CSCount)
+reports.EmplReports(elist, TotalChanged, CSCount)
+
+if ReportByFileType and Numstat:
+    reports.ReportByFileType(hlist)
+
+if FileReport:
+    reports.FileAccessReport(FileReport, FileAccesses, CSCount)

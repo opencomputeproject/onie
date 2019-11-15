@@ -1,0 +1,65 @@
+From e9fdd85d1f62b0454db3e999a510bdc520efbae3 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Mon, 26 Feb 2018 10:28:04 -0600
+Subject: [PATCH 352/448] staging: fsl-mc/dpio: Fix incorrect casts
+
+The DPIO driver incorrectly assumes virtual addresses are always
+64b long, which causes compiler errors when building for a 32b
+platform.
+
+Fix this by using explicit casts to uintptr_t where necessary.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-mc/bus/dpio/dpio-service.c |    4 ++--
+ drivers/staging/fsl-mc/bus/dpio/qbman-portal.c |    4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-mc/bus/dpio/dpio-service.c b/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
+index c2ab1c1..0570e16 100644
+--- a/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
++++ b/drivers/staging/fsl-mc/bus/dpio/dpio-service.c
+@@ -221,7 +221,7 @@ irqreturn_t dpaa2_io_irq(struct dpaa2_io *obj)
+ 			u64 q64;
+ 
+ 			q64 = qbman_result_SCN_ctx(dq);
+-			ctx = (void *)q64;
++			ctx = (void *)(uintptr_t)q64;
+ 			ctx->cb(ctx);
+ 		} else {
+ 			pr_crit("fsl-mc-dpio: Unrecognised/ignored DQRR entry\n");
+@@ -266,7 +266,7 @@ int dpaa2_io_service_register(struct dpaa2_io *d,
+ 		return -ENODEV;
+ 
+ 	ctx->dpio_id = d->dpio_desc.dpio_id;
+-	ctx->qman64 = (u64)ctx;
++	ctx->qman64 = (u64)(uintptr_t)ctx;
+ 	ctx->dpio_private = d;
+ 	spin_lock_irqsave(&d->lock_notifications, irqflags);
+ 	list_add(&ctx->node, &d->notifications);
+diff --git a/drivers/staging/fsl-mc/bus/dpio/qbman-portal.c b/drivers/staging/fsl-mc/bus/dpio/qbman-portal.c
+index 97fd356..1d31227 100644
+--- a/drivers/staging/fsl-mc/bus/dpio/qbman-portal.c
++++ b/drivers/staging/fsl-mc/bus/dpio/qbman-portal.c
+@@ -543,7 +543,7 @@ void qbman_pull_desc_set_storage(struct qbman_pull_desc *d,
+ 				 int stash)
+ {
+ 	/* save the virtual address */
+-	d->rsp_addr_virt = (u64)storage;
++	d->rsp_addr_virt = (u64)(uintptr_t)storage;
+ 
+ 	if (!storage) {
+ 		d->verb &= ~(1 << QB_VDQCR_VERB_RLS_SHIFT);
+@@ -636,7 +636,7 @@ int qbman_swp_pull(struct qbman_swp *s, struct qbman_pull_desc *d)
+ 		atomic_inc(&s->vdq.available);
+ 		return -EBUSY;
+ 	}
+-	s->vdq.storage = (void *)d->rsp_addr_virt;
++	s->vdq.storage = (void *)(uintptr_t)d->rsp_addr_virt;
+ 	p = qbman_get_cmd(s, QBMAN_CENA_SWP_VDQCR);
+ 	p->numf = d->numf;
+ 	p->tok = QMAN_DQ_TOKEN_VALID;
+-- 
+1.7.1
+

@@ -82,6 +82,16 @@ Path:
 [machine/quanta/quanta_bwde](https://github.com/opencomputeproject/onie/tree/master/machine/quanta/quanta_bwde).
 More Information:
 [machine/quanta/quanta_bwde/INSTALL](https://github.com/opencomputeproject/onie/blob/master/machine/quanta/quanta_bwde/INSTALL).
+### - T4048-IX8
+Path:
+[machine/quanta/quanta_common_rglbmc](https://github.com/opencomputeproject/onie/tree/master/machine/quanta/quanta_common_rglbmc).
+More Information:
+[machine/quanta/quanta_common_rglbmc/INSTALL](https://github.com/opencomputeproject/onie/blob/master/machine/quanta/quanta_common_rglbmc/INSTALL).
+### - T4048-IX8D
+Path:
+[machine/quanta/quanta_dnv](https://github.com/opencomputeproject/onie/tree/master/machine/quanta/quanta_dnv).
+More Information:
+[machine/quanta/quanta_dnv/INSTALL](https://github.com/opencomputeproject/onie/blob/master/machine/quanta/quanta_dnv/INSTALL).
 ## QuantaMesh 5000 Series:
 ### - T5016-LB8D
 Path:
@@ -119,6 +129,16 @@ Path:
 [machine/quanta/quanta_common_rglbmc](https://github.com/opencomputeproject/onie/tree/master/machine/quanta/quanta_common_rglbmc).
 More Information:
 [machine/quanta/quanta_common_rglbmc/INSTALL](https://github.com/opencomputeproject/onie/blob/master/machine/quanta/quanta_common_rglbmc/INSTALL).
+### - T7032-IX7
+Path:
+[machine/quanta/quanta_common_rglbmc](https://github.com/opencomputeproject/onie/tree/master/machine/quanta/quanta_common_rglbmc).
+More Information:
+[machine/quanta/quanta_common_rglbmc/INSTALL](https://github.com/opencomputeproject/onie/blob/master/machine/quanta/quanta_common_rglbmc/INSTALL).
+### - T7032-IX7D
+Path:
+[machine/quanta/quanta_dnv](https://github.com/opencomputeproject/onie/tree/master/machine/quanta/quanta_dnv.
+More Information:
+[machine/quanta/quanta_common_dnv/INSTALL](https://github.com/opencomputeproject/onie/blob/master/machine/quanta/quanta_dnv/INSTALL).
 ### - T7064-IX4
 Path:
 [machine/quanta/quanta_bwde](https://github.com/opencomputeproject/onie/tree/master/machine/quanta/quanta_bwde).

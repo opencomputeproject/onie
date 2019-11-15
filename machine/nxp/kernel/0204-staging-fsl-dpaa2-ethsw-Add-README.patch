@@ -1,0 +1,129 @@
+From 69b3947ed97f77a6f4357cb3097b1039a43fdfe7 Mon Sep 17 00:00:00 2001
+From: Razvan Stefanescu <razvan.stefanescu@nxp.com>
+Date: Thu, 24 Aug 2017 11:16:53 +0300
+Subject: [PATCH 204/448] staging: fsl-dpaa2/ethsw: Add README
+
+Add a README file describing the driver architecture, components and
+interfaces.
+
+Signed-off-by: Razvan Stefanescu <razvan.stefanescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethsw/README |  106 ++++++++++++++++++++++++++++++++
+ 1 files changed, 106 insertions(+), 0 deletions(-)
+ create mode 100644 drivers/staging/fsl-dpaa2/ethsw/README
+
+diff --git a/drivers/staging/fsl-dpaa2/ethsw/README b/drivers/staging/fsl-dpaa2/ethsw/README
+new file mode 100644
+index 0000000..f6fc07f
+--- /dev/null
++++ b/drivers/staging/fsl-dpaa2/ethsw/README
+@@ -0,0 +1,106 @@
++DPAA2 Ethernet Switch driver
++============================
++
++This file provides documentation for the DPAA2 Ethernet Switch driver
++
++
++Contents
++========
++	Supported Platforms
++	Architecture Overview
++	Creating an Ethernet Switch
++	Features
++
++
++	Supported Platforms
++===================
++This driver provides networking support for Freescale LS2085A, LS2088A
++DPAA2 SoCs.
++
++
++Architecture Overview
++=====================
++The Ethernet Switch in the DPAA2 architecture consists of several hardware
++resources that provide the functionality. These are allocated and
++configured via the Management Complex (MC) portals. MC abstracts most of
++these resources as DPAA2 objects and exposes ABIs through which they can
++be configured and controlled.
++
++For a more detailed description of the DPAA2 architecture and its object
++abstractions see:
++	drivers/staging/fsl-mc/README.txt
++
++The Ethernet Switch is built on top of a Datapath Switch (DPSW) object.
++
++Configuration interface:
++
++          ---------------------
++         | DPAA2 Switch driver |
++          ---------------------
++                   .
++                   .
++              ----------
++             | DPSW API |
++              ----------
++                   .           software
++ ================= . ==============
++                   .           hardware
++          ---------------------
++         | MC hardware portals |
++          ---------------------
++                   .
++                   .
++                 ------
++                | DPSW |
++                 ------
++
++Driver uses the switch device driver model and exposes each switch port as
++a network interface, which can be included in a bridge. Traffic switched
++between ports is offloaded into the hardware. Exposed network interfaces
++are not used for I/O, they are used just for configuration. This
++limitation is going to be addressed in the future.
++
++The DPSW can have ports connected to DPNIs or to PHYs via DPMACs.
++
++
++ [ethA]     [ethB]     [ethC]     [ethD]     [ethE]     [ethF]
++    :          :          :          :          :          :
++    :          :          :          :          :          :
++[eth drv]  [eth drv]  [                ethsw drv              ]
++    :          :          :          :          :          :        kernel
++========================================================================
++    :          :          :          :          :          :        hardware
++ [DPNI]      [DPNI]     [============= DPSW =================]
++    |          |          |          |          |          |
++    |           ----------           |       [DPMAC]    [DPMAC]
++     -------------------------------            |          |
++                                                |          |
++                                              [PHY]      [PHY]
++
++For a more detailed description of the Ethernet switch device driver model
++see:
++	Documentation/networking/switchdev.txt
++
++Creating an Ethernet Switch
++===========================
++A device is created for the switch objects probed on the MC bus. Each DPSW
++has a number of properties which determine the configuration options and
++associated hardware resources.
++
++A DPSW object (and the other DPAA2 objects needed for a DPAA2 switch) can
++be added to a container on the MC bus in one of two ways: statically,
++through a Datapath Layout Binary file (DPL) that is parsed by MC at boot
++time; or created dynamically at runtime, via the DPAA2 objects APIs.
++
++Features
++========
++Driver configures DPSW to perform hardware switching offload of
++unicast/multicast/broadcast (VLAN tagged or untagged) traffic between its
++ports.
++
++It allows configuration of hardware learning, flooding, multicast groups,
++port VLAN configuration and STP state.
++
++Static entries can be added/removed from the FDB.
++
++Hardware statistics for each port are provided through ethtool -S option.
+-- 
+1.7.1
+

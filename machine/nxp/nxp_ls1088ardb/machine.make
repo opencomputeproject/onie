@@ -32,7 +32,7 @@ KEXEC_ENABLE = yes
 UBOOT_DTB_ENABLE = yes
 
 # Set the desired U-Boot version
-UBOOT_VERSION = 2017.11
+UBOOT_VERSION = 2018.03
 
 # Specify Linux kernel version -- comment out to use the default
 LINUX_VERSION = 4.9

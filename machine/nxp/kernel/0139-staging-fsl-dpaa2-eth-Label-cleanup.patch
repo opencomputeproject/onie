@@ -1,0 +1,133 @@
+From 42cb2f58b4a537c4158c6e227bef39d20a2454ba Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 3 May 2017 19:29:56 +0300
+Subject: [PATCH 139/448] staging: fsl-dpaa2/eth: Label cleanup
+
+Clean up goto labels in a couple of functions, by
+removing/renaming redundant ones.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   37 +++++++++--------------
+ 1 files changed, 15 insertions(+), 22 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 931accd..5d91720 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1447,34 +1447,32 @@ static void cdan_cb(struct dpaa2_io_notification_ctx *ctx)
+ 	err = dpcon_open(priv->mc_io, 0, dpcon->obj_desc.id, &dpcon->mc_handle);
+ 	if (err) {
+ 		dev_err(dev, "dpcon_open() failed\n");
+-		goto err_open;
++		goto free;
+ 	}
+ 
+ 	err = dpcon_reset(priv->mc_io, 0, dpcon->mc_handle);
+ 	if (err) {
+ 		dev_err(dev, "dpcon_reset() failed\n");
+-		goto err_reset;
++		goto close;
+ 	}
+ 
+ 	err = dpcon_get_attributes(priv->mc_io, 0, dpcon->mc_handle, &attrs);
+ 	if (err) {
+ 		dev_err(dev, "dpcon_get_attributes() failed\n");
+-		goto err_get_attr;
++		goto close;
+ 	}
+ 
+ 	err = dpcon_enable(priv->mc_io, 0, dpcon->mc_handle);
+ 	if (err) {
+ 		dev_err(dev, "dpcon_enable() failed\n");
+-		goto err_enable;
++		goto close;
+ 	}
+ 
+ 	return dpcon;
+ 
+-err_enable:
+-err_get_attr:
+-err_reset:
++close:
+ 	dpcon_close(priv->mc_io, 0, dpcon->mc_handle);
+-err_open:
++free:
+ 	fsl_mc_object_free(dpcon);
+ 
+ 	return NULL;
+@@ -1912,7 +1910,7 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 	err = dpni_open(priv->mc_io, 0, ls_dev->obj_desc.id, &priv->mc_token);
+ 	if (err) {
+ 		dev_err(dev, "dpni_open() failed\n");
+-		goto err_open;
++		return err;
+ 	}
+ 
+ 	ls_dev->mc_io = priv->mc_io;
+@@ -1921,19 +1919,19 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 	err = dpni_reset(priv->mc_io, 0, priv->mc_token);
+ 	if (err) {
+ 		dev_err(dev, "dpni_reset() failed\n");
+-		goto err_reset;
++		goto close;
+ 	}
+ 
+ 	err = dpni_get_attributes(priv->mc_io, 0, priv->mc_token,
+ 				  &priv->dpni_attrs);
+ 	if (err) {
+ 		dev_err(dev, "dpni_get_attributes() failed (err=%d)\n", err);
+-		goto err_get_attr;
++		goto close;
+ 	}
+ 
+ 	err = set_buffer_layout(priv);
+ 	if (err)
+-		goto err_buf_layout;
++		goto close;
+ 
+ 	/* Now that we've set our tx buffer layout, retrieve the minimum
+ 	 * required tx data offset.
+@@ -1942,7 +1940,7 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 				      &priv->tx_data_offset);
+ 	if (err) {
+ 		dev_err(dev, "dpni_get_tx_data_offset() failed\n");
+-		goto err_data_offset;
++		goto close;
+ 	}
+ 
+ 	if ((priv->tx_data_offset % 64) != 0)
+@@ -1955,26 +1953,21 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 	/* Enable congestion notifications for Tx queues */
+ 	err = setup_tx_congestion(priv);
+ 	if (err)
+-		goto err_tx_cong;
++		goto close;
+ 
+ 	/* Enable flow control */
+ 	cfg.options = DPNI_LINK_OPT_AUTONEG | DPNI_LINK_OPT_PAUSE;
+ 	err = dpni_set_link_cfg(priv->mc_io, 0, priv->mc_token, &cfg);
+ 	if (err) {
+ 		dev_err(dev, "dpni_set_link_cfg() failed\n");
+-		goto err_set_link_cfg;
++		goto close;
+ 	}
+ 
+ 	return 0;
+ 
+-err_set_link_cfg:
+-err_tx_cong:
+-err_data_offset:
+-err_buf_layout:
+-err_get_attr:
+-err_reset:
++close:
+ 	dpni_close(priv->mc_io, 0, priv->mc_token);
+-err_open:
++
+ 	return err;
+ }
+ 
+-- 
+1.7.1
+

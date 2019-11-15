@@ -1,0 +1,31 @@
+From 9f3fed8d8524ce2e257fb9270ac562eda7692be1 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Wed, 16 May 2018 14:56:40 +0300
+Subject: [PATCH 274/448] staging: fsl-dpaa2/eth: Restrict error message print
+
+When trying to configure a distribution key, don't print
+an error message if the operation is not supported (e.g.
+when the interface is single-queue).
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index f191c8a..ebcf787 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2763,7 +2763,8 @@ int dpaa2_eth_set_dist_key(struct dpaa2_eth_priv *priv,
+ 	dma_unmap_single(dev, key_iova, DPAA2_CLASSIFIER_DMA_SIZE,
+ 			 DMA_TO_DEVICE);
+ 	if (err) {
+-		dev_err(dev, "Distribution key config failed\n");
++		if (err != -EOPNOTSUPP)
++			dev_err(dev, "Distribution key config failed\n");
+ 		goto free_key;
+ 	}
+ 
+-- 
+1.7.1
+

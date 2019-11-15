@@ -1,0 +1,46 @@
+From 0741d25b1a7e15df0c959ed7fcd28d4f908fb60e Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Fri, 13 Oct 2017 09:01:01 +0000
+Subject: [PATCH 172/448] staging: fsl-dpaa2/eth: Add buffer count to channel stats
+
+Since adding support for multiple buffer thresholds (taildrop, flow
+control pause frames, PFC pause frames), it's useful to have the
+per-channel buffer count available in the debug stats.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ .../staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c |    9 +++++----
+ 1 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+index 66a25de..933412e 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+@@ -159,19 +159,20 @@ static int dpaa2_dbg_ch_show(struct seq_file *file, void *offset)
+ 	int i;
+ 
+ 	seq_printf(file, "Channel stats for %s:\n", priv->net_dev->name);
+-	seq_printf(file, "%s%16s%16s%16s%16s%16s\n",
++	seq_printf(file, "%s%16s%16s%16s%16s%16s%16s\n",
+ 		   "CHID", "CPU", "Deq busy", "Frames", "CDANs",
+-		   "Avg frm/CDAN");
++		   "Avg frm/CDAN", "Buf count");
+ 
+ 	for (i = 0; i < priv->num_channels; i++) {
+ 		ch = priv->channel[i];
+-		seq_printf(file, "%4d%16d%16llu%16llu%16llu%16llu\n",
++		seq_printf(file, "%4d%16d%16llu%16llu%16llu%16llu%16d\n",
+ 			   ch->ch_id,
+ 			   ch->nctx.desired_cpu,
+ 			   ch->stats.dequeue_portal_busy,
+ 			   ch->stats.frames,
+ 			   ch->stats.cdan,
+-			   ch->stats.frames / ch->stats.cdan);
++			   ch->stats.frames / ch->stats.cdan,
++			   ch->buf_count);
+ 	}
+ 
+ 	return 0;
+-- 
+1.7.1
+

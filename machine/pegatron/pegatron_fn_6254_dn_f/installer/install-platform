@@ -1,0 +1,233 @@
+# Pegatron fb_6256_rn_b custom installer file
+create_diag_gpt_partition()
+{
+    echo "INFO: Create DIAG Partition"
+    
+    diag_bitmask="0x1"
+    diag_volume_label="PEGATRON-DIAG"
+    diag_volume_label2="ONIE-DIAG"
+    diag_boot_end=$(( $onie_boot_start - 1 ))
+    
+    diag_volume_part=$(sgdisk -p $onie_dev | grep -E "${diag_volume_label}|${diag_volume_label2}" | awk '{print $1}')
+    if [ -n "$diag_volume_part" ] ; then
+       echo "INFO: ${diag_volume_label} Partition had been created"
+       return
+    fi
+
+    sgdisk --new=${diag_boot_part}:${diag_boot_start}:${diag_boot_end} \
+        --attributes=${diag_boot_part}:=:$diag_bitmask \
+        --change-name=${diag_boot_part}:$diag_volume_label "$onie_dev" || {
+        echo "Error: Unable to create partition $diag_boot_part on $onie_dev"
+        exit 1
+    }
+
+    diag_dev=$(echo $onie_dev | sed -e 's/\(mmcblk[0-9]\)/\1p/')$diag_boot_part
+    echo $onie_dev | grep -q nvme && {
+        diag_dev=$(echo $onie_dev | sed -e 's/\(nvme[0-9]n[0-9]\)/\1p/')$diag_boot_part
+    }
+    partprobe
+
+    mkfs.ext4 -F -L $diag_volume_label $diag_dev || {
+        echo "Error: Unable to create file system on $diag_dev"
+        exit 1
+    }
+}
+
+create_diag_msdos_partition()
+{
+    echo "INFO: Create DIAG Partition"
+    diag_boot_end=$(( $onie_boot_start - 1 ))
+    diag_volume_label="PEGATRON-DIAG"
+    diag_volume_label2="ONIE-DIAG"
+
+    part_info="$(blkid | grep -E "${diag_volume_label}|${diag_volume_label2}" | awk -F: '{print $1}')"
+    if [ -n "$part_info" ] ; then
+        echo "INFO: ${diag_volume_label} Partition had been created"
+        return
+    fi
+
+    parted -s --align optimal $onie_dev unit s \
+      mkpart primary $diag_boot_start $diag_boot_end set $diag_boot_part boot on || {
+        echo "ERROR: Problems creating demo msdos partition $diag_boot_part on: $onie_dev"
+        exit 1
+    }
+
+    diag_dev=$(echo $onie_dev | sed -e 's/\(mmcblk[0-9]\)/\1p/')$diag_boot_part
+    echo $onie_dev | grep -q nvme && {
+        diag_dev=$(echo $onie_dev | sed -e 's/\(nvme[0-9]n[0-9]\)/\1p/')$diag_boot_part
+    }
+    partprobe
+
+    mkfs.ext4 -F -L $diag_volume_label $diag_dev || {
+        echo "Error: Unable to create file system on $diag_dev"
+        exit 1
+    }
+}
+
+init_onie_install()
+{
+
+    # Find target install block device.
+    # - Default value from burned in install.conf
+    # - Overridden with -d CLI arg
+    [ -b "$onie_dev" ] || onie_dev="$(install_device_platform)"
+    [ $? -eq 0 ] || {
+        echo "WARNING: Unable to find ONIE install block device."
+    }
+
+    [ -b "$onie_dev" ] || {
+        echo "ERROR: Invalid ONIE install device: $onie_dev"
+        exit 1
+    }
+
+    # check if we have an mmcblk device
+    blk_suffix=
+    echo $onie_dev | grep -q mmcblk && blk_suffix="p"
+    # check if we have an nvme device
+    echo $onie_dev | grep -q nvme && blk_suffix="p"
+
+    [ -r ./onie-blkdev-common ] || {
+        echo "ERROR: Unable to find onie-blkdev-common"
+        exit 1
+    }
+    . ./onie-blkdev-common
+
+    # wipe out current onie_dev if ONIE will embed to another
+    # one, or just keep updating to current one
+    curr_onie_dev=$(onie_get_boot_disk)
+    if [ -b "$curr_onie_dev" ] && [ "$curr_onie_dev" != "$onie_dev" ] ; then
+        if [ "$onie_boot_reason" = "embed" ] ; then
+            wipe_curr_onie_dev="yes"
+        else
+            onie_dev="$curr_onie_dev"
+        fi
+    fi
+
+    running_firmware="$(onie_get_running_firmware)"
+
+    # Determine the desired firmware to install based on the
+    # installer.
+    case "$image_firmware" in
+        auto)
+            # auto-detect whether BIOS or UEFI
+            if [ -d "/sys/firmware/efi/efivars" ] ; then
+                install_firmware="uefi"
+            else
+                install_firmware="bios"
+            fi
+            ;;
+
+        uefi)
+            [ -d "/sys/firmware/efi/efivars" ] || {
+                echo "ERROR: UEFI firmware install requested, but running system does not support UEFI"
+                exit 1
+            }
+            install_firmware="uefi"
+            ;;
+
+        bios)
+            install_firmware="bios"
+            ;;
+
+        *)
+            echo "WARNING: Unknown firmware requested: $onie_firmware"
+            echo "WARNING: Defaulting to 'bios'."
+            install_firmware="bios"
+
+    esac
+
+    # Peform a few sanity checks prior to starting the embed/upgrade
+    # operation.
+
+    # Check the requested firmware type is compatible with the running
+    # system for upgrades.  When embedding it is OK to change firmware
+    # types, as the entire system is being reprovisioned.
+    if [ "$onie_boot_reason" != "embed" ] ; then
+        # For upgrades the pre/post firmware must be equal.
+        if [ "$running_firmware" != "$install_firmware" ] ; then
+            echo "ERROR: Upgrade firmware mismatch detected."
+            echo "ERROR: Upgrading from firmware '$running_firmware' to '$install_firmware' is not supported."
+            exit 1
+        fi
+    fi
+
+    # ONIE Partition parameters.  'start' and 'size' are in units of 512
+    # byte sectors.
+
+    # sectors_per_mb = (1024 * 1024) / 512 = 2048
+    sectors_per_mb=2048
+
+    # Note: Determine the disk partitioning layout.  In the case of
+    # upgrade the running partition type could be different from the
+    # installer's image type.
+    #
+    # Also Note: On platforms that use the "disk" eeprom type,
+    # onie-syseeprom content is stored in the area just before
+    # the first partition (2048 below).  See sys_eeprom_disk.c
+    # in the busybox source.
+    if [ "$install_firmware" = "uefi" ] ; then
+
+        # UEFI EFI System Partition
+        uefi_esp_part=1
+        uefi_esp_start=2048
+        # 256MB
+        uefi_esp_size=$(( 256 * $sectors_per_mb ))
+
+        # DIAG Paritition
+        diag_boot_part=$(( $uefi_esp_part + 1 ))
+        diag_boot_start=$(( $uefi_esp_start + $uefi_esp_size ))
+        # 3GB
+        diag_boot_size=$(( 3072 * $sectors_per_mb ))
+
+        # ONIE-BOOT Paritition
+        onie_boot_part=$(( $diag_boot_part + 2 ))
+        onie_boot_start=$(( $diag_boot_start + $diag_boot_size ))
+        # 128MB
+        onie_boot_size=$(( 128 * $sectors_per_mb ))
+
+        # Helper functions
+        init_disk="init_uefi_disk"
+        verify_partitions="verify_uefi_partitions"
+    elif [ "$image_partition_type" = "gpt" ] ; then
+        # GRUB Boot Partition
+        grub_boot_part=1
+        grub_boot_start=2048
+        # 2MB
+        grub_boot_size=$(( 2 * $sectors_per_mb ))
+
+        # DIAG Paritition
+        diag_boot_part=$(( $grub_boot_part + 1 ))
+        diag_boot_start=$(( $grub_boot_start + $grub_boot_size ))
+        # 3GB
+        diag_boot_size=$(( 3072 * $sectors_per_mb ))
+
+        # ONIE-BOOT Paritition
+        onie_boot_part=$(( $diag_boot_part + 2 ))
+        onie_boot_start=$(( $diag_boot_start + $diag_boot_size ))
+        # 128MB
+        onie_boot_size=$(( 128 * $sectors_per_mb ))
+
+        # Helper functions
+        init_disk="init_gpt_disk"
+        verify_partitions="verify_gpt_partitions"
+    elif [ "$image_partition_type" = "msdos" ] ; then
+        # DIAG Paritition
+        diag_boot_part=1
+        diag_boot_start=2048
+        diag_boot_size=$(( 3072 * $sectors_per_mb ))
+        
+        # ONIE-BOOT Paritition
+        onie_boot_part=$(( $diag_boot_part + 2 ))
+        onie_boot_start=$(( $diag_boot_start + $diag_boot_size ))
+        
+        # 128MB
+        onie_boot_size=$(( 128 * $sectors_per_mb ))
+        # Helper functions
+        init_disk="init_msdos_disk"
+        verify_partitions="verify_msdos_partitions"
+    else
+        echo "ERROR: Unsupported partition type: $image_partition_type"
+        exit 1
+    fi
+
+}

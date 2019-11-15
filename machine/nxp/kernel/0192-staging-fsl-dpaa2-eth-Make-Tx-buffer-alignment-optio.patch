@@ -1,0 +1,61 @@
+From 9b1a7ffd300886e94e310f59b5a44b517c1138db Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Mon, 20 Nov 2017 17:55:29 +0200
+Subject: [PATCH 192/448] staging: fsl-dpaa2/eth: Make Tx buffer alignment optional
+
+Aligning the Tx buffers at 64B is a performance optimization
+recommendation, not a hard requirement.
+
+Make optional the alignment of Tx FD buffers, without enforcing
+a reallocation in case there is not enough headroom for it.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   14 ++++++++++----
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    2 +-
+ 2 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index fdf6c55..1649521 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -660,13 +660,19 @@ static int build_single_fd(struct dpaa2_eth_priv *priv,
+ 			   struct dpaa2_fd *fd)
+ {
+ 	struct device *dev = priv->net_dev->dev.parent;
+-	u8 *buffer_start;
++	u8 *buffer_start, *aligned_start;
+ 	struct dpaa2_eth_swa *swa;
+ 	dma_addr_t addr;
+ 
+-	buffer_start = PTR_ALIGN(skb->data -
+-				 dpaa2_eth_needed_headroom(priv, skb),
+-				 DPAA2_ETH_TX_BUF_ALIGN);
++	buffer_start = skb->data - dpaa2_eth_needed_headroom(priv, skb);
++
++	/* If there's enough room to align the FD address, do it.
++	 * It will help hardware optimize accesses.
++	 */
++	aligned_start = PTR_ALIGN(buffer_start - DPAA2_ETH_TX_BUF_ALIGN,
++				  DPAA2_ETH_TX_BUF_ALIGN);
++	if (aligned_start >= skb->head)
++		buffer_start = aligned_start;
+ 
+ 	/* Store a backpointer to the skb at the beginning of the buffer
+ 	 * (in the private data area) such that we can release it
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 586fb93..0b26093 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -468,7 +468,7 @@ static inline unsigned int dpaa2_eth_buf_raw_size(struct dpaa2_eth_priv *priv)
+ static inline unsigned int
+ dpaa2_eth_needed_headroom(struct dpaa2_eth_priv *priv, struct sk_buff *skb)
+ {
+-	unsigned int headroom = DPAA2_ETH_SWA_SIZE + DPAA2_ETH_TX_BUF_ALIGN;
++	unsigned int headroom = DPAA2_ETH_SWA_SIZE;
+ 
+ 	/* If we don't have an skb (e.g. XDP buffer), we only need space for
+ 	 * the software annotation area
+-- 
+1.7.1
+

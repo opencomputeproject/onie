@@ -1,0 +1,750 @@
+From e4354b10b05bf9d039dba2207c1f7bb3d4bd29c2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Tue, 17 Jul 2018 15:14:43 +0300
+Subject: [PATCH 423/448] crypto: caam/qi2 - ablkcipher -> skcipher conversion
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Before upstreaming the driver, convert it from deprecated ablkcipher API
+to skcipher.
+
+Link: https://www.mail-archive.com/search?l=mid&q=20170728085622.GC19664@gondor.apana.org.au
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ drivers/crypto/caam/caamalg_qi2.c |  368 +++++++++++++++++--------------------
+ drivers/crypto/caam/caamalg_qi2.h |    6 +-
+ drivers/crypto/caam/compat.h      |    1 +
+ 3 files changed, 172 insertions(+), 203 deletions(-)
+
+diff --git a/drivers/crypto/caam/caamalg_qi2.c b/drivers/crypto/caam/caamalg_qi2.c
+index e8b82bd..2cc3848 100644
+--- a/drivers/crypto/caam/caamalg_qi2.c
++++ b/drivers/crypto/caam/caamalg_qi2.c
+@@ -57,6 +57,12 @@ struct caam_aead_alg {
+ 	bool registered;
+ };
+ 
++struct caam_skcipher_alg {
++	struct skcipher_alg skcipher;
++	struct caam_alg_entry caam;
++	bool registered;
++};
++
+ /**
+  * caam_ctx - per-session context
+  * @flc: Flow Contexts array
+@@ -125,8 +131,8 @@ static inline void qi_cache_free(void *obj)
+ static struct caam_request *to_caam_req(struct crypto_async_request *areq)
+ {
+ 	switch (crypto_tfm_alg_type(areq->tfm)) {
+-	case CRYPTO_ALG_TYPE_ABLKCIPHER:
+-		return ablkcipher_request_ctx(ablkcipher_request_cast(areq));
++	case CRYPTO_ALG_TYPE_SKCIPHER:
++		return skcipher_request_ctx(skcipher_request_cast(areq));
+ 	case CRYPTO_ALG_TYPE_AEAD:
+ 		return aead_request_ctx(container_of(areq, struct aead_request,
+ 						     base));
+@@ -1130,20 +1136,21 @@ static int rfc4543_setkey(struct crypto_aead *aead,
+ 	return rfc4543_set_sh_desc(aead);
+ }
+ 
+-static int ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+-			     const u8 *key, unsigned int keylen)
++static int skcipher_setkey(struct crypto_skcipher *skcipher, const u8 *key,
++			   unsigned int keylen)
+ {
+-	struct caam_ctx *ctx = crypto_ablkcipher_ctx(ablkcipher);
+-	struct crypto_tfm *tfm = crypto_ablkcipher_tfm(ablkcipher);
+-	const char *alg_name = crypto_tfm_alg_name(tfm);
++	struct caam_ctx *ctx = crypto_skcipher_ctx(skcipher);
++	struct caam_skcipher_alg *alg =
++		container_of(crypto_skcipher_alg(skcipher),
++			     struct caam_skcipher_alg, skcipher);
+ 	struct device *dev = ctx->dev;
+ 	struct caam_flc *flc;
+-	unsigned int ivsize = crypto_ablkcipher_ivsize(ablkcipher);
++	unsigned int ivsize = crypto_skcipher_ivsize(skcipher);
+ 	u32 *desc;
+ 	u32 ctx1_iv_off = 0;
+ 	const bool ctr_mode = ((ctx->cdata.algtype & OP_ALG_AAI_MASK) ==
+ 			       OP_ALG_AAI_CTR_MOD128);
+-	const bool is_rfc3686 = (ctr_mode && strstr(alg_name, "rfc3686"));
++	const bool is_rfc3686 = alg->caam.rfc3686;
+ 
+ #ifdef DEBUG
+ 	print_hex_dump(KERN_ERR, "key in @" __stringify(__LINE__)": ",
+@@ -1171,7 +1178,7 @@ static int ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 	ctx->cdata.key_virt = key;
+ 	ctx->cdata.key_inline = true;
+ 
+-	/* ablkcipher_encrypt shared descriptor */
++	/* skcipher_encrypt shared descriptor */
+ 	flc = &ctx->flc[ENCRYPT];
+ 	desc = flc->sh_desc;
+ 	cnstr_shdsc_ablkcipher_encap(desc, &ctx->cdata, ivsize,
+@@ -1181,7 +1188,7 @@ static int ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 				   sizeof(flc->flc) + desc_bytes(desc),
+ 				   ctx->dir);
+ 
+-	/* ablkcipher_decrypt shared descriptor */
++	/* skcipher_decrypt shared descriptor */
+ 	flc = &ctx->flc[DECRYPT];
+ 	desc = flc->sh_desc;
+ 	cnstr_shdsc_ablkcipher_decap(desc, &ctx->cdata, ivsize,
+@@ -1194,18 +1201,17 @@ static int ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 	return 0;
+ }
+ 
+-static int xts_ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+-				 const u8 *key, unsigned int keylen)
++static int xts_skcipher_setkey(struct crypto_skcipher *skcipher, const u8 *key,
++			       unsigned int keylen)
+ {
+-	struct caam_ctx *ctx = crypto_ablkcipher_ctx(ablkcipher);
++	struct caam_ctx *ctx = crypto_skcipher_ctx(skcipher);
+ 	struct device *dev = ctx->dev;
+ 	struct caam_flc *flc;
+ 	u32 *desc;
+ 
+ 	if (keylen != 2 * AES_MIN_KEY_SIZE  && keylen != 2 * AES_MAX_KEY_SIZE) {
+ 		dev_err(dev, "key size mismatch\n");
+-		crypto_ablkcipher_set_flags(ablkcipher,
+-					    CRYPTO_TFM_RES_BAD_KEY_LEN);
++		crypto_skcipher_set_flags(skcipher, CRYPTO_TFM_RES_BAD_KEY_LEN);
+ 		return -EINVAL;
+ 	}
+ 
+@@ -1213,7 +1219,7 @@ static int xts_ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 	ctx->cdata.key_virt = key;
+ 	ctx->cdata.key_inline = true;
+ 
+-	/* xts_ablkcipher_encrypt shared descriptor */
++	/* xts_skcipher_encrypt shared descriptor */
+ 	flc = &ctx->flc[ENCRYPT];
+ 	desc = flc->sh_desc;
+ 	cnstr_shdsc_xts_ablkcipher_encap(desc, &ctx->cdata);
+@@ -1222,7 +1228,7 @@ static int xts_ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 				   sizeof(flc->flc) + desc_bytes(desc),
+ 				   ctx->dir);
+ 
+-	/* xts_ablkcipher_decrypt shared descriptor */
++	/* xts_skcipher_decrypt shared descriptor */
+ 	flc = &ctx->flc[DECRYPT];
+ 	desc = flc->sh_desc;
+ 	cnstr_shdsc_xts_ablkcipher_decap(desc, &ctx->cdata);
+@@ -1234,37 +1240,36 @@ static int xts_ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 	return 0;
+ }
+ 
+-static struct ablkcipher_edesc *ablkcipher_edesc_alloc(struct ablkcipher_request
+-						       *req)
++static struct skcipher_edesc *skcipher_edesc_alloc(struct skcipher_request *req)
+ {
+-	struct crypto_ablkcipher *ablkcipher = crypto_ablkcipher_reqtfm(req);
+-	struct caam_request *req_ctx = ablkcipher_request_ctx(req);
++	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
++	struct caam_request *req_ctx = skcipher_request_ctx(req);
+ 	struct dpaa2_fl_entry *in_fle = &req_ctx->fd_flt[1];
+ 	struct dpaa2_fl_entry *out_fle = &req_ctx->fd_flt[0];
+-	struct caam_ctx *ctx = crypto_ablkcipher_ctx(ablkcipher);
++	struct caam_ctx *ctx = crypto_skcipher_ctx(skcipher);
+ 	struct device *dev = ctx->dev;
+ 	gfp_t flags = (req->base.flags & CRYPTO_TFM_REQ_MAY_SLEEP) ?
+ 		       GFP_KERNEL : GFP_ATOMIC;
+ 	int src_nents, mapped_src_nents, dst_nents = 0, mapped_dst_nents = 0;
+-	struct ablkcipher_edesc *edesc;
++	struct skcipher_edesc *edesc;
+ 	dma_addr_t iv_dma;
+ 	u8 *iv;
+-	int ivsize = crypto_ablkcipher_ivsize(ablkcipher);
++	int ivsize = crypto_skcipher_ivsize(skcipher);
+ 	int dst_sg_idx, qm_sg_ents, qm_sg_bytes;
+ 	struct dpaa2_sg_entry *sg_table;
+ 
+-	src_nents = sg_nents_for_len(req->src, req->nbytes);
++	src_nents = sg_nents_for_len(req->src, req->cryptlen);
+ 	if (unlikely(src_nents < 0)) {
+ 		dev_err(dev, "Insufficient bytes (%d) in src S/G\n",
+-			req->nbytes);
++			req->cryptlen);
+ 		return ERR_PTR(src_nents);
+ 	}
+ 
+ 	if (unlikely(req->dst != req->src)) {
+-		dst_nents = sg_nents_for_len(req->dst, req->nbytes);
++		dst_nents = sg_nents_for_len(req->dst, req->cryptlen);
+ 		if (unlikely(dst_nents < 0)) {
+ 			dev_err(dev, "Insufficient bytes (%d) in dst S/G\n",
+-				req->nbytes);
++				req->cryptlen);
+ 			return ERR_PTR(dst_nents);
+ 		}
+ 
+@@ -1296,7 +1301,7 @@ static int xts_ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 
+ 	qm_sg_ents += mapped_dst_nents > 1 ? mapped_dst_nents : 0;
+ 	qm_sg_bytes = qm_sg_ents * sizeof(struct dpaa2_sg_entry);
+-	if (unlikely(offsetof(struct ablkcipher_edesc, sgt) + qm_sg_bytes +
++	if (unlikely(offsetof(struct skcipher_edesc, sgt) + qm_sg_bytes +
+ 		     ivsize > CAAM_QI_MEMCACHE_SIZE)) {
+ 		dev_err(dev, "No space for %d S/G entries and/or %dB IV\n",
+ 			qm_sg_ents, ivsize);
+@@ -1317,7 +1322,7 @@ static int xts_ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 	/* Make sure IV is located in a DMAable area */
+ 	sg_table = &edesc->sgt[0];
+ 	iv = (u8 *)(sg_table + qm_sg_ents);
+-	memcpy(iv, req->info, ivsize);
++	memcpy(iv, req->iv, ivsize);
+ 
+ 	iv_dma = dma_map_single(dev, iv, ivsize, DMA_TO_DEVICE);
+ 	if (dma_mapping_error(dev, iv_dma)) {
+@@ -1352,8 +1357,8 @@ static int xts_ablkcipher_setkey(struct crypto_ablkcipher *ablkcipher,
+ 
+ 	memset(&req_ctx->fd_flt, 0, sizeof(req_ctx->fd_flt));
+ 	dpaa2_fl_set_final(in_fle, true);
+-	dpaa2_fl_set_len(in_fle, req->nbytes + ivsize);
+-	dpaa2_fl_set_len(out_fle, req->nbytes);
++	dpaa2_fl_set_len(in_fle, req->cryptlen + ivsize);
++	dpaa2_fl_set_len(out_fle, req->cryptlen);
+ 
+ 	dpaa2_fl_set_format(in_fle, dpaa2_fl_sg);
+ 	dpaa2_fl_set_addr(in_fle, edesc->qm_sg_dma);
+@@ -1396,12 +1401,11 @@ static void tls_unmap(struct device *dev, struct tls_edesc *edesc,
+ 		   edesc->qm_sg_bytes);
+ }
+ 
+-static void ablkcipher_unmap(struct device *dev,
+-			     struct ablkcipher_edesc *edesc,
+-			     struct ablkcipher_request *req)
++static void skcipher_unmap(struct device *dev, struct skcipher_edesc *edesc,
++			   struct skcipher_request *req)
+ {
+-	struct crypto_ablkcipher *ablkcipher = crypto_ablkcipher_reqtfm(req);
+-	int ivsize = crypto_ablkcipher_ivsize(ablkcipher);
++	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
++	int ivsize = crypto_skcipher_ivsize(skcipher);
+ 
+ 	caam_unmap(dev, req->src, req->dst, edesc->src_nents, edesc->dst_nents,
+ 		   edesc->iv_dma, ivsize, edesc->qm_sg_dma, edesc->qm_sg_bytes);
+@@ -1653,16 +1657,16 @@ static int ipsec_gcm_decrypt(struct aead_request *req)
+ 	return aead_decrypt(req);
+ }
+ 
+-static void ablkcipher_done(void *cbk_ctx, u32 status)
++static void skcipher_done(void *cbk_ctx, u32 status)
+ {
+ 	struct crypto_async_request *areq = cbk_ctx;
+-	struct ablkcipher_request *req = ablkcipher_request_cast(areq);
++	struct skcipher_request *req = skcipher_request_cast(areq);
+ 	struct caam_request *req_ctx = to_caam_req(areq);
+-	struct crypto_ablkcipher *ablkcipher = crypto_ablkcipher_reqtfm(req);
+-	struct caam_ctx *ctx = crypto_ablkcipher_ctx(ablkcipher);
+-	struct ablkcipher_edesc *edesc = req_ctx->edesc;
++	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
++	struct caam_ctx *ctx = crypto_skcipher_ctx(skcipher);
++	struct skcipher_edesc *edesc = req_ctx->edesc;
+ 	int ecode = 0;
+-	int ivsize = crypto_ablkcipher_ivsize(ablkcipher);
++	int ivsize = crypto_skcipher_ivsize(skcipher);
+ 
+ #ifdef DEBUG
+ 	dev_err(ctx->dev, "%s %d: err 0x%x\n", __func__, __LINE__, status);
+@@ -1675,99 +1679,93 @@ static void ablkcipher_done(void *cbk_ctx, u32 status)
+ 
+ #ifdef DEBUG
+ 	print_hex_dump(KERN_ERR, "dstiv  @" __stringify(__LINE__)": ",
+-		       DUMP_PREFIX_ADDRESS, 16, 4, req->info,
++		       DUMP_PREFIX_ADDRESS, 16, 4, req->iv,
+ 		       edesc->src_nents > 1 ? 100 : ivsize, 1);
+ 	caam_dump_sg(KERN_ERR, "dst    @" __stringify(__LINE__)": ",
+ 		     DUMP_PREFIX_ADDRESS, 16, 4, req->dst,
+-		     edesc->dst_nents > 1 ? 100 : req->nbytes, 1);
++		     edesc->dst_nents > 1 ? 100 : req->cryptlen, 1);
+ #endif
+ 
+-	ablkcipher_unmap(ctx->dev, edesc, req);
++	skcipher_unmap(ctx->dev, edesc, req);
+ 
+ 	/*
+-	 * The crypto API expects us to set the IV (req->info) to the last
++	 * The crypto API expects us to set the IV (req->iv) to the last
+ 	 * ciphertext block. This is used e.g. by the CTS mode.
+ 	 */
+ 	if (req_ctx->op_type == ENCRYPT)
+-		scatterwalk_map_and_copy(req->info, req->dst, req->nbytes -
++		scatterwalk_map_and_copy(req->iv, req->dst, req->cryptlen -
+ 					 ivsize, ivsize, 0);
+ 
+ 	qi_cache_free(edesc);
+-	ablkcipher_request_complete(req, ecode);
++	skcipher_request_complete(req, ecode);
+ }
+ 
+-static int ablkcipher_encrypt(struct ablkcipher_request *req)
++static int skcipher_encrypt(struct skcipher_request *req)
+ {
+-	struct ablkcipher_edesc *edesc;
+-	struct crypto_ablkcipher *ablkcipher = crypto_ablkcipher_reqtfm(req);
+-	struct caam_ctx *ctx = crypto_ablkcipher_ctx(ablkcipher);
+-	struct caam_request *caam_req = ablkcipher_request_ctx(req);
++	struct skcipher_edesc *edesc;
++	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
++	struct caam_ctx *ctx = crypto_skcipher_ctx(skcipher);
++	struct caam_request *caam_req = skcipher_request_ctx(req);
+ 	int ret;
+ 
+ 	/* allocate extended descriptor */
+-	edesc = ablkcipher_edesc_alloc(req);
++	edesc = skcipher_edesc_alloc(req);
+ 	if (IS_ERR(edesc))
+ 		return PTR_ERR(edesc);
+ 
+ 	caam_req->flc = &ctx->flc[ENCRYPT];
+ 	caam_req->flc_dma = ctx->flc_dma[ENCRYPT];
+ 	caam_req->op_type = ENCRYPT;
+-	caam_req->cbk = ablkcipher_done;
++	caam_req->cbk = skcipher_done;
+ 	caam_req->ctx = &req->base;
+ 	caam_req->edesc = edesc;
+ 	ret = dpaa2_caam_enqueue(ctx->dev, caam_req);
+ 	if (ret != -EINPROGRESS &&
+ 	    !(ret == -EBUSY && req->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG)) {
+-		ablkcipher_unmap(ctx->dev, edesc, req);
++		skcipher_unmap(ctx->dev, edesc, req);
+ 		qi_cache_free(edesc);
+ 	}
+ 
+ 	return ret;
+ }
+ 
+-static int ablkcipher_decrypt(struct ablkcipher_request *req)
++static int skcipher_decrypt(struct skcipher_request *req)
+ {
+-	struct ablkcipher_edesc *edesc;
+-	struct crypto_ablkcipher *ablkcipher = crypto_ablkcipher_reqtfm(req);
+-	struct caam_ctx *ctx = crypto_ablkcipher_ctx(ablkcipher);
+-	struct caam_request *caam_req = ablkcipher_request_ctx(req);
+-	int ivsize = crypto_ablkcipher_ivsize(ablkcipher);
++	struct skcipher_edesc *edesc;
++	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
++	struct caam_ctx *ctx = crypto_skcipher_ctx(skcipher);
++	struct caam_request *caam_req = skcipher_request_ctx(req);
++	int ivsize = crypto_skcipher_ivsize(skcipher);
+ 	int ret;
+ 
+ 	/* allocate extended descriptor */
+-	edesc = ablkcipher_edesc_alloc(req);
++	edesc = skcipher_edesc_alloc(req);
+ 	if (IS_ERR(edesc))
+ 		return PTR_ERR(edesc);
+ 
+ 	/*
+-	 * The crypto API expects us to set the IV (req->info) to the last
++	 * The crypto API expects us to set the IV (req->iv) to the last
+ 	 * ciphertext block.
+ 	 */
+-	scatterwalk_map_and_copy(req->info, req->src, req->nbytes - ivsize,
++	scatterwalk_map_and_copy(req->iv, req->src, req->cryptlen - ivsize,
+ 				 ivsize, 0);
+ 
+ 	caam_req->flc = &ctx->flc[DECRYPT];
+ 	caam_req->flc_dma = ctx->flc_dma[DECRYPT];
+ 	caam_req->op_type = DECRYPT;
+-	caam_req->cbk = ablkcipher_done;
++	caam_req->cbk = skcipher_done;
+ 	caam_req->ctx = &req->base;
+ 	caam_req->edesc = edesc;
+ 	ret = dpaa2_caam_enqueue(ctx->dev, caam_req);
+ 	if (ret != -EINPROGRESS &&
+ 	    !(ret == -EBUSY && req->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG)) {
+-		ablkcipher_unmap(ctx->dev, edesc, req);
++		skcipher_unmap(ctx->dev, edesc, req);
+ 		qi_cache_free(edesc);
+ 	}
+ 
+ 	return ret;
+ }
+ 
+-struct caam_crypto_alg {
+-	struct list_head entry;
+-	struct crypto_alg crypto_alg;
+-	struct caam_alg_entry caam;
+-};
+-
+ static int caam_cra_init(struct caam_ctx *ctx, struct caam_alg_entry *caam,
+ 			 bool uses_dkp)
+ {
+@@ -1796,16 +1794,14 @@ static int caam_cra_init(struct caam_ctx *ctx, struct caam_alg_entry *caam,
+ 	return 0;
+ }
+ 
+-static int caam_cra_init_ablkcipher(struct crypto_tfm *tfm)
++static int caam_cra_init_skcipher(struct crypto_skcipher *tfm)
+ {
+-	struct crypto_alg *alg = tfm->__crt_alg;
+-	struct caam_crypto_alg *caam_alg = container_of(alg, typeof(*caam_alg),
+-							crypto_alg);
+-	struct ablkcipher_tfm *ablkcipher_tfm =
+-		crypto_ablkcipher_crt(__crypto_ablkcipher_cast(tfm));
+-
+-	ablkcipher_tfm->reqsize = sizeof(struct caam_request);
+-	return caam_cra_init(crypto_tfm_ctx(tfm), &caam_alg->caam, false);
++	struct skcipher_alg *alg = crypto_skcipher_alg(tfm);
++	struct caam_skcipher_alg *caam_alg =
++		container_of(alg, typeof(*caam_alg), skcipher);
++
++	crypto_skcipher_set_reqsize(tfm, sizeof(struct caam_request));
++	return caam_cra_init(crypto_skcipher_ctx(tfm), &caam_alg->caam, false);
+ }
+ 
+ static int caam_cra_init_aead(struct crypto_aead *tfm)
+@@ -1827,9 +1823,9 @@ static void caam_exit_common(struct caam_ctx *ctx)
+ 			       DMA_ATTR_SKIP_CPU_SYNC);
+ }
+ 
+-static void caam_cra_exit(struct crypto_tfm *tfm)
++static void caam_cra_exit(struct crypto_skcipher *tfm)
+ {
+-	caam_exit_common(crypto_tfm_ctx(tfm));
++	caam_exit_common(crypto_skcipher_ctx(tfm));
+ }
+ 
+ static void caam_cra_exit_aead(struct crypto_aead *tfm)
+@@ -1837,106 +1833,111 @@ static void caam_cra_exit_aead(struct crypto_aead *tfm)
+ 	caam_exit_common(crypto_aead_ctx(tfm));
+ }
+ 
+-#define template_ablkcipher	template_u.ablkcipher
+-struct caam_alg_template {
+-	char name[CRYPTO_MAX_ALG_NAME];
+-	char driver_name[CRYPTO_MAX_ALG_NAME];
+-	unsigned int blocksize;
+-	u32 type;
+-	union {
+-		struct ablkcipher_alg ablkcipher;
+-	} template_u;
+-	u32 class1_alg_type;
+-	u32 class2_alg_type;
+-};
+-
+-static struct caam_alg_template driver_algs[] = {
+-	/* ablkcipher descriptor */
++static struct caam_skcipher_alg driver_algs[] = {
+ 	{
+-		.name = "cbc(aes)",
+-		.driver_name = "cbc-aes-caam-qi2",
+-		.blocksize = AES_BLOCK_SIZE,
+-		.template_ablkcipher = {
+-			.setkey = ablkcipher_setkey,
+-			.encrypt = ablkcipher_encrypt,
+-			.decrypt = ablkcipher_decrypt,
++		.skcipher = {
++			.base = {
++				.cra_name = "cbc(aes)",
++				.cra_driver_name = "cbc-aes-caam-qi2",
++				.cra_blocksize = AES_BLOCK_SIZE,
++			},
++			.setkey = skcipher_setkey,
++			.encrypt = skcipher_encrypt,
++			.decrypt = skcipher_decrypt,
+ 			.min_keysize = AES_MIN_KEY_SIZE,
+ 			.max_keysize = AES_MAX_KEY_SIZE,
+ 			.ivsize = AES_BLOCK_SIZE,
+ 		},
+-		.class1_alg_type = OP_ALG_ALGSEL_AES | OP_ALG_AAI_CBC,
++		.caam.class1_alg_type = OP_ALG_ALGSEL_AES | OP_ALG_AAI_CBC,
+ 	},
+ 	{
+-		.name = "cbc(des3_ede)",
+-		.driver_name = "cbc-3des-caam-qi2",
+-		.blocksize = DES3_EDE_BLOCK_SIZE,
+-		.template_ablkcipher = {
+-			.setkey = ablkcipher_setkey,
+-			.encrypt = ablkcipher_encrypt,
+-			.decrypt = ablkcipher_decrypt,
++		.skcipher = {
++			.base = {
++				.cra_name = "cbc(des3_ede)",
++				.cra_driver_name = "cbc-3des-caam-qi2",
++				.cra_blocksize = DES3_EDE_BLOCK_SIZE,
++			},
++			.setkey = skcipher_setkey,
++			.encrypt = skcipher_encrypt,
++			.decrypt = skcipher_decrypt,
+ 			.min_keysize = DES3_EDE_KEY_SIZE,
+ 			.max_keysize = DES3_EDE_KEY_SIZE,
+ 			.ivsize = DES3_EDE_BLOCK_SIZE,
+ 		},
+-		.class1_alg_type = OP_ALG_ALGSEL_3DES | OP_ALG_AAI_CBC,
++		.caam.class1_alg_type = OP_ALG_ALGSEL_3DES | OP_ALG_AAI_CBC,
+ 	},
+ 	{
+-		.name = "cbc(des)",
+-		.driver_name = "cbc-des-caam-qi2",
+-		.blocksize = DES_BLOCK_SIZE,
+-		.template_ablkcipher = {
+-			.setkey = ablkcipher_setkey,
+-			.encrypt = ablkcipher_encrypt,
+-			.decrypt = ablkcipher_decrypt,
++		.skcipher = {
++			.base = {
++				.cra_name = "cbc(des)",
++				.cra_driver_name = "cbc-des-caam-qi2",
++				.cra_blocksize = DES_BLOCK_SIZE,
++			},
++			.setkey = skcipher_setkey,
++			.encrypt = skcipher_encrypt,
++			.decrypt = skcipher_decrypt,
+ 			.min_keysize = DES_KEY_SIZE,
+ 			.max_keysize = DES_KEY_SIZE,
+ 			.ivsize = DES_BLOCK_SIZE,
+ 		},
+-		.class1_alg_type = OP_ALG_ALGSEL_DES | OP_ALG_AAI_CBC,
++		.caam.class1_alg_type = OP_ALG_ALGSEL_DES | OP_ALG_AAI_CBC,
+ 	},
+ 	{
+-		.name = "ctr(aes)",
+-		.driver_name = "ctr-aes-caam-qi2",
+-		.blocksize = 1,
+-		.template_ablkcipher = {
+-			.setkey = ablkcipher_setkey,
+-			.encrypt = ablkcipher_encrypt,
+-			.decrypt = ablkcipher_decrypt,
++		.skcipher = {
++			.base = {
++				.cra_name = "ctr(aes)",
++				.cra_driver_name = "ctr-aes-caam-qi2",
++				.cra_blocksize = 1,
++			},
++			.setkey = skcipher_setkey,
++			.encrypt = skcipher_encrypt,
++			.decrypt = skcipher_decrypt,
+ 			.min_keysize = AES_MIN_KEY_SIZE,
+ 			.max_keysize = AES_MAX_KEY_SIZE,
+ 			.ivsize = AES_BLOCK_SIZE,
++			.chunksize = AES_BLOCK_SIZE,
+ 		},
+-		.class1_alg_type = OP_ALG_ALGSEL_AES | OP_ALG_AAI_CTR_MOD128,
++		.caam.class1_alg_type = OP_ALG_ALGSEL_AES |
++					OP_ALG_AAI_CTR_MOD128,
+ 	},
+ 	{
+-		.name = "rfc3686(ctr(aes))",
+-		.driver_name = "rfc3686-ctr-aes-caam-qi2",
+-		.blocksize = 1,
+-		.template_ablkcipher = {
+-			.setkey = ablkcipher_setkey,
+-			.encrypt = ablkcipher_encrypt,
+-			.decrypt = ablkcipher_decrypt,
++		.skcipher = {
++			.base = {
++				.cra_name = "rfc3686(ctr(aes))",
++				.cra_driver_name = "rfc3686-ctr-aes-caam-qi2",
++				.cra_blocksize = 1,
++			},
++			.setkey = skcipher_setkey,
++			.encrypt = skcipher_encrypt,
++			.decrypt = skcipher_decrypt,
+ 			.min_keysize = AES_MIN_KEY_SIZE +
+ 				       CTR_RFC3686_NONCE_SIZE,
+ 			.max_keysize = AES_MAX_KEY_SIZE +
+ 				       CTR_RFC3686_NONCE_SIZE,
+ 			.ivsize = CTR_RFC3686_IV_SIZE,
++			.chunksize = AES_BLOCK_SIZE,
++		},
++		.caam = {
++			.class1_alg_type = OP_ALG_ALGSEL_AES |
++					   OP_ALG_AAI_CTR_MOD128,
++			.rfc3686 = true,
+ 		},
+-		.class1_alg_type = OP_ALG_ALGSEL_AES | OP_ALG_AAI_CTR_MOD128,
+ 	},
+ 	{
+-		.name = "xts(aes)",
+-		.driver_name = "xts-aes-caam-qi2",
+-		.blocksize = AES_BLOCK_SIZE,
+-		.template_ablkcipher = {
+-			.setkey = xts_ablkcipher_setkey,
+-			.encrypt = ablkcipher_encrypt,
+-			.decrypt = ablkcipher_decrypt,
++		.skcipher = {
++			.base = {
++				.cra_name = "xts(aes)",
++				.cra_driver_name = "xts-aes-caam-qi2",
++				.cra_blocksize = AES_BLOCK_SIZE,
++			},
++			.setkey = xts_skcipher_setkey,
++			.encrypt = skcipher_encrypt,
++			.decrypt = skcipher_decrypt,
+ 			.min_keysize = 2 * AES_MIN_KEY_SIZE,
+ 			.max_keysize = 2 * AES_MAX_KEY_SIZE,
+ 			.ivsize = AES_BLOCK_SIZE,
+ 		},
+-		.class1_alg_type = OP_ALG_ALGSEL_AES | OP_ALG_AAI_XTS,
++		.caam.class1_alg_type = OP_ALG_ALGSEL_AES | OP_ALG_AAI_XTS,
+ 	}
+ };
+ 
+@@ -3122,37 +3123,17 @@ struct caam_alg_template {
+ 	},
+ };
+ 
+-static struct caam_crypto_alg *caam_alg_alloc(struct caam_alg_template
+-					      *template)
++static void caam_skcipher_alg_init(struct caam_skcipher_alg *t_alg)
+ {
+-	struct caam_crypto_alg *t_alg;
+-	struct crypto_alg *alg;
+-
+-	t_alg = kzalloc(sizeof(*t_alg), GFP_KERNEL);
+-	if (!t_alg)
+-		return ERR_PTR(-ENOMEM);
+-
+-	alg = &t_alg->crypto_alg;
+-
+-	snprintf(alg->cra_name, CRYPTO_MAX_ALG_NAME, "%s", template->name);
+-	snprintf(alg->cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
+-		 template->driver_name);
+-	alg->cra_module = THIS_MODULE;
+-	alg->cra_exit = caam_cra_exit;
+-	alg->cra_priority = CAAM_CRA_PRIORITY;
+-	alg->cra_blocksize = template->blocksize;
+-	alg->cra_alignmask = 0;
+-	alg->cra_ctxsize = sizeof(struct caam_ctx);
+-	alg->cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY |
+-			 CRYPTO_ALG_TYPE_ABLKCIPHER;
+-	alg->cra_init = caam_cra_init_ablkcipher;
+-	alg->cra_type = &crypto_ablkcipher_type;
+-	alg->cra_ablkcipher = template->template_ablkcipher;
++	struct skcipher_alg *alg = &t_alg->skcipher;
+ 
+-	t_alg->caam.class1_alg_type = template->class1_alg_type;
+-	t_alg->caam.class2_alg_type = template->class2_alg_type;
++	alg->base.cra_module = THIS_MODULE;
++	alg->base.cra_priority = CAAM_CRA_PRIORITY;
++	alg->base.cra_ctxsize = sizeof(struct caam_ctx);
++	alg->base.cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY;
+ 
+-	return t_alg;
++	alg->init = caam_cra_init_skcipher;
++	alg->exit = caam_cra_exit;
+ }
+ 
+ static void caam_aead_alg_init(struct caam_aead_alg *t_alg)
+@@ -5319,7 +5300,6 @@ static int __cold dpaa2_dpseci_disable(struct dpaa2_caam_priv *priv)
+ 	return 0;
+ }
+ 
+-static struct list_head alg_list;
+ static struct list_head hash_list;
+ 
+ static int dpaa2_caam_probe(struct fsl_mc_device *dpseci_dev)
+@@ -5409,11 +5389,9 @@ static int dpaa2_caam_probe(struct fsl_mc_device *dpseci_dev)
+ 	}
+ 
+ 	/* register crypto algorithms the device supports */
+-	INIT_LIST_HEAD(&alg_list);
+ 	for (i = 0; i < ARRAY_SIZE(driver_algs); i++) {
+-		struct caam_crypto_alg *t_alg;
+-		struct caam_alg_template *alg = driver_algs + i;
+-		u32 alg_sel = alg->class1_alg_type & OP_ALG_ALGSEL_MASK;
++		struct caam_skcipher_alg *t_alg = driver_algs + i;
++		u32 alg_sel = t_alg->caam.class1_alg_type & OP_ALG_ALGSEL_MASK;
+ 
+ 		/* Skip DES algorithms if not supported by device */
+ 		if (!priv->sec_attr.des_acc_num &&
+@@ -5426,24 +5404,17 @@ static int dpaa2_caam_probe(struct fsl_mc_device *dpseci_dev)
+ 		    (alg_sel == OP_ALG_ALGSEL_AES))
+ 			continue;
+ 
+-		t_alg = caam_alg_alloc(alg);
+-		if (IS_ERR(t_alg)) {
+-			err = PTR_ERR(t_alg);
+-			dev_warn(dev, "%s alg allocation failed: %d\n",
+-				 alg->driver_name, err);
+-			continue;
+-		}
+ 		t_alg->caam.dev = dev;
++		caam_skcipher_alg_init(t_alg);
+ 
+-		err = crypto_register_alg(&t_alg->crypto_alg);
++		err = crypto_register_skcipher(&t_alg->skcipher);
+ 		if (err) {
+ 			dev_warn(dev, "%s alg registration failed: %d\n",
+-				 t_alg->crypto_alg.cra_driver_name, err);
+-			kfree(t_alg);
++				 t_alg->skcipher.base.cra_driver_name, err);
+ 			continue;
+ 		}
+ 
+-		list_add_tail(&t_alg->entry, &alg_list);
++		t_alg->registered = true;
+ 		registered = true;
+ 	}
+ 
+@@ -5577,14 +5548,11 @@ static int __cold dpaa2_caam_remove(struct fsl_mc_device *ls_dev)
+ 			crypto_unregister_aead(&t_alg->aead);
+ 	}
+ 
+-	if (alg_list.next) {
+-		struct caam_crypto_alg *t_alg, *n;
++	for (i = 0; i < ARRAY_SIZE(driver_algs); i++) {
++		struct caam_skcipher_alg *t_alg = driver_algs + i;
+ 
+-		list_for_each_entry_safe(t_alg, n, &alg_list, entry) {
+-			crypto_unregister_alg(&t_alg->crypto_alg);
+-			list_del(&t_alg->entry);
+-			kfree(t_alg);
+-		}
++		if (t_alg->registered)
++			crypto_unregister_skcipher(&t_alg->skcipher);
+ 	}
+ 
+ 	if (hash_list.next) {
+diff --git a/drivers/crypto/caam/caamalg_qi2.h b/drivers/crypto/caam/caamalg_qi2.h
+index 98954da..ef72bd2 100644
+--- a/drivers/crypto/caam/caamalg_qi2.h
++++ b/drivers/crypto/caam/caamalg_qi2.h
+@@ -192,7 +192,7 @@ struct tls_edesc {
+ };
+ 
+ /*
+- * ablkcipher_edesc - s/w-extended ablkcipher descriptor
++ * skcipher_edesc - s/w-extended skcipher descriptor
+  * @src_nents: number of segments in input scatterlist
+  * @dst_nents: number of segments in output scatterlist
+  * @iv_dma: dma address of iv for checking continuity and link table
+@@ -200,7 +200,7 @@ struct tls_edesc {
+  * @qm_sg_dma: I/O virtual address of h/w link table
+  * @sgt: the h/w link table, followed by IV
+  */
+-struct ablkcipher_edesc {
++struct skcipher_edesc {
+ 	int src_nents;
+ 	int dst_nents;
+ 	dma_addr_t iv_dma;
+@@ -253,7 +253,7 @@ enum optype {
+  * @op_type: operation type
+  * @cbk: Callback function to invoke when job is completed
+  * @ctx: arbit context attached with request by the application
+- * @edesc: extended descriptor; points to one of {ablkcipher,aead}_edesc
++ * @edesc: extended descriptor; points to one of {skcipher,aead}_edesc
+  */
+ struct caam_request {
+ 	struct dpaa2_fl_entry fd_flt[2];
+diff --git a/drivers/crypto/caam/compat.h b/drivers/crypto/caam/compat.h
+index 4e084f5..3f02b84 100644
+--- a/drivers/crypto/caam/compat.h
++++ b/drivers/crypto/caam/compat.h
+@@ -38,6 +38,7 @@
+ #include <crypto/authenc.h>
+ #include <crypto/akcipher.h>
+ #include <crypto/scatterwalk.h>
++#include <crypto/skcipher.h>
+ #include <crypto/internal/skcipher.h>
+ #include <crypto/internal/hash.h>
+ #include <crypto/internal/rsa.h>
+-- 
+1.7.1
+

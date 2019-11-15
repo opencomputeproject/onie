@@ -1,0 +1,106 @@
+From e0aa12db5463bb86f07a99c2c4255be828265075 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 23 Mar 2018 08:44:09 -0500
+Subject: [PATCH 259/448] staging: fsl-dpaa2/eth: Add DPNI version check
+
+The DPAA2 Ethernet driver assumes the DPNI objects that it
+uses to build network interfaces have a minimum supported
+API version, but until now it did nothing to enforce this
+requirement.
+
+Add a check at probe time to make sure the DPNI object is
+compatible with the set of MC commands we intend to use
+on it.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c     |   15 +++++++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h     |   10 ++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c |   11 ++---------
+ 3 files changed, 27 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 523b7b9..d5a4dd8 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2234,6 +2234,21 @@ static int setup_dpni(struct fsl_mc_device *ls_dev)
+ 		return err;
+ 	}
+ 
++	/* Check if we can work with this DPNI object */
++	err = dpni_get_api_version(priv->mc_io, 0, &priv->dpni_ver_major,
++				   &priv->dpni_ver_minor);
++	if (err) {
++		dev_err(dev, "dpni_get_api_version() failed\n");
++		goto close;
++	}
++	if (dpaa2_eth_cmp_dpni_ver(priv, DPNI_VER_MAJOR, DPNI_VER_MINOR) < 0) {
++		dev_err(dev, "DPNI version %u.%u not supported, need >= %u.%u\n",
++			priv->dpni_ver_major, priv->dpni_ver_minor,
++			DPNI_VER_MAJOR, DPNI_VER_MINOR);
++		err = -ENOTSUPP;
++		goto close;
++	}
++
+ 	ls_dev->mc_io = priv->mc_io;
+ 	ls_dev->mc_handle = priv->mc_token;
+ 
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 12c7dc3..46cd75d 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -407,6 +407,8 @@ struct dpaa2_eth_priv {
+ 	struct dpaa2_eth_channel *channel[DPAA2_ETH_MAX_DPCONS];
+ 
+ 	struct dpni_attr dpni_attrs;
++	u16 dpni_ver_major;
++	u16 dpni_ver_minor;
+ 	struct fsl_mc_device *dpbp_dev;
+ 
+ 	struct fsl_mc_io *mc_io;
+@@ -458,6 +460,14 @@ struct dpaa2_eth_priv {
+ extern const struct ethtool_ops dpaa2_ethtool_ops;
+ extern const char dpaa2_eth_drv_version[];
+ 
++static inline int dpaa2_eth_cmp_dpni_ver(struct dpaa2_eth_priv *priv,
++					 u16 ver_major, u16 ver_minor)
++{
++	if (priv->dpni_ver_major == ver_major)
++		return priv->dpni_ver_minor - ver_minor;
++	return priv->dpni_ver_major - ver_major;
++}
++
+ /* Hardware only sees DPAA2_ETH_RX_BUF_SIZE, but the skb built around
+  * the buffer also needs space for its shared info struct, and we need
+  * to allocate enough to accommodate hardware alignment restrictions
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+index fa97225..41628a7 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-ethtool.c
+@@ -87,20 +87,13 @@ static void dpaa2_eth_get_drvinfo(struct net_device *net_dev,
+ 				  struct ethtool_drvinfo *drvinfo)
+ {
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+-	u16 fw_major, fw_minor;
+-	int err;
+ 
+ 	strlcpy(drvinfo->driver, KBUILD_MODNAME, sizeof(drvinfo->driver));
+ 	strlcpy(drvinfo->version, dpaa2_eth_drv_version,
+ 		sizeof(drvinfo->version));
+ 
+-	err =  dpni_get_api_version(priv->mc_io, 0, &fw_major, &fw_minor);
+-	if (!err)
+-		snprintf(drvinfo->fw_version, sizeof(drvinfo->fw_version),
+-			 "%u.%u", fw_major, fw_minor);
+-	else
+-		strlcpy(drvinfo->fw_version, "N/A",
+-			sizeof(drvinfo->fw_version));
++	snprintf(drvinfo->fw_version, sizeof(drvinfo->fw_version),
++		 "%u.%u", priv->dpni_ver_major, priv->dpni_ver_minor);
+ 
+ 	strlcpy(drvinfo->bus_info, dev_name(net_dev->dev.parent->parent),
+ 		sizeof(drvinfo->bus_info));
+-- 
+1.7.1
+

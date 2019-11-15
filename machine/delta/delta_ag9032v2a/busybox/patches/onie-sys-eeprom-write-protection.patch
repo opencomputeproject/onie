@@ -1,0 +1,91 @@
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index e34abf5..ec6eac7 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -1,6 +1,20 @@
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
+ #include <getopt.h>
++#include "stdio.h"
++#include "stdlib.h"
++#include "string.h"
++
++#define ENABLE_MODE      1
++#define DISENABLE_MODE   2
++#define ENABLE_OFFSET    0x7c
++#define DISENABLE_OFFSET 0x74
++#define WRITE_PROTECT_I2C_SEL_BUS  0
++#define WRITE_PROTECT_I2C_SEL_ADDR 0x31
++#define WRITE_PROTECT_I2C_GET_REG  0x14
++#define WRITE_PROTECT_I2C_SET_REG  0x14
++
++static void eeprom_write_protect(int mode);
+ 
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+ /*
+@@ -53,6 +67,7 @@ int onie_syseeprom_main(int argc, char **argv)
+     char *value, *subopts, *tname;
+     int index, c, i, option_index, tcode;
+     char tlv_value[TLV_DECODE_VALUE_MAX_LEN];
++    char gpio_io_sel_cmd[64] = {0};
+ 
+     const size_t tlv_code_count = sizeof(tlv_code_list) /
+ 	sizeof(tlv_code_list[0]);
+@@ -77,6 +92,8 @@ int onie_syseeprom_main(int argc, char **argv)
+     }
+     tokens[tlv_code_count*2] = NULL;
+ 
++    eeprom_write_protect(DISENABLE_MODE);
++
+     while (TRUE) {
+ 	c = getopt_long(argc, argv, short_options,
+ 			long_options, &option_index);
+@@ -181,5 +198,48 @@ syseeprom_err:
+ 	free(tokens[i*2]);
+ 	free(tokens[(i*2) + 1]);
+     }
++    eeprom_write_protect(ENABLE_MODE);
+     return  (err == 0) ? 0 : 1;
+ }
++
++static void eeprom_write_protect(int mode){
++    char get_value_cmd[64] = {0};
++    char r_value[10] = {0};
++    char write_protect_cmd[64] = {0};
++    FILE *pFd  = NULL;
++    int offset = 0;
++    int s_value = 0;
++    int rv = 0;
++
++    sprintf(get_value_cmd, "i2cget -y %d 0x%x 0x%x",
++            WRITE_PROTECT_I2C_SEL_BUS, WRITE_PROTECT_I2C_SEL_ADDR,
++            WRITE_PROTECT_I2C_GET_REG);
++    pFd = popen(get_value_cmd, "r");
++    if( pFd != NULL){
++        if(fgets(r_value, 10, pFd) != NULL){
++            rv = strtol(r_value, NULL, 16);
++            switch(mode){
++                case ENABLE_MODE:
++                    offset = ENABLE_OFFSET;
++                    s_value = ( rv | offset);
++                    break;
++                case DISENABLE_MODE:
++                    offset = DISENABLE_OFFSET;
++                    s_value = ( rv & offset);
++                    break;
++            }
++            sprintf(write_protect_cmd, "i2cset -y %d 0x%x 0x%x 0x%x > /dev/null 2>&1",
++                    WRITE_PROTECT_I2C_SEL_BUS, WRITE_PROTECT_I2C_SEL_ADDR,
++                    WRITE_PROTECT_I2C_SET_REG, s_value);
++            system(write_protect_cmd);/* enable/disable the eeprom write protect via CPLD */
++        }
++        else{
++            printf("Set Data Failed\n");
++        }
++        pclose(pFd);
++    }
++    else{
++        printf("Get Data Failed\n");
++    }
++}
++

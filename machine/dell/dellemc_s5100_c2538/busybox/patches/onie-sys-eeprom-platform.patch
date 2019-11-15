@@ -1,0 +1,122 @@
+Add platform specific stuff for the sys-eeprom
+
+From: Lakesh Sharma <lakesh_sharma@dell.com>
+
+
+---
+ include/sys_eeprom.h       |   10 ++++++++++
+ miscutils/onie_tlvinfo.c   |   25 ++++++++++++++++++++++++-
+ miscutils/sys_eeprom.c     |   12 ++++++++++++
+ miscutils/sys_eeprom_i2c.c |    1 +
+ 4 files changed, 47 insertions(+), 1 deletion(-)
+
+diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
+index 94dfd5a..4f0b9bb 100644
+--- a/include/sys_eeprom.h
++++ b/include/sys_eeprom.h
+@@ -1,2 +1,12 @@
+ int read_sys_eeprom(void *eeprom_data, int offset, int len);
+ int write_sys_eeprom(void *eeprom_data, int len);
++
++#define SYS_EEPROM_I2C_SW_I2C_BUS     1
++#define SYS_EEPROM_I2C_SW_I2C_ADDR    0x70
++#define SYS_EEPROM_I2C_SW_CH_SEL_REG  0
++#define SYS_EEPROM_I2C_SW_CH_SEL_VAL  8
++#define SYS_EEPROM_I2C_SW_CMD_SZ      50
++
++#define SYS_EEPROM_WP_REG_ADDR        0x220
++#define SYS_EEPROM_WP_REG_MASK        0x1
++
+diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
+index 26b6ec5..ebbc283 100644
+--- a/miscutils/onie_tlvinfo.c
++++ b/miscutils/onie_tlvinfo.c
+@@ -1,3 +1,6 @@
++#include <unistd.h>
++#include <sys/io.h>
++#include <errno.h>
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
+ #include "sys_eeprom.h"
+@@ -504,12 +507,32 @@ int read_eeprom(u_int8_t *eeprom)
+  */
+ int prog_eeprom(u_int8_t * eeprom)
+ {
+-    int ret = 0;
++    int ret = 0, rc = 0;
+     tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
+     int eeprom_len;
++    unsigned char read_byte;
+ 
+     eeprom_len = sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen);
++    /* Remove write-protection of system eeprom */
++    rc = ioperm(SYS_EEPROM_WP_REG_ADDR, 1, 1);
++    if(rc) {
++        printf("Error disabling EEPROM WP, errno %d \n",errno);
++        return -1;
++    }
++    read_byte = inb(SYS_EEPROM_WP_REG_ADDR);
++    read_byte = read_byte & ~SYS_EEPROM_WP_REG_MASK;
++    outb(read_byte, SYS_EEPROM_WP_REG_ADDR);
+     ret = write_sys_eeprom(eeprom, eeprom_len);
++
++    /* Restore write-protection of system eeprom */
++    read_byte = inb(SYS_EEPROM_WP_REG_ADDR);
++    read_byte = read_byte | SYS_EEPROM_WP_REG_MASK;
++    outb(read_byte, SYS_EEPROM_WP_REG_ADDR);
++    rc = ioperm(SYS_EEPROM_WP_REG_ADDR, 1, 0);
++    if(rc) {
++        printf("Error enabling EEPROM WP, errno %d \n",errno);
++    }
++
+     if (ret) {
+ 	printf("Programming failed.\n");
+ 	return -1;
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index a24d6bb..165ffe7 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -1,5 +1,6 @@
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
+ #include <getopt.h>
+ 
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+@@ -54,6 +55,7 @@ int onie_syseeprom_main(int argc, char **argv)
+     char *value, *subopts, *tname;
+     int index, c, i, option_index, tcode;
+     char tlv_value[TLV_DECODE_VALUE_MAX_LEN];
++    char i2c_sw_sel_cmd[SYS_EEPROM_I2C_SW_CMD_SZ];
+ 
+     const size_t tlv_code_count = sizeof(tlv_code_list) /
+ 	sizeof(tlv_code_list[0]);
+@@ -69,6 +71,16 @@ int onie_syseeprom_main(int argc, char **argv)
+ 	{0,         0,                    0,      0},
+     };
+ 
++    /*
++     * Set the I2C switch config so that ID-eeprom channel is selected.
++     */
++    memset(i2c_sw_sel_cmd, 0, SYS_EEPROM_I2C_SW_CMD_SZ);
++    snprintf(i2c_sw_sel_cmd, SYS_EEPROM_I2C_SW_CMD_SZ, "i2cset -y %d 0x%x %d %d ",
++	SYS_EEPROM_I2C_SW_I2C_BUS, SYS_EEPROM_I2C_SW_I2C_ADDR,
++	SYS_EEPROM_I2C_SW_CH_SEL_REG, SYS_EEPROM_I2C_SW_CH_SEL_VAL);
++
++    system(i2c_sw_sel_cmd);
++
+     for (i = 0; i < tlv_code_count; i++) {
+ 	    tokens[i*2] = malloc(6);
+ 	    snprintf(tokens[(i*2)], 6,     "0x%x", tlv_code_list[i].m_code);
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index ed3235b..46db9e3 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -55,6 +55,7 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 	    return -1;
+ 	}
+ 	eeprom_write_byte(&e, addr, *c);
++	usleep(5000);
+ 	eeprom_close(&e);
+ 	c++; addr++;
+     }

@@ -1,0 +1,56 @@
+From dc56d10eb1b182097e992f14bea7bbe6758e49fa Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 27 Apr 2017 17:27:25 +0300
+Subject: [PATCH 134/448] staging: fsl-dpaa2/eth: Flow affinity for non-forwarded traffic
+
+The previous patch ensures Tx flow affinity for forwarded frames,
+but for termination traffic the initial flow affinity is determined
+based on the skb hash, which is expected to hit only a few Tx queues
+when there is a small number of flows.
+
+Instead, use XPS (transmit packet steering) to set netdevice queue
+affinity to the sending core.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   14 +++++++++++++-
+ 1 files changed, 13 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index aecbc61..efd6e9d 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1645,9 +1645,10 @@ static void free_dpio(struct dpaa2_eth_priv *priv)
+ static void set_fq_affinity(struct dpaa2_eth_priv *priv)
+ {
+ 	struct device *dev = priv->net_dev->dev.parent;
++	struct cpumask xps_mask;
+ 	struct dpaa2_eth_fq *fq;
+ 	int rx_cpu, txc_cpu;
+-	int i;
++	int i, err;
+ 
+ 	/* For each FQ, pick one channel/CPU to deliver frames to.
+ 	 * This may well change at runtime, either through irqbalance or
+@@ -1666,6 +1667,17 @@ static void set_fq_affinity(struct dpaa2_eth_priv *priv)
+ 			break;
+ 		case DPAA2_TX_CONF_FQ:
+ 			fq->target_cpu = txc_cpu;
++
++			/* Tell the stack to affine to txc_cpu the Tx queue
++			 * associated with the confirmation one
++			 */
++			cpumask_clear(&xps_mask);
++			cpumask_set_cpu(txc_cpu, &xps_mask);
++			err = netif_set_xps_queue(priv->net_dev, &xps_mask,
++						  fq->flowid);
++			if (err)
++				dev_info_once(dev, "Error setting XPS queue\n");
++
+ 			txc_cpu = cpumask_next(txc_cpu, &priv->dpio_cpumask);
+ 			if (txc_cpu >= nr_cpu_ids)
+ 				txc_cpu = cpumask_first(&priv->dpio_cpumask);
+-- 
+1.7.1
+

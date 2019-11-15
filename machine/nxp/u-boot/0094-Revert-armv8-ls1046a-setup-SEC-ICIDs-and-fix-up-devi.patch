@@ -1,0 +1,108 @@
+From 5c872b41558915b39b66e9f9879d92a86e14c575 Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Tue, 21 Aug 2018 15:07:30 +0300
+Subject: [PATCH 094/107] Revert "armv8: ls1046a: setup SEC ICIDs and fix up device tree"
+
+This reverts commit 98bd36217b58f0fb35fb24def513b8c4f8472e4a.
+
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c     |   14 -----------
+ .../arm/include/asm/arch-fsl-layerscape/fsl_icid.h |   25 --------------------
+ .../include/asm/arch-fsl-layerscape/immap_lsch2.h  |    8 ------
+ 3 files changed, 0 insertions(+), 47 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c b/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
+index 2da9ada..30c7d8d 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/ls1046_ids.c
+@@ -40,20 +40,6 @@ struct icid_id_table icid_tbl[] = {
+ 	SET_EDMA_ICID(FSL_EDMA_STREAM_ID),
+ 	SET_ETR_ICID(FSL_ETR_STREAM_ID),
+ 	SET_DEBUG_ICID(FSL_DEBUG_STREAM_ID),
+-#ifdef CONFIG_FSL_CAAM
+-	SET_SEC_QI_ICID(FSL_DPAA1_STREAM_ID_START + 2),
+-	SET_SEC_JR_ICID_ENTRY(0, FSL_DPAA1_STREAM_ID_START + 3),
+-	SET_SEC_JR_ICID_ENTRY(1, FSL_DPAA1_STREAM_ID_START + 4),
+-	SET_SEC_JR_ICID_ENTRY(2, FSL_DPAA1_STREAM_ID_START + 5),
+-	SET_SEC_JR_ICID_ENTRY(3, FSL_DPAA1_STREAM_ID_START + 6),
+-	SET_SEC_RTIC_ICID_ENTRY(0, FSL_DPAA1_STREAM_ID_START + 7),
+-	SET_SEC_RTIC_ICID_ENTRY(1, FSL_DPAA1_STREAM_ID_START + 8),
+-	SET_SEC_RTIC_ICID_ENTRY(2, FSL_DPAA1_STREAM_ID_START + 9),
+-	SET_SEC_RTIC_ICID_ENTRY(3, FSL_DPAA1_STREAM_ID_START + 10),
+-	SET_SEC_DECO_ICID_ENTRY(0, FSL_DPAA1_STREAM_ID_START + 11),
+-	SET_SEC_DECO_ICID_ENTRY(1, FSL_DPAA1_STREAM_ID_START + 12),
+-	SET_SEC_DECO_ICID_ENTRY(2, FSL_DPAA1_STREAM_ID_START + 13),
+-#endif
+ };
+ 
+ int icid_tbl_sz = ARRAY_SIZE(icid_tbl);
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/fsl_icid.h b/arch/arm/include/asm/arch-fsl-layerscape/fsl_icid.h
+index a70c866..5be50a1 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/fsl_icid.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/fsl_icid.h
+@@ -8,7 +8,6 @@
+ 
+ #include <asm/types.h>
+ #include <fsl_qbman.h>
+-#include <fsl_sec.h>
+ 
+ struct icid_id_table {
+ 	const char *compat;
+@@ -83,30 +82,6 @@ void fdt_fixup_icid(void *blob);
+ #define SET_FMAN_ICID_ENTRY(_port_id, streamid) \
+ 	{ .port_id = (_port_id), .icid = (streamid) }
+ 
+-#define SET_SEC_QI_ICID(streamid) \
+-	SET_ICID_ENTRY("fsl,sec-v4.0", streamid, \
+-		(((streamid) << 16) | (streamid)), \
+-		offsetof(ccsr_sec_t, qilcr_ls) + \
+-		CONFIG_SYS_FSL_SEC_ADDR, \
+-		CONFIG_SYS_FSL_SEC_ADDR)
+-
+-#define SET_SEC_JR_ICID_ENTRY(jr_num, streamid) \
+-	SET_ICID_ENTRY("fsl,sec-v4.0-job-ring", streamid, \
+-		(((streamid) << 16) | (streamid)), \
+-		offsetof(ccsr_sec_t, jrliodnr[jr_num].ls) + \
+-		CONFIG_SYS_FSL_SEC_ADDR, \
+-		FSL_SEC_JR##jr_num##_BASE_ADDR)
+-
+-#define SET_SEC_DECO_ICID_ENTRY(deco_num, streamid) \
+-	SET_ICID_ENTRY(NULL, streamid, (((streamid) << 16) | (streamid)), \
+-		offsetof(ccsr_sec_t, decoliodnr[deco_num].ls) + \
+-		CONFIG_SYS_FSL_SEC_ADDR, 0)
+-
+-#define SET_SEC_RTIC_ICID_ENTRY(rtic_num, streamid) \
+-	SET_ICID_ENTRY(NULL, streamid, (((streamid) << 16) | (streamid)), \
+-		offsetof(ccsr_sec_t, rticliodnr[rtic_num].ls) + \
+-		CONFIG_SYS_FSL_SEC_ADDR, 0)
+-
+ extern struct icid_id_table icid_tbl[];
+ extern struct fman_icid_id_table fman_icid_tbl[];
+ extern int icid_tbl_sz;
+diff --git a/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch2.h b/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch2.h
+index 9f17e9a..71c69e9 100644
+--- a/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch2.h
++++ b/arch/arm/include/asm/arch-fsl-layerscape/immap_lsch2.h
+@@ -201,18 +201,10 @@ struct sys_info {
+ 
+ #define CONFIG_SYS_FSL_SEC_OFFSET		0x700000ull
+ #define CONFIG_SYS_FSL_JR0_OFFSET		0x710000ull
+-#define FSL_SEC_JR0_OFFSET			CONFIG_SYS_FSL_JR0_OFFSET
+-#define FSL_SEC_JR1_OFFSET			0x720000ull
+-#define FSL_SEC_JR2_OFFSET			0x730000ull
+-#define FSL_SEC_JR3_OFFSET			0x740000ull
+ #define CONFIG_SYS_FSL_SEC_ADDR \
+ 	(CONFIG_SYS_IMMR + CONFIG_SYS_FSL_SEC_OFFSET)
+ #define CONFIG_SYS_FSL_JR0_ADDR \
+ 	(CONFIG_SYS_IMMR + CONFIG_SYS_FSL_JR0_OFFSET)
+-#define FSL_SEC_JR0_BASE_ADDR (CONFIG_SYS_IMMR + FSL_SEC_JR0_OFFSET)
+-#define FSL_SEC_JR1_BASE_ADDR (CONFIG_SYS_IMMR + FSL_SEC_JR1_OFFSET)
+-#define FSL_SEC_JR2_BASE_ADDR (CONFIG_SYS_IMMR + FSL_SEC_JR2_OFFSET)
+-#define FSL_SEC_JR3_BASE_ADDR (CONFIG_SYS_IMMR + FSL_SEC_JR3_OFFSET)
+ 
+ /* Device Configuration and Pin Control */
+ #define DCFG_DCSR_PORCR1		0x0
+-- 
+1.7.1
+

@@ -1,0 +1,48 @@
+From eca965603fecb499ec98937af96f794fcc15eba8 Mon Sep 17 00:00:00 2001
+From: Bao Xiaowei <xiaowei.bao@nxp.com>
+Date: Fri, 20 Apr 2018 13:17:58 +0800
+Subject: [PATCH 040/107] armv8/fsl-lsch2: correct QMAN clock
+
+Signed-off-by: Bao Xiaowei <xiaowei.bao@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/Kconfig          |    8 ++++++++
+ .../arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c |    4 +++-
+ 2 files changed, 11 insertions(+), 1 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/Kconfig b/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
+index 7b59dc9..8ffb457 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
++++ b/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
+@@ -445,6 +445,14 @@ config SYS_FSL_SDHC_CLK_DIV
+ 	help
+ 	  This is the divider that is used to derive SDHC clock from Platform
+ 	  clock, in another word SDHC_clk = Platform_clk / this_divider.
++
++config SYS_FSL_QMAN_CLK_DIV
++	int "QMAN clock divider"
++	default 1 if ARCH_LS1043A
++	default 2
++	help
++	  This is the divider that is used to derive QMAN clock from Platform
++	  clock, in another word QMAN_clk = Platform_clk / this_divider.
+ endmenu
+ 
+ config RESV_RAM
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c b/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
+index 5f23aad..5fb236a 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
++++ b/arch/arm/cpu/armv8/fsl-layerscape/fsl_lsch2_speed.c
+@@ -156,7 +156,9 @@ void get_sys_info(struct sys_info *sys_info)
+ 						CONFIG_SYS_FSL_IFC_CLK_DIV;
+ #endif
+ #ifdef CONFIG_SYS_DPAA_QBMAN
+-	sys_info->freq_qman = sys_info->freq_systembus;
++	sys_info->freq_qman = (sys_info->freq_systembus /
++				CONFIG_SYS_FSL_PCLK_DIV) /
++				CONFIG_SYS_FSL_QMAN_CLK_DIV;
+ #endif
+ }
+ 
+-- 
+1.7.1
+

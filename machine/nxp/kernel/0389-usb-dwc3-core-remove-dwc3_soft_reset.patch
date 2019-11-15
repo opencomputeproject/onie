@@ -1,0 +1,81 @@
+From 6c25a5b557fbdcd8bebe20c73cb2fd487765451d Mon Sep 17 00:00:00 2001
+From: Felipe Balbi <felipe.balbi@linux.intel.com>
+Date: Mon, 14 Nov 2016 11:24:53 +0200
+Subject: [PATCH 389/448] usb: dwc3: core: remove dwc3_soft_reset()
+
+dwc3_soft_reset() is doing the same thing as
+dwc3_core_soft_reset(). Let's remove
+dwc3_soft_reset() since that's not needed anymore.
+
+Signed-off-by: Felipe Balbi <felipe.balbi@linux.intel.com>
+---
+ drivers/usb/dwc3/core.c |   39 ---------------------------------------
+ 1 files changed, 0 insertions(+), 39 deletions(-)
+
+diff --git a/drivers/usb/dwc3/core.c b/drivers/usb/dwc3/core.c
+index 6b04876..baab2bb 100644
+--- a/drivers/usb/dwc3/core.c
++++ b/drivers/usb/dwc3/core.c
+@@ -188,33 +188,6 @@ static int dwc3_core_soft_reset(struct dwc3 *dwc)
+ 	return -ETIMEDOUT;
+ }
+ 
+-/**
+- * dwc3_soft_reset - Issue soft reset
+- * @dwc: Pointer to our controller context structure
+- */
+-static int dwc3_soft_reset(struct dwc3 *dwc)
+-{
+-	unsigned long timeout;
+-	u32 reg;
+-
+-	timeout = jiffies + msecs_to_jiffies(500);
+-	dwc3_writel(dwc->regs, DWC3_DCTL, DWC3_DCTL_CSFTRST);
+-	do {
+-		reg = dwc3_readl(dwc->regs, DWC3_DCTL);
+-		if (!(reg & DWC3_DCTL_CSFTRST))
+-			break;
+-
+-		if (time_after(jiffies, timeout)) {
+-			dev_err(dwc->dev, "Reset Timed Out\n");
+-			return -ETIMEDOUT;
+-		}
+-
+-		cpu_relax();
+-	} while (true);
+-
+-	return 0;
+-}
+-
+ /*
+  * dwc3_frame_length_adjustment - Adjusts frame length if required
+  * @dwc3: Pointer to our controller context structure
+@@ -550,13 +523,6 @@ static int dwc3_phy_setup(struct dwc3 *dwc)
+ 		}
+ 		/* FALLTHROUGH */
+ 	case DWC3_GHWPARAMS3_HSPHY_IFC_ULPI:
+-		/* Making sure the interface and PHY are operational */
+-		ret = dwc3_soft_reset(dwc);
+-		if (ret)
+-			return ret;
+-
+-		udelay(1);
+-
+ 		ret = dwc3_ulpi_init(dwc);
+ 		if (ret)
+ 			return ret;
+@@ -753,11 +719,6 @@ static int dwc3_core_init(struct dwc3 *dwc)
+ 			dwc->maximum_speed = USB_SPEED_HIGH;
+ 	}
+ 
+-	/* issue device SoftReset too */
+-	ret = dwc3_soft_reset(dwc);
+-	if (ret)
+-		goto err0;
+-
+ 	ret = dwc3_core_soft_reset(dwc);
+ 	if (ret)
+ 		goto err0;
+-- 
+1.7.1
+

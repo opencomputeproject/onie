@@ -1,0 +1,39 @@
+From d96f39018f3988d6b505dbf49641f65048d62d3a Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Tue, 20 Mar 2018 07:04:46 -0500
+Subject: [PATCH 270/448] staging: fsl-dpaa2/eth: Defer probing if no MC portal available
+
+MC portals may not be available at the initial probing attempt
+due to dependencies on other modules.
+
+Check the return value of the MC portal allocation function and
+defer probing in case it's not available yet. For all other error
+cases the behaviour stays the same.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Suggested-by: Nipun Gupta <nipun.gupta@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index ae984fe..e688c04 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -3534,8 +3534,10 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
+ 	err = fsl_mc_portal_allocate(dpni_dev, FSL_MC_IO_ATOMIC_CONTEXT_PORTAL,
+ 				     &priv->mc_io);
+ 	if (err) {
+-		dev_dbg(dev, "MC portal allocation failed\n");
+-		err = -EPROBE_DEFER;
++		if (err == -ENXIO)
++			err = -EPROBE_DEFER;
++		else
++			dev_err(dev, "MC portal allocation failed\n");
+ 		goto err_portal_alloc;
+ 	}
+ 
+-- 
+1.7.1
+

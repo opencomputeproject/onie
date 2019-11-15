@@ -1,0 +1,481 @@
+From 5478614526ed517499c7f3f4548a0d1182937487 Mon Sep 17 00:00:00 2001
+From: Ioana Ciornei <ioana.ciornei@nxp.com>
+Date: Tue, 16 Oct 2018 11:20:15 +0800
+Subject: [PATCH 283/448] bus: fsl-mc: add restool userspace support
+
+[context adjustment]
+
+Adding kernel support for restool, a userspace tool for resource
+management, means exporting an ioctl capable device file representing
+the root resource container.
+This new functionality in the fsl-mc bus driver intends to provide
+restool an interface to interact with the MC firmware.
+Commands that are composed in userspace are sent to the MC firmware
+through the RESTOOL_SEND_MC_COMMAND ioctl.
+By default the implicit MC I/O portal is used for this operation,
+but if the implicit one is busy, a dynamic portal is allocated and then
+freed upon execution.
+
+Signed-off-by: Ioana Ciornei <ioana.ciornei@nxp.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ Documentation/ioctl/ioctl-number.txt        |    1 +
+ Documentation/networking/dpaa2/overview.rst |    4 +
+ drivers/bus/fsl-mc/Kconfig                  |    7 +
+ drivers/bus/fsl-mc/Makefile                 |    3 +
+ drivers/bus/fsl-mc/fsl-mc-bus.c             |   19 +++
+ drivers/bus/fsl-mc/fsl-mc-private.h         |   48 ++++++
+ drivers/bus/fsl-mc/fsl-mc-restool.c         |  219 +++++++++++++++++++++++++++
+ include/uapi/linux/fsl_mc.h                 |    8 +
+ 8 files changed, 309 insertions(+), 0 deletions(-)
+ create mode 100644 drivers/bus/fsl-mc/fsl-mc-restool.c
+
+diff --git a/Documentation/ioctl/ioctl-number.txt b/Documentation/ioctl/ioctl-number.txt
+index 81c7f2b..7fb51c5 100644
+--- a/Documentation/ioctl/ioctl-number.txt
++++ b/Documentation/ioctl/ioctl-number.txt
+@@ -170,6 +170,7 @@ Code  Seq#(hex)	Include File		Comments
+ 'R'	00-1F	linux/random.h		conflict!
+ 'R'	01	linux/rfkill.h		conflict!
+ 'R'	C0-DF	net/bluetooth/rfcomm.h
++'R'	E0	uapi/linux/fsl_mc.h
+ 'S'	all	linux/cdrom.h		conflict!
+ 'S'	80-81	scsi/scsi_ioctl.h	conflict!
+ 'S'	82-FF	scsi/scsi.h		conflict!
+diff --git a/Documentation/networking/dpaa2/overview.rst b/Documentation/networking/dpaa2/overview.rst
+index 79fede4..1056445 100644
+--- a/Documentation/networking/dpaa2/overview.rst
++++ b/Documentation/networking/dpaa2/overview.rst
+@@ -127,6 +127,10 @@ level.
+ 
+ DPRCs can be defined statically and populated with objects
+ via a config file passed to the MC when firmware starts it.
++There is also a Linux user space tool called "restool" that can be
++used to create/destroy containers and objects dynamically. The latest
++version of restool can be found at:
++        https://github.com/qoriq-open-source/restool
+ 
+ DPAA2 Objects for an Ethernet Network Interface
+ -----------------------------------------------
+diff --git a/drivers/bus/fsl-mc/Kconfig b/drivers/bus/fsl-mc/Kconfig
+index bcca644..74a8a83 100644
+--- a/drivers/bus/fsl-mc/Kconfig
++++ b/drivers/bus/fsl-mc/Kconfig
+@@ -14,3 +14,10 @@ config FSL_MC_BUS
+ 	  architecture.  The fsl-mc bus driver handles discovery of
+ 	  DPAA2 objects (which are represented as Linux devices) and
+ 	  binding objects to drivers.
++
++config FSL_MC_RESTOOL
++	bool "Management Complex (MC) restool support"
++	depends on FSL_MC_BUS
++	help
++	  Provides kernel support for the Management Complex resource
++	  manager user-space tool - restool.
+diff --git a/drivers/bus/fsl-mc/Makefile b/drivers/bus/fsl-mc/Makefile
+index 3c518c7..2017bdb 100644
+--- a/drivers/bus/fsl-mc/Makefile
++++ b/drivers/bus/fsl-mc/Makefile
+@@ -16,3 +16,6 @@ mc-bus-driver-objs := fsl-mc-bus.o \
+ 		      fsl-mc-allocator.o \
+ 		      fsl-mc-msi.o \
+ 		      dpmcp.o
++
++# MC restool kernel support
++obj-$(CONFIG_FSL_MC_RESTOOL) += fsl-mc-restool.o
+diff --git a/drivers/bus/fsl-mc/fsl-mc-bus.c b/drivers/bus/fsl-mc/fsl-mc-bus.c
+index 5d8266c..0ade415 100644
+--- a/drivers/bus/fsl-mc/fsl-mc-bus.c
++++ b/drivers/bus/fsl-mc/fsl-mc-bus.c
+@@ -792,6 +792,7 @@ static int fsl_mc_bus_probe(struct platform_device *pdev)
+ 	struct fsl_mc *mc;
+ 	struct fsl_mc_device *mc_bus_dev = NULL;
+ 	struct fsl_mc_io *mc_io = NULL;
++	struct fsl_mc_bus *mc_bus = NULL;
+ 	int container_id;
+ 	phys_addr_t mc_portal_phys_addr;
+ 	u32 mc_portal_size;
+@@ -863,9 +864,18 @@ static int fsl_mc_bus_probe(struct platform_device *pdev)
+ 	if (error < 0)
+ 		goto error_cleanup_mc_io;
+ 
++	mc_bus = to_fsl_mc_bus(mc_bus_dev);
++	error = fsl_mc_restool_create_device_file(mc_bus);
++	if (error < 0)
++		goto error_cleanup_device;
++
+ 	mc->root_mc_bus_dev = mc_bus_dev;
++
+ 	return 0;
+ 
++error_cleanup_device:
++	fsl_mc_device_remove(mc_bus_dev);
++
+ error_cleanup_mc_io:
+ 	fsl_destroy_mc_io(mc_io);
+ 	return error;
+@@ -878,10 +888,12 @@ static int fsl_mc_bus_probe(struct platform_device *pdev)
+ static int fsl_mc_bus_remove(struct platform_device *pdev)
+ {
+ 	struct fsl_mc *mc = platform_get_drvdata(pdev);
++	struct fsl_mc_bus *mc_bus = to_fsl_mc_bus(mc->root_mc_bus_dev);
+ 
+ 	if (!fsl_mc_is_root_dprc(&mc->root_mc_bus_dev->dev))
+ 		return -EINVAL;
+ 
++	fsl_mc_restool_remove_device_file(mc_bus);
+ 	fsl_mc_device_remove(mc->root_mc_bus_dev);
+ 
+ 	fsl_destroy_mc_io(mc->root_mc_bus_dev->mc_io);
+@@ -931,8 +943,15 @@ static int __init fsl_mc_bus_driver_init(void)
+ 	if (error < 0)
+ 		goto error_cleanup_dprc_driver;
+ 
++	error = fsl_mc_restool_init();
++	if (error < 0)
++		goto error_cleanup_mc_allocator;
++
+ 	return 0;
+ 
++error_cleanup_mc_allocator:
++	fsl_mc_allocator_driver_exit();
++
+ error_cleanup_dprc_driver:
+ 	dprc_driver_exit();
+ 
+diff --git a/drivers/bus/fsl-mc/fsl-mc-private.h b/drivers/bus/fsl-mc/fsl-mc-private.h
+index ea11b4f..00cca7d 100644
+--- a/drivers/bus/fsl-mc/fsl-mc-private.h
++++ b/drivers/bus/fsl-mc/fsl-mc-private.h
+@@ -10,6 +10,8 @@
+ 
+ #include <linux/fsl/mc.h>
+ #include <linux/mutex.h>
++#include <linux/cdev.h>
++#include <linux/ioctl.h>
+ 
+ /*
+  * Data Path Management Complex (DPMNG) General API
+@@ -492,6 +494,24 @@ struct fsl_mc_resource_pool {
+ };
+ 
+ /**
++ * struct fsl_mc_restool - information associated with a restool device file
++ * @cdev: struct char device linked to the root dprc
++ * @dev: dev_t for the char device to be added
++ * @device: newly created device in /dev
++ * @mutex: mutex lock to serialize the open/release operations
++ * @local_instance_in_use: local MC I/O instance in use or not
++ * @dynamic_instance_count: number of dynamically created MC I/O instances
++ */
++struct fsl_mc_restool {
++	struct cdev cdev;
++	dev_t dev;
++	struct device *device;
++	struct mutex mutex; /* serialize open/release operations */
++	bool local_instance_in_use;
++	u32 dynamic_instance_count;
++};
++
++/**
+  * struct fsl_mc_bus - logical bus that corresponds to a physical DPRC
+  * @mc_dev: fsl-mc device for the bus device itself.
+  * @resource_pools: array of resource pools (one pool per resource type)
+@@ -500,6 +520,7 @@ struct fsl_mc_resource_pool {
+  * @irq_resources: Pointer to array of IRQ objects for the IRQ pool
+  * @scan_mutex: Serializes bus scanning
+  * @dprc_attr: DPRC attributes
++ * @restool_misc: struct that abstracts the interaction with userspace restool
+  */
+ struct fsl_mc_bus {
+ 	struct fsl_mc_device mc_dev;
+@@ -507,6 +528,7 @@ struct fsl_mc_bus {
+ 	struct fsl_mc_device_irq *irq_resources;
+ 	struct mutex scan_mutex;    /* serializes bus scanning */
+ 	struct dprc_attributes dprc_attr;
++	struct fsl_mc_restool restool_misc;
+ };
+ 
+ #define to_fsl_mc_bus(_mc_dev) \
+@@ -561,4 +583,30 @@ int __must_check fsl_create_mc_io(struct device *dev,
+ 
+ bool fsl_mc_is_root_dprc(struct device *dev);
+ 
++#ifdef CONFIG_FSL_MC_RESTOOL
++
++int fsl_mc_restool_create_device_file(struct fsl_mc_bus *mc_bus);
++
++void fsl_mc_restool_remove_device_file(struct fsl_mc_bus *mc_bus);
++
++int fsl_mc_restool_init(void);
++
++#else
++
++static inline int fsl_mc_restool_create_device_file(struct fsl_mc_bus *mc_bus)
++{
++	return 0;
++}
++
++static inline void fsl_mc_restool_remove_device_file(struct fsl_mc_bus *mc_bus)
++{
++}
++
++static inline int fsl_mc_restool_init(void)
++{
++	return 0;
++}
++
++#endif
++
+ #endif /* _FSL_MC_PRIVATE_H_ */
+diff --git a/drivers/bus/fsl-mc/fsl-mc-restool.c b/drivers/bus/fsl-mc/fsl-mc-restool.c
+new file mode 100644
+index 0000000..c39b8e8
+--- /dev/null
++++ b/drivers/bus/fsl-mc/fsl-mc-restool.c
+@@ -0,0 +1,219 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Management Complex (MC) restool support
++ *
++ * Copyright 2018 NXP
++ *
++ */
++
++#include <linux/slab.h>
++#include <linux/cdev.h>
++#include <linux/fs.h>
++#include <linux/uaccess.h>
++
++#include "fsl-mc-private.h"
++
++#define FSL_MC_BUS_MAX_MINORS	1
++
++static struct class *fsl_mc_bus_class;
++static int fsl_mc_bus_major;
++
++static int fsl_mc_restool_send_command(unsigned long arg,
++				       struct fsl_mc_io *mc_io)
++{
++	struct fsl_mc_command mc_cmd;
++	int error;
++
++	error = copy_from_user(&mc_cmd, (void __user *)arg, sizeof(mc_cmd));
++	if (error)
++		return -EFAULT;
++
++	error = mc_send_command(mc_io, &mc_cmd);
++	if (error)
++		return error;
++
++	error = copy_to_user((void __user *)arg, &mc_cmd, sizeof(mc_cmd));
++	if (error)
++		return -EFAULT;
++
++	return 0;
++}
++
++int fsl_mc_restool_init(void)
++{
++	dev_t dev;
++	int error;
++
++	fsl_mc_bus_class = class_create(THIS_MODULE, "fsl_mc_bus");
++	if (IS_ERR(fsl_mc_bus_class)) {
++		error = PTR_ERR(fsl_mc_bus_class);
++		return error;
++	}
++
++	error = alloc_chrdev_region(&dev, 0,
++				    FSL_MC_BUS_MAX_MINORS,
++				    "fsl_mc_bus");
++	if (error < 0)
++		return error;
++
++	fsl_mc_bus_major = MAJOR(dev);
++
++	return 0;
++}
++
++static int fsl_mc_restool_dev_open(struct inode *inode, struct file *filep)
++{
++	struct fsl_mc_device *root_mc_device;
++	struct fsl_mc_restool *mc_restool;
++	struct fsl_mc_bus *mc_bus;
++	struct fsl_mc_io *dynamic_mc_io;
++	int error;
++
++	mc_restool = container_of(inode->i_cdev, struct fsl_mc_restool, cdev);
++	mc_bus = container_of(mc_restool, struct fsl_mc_bus, restool_misc);
++	root_mc_device = &mc_bus->mc_dev;
++
++	mutex_lock(&mc_restool->mutex);
++
++	if (!mc_restool->local_instance_in_use) {
++		filep->private_data = root_mc_device->mc_io;
++		mc_restool->local_instance_in_use = true;
++	} else {
++		dynamic_mc_io = kzalloc(sizeof(*dynamic_mc_io), GFP_KERNEL);
++		if (!dynamic_mc_io) {
++			error = -ENOMEM;
++			goto error_alloc_mc_io;
++		}
++
++		error = fsl_mc_portal_allocate(root_mc_device, 0,
++					       &dynamic_mc_io);
++		if (error) {
++			pr_err("Could not allocate MC portal\n");
++			goto error_portal_allocate;
++		}
++
++		mc_restool->dynamic_instance_count++;
++		filep->private_data = dynamic_mc_io;
++	}
++
++	mutex_unlock(&mc_restool->mutex);
++
++	return 0;
++
++error_portal_allocate:
++	kfree(dynamic_mc_io);
++
++error_alloc_mc_io:
++	mutex_unlock(&mc_restool->mutex);
++
++	return error;
++}
++
++static int fsl_mc_restool_dev_release(struct inode *inode, struct file *filep)
++{
++	struct fsl_mc_device *root_mc_device;
++	struct fsl_mc_restool *mc_restool;
++	struct fsl_mc_bus *mc_bus;
++	struct fsl_mc_io *mc_io;
++
++	mc_restool = container_of(inode->i_cdev, struct fsl_mc_restool, cdev);
++	mc_bus = container_of(mc_restool, struct fsl_mc_bus, restool_misc);
++	root_mc_device = &mc_bus->mc_dev;
++	mc_io = filep->private_data;
++
++	mutex_lock(&mc_restool->mutex);
++
++	if (WARN_ON(!mc_restool->local_instance_in_use &&
++		    mc_restool->dynamic_instance_count == 0)) {
++		mutex_unlock(&mc_restool->mutex);
++		return -EINVAL;
++	}
++
++	if (filep->private_data == root_mc_device->mc_io) {
++		mc_restool->local_instance_in_use = false;
++	} else {
++		fsl_mc_portal_free(mc_io);
++		kfree(mc_io);
++		mc_restool->dynamic_instance_count--;
++	}
++
++	filep->private_data = NULL;
++	mutex_unlock(&mc_restool->mutex);
++
++	return 0;
++}
++
++static long fsl_mc_restool_dev_ioctl(struct file *file,
++				     unsigned int cmd,
++				     unsigned long arg)
++{
++	int error;
++
++	switch (cmd) {
++	case RESTOOL_SEND_MC_COMMAND:
++		error = fsl_mc_restool_send_command(arg, file->private_data);
++		break;
++	default:
++		pr_err("%s: unexpected ioctl call number\n", __func__);
++		error = -EINVAL;
++	}
++
++	return error;
++}
++
++static const struct file_operations fsl_mc_restool_dev_fops = {
++	.owner = THIS_MODULE,
++	.open = fsl_mc_restool_dev_open,
++	.release = fsl_mc_restool_dev_release,
++	.unlocked_ioctl = fsl_mc_restool_dev_ioctl,
++};
++
++int fsl_mc_restool_create_device_file(struct fsl_mc_bus *mc_bus)
++{
++	struct fsl_mc_device *mc_dev = &mc_bus->mc_dev;
++	struct fsl_mc_restool *mc_restool = &mc_bus->restool_misc;
++	int error;
++
++	mc_restool = &mc_bus->restool_misc;
++	mc_restool->dev = MKDEV(fsl_mc_bus_major, 0);
++	cdev_init(&mc_restool->cdev, &fsl_mc_restool_dev_fops);
++
++	error = cdev_add(&mc_restool->cdev,
++			 mc_restool->dev,
++			 FSL_MC_BUS_MAX_MINORS);
++	if (error)
++		return error;
++
++	mc_restool->device = device_create(fsl_mc_bus_class,
++					   NULL,
++					   mc_restool->dev,
++					   NULL,
++					   "%s",
++					   dev_name(&mc_dev->dev));
++	if (IS_ERR(mc_restool->device)) {
++		error = PTR_ERR(mc_restool->device);
++		goto error_device_create;
++	}
++
++	mutex_init(&mc_restool->mutex);
++
++	return 0;
++
++error_device_create:
++	cdev_del(&mc_restool->cdev);
++
++	return error;
++}
++
++void fsl_mc_restool_remove_device_file(struct fsl_mc_bus *mc_bus)
++{
++	struct fsl_mc_restool *mc_restool = &mc_bus->restool_misc;
++
++	if (WARN_ON(mc_restool->local_instance_in_use))
++		return;
++
++	if (WARN_ON(mc_restool->dynamic_instance_count != 0))
++		return;
++
++	cdev_del(&mc_restool->cdev);
++}
+diff --git a/include/uapi/linux/fsl_mc.h b/include/uapi/linux/fsl_mc.h
+index 54590a2..e4c8dd0 100644
+--- a/include/uapi/linux/fsl_mc.h
++++ b/include/uapi/linux/fsl_mc.h
+@@ -14,10 +14,18 @@
+  * struct fsl_mc_command - Management Complex (MC) command structure
+  * @header: MC command header
+  * @params: MC command parameters
++ *
++ * Used by RESTOOL_SEND_MC_COMMAND
+  */
+ struct fsl_mc_command {
+ 	__u64 header;
+ 	__u64 params[MC_CMD_NUM_OF_PARAMS];
+ };
+ 
++#define RESTOOL_IOCTL_TYPE	'R'
++#define RESTOOL_IOCTL_SEQ	0xE0
++
++#define RESTOOL_SEND_MC_COMMAND \
++	_IOWR(RESTOOL_IOCTL_TYPE, RESTOOL_IOCTL_SEQ, struct fsl_mc_command)
++
+ #endif /* _UAPI_FSL_MC_H_ */
+-- 
+1.7.1
+

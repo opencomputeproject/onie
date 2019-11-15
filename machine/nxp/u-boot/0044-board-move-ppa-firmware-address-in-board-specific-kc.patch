@@ -1,0 +1,374 @@
+From d000b1409fce1aace705fee85386051bfc4bfc7c Mon Sep 17 00:00:00 2001
+From: Bhaskar Upadhaya <Bhaskar.Upadhaya@nxp.com>
+Date: Fri, 27 Apr 2018 15:35:28 +0530
+Subject: [PATCH 044/107] board: move ppa firmware address in board specific kconfig
+
+ppa firmware address may vary depending upon different boards,
+configure ppa firmware address in board specific kconfig
+
+Signed-off-by: Bhaskar Upadhaya <Bhaskar.Upadhaya@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/Kconfig |   17 -----------
+ board/freescale/ls1012afrdm/Kconfig       |    4 +++
+ board/freescale/ls1012aqds/Kconfig        |    3 ++
+ board/freescale/ls1012ardb/Kconfig        |    8 +++++
+ board/freescale/ls1043aqds/Kconfig        |   21 ++++++++++++++
+ board/freescale/ls1043ardb/Kconfig        |   21 ++++++++++++++
+ board/freescale/ls1046aqds/Kconfig        |   21 ++++++++++++++
+ board/freescale/ls1046ardb/Kconfig        |   22 +++++++++++++++
+ board/freescale/ls1088a/Kconfig           |   28 +++++++++++++++++++
+ board/freescale/ls2080aqds/Kconfig        |   21 ++++++++++++++
+ board/freescale/ls2080ardb/Kconfig        |   42 +++++++++++++++++++++++++++++
+ 11 files changed, 191 insertions(+), 17 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/Kconfig b/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
+index 8ffb457..66d6465 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
++++ b/arch/arm/cpu/armv8/fsl-layerscape/Kconfig
+@@ -237,23 +237,6 @@ config SYS_LS_PPA_FW_IN_NAND
+ 
+ endchoice
+ 
+-config SYS_LS_PPA_FW_ADDR
+-	hex "Address of PPA firmware loading from"
+-	depends on FSL_LS_PPA
+-	default 0x20400000 if SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT && ARCH_LS2080A
+-	default 0x40400000 if SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT
+-	default 0x580400000 if SYS_LS_PPA_FW_IN_XIP && ARCH_LS2080A
+-	default 0x20400000 if SYS_LS_PPA_FW_IN_XIP && ARCH_LS1088A
+-	default 0x60400000 if SYS_LS_PPA_FW_IN_XIP
+-	default 0x400000 if SYS_LS_PPA_FW_IN_MMC
+-	default 0x400000 if SYS_LS_PPA_FW_IN_NAND
+-
+-	help
+-	  If the PPA firmware locate at XIP flash, such as NOR or
+-	  QSPI flash, this address is a directly memory-mapped.
+-	  If it is in a serial accessed flash, such as NAND and SD
+-	  card, it is a byte offset.
+-
+ config SYS_LS_PPA_ESBC_ADDR
+ 	hex "hdr address of PPA firmware loading from"
+ 	depends on FSL_LS_PPA && CHAIN_OF_TRUST
+diff --git a/board/freescale/ls1012afrdm/Kconfig b/board/freescale/ls1012afrdm/Kconfig
+index 22d521b..fd33807 100644
+--- a/board/freescale/ls1012afrdm/Kconfig
++++ b/board/freescale/ls1012afrdm/Kconfig
+@@ -12,6 +12,10 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1012afrdm"
+ 
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x40400000
++
+ if FSL_PFE
+ 
+ config BOARD_SPECIFIC_OPTIONS # dummy
+diff --git a/board/freescale/ls1012aqds/Kconfig b/board/freescale/ls1012aqds/Kconfig
+index c0b12ed..b702fb2 100644
+--- a/board/freescale/ls1012aqds/Kconfig
++++ b/board/freescale/ls1012aqds/Kconfig
+@@ -12,6 +12,9 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1012aqds"
+ 
++config SYS_LS_PPA_FW_ADDR
++        hex "PPA Firmware Addr"
++        default 0x40400000
+ 
+ if FSL_PFE
+ 
+diff --git a/board/freescale/ls1012ardb/Kconfig b/board/freescale/ls1012ardb/Kconfig
+index 493d477..0b873dd 100644
+--- a/board/freescale/ls1012ardb/Kconfig
++++ b/board/freescale/ls1012ardb/Kconfig
+@@ -12,6 +12,10 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1012ardb"
+ 
++config SYS_LS_PPA_FW_ADDR
++        hex "PPA Firmware Addr"
++        default 0x40400000
++
+ if FSL_PFE
+ 
+ config BOARD_SPECIFIC_OPTIONS # dummy
+@@ -59,6 +63,10 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+         default "ls1012a2g5rdb"
+ 
++config SYS_LS_PPA_FW_ADDR
++        hex "PPA Firmware Addr"
++        default 0x40400000
++
+ if FSL_PFE
+ 
+ config BOARD_SPECIFIC_OPTIONS # dummy
+diff --git a/board/freescale/ls1043aqds/Kconfig b/board/freescale/ls1043aqds/Kconfig
+index 95d2888..3c571aa 100644
+--- a/board/freescale/ls1043aqds/Kconfig
++++ b/board/freescale/ls1043aqds/Kconfig
+@@ -12,6 +12,27 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1043aqds"
+ 
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x60400000
++endif
++
++if (SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x40400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+diff --git a/board/freescale/ls1043ardb/Kconfig b/board/freescale/ls1043ardb/Kconfig
+index 1bab7ca..26272c9 100644
+--- a/board/freescale/ls1043ardb/Kconfig
++++ b/board/freescale/ls1043ardb/Kconfig
+@@ -22,6 +22,27 @@ config SYS_HAS_ARMV8_SECURE_BASE
+ 	  If enabled, please also define the value for ARMV8_SECURE_BASE,
+ 	  for LS1043ARDB, it could be some address in OCRAM.
+ 
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x60400000
++endif
++
++if (SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x40400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+diff --git a/board/freescale/ls1046aqds/Kconfig b/board/freescale/ls1046aqds/Kconfig
+index 070827d..d75960f 100644
+--- a/board/freescale/ls1046aqds/Kconfig
++++ b/board/freescale/ls1046aqds/Kconfig
+@@ -12,6 +12,27 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1046aqds"
+ 
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x60400000
++endif
++
++if (SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x40400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+diff --git a/board/freescale/ls1046ardb/Kconfig b/board/freescale/ls1046ardb/Kconfig
+index b9f2ed7..cd05cbf 100644
+--- a/board/freescale/ls1046ardb/Kconfig
++++ b/board/freescale/ls1046ardb/Kconfig
+@@ -12,5 +12,27 @@ config SYS_SOC
+ 
+ config SYS_CONFIG_NAME
+ 	default "ls1046ardb"
++
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x60400000
++endif
++
++if (SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x40400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ endif
+diff --git a/board/freescale/ls1088a/Kconfig b/board/freescale/ls1088a/Kconfig
+index 4479dd0..235e5d1 100644
+--- a/board/freescale/ls1088a/Kconfig
++++ b/board/freescale/ls1088a/Kconfig
+@@ -12,6 +12,20 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1088aqds"
+ 
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x20400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ endif
+ 
+@@ -29,5 +43,19 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls1088ardb"
+ 
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x20400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ endif
+diff --git a/board/freescale/ls2080aqds/Kconfig b/board/freescale/ls2080aqds/Kconfig
+index e2b2c8d..5f23304 100644
+--- a/board/freescale/ls2080aqds/Kconfig
++++ b/board/freescale/ls2080aqds/Kconfig
+@@ -13,6 +13,27 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls2080aqds"
+ 
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x580400000
++endif
++
++if (SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x20400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+diff --git a/board/freescale/ls2080ardb/Kconfig b/board/freescale/ls2080ardb/Kconfig
+index 8f64642..787f8f4 100644
+--- a/board/freescale/ls2080ardb/Kconfig
++++ b/board/freescale/ls2080ardb/Kconfig
+@@ -13,6 +13,27 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls2080ardb"
+ 
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x580400000
++endif
++
++if (SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x20400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+@@ -31,6 +52,27 @@ config SYS_SOC
+ config SYS_CONFIG_NAME
+ 	default "ls2080ardb"
+ 
++if SYS_LS_PPA_FW_IN_XIP
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x580400000
++endif
++
++if (SYS_LS_PPA_FW_IN_XIP && QSPI_BOOT)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x20400000
++endif
++
++if (SYS_LS_PPA_FW_IN_MMC || SYS_LS_PPA_FW_IN_NAND)
++
++config SYS_LS_PPA_FW_ADDR
++	hex "PPA Firmware Addr"
++	default 0x400000
++endif
++
+ source "board/freescale/common/Kconfig"
+ 
+ endif
+-- 
+1.7.1
+

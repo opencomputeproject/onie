@@ -1,0 +1,206 @@
+From 8d34e7df072434f4866ed70b8f6d78aa6e372da6 Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Fri, 13 Apr 2018 11:52:44 +0300
+Subject: [PATCH 287/448] bus: fsl-mc: Propagate driver_override for a child DPRC's children
+
+When a child DPRC is bound to the vfio_fsl_mc driver via
+driver_override, its own children should not be bound to corresponding
+host kernel drivers, but instead should be bound to the vfio_fsl_mc
+driver as well.
+
+Currently, when a child container is scanned by the vfio_fsl_mc
+driver, child devices found are automatically bound to corresponding
+host kernel drivers (e.g., DPMCP and DPBP objects are bound to the
+fsl_mc_allocator driver, DPNI objects are bound to the ldpaa_eth
+driver, etc), Then, the user has to manually unbind these child
+devices from their drivers, set the driver_override sysfs attribute
+to vfio_fsl_mc driver, for each of them and rebind them.
+
+Signed-off-by: J. German Rivera <German.Rivera@freescale.com>
+Signed-off-by: Stuart Yoder <stuart.yoder@nxp.com>
+Signed-off-by: Bharat Bhushan <Bharat.Bhushan@nxp.com>
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+---
+ drivers/bus/fsl-mc/dprc-driver.c    |   14 ++++++++++----
+ drivers/bus/fsl-mc/fsl-mc-bus.c     |   21 ++++++++++++++++++---
+ drivers/bus/fsl-mc/fsl-mc-private.h |    2 ++
+ include/linux/fsl/mc.h              |    2 ++
+ 4 files changed, 32 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/bus/fsl-mc/dprc-driver.c b/drivers/bus/fsl-mc/dprc-driver.c
+index be80e3a..d9655ed 100644
+--- a/drivers/bus/fsl-mc/dprc-driver.c
++++ b/drivers/bus/fsl-mc/dprc-driver.c
+@@ -156,6 +156,8 @@ static void check_plugged_state_change(struct fsl_mc_device *mc_dev,
+  * dprc_add_new_devices - Adds devices to the logical bus for a DPRC
+  *
+  * @mc_bus_dev: pointer to the fsl-mc device that represents a DPRC object
++ * @driver_override: driver override to apply to new objects found in the
++ * DPRC, or NULL, if none.
+  * @obj_desc_array: array of device descriptors for child devices currently
+  * present in the physical DPRC.
+  * @num_child_objects_in_mc: number of entries in obj_desc_array
+@@ -165,6 +167,7 @@ static void check_plugged_state_change(struct fsl_mc_device *mc_dev,
+  * in the physical DPRC.
+  */
+ static void dprc_add_new_devices(struct fsl_mc_device *mc_bus_dev,
++				 const char *driver_override,
+ 				 struct fsl_mc_obj_desc *obj_desc_array,
+ 				 int num_child_objects_in_mc)
+ {
+@@ -189,7 +192,7 @@ static void dprc_add_new_devices(struct fsl_mc_device *mc_bus_dev,
+ 		}
+ 
+ 		error = fsl_mc_device_add(obj_desc, NULL, &mc_bus_dev->dev,
+-					  &child_dev);
++					  driver_override, &child_dev);
+ 		if (error < 0)
+ 			continue;
+ 	}
+@@ -199,6 +202,8 @@ static void dprc_add_new_devices(struct fsl_mc_device *mc_bus_dev,
+  * dprc_scan_objects - Discover objects in a DPRC
+  *
+  * @mc_bus_dev: pointer to the fsl-mc device that represents a DPRC object
++ * @driver_override: driver override to apply to new objects found in the
++ * DPRC, or NULL, if none.
+  * @total_irq_count: If argument is provided the function populates the
+  * total number of IRQs created by objects in the DPRC.
+  *
+@@ -215,6 +220,7 @@ static void dprc_add_new_devices(struct fsl_mc_device *mc_bus_dev,
+  * of the device drivers for the non-allocatable devices.
+  */
+ int dprc_scan_objects(struct fsl_mc_device *mc_bus_dev,
++		      const char *driver_override,
+ 		      unsigned int *total_irq_count)
+ {
+ 	int num_child_objects;
+@@ -315,7 +321,7 @@ int dprc_scan_objects(struct fsl_mc_device *mc_bus_dev,
+ 	dprc_remove_devices(mc_bus_dev, child_obj_desc_array,
+ 			    num_child_objects);
+ 
+-	dprc_add_new_devices(mc_bus_dev, child_obj_desc_array,
++	dprc_add_new_devices(mc_bus_dev, driver_override, child_obj_desc_array,
+ 			     num_child_objects);
+ 
+ 	if (child_obj_desc_array)
+@@ -344,7 +350,7 @@ static int dprc_scan_container(struct fsl_mc_device *mc_bus_dev)
+ 	 * Discover objects in the DPRC:
+ 	 */
+ 	mutex_lock(&mc_bus->scan_mutex);
+-	error = dprc_scan_objects(mc_bus_dev, NULL);
++	error = dprc_scan_objects(mc_bus_dev, NULL, NULL);
+ 	mutex_unlock(&mc_bus->scan_mutex);
+ 	if (error < 0) {
+ 		fsl_mc_cleanup_all_resource_pools(mc_bus_dev);
+@@ -415,7 +421,7 @@ static irqreturn_t dprc_irq0_handler_thread(int irq_num, void *arg)
+ 		      DPRC_IRQ_EVENT_OBJ_CREATED)) {
+ 		unsigned int irq_count;
+ 
+-		error = dprc_scan_objects(mc_dev, &irq_count);
++		error = dprc_scan_objects(mc_dev, NULL, &irq_count);
+ 		if (error < 0) {
+ 			/*
+ 			 * If the error is -ENXIO, we ignore it, as it indicates
+diff --git a/drivers/bus/fsl-mc/fsl-mc-bus.c b/drivers/bus/fsl-mc/fsl-mc-bus.c
+index 80010d1..c2d9131 100644
+--- a/drivers/bus/fsl-mc/fsl-mc-bus.c
++++ b/drivers/bus/fsl-mc/fsl-mc-bus.c
+@@ -156,7 +156,7 @@ static ssize_t rescan_store(struct device *dev,
+ 
+ 	if (val) {
+ 		mutex_lock(&root_mc_bus->scan_mutex);
+-		dprc_scan_objects(root_mc_dev, NULL);
++		dprc_scan_objects(root_mc_dev, NULL, NULL);
+ 		mutex_unlock(&root_mc_bus->scan_mutex);
+ 	}
+ 
+@@ -183,7 +183,7 @@ static int scan_fsl_mc_bus(struct device *dev, void *data)
+ 	root_mc_dev = to_fsl_mc_device(dev);
+ 	root_mc_bus = to_fsl_mc_bus(root_mc_dev);
+ 	mutex_lock(&root_mc_bus->scan_mutex);
+-	dprc_scan_objects(root_mc_dev, NULL);
++	dprc_scan_objects(root_mc_dev, NULL, NULL);
+ 	mutex_unlock(&root_mc_bus->scan_mutex);
+ 
+ exit:
+@@ -605,6 +605,7 @@ static void fsl_mc_device_release(struct device *dev)
+ int fsl_mc_device_add(struct fsl_mc_obj_desc *obj_desc,
+ 		      struct fsl_mc_io *mc_io,
+ 		      struct device *parent_dev,
++		      const char *driver_override,
+ 		      struct fsl_mc_device **new_mc_dev)
+ {
+ 	int error;
+@@ -637,6 +638,19 @@ int fsl_mc_device_add(struct fsl_mc_obj_desc *obj_desc,
+ 
+ 	mc_dev->obj_desc = *obj_desc;
+ 	mc_dev->mc_io = mc_io;
++
++	if (driver_override) {
++		/*
++		 * We trust driver_override, so we don't need to use
++		 * kstrndup() here
++		 */
++		mc_dev->driver_override = kstrdup(driver_override, GFP_KERNEL);
++		if (!mc_dev->driver_override) {
++			error = -ENOMEM;
++			goto error_cleanup_dev;
++		}
++	}
++
+ 	device_initialize(&mc_dev->dev);
+ 	mc_dev->dev.parent = parent_dev;
+ 	mc_dev->dev.bus = &fsl_mc_bus_type;
+@@ -936,7 +950,8 @@ static int fsl_mc_bus_probe(struct platform_device *pdev)
+ 	obj_desc.irq_count = 1;
+ 	obj_desc.region_count = 0;
+ 
+-	error = fsl_mc_device_add(&obj_desc, mc_io, &pdev->dev, &mc_bus_dev);
++	error = fsl_mc_device_add(&obj_desc, mc_io, &pdev->dev, NULL,
++				 &mc_bus_dev);
+ 	if (error < 0)
+ 		goto error_cleanup_mc_io;
+ 
+diff --git a/drivers/bus/fsl-mc/fsl-mc-private.h b/drivers/bus/fsl-mc/fsl-mc-private.h
+index d1fd09d..e95c4c4 100644
+--- a/drivers/bus/fsl-mc/fsl-mc-private.h
++++ b/drivers/bus/fsl-mc/fsl-mc-private.h
+@@ -547,6 +547,7 @@ struct fsl_mc_bus {
+ int __must_check fsl_mc_device_add(struct fsl_mc_obj_desc *obj_desc,
+ 				   struct fsl_mc_io *mc_io,
+ 				   struct device *parent_dev,
++				   const char *driver_override,
+ 				   struct fsl_mc_device **new_mc_dev);
+ 
+ void fsl_mc_device_remove(struct fsl_mc_device *mc_dev);
+@@ -556,6 +557,7 @@ int __must_check fsl_mc_device_add(struct fsl_mc_obj_desc *obj_desc,
+ void dprc_driver_exit(void);
+ 
+ int dprc_scan_objects(struct fsl_mc_device *mc_bus_dev,
++		      const char *driver_override,
+ 		      unsigned int *total_irq_count);
+ 
+ int __init fsl_mc_allocator_driver_init(void);
+diff --git a/include/linux/fsl/mc.h b/include/linux/fsl/mc.h
+index 19a352b..ec526ed 100644
+--- a/include/linux/fsl/mc.h
++++ b/include/linux/fsl/mc.h
+@@ -162,6 +162,7 @@ struct fsl_mc_obj_desc {
+  * @regions: pointer to array of MMIO region entries
+  * @irqs: pointer to array of pointers to interrupts allocated to this device
+  * @resource: generic resource associated with this MC object device, if any.
++ * @driver_override: Driver name to force a match
+  *
+  * Generic device object for MC object devices that are "attached" to a
+  * MC bus.
+@@ -194,6 +195,7 @@ struct fsl_mc_device {
+ 	struct resource *regions;
+ 	struct fsl_mc_device_irq **irqs;
+ 	struct fsl_mc_resource *resource;
++	const char *driver_override;
+ };
+ 
+ #define to_fsl_mc_device(_dev) \
+-- 
+1.7.1
+

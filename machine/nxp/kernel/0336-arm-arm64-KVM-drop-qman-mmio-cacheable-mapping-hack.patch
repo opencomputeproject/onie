@@ -1,0 +1,132 @@
+From 41721442084190a4e1e0ed4ea80395cb0d947024 Mon Sep 17 00:00:00 2001
+From: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+Date: Thu, 31 May 2018 16:52:21 +0800
+Subject: [PATCH 336/448] arm/arm64: KVM: drop qman mmio cacheable mapping hack
+
+[context adjustment virt/kvm/arm/mmu.c->arch/arm/kvm/mmu.c]
+
+Instead of hardcoding checks for qman cacheable
+mmio region physical addresses extract mapping
+information from the user-space mapping.
+The involves several steps;
+ - get access to a pte part of the user-space mapping
+   by using get_locked_pte() / pte_unmap_unlock() apis
+ - extract memtype (normal / device), shareability from
+   the pte
+ - convert to S2 translation bits in newly added
+   function stage1_to_stage2_pgprot()
+ - finish making the s2 translation with the obtained bits
+
+Another explored option was using vm_area_struct::vm_page_prot
+which is set in vfio-mc mmap code to the correct page bits.
+However, experiments show that these bits are later altered
+in the generic mmap code (e.g. the shareability bit is always
+set on arm64).
+The only place where the original bits can still be found
+is the user-space mapping, using the method described above.
+
+Signed-off-by: Laurentiu Tudor <laurentiu.tudor@nxp.com>
+[Bharat - Fixed mem_type check issue]
+Signed-off-by: Bharat Bhushan <Bharat.Bhushan@nxp.com>
+[Ioana - added a sanity check for hugepages]
+Signed-off-by: Ioana Ciornei <ioana.ciornei@nxp.com>
+Integrated-by: Zhao Qiang <qiang.zhao@nxp.com>
+---
+ arch/arm/kvm/mmu.c |   50 +++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 49 insertions(+), 1 deletions(-)
+
+diff --git a/arch/arm/kvm/mmu.c b/arch/arm/kvm/mmu.c
+index 495f4da..1d9ae29 100644
+--- a/arch/arm/kvm/mmu.c
++++ b/arch/arm/kvm/mmu.c
+@@ -1039,6 +1039,30 @@ int kvm_phys_addr_ioremap(struct kvm *kvm, phys_addr_t guest_ipa,
+ 	return ret;
+ }
+ 
++#ifdef ARM64
++static pgprot_t stage1_to_stage2_pgprot(pgprot_t prot)
++{
++	switch (pgprot_val(prot) & PTE_ATTRINDX_MASK) {
++		case PTE_ATTRINDX(MT_DEVICE_nGnRE):
++		case PTE_ATTRINDX(MT_DEVICE_nGnRnE):
++		case PTE_ATTRINDX(MT_DEVICE_GRE):
++			return PAGE_S2_DEVICE;
++		case PTE_ATTRINDX(MT_NORMAL_NC):
++		case PTE_ATTRINDX(MT_NORMAL):
++			return (pgprot_val(prot) & PTE_SHARED)
++				? PAGE_S2
++				: PAGE_S2_NS;
++	}
++
++	return PAGE_S2_DEVICE;
++}
++#else
++static pgprot_t stage1_to_stage2_pgprot(pgprot_t prot)
++{
++	return PAGE_S2_DEVICE;
++}
++#endif
++
+ static bool transparent_hugepage_adjust(kvm_pfn_t *pfnp, phys_addr_t *ipap)
+ {
+ 	kvm_pfn_t pfn = *pfnp;
+@@ -1290,6 +1314,19 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
+ 		hugetlb = true;
+ 		gfn = (fault_ipa & PMD_MASK) >> PAGE_SHIFT;
+ 	} else {
++		if (!is_vm_hugetlb_page(vma)) {
++			pte_t *pte;
++			spinlock_t *ptl;
++			pgprot_t prot;
++
++			pte = get_locked_pte(current->mm, memslot->userspace_addr, &ptl);
++			prot = stage1_to_stage2_pgprot(__pgprot(pte_val(*pte)));
++			pte_unmap_unlock(pte, ptl);
++#ifdef ARM64
++			if (pgprot_val(prot) == pgprot_val(PAGE_S2_NS))
++				mem_type = PAGE_S2_NS;
++#endif
++		}
+ 		/*
+ 		 * Pages belonging to memslots that don't have the same
+ 		 * alignment for userspace and IPA cannot be mapped using
+@@ -1327,6 +1364,11 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
+ 	if (is_error_noslot_pfn(pfn))
+ 		return -EFAULT;
+ 
++#ifdef ARM64
++	if (pgprot_val(mem_type) == pgprot_val(PAGE_S2_NS)) {
++		flags |= KVM_S2PTE_FLAG_IS_IOMAP;
++	} else
++#endif
+ 	if (kvm_is_device_pfn(pfn)) {
+ 		mem_type = PAGE_S2_DEVICE;
+ 		flags |= KVM_S2PTE_FLAG_IS_IOMAP;
+@@ -1864,6 +1906,9 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
+ 			gpa_t gpa = mem->guest_phys_addr +
+ 				    (vm_start - mem->userspace_addr);
+ 			phys_addr_t pa;
++			pgprot_t prot;
++			pte_t *pte;
++			spinlock_t *ptl;
+ 
+ 			pa = (phys_addr_t)vma->vm_pgoff << PAGE_SHIFT;
+ 			pa += vm_start - vma->vm_start;
+@@ -1873,10 +1918,13 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
+ 				ret = -EINVAL;
+ 				goto out;
+ 			}
++			pte = get_locked_pte(current->mm, mem->userspace_addr, &ptl);
++			prot = stage1_to_stage2_pgprot(__pgprot(pte_val(*pte)));
++			pte_unmap_unlock(pte, ptl);
+ 
+ 			ret = kvm_phys_addr_ioremap(kvm, gpa, pa,
+ 						    vm_end - vm_start,
+-						    writable, PAGE_S2_DEVICE);
++						    writable, prot);
+ 			if (ret)
+ 				break;
+ 		}
+-- 
+1.7.1
+

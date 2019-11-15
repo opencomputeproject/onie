@@ -1,0 +1,118 @@
+diff --git a/miscutils/sys_eeprom_sysfs_file.c b/miscutils/sys_eeprom_sysfs_file.c
+index 68f33c9..feb5c00 100644
+--- a/miscutils/sys_eeprom_sysfs_file.c
++++ b/miscutils/sys_eeprom_sysfs_file.c
+@@ -6,7 +6,7 @@
+ /*
+  * read_sys_eeprom - read the hwinfo from MTD EEPROM
+  */
+-int read_sys_eeprom(void *eeprom_data, int offset, int len)
++static int _read_sys_eeprom(char *path, void *eeprom_data, int offset, int len)
+ {
+ 	int rc;
+ 	int ret = 0;
+@@ -15,29 +15,29 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ 
+ 	c = eeprom_data;
+ 
+-	fd = open(SYS_EEPROM_SYSFS_FILE_PATH, O_RDONLY);
++	fd = open(path, O_RDONLY);
+ 	if (fd < 0) {
+ 		fprintf (stderr, "Can't open %s: %s\n",
+-			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++			path, strerror (errno));
+ 		return -1;
+ 	}
+ 
+ 	if (lseek (fd, offset + SYS_EEPROM_OFFSET, SEEK_SET) == -1) {
+ 		fprintf (stderr, "Seek error on %s: %s\n",
+-			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++			path, strerror (errno));
+ 		return -1;
+ 	}
+ 
+ 	rc = read (fd, c, len);
+ 	if (rc != len) {
+ 		fprintf (stderr, "Read error on %s: %s\n",
+-			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++			path, strerror (errno));
+ 		return -1;
+ 	}
+ 
+ 	if (close (fd)) {
+ 		fprintf (stderr, "I/O error on %s: %s\n",
+-			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++			path, strerror (errno));
+ 		return -1;
+ 	}
+ 	return ret;
+@@ -46,7 +46,7 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ /*
+  * write_sys_eeprom - write the hwinfo to MTD EEPROM
+  */
+-int write_sys_eeprom(void *eeprom_data, int len)
++static int _write_sys_eeprom(char *path, void *eeprom_data, int len)
+ {
+ 	int rc;
+ 	int ret = 0;
+@@ -55,31 +55,55 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 
+ 	c = eeprom_data;
+ 
+-	fd = open(SYS_EEPROM_SYSFS_FILE_PATH, O_RDWR);
++	fd = open(path, O_RDWR);
+ 	if (fd < 0) {
+ 		fprintf (stderr, "Can't open %s: %s\n",
+-			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++			path, strerror (errno));
+ 		return -1;
+ 	}
+ 
+ 	if (lseek (fd, SYS_EEPROM_OFFSET, SEEK_SET) == -1) {
+ 		fprintf (stderr, "Seek error on %s: %s\n",
+-			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++			path, strerror (errno));
+ 		return -1;
+ 	}
+ 
+ 	rc = write (fd, c, len);
+ 	if (rc != len) {
+ 		fprintf (stderr, "Write error on %s: %s\n",
+-			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++			path, strerror (errno));
+ 		return -1;
+ 	}
+ 
+ 	if (close (fd)) {
+ 		fprintf (stderr, "I/O error on %s: %s\n",
+-			SYS_EEPROM_SYSFS_FILE_PATH, strerror (errno));
++			path, strerror (errno));
+ 		return -1;
+ 	}
+ 
+ 	return ret;
+ }
++
++#define SYS_EEPROM_SYSFS_FILE_PATH_BACKUP "/sys/bus/i2c/devices/16-0050/eeprom"
++
++int read_sys_eeprom(void *eeprom_data, int offset, int len)
++{
++	int ret = 0;
++	ret = _read_sys_eeprom(SYS_EEPROM_SYSFS_FILE_PATH,
++			eeprom_data, offset, len);
++	if (ret != 0) {
++		ret = _read_sys_eeprom(SYS_EEPROM_SYSFS_FILE_PATH_BACKUP,
++				eeprom_data, offset, len);
++	}
++	return ret;
++}
++
++int write_sys_eeprom(void *eeprom_data, int len)
++{
++	int ret = 0;
++	ret |= _write_sys_eeprom(SYS_EEPROM_SYSFS_FILE_PATH,
++			eeprom_data, len);
++	ret |= _write_sys_eeprom(SYS_EEPROM_SYSFS_FILE_PATH_BACKUP,
++			eeprom_data, len);
++	return ret;
++}

@@ -1,0 +1,222 @@
+From 40beebe4b2f3c429d44ef4a49190195c8d2c70c5 Mon Sep 17 00:00:00 2001
+From: Razvan Stefanescu <razvan.stefanescu@nxp.com>
+Date: Wed, 28 Mar 2018 13:36:03 +0300
+Subject: [PATCH 236/448] staging: fsl-dpaa2/ethsw: Fix tag control information value overwrite
+
+The tag control information (TCI) part of the VLAN header contains several
+fields, including PCP (priority code point) and PVID (port VLAN id).
+
+Current implementation uses function ethsw_port_set_tci() to set the PVID
+value and mistakenly overwrites the rest of the TCI fields with 0,
+including PCP which by default has a value of 7.
+
+Fix this by adding support to retrieve TCI set in hardware. Read existing
+value and only updated the PVID fields, leaving others unchanged.
+
+Signed-off-by: Razvan Stefanescu <razvan.stefanescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethsw/dpsw-cmd.h |   13 ++++++++
+ drivers/staging/fsl-dpaa2/ethsw/dpsw.c     |   42 ++++++++++++++++++++++++++++
+ drivers/staging/fsl-dpaa2/ethsw/dpsw.h     |    6 ++++
+ drivers/staging/fsl-dpaa2/ethsw/ethsw.c    |   37 ++++++++++++------------
+ 4 files changed, 79 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethsw/dpsw-cmd.h b/drivers/staging/fsl-dpaa2/ethsw/dpsw-cmd.h
+index 06b7112..25834b2 100644
+--- a/drivers/staging/fsl-dpaa2/ethsw/dpsw-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethsw/dpsw-cmd.h
+@@ -74,6 +74,8 @@
+ #define DPSW_CMDID_IF_SET_FLOODING          DPSW_CMD_ID(0x047)
+ #define DPSW_CMDID_IF_SET_BROADCAST         DPSW_CMD_ID(0x048)
+ 
++#define DPSW_CMDID_IF_GET_TCI               DPSW_CMD_ID(0x04A)
++
+ #define DPSW_CMDID_IF_SET_LINK_CFG          DPSW_CMD_ID(0x04C)
+ 
+ #define DPSW_CMDID_VLAN_ADD                 DPSW_CMD_ID(0x060)
+@@ -231,6 +233,17 @@ struct dpsw_cmd_if_set_tci {
+ 	__le16 conf;
+ };
+ 
++struct dpsw_cmd_if_get_tci {
++	__le16 if_id;
++};
++
++struct dpsw_rsp_if_get_tci {
++	__le16 pad;
++	__le16 vlan_id;
++	u8 dei;
++	u8 pcp;
++};
++
+ #define DPSW_STATE_SHIFT	0
+ #define DPSW_STATE_SIZE		4
+ 
+diff --git a/drivers/staging/fsl-dpaa2/ethsw/dpsw.c b/drivers/staging/fsl-dpaa2/ethsw/dpsw.c
+index f1a1fac..22e4394 100644
+--- a/drivers/staging/fsl-dpaa2/ethsw/dpsw.c
++++ b/drivers/staging/fsl-dpaa2/ethsw/dpsw.c
+@@ -553,6 +553,48 @@ int dpsw_if_set_tci(struct fsl_mc_io *mc_io,
+ }
+ 
+ /**
++ * dpsw_if_get_tci() - Get default VLAN Tag Control Information (TCI)
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:	Token of DPSW object
++ * @if_id:	Interface Identifier
++ * @cfg:	Tag Control Information Configuration
++ *
++ * Return:	Completion status. '0' on Success; Error code otherwise.
++ */
++int dpsw_if_get_tci(struct fsl_mc_io *mc_io,
++		    u32 cmd_flags,
++		    u16 token,
++		    u16 if_id,
++		    struct dpsw_tci_cfg *cfg)
++{
++	struct fsl_mc_command cmd = { 0 };
++	struct dpsw_cmd_if_get_tci *cmd_params;
++	struct dpsw_rsp_if_get_tci *rsp_params;
++	int err;
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(DPSW_CMDID_IF_GET_TCI,
++					  cmd_flags,
++					  token);
++	cmd_params = (struct dpsw_cmd_if_get_tci *)cmd.params;
++	cmd_params->if_id = cpu_to_le16(if_id);
++
++	/* send command to mc*/
++	err = mc_send_command(mc_io, &cmd);
++	if (err)
++		return err;
++
++	/* retrieve response parameters */
++	rsp_params = (struct dpsw_rsp_if_get_tci *)cmd.params;
++	cfg->pcp = rsp_params->pcp;
++	cfg->dei = rsp_params->dei;
++	cfg->vlan_id = le16_to_cpu(rsp_params->vlan_id);
++
++	return 0;
++}
++
++/**
+  * dpsw_if_set_stp() - Function sets Spanning Tree Protocol (STP) state.
+  * @mc_io:	Pointer to MC portal's I/O object
+  * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
+diff --git a/drivers/staging/fsl-dpaa2/ethsw/dpsw.h b/drivers/staging/fsl-dpaa2/ethsw/dpsw.h
+index 87369a5..b26215b 100644
+--- a/drivers/staging/fsl-dpaa2/ethsw/dpsw.h
++++ b/drivers/staging/fsl-dpaa2/ethsw/dpsw.h
+@@ -331,6 +331,12 @@ int dpsw_if_set_tci(struct fsl_mc_io *mc_io,
+ 		    u16 if_id,
+ 		    const struct dpsw_tci_cfg *cfg);
+ 
++int dpsw_if_get_tci(struct fsl_mc_io *mc_io,
++		    u32 cmd_flags,
++		    u16 token,
++		    u16 if_id,
++		    struct dpsw_tci_cfg *cfg);
++
+ /**
+  * enum dpsw_stp_state - Spanning Tree Protocol (STP) states
+  * @DPSW_STP_STATE_BLOCKING: Blocking state
+diff --git a/drivers/staging/fsl-dpaa2/ethsw/ethsw.c b/drivers/staging/fsl-dpaa2/ethsw/ethsw.c
+index f9dc627..506feae 100644
+--- a/drivers/staging/fsl-dpaa2/ethsw/ethsw.c
++++ b/drivers/staging/fsl-dpaa2/ethsw/ethsw.c
+@@ -74,14 +74,23 @@ static int ethsw_add_vlan(struct ethsw_core *ethsw, u16 vid)
+ 	return 0;
+ }
+ 
+-static int ethsw_port_set_tci(struct ethsw_port_priv *port_priv,
+-			      struct dpsw_tci_cfg *tci_cfg)
++static int ethsw_port_set_pvid(struct ethsw_port_priv *port_priv, u16 pvid)
+ {
+ 	struct ethsw_core *ethsw = port_priv->ethsw_data;
+ 	struct net_device *netdev = port_priv->netdev;
++	struct dpsw_tci_cfg tci_cfg = { 0 };
+ 	bool is_oper;
+ 	int err, ret;
+ 
++	err = dpsw_if_get_tci(ethsw->mc_io, 0, ethsw->dpsw_handle,
++			      port_priv->idx, &tci_cfg);
++	if (err) {
++		netdev_err(netdev, "dpsw_if_get_tci err %d\n", err);
++		return err;
++	}
++
++	tci_cfg.vlan_id = pvid;
++
+ 	/* Interface needs to be down to change PVID */
+ 	is_oper = netif_oper_up(netdev);
+ 	if (is_oper) {
+@@ -95,17 +104,16 @@ static int ethsw_port_set_tci(struct ethsw_port_priv *port_priv,
+ 	}
+ 
+ 	err = dpsw_if_set_tci(ethsw->mc_io, 0, ethsw->dpsw_handle,
+-			      port_priv->idx, tci_cfg);
++			      port_priv->idx, &tci_cfg);
+ 	if (err) {
+ 		netdev_err(netdev, "dpsw_if_set_tci err %d\n", err);
+ 		goto set_tci_error;
+ 	}
+ 
+ 	/* Delete previous PVID info and mark the new one */
+-	if (port_priv->pvid)
+-		port_priv->vlans[port_priv->pvid] &= ~ETHSW_VLAN_PVID;
+-	port_priv->vlans[tci_cfg->vlan_id] |= ETHSW_VLAN_PVID;
+-	port_priv->pvid = tci_cfg->vlan_id;
++	port_priv->vlans[port_priv->pvid] &= ~ETHSW_VLAN_PVID;
++	port_priv->vlans[pvid] |= ETHSW_VLAN_PVID;
++	port_priv->pvid = pvid;
+ 
+ set_tci_error:
+ 	if (is_oper) {
+@@ -157,13 +165,7 @@ static int ethsw_port_add_vlan(struct ethsw_port_priv *port_priv,
+ 	}
+ 
+ 	if (flags & BRIDGE_VLAN_INFO_PVID) {
+-		struct dpsw_tci_cfg tci_cfg = {
+-			.pcp = 0,
+-			.dei = 0,
+-			.vlan_id = vid,
+-		};
+-
+-		err = ethsw_port_set_tci(port_priv, &tci_cfg);
++		err = ethsw_port_set_pvid(port_priv, vid);
+ 		if (err)
+ 			return err;
+ 	}
+@@ -799,9 +801,7 @@ static int ethsw_port_del_vlan(struct ethsw_port_priv *port_priv, u16 vid)
+ 		return -ENOENT;
+ 
+ 	if (port_priv->vlans[vid] & ETHSW_VLAN_PVID) {
+-		struct dpsw_tci_cfg tci_cfg = { 0 };
+-
+-		err = ethsw_port_set_tci(port_priv, &tci_cfg);
++		err = ethsw_port_set_pvid(port_priv, 0);
+ 		if (err)
+ 			return err;
+ 	}
+@@ -1188,7 +1188,6 @@ static int ethsw_port_init(struct ethsw_port_priv *port_priv, u16 port)
+ 	const char def_mcast[ETH_ALEN] = {0x01, 0x00, 0x5e, 0x00, 0x00, 0x01};
+ 	struct net_device *netdev = port_priv->netdev;
+ 	struct ethsw_core *ethsw = port_priv->ethsw_data;
+-	struct dpsw_tci_cfg tci_cfg = {0};
+ 	struct dpsw_vlan_if_cfg vcfg;
+ 	int err;
+ 
+@@ -1206,7 +1205,7 @@ static int ethsw_port_init(struct ethsw_port_priv *port_priv, u16 port)
+ 		return err;
+ 	}
+ 
+-	err = ethsw_port_set_tci(port_priv, &tci_cfg);
++	err = ethsw_port_set_pvid(port_priv, 0);
+ 	if (err)
+ 		return err;
+ 
+-- 
+1.7.1
+

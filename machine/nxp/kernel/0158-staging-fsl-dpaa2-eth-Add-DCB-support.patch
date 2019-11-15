@@ -1,0 +1,138 @@
+From a2d8e1e6d8b5f7fedbf3cd7ad0c1fd1108a3bd8d Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Mon, 7 Aug 2017 09:53:18 +0000
+Subject: [PATCH 158/448] staging: fsl-dpaa2/eth: Add DCB support
+
+Add initial DCB ops in the DPAA2 Ethernet driver. Currently they are
+dummy calls.
+
+Tested integration with userspace lldpad:
+- lldpad daemon running
+- bring interface up
+- lldptool -L -i niX adminStatus=rxtx
+- lldptool -T -i niX -V PFC -c enabled={prio comma separated list}
+- lldptool -t -i niX -V PFC -c enabled
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   74 ++++++++++++++++++++++++
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |    4 +
+ 2 files changed, 78 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index f14ad65..a2b447e 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2851,6 +2851,76 @@ static void dpaa2_eth_sysfs_remove(struct device *dev)
+ 		device_remove_file(dev, &dpaa2_eth_attrs[i]);
+ }
+ 
++#ifdef CONFIG_FSL_DPAA2_ETH_DCB
++static int dpaa2_eth_dcbnl_ieee_getpfc(struct net_device *net_dev,
++				       struct ieee_pfc *pfc)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++
++	pfc->pfc_cap = dpaa2_eth_tc_count(priv);
++	pfc->pfc_en = priv->pfc.pfc_en;
++	pfc->mbc = priv->pfc.mbc;
++	pfc->delay = priv->pfc.delay;
++
++	return 0;
++}
++
++static int dpaa2_eth_dcbnl_ieee_setpfc(struct net_device *net_dev,
++				       struct ieee_pfc *pfc)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++
++	memcpy(&priv->pfc, pfc, sizeof(priv->pfc));
++
++	return 0;
++}
++
++static u8 dpaa2_eth_dcbnl_getdcbx(struct net_device *net_dev)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++
++	return priv->dcbx_mode;
++}
++
++static u8 dpaa2_eth_dcbnl_setdcbx(struct net_device *net_dev, u8 mode)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++
++	priv->dcbx_mode = mode;
++	return 0;
++}
++
++static u8 dpaa2_eth_dcbnl_getcap(struct net_device *net_dev, int capid, u8 *cap)
++{
++	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
++
++	switch (capid) {
++	case DCB_CAP_ATTR_PFC:
++		*cap = true;
++		break;
++	case DCB_CAP_ATTR_PFC_TCS:
++		*cap = 1 << dpaa2_eth_tc_count(priv);
++		break;
++	case DCB_CAP_ATTR_DCBX:
++		*cap = priv->dcbx_mode;
++		break;
++	default:
++		*cap = false;
++		break;
++	}
++
++	return 0;
++}
++
++const struct dcbnl_rtnl_ops dpaa2_eth_dcbnl_ops = {
++	.ieee_getpfc	= dpaa2_eth_dcbnl_ieee_getpfc,
++	.ieee_setpfc	= dpaa2_eth_dcbnl_ieee_setpfc,
++	.getdcbx	= dpaa2_eth_dcbnl_getdcbx,
++	.setdcbx	= dpaa2_eth_dcbnl_setdcbx,
++	.getcap		= dpaa2_eth_dcbnl_getcap,
++};
++#endif
++
+ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
+ {
+ 	struct device *dev;
+@@ -2939,6 +3009,10 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
+ 		goto err_alloc_rings;
+ 
+ 	net_dev->ethtool_ops = &dpaa2_ethtool_ops;
++#ifdef CONFIG_FSL_DPAA2_ETH_DCB
++	net_dev->dcbnl_ops = &dpaa2_eth_dcbnl_ops;
++	priv->dcbx_mode = DCB_CAP_DCBX_HOST | DCB_CAP_DCBX_VER_IEEE;
++#endif
+ 
+ 	err = setup_irqs(dpni_dev);
+ 	if (err) {
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index f974717..cf6d462 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -33,6 +33,7 @@
+ #ifndef __DPAA2_ETH_H
+ #define __DPAA2_ETH_H
+ 
++#include <linux/dcbnl.h>
+ #include <linux/netdevice.h>
+ #include <linux/if_vlan.h>
+ 
+@@ -422,6 +423,9 @@ struct dpaa2_eth_priv {
+ 	/* array of classification rules */
+ 	struct dpaa2_eth_cls_rule *cls_rule;
+ 	struct dpni_tx_shaping_cfg shaping_cfg;
++
++	u8 dcbx_mode;
++	struct ieee_pfc pfc;
+ };
+ 
+ #define dpaa2_eth_hash_enabled(priv)	\
+-- 
+1.7.1
+

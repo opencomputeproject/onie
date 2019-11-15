@@ -1,0 +1,47 @@
+From adc86a463d4915cf85b4056d2762d3a107a6c6be Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Fri, 23 Mar 2018 08:44:05 -0500
+Subject: [PATCH 255/448] staging: fsl-dpaa2/eth: Use generic irq handler
+
+For the link state interrupt, we used a dummy non-threaded
+irq handler, which had the same implementation as the generic
+irq_default_primary_handler() function.
+
+Give up on using our own irq handler and let the kernel use
+the generic one instead.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |    8 +-------
+ 1 files changed, 1 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 61992ff..c5fd1ca 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -2919,11 +2919,6 @@ static int poll_link_state(void *arg)
+ 	return 0;
+ }
+ 
+-static irqreturn_t dpni_irq0_handler(int irq_num, void *arg)
+-{
+-	return IRQ_WAKE_THREAD;
+-}
+-
+ static irqreturn_t dpni_irq0_handler_thread(int irq_num, void *arg)
+ {
+ 	u32 status = ~0;
+@@ -2958,8 +2953,7 @@ static int setup_irqs(struct fsl_mc_device *ls_dev)
+ 
+ 	irq = ls_dev->irqs[0];
+ 	err = devm_request_threaded_irq(&ls_dev->dev, irq->msi_desc->irq,
+-					dpni_irq0_handler,
+-					dpni_irq0_handler_thread,
++					NULL, dpni_irq0_handler_thread,
+ 					IRQF_NO_SUSPEND | IRQF_ONESHOT,
+ 					dev_name(&ls_dev->dev), &ls_dev->dev);
+ 	if (err < 0) {
+-- 
+1.7.1
+

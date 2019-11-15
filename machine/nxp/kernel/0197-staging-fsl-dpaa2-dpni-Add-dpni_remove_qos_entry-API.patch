@@ -1,0 +1,67 @@
+From a80ea912393f3d05dd9497fdd53e3e37a15ad1ee Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Tue, 5 Dec 2017 17:57:55 +0200
+Subject: [PATCH 197/448] staging: fsl-dpaa2/dpni: Add dpni_remove_qos_entry API
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h |    1 +
+ drivers/staging/fsl-dpaa2/ethernet/dpni.c     |   30 +++++++++++++++++++++++++
+ 2 files changed, 31 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+index a9ee25f..3a56569 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni-cmd.h
+@@ -91,6 +91,7 @@
+ 
+ #define DPNI_CMDID_SET_QOS_TBL				DPNI_CMD(0x240)
+ #define DPNI_CMDID_ADD_QOS_ENT				DPNI_CMD(0x241)
++#define DPNI_CMDID_REMOVE_QOS_ENT			DPNI_CMD(0x242)
+ #define DPNI_CMDID_ADD_FS_ENT				DPNI_CMD(0x244)
+ #define DPNI_CMDID_REMOVE_FS_ENT			DPNI_CMD(0x245)
+ #define DPNI_CMDID_CLR_FS_ENT				DPNI_CMD(0x246)
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.c b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+index fdc01db..5aa172a 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.c
+@@ -1455,6 +1455,36 @@ int dpni_add_qos_entry(struct fsl_mc_io *mc_io,
+ }
+ 
+ /**
++ * dpni_remove_qos_entry() - Remove QoS mapping entry
++ * @mc_io:	Pointer to MC portal's I/O object
++ * @cmd_flags:	Command flags; one or more of 'MC_CMD_FLAG_'
++ * @token:	Token of DPNI object
++ * @cfg:	QoS rule to remove
++ *
++ * Return:	'0' on Success; Error code otherwise.
++ */
++int dpni_remove_qos_entry(struct fsl_mc_io *mc_io,
++			  u32 cmd_flags,
++			  u16 token,
++			  const struct dpni_rule_cfg *cfg)
++{
++	struct dpni_cmd_remove_qos_entry *cmd_params;
++	struct mc_command cmd = { 0 };
++
++	/* prepare command */
++	cmd.header = mc_encode_cmd_header(DPNI_CMDID_REMOVE_QOS_ENT,
++					  cmd_flags,
++					  token);
++	cmd_params = (struct dpni_cmd_remove_qos_entry *)cmd.params;
++	cmd_params->key_size = cfg->key_size;
++	cmd_params->key_iova = cpu_to_le64(cfg->key_iova);
++	cmd_params->mask_iova = cpu_to_le64(cfg->mask_iova);
++
++	/* send command to mc*/
++	return mc_send_command(mc_io, &cmd);
++}
++
++/**
+  * dpni_add_fs_entry() - Add Flow Steering entry for a specific traffic class
+  *			(to select a flow ID)
+  * @mc_io:	Pointer to MC portal's I/O object
+-- 
+1.7.1
+

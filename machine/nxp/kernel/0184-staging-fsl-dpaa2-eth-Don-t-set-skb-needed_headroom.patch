@@ -1,0 +1,129 @@
+From f6437b442d5af85d2cb9233c3f13dc2a177d7311 Mon Sep 17 00:00:00 2001
+From: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+Date: Thu, 9 Nov 2017 12:14:44 +0200
+Subject: [PATCH 184/448] staging: fsl-dpaa2/eth: Don't set skb->needed_headroom
+
+The latest changes in the buffer layout code try to make sure
+we don't realloc skbs forwarded between two DPAA2 Eth interfaces.
+The code works, but it's somewhat frail as it relies on network
+stack internal formulas.
+
+Instead, it's safer and easier to just not request any guarantee
+from the stack. We already double check in the driver the required
+headroom size of egress frames and realloc the skb if needed, so
+we don't need to add any extra code.
+
+On forwarding between two of our own interfaces, there is no
+functional change; for traffic generated on the core, skb realloc
+operations are moved from the stack to our driver, with no visible
+impact on performance.
+
+Signed-off-by: Ioana Radulescu <ruxandra.radulescu@nxp.com>
+---
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c |   28 +++--------------------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h |   14 ++++++-----
+ 2 files changed, 12 insertions(+), 30 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index ce3f606..aea80f0 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -675,8 +675,7 @@ static int build_single_fd(struct dpaa2_eth_priv *priv,
+ 	struct dpaa2_eth_swa *swa;
+ 	dma_addr_t addr;
+ 
+-	buffer_start = PTR_ALIGN(skb->data - priv->tx_data_offset -
+-				 DPAA2_ETH_TX_BUF_ALIGN,
++	buffer_start = PTR_ALIGN(skb->data - dpaa2_eth_tx_headroom(priv),
+ 				 DPAA2_ETH_TX_BUF_ALIGN);
+ 
+ 	/* PTA from egress side is passed as is to the confirmation side so
+@@ -827,10 +826,10 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
+ 	percpu_stats = this_cpu_ptr(priv->percpu_stats);
+ 	percpu_extras = this_cpu_ptr(priv->percpu_extras);
+ 
+-	if (unlikely(skb_headroom(skb) < dpaa2_eth_needed_headroom(priv))) {
++	if (skb_headroom(skb) < dpaa2_eth_tx_headroom(priv)) {
+ 		struct sk_buff *ns;
+ 
+-		ns = skb_realloc_headroom(skb, dpaa2_eth_needed_headroom(priv));
++		ns = skb_realloc_headroom(skb, dpaa2_eth_tx_headroom(priv));
+ 		if (unlikely(!ns)) {
+ 			percpu_stats->tx_dropped++;
+ 			goto err_alloc_headroom;
+@@ -2202,7 +2201,7 @@ static int set_buffer_layout(struct dpaa2_eth_priv *priv)
+ 	/* rx buffer */
+ 	buf_layout.pass_parser_result = true;
+ 	buf_layout.data_align = priv->rx_buf_align;
+-	buf_layout.data_head_room = dpaa2_eth_rx_head_room(priv);
++	buf_layout.data_head_room = dpaa2_eth_rx_headroom(priv);
+ 	buf_layout.options = DPNI_BUF_LAYOUT_OPT_PARSER_RESULT |
+ 			     DPNI_BUF_LAYOUT_OPT_FRAME_STATUS |
+ 			     DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE |
+@@ -2846,7 +2845,6 @@ static int netdev_init(struct net_device *net_dev)
+ {
+ 	struct device *dev = net_dev->dev.parent;
+ 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
+-	u16 rx_headroom, req_headroom;
+ 	u8 bcast_addr[ETH_ALEN];
+ 	u8 num_queues;
+ 	int err;
+@@ -2865,24 +2863,6 @@ static int netdev_init(struct net_device *net_dev)
+ 		return err;
+ 	}
+ 
+-	/* Reserve enough space to align buffer as per hardware requirement;
+-	 * NOTE: priv->tx_data_offset MUST be initialized at this point.
+-	 */
+-	net_dev->needed_headroom = dpaa2_eth_needed_headroom(priv);
+-
+-	/* If headroom guaranteed by hardware in the Rx frame buffer is
+-	 * smaller than the Tx headroom required by the stack, issue a
+-	 * one time warning. This will most likely mean skbs forwarded to
+-	 * another DPAA2 network interface will get reallocated, with a
+-	 * significant performance impact.
+-	 */
+-	req_headroom = LL_RESERVED_SPACE(net_dev) - ETH_HLEN;
+-	rx_headroom = ALIGN(DPAA2_ETH_RX_HWA_SIZE + DPAA2_ETH_SWA_SIZE +
+-			    dpaa2_eth_rx_head_room(priv), priv->rx_buf_align);
+-	if (req_headroom > rx_headroom)
+-		dev_info_once(dev, "Required headroom (%d) greater than available (%d)\n",
+-			      req_headroom, rx_headroom);
+-
+ 	/* Set MTU limits */
+ 	net_dev->min_mtu = 68;
+ 	net_dev->max_mtu = DPAA2_ETH_MAX_MTU;
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index 95d8ca9..e33d173 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -466,18 +466,20 @@ static inline unsigned int dpaa2_eth_buf_raw_size(struct dpaa2_eth_priv *priv)
+ 	return DPAA2_ETH_SKB_SIZE + priv->rx_buf_align;
+ }
+ 
+-static inline
+-unsigned int dpaa2_eth_needed_headroom(struct dpaa2_eth_priv *priv)
++/* Total headroom needed by the hardware in Tx frame buffers */
++static inline unsigned int dpaa2_eth_tx_headroom(struct dpaa2_eth_priv *priv)
+ {
+-	return priv->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN - HH_DATA_MOD;
++	return priv->tx_data_offset + DPAA2_ETH_TX_BUF_ALIGN;
+ }
+ 
+ /* Extra headroom space requested to hardware, in order to make sure there's
+- * no realloc'ing in forwarding scenarios
++ * no realloc'ing in forwarding scenarios. We need to reserve enough space
++ * such that we can accommodate the required Tx offset and alignment in the
++ * ingress frame buffer
+  */
+-static inline unsigned int dpaa2_eth_rx_head_room(struct dpaa2_eth_priv *priv)
++static inline unsigned int dpaa2_eth_rx_headroom(struct dpaa2_eth_priv *priv)
+ {
+-	return dpaa2_eth_needed_headroom(priv) -
++	return dpaa2_eth_tx_headroom(priv) -
+ 	       (DPAA2_ETH_SWA_SIZE + DPAA2_ETH_RX_HWA_SIZE);
+ }
+ 
+-- 
+1.7.1
+

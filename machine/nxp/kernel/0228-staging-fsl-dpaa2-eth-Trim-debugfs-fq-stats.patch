@@ -1,0 +1,42 @@
+From c5945be1028de91bde62eecad0261f39779853c3 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Fri, 15 Dec 2017 14:21:17 +0200
+Subject: [PATCH 228/448] staging: fsl-dpaa2/eth: Trim debugfs fq stats
+
+With the addition of multiple traffic classes support, the number of
+frame queues grew significantly, to a point where a screen is not enough
+to fit all statistics. Since a small number of queues are actually used
+in each scenario, update debugfs to display numbers only for those.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ .../staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+index c916c02..599b813 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+@@ -110,7 +110,7 @@ static int dpaa2_dbg_fqs_show(struct seq_file *file, void *offset)
+ 	u32 fcnt, bcnt;
+ 	int i, err;
+ 
+-	seq_printf(file, "FQ stats for %s:\n", priv->net_dev->name);
++	seq_printf(file, "non-zero FQ stats for %s:\n", priv->net_dev->name);
+ 	seq_printf(file, "%s%16s%16s%16s%16s%16s%16s\n",
+ 		   "VFQID", "CPU", "Traffic Class", "Type", "Frames",
+ 		   "Pending frames", "Congestion");
+@@ -121,6 +121,10 @@ static int dpaa2_dbg_fqs_show(struct seq_file *file, void *offset)
+ 		if (err)
+ 			fcnt = 0;
+ 
++		/* A lot of queues, no use displaying zero traffic ones */
++		if (!fq->stats.frames && !fcnt)
++			continue;
++
+ 		seq_printf(file, "%5d%16d%16d%16s%16llu%16u%16llu\n",
+ 			   fq->fqid,
+ 			   fq->target_cpu,
+-- 
+1.7.1
+

@@ -1,0 +1,193 @@
+From 315608681d233067b3767977682416867d23d2b3 Mon Sep 17 00:00:00 2001
+From: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+Date: Mon, 7 Aug 2017 08:21:05 +0000
+Subject: [PATCH 155/448] staging: fsl-dpaa2/eth: Handle multiple traffic classes
+
+The driver only handles frame workqueues associated with traffic class
+0. Add support for multiple traffic classes for the same flowid, based
+on the tc field in the fq struct, and the num_tcs parameter in the dpni
+atttributes. Create a separate fq for each tc x flowid. Display the
+information in debugfs.
+
+Signed-off-by: Bogdan Purcareata <bogdan.purcareata@nxp.com>
+---
+ .../staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c |    9 +++--
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c     |   31 +++++++++++++-------
+ drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h     |   15 +++++++--
+ drivers/staging/fsl-dpaa2/ethernet/dpni.h          |    8 +++++
+ 4 files changed, 44 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+index 445c5d1..66a25de 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth-debugfs.c
+@@ -110,9 +110,9 @@ static int dpaa2_dbg_fqs_show(struct seq_file *file, void *offset)
+ 	int i, err;
+ 
+ 	seq_printf(file, "FQ stats for %s:\n", priv->net_dev->name);
+-	seq_printf(file, "%s%16s%16s%16s%16s%16s\n",
+-		   "VFQID", "CPU", "Type", "Frames", "Pending frames",
+-		   "Congestion");
++	seq_printf(file, "%s%16s%16s%16s%16s%16s%16s\n",
++		   "VFQID", "CPU", "Traffic Class", "Type", "Frames",
++		   "Pending frames", "Congestion");
+ 
+ 	for (i = 0; i <  priv->num_fqs; i++) {
+ 		fq = &priv->fq[i];
+@@ -120,9 +120,10 @@ static int dpaa2_dbg_fqs_show(struct seq_file *file, void *offset)
+ 		if (err)
+ 			fcnt = 0;
+ 
+-		seq_printf(file, "%5d%16d%16s%16llu%16u%16llu\n",
++		seq_printf(file, "%5d%16d%16d%16s%16llu%16u%16llu\n",
+ 			   fq->fqid,
+ 			   fq->target_cpu,
++			   fq->tc,
+ 			   fq_type_to_str(fq),
+ 			   fq->stats.frames,
+ 			   fcnt,
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+index 2c72f14..30c5e24 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.c
+@@ -1821,7 +1821,7 @@ static void set_fq_affinity(struct dpaa2_eth_priv *priv)
+ 
+ static void setup_fqs(struct dpaa2_eth_priv *priv)
+ {
+-	int i;
++	int i, j;
+ 
+ 	/* We have one TxConf FQ per Tx flow.
+ 	 * The number of Tx and Rx queues is the same.
+@@ -1833,11 +1833,13 @@ static void setup_fqs(struct dpaa2_eth_priv *priv)
+ 		priv->fq[priv->num_fqs++].flowid = (u16)i;
+ 	}
+ 
+-	for (i = 0; i < dpaa2_eth_queue_count(priv); i++) {
+-		priv->fq[priv->num_fqs].type = DPAA2_RX_FQ;
+-		priv->fq[priv->num_fqs].consume = dpaa2_eth_rx;
+-		priv->fq[priv->num_fqs++].flowid = (u16)i;
+-	}
++	for (i = 0; i < dpaa2_eth_tc_count(priv); i++)
++		for (j = 0; j < dpaa2_eth_queue_count(priv); j++) {
++			priv->fq[priv->num_fqs].type = DPAA2_RX_FQ;
++			priv->fq[priv->num_fqs].consume = dpaa2_eth_rx;
++			priv->fq[priv->num_fqs].tc = (u8)i;
++			priv->fq[priv->num_fqs++].flowid = (u16)j;
++		}
+ 
+ #ifdef CONFIG_FSL_DPAA2_ETH_USE_ERR_QUEUE
+ 	/* We have exactly one Rx error queue per DPNI */
+@@ -2133,7 +2135,7 @@ static int setup_rx_flow(struct dpaa2_eth_priv *priv,
+ 	int err;
+ 
+ 	err = dpni_get_queue(priv->mc_io, 0, priv->mc_token,
+-			     DPNI_QUEUE_RX, 0, fq->flowid, &queue, &qid);
++			     DPNI_QUEUE_RX, fq->tc, fq->flowid, &queue, &qid);
+ 	if (err) {
+ 		dev_err(dev, "dpni_get_queue(RX) failed\n");
+ 		return err;
+@@ -2146,7 +2148,7 @@ static int setup_rx_flow(struct dpaa2_eth_priv *priv,
+ 	queue.destination.priority = 1;
+ 	queue.user_context = (u64)fq;
+ 	err = dpni_set_queue(priv->mc_io, 0, priv->mc_token,
+-			     DPNI_QUEUE_RX, 0, fq->flowid,
++			     DPNI_QUEUE_RX, fq->tc, fq->flowid,
+ 			     DPNI_QUEUE_OPT_USER_CTX | DPNI_QUEUE_OPT_DEST,
+ 			     &queue);
+ 	if (err) {
+@@ -2176,8 +2178,9 @@ int set_rx_taildrop(struct dpaa2_eth_priv *priv, bool enable)
+ 		if (priv->fq[i].type != DPAA2_RX_FQ)
+ 			continue;
+ 		err = dpni_set_taildrop(priv->mc_io, 0, priv->mc_token,
+-					DPNI_CP_QUEUE, DPNI_QUEUE_RX, 0,
+-					priv->fq[i].flowid, &td);
++					DPNI_CP_QUEUE, DPNI_QUEUE_RX,
++					priv->fq[i].tc, priv->fq[i].flowid,
++					&td);
+ 		if (err)
+ 			return err;
+ 	}
+@@ -2378,7 +2381,13 @@ static int dpaa2_eth_set_hash(struct dpaa2_eth_priv *priv)
+ 		dist_cfg.dist_mode = DPNI_DIST_MODE_HASH;
+ 	}
+ 
+-	err = dpni_set_rx_tc_dist(priv->mc_io, 0, priv->mc_token, 0, &dist_cfg);
++	for (i = 0; i < dpaa2_eth_tc_count(priv); i++) {
++		err = dpni_set_rx_tc_dist(priv->mc_io, 0, priv->mc_token, i,
++					  &dist_cfg);
++		if (err)
++			break;
++	}
++
+ 	dma_unmap_single(dev, dist_cfg.key_cfg_iova,
+ 			 DPAA2_CLASSIFIER_DMA_SIZE, DMA_TO_DEVICE);
+ 	if (err)
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+index e514b5c..f974717 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpaa2-eth.h
+@@ -308,16 +308,17 @@ struct dpaa2_eth_ch_stats {
+ 	__u64 pull_err;
+ };
+ 
++#define DPAA2_ETH_MAX_DPCONS		NR_CPUS
++#define DPAA2_ETH_MAX_TCS		8
++
+ /* Maximum number of queues associated with a DPNI */
+-#define DPAA2_ETH_MAX_RX_QUEUES		16
+-#define DPAA2_ETH_MAX_TX_QUEUES		NR_CPUS
++#define DPAA2_ETH_MAX_RX_QUEUES		(DPNI_MAX_DIST_SIZE * DPAA2_ETH_MAX_TCS)
++#define DPAA2_ETH_MAX_TX_QUEUES		DPNI_MAX_SENDERS
+ #define DPAA2_ETH_MAX_RX_ERR_QUEUES	1
+ #define DPAA2_ETH_MAX_QUEUES		(DPAA2_ETH_MAX_RX_QUEUES + \
+ 					DPAA2_ETH_MAX_TX_QUEUES + \
+ 					DPAA2_ETH_MAX_RX_ERR_QUEUES)
+ 
+-#define DPAA2_ETH_MAX_DPCONS		NR_CPUS
+-
+ enum dpaa2_eth_fq_type {
+ 	DPAA2_RX_FQ = 0,
+ 	DPAA2_TX_CONF_FQ,
+@@ -330,6 +331,7 @@ struct dpaa2_eth_fq {
+ 	u32 fqid;
+ 	u32 tx_qdbin;
+ 	u16 flowid;
++	u8 tc;
+ 	int target_cpu;
+ 	struct dpaa2_eth_channel *channel;
+ 	enum dpaa2_eth_fq_type type;
+@@ -445,6 +447,11 @@ static inline int dpaa2_eth_queue_count(struct dpaa2_eth_priv *priv)
+ 	return priv->dpni_attrs.num_queues;
+ }
+ 
++static inline int dpaa2_eth_tc_count(struct dpaa2_eth_priv *priv)
++{
++	return priv->dpni_attrs.num_tcs;
++}
++
+ void check_cls_support(struct dpaa2_eth_priv *priv);
+ 
+ int set_rx_taildrop(struct dpaa2_eth_priv *priv, bool enable);
+diff --git a/drivers/staging/fsl-dpaa2/ethernet/dpni.h b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+index bd67903..701d39b 100644
+--- a/drivers/staging/fsl-dpaa2/ethernet/dpni.h
++++ b/drivers/staging/fsl-dpaa2/ethernet/dpni.h
+@@ -52,6 +52,14 @@
+  * Maximum number of buffer pools per DPNI
+  */
+ #define DPNI_MAX_DPBP				8
++/**
++ * Maximum number of senders
++ */
++#define DPNI_MAX_SENDERS			8
++/**
++ * Maximum distribution size
++ */
++#define DPNI_MAX_DIST_SIZE			8
+ 
+ /**
+  * All traffic classes considered; see dpni_set_queue()
+-- 
+1.7.1
+

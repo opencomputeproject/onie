@@ -1,0 +1,55 @@
+From f469635bfd804ffd380be89e48857b624f4b36b6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Horia=20Geant=C4=83?= <horia.geanta@nxp.com>
+Date: Tue, 10 Jul 2018 18:11:38 +0300
+Subject: [PATCH 414/448] Revert "crypto: testmgr - don't DMA map IV from stack in test_skcipher()"
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This reverts commit 7613d0bd05aec152f69e69b08060e0842fbeeaf6.
+
+Revert this workaround, now that CAAM drivers make sure the buffer
+used for IV is DMAable:
+115957bb3e59 ("crypto: caam - fix IV DMA mapping and updating")
+3a488aaec6f3 ("crypto: caam/qi - fix IV DMA mapping and updating")
+41ce01259c38 ("crypto: caam/qi - fix IV DMA mapping (for tls)")
+2ff8cd41cb1c ("crypto: caam/qi2 - fix IV DMA mapping and updating")
+
+Signed-off-by: Horia Geantă <horia.geanta@nxp.com>
+---
+ crypto/testmgr.c |    7 +------
+ 1 files changed, 1 insertions(+), 6 deletions(-)
+
+diff --git a/crypto/testmgr.c b/crypto/testmgr.c
+index e920ee0..73d91fb 100644
+--- a/crypto/testmgr.c
++++ b/crypto/testmgr.c
+@@ -1320,16 +1320,12 @@ static int __test_skcipher(struct crypto_skcipher *tfm, int enc,
+ 	const char *e, *d;
+ 	struct tcrypt_result result;
+ 	void *data;
+-	char *iv;
++	char iv[MAX_IVLEN];
+ 	char *xbuf[XBUFSIZE];
+ 	char *xoutbuf[XBUFSIZE];
+ 	int ret = -ENOMEM;
+ 	unsigned int ivsize = crypto_skcipher_ivsize(tfm);
+ 
+-	iv = kmalloc(MAX_IVLEN, GFP_KERNEL);
+-	if (!iv)
+-		return ret;
+-
+ 	if (testmgr_alloc_buf(xbuf))
+ 		goto out_nobuf;
+ 
+@@ -1570,7 +1566,6 @@ static int __test_skcipher(struct crypto_skcipher *tfm, int enc,
+ 		testmgr_free_buf(xoutbuf);
+ out_nooutbuf:
+ 	testmgr_free_buf(xbuf);
+-	kfree(iv);
+ out_nobuf:
+ 	return ret;
+ }
+-- 
+1.7.1
+

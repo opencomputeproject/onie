@@ -1,0 +1,61 @@
+From 60afe560857f5ebb01afb1f086cdc93bcd602f98 Mon Sep 17 00:00:00 2001
+From: Xiaoliang Yang <xiaoliang.yang_1@nxp.com>
+Date: Tue, 15 May 2018 18:27:45 +0800
+Subject: [PATCH 057/107] watchdog: Kconfig: add config to disable wdog reset
+
+Add Kconfig support for CONFIG_WATCHDOG_RESET_DISABLE, use this config
+to disable watchdog reset in imx_watchdog driver, so that the watchdog
+will not be fed in u-boot.
+
+Signed-off-by: Xiaoliang Yang <xiaoliang.yang_1@nxp.com>
+---
+ arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2 |    3 +++
+ drivers/watchdog/Kconfig                           |    5 +++++
+ drivers/watchdog/imx_watchdog.c                    |    2 ++
+ 3 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2 b/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2
+index 87b91eb..c43a99b 100644
+--- a/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2
++++ b/arch/arm/cpu/armv8/fsl-layerscape/doc/README.lsch2
+@@ -18,3 +18,6 @@ Use following config to set watchdog timeout, if this config is not defined,
+ the default timeout value is 128s which is the maximum. Set 10 seconds for
+ example:
+     #define CONFIG_WATCHDOG_TIMEOUT_MSECS 10000
++Use following config to disable reset watchdog, so that the watchdog will
++not be fed in u-boot:
++    #define CONFIG_WATCHDOG_RESET_DISABLE
+diff --git a/drivers/watchdog/Kconfig b/drivers/watchdog/Kconfig
+index fc46b67..2594f5b 100644
+--- a/drivers/watchdog/Kconfig
++++ b/drivers/watchdog/Kconfig
+@@ -78,4 +78,9 @@ config WDT_ORION
+ 	   Select this to enable Orion watchdog timer, which can be found on some
+ 	   Marvell Armada chips.
+ 
++config WATCHDOG_RESET_DISABLE
++	bool "Disable reset watchdog"
++	help
++	   Disable reset watchdog, which can let WATCHDOG_RESET invalid.
++
+ endmenu
+diff --git a/drivers/watchdog/imx_watchdog.c b/drivers/watchdog/imx_watchdog.c
+index 3ad4e55..6691ee9 100644
+--- a/drivers/watchdog/imx_watchdog.c
++++ b/drivers/watchdog/imx_watchdog.c
+@@ -20,10 +20,12 @@
+ #ifdef CONFIG_IMX_WATCHDOG
+ void hw_watchdog_reset(void)
+ {
++#ifndef CONFIG_WATCHDOG_RESET_DISABLE
+ 	struct watchdog_regs *wdog = (struct watchdog_regs *)WDOG1_BASE_ADDR;
+ 
+ 	writew(0x5555, &wdog->wsr);
+ 	writew(0xaaaa, &wdog->wsr);
++#endif /* CONFIG_WATCHDOG_RESET_DISABLE*/
+ }
+ 
+ void hw_watchdog_init(void)
+-- 
+1.7.1
+

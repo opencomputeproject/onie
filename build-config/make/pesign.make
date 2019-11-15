@@ -78,7 +78,7 @@ $(PESIGN_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(PESIGN_BUILD_STAMP)
 	$(Q) $(MAKE) -C $(PESIGN_DIR) install DESTDIR=$(PESIGN_INSTALL_DIR)
 	$(Q) touch $@
 
-USERSPACE_CLEAN += pesign-clean
+USER_CLEAN += pesign-clean
 pesign-clean:
 	$(Q) rm -rf $(PESIGN_BUILD_DIR)
 	$(Q) rm -f $(PESIGN_STAMP)
