@@ -384,8 +384,10 @@ local_fs_run()
     mp=$(mktemp -d)
     while [ ${#onie_local_parts} -gt 0 ] ; do
         p=${onie_local_parts%%,*}
+        mountopts=""
+        beginswith "ubi:" $p && mountopts="-t ubifs"
         onie_local_parts=${onie_local_parts#*,}
-        mount $p $mp > /dev/null 2>&1 && {
+        mount $mountopts $p $mp > /dev/null 2>&1 && {
             for f in $(get_default_filenames) ; do
                 if [ -r $mp/$f ] ; then
                     # copy to /tmp, which is a tmpfs -- installer needs to
@@ -397,7 +399,7 @@ local_fs_run()
                         return 1
                     }
                     sync ; sync
-                    umount $p
+                    umount $mp
                     ln -sf $tmp_copy $onie_installer || {
                         log_failure_msg "local_fs_run():$p Unable to make symlink to $onie_installer in tmpfs"
                         rm -f $tmp_copy
@@ -406,7 +408,7 @@ local_fs_run()
                     run_installer "file:/$p/$f" && return 0
                     rm -f $tmp_copy $onie_installer
                     # re-mount it to look for more files
-                    mount $p $mp > /dev/null 2>&1
+                    mount $mountopts $p $mp > /dev/null 2>&1
                 fi
             done
             umount $p
