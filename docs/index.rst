@@ -24,6 +24,10 @@ Open Network Install Environment
 News
 ====
 
+November 24, 2019
+  Released version `2019.11
+  <https://ocp-all.groups.io/g/OCP-ONIE/topic/onie_release_2019_11_is_now/61879934?p=,,,20,0,0,0::recentpostdate%2Fsticky,,,20,2,0,61879934>`_
+
 August 15, 2019
   Released version `2019.08
   <https://ocp-all.groups.io/g/OCP-ONIE/topic/onie_quarterly_release/32900032?p=,,,20,0,0,0::recentpostdate%2Fsticky,,,20,2,0,32900032>`_  
