@@ -86,16 +86,17 @@ Yes.  See the :ref:`x86_virtual_machine` section for details.
 Can I set up a local cache of downloaded packages ONIE needs?
 =============================================================
 
-ONIE downloads various packages as it builds.  Can we avoid
-downloading things all time?  Yes we can.
+ONIE downloads various packages as it builds, so if your network
+connection is neither fast nor reliable, storing these files locally
+makes sense. Depending on your build configuration, there are two
+equally viable options.
 
-To avoid downloading the packages from across the ocean you can set up
-a local cache of the packages.  You would need an HTTP server on your
-local development network.
+Option 1: local HTTP server
+---------------------------
 
 To set up the local cache, read the documentation in the
-``onie/build-config/local.make.example`` file.  Rename this file to
-``local.make`` and the build system will use it.
+ ``onie/build-config/local.make.example`` file.  Rename this file to
+ ``local.make`` and the build system will use it.
 
 In that file, set the ``ONIE_MIRROR`` variable to point at your local
 HTTP server.
@@ -122,7 +123,37 @@ Copy all those files to your HTTP server and set the
 Now you should be all set. 
 
 The build system will still download packages, but it will be from a 
-local HTTP server and will be much faster. 
+local HTTP server and will be much faster.
+
+Option 2: local system cache
+----------------------------
+
+This would be more appropriate for a single development system
+that may have limited network access. Here, the mirrored 
+packages are stored under ``/var/cache/onie/download``, and the
+``fetch-package`` script will copy packages from there to 
+your local ``onie/build/download`` directory if network
+download fails.
+ 
+Since the package versions in ``/var/cache/onie/download`` are
+exactly the same as what you would find under your local
+``onie/build/download`` directory after a successful build,
+setting this up is as simple as just reversing the process. Use
+the root account to create ``/var/cache/onie/download`` and
+then copy the contents of ``onie/build/download`` to it.
+
+If you are building ONIE for multiple platforms, you
+might consider pre-emptively downloading the entire mirror of
+all possible packages from: `<http://mirror.opencompute.org/onie>`_.
+This will almost certainly store some packages you won't use,
+but the mirror will only have to be updated once.
+
+As of October 31, 2019, this repository is about two gigabytes in size,
+and can be downloaded with wget as follows:
+
+wget --recursive --cut-dirs=2 --no-host-directories \
+ --no-parent --reject "index.html" http://mirror.opencompute.org/onie/
+
 
 Can I copy an ONIE source tree work space to another location?
 ==============================================================

@@ -7,6 +7,9 @@
 ************
 Project News
 ************
+November 24, 2019
+  Released version `2019.11
+  <https://ocp-all.groups.io/g/OCP-ONIE/topic/onie_release_2019_11_is_now/61879934?p=,,,20,0,0,0::recentpostdate%2Fsticky,,,20,2,0,61879934>`_
 
 August 15, 2019
   Released version `2019.08
@@ -15,6 +18,7 @@ August 15, 2019
 May 7, 2019
   Released version `2019.05
   <https://ocp-all.groups.io/g/OCP-ONIE/message/45>`_
+  OpenCompute project status update `<https://www.youtube.com/watch?v=lk4sb30z0zk&t=5s>`_
 
 February 12, 2019
   Released version `2019.02
