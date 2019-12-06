@@ -1,0 +1,205 @@
+#!/bin/sh
+
+#  Copyright (C) 2013,2014,2018 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+##
+## Discover and run installer program.
+##
+## This assumes the shell is ash/dash.
+##
+
+. /lib/onie/functions
+
+import_cmdline
+
+# Allow an architecture to skip some partitions during discovery.  The
+# default skip list is empty.
+skip_parts_arch()
+{
+    return 0
+}
+[ -r /lib/onie/discover-arch ] && . /lib/onie/discover-arch
+
+syslog_tag=discover
+onie_disco=
+
+# Files used to pass parameters to exec_installer
+onie_neigh_file="${ONIE_RUN_DIR}/onie_neigh_file.txt"
+onie_parms_file="${ONIE_RUN_DIR}/onie_parms_file.txt"
+
+# Neighbor table service discovery
+neigh_discovery()
+{
+
+    intf_list=$(net_intf)
+    ping_cnt=3
+
+    for i in $intf_list ; do
+        # Wait for interface link-local addr to leave tentative state
+        cnt=300
+        while [ $cnt -gt 0 ] ; do
+            foo=$(ip addr show dev $i | grep tentative)
+            [ "$?" -ne 0 ] && break
+            cnt=$(( $cnt - 1 ))
+            sleep 0.1
+        done
+        ping6 -I $i -c $ping_cnt ff02::1 > /dev/null 2>&1
+        ping -I $i -w 2 -c $ping_cnt -q 255.255.255.255 > /dev/null 2>&1
+    done
+
+    # Allow neighbor table to populate -- better way?
+    sleep 4
+    rm -f $onie_neigh_file
+    echo -n "onie_neighs@@" > $onie_neigh_file
+    # gather IPv4 neighbors
+    ip -4 neigh show | awk '{print $1}' | tr '\n' ',' >> $onie_neigh_file
+    # gather IPv6 neighbors
+    ip -6 neigh show | awk '{print "[" $1 "-" $3 "]"}' | tr '\n' ',' >> $onie_neigh_file
+    echo -n "##" >> $onie_neigh_file
+    log_debug_msg "onie_neighs: $(cat $onie_neigh_file)"
+}
+
+# Static service discovery
+sd_static()
+{
+    # If static URL passed to us by u-boot then use it
+    if [ -n "$onie_install_url" ] ; then
+        log_info_msg "Found static url: $onie_install_url"
+        onie_disco=$(add_parm "$onie_disco" onie_static_url $onie_install_url)
+        return 0
+    fi
+    return 1
+}
+
+# Check locally attached filesystems, skipping the ONIE partitions
+sd_localfs()
+{
+    sed_cmd=
+    # Possibly skip some partitions, specific to an architecture
+    for skip in $(skip_parts_arch) ; do
+        sed_cmd="$sed_cmd -e /$skip/d"
+    done
+    part_list=$(blkid | sed $sed_cmd -e 's/:.*$//')
+    mp=$(mktemp -d)
+    local_parts=
+    for p in $part_list ; do
+        mount $p $mp > /dev/null 2>&1 && {
+            for f in $(get_default_filenames) ; do
+                log_info_msg "Attempting file:/$p/$f ..."
+                if ! [ "$(ls $mp | grep $f)" = "" ]; then
+                    local_parts="${p},$local_parts"
+                    break
+                fi
+            done
+            umount $p > /dev/null 2>&1
+        }
+    done
+    rm -rf $mp
+    if [ -n "$local_parts" ] ; then
+        onie_disco=$(add_parm "$onie_disco" onie_local_parts $local_parts)
+        return 0
+    fi
+
+    return 1
+}
+
+# DHCPv6 service discovery
+sd_dhcp6()
+{
+    # TODO
+    # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
+    return 1
+}
+
+# DHCPv4 service discovery
+sd_dhcp4()
+{
+    intf_list=$(net_intf)
+    udhcp_args="$(udhcpc_args) -t 2 -T 2 -n"
+
+    udhcp_request_opts=
+    for o in 7 43 54 66 67 72 114 125 ; do
+        udhcp_request_opts="$udhcp_request_opts -O $o"
+    done
+
+    # Initate DHCP request on every interface in the list.  Stop after
+    # one works.
+
+    for i in $intf_list ; do
+        log_debug_msg "Trying DHCPv4 on interface: $i"
+        tmp=$(udhcpc $udhcp_args $udhcp_request_opts -i $i -s /lib/onie/udhcp4_sd) && break
+        tmp=
+    done
+
+    onie_disco="${onie_disco}${tmp##*ONIE_PARMS:}"
+    if [ -n "$onie_disco" ] ; then
+        return 0
+    fi
+
+    return 1
+}
+
+# mDNS / DNS-SD service discovery
+sd_mdns()
+{
+    # TODO
+    # log_info_msg "Trying mDNS/DNS-SD service discovery."
+    return 1
+}
+
+# Fall back service discovery
+sd_fallback()
+{
+    # TODO
+    # log_info_msg "Trying fall back service discovery."
+    return 1
+}
+
+# Discover the URL(s) to use for the installer
+service_discovery()
+{
+    # add/update $onie_disco
+    log_console_msg "Starting ONIE Service Discovery"
+    onie_disco=
+    sd_static  && return
+    sd_localfs
+    sd_dhcp6
+    sd_dhcp4
+    sd_mdns
+    sd_fallback
+}
+
+delay=20
+
+# Download and run installer entry point
+while true ; do
+    /etc/init.d/networking.sh discover
+    /etc/init.d/syslogd.sh discover
+    service_discovery
+    log_debug_msg "onie_disco: $onie_disco"
+    neigh_discovery
+    
+    rm -f /var/run/install.rc
+    cat $onie_neigh_file > $onie_parms_file
+    echo "$onie_disco" >>  $onie_parms_file
+    sed -e 's/@@/ = /g' -e 's/##/\n/g' $onie_parms_file | logger -t discover -p ${syslog_onie}.info
+    exec_installer $onie_parms_file 2>&1 | tee $tee_log_file | logger -t onie-exec -p ${syslog_onie}.info
+    [ -r /var/run/install.rc ] && [ "$(cat /var/run/install.rc)" = "0" ] && exit 0
+    # pause to avoid DoSing someone
+    log_info_msg "Sleeping for $delay seconds "
+    cnt=0
+    while [ $cnt -lt $delay ] ; do
+        if [ "$(( $cnt % 5 ))" = "0" ] ; then
+            _log_msg "$(( ($delay - $cnt) / 5 )).."
+        fi
+        cnt=$(( $cnt + 1 ))
+        sleep 1
+    done
+done
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
