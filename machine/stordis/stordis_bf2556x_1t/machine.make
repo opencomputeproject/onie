@@ -17,12 +17,12 @@ endif
 # The VENDOR_VERSION string is appended to the overall ONIE version
 # string.  HW vendors can use this to appended their own versioning
 # information to the base ONIE version string.
-VENDOR_VERSION = stordis_bf2556x_1t_v1.10
+VENDOR_VERSION = stordis_bf2556x_1t_v1.20
 
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
 # Open Compute Project IANA number
-VENDOR_ID = 2254
+VENDOR_ID = 70567
 
 # Enable the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = yes
