@@ -384,31 +384,32 @@ local_fs_run()
     mp=$(mktemp -d)
     while [ ${#onie_local_parts} -gt 0 ] ; do
         p=${onie_local_parts%%,*}
-        mountopts=""
-        beginswith "ubi:" $p && mountopts="-t ubifs"
         onie_local_parts=${onie_local_parts#*,}
-        mount $mountopts $p $mp > /dev/null 2>&1 && {
-            for f in $(get_default_filenames) ; do
-                if [ -r $mp/$f ] ; then
+        mount $p $mp > /dev/null 2>&1 && {
+            for f in $(get_default_filenames) ; do	  
+                f1=$(ls -Art $mp | grep $f | tail -n 1)
+                if ! [ "$f1" = "" ] && [ -r $mp/$f1 ] ; then
                     # copy to /tmp, which is a tmpfs -- installer needs to
                     # run with everything unmounted.
                     tmp_copy=$(mktemp -p /tmp)
-                    cp $mp/$f $tmp_copy || {
-                        log_failure_msg "local_fs_run():$p Unable to copy $mp/$f to tmpfs"
+                    log_info_msg "Prepare install $mp/$f1 ..."
+                    cp $mp/$f1 $tmp_copy || {
+                        log_failure_msg "local_fs_run():$p Unable to copy $mp/$f1 to tmpfs"
                         rm -f $tmp_copy
                         return 1
                     }
                     sync ; sync
-                    umount $mp
+                    umount $p
                     ln -sf $tmp_copy $onie_installer || {
                         log_failure_msg "local_fs_run():$p Unable to make symlink to $onie_installer in tmpfs"
                         rm -f $tmp_copy
                         return 1
                     }
-                    run_installer "file:/$p/$f" && return 0
+                    f2=$(ls -Art $p | grep $f | tail -n 1)
+                    run_installer "file:/$p/$f2" && return 0
                     rm -f $tmp_copy $onie_installer
                     # re-mount it to look for more files
-                    mount $mountopts $p $mp > /dev/null 2>&1
+                    mount $p $mp > /dev/null 2>&1
                 fi
             done
             umount $p
