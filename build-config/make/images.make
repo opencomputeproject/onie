@@ -268,6 +268,10 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 		cp -a $(MACHINEDIR)/rootconf/sysroot-rcK/* $(SYSROOTDIR)/etc/rc0.d ; \
 		cp -a $(MACHINEDIR)/rootconf/sysroot-rcK/* $(SYSROOTDIR)/etc/rc6.d ; \
 	     fi
+	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-etc ] ; then \
+		cp -ar $(MACHINEDIR)/rootconf/sysroot-etc/* $(SYSROOTDIR)/etc/ ; \
+		cp -ar $(MACHINEDIR)/rootconf/sysroot-etc/* $(SYSROOTDIR)/etc/ ; \
+	     fi
 	$(Q) cd $(SYSROOTDIR) && ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_ID=onie" >> $(LSB_RELEASE_FILE)

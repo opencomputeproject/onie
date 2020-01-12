@@ -1,0 +1,187 @@
+From 8bb48dd424ba8671397b0863c92eb1eec4346a06 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Fri, 25 Oct 2019 15:34:56 +0800
+Subject: [PATCH] Enable/Disable write protect of EEPROM
+
+---
+ miscutils/sys_eeprom_i2c.c | 132 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 132 insertions(+)
+
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index ee182fa..7d9ddd8 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -13,11 +13,86 @@
+     #define EEPROM_TYPE EEPROM_TYPE_UNKNOWN
+ #endif
+ 
++#define WRITE_PROTECT_DISABLE     0
++#define WRITE_PROTECT_ENABLE      1
++
+ struct mux_info {
+ 	u_int8_t addr;
+ 	u_int8_t channel;
+ };
+ 
++struct mb_info {
++	u_int32_t motherboard_id;
++	struct mux_info mux;
++	u_int8_t eeprom_addr;
++	u_int8_t eeprom_offset;
++	u_int8_t wp_enable;
++	u_int8_t wp_disable;
++};
++
++struct mb_info mb_i2c_info[] = {
++	{
++		.motherboard_id = 0x1, /* Mercedes */
++		.mux = {.addr = 0x73, .channel = 2},
++		.eeprom_addr = 0x76,
++		.eeprom_offset = 0x02,
++		.wp_disable = 0x6A,
++		.wp_enable = 0x6E
++	},
++	{
++		.motherboard_id = 0x2, /* Mercedes2 */
++		.mux = {.addr = 0x73, .channel = 1},
++		.eeprom_addr = 0x75,
++		.eeprom_offset = 0x12,
++		.wp_disable = 0x0A,
++		.wp_enable = 0x0E
++	},
++	{
++		.motherboard_id = 0x4, /* Bugatti */
++		.mux = {.addr = 0x73, .channel = 0},
++		.eeprom_addr = 0x74,
++		.eeprom_offset = 0x07,
++		.wp_disable = 0x19,
++		.wp_enable = 0x1D
++	},
++	{
++		.motherboard_id = 0x5, /* Jaguar */
++		.mux = {.addr = 0x73, .channel = 1},
++		.eeprom_addr = 0x75,
++		.eeprom_offset = 0x12,
++		.wp_disable = 0x00,
++		.wp_enable = 0x04
++	},
++	{
++		.motherboard_id = 0x7, /* Bugatti2 */
++		.mux = {.addr = 0x73, .channel = 0},
++		.eeprom_addr = 0x74,
++		.eeprom_offset = 0x07,
++		.wp_disable = 0x19,
++		.wp_enable = 0x1D
++	},
++	{
++		.motherboard_id = 0xff,
++		.mux = {.addr = 0xff, .channel = 0xff},
++		.eeprom_addr = 0xff,
++		.eeprom_offset = 0xff,
++		.wp_disable = 0xff,
++		.wp_enable = 0xff
++	}
++};
++
++static struct mb_info *find_i2c_info(void)
++{
++	struct mb_info *m=NULL;
++	u_int32_t board_id = mb_id_get();
++
++	for(m=mb_i2c_info; m->motherboard_id != 0xff; m++) {
++		if( board_id == m->motherboard_id )
++			break;
++	}
++	return m;
++}
++
+ static int i2c_mux_channel_select(u_int8_t chip_addr, int channel)
+ {
+ 	struct eeprom ch;
+@@ -50,6 +125,21 @@ static int i2c_mux_channel_release(u_int8_t chip_addr)
+ 	return i2c_mux_channel_select(chip_addr, -1);
+ }
+ 
++static int i2c_cpld_write_protect_init(struct mb_info *info)
++{
++	struct mb_info *m = NULL;
++
++	memset(info, 0, sizeof(struct mb_info));
++	m = find_i2c_info();
++
++	if(m != NULL) {
++		memcpy(info, m, sizeof(struct mb_info));
++		return 0;
++	}
++
++	return -1;
++}
++
+ static int i2c_mux_eeprom_init(struct mux_info *info)
+ {
+ 	int mux=0;
+@@ -68,6 +158,42 @@ static int i2c_mux_eeprom_init(struct mux_info *info)
+ 	return 0;
+ }
+ 
++static int sys_eeprom_write_protect_set(int enable)
++{
++	struct eeprom wp;
++	struct mb_info info;
++	u_int8_t mcr;
++
++	if (i2c_cpld_write_protect_init(&info)) {
++		printf("ERROR: Cannot open I2C device\n");
++		return -1;
++	}
++
++	// Change CPLD channel
++	i2c_mux_channel_select(info.mux.addr, info.mux.channel);
++
++	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, info.eeprom_addr,
++			EEPROM_TYPE_8BIT_ADDR, &wp)) {
++		printf("ERROR: Cannot open I2C device\n");
++		return -1;
++	}
++
++	mcr = eeprom_read_byte(&wp, info.eeprom_offset);
++	if (enable == WRITE_PROTECT_DISABLE) {
++		mcr &= info.wp_disable;
++		eeprom_write_byte(&wp, info.eeprom_offset, mcr);
++	} else {
++		mcr |= info.wp_enable;
++		eeprom_write_byte(&wp, info.eeprom_offset, mcr);
++	}
++	eeprom_close(&wp);
++
++	//Reset CPLD channel
++	i2c_mux_channel_release(info.mux.addr);
++
++	return 0;
++}
++
+ /*
+  * read_sys_eeprom - read the hwinfo from i2c EEPROM
+  */
+@@ -112,6 +238,10 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 	u_int16_t  addr = SYS_EEPROM_OFFSET;
+ 	struct mux_info info;
+ 
++	if (sys_eeprom_write_protect_set(WRITE_PROTECT_DISABLE)) {
++		return -1;
++	}
++
+ 	i2c_mux_eeprom_init(&info);
+ 	i2c_mux_channel_select(info.addr, info.channel);
+ 
+@@ -129,5 +259,7 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 
+ 	i2c_mux_channel_release(info.addr);
+ 
++	sys_eeprom_write_protect_set(WRITE_PROTECT_ENABLE);
++
+ 	return ret;
+ }
+-- 
+2.17.1
+

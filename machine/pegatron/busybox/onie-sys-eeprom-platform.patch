@@ -1,0 +1,179 @@
+From d8aa4172d6ed2fd83313849bf52edc1f1e52de2a Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Fri, 20 Apr 2018 16:21:30 +0800
+Subject: [PATCH] Add support for onie-syseeprom.
+
+---
+ miscutils/sys_eeprom_i2c.c | 136 +++++++++++++++++++++++++++----------
+ 1 file changed, 102 insertions(+), 34 deletions(-)
+
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index ed3235b..1691cdb 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -2,6 +2,7 @@
+ #include "onie_tlvinfo.h"
+ #include "sys_eeprom.h"
+ #include "24cXX.h"
++#include "i2c-dev.h"
+ 
+ #if SYS_EEPROM_I2C_MEM_ADDR_BITS == 8
+     #define EEPROM_TYPE EEPROM_TYPE_8BIT_ADDR
+@@ -11,29 +12,90 @@
+     #define EEPROM_TYPE EEPROM_TYPE_UNKNOWN
+ #endif
+ 
++struct mux_info {
++	u_int8_t addr;
++	u_int8_t channel;
++};
++
++static int i2c_mux_channel_select(u_int8_t chip_addr, int channel)
++{
++	struct eeprom ch;
++	u_int8_t ch_addr=chip_addr, ch_offset=0x0, ch_data=0;
++
++	switch (channel) {
++	case 0:
++		ch_data=0x04;
++		break;
++	case 1:
++		ch_data=0x05;
++		break;
++	case 2:
++		ch_data=0x06;
++		break;
++	case 3:
++		ch_data=0x07;
++		break;
++	default:
++		ch_data=0x00;
++		break;
++	}
++
++	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, ch_addr,
++			EEPROM_TYPE_8BIT_ADDR, &ch)) {
++		printf("ERROR: Cannot open I2C device\n");
++		return -1;
++	}
++	eeprom_write_byte(&ch, ch_offset, ch_data);
++	eeprom_close(&ch);
++
++	return 0;
++}
++
++static int i2c_mux_channel_release(u_int8_t chip_addr)
++{
++	return i2c_mux_channel_select(chip_addr, -1);
++}
++
++static int i2c_mux_eeprom_init(struct mux_info *info)
++{
++	memset(info, 0, sizeof(struct mux_info));
++
++	info->addr = 0x72;
++	info->channel = 2;
++
++	return 0;
++}
++
+ /*
+  * read_sys_eeprom - read the hwinfo from i2c EEPROM
+  */
+ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ {
+-    int ret = 0;
+-    struct eeprom e;
+-    int i = 0;
+-    u_int8_t *c;
+-    int addr = SYS_EEPROM_OFFSET + offset;
+-
+-    c = eeprom_data;
+-    if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-		    EEPROM_TYPE, &e)) {
+-	printf("ERROR: Cannot open I2C device\n");
+-	return -1;
+-    }
+-    for (i = 0; i < len; i++) {
+-	*c = eeprom_read_byte(&e, addr);
+-	c++; addr++;
+-    }
+-    eeprom_close(&e);
+-    return ret;
++	int ret = 0;
++	struct eeprom e;
++	int i = 0;
++	u_int8_t *c;
++	int addr = SYS_EEPROM_OFFSET + offset;
++	struct mux_info info;
++
++	i2c_mux_eeprom_init(&info);
++	i2c_mux_channel_select(info.addr, info.channel);
++
++	c = eeprom_data;
++	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++			EEPROM_TYPE, &e)) {
++		printf("ERROR: Cannot open I2C device\n");
++		return -1;
++	}
++	for (i = 0; i < len; i++) {
++		*c = eeprom_read_byte(&e, addr);
++		c++; addr++;
++	}
++	eeprom_close(&e);
++
++	i2c_mux_channel_release(info.addr);
++
++	return ret;
+ }
+ 
+ /*
+@@ -41,23 +103,29 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+  */
+ int write_sys_eeprom(void *eeprom_data, int len)
+ {
+-    int ret = 0;
+-    struct eeprom e;
+-    int i = 0;
+-    u_int8_t *c;
+-    u_int16_t  addr = SYS_EEPROM_OFFSET;
+-
+-    c = eeprom_data;
+-    for (i = 0; i < len; i++) {
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++	int ret = 0;
++	struct eeprom e;
++	int i = 0;
++	u_int8_t *c;
++	u_int16_t  addr = SYS_EEPROM_OFFSET;
++	struct mux_info info;
++
++	i2c_mux_eeprom_init(&info);
++	i2c_mux_channel_select(info.addr, info.channel);
++
++	c = eeprom_data;
++	for (i = 0; i < len; i++) {
++		if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+ 			EEPROM_TYPE, &e)) {
+-	    printf("ERROR: Cannot open I2C device\n");
+-	    return -1;
++			printf("ERROR: Cannot open I2C device\n");
++			return -1;
++		}
++		eeprom_write_byte(&e, addr, *c);
++		eeprom_close(&e);
++		c++; addr++;
+ 	}
+-	eeprom_write_byte(&e, addr, *c);
+-	eeprom_close(&e);
+-	c++; addr++;
+-    }
+ 
+-    return ret;
++	i2c_mux_channel_release(info.addr);
++
++	return ret;
+ }
+-- 
+2.17.1
+

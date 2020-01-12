@@ -285,7 +285,7 @@ $(TREE_STAMP): $(PROJECT_STAMP)
 ONIE_RELEASE_TAG	?= $(shell [ -r ./conf/onie-release ] && cat ./conf/onie-release)
 ifeq ($(ONIE_RELEASE_TAG),)
   GIT_BRANCH = $(shell cd $(MACHINEDIR) && git rev-parse --abbrev-ref HEAD)
-  BUILD_DATE = $(shell date +%Y%m%d%H%M)
+  BUILD_DATE = $(shell date +%m%d%H%M)
   ifneq ($(RELEASE),)
     # Optional: If RELEASE specified on the command line insert the
     # string after the branch name.

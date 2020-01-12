@@ -20,7 +20,7 @@ Install docker.io on your host system.  This varies by distribution,
 but for a Debian based system this looks like:
 ```
 user@host:~$ sudo apt-get update
-user@host:~$ sudo apt-get install docker.io`
+user@host:~$ sudo apt-get install docker.io
 ```
 
 You may need to add your user id to the `docker` group.

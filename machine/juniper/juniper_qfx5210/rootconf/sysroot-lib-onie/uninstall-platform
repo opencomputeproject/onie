@@ -1,0 +1,55 @@
+# x86_64 specific uninstall routine
+
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2015,2016 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+uninstall_system()
+{
+    echo "Uninstall platform Inside uninstall_system"
+    # Clean up block device that contains ONIE
+    local blk_dev="$(onie_get_boot_disk | sed -e 's#/dev/##')"
+
+    [ -b "/dev/$blk_dev" ] || {
+        echo "Error: Unable to determine block device of ONIE install"
+        exit 1
+    }
+
+    if [ "$(onie_get_running_firmware)" = "uefi" ] ; then
+        uefi_clean_up
+        uefi_boot_onie_install
+    else
+        # Re-install ONIE GRUB in the MBR as the NOS we just removed
+        # probably installed there.
+        bios_boot_onie_install
+    fi
+
+    # Wipe out and delete all partitions, except for important ones,
+    # like GRUB, ONIE and possibly a DIAG.
+    erase_mass_storage $blk_dev
+
+    # There are primary and secondary bios in qfx5210 platform. There is a problem with bios which prevents the OS booting from the secondary bios when the OS was installed using primary bios.
+    # Secondary bios fails to detect the UEFI partition. Right now the workaround is to create "SONiC" entry and have a folder structure /EFI/BOOT/BOOT64x.efi.
+    # While uninstalling SONiC NOS, we need to remove this entry also. 
+
+    efibootmgr -v | grep 'BOOTX64.EFI)' | awk '{ print $1 }' | cut -b 5-8 | while read boot_num ; do
+        local boot_num_local=${boot_num}
+        printf "${log_pre} Removing SONiC entry\n"
+        efibootmgr --quiet -b $boot_num_local -B
+    done
+
+    mkdir /tmp/sda1
+    mount /dev/sda1 /tmp/sda1
+    cd /tmp/sda1/EFI
+    rm -rf BOOT > /dev/null 2>&1
+    cd /tmp
+    umount sda1
+
+    return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
