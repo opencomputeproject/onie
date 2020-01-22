@@ -27,7 +27,7 @@ VENDOR_ID = 31874
 I2CTOOLS_ENABLE = yes
 
 # Console parameters
-CONSOLE_DEV = 0
+CONSOLE_DEV = 1
 
 # Enable UEFI support
 UEFI_ENABLE = yes
