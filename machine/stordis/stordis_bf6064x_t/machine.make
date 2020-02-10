@@ -32,7 +32,7 @@ SKIP_ETHMGMT_MACS = yes
 
 # Set Linux kernel version
 LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 57
+LINUX_MINOR_VERSION	= 95
 
 # Specify uClibc version
 #UCLIBC_VERSION = 0.9.32.1
