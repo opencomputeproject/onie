@@ -105,6 +105,37 @@ sd_localfs()
     return 1
 }
 
+# Check locally attached ubi filesystems, skipping the ONIE partitions
+sd_localubifs()
+{
+    mp=$(mktemp -d)
+    local_parts=
+    for p in /sys/class/ubi/ubi?/ubi?_? ; do
+        [ -r $p/name ] || continue
+        ubiname=$(cat $p/name)
+        for skip in $(skip_parts_arch) ; do
+            [ "$skip" = "$ubiname" ] && continue 2
+        done
+        mount -t ubifs ubi:$ubiname $mp > /dev/null 2>&1 && {
+            for f in $(get_default_filenames) ; do
+                log_info_msg "Attempting file: ubi:$ubiname/$f ..."
+                if [ -r $mp/$f ] ; then
+                    local_parts="ubi:${ubiname},$local_parts"
+                    break
+                fi
+            done
+            umount $mp > /dev/null 2>&1
+        }
+    done
+    rm -rf $mp
+    if [ -n "$local_parts" ] ; then
+        onie_disco=$(add_parm "$onie_disco" onie_local_parts $local_parts)
+        return 0
+    fi
+
+    return 1
+}
+
 # DHCPv6 service discovery
 sd_dhcp6()
 {
@@ -165,6 +196,7 @@ service_discovery()
     onie_disco=
     sd_static  && return
     sd_localfs
+    sd_localubifs
     sd_dhcp6
     sd_dhcp4
     sd_mdns
