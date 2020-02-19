@@ -76,10 +76,11 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  2018.08 | Wed, Jul 18, 2018 | Wed, Aug 15, 2018
-  2018.11 | Wed, Oct 17, 2018 | Wed, Nov 14, 2018
-  2019.02 | Wed, Jan 16, 2019 | Wed, Feb 13, 2019
-  2019.05 | Wed, Apr 17, 2019 | Wed, May 15, 2019
+  2020.05 | Wed, Jul 15, 2020 | Wed, Aug 19, 2020
+  2020.08 | Wed, Oct 21, 2020 | Wed, Nov 18, 2020
+  2020.11 | Wed, Jan 20, 2020 | Wed, Feb 17, 2020
+  2021.02 | Wed, Apr 21, 2021 | Wed, May 19, 2021
+
 
 Making a Release
 ----------------

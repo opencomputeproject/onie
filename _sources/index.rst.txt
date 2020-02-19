@@ -1,4 +1,4 @@
-.. Copyright (C) 2019 Alex Doyle <adoyle@cumulusnetworks.com>
+.. Copyright (C) 2019,2020 Alex Doyle <adoyle@cumulusnetworks.com>
    Copyright (C) 2013,2014,2015,2016,2017,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
@@ -23,6 +23,10 @@ Open Network Install Environment
 
 News
 ====
+
+February 19, 2020
+  Released version `2020.02
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/97>`_
 
 November 24, 2019
   Released version `2019.11
