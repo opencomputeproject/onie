@@ -145,7 +145,7 @@ Path:
 More Information:
 [machine/quanta/quanta_bwde/INSTALL](https://github.com/opencomputeproject/onie/blob/master/machine/quanta/quanta_bwde/INSTALL).
 ## QuantaMesh 9000 Series:
-### - T9032-IX9(Rangeley CPU)
+### - T9032-IX9
 Path:
 [machine/quanta/quanta_bwde](https://github.com/opencomputeproject/onie/tree/master/machine/quanta/quanta_bwde).
 More Information:
