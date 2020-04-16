@@ -34,7 +34,7 @@ gen_machine_config()
     . $build_conf
     . $live_conf
     local onie_machine=${onie_machine:-$onie_build_machine}
-    local onie_platform="${onie_arch}-${onie_machine}-r${onie_machine_rev}"
+    local onie_platform=${onie_platform:-${onie_arch}-${onie_machine}-r${onie_machine_rev}}
     cat <<EOF >> $machine_conf
 onie_machine=$onie_machine
 onie_platform=$onie_platform
