@@ -1,0 +1,93 @@
+# Marvell a7020-comexp - update live machine configuration
+#
+# set 'onie_machine' & 'onie_platform' at run time by reading deviceID from Marvel PCI
+
+# global variables
+onie_mvl_machine_dflt=a7020-comexp
+
+mvl_pci=$(lspci | grep 11ab:8400 | awk '{print $1}')
+echo "1" > /sys/bus/pci/devices/0000\:$mvl_pci/enable
+
+bar0_space_address=$(cat /sys/bus/pci/devices/0000\:$mvl_pci/resource  | awk '{print $1}' | head -1)
+bar2_space_address=$(cat /sys/bus/pci/devices/0000\:$mvl_pci/resource  | awk '{print $1}' | head -3 | tail -1)
+bar2_mask=$(($bar2_space_address & 0xFFFFFFFF))
+
+
+# sysfs_pci_write function
+# Arguments:
+#	$1 - base_address
+#	$2 - offset
+#	$3 - data
+sysfs_pci_write()
+{
+    devmem_width=32
+    devmem $(($1 + $2)) $devmem_width $3
+}
+
+
+# Create mapping window
+# Arguments:
+#	$1 - deviceId base address
+configure_pci_window()
+{
+    sysfs_pci_write $bar0_space_address 0x1308 $bar2_mask
+    sleep 0.001s
+    sysfs_pci_write $bar0_space_address 0x130c $(($bar2_mask>>32))
+    sleep 0.001s
+    sysfs_pci_write $bar0_space_address 0x1310 $(($bar2_mask+0xFFFFF))
+    sleep 0.001s
+    sysfs_pci_write $bar0_space_address 0x1300 0x0
+    sleep 0.001s
+    sysfs_pci_write $bar0_space_address 0x1304 0x80000000
+    sleep 0.001s
+
+    # Configure the window map
+    sysfs_pci_write bar0_space_address 0x1314 $1
+    sleep 0.001s
+}
+
+set_onie_machine()
+{
+    deviceIdBaseAddr=0x1d000000
+    deviceIdReg=0x4c
+    configure_pci_window $deviceIdBaseAddr
+
+    deviceId=$(devmem $(($bar2_space_address + $deviceIdReg)))
+    deviceIdMask=$((deviceId & 0xFFFF0))
+
+    case "$deviceIdMask" in
+    # 0x84000
+    540672)
+        live_machine=db98cx8540_16cd
+        ;;
+    # 0x86000
+    548864)
+        live_machine=db98cx8580_32cd
+        ;;
+    #TBD - add support for RD board
+	#live_machine=rd98cx8580_128c
+    *)
+    esac
+}
+
+gen_live_config()
+{
+    onie_build_machine=$(cat /etc/machine-build.conf | grep 'onie_build_machine=' | cut -d "=" -f 2)
+    if [ "$onie_build_machine" = "$onie_mvl_machine_dflt" ]; then
+        set_onie_machine
+    fi
+
+    # Source build-time machine configuration
+    . /etc/machine-build.conf
+    if [ -n "$live_machine" ] ; then
+        cat<<EOF
+# Runtime ONIE Machine
+onie_machine=$live_machine
+onie_platform=${onie_arch}-marvell_${live_machine}-r${onie_machine_rev}
+EOF
+    fi
+}
+
+
+
+
