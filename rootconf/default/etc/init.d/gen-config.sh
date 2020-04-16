@@ -2,6 +2,8 @@
 
 #  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2017 david_yang <david_yang@accton.com>
+#  Copyright (C) 2020 Gil Tabibian <gilt@marvell.com>
+#  Copyright (C) 2020 Alex Doyle <adoyle@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -34,7 +36,8 @@ gen_machine_config()
     . $build_conf
     . $live_conf
     local onie_machine=${onie_machine:-$onie_build_machine}
-    local onie_platform="${onie_arch}-${onie_machine}-r${onie_machine_rev}"
+	# if onie_platform has not been set in the sourced files, set it now.
+    local onie_platform=${onie_platform:-${onie_arch}-${onie_machine}-r${onie_machine_rev}}
     cat <<EOF >> $machine_conf
 onie_machine=$onie_machine
 onie_platform=$onie_platform
