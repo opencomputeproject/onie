@@ -83,6 +83,17 @@ Yes.  See the :ref:`x86_virtual_machine` section for details.
 
 .. _cache_packages:
 
+What is the easiest way to set up a build environment?
+======================================================
+If you can install Docker, then try Dedicated User Environment:
+`<https://github.com/CumulusNetworks/DUE/blob/master/templates/onie/README.md>`_.
+DUE is an open source project that will create a user friendly
+ONIE build environment in a Docker container.
+
+These containers are also used to publish ONIE releases, so once
+you have created one, you will have exactly the same build environment
+that was used to create the last release.
+
 Can I set up a local cache of downloaded packages ONIE needs?
 =============================================================
 
@@ -148,12 +159,15 @@ all possible packages from: `<http://mirror.opencompute.org/onie>`_.
 This will almost certainly store some packages you won't use,
 but the mirror will only have to be updated once.
 
-As of October 31, 2019, this repository is about two gigabytes in size,
+As of April 30, 2020, this repository is about two gigabytes in size,
 and can be downloaded with wget as follows:
 
 wget --recursive --cut-dirs=2 --no-host-directories \
  --no-parent --reject "index.html" http://mirror.opencompute.org/onie/
 
+If you want to default to using the local cache, add the
+following argument to the command line when invoking make:
+``ONIE_USE_SYSTEM_DOWNLOAD_CACHE=TRUE``
 
 Can I copy an ONIE source tree work space to another location?
 ==============================================================
@@ -175,6 +189,30 @@ That will wipe out everything and you can proceed.
    The ``clean`` target will *not* clean up everything.  It will leave
    behind the toolchain and the downloaded packages.  The ``distclean``
    target wipes out everything.
+
+
+Are there issues with a particular platform?
+==========================================================
+As of release 2020.05, there is a json file at
+build-config/scripts/onie-build-targets.json that represents
+the current state of all platforms as of the last release.
+
+This is primarily used to generate platform specific build
+jobs in Jenkins automation, but if you have the JSON command
+line parser ``jq`` installed, the file can be easily queried to
+return formatted information.
+
+For example:
+ 
+ List platforms that have known issues.
+  ``jq '.[] | select(.Notes!="No notes.")' scripts/onie-build-targets.json``
+
+ Print the list of all platforms.
+  ``jq . scripts/onie-build-targets.json``
+
+ List platforms by vendor (Ex: accton ).
+  ``jq '.[] | select(.Vendor | . and contains("accton"))' scripts/onie-build-targets.json``
+	 
 
 Are there any interesting Makefile targets lurking around?
 ==========================================================
