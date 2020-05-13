@@ -24,7 +24,11 @@ onie_get_boot_dev()
 }
 
 find_sata_rule="ata.*sata"
-find_mmc_rule="usb.*3-1"
+if [ -d "/sys/firmware/efi/efivars" ] ; then
+    find_mmc_rule="usb.*2-1"
+else
+    find_mmc_rule="usb.*3-1"
+fi
 sata_device_list=$(lsblk.sh | grep -v ^NAME | grep -E "${find_sata_rule}")
 mmc_device_list=$(lsblk.sh | grep -v ^NAME | grep -E "${find_mmc_rule}")
 onie_sata_device=$(echo "${sata_device_list}" | awk '{print $1}')
@@ -148,8 +152,6 @@ gen_machine_config()
         echo "onie_boot_device=\"\"" >> $machine_conf
         echo "nos_install_device=\"\"" >> $machine_conf
     fi
-    
-
 }
 
 remove_dev_info()

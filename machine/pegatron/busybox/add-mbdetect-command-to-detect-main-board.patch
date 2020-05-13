@@ -1,4 +1,4 @@
-From f2a86752e1eb81eca529392e3df3cfcd80f6b822 Mon Sep 17 00:00:00 2001
+From 65ea292542c797233b393995b3f39f23873ac980 Mon Sep 17 00:00:00 2001
 From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
 Date: Wed, 23 Oct 2019 14:27:12 +0800
 Subject: [PATCH] Add 'mbdetect' command to detect main board.
@@ -6,12 +6,12 @@ Subject: [PATCH] Add 'mbdetect' command to detect main board.
 ---
  include/applets.src.h |   1 +
  include/gpio.h        |  13 +++
- include/i2c-dev.h     | 176 +++++++++++++++++++++++++++++++++++++
- include/mb_detect.h   |  40 +++++++++
+ include/i2c-dev.h     | 176 +++++++++++++++++++++++++++++++++++
+ include/mb_detect.h   |  41 +++++++++
  miscutils/Kbuild.src  |   2 +-
- miscutils/gpio.c      | 188 +++++++++++++++++++++++++++++++++++++++
- miscutils/mb_detect.c | 199 ++++++++++++++++++++++++++++++++++++++++++
- 7 files changed, 618 insertions(+), 1 deletion(-)
+ miscutils/gpio.c      | 188 ++++++++++++++++++++++++++++++++++++++
+ miscutils/mb_detect.c | 208 ++++++++++++++++++++++++++++++++++++++++++
+ 7 files changed, 628 insertions(+), 1 deletion(-)
  create mode 100644 include/gpio.h
  create mode 100644 include/mb_detect.h
  create mode 100644 miscutils/gpio.c
@@ -236,10 +236,10 @@ index 23f7c2c..a7a8609 100644
  #endif /* _LINUX_I2C_DEV_H */
 diff --git a/include/mb_detect.h b/include/mb_detect.h
 new file mode 100644
-index 0000000..5db619b
+index 0000000..b852983
 --- /dev/null
 +++ b/include/mb_detect.h
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,41 @@
 +#ifndef __MB_DETECT_H
 +#define __MB_DETECT_H
 +
@@ -258,6 +258,7 @@ index 0000000..5db619b
 +#define MB_DETECT_I2C_MUX_CHANNEL       0
 +#define MB_BOARDID0_I2C_ADDR            0xFE
 +#define MB_BOARDID1_I2C_ADDR            0xFF
++#define MB_BOARDID_I2C_MUX_ADDR         0x74
 +#define SYS_PRODUCT_NAME_SIZE           31  /* max. product name size */
 +#define SYS_MODEL_NAME_SIZE             31  /* max. model name size */
 +#define SYS_ASIC_NAME_SIZE              16  /* max. asic name size */
@@ -489,10 +490,10 @@ index 0000000..b2cdcda
 +}
 diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
 new file mode 100644
-index 0000000..22585e5
+index 0000000..c4621bb
 --- /dev/null
 +++ b/miscutils/mb_detect.c
-@@ -0,0 +1,199 @@
+@@ -0,0 +1,208 @@
 +#include "libbb.h"
 +#include <i2c-dev.h>
 +#include <gpio.h>
@@ -505,29 +506,6 @@ index 0000000..22585e5
 +	{ 0x00, "project_name",  "product_name\0",  "platform_name\0", 0 }
 +};
 +
-+static u32 mb_id_get_from_gpio(void)
-+{
-+	u32 board_id = 0;
-+	int rv = 0, index=0;
-+	unsigned int gpio_addr=0, id[4] = {0};
-+	unsigned int gpio_id[4]= { MBBOARD_GPIO_ID0_ADDR,
-+				   MBBOARD_GPIO_ID1_ADDR,
-+				   MBBOARD_GPIO_ID2_ADDR,
-+				   MBBOARD_GPIO_ID3_ADDR };
-+
-+	for (index = 0; index < 4; index++) {
-+		gpio_addr=MBBOARD_GPIO_ADDR + gpio_id[index];
-+		rv = gpio_get_value(gpio_addr, &id[index]);
-+		if (rv < 0)
-+			goto error;
-+	}
-+
-+	board_id = (id[3] << 3) + (id[2] << 2) + (id[1] << 1) + id[0];
-+
-+error:
-+	return board_id;
-+}
-+
 +static u32 mb_id_get_from_cpld(void)
 +{
 +	u32 board_id = 0, extended = 0;
@@ -535,7 +513,7 @@ index 0000000..22585e5
 +
 +	if(i2c_mux_select(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
 +	{
-+		if(i2c_read(MB_DETECT_I2C_BUS, MB_BOARDID0_I2C_ADDR, 0, &data, 1) == 0)
++		if(i2c_read(MB_DETECT_I2C_BUS, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID0_I2C_ADDR, &data, 1) == 0)
 +		{
 +			extended = data >> 7;
 +			board_id = data & 0x7F;
@@ -547,7 +525,7 @@ index 0000000..22585e5
 +	{
 +		if(i2c_mux_select(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
 +		{
-+			if(i2c_read(MB_DETECT_I2C_BUS, MB_BOARDID1_I2C_ADDR, 0, &data, 1) == 0)
++			if(i2c_read(MB_DETECT_I2C_BUS, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID1_I2C_ADDR, &data, 1) == 0)
 +			{
 +				board_id = data;
 +			}
@@ -558,12 +536,41 @@ index 0000000..22585e5
 +	return board_id;
 +}
 +
++static u32 mb_id_get_from_gpio(void)
++{
++	u32 board_id = 0, cpld_board_id = 0;
++	int rv = 0, index=0;
++	unsigned int gpio_addr=0, id[4] = {0};
++	unsigned int gpio_id[4]= { MBBOARD_GPIO_ID0_ADDR,
++				   MBBOARD_GPIO_ID1_ADDR,
++				   MBBOARD_GPIO_ID2_ADDR,
++				   MBBOARD_GPIO_ID3_ADDR };
++
++	for (index = 0; index < 4; index++) {
++		gpio_addr=MBBOARD_GPIO_ADDR + gpio_id[index];
++		rv = gpio_get_value(gpio_addr, &id[index]);
++		if (rv < 0) {
++			id[index] = 0;
++		}
++	}
++
++	if (id[3]) {
++		cpld_board_id = mb_id_get_from_cpld();
++		if (cpld_board_id == 0)
++			id[3] = 0;
++	}
++
++	board_id = (id[3] << 3) + (id[2] << 2) + (id[1] << 1) + id[0];
++
++error:
++	return board_id;
++}
 +
 +/*
 + *  This macro defines the mbdetect command line command.
 + */
 +//usage:#define mbdetect_trivial_usage
-+//usage:       "[-ifpdmbsce]"
++//usage:       "[-hifd]"
 +//usage:#define mbdetect_full_usage "\n\n"
 +//usage:     "Display Quanta Switch Motherboard detect result.\n"
 +//usage:     "\n	-i	Output motherboard id."
@@ -644,7 +651,7 @@ index 0000000..22585e5
 +	__u8 id;
 +	SysBoardInfo bdinfo;
 +
-+	const char *short_options = "hifpdmbsce";
++	const char *short_options = "hifd";
 +	const struct option long_options[] = {
 +		{"help",        no_argument,          0,    'h'},
 +		{"id",          no_argument,          0,    'i'},
@@ -689,6 +696,9 @@ index 0000000..22585e5
 +			break;
 +		}
 +	}
++
++	if (!count)
++		mbdetect_usage();
 +
 +	return 0;
 +}

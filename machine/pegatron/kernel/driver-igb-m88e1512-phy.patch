@@ -1,0 +1,66 @@
+From b6ee72b8412e3c65d12489e29fb57fc4786fc907 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Thu, 26 Mar 2020 15:47:34 +0800
+Subject: [PATCH] Correct OOB PHY Marvell-88e1512 LED behavior, and add it LED
+ control interface.
+
+---
+ .../net/ethernet/intel/igb/e1000_defines.h    |  3 +++
+ drivers/net/ethernet/intel/igb/e1000_phy.c    | 27 +++++++++++++++++++
+ 2 files changed, 30 insertions(+)
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_defines.h b/drivers/net/ethernet/intel/igb/e1000_defines.h
+index 7382e9dfbfc8..b812770ae0c6 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_defines.h
++++ b/drivers/net/ethernet/intel/igb/e1000_defines.h
+@@ -609,6 +609,9 @@
+ #define E1000_M88E1512_CFG_REG_2		0x0011
+ #define E1000_M88E1512_CFG_REG_3		0x0007
+ #define E1000_M88E1512_MODE			0x0014
++#define E1000_M88E1512_LED_FUNCTION_CTRL_REG		0x10 /* Page 3, Reg 16. */
++#define E1000_M88E1512_LED_TIMER_CTRL_REG		0x12 /* Page 3, Reg 18. */
++#define E1000_M88E1512_LED_POLARITY_CTRL_REG		0x11 /* Page 3, Reg 17. */
+ 
+ /* PCI Express Control */
+ #define E1000_GCR_CMPL_TMOUT_MASK       0x0000F000
+diff --git a/drivers/net/ethernet/intel/igb/e1000_phy.c b/drivers/net/ethernet/intel/igb/e1000_phy.c
+index a1880b4c1f37..4c9290635233 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_phy.c
++++ b/drivers/net/ethernet/intel/igb/e1000_phy.c
+@@ -2376,6 +2376,33 @@ s32 igb_initialize_M88E1512_phy(struct e1000_hw *hw)
+ {
+ 	struct e1000_phy_info *phy = &hw->phy;
+ 	s32 ret_val = 0;
++	u16 mii_reg = 0;
++
++	ret_val = phy->ops.write_reg(hw, E1000_M88E1543_PAGE_ADDR, 0x3);
++	if (ret_val)
++		goto out;
++
++	hw->phy.ops.read_reg(hw, E1000_M88E1512_LED_FUNCTION_CTRL_REG, &mii_reg);
++	mii_reg=(mii_reg & 0xFFF0) | 0x0007;  /* =0x1017 */
++	ret_val = phy->ops.write_reg(hw, E1000_M88E1512_LED_FUNCTION_CTRL_REG, mii_reg);
++	if (ret_val)
++		goto out;
++
++	hw->phy.ops.read_reg(hw, E1000_M88E1512_LED_TIMER_CTRL_REG, &mii_reg);
++	mii_reg=(mii_reg & 0xFF7F) | 0x0080;  /* =0x4985 */
++	ret_val = phy->ops.write_reg(hw, E1000_M88E1512_LED_TIMER_CTRL_REG, mii_reg);
++	if (ret_val)
++		goto out;
++
++	hw->phy.ops.read_reg(hw, E1000_M88E1512_LED_POLARITY_CTRL_REG, &mii_reg);
++	mii_reg=(mii_reg & 0xFFFC) | 0x0001;  /* =0x4401 */
++	ret_val = phy->ops.write_reg(hw, E1000_M88E1512_LED_POLARITY_CTRL_REG, mii_reg);
++	if (ret_val)
++		goto out;
++
++	ret_val = phy->ops.write_reg(hw, E1000_M88E1543_PAGE_ADDR, 0x0);
++	if (ret_val)
++		goto out;
+ 
+ 	/* Switch to PHY page 0xFF. */
+ 	ret_val = phy->ops.write_reg(hw, E1000_M88E1543_PAGE_ADDR, 0x00FF);
+-- 
+2.17.1
+

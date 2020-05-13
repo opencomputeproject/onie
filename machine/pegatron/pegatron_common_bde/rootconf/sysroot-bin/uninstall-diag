@@ -63,10 +63,12 @@ create_diag_gpt_partition()
     blk_dev=$(blkid | grep ONIE-BOOT | awk '{print $1}' |  sed -e 's/[1-9][0-9]*:.*$//' | sed -e 's/\([0-9]\)\(p\)/\1/' | head -n 1)
 
     # Find next available partition
-    last_part=$(sgdisk -p $blk_dev | grep ONIE-BOOT | awk '{print $1}')
-    diag_part=$(( $last_part - 1 ))
+    efi_volume_label="EFI System"
+    grub_volume_label="GRUB-BOOT"
+    last_part=$(sgdisk -p $blk_dev | grep -E "${efi_volume_label}|${grub_volume_label}" | awk '{print $1}')
+    diag_part=$(( $last_part + 1 ))
     onie_start_sector=$(sgdisk -p $blk_dev | grep ONIE-BOOT | awk '{print $2}')
-    grub_end_sector=$(sgdisk -p $blk_dev | grep GRUB-BOOT | awk '{print $3}')
+    grub_end_sector=$(sgdisk -p $blk_dev | grep -E "${efi_volume_label}|${grub_volume_label}" | awk '{print $3}')
     diag_start_sector=$(( $grub_end_sector + 1 ))
     diag_end_sector=$(( $onie_start_sector - 1 ))
     
