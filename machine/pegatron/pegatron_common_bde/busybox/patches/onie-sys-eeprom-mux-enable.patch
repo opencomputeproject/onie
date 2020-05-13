@@ -1,0 +1,79 @@
+From 76587c523c2dde02ebf7ea8444471b7bd428e959 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Fri, 20 Sep 2019 15:03:42 +0800
+Subject: [PATCH] Add support for different mux address of EEPROM
+
+---
+ miscutils/sys_eeprom_i2c.c | 40 ++++++++++++++++++++------------------
+ 1 file changed, 21 insertions(+), 19 deletions(-)
+
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index 1691cdb..ee182fa 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -3,6 +3,7 @@
+ #include "sys_eeprom.h"
+ #include "24cXX.h"
+ #include "i2c-dev.h"
++#include <mb_detect.h>
+ 
+ #if SYS_EEPROM_I2C_MEM_ADDR_BITS == 8
+     #define EEPROM_TYPE EEPROM_TYPE_8BIT_ADDR
+@@ -21,23 +22,16 @@ static int i2c_mux_channel_select(u_int8_t chip_addr, int channel)
+ {
+ 	struct eeprom ch;
+ 	u_int8_t ch_addr=chip_addr, ch_offset=0x0, ch_data=0;
+-
+-	switch (channel) {
+-	case 0:
+-		ch_data=0x04;
+-		break;
+-	case 1:
+-		ch_data=0x05;
+-		break;
+-	case 2:
+-		ch_data=0x06;
+-		break;
+-	case 3:
+-		ch_data=0x07;
+-		break;
+-	default:
+-		ch_data=0x00;
+-		break;
++	u_int32_t board_id = mb_id_get();
++
++	if (channel < 0) {
++		ch_data = 0x0;
++	} else {
++		if (board_id <= 0x07) {
++			ch_data = 0x4 + channel;
++		} else {
++			ch_data = 0x1 << channel;
++		}
+ 	}
+ 
+ 	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, ch_addr,
+@@ -58,10 +52,18 @@ static int i2c_mux_channel_release(u_int8_t chip_addr)
+ 
+ static int i2c_mux_eeprom_init(struct mux_info *info)
+ {
++	int mux=0;
++	u_int32_t board_id = mb_id_get();
++
+ 	memset(info, 0, sizeof(struct mux_info));
+ 
+-	info->addr = 0x72;
+-	info->channel = 2;
++	if (board_id <= 0x07) {
++		info->addr = 0x72;
++		info->channel = 2;
++	} else {
++		info->addr = 0x73;
++		info->channel = 3;
++	}
+ 
+ 	return 0;
+ }
+-- 
+2.17.1
+

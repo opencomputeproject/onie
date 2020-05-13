@@ -541,12 +541,14 @@ remove_diag_partition()
     local diag_log_part=$(sgdisk -p $blk_dev | grep "LOG-DIAG" | awk '{print $1}')
     local diag_log_dev="$blk_dev$diag_log_part"
     local newer_volume_label="PEGATRON-DIAG"
+    local efi_volume_label="EFI System"
+    local grub_volume_label="GRUB-BOOT"
     
     # Find next available partition
-    local last_part=$(sgdisk -p $blk_dev | grep GRUB-BOOT | awk '{print $1}')
+    local last_part=$(sgdisk -p $blk_dev | grep -E "${efi_volume_label}|${grub_volume_label}" | awk '{print $1}')
     local demo_diag_part=$(( $last_part + 1 ))
     local onie_start_sector=$(sgdisk -p $blk_dev | grep ONIE-BOOT | awk '{print $2}')
-    local grub_end_sector=$(sgdisk -p $blk_dev | grep GRUB-BOOT | awk '{print $3}')
+    local grub_end_sector=$(sgdisk -p $blk_dev | grep -E "${efi_volume_label}|${grub_volume_label}" | awk '{print $3}')
     local demo_diag_start_sector=$(( $grub_end_sector + 1 ))
     local demo_diag_end_sector=$(( $onie_start_sector - 1 ))
     local attr_bitmask="0x1"

@@ -1,0 +1,202 @@
+From 95444ae5ed89f635ed9b3fdf994182ebe3dfb906 Mon Sep 17 00:00:00 2001
+From: GeorgeWu <george_wu@pegatroncorp.com>
+Date: Mon, 28 Oct 2019 11:02:28 +0800
+Subject: [PATCH] Add information for mbdetect in common broadwell-DE platform.
+
+---
+ include/mb_detect.h   | 24 ++++++++++++-------
+ miscutils/mb_detect.c | 56 ++++++++++++++++++++++++++++++++++++-------
+ 2 files changed, 63 insertions(+), 17 deletions(-)
+
+diff --git a/include/mb_detect.h b/include/mb_detect.h
+index b852983..c397904 100644
+--- a/include/mb_detect.h
++++ b/include/mb_detect.h
+@@ -2,16 +2,17 @@
+ #define __MB_DETECT_H
+ 
+ typedef __u8 u8;
++typedef __u16 u16;
+ typedef __u32 u32;
+ typedef __s32 s32;
+ 
+-#define MBBOARD_GPIO_ADDR               452
+-#define MBBOARD_GPIO_ID0_ADDR           40
+-#define MBBOARD_GPIO_ID1_ADDR           49
+-#define MBBOARD_GPIO_ID2_ADDR           55
+-#define MBBOARD_GPIO_ID3_ADDR           54
+-
+-#define MB_DETECT_I2C_BUS               1
++#define MBBOARD_GPIO_ADDR               436
++#define MBBOARD_GPIO_ID0_ADDR           44
++#define MBBOARD_GPIO_ID1_ADDR           45
++#define MBBOARD_GPIO_ID2_ADDR           46
++#define MBBOARD_GPIO_ID3_ADDR           58
++#define MBBOARD_GPIO_BMC_PRESENT        18
++#define MB_DETECT_I2C_BUS               0
+ #define MB_DETECT_I2C_MUX_ADDR          0x73
+ #define MB_DETECT_I2C_MUX_CHANNEL       0
+ #define MB_BOARDID0_I2C_ADDR            0xFE
+@@ -23,7 +24,11 @@ typedef __s32 s32;
+ 
+ 
+ enum {
+-	MB_LAST = 0
++	BUGATTI = 0,
++	JAGUAR,
++	BUGATTI2,
++	GEMINI,
++	MB_LAST
+ };
+ 
+ typedef struct {
+@@ -32,10 +37,13 @@ typedef struct {
+ 	u8 productName[SYS_PRODUCT_NAME_SIZE+1];
+ 	u8 modelName[SYS_MODEL_NAME_SIZE+1];
+ 	u32 machine_rev;
++	u32 is_bmc_available;
+ } SysBoardInfo;
+ 
+ extern u32 mb_id_get(void);
+ extern u32 mb_index_get(void);
+ extern s32 sys_board_info_get(SysBoardInfo *bdinfo);
++extern u32 bmc_is_available(void);
++extern u32 mb_index_support_bmc(u32 index);
+ 
+ #endif	/* __MB_DETECT_H */
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+index c4621bb..b3bd69d 100644
+--- a/miscutils/mb_detect.c
++++ b/miscutils/mb_detect.c
+@@ -6,8 +6,11 @@
+ 
+ extern void mbdetect_usage(void);
+ 
+-SysBoardInfo sysBoardInfo[1] = {
+-	{ 0x00, "project_name",  "product_name\0",  "platform_name\0", 0 }
++SysBoardInfo sysBoardInfo[] = {
++	{ 0x04, "bugatti", 		"FB_6032_BN_F\0", "fb_6032_bn_f\0", 0, 0 },
++	{ 0x05, "jaguar",		"FB_6256_BN_B\0", "fb_6256_bn_b\0", 0, 0 },
++	{ 0x07, "bugatti2",		"FB_6032_BN_F\0", "fb_6032_bn_f\0", 1, 0 },
++	{ 0x09, "gemini",		"FM_6256_BN_F\0", "fm_6256_bn_f\0", 0, 0 },
+ };
+ 
+ static u32 mb_id_get_from_cpld(void)
+@@ -74,19 +77,20 @@ error:
+  *  This macro defines the mbdetect command line command.
+  */
+ //usage:#define mbdetect_trivial_usage
+-//usage:       "[-hifd]"
++//usage:       "[-hifdb]"
+ //usage:#define mbdetect_full_usage "\n\n"
+ //usage:     "Display Quanta Switch Motherboard detect result.\n"
+ //usage:     "\n	-i	Output motherboard id."
+ //usage:     "\n	-f	Output motherboard platform."
+ //usage:     "\n	-p	Output motherboard project."
+ //usage:     "\n	-d	Output motherboard product."
++//usage:     "\n	-b	Output bmc is available."
+ 
+ void mbdetect_usage(void)
+ {
+ 	static const char *usage =
+ 	"Display PEGATRON Switch Motherboard detect result.\n"
+-	"Usage: mbdetect [-h] [-i] [-f] [-d] \n"
++	"Usage: mbdetect [-h] [-i] [-f] [-d] [-b]\n"
+ 	"   With no arguments display all motherboard information.\n"
+ 	"   -h --help\n"
+ 	"      Display usage\n"
+@@ -95,7 +99,9 @@ void mbdetect_usage(void)
+ 	"   -f --platform\n"
+ 	"      Output motherboard platform name.\n"
+ 	"   -d --product\n"
+-	"      Output motherboard product name.\n";
++	"      Output motherboard product name.\n"
++	"   -b --bmc\n"
++	"      Output bmc is available.\n";
+ 
+ 	fprintf(stderr, "%s", usage);
+ 	exit(1);
+@@ -114,15 +120,42 @@ u32 mb_id_get(void)
+ 	return board_id;
+ }
+ 
++u32 bmc_is_available(void)
++{
++	u32 status = 0;
++	u32 gpio_addr=0;
++	s32 rv = 0;
++	u32 board_id = mb_id_get();
++
++	if (board_id < 0x08)
++		return 0;
++
++	//Detect BMC is available now or not.
++	gpio_addr = MBBOARD_GPIO_ADDR + MBBOARD_GPIO_BMC_PRESENT;
++	rv = gpio_get_value(gpio_addr, &status);
++
++	if (rv < 0 || status)
++		return 0;
++
++	return 1;
++}
++
++u32 mb_index_support_bmc(u32 index)
++{
++	return sysBoardInfo[index].is_bmc_available;
++}
++
+ u32 mb_index_get(void)
+ {
+ 	SysBoardInfo *bdinfo = sysBoardInfo;
+ 	u32 index = 0;
+ 	u32 motherboard_id = mb_id_get();
++	u32 is_bmc_available = bmc_is_available();
+ 
+ 	for(index=0;index < MB_LAST; index++) {
+-		if(motherboard_id == bdinfo->motherboard_id) {
+-			break;
++		if ( (motherboard_id == bdinfo->motherboard_id) &&
++		     (is_bmc_available == bdinfo->is_bmc_available) ) {
++				break;
+ 		}
+ 		bdinfo++;
+ 	}
+@@ -139,7 +172,6 @@ s32 sys_board_info_get(SysBoardInfo *bdinfo)
+ 		return 0;
+ 	}
+ 
+-	bdinfo = NULL;
+ 	return -1;
+ }
+ 
+@@ -154,13 +186,15 @@ int mbdetect_main(int argc, char **argv)
+ 	int c, option_index;
+ 	__u8 id;
+ 	SysBoardInfo bdinfo;
++	u32 status = 0;
+ 
+-	const char *short_options = "hifd";
++	const char *short_options = "hifdb";
+ 	const struct option long_options[] = {
+ 		{"help",        no_argument,          0,    'h'},
+ 		{"id",          no_argument,          0,    'i'},
+ 		{"platform",    no_argument,          0,    'f'},
+ 		{"product",     no_argument,          0,    'd'},
++		{"bmc",         no_argument,          0,    'b'},
+ 		{0,                       0,          0,      0},
+ 	};
+ 
+@@ -195,6 +229,10 @@ int mbdetect_main(int argc, char **argv)
+ 				printf("Error: No match motherboard detected.\n");
+ 			}
+ 			break;
++		case 'b':
++			status = bmc_is_available();
++			printf("%d\n", status);
++			break;
+ 		default:
+ 			mbdetect_usage();
+ 			break;
+-- 
+2.17.1
+
