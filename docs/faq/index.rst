@@ -194,8 +194,10 @@ That will wipe out everything and you can proceed.
 Are there issues with a particular platform?
 ==========================================================
 As of release 2020.05, there is a json file at
-build-config/scripts/onie-build-targets.json that represents
-the current state of all platforms as of the last release.
+
+ `<https://github.com/opencomputeproject/onie/blob/master/build-config/scripts/onie-build-targets.json>`_
+
+...which represents the current state of all platforms on the master branch.
 
 This is primarily used to generate platform specific build
 jobs in Jenkins automation, but if you have the JSON command
