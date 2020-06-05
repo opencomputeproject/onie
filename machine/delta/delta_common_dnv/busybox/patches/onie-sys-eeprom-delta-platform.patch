@@ -1,0 +1,653 @@
+diff --git a/include/applets.src.h b/include/applets.src.h
+index 71b8cbd..62a1c65 100644
+--- a/include/applets.src.h
++++ b/include/applets.src.h
+@@ -345,6 +345,7 @@ IF_WHOAMI(APPLET_NOFORK(whoami, whoami, BB_DIR_USR_BIN, BB_SUID_DROP, whoami))
+ IF_YES(APPLET_NOFORK(yes, yes, BB_DIR_USR_BIN, BB_SUID_DROP, yes))
+ IF_ZCIP(APPLET(zcip, BB_DIR_SBIN, BB_SUID_DROP))
+ IF_SYS_EEPROM(APPLET_ODDNAME(onie-syseeprom, onie_syseeprom, BB_DIR_USR_BIN, BB_SUID_DROP, onie_syseeprom))
++APPLET_ODDNAME(dni_pdetect, dni_pdetect, BB_DIR_USR_BIN, BB_SUID_DROP, dni_pdetect)
+ 
+ #if !defined(PROTOTYPES) && !defined(NAME_MAIN) && !defined(MAKE_USAGE) \
+ 	&& !defined(MAKE_LINKS) && !defined(MAKE_SUID)
+diff --git a/include/dni_pdetect.h b/include/dni_pdetect.h
+new file mode 100644
+index 0000000..12ac46b
+--- /dev/null
++++ b/include/dni_pdetect.h
+@@ -0,0 +1,51 @@
++int dni_product_name_get(char *r_str);
++int dni_dmidecode_get(char *r_str, int type);
++int dni_eeprom_path_get(int *r_bus, int *r_addr);
++void eeprom_write_protect(int mode);
++
++#define CMD_SIZE 64
++#define TAG_SIZE 50
++#define PRODUCT_NAME_SIZE 50
++#define BUF_SIZE 50
++#define COMBINATION_SIZE 6
++#define CPLD_BUS_OFFSET 4
++#define REG_OFFSET 2
++#define VALUE_OFFSET 4
++#define PATH_CMD_NUM_OFFSET 5
++#define ONE_BIT 2
++#define TWO_BIT 3
++#define BUS_PATH_SIZE 20
++#define R_VALUE_SIZE 10
++#define INFO_SIZE 8
++#define EEPROM_BUS_OFFSET 1
++#define EEPROM_ADDR_OFFSET 2
++
++typedef struct product_s
++{
++    char name[20];
++}product_t;
++
++typedef struct portect_info_s
++{
++    int portect_exist;
++    int bus;
++    int addr;
++    int reg;
++    int enable_offset;
++    int disable_offset;
++}portect_info_t;
++
++typedef struct eeprom_path_s
++{
++    int bus;
++    int addr;
++}eeprom_path_t;
++
++enum
++{
++    ASSETTAG = 0,
++    PRODUCTNAME,
++    ENABLE_MODE,
++    DISABLE_MODE,
++};
++
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index 72ddcd1..ded22f3 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -56,3 +56,4 @@ lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
+ lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
++lib-y                     += dni_pdetect.o
+diff --git a/miscutils/dni_pdetect.c b/miscutils/dni_pdetect.c
+new file mode 100644
+index 0000000..3d13efb
+--- /dev/null
++++ b/miscutils/dni_pdetect.c
+@@ -0,0 +1,481 @@
++#include "libbb.h"
++#include <i2c-dev.h>
++#include <getopt.h>
++#include "24cXX.h"
++#include <dni_pdetect.h>
++#include "onie_tlvinfo.h"
++
++#if SYS_EEPROM_I2C_MEM_ADDR_BITS == 8
++    #define EEPROM_TYPE EEPROM_TYPE_8BIT_ADDR
++#elif SYS_EEPROM_I2C_MEM_ADDR_BITS == 16
++    #define EEPROM_TYPE EEPROM_TYPE_16BIT_ADDR
++#else
++    #define EEPROM_TYPE EEPROM_TYPE_UNKNOWN
++#endif
++
++const product_t product[] =
++{
++    {"ag9032v2"},
++    {"agc7008sd"},
++};
++
++const portect_info_t portect_info[] =
++{
++    {0, 0, 0x0, 0x0, 0x0, 0x0},
++    {0, 0, 0x0, 0x0, 0x0, 0x0},
++};
++
++const eeprom_path_t eeprom_path[] =
++{
++    {0, 0x53},
++    {1, 0x57},
++};
++
++const eeprom_path_t tryeeprom_path[] =
++{
++    {0, 0x53},
++    {0, 0x56},
++    {1, 0x53},
++    {1, 0x54},
++    {1, 0x57},
++};
++
++extern void dni_pdetect_usage(void);
++
++/*
++ *  This macro defines the mbdetect command line command.
++ */
++//usage:#define dni_pdetect_trivial_usage
++//usage:       "[-hgs]"
++//usage:#define dni_pdetect_full_usage "\n\n"
++//usage:     "Display Quanta Switch Motherboard detect result.\n"
++//usage:     "\n       -h      Display usage."
++//usage:     "\n       -g      Output platform product name."
++
++void dni_pdetect_usage(void)
++{
++    static const char *usage =
++       "Display Delta Switch product detect result.\n"
++       "Usage: mbdetect [-h] [-g]\n"
++       "   With no arguments display all product information.\n"
++       "   -h --help\n"
++       "      Display usage\n"
++       "   -g --get-product\n"
++       "      Output platform product name.\n";
++
++    fprintf(stderr, "%s", usage);
++    exit(1);
++}
++
++/*
+++ *  do_mbdetect
+++ *  This function implements the mbdetect command.
+++ */
++int dni_pdetect_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
++int dni_pdetect_main(int argc, char **argv)
++{
++    int count = 0;
++    int c, option_index;
++    char product_name[PRODUCT_NAME_SIZE] = {0};
++    char set_cmd[CMD_SIZE] = {0};
++    char *subopts;
++    char *value;
++    int index;
++    int i;
++
++    const char *short_options = "hg";
++    const struct option long_options[] = {
++        {"help",        no_argument,          0,    'h'},
++        {"get-project", no_argument,          0,    'g'},
++        {0,                       0,          0,      0},
++    };
++
++    while(TRUE)
++    {
++        c = getopt_long(argc, argv, short_options, long_options, &option_index);
++        if (c == EOF)
++            break;
++
++        count++;
++        switch(c)
++        {
++            case 'h':
++                dni_pdetect_usage();
++                break;
++
++            case 'g':
++                if(dni_product_name_get(product_name) == 0)
++                {
++                    printf("delta_%s\n", product_name);
++                }
++                else
++                {
++                    printf("delta_common_dnv\n");
++                }
++                break;
++            default:
++                dni_pdetect_usage();
++                break;
++        }
++    }
++}
++
++int dni_dmidecode_get(char *r_str, int type)
++{
++    FILE *fpRead;
++    char cmd[CMD_SIZE] = {0};
++    char buf[BUF_SIZE] = {0};
++    int rv = -1;
++
++    switch(type)
++    {
++        case ASSETTAG:
++            sprintf(cmd, "dmidecode -s baseboard-asset-tag");
++            break;
++        case PRODUCTNAME:
++            sprintf(cmd, "dmidecode -s system-product-name");
++            break;
++        default:
++            goto END;
++            break;
++    }
++
++    fpRead = popen(cmd, "r");
++    if(fpRead != NULL)
++    {
++        if(fgets(buf, sizeof(buf), fpRead) != NULL)
++        {
++            strcpy(r_str, buf);
++            if(strlen(r_str) > 3 && strstr(r_str, "Specified") == NULL)
++            {
++                rv = 0;
++            }
++        }
++    }
++    pclose(fpRead);
++END:
++    return rv;
++}
++
++int dni_syseeprom_productname_get(char *r_str)
++{
++    FILE *fpRead;
++    char cmd[CMD_SIZE] = {0};
++    char buf[BUF_SIZE] = {0};
++    int rv = -1;
++
++    sprintf(cmd, "onie-syseeprom -g 0x21");
++    fpRead = popen(cmd, "r");
++    if(fpRead != NULL)
++    {
++        if(fgets(buf, sizeof(buf), fpRead) != NULL)
++        {
++            strcpy(r_str, buf);
++            if(strlen(r_str) > 3 && strstr(r_str, "ERROR") == NULL)
++            {
++                rv = 0;
++            }
++        }
++    }
++    pclose(fpRead);
++    return rv;
++}
++
++int dni_product_index_get(char *productName)
++{
++    int rv = -1;
++    int check_num = 0;
++    int i = 0;
++
++    for(i = 0; i < sizeof(product)/sizeof(product[0]); i++)
++    {
++        if(strstr(productName, product[i].name) != NULL)
++        {
++            rv = i;
++            goto END;        
++        }
++        else
++        {
++            check_num++;
++        }
++
++        if(check_num == sizeof(product)/sizeof(product[0]))
++        {
++            goto END;
++        }
++    }
++END:
++    return rv;
++}
++
++int dni_i2c_set(int bus, int addr, int reg, int value)
++{
++    FILE *pFw  = NULL;
++    char set_cmd[CMD_SIZE] = {0};
++    char buf[BUF_SIZE] = {0};
++    int rv = 0;
++    sprintf(set_cmd, "i2cset -y %d 0x%x 0x%x 0x%x > /dev/null 2>&1", bus, addr, reg, value);
++    pFw = popen(set_cmd, "r");
++    if(pFw != NULL)
++    {
++        if(fgets(buf, sizeof(buf), pFw) != NULL)
++        {
++            rv = -1;
++        }
++    }
++    pclose(pFw);
++    return rv;
++}
++
++void eeprom_write_protect(int mode)
++{
++    FILE *pFr  = NULL;
++    char get_value_cmd[CMD_SIZE] = {0};
++    char write_protect_cmd[CMD_SIZE] = {0};
++    char r_value[R_VALUE_SIZE] = {0};
++    char product_name[PRODUCT_NAME_SIZE] = {0};
++    char s_type[ONE_BIT] = {0};
++    char s_bus[ONE_BIT] = {0};
++    char s_path_cmd_num[ONE_BIT] = {0};
++    char s_tag[TAG_SIZE] = {0};
++    char s_addr[TWO_BIT] = {0};
++    char s_reg[TWO_BIT] = {0};
++    char s_value[TWO_BIT] = {0};
++    char s_info[INFO_SIZE] = {0};
++    int i = 0;
++    int type = 0;
++    int bus = 0;
++    int addr = 0;
++    int reg = 0;
++    int value = 0;
++    int enable_offset = 0;
++    int disable_offset = 0;
++    int rv = 0;
++    int getinfor = 0;
++    int check_num = 0;
++    long path_cmd_num = 0;
++    int action_check = 0;
++    int p_index = 0;
++    char buf[BUF_SIZE] = {0};
++
++    if(dni_dmidecode_get(s_tag, ASSETTAG) == 0)
++    {
++        /*0    0       53      0   1             31   14  fc    31   14  fd
++          type eebus  eeaddr bus action number addr reg value addr reg value
++        */
++        strncpy(s_type, s_tag, 1);
++        type = strtol(s_type, NULL, 10);
++        switch(type)
++        {
++            case 0:
++                strncpy(s_bus, s_tag + CPLD_BUS_OFFSET, 1);
++                bus = strtol(s_bus, NULL, 10);
++                strncpy(s_path_cmd_num, s_tag + PATH_CMD_NUM_OFFSET, 1);
++                path_cmd_num = strtol(s_path_cmd_num, NULL, 10);
++                if(path_cmd_num == 0)
++                {
++                    goto END;
++                }
++                for(i = 6; i < strlen(s_tag); i += 6)
++                {
++                    strncpy(s_info, s_tag + i, 6);
++                    strncpy(s_addr, s_info, 2);
++                    strncpy(s_reg, s_info + REG_OFFSET, 2);
++                    strncpy(s_value, s_info + VALUE_OFFSET, 2);
++                    addr = strtol(s_addr, NULL, 16);
++                    reg = strtol(s_reg, NULL, 16);
++                    value = strtol(s_value, NULL, 16);
++                    if(mode == DISABLE_MODE && action_check < path_cmd_num)
++                    {
++                        if(dni_i2c_set(bus, addr, reg, value) == -1)
++                        {
++                            getinfor = 0;
++                            break;
++                        }
++                    }
++                    else if(mode == ENABLE_MODE && action_check >= path_cmd_num)
++                    {
++                        if(dni_i2c_set(bus, addr, reg, value) == -1)
++                        {
++                            getinfor = 0;
++                            break;
++                        }
++                    }
++                    action_check++;
++                    getinfor = 1;
++                }
++                break;
++            case 1: /*NO write protect*/
++                goto END;        
++                break;
++            default:
++                break;
++        }
++    }
++
++    if(dni_dmidecode_get(product_name, PRODUCTNAME) == 0 && getinfor == 0)
++    {
++        for(i = 0; i < sizeof(product_name); i++)
++        {
++            product_name[i] = tolower(product_name[i]);
++        }
++
++        p_index = dni_product_index_get(product_name);
++
++        if(p_index != -1);
++        {
++            if(portect_info[p_index].portect_exist == 0)
++            {
++                goto END;
++            }
++
++            sprintf(get_value_cmd, "i2cget -y %d 0x%x 0x%x", portect_info[p_index].bus, portect_info[p_index].addr, portect_info[p_index].reg);
++            pFr = popen(get_value_cmd, "r");
++            if( pFr != NULL)
++            {
++                if(fgets(r_value, 10, pFr) != NULL)
++                {
++                    rv = strtol(r_value, NULL, 16);
++                    switch(mode)
++                    {
++                        case ENABLE_MODE:
++                            value = ( rv | portect_info[p_index].enable_offset);
++                            break;
++                        case DISABLE_MODE:
++                            value = ( rv & portect_info[p_index].disable_offset);
++                            break;
++                    }
++                    if(dni_i2c_set(portect_info[p_index].bus, portect_info[p_index].addr, portect_info[p_index].reg, value) == -1)
++                    {
++                        pclose(pFr);
++                        goto END;
++                    }
++
++                }
++            }
++            pclose(pFr);
++        }
++    }
++END:
++    return;
++}
++
++int dni_product_name_get(char *r_str)
++{
++    int rv = -1;
++    int i;
++    char s_tag[TAG_SIZE] = {0};
++    char product_name[PRODUCT_NAME_SIZE] = {0};
++
++    if(dni_dmidecode_get(s_tag, ASSETTAG) == 0)
++    {
++        if(dni_syseeprom_productname_get(product_name) == 0)
++        {
++            for(i = 0; i < sizeof(product_name); i++)
++            {
++                product_name[i] = tolower(product_name[i]);
++            }
++            strcpy(r_str, product_name);
++            rv = 0;
++            goto END;
++        }
++    }
++
++    if(dni_dmidecode_get(product_name, PRODUCTNAME) == 0)
++    {
++        for(i = 0; i < sizeof(product_name); i++)
++        {
++            product_name[i] = tolower(product_name[i]);
++        }
++        strcpy(r_str, product_name);
++        rv = 0;
++        goto END;
++    }
++END:
++    return rv;
++}
++
++int dni_eeprom_path_get(int *r_bus, int *r_addr)
++{
++    int rv = -1;
++    int i;
++    int check_num = 0;
++    char s_tag[TAG_SIZE] = {0};
++    char s_eeprom_bus[ONE_BIT]= {0};
++    char s_eeprom_addr[TWO_BIT]= {0};
++    char product_name[PRODUCT_NAME_SIZE] = {0};
++    char i2c_bus_path[BUS_PATH_SIZE] = {0};
++    struct eeprom e;
++    int p_index = 0;
++    int eepromBus = 0;
++    int eepromAddr = 0x0;
++    int inforget = 0;
++
++    if(dni_dmidecode_get(s_tag, ASSETTAG) == 0)
++    {
++        strncpy(s_eeprom_bus, s_tag + EEPROM_BUS_OFFSET, 1);
++        eepromBus = strtol(s_eeprom_bus, NULL, 10);
++        strncpy(s_eeprom_addr, s_tag + EEPROM_ADDR_OFFSET, 2);
++        eepromAddr = strtol(s_eeprom_addr, NULL, 16);
++        sprintf(i2c_bus_path, "/dev/i2c-%d", eepromBus);
++        if(eeprom_open(i2c_bus_path, eepromAddr, EEPROM_TYPE, &e) == 0)
++        {
++            inforget = 1;
++        }
++        else
++        {
++            goto ProductNameGetEEPROM;
++        }
++    }
++
++ProductNameGetEEPROM:
++    if(dni_dmidecode_get(product_name, PRODUCTNAME) == 0 && inforget == 0)
++    {
++        for(i = 0; i < sizeof(product_name); i++)
++        {
++            product_name[i] = tolower(product_name[i]);
++        }
++
++        p_index = dni_product_index_get(product_name);
++
++        if(p_index != -1);
++        {
++            eepromBus = eeprom_path[p_index].bus;
++            eepromAddr = eeprom_path[p_index].addr;
++            sprintf(i2c_bus_path, "/dev/i2c-%d", eepromBus);
++            if(eeprom_open(i2c_bus_path, eepromAddr, EEPROM_TYPE, &e) == 0)
++            {
++                inforget = 1;
++            }
++            else
++            {
++                goto TryEEPROMPath;
++            }
++        }
++    }
++
++TryEEPROMPath:
++    if(inforget == 0)
++    {
++        for(i = 0; i < sizeof(tryeeprom_path)/sizeof(tryeeprom_path[0]); i++)
++        {
++            eepromBus = tryeeprom_path[i].bus;
++            eepromAddr = tryeeprom_path[i].addr;
++            sprintf(i2c_bus_path, "/dev/i2c-%d", eepromBus);
++            if(eeprom_open(i2c_bus_path, eepromAddr, EEPROM_TYPE, &e) == 0)
++            {
++                inforget = 1;
++                goto END;
++            }
++        }
++    }
++END:
++    if(inforget == 1)
++    {
++        *r_bus = eepromBus;
++        *r_addr = eepromAddr;
++        rv = 0;
++    }
++    return rv;
++}
++
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+index a24d6bb..7363ea6 100644
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -1,6 +1,7 @@
+ #include "libbb.h"
+ #include "onie_tlvinfo.h"
+ #include <getopt.h>
++#include <dni_pdetect.h>
+ 
+ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+ /*
+@@ -77,6 +78,7 @@ int onie_syseeprom_main(int argc, char **argv)
+ 	    snprintf(tokens[(i*2) + 1], 6, "0x%X", tlv_code_list[i].m_code);
+     }
+     tokens[tlv_code_count*2] = NULL;
++    eeprom_write_protect(DISABLE_MODE);
+ 
+     while (TRUE) {
+ 	c = getopt_long(argc, argv, short_options,
+@@ -184,5 +186,6 @@ syseeprom_err:
+ 	free(tokens[i*2]);
+ 	free(tokens[(i*2) + 1]);
+     }
++    eeprom_write_protect(ENABLE_MODE);
+     return  (err == 0) ? 0 : 1;
+ }
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index ed3235b..3b60e51 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -2,6 +2,7 @@
+ #include "onie_tlvinfo.h"
+ #include "sys_eeprom.h"
+ #include "24cXX.h"
++#include <dni_pdetect.h>
+ 
+ #if SYS_EEPROM_I2C_MEM_ADDR_BITS == 8
+     #define EEPROM_TYPE EEPROM_TYPE_8BIT_ADDR
+@@ -21,10 +22,22 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+     int i = 0;
+     u_int8_t *c;
+     int addr = SYS_EEPROM_OFFSET + offset;
++    int eeprom_addr = 0x0;
++    int i2c_bus = 0;
++    char i2c_path[20] = {0};
+ 
+     c = eeprom_data;
+-    if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-		    EEPROM_TYPE, &e)) {
++    if(dni_eeprom_path_get(&i2c_bus, &eeprom_addr) != 0)
++    {
++        eeprom_addr = SYS_EEPROM_I2C_ADDR;
++        memcpy(i2c_path, SYS_EEPROM_I2C_DEVICE, sizeof(SYS_EEPROM_I2C_DEVICE));
++    }
++    else
++    {
++        sprintf(i2c_path, "/dev/i2c-%d", i2c_bus);
++    }
++    if (eeprom_open(i2c_path, eeprom_addr,
++                    EEPROM_TYPE, &e)) {
+ 	printf("ERROR: Cannot open I2C device\n");
+ 	return -1;
+     }
+@@ -46,10 +59,22 @@ int write_sys_eeprom(void *eeprom_data, int len)
+     int i = 0;
+     u_int8_t *c;
+     u_int16_t  addr = SYS_EEPROM_OFFSET;
++    int eeprom_addr = 0x0;
++    int i2c_bus = 0;
++    char i2c_path[20] = {0};
+ 
+     c = eeprom_data;
++    if(dni_eeprom_path_get(&i2c_bus, &eeprom_addr) != 0)
++    {
++        eeprom_addr = SYS_EEPROM_I2C_ADDR;
++        memcpy(i2c_path, SYS_EEPROM_I2C_DEVICE, sizeof(SYS_EEPROM_I2C_DEVICE));
++    }
++    else
++    {
++        sprintf(i2c_path, "/dev/i2c-%d", i2c_bus);
++    }
+     for (i = 0; i < len; i++) {
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++	if (eeprom_open(i2c_path, eeprom_addr,
+ 			EEPROM_TYPE, &e)) {
+ 	    printf("ERROR: Cannot open I2C device\n");
+ 	    return -1;
