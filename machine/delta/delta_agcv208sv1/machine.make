@@ -1,7 +1,7 @@
 # Delta agcv208sv1
 
 ONIE_ARCH ?= x86_64
-SWITCH_ASIC_VENDOR = broadcom
+SWITCH_ASIC_VENDOR = bcm
 
 VENDOR_REV ?= 0
 
