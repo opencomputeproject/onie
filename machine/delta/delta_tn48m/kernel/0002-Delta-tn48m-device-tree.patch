@@ -1,0 +1,210 @@
+
+
+diff --git a/arch/arm64/boot/dts/marvell/armada-7040-db.dts b/arch/arm64/boot/dts/marvell/armada-7040-db.dts
+index 7a2fc016..dff6f8fa 100644
+--- a/arch/arm64/boot/dts/marvell/armada-7040-db.dts
++++ b/arch/arm64/boot/dts/marvell/armada-7040-db.dts
+@@ -67,32 +67,8 @@
+ 		ethernet2 = &cp0_emac3;
+ 	};
+ 
+-	cpm_reg_usb3_0_vbus: cpm-usb3-0-vbus {
+-		compatible = "regulator-fixed";
+-		regulator-name = "usb3h0-vbus";
+-		regulator-min-microvolt = <5000000>;
+-		regulator-max-microvolt = <5000000>;
+-		enable-active-high;
+-		gpio = <&expander0 0 GPIO_ACTIVE_HIGH>;
+-	};
+-
+-	cpm_reg_usb3_1_vbus: cpm-usb3-1-vbus {
+-		compatible = "regulator-fixed";
+-		regulator-name = "usb3h1-vbus";
+-		regulator-min-microvolt = <5000000>;
+-		regulator-max-microvolt = <5000000>;
+-		enable-active-high;
+-		gpio = <&expander0 1 GPIO_ACTIVE_HIGH>;
+-	};
+-
+-	cpm_usb3_0_phy: cpm-usb3-0-phy {
+-		compatible = "usb-nop-xceiv";
+-		vcc-supply = <&cpm_reg_usb3_0_vbus>;
+-	};
+-
+-	cpm_usb3_1_phy: cpm-usb3-1-phy {
+-		compatible = "usb-nop-xceiv";
+-		vcc-supply = <&cpm_reg_usb3_1_vbus>;
++	mass_storage {
++		device = "sda";
+ 	};
+ };
+ 
+@@ -103,54 +79,29 @@
+ 
+ &spi0 {
+ 	status = "okay";
+-
+-	spi-flash@0 {
+-		#address-cells = <1>;
+-		#size-cells = <1>;
+-		compatible = "jedec,spi-nor";
+-		reg = <0>;
+-		spi-max-frequency = <10000000>;
+-
+-		partitions {
+-			compatible = "fixed-partitions";
+-			#address-cells = <1>;
+-			#size-cells = <1>;
+-
+-			partition@0 {
+-				label = "U-Boot";
+-				reg = <0 0x200000>;
+-			};
+-			partition@400000 {
+-				label = "Filesystem";
+-				reg = <0x200000 0xce0000>;
+-			};
+-		};
+-	};
+ };
+ 
+ &uart0 {
+ 	status = "okay";
+ };
+ 
+-
++#if 0
+ &cpm_pcie2 {
+ 	status = "okay";
+ };
+-
++#endif
+ &cpm_i2c0 {
+ 	status = "okay";
+ 	clock-frequency = <100000>;
++};
+ 
+-	expander0: pca9555@21 {
+-		compatible = "nxp,pca9555";
+-		pinctrl-names = "default";
+-		gpio-controller;
+-		#gpio-cells = <2>;
+-		reg = <0x21>;
+-	};
++&cpm_i2c1 {
++	status = "okay";
++
++	clock-frequency = <100000>;
+ };
+ 
+-&cpm_spi1 {
++&cpm_spi0 {
+ 	status = "okay";
+ 
+ 	spi-flash@0 {
+@@ -166,13 +117,19 @@
+ 			#size-cells = <1>;
+ 
+ 			partition@0 {
+-				label = "U-Boot";
+-				reg = <0x0 0x200000>;
++				label = "uboot";
++				reg = <0x0 0x003f0000>;
+ 			};
+-
+-			partition@400000 {
+-				label = "Filesystem";
+-				reg = <0x200000 0xe00000>;
++			partition@3f0000 {
++                /* 64KB */
++                reg = <0x003f0000 0x00010000>;
++                label = "uboot-env";
++                env_size = <0x10000>;
++			};
++            partition@400000 {
++                /* 10MB */
++                reg = <0x00400000 0x00c00000>;
++                label = "onie";
+ 			};
+ 		};
+ 	};
+@@ -183,12 +140,10 @@
+ };
+ 
+ &cpm_usb3_0 {
+-	usb-phy = <&cpm_usb3_0_phy>;
+ 	status = "okay";
+ };
+ 
+ &cpm_usb3_1 {
+-	usb-phy = <&cpm_usb3_1_phy>;
+ 	status = "okay";
+ };
+ 
+@@ -209,34 +164,42 @@
+ &cpm_mdio {
+ 	status = "okay";
+ 
+-	phy0: ethernet-phy@0 {
+-		reg = <0>;
+-	};
+-	phy1: ethernet-phy@1 {
+-		reg = <1>;
++	OOB_E1512_PHY: ethernet-phy@1 {
++		reg = <0x0>;
+ 	};
+ };
+ 
++&cpm_ethernet {
++	status = "okay";
++};
++
+ &cp0_emac0 {
+-	phy-mode = "10gbase-kr"; /* lane-2 */
++	phy-mode = "sgmii";
++    fixed-link {
++            speed = <1000>;
++            full-duplex;
++    };
+ };
+ &cp0_emac2 {
+-	phy-mode = "sgmii"; /* lane-0 */
+-	phy = <&phy0>;
++	phy-mode = "sgmii";
++    fixed-link {
++            speed = <1000>;
++            full-duplex;
++    };
+ };
+ &cp0_emac3 {
+-	phy-mode = "rgmii-id"; /* rgmii-1 */
+-	phy = <&phy1>;
++	phy-mode = "sgmii";
++	phy = <&OOB_E1512_PHY>;
+ };
+ 
+ &cp0_ppv22 {
+ 	status = "okay";
+-	l4_chksum_jumbo_port = <0>;
+ };
+ 
+ &cp0_eth0 {
+ 	status = "okay";
+ };
++
+ &cp0_eth1 {
+ 	status = "okay";
+ };
+@@ -245,5 +208,12 @@
+ };
+ 
+ &cpm_crypto {
++	status = "disabled";
++};
++
++&cpm_pcie0 {
+ 	status = "okay";
++
++	phys = <&cpm_comphy0 0>;
++	ranges = <0x81000000 0x0 0xf9020000 0x0 0xf9020000 0x0 0x10000 0x82000000 0x0 0xc0000000 0x0 0xc0000000 0x0 0x30000000>;
+ };
