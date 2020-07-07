@@ -1,0 +1,42 @@
+
+
+diff --git a/miscutils/fw_env.c b/miscutils/fw_env.c
+index 777c369..56ae7bc 100644
+--- a/miscutils/fw_env.c
++++ b/miscutils/fw_env.c
+@@ -35,6 +35,8 @@
+ #define	CMD_GETENV	"fw_printenv"
+ #define	CMD_SETENV	"fw_setenv"
+ 
++#define DIV_ROUND_UP(n, d)	(((n) + (d) - 1) / (d))
++
+ #define min(x, y) ({				\
+ 	typeof(x) _min1 = (x);			\
+ 	typeof(y) _min2 = (y);			\
+@@ -838,9 +840,9 @@ static int flash_write_buf (int dev, int fd, void *buf, size_t count,
+ 
+ 		ioctl (fd, MEMLOCK, &erase);
+ 
+-		processed  += blocklen;
++		processed  += erasesize;
+ 		block_seek = 0;
+-		blockstart += blocklen;
++		blockstart += erasesize;
+ 	}
+ 
+ 	if (write_total > count)
+@@ -1241,9 +1243,12 @@ static int get_config (const char *fname)
+ 		if (rc < 4)
+ 			continue;
+ 
+-		if (rc < 5)
++		if (rc < 5){
+ 			/* Default - 1 sector */
+-			ENVSECTORS (i) = 1;
++			/*ENVSECTORS (i) = 1;*/
++			/* Assume enough sectors to cover the environment */
++			ENVSECTORS(i) = DIV_ROUND_UP(ENVSIZE(i), DEVESIZE(i));
++		}
+ 
+ 		i++;
+ 	}

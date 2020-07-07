@@ -1,0 +1,1 @@
+../init.d/detect_board_id.sh
