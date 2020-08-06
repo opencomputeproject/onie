@@ -9,9 +9,9 @@
 # This is a makefile fragment that defines the build of ipmitool
 #
 
-IPMITOOL_VERSION		= 1.8.15
+IPMITOOL_VERSION		= 1.8.18
 IPMITOOL_TARBALL		= ipmitool-$(IPMITOOL_VERSION).tar.bz2
-IPMITOOL_TARBALL_URLS	+= $(ONIE_MIRROR) http://sourceforge.net/projects/ipmitool/files/ipmitool/$(IPMITOOL_VERSION)/$(IPMITOOL_TARBALL)/download
+IPMITOOL_TARBALL_URLS	+= $(ONIE_MIRROR) https://github.com/ipmitool/ipmitool/releases/download/IPMITOOL_$(subst .,_,$(IPMITOOL_VERSION))/
 IPMITOOL_BUILD_DIR	= $(USER_BUILDDIR)/ipmitool
 IPMITOOL_DIR		= $(IPMITOOL_BUILD_DIR)/ipmitool-$(IPMITOOL_VERSION)
 
