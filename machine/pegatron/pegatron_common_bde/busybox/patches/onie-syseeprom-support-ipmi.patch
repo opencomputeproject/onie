@@ -1,0 +1,210 @@
+From fc2a6d562c71703a1d8a9670298180b7aacff7b5 Mon Sep 17 00:00:00 2001
+From: GeorgeWu <george_wu@pegatroncorp.com>
+Date: Tue, 4 Jun 2019 09:05:58 +0800
+Subject: [PATCH] onie-syseeprom support IPMI
+
+---
+ miscutils/Kbuild.src       |   2 +-
+ miscutils/sys_eeprom_alt.c | 148 +++++++++++++++++++++++++++++++++++++
+ miscutils/sys_eeprom_i2c.c |   8 +-
+ 3 files changed, 153 insertions(+), 5 deletions(-)
+ create mode 100755 miscutils/sys_eeprom_alt.c
+
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index d45fd4e..3dd45fa 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -52,7 +52,7 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
+ lib-$(CONFIG_VOLNAME)     += volname.o
+ lib-$(CONFIG_WATCHDOG)    += watchdog.o
+ lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
+-lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o mb_detect.o gpio.o
++lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o mb_detect.o gpio.o sys_eeprom_alt.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
+ lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
+diff --git a/miscutils/sys_eeprom_alt.c b/miscutils/sys_eeprom_alt.c
+new file mode 100755
+index 0000000..14f4dec
+--- /dev/null
++++ b/miscutils/sys_eeprom_alt.c
+@@ -0,0 +1,148 @@
++#include "libbb.h"
++#include "onie_tlvinfo.h"
++#include "sys_eeprom.h"
++#include <mb_detect.h>
++
++#define DATA_SIZE (128)
++#define EEPROM_READ "ipmitool raw 0x3C 0x10"
++#define EEPROM_WRITE "ipmitool raw 0x3C 0x11"
++char cmd[sizeof(EEPROM_READ) + 15 + 5*DATA_SIZE + 1];
++size_t cmd_length = sizeof(cmd);
++
++extern int i2c_read_sys_eeprom(void *eeprom_data, int offset, int len);
++extern int i2c_write_sys_eeprom(void *eeprom_data, int len);
++int ipmi_read_sys_eeprom(void *eeprom_data, int offset, int len);
++int ipmi_write_sys_eeprom(void *eeprom_data, int len);
++
++int ipmi_read_sys_eeprom(void *eeprom_data, int offset, int len)
++{
++	int i;
++	int read_len;
++	int ipmi_offset;
++	int ipmi_len;
++	FILE *fd;
++	char *c = eeprom_data;
++	char *cmd_p;
++	unsigned int data;
++
++	read_len = 0;
++	while (read_len < len) {
++		ipmi_offset = offset + SYS_EEPROM_OFFSET + read_len;
++		ipmi_len = len - read_len;
++		if (ipmi_len > DATA_SIZE) {
++			ipmi_len = DATA_SIZE;
++		}
++		memset(cmd, 0, cmd_length);
++		cmd_p = cmd;
++		cmd_p += sprintf(cmd_p, "%s",EEPROM_READ);
++		if (SYS_EEPROM_MAX_SIZE > 256) {
++			cmd_p += sprintf(cmd_p, " 0x%02x",(ipmi_offset>>8)&0x0ff);
++			cmd_p += sprintf(cmd_p, " 0x%02x",ipmi_offset&0x0ff);
++		} else {
++			cmd_p += sprintf(cmd_p, " 0x%02x",ipmi_offset);
++		}
++		cmd_p += sprintf(cmd_p, " 0x%02x",ipmi_len);
++
++		fd = popen(cmd, "r");
++		if (fd == NULL) {
++			fprintf(stderr, "Cannot open file: %s\n", strerror(errno));
++			return -1;
++		}
++		i = 0;
++		while (i < ipmi_len) {
++			fscanf(fd, "%2x", &data);
++			if (feof(fd)) {
++				break;
++			}
++			*c = data;
++			i++; c++;
++		}
++		pclose(fd);
++		if (i != ipmi_len) {
++			fprintf(stderr, "ERROR: expected length: %d; read length: %d\n", ipmi_len, i);
++			fprintf(stderr, "%s\n", cmd);
++			return -1;
++		}
++		read_len += i;
++	}
++
++	return 0;
++}
++
++int ipmi_write_sys_eeprom(void *eeprom_data, int len)
++{
++	int i;
++	int write_len;
++	int ipmi_offset;
++	int ipmi_len;
++	char *c = eeprom_data;
++	char *cmd_p;
++
++	write_len = 0;
++	while (write_len < len) {
++		ipmi_offset = SYS_EEPROM_OFFSET + write_len;
++		ipmi_len = len - write_len;
++		if (ipmi_len > DATA_SIZE) {
++			ipmi_len = DATA_SIZE;
++		}
++		memset(cmd, 0, cmd_length);
++		cmd_p = cmd;
++		cmd_p += sprintf(cmd_p, "%s",EEPROM_WRITE);
++		if (SYS_EEPROM_MAX_SIZE > 256) {
++			cmd_p += sprintf(cmd_p, " 0x%02x",(ipmi_offset>>8)&0x0ff);
++			cmd_p += sprintf(cmd_p, " 0x%02x",ipmi_offset&0x0ff);
++		} else {
++			cmd_p += sprintf(cmd_p, " 0x%02x",ipmi_offset);
++		}
++		cmd_p += sprintf(cmd_p, " 0x%02x",ipmi_len);
++		i = 0;
++		cmd_p = cmd + strlen(cmd);
++		while (i < ipmi_len) {
++			sprintf(cmd_p, " 0x%02x", *c);
++			i++; c++; cmd_p += 5;
++		}
++		write_len += i;
++		if (system(cmd) != 0) {
++			fprintf(stderr, "Write error: %s\n", strerror(errno));
++			fprintf(stderr, "%s\n", cmd);
++			return -1;
++		}
++	}
++
++	return 0;
++}
++
++int read_sys_eeprom(void *eeprom_data, int offset, int len)
++{
++	u32 index = -1;
++	u32 support_bmc = 0;
++
++	index = mb_index_get();
++	support_bmc = mb_index_support_bmc(index);
++
++	if (support_bmc && bmc_is_available() == 1)
++	{
++		return ipmi_read_sys_eeprom(eeprom_data, offset, len);
++	}
++	else
++	{
++		return i2c_read_sys_eeprom(eeprom_data, offset, len);
++	}
++}
++
++int write_sys_eeprom(void *eeprom_data, int len)
++{
++	u32 index = -1;
++	u32 support_bmc = 0;
++
++	index = mb_index_get();
++	support_bmc = mb_index_support_bmc(index);
++	if (support_bmc && bmc_is_available() == 1)
++	{
++		return ipmi_write_sys_eeprom(eeprom_data, len);
++	}
++	else
++	{
++		return i2c_write_sys_eeprom(eeprom_data, len);
++	}
++}
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index 874f414..d6dcdea 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -197,9 +197,9 @@ static int sys_eeprom_write_protect_set(int enable)
+ }
+ 
+ /*
+- * read_sys_eeprom - read the hwinfo from i2c EEPROM
++ * i2c_read_sys_eeprom - read the hwinfo from i2c EEPROM
+  */
+-int read_sys_eeprom(void *eeprom_data, int offset, int len)
++int i2c_read_sys_eeprom(void *eeprom_data, int offset, int len)
+ {
+ 	int ret = 0;
+ 	struct eeprom e;
+@@ -232,9 +232,9 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ }
+ 
+ /*
+- * write_sys_eeprom - write the hwinfo to i2c EEPROM
++ * i2c_write_sys_eeprom - write the hwinfo to i2c EEPROM
+  */
+-int write_sys_eeprom(void *eeprom_data, int len)
++int i2c_write_sys_eeprom(void *eeprom_data, int len)
+ {
+ 	int ret = 0;
+ 	struct eeprom e;
+-- 
+2.17.1
+
