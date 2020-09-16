@@ -1,0 +1,255 @@
+From 531807bbfcca84540e10977b0e702e84bd21b3c1 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Wed, 5 Aug 2020 10:06:15 +0800
+Subject: [PATCH] Support i2c mux driver PCA9641
+
+---
+ include/mb_detect.h        |   1 +
+ miscutils/mb_detect.c      | 122 +++++++++++++++++++++++++++++++++++--
+ miscutils/sys_eeprom_i2c.c |  17 ++++--
+ 3 files changed, 130 insertions(+), 10 deletions(-)
+
+diff --git a/include/mb_detect.h b/include/mb_detect.h
+index c397904..dac33fa 100644
+--- a/include/mb_detect.h
++++ b/include/mb_detect.h
+@@ -40,6 +40,7 @@ typedef struct {
+ 	u32 is_bmc_available;
+ } SysBoardInfo;
+ 
++extern s32 mb_i2c_info_get(void);
+ extern u32 mb_id_get(void);
+ extern u32 mb_index_get(void);
+ extern s32 sys_board_info_get(SysBoardInfo *bdinfo);
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+index b3bd69d..cbf1bcb 100644
+--- a/miscutils/mb_detect.c
++++ b/miscutils/mb_detect.c
+@@ -17,26 +17,29 @@ static u32 mb_id_get_from_cpld(void)
+ {
+ 	u32 board_id = 0, extended = 0;
+ 	u8 data = 0;
++	s32 i2c_bus = 0;
+ 
+-	if(i2c_mux_select(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
++	i2c_bus = mb_i2c_info_get();
++
++	if(i2c_mux_select(i2c_bus, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
+ 	{
+-		if(i2c_read(MB_DETECT_I2C_BUS, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID0_I2C_ADDR, &data, 1) == 0)
++		if(i2c_read(i2c_bus, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID0_I2C_ADDR, &data, 1) == 0)
+ 		{
+ 			extended = data >> 7;
+ 			board_id = data & 0x7F;
+ 		}
+-		i2c_mux_release(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR);
++		i2c_mux_release(i2c_bus, MB_DETECT_I2C_MUX_ADDR);
+ 	}
+ 
+ 	if (extended)
+ 	{
+-		if(i2c_mux_select(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
++		if(i2c_mux_select(i2c_bus, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
+ 		{
+-			if(i2c_read(MB_DETECT_I2C_BUS, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID1_I2C_ADDR, &data, 1) == 0)
++			if(i2c_read(i2c_bus, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID1_I2C_ADDR, &data, 1) == 0)
+ 			{
+ 				board_id = data;
+ 			}
+-			i2c_mux_release(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR);
++			i2c_mux_release(i2c_bus, MB_DETECT_I2C_MUX_ADDR);
+ 		}
+ 	}
+ 
+@@ -73,6 +76,93 @@ error:
+ 	return board_id;
+ }
+ 
++static int find_i2c_busses(char* adapter_name)
++{
++	const char *const i2cdev_path = "/sys/class/i2c-dev";
++
++	char path[NAME_MAX], name[128];
++	struct dirent *de, *subde;
++	DIR *dir, *subdir;
++	int rv, bus, dev_bus;
++	char *pos;
++	FILE *fp;
++
++	/*
++	 * XXX Upstream i2cdetect also looks for i2c bus info in /proc/bus/i2c,
++	 * but we won't bother since it's only useful on older kernels (before
++	 * 2.6.5). We expect sysfs to be present and mounted at /sys/.
++	 */
++
++	dev_bus = -1;
++	dir = xopendir(i2cdev_path);
++	while ((de = readdir(dir))) {
++		if (de->d_name[0] == '.')
++			continue;
++
++		/* Simple version for ISA chips. */
++		snprintf(path, NAME_MAX, "%s/%s/name",
++			 i2cdev_path, de->d_name);
++		fp = fopen(path, "r");
++		if (fp == NULL) {
++			snprintf(path, NAME_MAX,
++				 "%s/%s/device/name",
++				 i2cdev_path, de->d_name);
++			fp = fopen(path, "r");
++		}
++
++		/* Non-ISA chips require the hard-way. */
++		if (fp == NULL) {
++			snprintf(path, NAME_MAX,
++				 "%s/%s/device/name",
++				 i2cdev_path, de->d_name);
++			subdir = opendir(path);
++			if (subdir == NULL)
++				continue;
++
++			while ((subde = readdir(subdir))) {
++				if (subde->d_name[0] == '.')
++					continue;
++
++				if (is_prefixed_with(subde->d_name, "i2c-")) {
++					snprintf(path, NAME_MAX,
++						 "%s/%s/device/%s/name",
++						 i2cdev_path, de->d_name,
++						 subde->d_name);
++					fp = fopen(path, "r");
++					break;
++				}
++			}
++		}
++
++		if (fp != NULL) {
++			/*
++			 * Get the rest of the info and display a line
++			 * for a single bus.
++			 */
++			memset(name, 0, sizeof(name));
++			pos = fgets(name, sizeof(name), fp);
++			fclose(fp);
++			if (pos == NULL)
++				continue;
++
++			pos = strchr(name, '\n');
++			if (pos != NULL)
++				*pos = '\0';
++
++			rv = sscanf(de->d_name, "i2c-%d", &bus);
++			if (rv != 1)
++				continue;
++
++			if (strstr(name, adapter_name)) {
++				dev_bus = bus;
++				break;
++			}
++		}
++	}
++
++	return dev_bus;
++}
++
+ /*
+  *  This macro defines the mbdetect command line command.
+  */
+@@ -107,6 +197,26 @@ void mbdetect_usage(void)
+ 	exit(1);
+ }
+ 
++s32 mb_i2c_info_get(void)
++{
++	int dbus, tbus;
++	char buf[64];
++	u8 data = 0;
++
++	dbus = find_i2c_busses("I801");
++	if (dbus < 0) {
++		sscanf(CONFIG_SYS_EEPROM_I2C_DEVICE, "/dev/i2c-%d", &dbus);
++	} else {
++		sprintf(buf, "i2c-%d-mux", dbus);
++		tbus = find_i2c_busses(buf);
++		if ( (tbus >= 0) && (i2c_read(tbus, MB_DETECT_I2C_MUX_ADDR, 0, &data, 1) == 0) ) {
++			dbus = tbus;
++		}
++	}
++
++	return dbus;
++}
++
+ u32 mb_id_get(void)
+ {
+ 	u32 board_id = 0;
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index 7d1d6e6..196dd1b 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -73,6 +73,8 @@ struct mb_info mb_i2c_info[] = {
+ 	}
+ };
+ 
++static char i2c_dev[64] = {0};
++
+ static struct mb_info *find_i2c_info(void)
+ {
+ 	struct mb_info *m=NULL;
+@@ -101,7 +103,7 @@ static int i2c_mux_channel_select(u_int8_t chip_addr, int channel)
+ 		}
+ 	}
+ 
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, ch_addr,
++	if (eeprom_open(i2c_dev, ch_addr,
+ 			EEPROM_TYPE_8BIT_ADDR, &ch)) {
+ 		printf("ERROR: Cannot open I2C device\n");
+ 		return -1;
+@@ -164,7 +166,7 @@ static int sys_eeprom_write_protect_set(int enable)
+ 	// Change CPLD channel
+ 	i2c_mux_channel_select(info.mux.addr, info.mux.channel);
+ 
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, info.eeprom_addr,
++	if (eeprom_open(i2c_dev, info.eeprom_addr,
+ 			EEPROM_TYPE_8BIT_ADDR, &wp)) {
+ 		printf("ERROR: Cannot open I2C device for write protect\n");
+ 		return -1;
+@@ -197,12 +199,15 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ 	u_int8_t *c;
+ 	int addr = SYS_EEPROM_OFFSET + offset;
+ 	struct mux_info info;
++	int i2c_bus = 0;
+ 
++	i2c_bus = mb_i2c_info_get();
++	sprintf(i2c_dev, "/dev/i2c-%d", i2c_bus);
+ 	i2c_mux_eeprom_init(&info);
+ 	i2c_mux_channel_select(info.addr, info.channel);
+ 
+ 	c = eeprom_data;
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++	if (eeprom_open(i2c_dev, SYS_EEPROM_I2C_ADDR,
+ 			EEPROM_TYPE, &e)) {
+ 		printf("ERROR: Cannot open I2C device\n");
+ 		return -1;
+@@ -229,6 +234,10 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 	u_int8_t *c;
+ 	u_int16_t  addr = SYS_EEPROM_OFFSET;
+ 	struct mux_info info;
++	int i2c_bus = 0;
++
++	i2c_bus = mb_i2c_info_get();
++	sprintf(i2c_dev, "/dev/i2c-%d", i2c_bus);
+ 
+ 	if (sys_eeprom_write_protect_set(WRITE_PROTECT_DISABLE)) {
+ 		return -1;
+@@ -239,7 +248,7 @@ int write_sys_eeprom(void *eeprom_data, int len)
+ 
+ 	c = eeprom_data;
+ 	for (i = 0; i < len; i++) {
+-		if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++		if (eeprom_open(i2c_dev, SYS_EEPROM_I2C_ADDR,
+ 			EEPROM_TYPE, &e)) {
+ 			printf("ERROR: Cannot open I2C device\n");
+ 			return -1;
+-- 
+2.17.1
+

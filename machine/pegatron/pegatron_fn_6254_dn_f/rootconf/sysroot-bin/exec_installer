@@ -1,0 +1,540 @@
+#!/bin/sh
+
+#  Copyright (C) 2013,2014,2015,2018 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2014 Matt Peterson <matt-github@peterson.org>
+#  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+. /lib/onie/functions
+syslog_tag=onie-exec
+
+install_result="/var/run/install.rc"
+
+# If the NOS install returns success then reboot.
+finish_nos_install()
+{
+    local result="$1"
+    local URL="$2"
+    local update_image="$3"
+
+    if [ $result -eq 0 ] ; then
+        log_console_msg "NOS install successful: $URL"
+        log_console_msg "Rebooting..."
+        reboot && return 0
+    fi
+    return 1
+}
+
+finish_update_install()
+{
+    local result="$1"
+    local URL="$2"
+    local update_image="$3"
+
+    if [ $result -eq 0 ] ; then
+        log_console_msg "Firmware update install successful: $URL"
+        if [ -x /tmp/reboot-cmd ] ; then
+            log_console_msg "Calling update supplied reboot-cmd..."
+            /tmp/reboot-cmd
+            sleep 10
+        else
+            log_console_msg "Rebooting..."
+            reboot && return 0
+        fi
+    fi
+    return 1
+}
+
+# Allow architectures to override finish_nos_install() and
+# finish_update_install().
+[ -r /lib/onie/exec-installer-arch ] && . /lib/onie/exec-installer-arch
+
+check_installer()
+{
+    # Check whether the image type passed by 'onie-nos-install',
+    # 'onie-self-update' or 'discover' is compatible with the current
+    # boot reason.
+    local image_type="$1"
+
+    case $onie_boot_reason in
+        update | embed)
+            [ "$image_type" = "$onie_image_type_update" ] && return 0
+            log_failure_msg "ONIE Update: Invalid ONIE update image format."
+            ;;
+        rescue)
+            # Allow to run either NOS installer or ONIE updater at the situation
+            return 0
+            ;;
+        install)
+            [ "$image_type" = "$onie_image_type_nos" ] && return 0
+            log_failure_msg "NOS Installer: Expecting install image, but found ONIE update image format."
+            ;;
+        *)
+            log_failure_msg "Unknown boot reason: ${onie_boot_reason}"
+            ;;
+    esac
+
+    return 1
+}
+
+run_installer()
+{
+    export onie_exec_url="$1"
+    # escape any % characters for printing with printf
+    print_exec_url=$(echo -n $onie_exec_url | sed -e 's/%/%%/g')
+    log_console_msg "Executing installer: $print_exec_url"
+
+    [ -r $onie_installer ] || {
+        log_failure_msg "Unable to find installer: $onie_installer"
+        return 1
+    }
+
+    image_type=$(get_image_type $onie_installer)
+    check_installer $image_type || return 1
+
+    chmod +x $onie_installer
+    # Send installer execution output to stdout or /dev/console
+    tee_path="$(realpath "/proc/$$/fd/1" 2>/dev/null)"
+    if [ "$tee_path" = "/dev/null" ] || [ -z "$tee_path" ] ; then
+        tee_path=/dev/console
+    fi
+    { $onie_installer $onie_installer_parms; echo "$?" > $install_result; } 2>&1 | \
+        tee $tee_path | logger $log_stderr -t os-install -p ${syslog_onie}.info
+
+    case $image_type in
+        "$onie_image_type_nos")
+            finish_nos_install "$(cat $install_result)" "$onie_exec_url" "$onie_installer" && return 0
+            ;;
+        "$onie_image_type_update")
+            finish_update_install "$(cat $install_result)" "$onie_exec_url" "$onie_installer" && return 0
+            ;;
+        *)
+            log_failure_msg "Unexpected image type: $image_type"
+            ;;
+    esac
+
+    # installer should not return
+    log_failure_msg "Unable to install image: $print_exec_url"
+    return 1
+}
+
+# wget HTTP/FTP download helper
+wget_run()
+{
+    type=$1
+    URL="$2"
+
+    wget_args="-T 3 -O $onie_installer"
+
+    if [ "$onie_verbose" = "y" ] || [ "$from_cli" = "yes" ] ; then
+        out_file="/proc/$$/fd/1"
+    else
+        wget_args="$wget_args -q"
+        out_file="/dev/null"
+    fi
+
+    # add HTTP headers
+    # Shell variable substituion
+    bb_ver=$(busybox | head -1 | sed -e 's/ (.*//' -e 's/ /-/')
+    os_ver=$(uname -r -s | sed -e 's/ /-/')
+    user_agent="onie/1.0 (${os_ver}$onie_version; $bb_ver)"
+
+    header_serial_num="ONIE-SERIAL-NUMBER: $onie_serial_num"
+    header_eth_addr="ONIE-ETH-ADDR: $onie_eth_addr"
+    header_vendor_id="ONIE-VENDOR-ID: $onie_vendor_id"
+    header_machine="ONIE-MACHINE: $onie_machine"
+    header_machine_rev="ONIE-MACHINE-REV: $onie_machine_rev"
+    header_arch="ONIE-ARCH: $onie_arch"
+    header_security_key="ONIE-SECURITY-KEY: $onie_sec_key"
+    header_operation="ONIE-OPERATION: $onie_operation"
+    header_version="ONIE-VERSION: $onie_version"
+
+    # escape any % characters for printing with printf
+    print_exec_url=$(echo -n $URL | sed -e 's/%/%%/g')
+    log_debug_msg "Running wget with: $user_agent $wget_args $print_exec_url\n"
+    log_info_msg "Attempting $print_exec_url ..."
+    wget -U "$user_agent" $wget_args       \
+        --header "$header_serial_num"   \
+        --header "$header_eth_addr"     \
+        --header "$header_vendor_id"    \
+        --header "$header_machine"      \
+        --header "$header_machine_rev"  \
+        --header "$header_arch"         \
+        --header "$header_security_key" \
+        --header "$header_operation"    \
+        --header "$header_version"      \
+        "$URL" > $out_file 2>&1 && run_installer "$URL" && return 0
+
+    return 1
+}
+
+# tftp_wrap -- A wrapper around busybox's tftp command that on error
+# inspects the stderr output looking for a timeout.
+tftp_timeout=no
+tftp_wrap()
+{
+    tftp_timeout=no
+
+    # capture tftp command output
+    tftp_tmpout=$(mktemp)
+    tftp $* > $tftp_tmpout 2>&1 
+    rc=$?
+
+    # on error check for timeout
+    if [ "$rc" != "0" ] ; then
+        grep -q timeout $tftp_tmpout && {
+            tftp_timeout=yes
+        }
+    fi
+
+    # return output to caller
+    cat $tftp_tmpout
+    rm -f $tftp_tmpout
+
+    return $rc
+}
+
+# TFTP download helper
+tftp_run()
+{
+    SERVER=$1
+    BOOTFILE=$2
+
+    URL="tftp://$SERVER/$BOOTFILE"
+    # escape any % characters for printing with printf
+    print_exec_url=$(echo -n $URL | sed -e 's/%/%%/g')
+    log_debug_msg "Running tftp get with: server: $SERVER, bootfile: $BOOTFILE"
+    log_info_msg "Attempting $print_exec_url ..."
+    if [ "$onie_verbose" = "y" ] || [ "$from_cli" = "yes" ] ; then
+        tftp_wrap -g -l $onie_installer -r $BOOTFILE $SERVER && run_installer "$URL" && return 0
+    else
+        tftp_wrap -g -l $onie_installer -r $BOOTFILE $SERVER > /dev/null 2>&1 && run_installer "$URL" && return 0
+    fi
+
+    return 1
+}
+
+# Try possible URL handlers
+# URL could be:
+#   http://
+#   ftp://
+#   file://
+#   tftp://
+url_run()
+{
+    URL="$1"
+    quiet=$2
+    url_type=${URL%%:*}
+    url_path=${URL##*://}
+    rm -f $onie_installer
+    case $url_type in
+        http | https | ftp)
+            wget_run $url_type "$URL" && return 0
+            ;;
+        tftp)
+            server=${url_path%%/*}
+            path=${url_path#*/}
+            tftp_run $server $path && return 0
+            ;;
+        file)
+            cp $url_path $onie_installer && run_installer "$URL" && return 0
+            ;;
+        *)
+            # First see if "$URL" refers a local file
+            if [ -r "$URL" ] ; then
+                cp $URL $onie_installer && run_installer "$URL" && return 0
+                return 1
+            fi
+            [ -n "$quiet" ] || log_failure_msg "Unknown URL type: $URL"
+            ;;
+    esac
+
+    rm -f $onie_installer
+    return 1
+}
+
+get_onie_neighs()
+{
+    while [ ${#onie_neighs} -gt 0 ] ; do
+        local n=${onie_neighs%%,*}
+        onie_neighs=${onie_neighs#*,}
+        echo $n | sed -e 's/-/%/g'
+    done
+}
+
+ulist()
+{
+    local list=$(echo "$1" | sed -e '/#/d')
+    # make list items unique, while preserving list order
+    { local cnt=0; for s in $list ; do printf "%d\t%s\n" $cnt $s ; cnt=$(( $cnt + 1 )) ; done ; } | \
+        sort -u -k2 | sort -n | cut -f2-
+}
+
+# Try various HTTP URLs
+http_download()
+{
+    # Build list of HTTP servers to try
+    local http_servers=$(ulist "\
+$onie_server_name
+# HTTP server IP only (DHCP opt 72)
+$onie_disco_wwwsrv
+# BOOTP next-server IP
+$onie_disco_siaddr
+# DHCP server IP (DHCP opt 54)
+$onie_disco_serverid
+# TFTP server IP (DHCP opt 150)
+$onie_disco_tftpsiaddr
+# DHCP TFTP server name (DHCP opt 66)
+# Requires DNS
+$onie_disco_tftp
+# Add link local neighbors
+$(get_onie_neighs)
+")
+
+    for server in $http_servers ; do
+        # Check if server appears to be alive
+        nc -w 10 $server 80 -e /bin/true > /dev/null 2>&1 && {
+            # Try list of default file names
+            for f in $(get_default_filenames) ; do
+                url_run "http://$server/$f" && return 0
+            done
+        }
+    done
+
+    # Try bootfile as a URL, supress warnings
+    if [ -n "$onie_disco_bootfile" ] ; then
+        url_run "$onie_disco_bootfile" quiet && return 0
+    fi
+
+    return 1
+}
+
+tftp_download()
+{
+    local tftp_servers=$(ulist "\
+$onie_server_name
+# BOOTP next-server IP
+$onie_disco_siaddr
+# TFTP server name (DHCP opt 66)
+# Requires DNS
+$onie_disco_tftp
+# TFTP server IP (DHCP opt 150)
+$onie_disco_tftpsiaddr
+# DHCP server IP (DHCP opt 54)
+$onie_disco_serverid
+")
+
+    # Busybox sets "boot_file" for the BOOTP boot file and sets
+    # "bootfile" (no underscore) for DHCP option 67.
+    local tftp_bootfiles=$(ulist "\
+$onie_disco_bootfile
+$onie_disco_boot_file
+")
+
+    for server in $tftp_servers ; do
+        for f in $tftp_bootfiles ; do
+            url_run "tftp://$server/$f" && return 0
+        done
+    done
+
+    return 1
+}
+
+waterfall()
+{
+    # Build list of waterfall paths
+
+    wf_paths=
+    # First is based on MAC address
+    [ -n "$onie_eth_addr" ] && wf_paths="$(echo $onie_eth_addr | sed -e 's/:/-/g')/$onie_default_filename"
+
+    if [ -n "$onie_disco_ip" ] ; then
+        # Next 8 are based on IP address in HEX:
+        tmp=$(echo $onie_disco_ip | sed -e 's/\./ /g')
+        cmd="printf %02X%02X%02X%02X $tmp"
+        wf_ip=$(eval $cmd)
+        len=8
+        while [ $len -gt 0 ] ; do
+            wf_paths="$wf_paths $(echo $wf_ip | head -c $len)/$onie_default_filename"
+            len=$(( $len - 1 ))
+        done
+    fi
+
+    # Next is root of tftp server -- try all default filenames
+    wf_paths="$wf_paths $(get_default_filenames)"
+
+    # TFTP waterfall
+    local tftp_servers=$(ulist "$onie_server_name $onie_disco_siaddr $onie_disco_tftp $onie_disco_tftpsiaddr")
+    for s in $tftp_servers ; do
+        for p in $wf_paths ; do
+            url_run "tftp://$s/$p" && return 0
+            if [ "$tftp_timeout" = "yes" ] ; then
+                # Stop TFTP waterfall on a timeout.
+                break;
+            fi
+        done
+    done
+
+    return 1
+}
+
+local_fs_run()
+{
+    mp=$(mktemp -d)
+    while [ ${#onie_local_parts} -gt 0 ] ; do
+        p=${onie_local_parts%%,*}
+        onie_local_parts=${onie_local_parts#*,}
+        mount $p $mp > /dev/null 2>&1 && {
+            for f in $(get_default_filenames) ; do	  
+                f1=$(ls -Art $mp | grep $f | tail -n 1)
+                if ! [ "$f1" = "" ] && [ -r $mp/$f1 ] ; then
+                    # copy to /tmp, which is a tmpfs -- installer needs to
+                    # run with everything unmounted.
+                    tmp_copy=$(mktemp -p /tmp)
+                    log_info_msg "Prepare install $mp/$f1 ..."
+                    cp $mp/$f1 $tmp_copy || {
+                        log_failure_msg "local_fs_run():$p Unable to copy $mp/$f1 to tmpfs"
+                        rm -f $tmp_copy
+                        return 1
+                    }
+                    sync ; sync
+                    umount $p
+                    ln -sf $tmp_copy $onie_installer || {
+                        log_failure_msg "local_fs_run():$p Unable to make symlink to $onie_installer in tmpfs"
+                        rm -f $tmp_copy
+                        return 1
+                    }
+                    f2=$(ls -Art $p | grep $f | tail -n 1)
+                    run_installer "file:/$p/$f2" && return 0
+                    rm -f $tmp_copy $onie_installer
+                    # re-mount it to look for more files
+                    mount $p $mp > /dev/null 2>&1
+                fi
+            done
+            umount $p
+        }
+    done
+    rm -rf $mp
+
+    return 1
+}
+
+firmware_update_run()
+{
+    local fw_rc=1
+    for image in $(ls $onie_update_pending_dir) ; do
+        if url_run "$onie_update_pending_dir/$image" ; then
+            fw_rc=0
+        else
+            fw_rc=1
+            break
+        fi
+    done
+
+    if [ $fw_rc -eq 0 ] ; then
+        # Firmware update(s) found and processed.
+        if [ -x /tmp/reboot-cmd ] ; then
+            log_console_msg "Calling update supplied reboot-cmd..."
+            /tmp/reboot-cmd
+            sleep 10
+        else
+            log_console_msg "Rebooting..."
+            reboot && return 0
+        fi
+    fi
+    
+    return 1
+}
+
+##
+## Script starts here
+##
+
+parm_file="$1"
+[ -r $parm_file ] || {
+    log_failure_msg "Unable to read parameter file: $parm_file"
+    log_console_msg "FATAL: Unable to read parameter file: $parm_file"
+    exit 1
+}
+parms="$(cat $parm_file)"
+
+import_parms "$parms"
+rm -f $onie_installer
+
+[ -z "$onie_eth_addr" ] && onie_eth_addr="$(onie-sysinfo -e)"
+[ -z "$onie_serial_num" ] && onie_serial_num="$(onie-sysinfo -s)"
+
+from_cli=no
+onie_installer_parms=
+
+# Try static installer URL from CLI
+if [ -n "$onie_cli_static_url" ] ; then
+    from_cli=yes
+    # also send to stdout of current process
+    tee_log_file=/proc/$$/fd/1
+    onie_installer_parms="$onie_cli_static_parms"
+    url_run "$onie_cli_static_url" && exit 0
+    # stop here if it didn't work
+    exit 1
+fi
+
+# Try static updater URL from CLI
+if [ -n "$onie_cli_static_update_url" ] ; then
+    from_cli=yes
+    # also send to stdout of current process
+    tee_log_file=/proc/$$/fd/1
+    onie_installer_parms="$onie_cli_static_update_parms"
+    url_run "$onie_cli_static_update_url" && exit 0
+    # stop here if it didn't work
+    exit 1
+fi
+
+# Next try static URL from kernel command line
+if [ -n "$onie_static_url" ] ; then
+    url_run "$onie_static_url" && exit 0
+fi
+
+# Next look for pending firmware updates
+if [ -d "$onie_update_pending_dir" ] ; then
+    firmware_update_run && exit 0
+fi
+
+# Next try locally attached filesystems
+if [ -n "$onie_local_parts" ] ; then
+    local_fs_run && exit 0
+fi
+
+# Next try exactly discovered URLs
+if [ -n "$onie_disco_onie_url" ] ; then
+    url_run "$onie_disco_onie_url" && exit 0
+fi
+
+if [ -n "$onie_disco_url" ] ; then
+    url_run "$onie_disco_url" && exit 0
+fi
+
+# Try HTTP discovery methods next
+http_download && {
+    echo "http success, exiting..."
+    exit 0
+}
+
+# Try TFTP discovery methods next
+tftp_download && {
+    echo "tftp success, exiting..."
+    exit 0
+}
+
+# Finally try HTTP/TFTP waterfall methods
+waterfall && {
+    echo "waterfall success, exiting..."
+    exit 0
+}
+
+exit 1
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

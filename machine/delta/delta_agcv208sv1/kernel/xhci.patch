@@ -1,0 +1,26 @@
+diff --git a/drivers/usb/core/config.c b/drivers/usb/core/config.c
+index 7c54a19..74ca8ae 100644
+--- a/drivers/usb/core/config.c
++++ b/drivers/usb/core/config.c
+@@ -324,6 +324,21 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno, int inum,
+ 		endpoint->desc.bInterval = n;
+ 	}
+ 
++#if 1  /* defined(_M_DEI_PORTING_) */
++	if ( (le16_to_cpu(0x04d8) == le16_to_cpu(to_usb_device(ddev)->descriptor.idVendor)) && 
++	     (le16_to_cpu(0x00de) == le16_to_cpu(to_usb_device(ddev)->descriptor.idProduct)) )
++	{
++		unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
++		cpuid(1, &eax, &ebx, &ecx, &edx);
++
++		if ( 0x506F0 == (eax & 0x0FFFF0))  /* Intel Denverton CPU ? */
++		{
++			endpoint->desc.bInterval = 3;
++			printk(KERN_INFO "Intel Denverton CPU board: MCP2210: EP bInterval[1] changed to [%d].\n", endpoint->desc.bInterval);
++		}
++	}
++#endif
++
+ 	/* Some buggy low-speed devices have Bulk endpoints, which is
+ 	 * explicitly forbidden by the USB spec.  In an attempt to make
+ 	 * them usable, we will try treating them as Interrupt endpoints.

@@ -1,0 +1,61 @@
+From ee72657a6f4d75323d2808407a1f33d452ccb5bf Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Thu, 7 Jun 2018 18:30:13 +0800
+Subject: [PATCH] Change I2C Bus Speed
+
+---
+ drivers/i2c/busses/Kconfig    | 14 ++++++++++++++
+ drivers/i2c/busses/i2c-ismt.c | 12 +++++++++++-
+ 2 files changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/i2c/busses/Kconfig b/drivers/i2c/busses/Kconfig
+index d252276..0444f08 100644
+--- a/drivers/i2c/busses/Kconfig
++++ b/drivers/i2c/busses/Kconfig
+@@ -153,6 +153,20 @@ config I2C_ISMT
+ 	  This driver can also be built as a module.  If so, the module will be
+ 	  called i2c-ismt.
+ 
++choice
++	prompt "Intel iSMT SMBus Speed"
++	depends on I2C_ISMT
++	default I2C_ISMT_BUS_400K
++	config I2C_ISMT_BUS_80K
++		bool "80KHz"
++	config I2C_ISMT_BUS_100K
++		bool "100KHz"
++	config I2C_ISMT_BUS_400K
++		bool "400KHz"
++	config I2C_ISMT_BUS_1000K
++		bool "1000KHz"
++endchoice
++
+ config I2C_PIIX4
+ 	tristate "Intel PIIX4 and compatible (ATI/AMD/Serverworks/Broadcom/SMSC)"
+ 	depends on PCI
+diff --git a/drivers/i2c/busses/i2c-ismt.c b/drivers/i2c/busses/i2c-ismt.c
+index 7aea288..73a63a5 100644
+--- a/drivers/i2c/busses/i2c-ismt.c
++++ b/drivers/i2c/busses/i2c-ismt.c
+@@ -189,7 +189,17 @@ static const struct pci_device_id ismt_ids[] = {
+ MODULE_DEVICE_TABLE(pci, ismt_ids);
+ 
+ /* Bus speed control bits for slow debuggers - refer to the docs for usage */
+-static unsigned int bus_speed;
++#if defined CONFIG_I2C_ISMT_BUS_80K
++static unsigned int bus_speed = 80;
++#elif defined CONFIG_I2C_ISMT_BUS_100K
++static unsigned int bus_speed = 100;
++#elif defined CONFIG_I2C_ISMT_BUS_400K
++static unsigned int bus_speed = 400;
++#elif defined CONFIG_I2C_ISMT_BUS_1000K
++static unsigned int bus_speed = 1000;
++#else
++static unsigned int bus_speed = 0;
++#endif
+ module_param(bus_speed, uint, S_IRUGO);
+ MODULE_PARM_DESC(bus_speed, "Bus Speed in kHz (0 = BIOS default)");
+ 
+-- 
+2.7.4
+

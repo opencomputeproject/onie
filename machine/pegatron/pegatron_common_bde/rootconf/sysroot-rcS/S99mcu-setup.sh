@@ -1,0 +1,1 @@
+../init.d/mcu-setup.sh

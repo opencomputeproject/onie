@@ -2,6 +2,7 @@
 
 #  Copyright (C) 2013-2014 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
+#  Copyright (C) 2019-2020 Alex Doyle <adoyle@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
@@ -22,6 +23,16 @@ The <SHA1 dir> contains <base file name>.sha1, which is verified
 after downloading.
 EOF
 }
+
+# Optional, system-wide directory to supplement downloads.
+# Once the local ./build/download directory is populated,
+# those packages can be copied here to be referenced should
+# the network become unavailable.
+# Populate with:
+#     wget --recursive --cut-dirs=2 --no-host-directories \
+#     --no-parent --reject "index.html" http://mirror.opencompute.org/onie/
+
+DOWNLOAD_CACHE_DIR="/var/cache/onie/download"
 
 OUTDIR=$1
 SHA1DIR=$2
@@ -57,28 +68,51 @@ if [ -r "${OUTDIR}/${FILE}" ] ; then
     echo "Using cached ${OUTDIR}/${FILE}"
 else
     download=no
-    while [ $# -ge 1 ] ; do
-        URL="$1/$FILE"
-        wget --no-verbose --no-check-certificate -O "${OUTDIR}/${FILE}" $URL
-        if [ $? -eq 0 ] ; then
-            # stop
+
+	# Allow setting of an environment variable to skip download and
+	# go straight to the system package cache.
+	if [ "$ONIE_USE_SYSTEM_DOWNLOAD_CACHE" = "TRUE" ];then
+		echo "  Getting ${FILE} from ${DOWNLOAD_CACHE_DIR} "
+	else
+		while [ $# -ge 1 ] ; do
+			URL="$1/$FILE"
+			echo "  Downloading $FILE from: $URL"
+			wget --no-verbose --no-check-certificate -O "${OUTDIR}/${FILE}" $URL
+			if [ $? -eq 0 ] ; then
+				# stop
+				download=yes
+				break
+			else
+				rm -f "${OUTDIR}/${FILE}"
+			fi
+			shift
+		done
+	fi
+    if [ "$download" = "no" ] ; then
+        # Has a package cache has been set up on the local system, mirroring
+        # http://mirror.opencompute.org/onie/
+        # Look there too.
+        if [ -e "${DOWNLOAD_CACHE_DIR}"/"${FILE}" ];then
+            echo "  Copying      $FILE from system cache at ${DOWNLOAD_CACHE_DIR}"
+            cp ${DOWNLOAD_CACHE_DIR}/${FILE} "${OUTDIR}/${FILE}"
             download=yes
-            break
-        else
-            rm -f "${OUTDIR}/${FILE}"
         fi
-        shift
-    done
-    if [ "$download" != "yes" ] ; then
-        echo "ERROR:  Unable to download $FILE"
-        exit 1
     fi
+    if [ "$download" != "yes" ] ; then
+        echo ""
+        echo "  ERROR:  Unable to download $FILE from $URL"
+        echo ""
+        exit 1
+    else
+        echo "  Got          $FILE"
+    fi
+    echo ""
 fi
 
 # Verify SHA1
 cd $OUTDIR && sha1sum -c ${SHA1DIR}/${FILE}.sha1 || {
-    echo "ERROR: Unable to verify sha1 for ${FILE}"
-    exit 1
-}
+        echo " ERROR: Unable to verify sha1 for ${FILE}"
+        exit 1
+    }
 
 exit 0

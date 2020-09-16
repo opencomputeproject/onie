@@ -1,0 +1,127 @@
+From 8ca15ed626c95987d34f8c3163d4d409c74e1d08 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Thu, 26 Mar 2020 15:03:21 +0800
+Subject: [PATCH] Add define for intel igb ethernet driver.
+
+---
+ .../net/ethernet/intel/igb/e1000_defines.h    | 53 +++++++++++++++++--
+ drivers/net/ethernet/intel/igb/e1000_regs.h   |  8 +++
+ 2 files changed, 57 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/ethernet/intel/igb/e1000_defines.h b/drivers/net/ethernet/intel/igb/e1000_defines.h
+index 7382e9dfbfc8..e410c2d57177 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_defines.h
++++ b/drivers/net/ethernet/intel/igb/e1000_defines.h
+@@ -331,8 +331,17 @@
+ /* Timestamp in Rx buffer */
+ #define E1000_RXPBS_CFG_TS_EN           0x80000000
+ 
+-#define I210_RXPBSIZE_DEFAULT		0x000000A2 /* RXPBSIZE default */
+-#define I210_TXPBSIZE_DEFAULT		0x04000014 /* TXPBSIZE default */
++#define I210_RXPBSIZE_DEFAULT           0x000000A2 /* RXPBSIZE default */
++#define I210_RXPBSIZE_MASK              0x0000003F
++#define I210_RXPBSIZE_PB_32KB           0x00000020
++#define I210_TXPBSIZE_DEFAULT           0x04000014 /* TXPBSIZE default */
++#define I210_TXPBSIZE_MASK              0xC0FFFFFF
++#define I210_TXPBSIZE_PB0_8KB           (8 << 0)
++#define I210_TXPBSIZE_PB1_8KB           (8 << 6)
++#define I210_TXPBSIZE_PB2_4KB           (4 << 12)
++#define I210_TXPBSIZE_PB3_4KB           (4 << 18)
++#define I210_DTXMXPKTSZ_DEFAULT         0x00000098
++#define I210_SR_QUEUES_NUM              2
+ 
+ /* SerDes Control */
+ #define E1000_SCTL_DISABLE_SERDES_LOOPBACK 0x0400
+@@ -457,6 +466,8 @@
+  * manageability enabled, allowing us room for 15 multicast addresses.
+  */
+ #define E1000_RAH_AV  0x80000000        /* Receive descriptor valid */
++#define E1000_RAH_ASEL_SRC_ADDR 0x00010000
++#define E1000_RAH_QSEL_ENABLE 0x10000000
+ #define E1000_RAL_MAC_ADDR_LEN 4
+ #define E1000_RAH_MAC_ADDR_LEN 2
+ #define E1000_RAH_POOL_MASK 0x03FC0000
+@@ -631,13 +642,17 @@
+ 
+ /* PHY Control Register */
+ #define MII_CR_FULL_DUPLEX      0x0100  /* FDX =1, half duplex =0 */
++#define MII_CR_SPEED_SELECT_MSB 0x0040  /* bits 6,13: 10=1000, 01=100, 00=10 */
++#define MII_CR_COLL_TEST_ENABLE 0x0080  /* Collision test enable */
+ #define MII_CR_RESTART_AUTO_NEG 0x0200  /* Restart auto negotiation */
++#define MII_CR_ISOLATE          0x0400	/* Isolate PHY from MII */
+ #define MII_CR_POWER_DOWN       0x0800  /* Power down */
+ #define MII_CR_AUTO_NEG_EN      0x1000  /* Auto Neg Enable */
++#define MII_CR_SPEED_SELECT_LSB 0x2000  /* bits 6,13: 10=1000, 01=100, 00=10 */
+ #define MII_CR_LOOPBACK         0x4000  /* 0 = normal, 1 = loopback */
+ #define MII_CR_RESET            0x8000  /* 0 = normal, 1 = PHY reset */
+-#define MII_CR_SPEED_1000       0x0040
+-#define MII_CR_SPEED_100        0x2000
++#define MII_CR_SPEED_1000       (MII_CR_SPEED_SELECT_MSB)
++#define MII_CR_SPEED_100        (MII_CR_SPEED_SELECT_LSB)
+ #define MII_CR_SPEED_10         0x0000
+ 
+ /* PHY Status Register */
+@@ -661,6 +676,8 @@
+ /* 1000BASE-T Control Register */
+ #define CR_1000T_HD_CAPS         0x0100 /* Advertise 1000T HD capability */
+ #define CR_1000T_FD_CAPS         0x0200 /* Advertise 1000T FD capability  */
++#define CR_1000T_REPEATER_DTE    0x0400 /* 1=Repeater/switch device port */
++					/* 0=DTE device */
+ #define CR_1000T_MS_VALUE        0x0800 /* 1=Configure PHY as Master */
+ 					/* 0=Configure PHY as Slave */
+ #define CR_1000T_MS_ENABLE       0x1000 /* 1=Master/Slave manual config value */
+@@ -1030,4 +1047,32 @@
+ #define E1000_VLAPQF_P_VALID(_n)	(0x1 << (3 + (_n) * 4))
+ #define E1000_VLAPQF_QUEUE_MASK	0x03
+ 
++/* TX Qav Control fields */
++#define E1000_TQAVCTRL_XMIT_MODE	BIT(0)
++#define E1000_TQAVCTRL_DATAFETCHARB	BIT(4)
++#define E1000_TQAVCTRL_DATATRANARB	BIT(8)
++#define E1000_TQAVCTRL_DATATRANTIM	BIT(9)
++#define E1000_TQAVCTRL_SP_WAIT_SR	BIT(10)
++/* Fetch Time Delta - bits 31:16
++ *
++ * This field holds the value to be reduced from the launch time for
++ * fetch time decision. The FetchTimeDelta value is defined in 32 ns
++ * granularity.
++ *
++ * This field is 16 bits wide, and so the maximum value is:
++ *
++ * 65535 * 32 = 2097120 ~= 2.1 msec
++ *
++ * XXX: We are configuring the max value here since we couldn't come up
++ * with a reason for not doing so.
++ */
++#define E1000_TQAVCTRL_FETCHTIME_DELTA	(0xFFFF << 16)
++
++/* TX Qav Credit Control fields */
++#define E1000_TQAVCC_IDLESLOPE_MASK	0xFFFF
++#define E1000_TQAVCC_QUEUEMODE		BIT(31)
++
++/* Transmit Descriptor Control fields */
++#define E1000_TXDCTL_PRIORITY		BIT(27)
++
+ #endif
+diff --git a/drivers/net/ethernet/intel/igb/e1000_regs.h b/drivers/net/ethernet/intel/igb/e1000_regs.h
+index d84afdd83e53..d1c9d993e1e4 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_regs.h
++++ b/drivers/net/ethernet/intel/igb/e1000_regs.h
+@@ -421,6 +421,14 @@ do { \
+ 
+ #define E1000_I210_FLA		0x1201C
+ 
++#define E1000_I210_DTXMXPKTSZ	0x355C
++
++#define E1000_I210_TXDCTL(_n)	(0x0E028 + ((_n) * 0x40))
++
++#define E1000_I210_TQAVCTRL	0x3570
++#define E1000_I210_TQAVCC(_n)	(0x3004 + ((_n) * 0x40))
++#define E1000_I210_TQAVHC(_n)	(0x300C + ((_n) * 0x40))
++
+ #define E1000_INVM_DATA_REG(_n)	(0x12120 + 4*(_n))
+ #define E1000_INVM_SIZE		64 /* Number of INVM Data Registers */
+ 
+-- 
+2.17.1
+

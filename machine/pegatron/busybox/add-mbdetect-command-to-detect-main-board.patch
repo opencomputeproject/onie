@@ -1,0 +1,707 @@
+From 65ea292542c797233b393995b3f39f23873ac980 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Wed, 23 Oct 2019 14:27:12 +0800
+Subject: [PATCH] Add 'mbdetect' command to detect main board.
+
+---
+ include/applets.src.h |   1 +
+ include/gpio.h        |  13 +++
+ include/i2c-dev.h     | 176 +++++++++++++++++++++++++++++++++++
+ include/mb_detect.h   |  41 +++++++++
+ miscutils/Kbuild.src  |   2 +-
+ miscutils/gpio.c      | 188 ++++++++++++++++++++++++++++++++++++++
+ miscutils/mb_detect.c | 208 ++++++++++++++++++++++++++++++++++++++++++
+ 7 files changed, 628 insertions(+), 1 deletion(-)
+ create mode 100644 include/gpio.h
+ create mode 100644 include/mb_detect.h
+ create mode 100644 miscutils/gpio.c
+ create mode 100644 miscutils/mb_detect.c
+
+diff --git a/include/applets.src.h b/include/applets.src.h
+index 71b8cbd..04097dd 100644
+--- a/include/applets.src.h
++++ b/include/applets.src.h
+@@ -345,6 +345,7 @@ IF_WHOAMI(APPLET_NOFORK(whoami, whoami, BB_DIR_USR_BIN, BB_SUID_DROP, whoami))
+ IF_YES(APPLET_NOFORK(yes, yes, BB_DIR_USR_BIN, BB_SUID_DROP, yes))
+ IF_ZCIP(APPLET(zcip, BB_DIR_SBIN, BB_SUID_DROP))
+ IF_SYS_EEPROM(APPLET_ODDNAME(onie-syseeprom, onie_syseeprom, BB_DIR_USR_BIN, BB_SUID_DROP, onie_syseeprom))
++APPLET_ODDNAME(mbdetect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
+ 
+ #if !defined(PROTOTYPES) && !defined(NAME_MAIN) && !defined(MAKE_USAGE) \
+ 	&& !defined(MAKE_LINKS) && !defined(MAKE_SUID)
+diff --git a/include/gpio.h b/include/gpio.h
+new file mode 100644
+index 0000000..ef07b6e
+--- /dev/null
++++ b/include/gpio.h
+@@ -0,0 +1,13 @@
++#ifndef __GPIO_H
++#define __GPIO_H
++
++extern int gpio_export(unsigned int gpio);
++extern int gpio_unexport(unsigned int gpio);
++extern int gpio_set_dir(unsigned int gpio, unsigned int out_flag);
++extern int gpio_set_value(unsigned int gpio, unsigned int value);
++extern int gpio_get_value(unsigned int gpio, unsigned int *value);
++extern int gpio_set_edge(unsigned int gpio, char *edge);
++extern int gpio_fd_open(unsigned int gpio);
++extern int gpio_fd_close(int fd);
++
++#endif	/* __GPIO_H */
+diff --git a/include/i2c-dev.h b/include/i2c-dev.h
+index 23f7c2c..a7a8609 100644
+--- a/include/i2c-dev.h
++++ b/include/i2c-dev.h
+@@ -326,5 +326,181 @@ static inline __s32 i2c_smbus_block_process_call(int file, __u8 command,
+ 	}
+ }
+ 
++static inline __s32 i2c_dev_smbus_access(__s32 file, __u8 read_write, __u8 command,
++                         __s32 size, union i2c_smbus_data *data)
++{
++	struct i2c_smbus_ioctl_data args;
++
++	args.read_write = read_write;
++	args.command = command;
++	args.size = size;
++	args.data = data;
++	return ioctl(file, I2C_SMBUS, &args);
++}
++
++static inline __s32 i2c_dev_open(__s32 i2cbus)
++{
++	__s32 file;
++	char filename[20] = "";
++
++	sprintf(filename, "/dev/i2c-%d", i2cbus);
++	file = open(filename, O_RDWR);
++
++	if (file < 0)
++		printf("Error: Could not open file %s\n", filename);
++
++	return file;
++}
++
++static inline __s32 i2c_dev_read(__s32 file, __u8 *buffer, __s32 offset, __s32 length)
++{
++	__s32 i;
++	union i2c_smbus_data data;
++
++	for (i = 0; i < length; i++)
++	{
++		if (i2c_dev_smbus_access(file, I2C_SMBUS_READ, (__u8)(i + offset), I2C_SMBUS_BYTE_DATA, &data))
++		{
++			return -1;
++		}
++		else
++		{
++			buffer[i] = 0x0FF & data.byte;
++		}
++		usleep(10000);
++	}
++
++	return 0;
++}
++
++static inline __s32 i2c_dev_write(__s32 file, __u8 *buffer, __s32 offset, __s32 length)
++{
++	__s32 i;
++	union i2c_smbus_data data;
++
++	for (i = 0; i < length; i++)
++	{
++		data.byte = (__u8)buffer[i];
++		if (i2c_dev_smbus_access(file, I2C_SMBUS_WRITE, (__u8)(i + offset), I2C_SMBUS_BYTE_DATA, &data) != 0)
++			return -1;
++		usleep(10000);
++	}
++	return 0;
++}
++
++static inline __s32 i2c_dev_seek(__s32 file, __s32 offset)
++{
++	return i2c_dev_smbus_access(file, I2C_SMBUS_WRITE, offset, I2C_SMBUS_BYTE, NULL);
++}
++
++static inline __s32 i2c_read(__s32 bus, __u8 dev, uint addr, __u8 *data, __s32 length)
++{
++	__s32 fd, ret;
++
++	fd = i2c_dev_open(bus);
++	if(fd < 0) {
++		return -1;
++	}
++
++	ret = ioctl(fd, I2C_SLAVE, dev);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	ret = i2c_dev_read(fd, data, addr, length);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	close(fd);
++	return 0;
++}
++
++static inline __s32 i2c_write(__s32 bus, __u8 dev, uint addr, __s32 alen, __u8 *data, __s32 length)
++{
++	__s32 fd, ret;
++
++	fd = i2c_dev_open(bus);
++	if(fd < 0) {
++		return -1;
++	}
++
++	ret = ioctl(fd, I2C_SLAVE, dev);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	ret = i2c_dev_seek(fd, addr);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	ret = i2c_dev_write(fd, data, alen, length);
++	if(ret < 0) {
++		close(fd);
++		return -1;
++	}
++
++	close(fd);
++	return 0;
++}
++
++/**
++ * i2c_mux_select - select channel for i2c mux
++ * 0xff will release i2c mux
++ */
++static inline __s32 i2c_mux_pca9544_select(__s32 bus, __u8 chip, __u8 channel)
++{
++	__u8 data = 0;
++	if(channel == 0xff)
++	{
++		data = 0;
++	}
++	else if(channel >=0 && channel <4)
++	{
++		data = 0x4 + channel;
++	}
++	else
++	{
++		return -1;
++	}
++
++	return i2c_write(bus, chip, 0, 1, &data, 1);
++}
++
++/**
++ * i2c_mux_select - select channel for i2c mux
++ * 0xff will release i2c mux
++ */
++static inline __s32 i2c_mux_select(__s32 bus, __u8 chip, __u8 channel)
++{
++	__u8 data = 0;
++	if(channel == 0xff)
++	{
++		data = 0;
++	}
++	else if(channel >=0 && channel <8)
++	{
++		data = (0x01 << channel);
++	}
++	else
++	{
++		return -1;
++	}
++
++	return i2c_write(bus, chip, 0, 1, &data, 1);
++}
++
++/**
++ * i2c_mux_release - release channel for i2c mux
++ */
++static inline __s32 i2c_mux_release(__s32 bus, __u8 chip)
++{
++	return i2c_mux_select(bus, chip, 0xff);
++}
+ 
+ #endif /* _LINUX_I2C_DEV_H */
+diff --git a/include/mb_detect.h b/include/mb_detect.h
+new file mode 100644
+index 0000000..b852983
+--- /dev/null
++++ b/include/mb_detect.h
+@@ -0,0 +1,41 @@
++#ifndef __MB_DETECT_H
++#define __MB_DETECT_H
++
++typedef __u8 u8;
++typedef __u32 u32;
++typedef __s32 s32;
++
++#define MBBOARD_GPIO_ADDR               452
++#define MBBOARD_GPIO_ID0_ADDR           40
++#define MBBOARD_GPIO_ID1_ADDR           49
++#define MBBOARD_GPIO_ID2_ADDR           55
++#define MBBOARD_GPIO_ID3_ADDR           54
++
++#define MB_DETECT_I2C_BUS               1
++#define MB_DETECT_I2C_MUX_ADDR          0x73
++#define MB_DETECT_I2C_MUX_CHANNEL       0
++#define MB_BOARDID0_I2C_ADDR            0xFE
++#define MB_BOARDID1_I2C_ADDR            0xFF
++#define MB_BOARDID_I2C_MUX_ADDR         0x74
++#define SYS_PRODUCT_NAME_SIZE           31  /* max. product name size */
++#define SYS_MODEL_NAME_SIZE             31  /* max. model name size */
++#define SYS_ASIC_NAME_SIZE              16  /* max. asic name size */
++
++
++enum {
++	MB_LAST = 0
++};
++
++typedef struct {
++	u32 motherboard_id;
++	u8 projectName[SYS_PRODUCT_NAME_SIZE+1];
++	u8 productName[SYS_PRODUCT_NAME_SIZE+1];
++	u8 modelName[SYS_MODEL_NAME_SIZE+1];
++	u32 machine_rev;
++} SysBoardInfo;
++
++extern u32 mb_id_get(void);
++extern u32 mb_index_get(void);
++extern s32 sys_board_info_get(SysBoardInfo *bdinfo);
++
++#endif	/* __MB_DETECT_H */
+diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
+index 72ddcd1..d45fd4e 100644
+--- a/miscutils/Kbuild.src
++++ b/miscutils/Kbuild.src
+@@ -52,7 +52,7 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
+ lib-$(CONFIG_VOLNAME)     += volname.o
+ lib-$(CONFIG_WATCHDOG)    += watchdog.o
+ lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
+-lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
++lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o mb_detect.o gpio.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
+ lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
+diff --git a/miscutils/gpio.c b/miscutils/gpio.c
+new file mode 100644
+index 0000000..b2cdcda
+--- /dev/null
++++ b/miscutils/gpio.c
+@@ -0,0 +1,188 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <errno.h>
++#include <unistd.h>
++#include <fcntl.h>
++
++ /****************************************************************
++ * Constants
++ ****************************************************************/
++#define SYSFS_GPIO_DIR "/sys/class/gpio"
++#define GPIO_MAX_BUF 64
++
++/****************************************************************
++ * gpio_export
++ ****************************************************************/
++int gpio_export(unsigned int gpio)
++{
++	int fd, len;
++	char buf[GPIO_MAX_BUF];
++
++	fd = open(SYSFS_GPIO_DIR "/export", O_WRONLY);
++	if (fd < 0) {
++		perror("gpio/export");
++		return fd;
++	}
++
++	len = snprintf(buf, sizeof(buf), "%d", gpio);
++	write(fd, buf, len);
++	close(fd);
++
++	return 0;
++}
++
++/****************************************************************
++ * gpio_unexport
++ ****************************************************************/
++int gpio_unexport(unsigned int gpio)
++{
++	int fd, len;
++	char buf[GPIO_MAX_BUF];
++
++	fd = open(SYSFS_GPIO_DIR "/unexport", O_WRONLY);
++	if (fd < 0) {
++		perror("gpio/export");
++		return fd;
++	}
++
++	len = snprintf(buf, sizeof(buf), "%d", gpio);
++	write(fd, buf, len);
++	close(fd);
++	return 0;
++}
++
++/****************************************************************
++ * gpio_set_dir
++ ****************************************************************/
++int gpio_set_dir(unsigned int gpio, unsigned int out_flag)
++{
++	int fd, len;
++	char buf[GPIO_MAX_BUF];
++
++	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR  "/gpio%d/direction", gpio);
++
++	fd = open(buf, O_WRONLY);
++	if (fd < 0) {
++		perror("gpio/direction");
++		return fd;
++	}
++
++	if (out_flag)
++		write(fd, "out", 4);
++	else
++		write(fd, "in", 3);
++
++	close(fd);
++	return 0;
++}
++
++/****************************************************************
++ * gpio_set_value
++ ****************************************************************/
++int gpio_set_value(unsigned int gpio, unsigned int value)
++{
++	int fd, len;
++	char buf[GPIO_MAX_BUF];
++
++	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR "/gpio%d/value", gpio);
++
++	fd = open(buf, O_WRONLY);
++	if (fd < 0) {
++		perror("gpio/set-value");
++		return fd;
++	}
++
++	if (value)
++		write(fd, "1", 2);
++	else
++		write(fd, "0", 2);
++
++	close(fd);
++	return 0;
++}
++
++/****************************************************************
++ * gpio_get_value
++ ****************************************************************/
++int gpio_get_value(unsigned int gpio, unsigned int *value)
++{
++	int fd, len,rv;
++	char buf[GPIO_MAX_BUF];
++	char ch;
++
++	rv = gpio_export(gpio);
++	if (rv < 0)
++		return rv;
++
++	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR "/gpio%d/value", gpio);
++
++	fd = open(buf, O_RDONLY);
++	if (fd < 0) {
++		perror("gpio/get-value");
++		return fd;
++	}
++
++	read(fd, &ch, 1);
++
++	if (ch != '0') {
++		*value = 1;
++	} else {
++		*value = 0;
++	}
++
++	close(fd);
++
++	rv = gpio_unexport(gpio);
++	if (rv < 0)
++		return rv;
++
++	return 0;
++}
++
++
++/****************************************************************
++ * gpio_set_edge
++ ****************************************************************/
++int gpio_set_edge(unsigned int gpio, char *edge)
++{
++	int fd, len;
++	char buf[GPIO_MAX_BUF];
++
++	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR "/gpio%d/edge", gpio);
++
++	fd = open(buf, O_WRONLY);
++	if (fd < 0) {
++		perror("gpio/set-edge");
++		return fd;
++	}
++
++	write(fd, edge, strlen(edge) + 1);
++	close(fd);
++	return 0;
++}
++
++/****************************************************************
++ * gpio_fd_open
++ ****************************************************************/
++int gpio_fd_open(unsigned int gpio)
++{
++	int fd, len;
++	char buf[GPIO_MAX_BUF];
++
++	len = snprintf(buf, sizeof(buf), SYSFS_GPIO_DIR "/gpio%d/value", gpio);
++
++	fd = open(buf, O_RDONLY | O_NONBLOCK );
++	if (fd < 0) {
++		perror("gpio/fd_open");
++	}
++	return fd;
++}
++
++/****************************************************************
++ * gpio_fd_close
++ ****************************************************************/
++int gpio_fd_close(int fd)
++{
++	return close(fd);
++}
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+new file mode 100644
+index 0000000..c4621bb
+--- /dev/null
++++ b/miscutils/mb_detect.c
+@@ -0,0 +1,208 @@
++#include "libbb.h"
++#include <i2c-dev.h>
++#include <gpio.h>
++#include <getopt.h>
++#include <mb_detect.h>
++
++extern void mbdetect_usage(void);
++
++SysBoardInfo sysBoardInfo[1] = {
++	{ 0x00, "project_name",  "product_name\0",  "platform_name\0", 0 }
++};
++
++static u32 mb_id_get_from_cpld(void)
++{
++	u32 board_id = 0, extended = 0;
++	u8 data = 0;
++
++	if(i2c_mux_select(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
++	{
++		if(i2c_read(MB_DETECT_I2C_BUS, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID0_I2C_ADDR, &data, 1) == 0)
++		{
++			extended = data >> 7;
++			board_id = data & 0x7F;
++		}
++		i2c_mux_release(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR);
++	}
++
++	if (extended)
++	{
++		if(i2c_mux_select(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
++		{
++			if(i2c_read(MB_DETECT_I2C_BUS, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID1_I2C_ADDR, &data, 1) == 0)
++			{
++				board_id = data;
++			}
++			i2c_mux_release(MB_DETECT_I2C_BUS, MB_DETECT_I2C_MUX_ADDR);
++		}
++	}
++
++	return board_id;
++}
++
++static u32 mb_id_get_from_gpio(void)
++{
++	u32 board_id = 0, cpld_board_id = 0;
++	int rv = 0, index=0;
++	unsigned int gpio_addr=0, id[4] = {0};
++	unsigned int gpio_id[4]= { MBBOARD_GPIO_ID0_ADDR,
++				   MBBOARD_GPIO_ID1_ADDR,
++				   MBBOARD_GPIO_ID2_ADDR,
++				   MBBOARD_GPIO_ID3_ADDR };
++
++	for (index = 0; index < 4; index++) {
++		gpio_addr=MBBOARD_GPIO_ADDR + gpio_id[index];
++		rv = gpio_get_value(gpio_addr, &id[index]);
++		if (rv < 0) {
++			id[index] = 0;
++		}
++	}
++
++	if (id[3]) {
++		cpld_board_id = mb_id_get_from_cpld();
++		if (cpld_board_id == 0)
++			id[3] = 0;
++	}
++
++	board_id = (id[3] << 3) + (id[2] << 2) + (id[1] << 1) + id[0];
++
++error:
++	return board_id;
++}
++
++/*
++ *  This macro defines the mbdetect command line command.
++ */
++//usage:#define mbdetect_trivial_usage
++//usage:       "[-hifd]"
++//usage:#define mbdetect_full_usage "\n\n"
++//usage:     "Display Quanta Switch Motherboard detect result.\n"
++//usage:     "\n	-i	Output motherboard id."
++//usage:     "\n	-f	Output motherboard platform."
++//usage:     "\n	-p	Output motherboard project."
++//usage:     "\n	-d	Output motherboard product."
++
++void mbdetect_usage(void)
++{
++	static const char *usage =
++	"Display PEGATRON Switch Motherboard detect result.\n"
++	"Usage: mbdetect [-h] [-i] [-f] [-d] \n"
++	"   With no arguments display all motherboard information.\n"
++	"   -h --help\n"
++	"      Display usage\n"
++	"   -i --id\n"
++	"      Output motherboard id.\n"
++	"   -f --platform\n"
++	"      Output motherboard platform name.\n"
++	"   -d --product\n"
++	"      Output motherboard product name.\n";
++
++	fprintf(stderr, "%s", usage);
++	exit(1);
++}
++
++u32 mb_id_get(void)
++{
++	u32 board_id = 0;
++
++	board_id = mb_id_get_from_gpio();
++
++	if (board_id == 0xF) {
++		board_id = mb_id_get_from_cpld();
++	}
++
++	return board_id;
++}
++
++u32 mb_index_get(void)
++{
++	SysBoardInfo *bdinfo = sysBoardInfo;
++	u32 index = 0;
++	u32 motherboard_id = mb_id_get();
++
++	for(index=0;index < MB_LAST; index++) {
++		if(motherboard_id == bdinfo->motherboard_id) {
++			break;
++		}
++		bdinfo++;
++	}
++
++	return index;
++}
++
++s32 sys_board_info_get(SysBoardInfo *bdinfo)
++{
++	u32 index = mb_index_get();
++
++	if(index < MB_LAST) {
++		memcpy(bdinfo, &sysBoardInfo[index], sizeof(SysBoardInfo));
++		return 0;
++	}
++
++	bdinfo = NULL;
++	return -1;
++}
++
++/*
++ *  do_mbdetect
++ *  This function implements the mbdetect command.
++ */
++int mbdetect_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
++int mbdetect_main(int argc, char **argv)
++{
++	int count = 0;
++	int c, option_index;
++	__u8 id;
++	SysBoardInfo bdinfo;
++
++	const char *short_options = "hifd";
++	const struct option long_options[] = {
++		{"help",        no_argument,          0,    'h'},
++		{"id",          no_argument,          0,    'i'},
++		{"platform",    no_argument,          0,    'f'},
++		{"product",     no_argument,          0,    'd'},
++		{0,                       0,          0,      0},
++	};
++
++	while (TRUE) {
++		c = getopt_long(argc, argv, short_options,
++				long_options, &option_index);
++		if (c == EOF)
++			break;
++
++		count++;
++		switch (c) {
++		case 'h':
++			mbdetect_usage();
++			break;
++		case 'i':
++			id = mb_id_get();
++			printf("%d\n", id);
++			break;
++		case 'f':
++			if(sys_board_info_get(&bdinfo) == 0) {
++				printf("x86_64-pegatron_%s-r%d\n", bdinfo.modelName, bdinfo.machine_rev);
++			}
++			else {
++				printf("Error: No match motherboard detected.\n");
++			}
++			break;
++		case 'd':
++			if(sys_board_info_get(&bdinfo) == 0) {
++				printf("%s\n", bdinfo.productName);
++			}
++			else {
++				printf("Error: No match motherboard detected.\n");
++			}
++			break;
++		default:
++			mbdetect_usage();
++			break;
++		}
++	}
++
++	if (!count)
++		mbdetect_usage();
++
++	return 0;
++}
+-- 
+2.17.1
+
