@@ -98,6 +98,11 @@ ifeq ($(IPMITOOL_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(IPMITOOL_INSTALL_STAMP)
 endif
 
+#Jay(v09): Integrate ioget/ioset tools in Apollo ONIE
+ifeq ($(IOACCESS_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(IOACCESS_INSTALL_STAMP)
+endif
+
 ifeq ($(EXT3_4_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(E2FSPROGS_INSTALL_STAMP)
 endif

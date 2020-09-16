@@ -1,0 +1,26 @@
+#!/bin/sh
+
+. /etc/machine.conf
+
+echo "Initializing ONIE system EEPROM..."
+onie-syseeprom -e
+
+# parse build date
+year=${onie_build_date%%-*}
+rest=${onie_build_date#*-}
+month=${rest%%-*}
+rest=${rest#*-}
+day=${rest%%T*}
+rest=${rest#*T}
+time=${rest%%-*}
+
+onie-syseeprom -s 0x21=$(dmidecode -s system-product-name | sed 's/ /_/g')
+onie-syseeprom -s 0x22=$(dmidecode -s baseboard-product-name)
+onie-syseeprom -s 0x23=$(dmidecode -s chassis-serial-number)
+onie-syseeprom -s 0x24=$(onie-sysinfo -e)
+onie-syseeprom -s 0x25="${month}/${day}/${year} ${time}:00"
+onie-syseeprom -s 0x28="$onie_platform"
+onie-syseeprom -s 0x29="$onie_version"
+onie-syseeprom -s 0x2b=$(dmidecode -s system-manufacturer)
+onie-syseeprom -s 0x2c="US"
+onie-syseeprom -s 0x2d=$(dmidecode -s system-manufacturer)

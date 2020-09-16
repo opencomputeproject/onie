@@ -124,6 +124,9 @@ PATCHDIR     = $(realpath ../patches)
 UPSTREAMDIR  = $(realpath ../upstream)
 CONFDIR	     = $(realpath ../rootconf)
 SCRIPTDIR    = $(realpath ./scripts)
+##### Jay(v09): Add variable for fw-upgrade-tools >>
+UFITOOLDIR   = $(realpath ../fw-upgrade-tools)
+##### Jay(v09): Add variable for fw-upgrade-tools <<
 
 #-------------------------------------------------------------------------------
 #
@@ -185,8 +188,11 @@ KNOWN_ASIC_VENDORS = \
   mvl    \
   nephos \
   none   \
+  barefoot \
   qemu   \
-  hp
+  hp     \
+  dell   \
+  cisco
 
 ifneq (,$(MAKECMDGOALS))
   ifeq (,$(filter onie-release-tag help distclean %build-host, $(MAKECMDGOALS)))
@@ -295,9 +301,12 @@ ifeq ($(ONIE_RELEASE_TAG),)
     ONIE_RELEASE_TAG = $(GIT_BRANCH)-$(BUILD_DATE)
   endif
 endif
-DIRTY  = $(shell cd $(MACHINEDIR) && git status | \
-		egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo -dirty)
-LSB_RELEASE_TAG := $(ONIE_RELEASE_TAG)$(VENDOR_VERSION)$(DIRTY)
+
+# Jim adds: do not show dirty token
+#LSB_RELEASE_TAG := $(ONIE_RELEASE_TAG)$(VENDOR_VERSION)$(DIRTY)
+#DIRTY  = $(shell cd $(MACHINEDIR) && git status | \
+#		egrep -q '(Your branch is ahead|modified:|Untracked files:)' && echo -dirty)
+LSB_RELEASE_TAG := $(ONIE_RELEASE_TAG)$(VENDOR_VERSION)
 export LSB_RELEASE_TAG
 
 #-------------------------------------------------------------------------------
@@ -438,6 +447,12 @@ endif
 ifeq ($(KEYUTILS_ENABLE),yes)
   include make/keyutils.make
 endif
+
+#Jay(v09): Integrate ioget/ioset tools in Apollo ONIE
+ifeq ($(IOACCESS_ENABLE),yes)
+  include make/ioaccess.make
+endif
+
 include make/images.make
 include make/demo.make
 

@@ -1,0 +1,102 @@
+#!/bin/sh
+
+# Copyright (C) 2018 Curt Brune <curt@cumulusnetworks.com>
+#
+# SPDX-License-Identifier:     GPL-2.0
+
+#
+# This script generates the following:
+#
+# - RSA 2048-bit private/public key pair in PEM encoding
+# - x509 self-signed certficate in DER and PEM encodings
+#
+
+set -e
+
+type="$1"
+short_name="$2"
+description="$3"
+
+SECRET_KEY="${short_name}-${type}-secret-key.pem"
+PUBLIC_KEY="${short_name}-${type}-public-key.pem"
+CERT_REQ="${short_name}-${type}-cert.req"
+VENDOR_CERT_DER="${short_name}-${type}-cert.der"
+VENDOR_CERT_PEM="${short_name}-${type}-cert.pem"
+VENDOR_CERT_ESL="${short_name}-${type}-cert.esl"
+
+if [ -f "$SECRET_KEY" ] ; then
+    echo "ERROR: secret key already exists"
+    exit 1
+fi
+
+if [ -f "$PUBLIC_KEY" ] ; then
+    echo "ERROR: public key already exists"
+    exit 1
+fi
+
+if [ -f "$CERT_REQ" ] ; then
+    echo "ERROR: certificate request already exists"
+    exit 1
+fi
+
+if [ -f "$VENDOR_CERT_DER" ] ; then
+    echo "ERROR: vendor DER certificate already exists"
+    exit 1
+fi
+
+if [ -f "$VENDOR_CERT_PEM" ] ; then
+    echo "ERROR: vendor PEM certificate already exists"
+    exit 1
+fi
+
+cat <<EOF
+*** WARNING:
+*** WARNING: These keys are for demonstration purposes only.
+*** WARNING: Do not use these keys in production systems.
+*** WARNING:
+EOF
+
+read -p "Do you understand and accept these risks (y/N)? " answer
+case $answer in
+    Y|y)
+        echo "Generating keys..."
+        ;;
+    *)
+        echo "Stopping..."
+        exit 0
+esac
+
+# Generate key pair
+openssl genpkey -out $SECRET_KEY -outform pem -algorithm RSA -pkeyopt rsa_keygen_bits:2048
+
+# Extract public key from secret-key.pem
+openssl rsa -in $SECRET_KEY -pubout -out $PUBLIC_KEY -outform pem
+
+# Generate certificate request configuration file
+cat<<EOF > $CERT_REQ
+[ req ]
+prompt = no
+distinguished_name = req_distinguished_name
+
+[ req_distinguished_name ]
+C                      = US
+ST                     = California
+L                      = Mountain View
+O                      = $description
+OU                     = Engineering Department
+CN                     = $short_name Testing Certificate Authority
+EOF
+
+# Generate DER encoded self-signed x509 certificate
+openssl req -x509 -new -config $CERT_REQ   \
+        -outform der -out $VENDOR_CERT_DER \
+        -key $SECRET_KEY -keyform pem      \
+        -sha256 -days 18250
+
+# Make PEM version of DER cert
+openssl x509 -in $VENDOR_CERT_DER -inform der -out $VENDOR_CERT_PEM -outform pem
+
+# Print certificate info
+openssl x509 -in $VENDOR_CERT_DER -inform der -text -noout
+
+echo "Keys and certificates generated successfully."
