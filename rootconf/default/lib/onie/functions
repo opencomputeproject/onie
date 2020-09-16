@@ -388,6 +388,13 @@ str2hex()
     echo -n "$1" | hexdump -ve '1/1 "%.2x"'
 }
 
+# turn string into hex with prefixed length (as hex byte)
+str2lenhex()
+{
+    local str="$1"
+    printf "%02X%s" ${#str} $(str2hex $str)
+}
+
 make_str_opt()
 {
     local code="$1"
@@ -400,7 +407,11 @@ udhcpc_args()
 {
     local udhcp_args="-q -S -V onie_vendor:${onie_platform}"
     # user_class - option 77 - string in hex
-    local udhcp_user_class="-x 77:$(str2hex onie_dhcp_user_class)"
+    local udhcp_user_class="-x 77:$(str2lenhex onie_dhcp_user_class)"
+	
+    # client id - option 61 - serial number in hex
+    local udhcp_client_id="-x 61:00$(str2hex $(onie-sysinfo -s))"
+
     # vendor specific options - option 125 - string in hex
     # code 3 - machine
     # code 4 - CPU architecture
@@ -411,7 +422,7 @@ udhcpc_args()
     local payload="${udhcp_vivso_machine}${udhcp_vivso_arch}${udhcp_vivso_machine_rev}"
     local len=$(( ${#payload} / 2 ))
     local udhcp_vivso="-x 125:$(printf %08X%02X%s $onie_iana_enterprise $len $payload)"
-    echo "$udhcp_args" "$udhcp_user_class" "$udhcp_vivso"
+    echo "$udhcp_args" "$udhcp_user_class" "$udhcp_client_id" "$udhcp_vivso"
 }
 
 # Increment a MAC address by the specified integer
@@ -491,6 +502,18 @@ prompt_yes_no()
     return 1
 }
 
+# Determines if the second parameter string begins with the first parameter
+beginswith()
+{
+    case "$2" in
+        "$1"*)
+            true
+            ;;
+        *)
+            false
+            ;;
+    esac
+}
 # Local Variables:
 # mode: shell-script
 # eval: (sh-set-shell "/bin/sh" t nil)

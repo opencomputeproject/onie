@@ -1,0 +1,148 @@
+==============================================
+Installing ONIE on Juniper_Networks QFX5200
+==============================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/juniper MACHINE=juniper_qfx5200 all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/juniper MACHINE=juniper_qfx5200 all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+stack@controller:~/onie/onie_J/onie/build/images$ ls -ltr
+total 83376
+-rw-rw---- 1 stack stack  8720096 Feb 19 12:33 juniper_qfx5200-r0.initrd
+-rw-rw---- 1 stack stack  3782912 Feb 19 12:37 juniper_qfx5200-r0.vmlinuz
+-rw-rw---- 1 stack stack 12566391 Feb 19 12:37 onie-updater-x86_64-juniper_qfx5200-r0
+-rw-rw---- 1 stack stack 28835840 Feb 19 12:37 onie-recovery-x86_64-juniper_qfx5200-r0.iso
+
+juniper_qfx5200-r0.vmlinuz -- This is the ONIE kernel image
+
+juniper_qfx5200-r0.initrd  -- This is the ONIE initramfs (filesystem)
+
+onie-updater-x86_64-juniper_qfx5200-r0 -- This is the ONIE self-update
+image.  This image is a self-extracting archive used for installing ONIE.
+
+onie-recovery-x86_64-juniper_qfx5200-r0.iso -- This is a recovery ISO 
+image. This image can be used to create a bootable USB memory stick for 
+installing/recovery ONIE.
+
+Demo target can be built using the command
+
+  $ make -j4 MACHINEROOT=../machine/juniper MACHINE=juniper_qfx5200 all demo
+
+Then two more bin files are created in addition to the above listed
+
+-rw-rw---- 1 stack stack 12576008 Feb 19 16:30 demo-installer-x86_64-juniper_qfx5200-r0.bin
+-rw-rw---- 1 stack stack 12576008 Feb 19 16:30 demo-diag-installer-x86_64-juniper_qfx5200-r0.bin
+
+These files can be installed by 'onie-nos-install' command to test the installation / boot 
+workflow.
+
+For make clean, use the following command
+
+make machine-clean MACHINEROOT=../machine/juniper MACHINE=juniper_qfx5200
+
+
+Installing ONIE on a Blank Machine
+==================================
+
+To install ONIE on a new machine use one of the onie-recovery images.
+
+Overview
+--------
+
+An "ONIE recovery image" is used for:
+
+1. installing ONIE on a blank machine, i.e. what manufacturing would
+   use.
+
+2. recovering a destroyed ONIE system.
+
+.<machine>.iso -- a hybrid ISO image can be used as recovery image.
+
+
+ISO Recovery Image
+------------------
+   you can use the recovery ISO image to create a bootable USB memory stick.
+
+Creating bootable USB stick
+---------------------------
+
+Use ``dd`` to copy the .iso image to a USB stick and boot from that::
+
+  dd if=<machine>.iso of=/dev/sdX bs=10M
+
+For example::
+  dd if=onie-recovery-x86_64-juniper_qfx5200-r0.iso of=/dev/sdb bs=10M
+
+You can find the correct ``/dev/sdX`` by inspecing the ``dmesg``
+output after inserting the USB stick into your work station.
+
+Booting from USB stick
+----------------------
+
+To enable booting from USB in the BIOS:
+
+1. Insert the USB stick
+
+2. Power on the switch and enter the BIOS configuration
+
+3. Set the hard drive boot order:
+
+  In "Boot Option #1" select the device that corresponds to your
+  device::
+
+    Boot-->Boot Option Priorities-->Boot Option #1
+
+  If the device name is not listed in "Boot Option #1", please
+  check the priorities in the hard drive boot order::
+
+    Boot-->Hard Drive BBS Priorities-->Boot Option #1
+
+  Taking ``JetFlashTranscend 8GB 8.07`` as an example, the boot
+  order will look like following::
+
+    Boot Option Priorities
+    Boot Option #1          [JetFlashTranscend 8...]
+    Boot Option #2          [ATP ATP IG eUSB 1100]
+    Boot Option #3          [IBA GE Slot 00A0 v1543]
+    Boot Option #4          [UEFI: Built-in EFI ...]
+
+4. Save and Exit the BIOS configuration
+
+5. After several seconds, you should see:
+
+                     GNU GRUB  version 2.02~beta2+e4a1fe391
+
+ +----------------------------------------------------------------------------+
+ |*ONIE: Rescue                                                               |
+ | ONIE: Embed ONIE                                                           |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line.
+
+  - Choose ``ONIE: Embed ONIE`` for creating a fresh partition layout and
+    installing ONIE automatically.  All data on the mass storage will be
+    erased.
+  - Choose ``ONIE: Rescue`` for entering ONIE recovery command-line shell.

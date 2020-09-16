@@ -8,7 +8,7 @@ VENDOR_REV ?= 0
 
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),0)
-  MACHINE_REV = 1
+  MACHINE_REV = 7
 else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
@@ -18,7 +18,7 @@ endif
 # string.  HW vendors can use this to appended their own versioning
 # information to the base ONIE version string.
 # ONIE Version = onie-release version + VENDOR_VERSION
-VENDOR_VERSION = v06
+VENDOR_VERSION = v08
 
 # Enable UEFI support
 UEFI_ENABLE = yes
@@ -33,6 +33,7 @@ VENDOR_ID = 51242
 
 # Enable the i2ctools command for this platform
 I2CTOOLS_ENABLE = yes
+IPMITOOL_ENABLE = yes
 
 #
 # Console parameters can be defined here (default values are in

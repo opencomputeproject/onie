@@ -1,0 +1,176 @@
+From e210f9291535e581d577dfc90d9f3b1c7b84e611 Mon Sep 17 00:00:00 2001
+From: gilt <gilt@marvell.com>
+Date: Mon, 26 Aug 2019 14:58:10 +0300
+Subject: [PATCH] From a74e3ab5d785f600c4848eeb8ffaf23daf76adea Mon Sep 17
+ 00:00:00 2001 Subject: [PATCH] From 50ba0ed922447273523c371a948cf977d3f414e0
+ Mon Sep 17  00:00:00 2001 Subject: [PATCH] add a7020-comexp dts
+
+Change-Id: If4d6e2b704aad1616ad91871282e678eabb400dd
+---
+ arch/arm64/boot/dts/marvell/Makefile               |   1 +
+ .../boot/dts/marvell/armada-7020-comexpress.dts    | 141 +++++++++++++++++++++
+ 2 files changed, 142 insertions(+)
+ create mode 100644 arch/arm64/boot/dts/marvell/armada-7020-comexpress.dts
+
+diff --git a/arch/arm64/boot/dts/marvell/Makefile b/arch/arm64/boot/dts/marvell/Makefile
+index 55f86c8..da5c1db 100644
+--- a/arch/arm64/boot/dts/marvell/Makefile
++++ b/arch/arm64/boot/dts/marvell/Makefile
+@@ -5,6 +5,7 @@ dtb-$(CONFIG_ARCH_BERLIN) += berlin4ct-stb.dtb
+ # Mvebu SoC Family
+ dtb-$(CONFIG_ARCH_MVEBU) += armada-3720-db.dtb
+ dtb-$(CONFIG_ARCH_MVEBU) += armada-7020-amc.dtb
++dtb-$(CONFIG_ARCH_MVEBU) += armada-7020-comexpress.dtb
+ dtb-$(CONFIG_ARCH_MVEBU) += armada-7040-db.dtb
+ dtb-$(CONFIG_ARCH_MVEBU) += armada-8040-db.dtb
+ 
+diff --git a/arch/arm64/boot/dts/marvell/armada-7020-comexpress.dts b/arch/arm64/boot/dts/marvell/armada-7020-comexpress.dts
+new file mode 100644
+index 0000000..de0801f
+--- /dev/null
++++ b/arch/arm64/boot/dts/marvell/armada-7020-comexpress.dts
+@@ -0,0 +1,141 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * Copyright (C) 2019 Marvell Technology Group Ltd.
++ *
++ * Device Tree file for Marvell Armada 7020 AMC board.
++ */
++
++#include "armada-7020.dtsi"
++
++/ {
++	model = "Marvell Armada-7020 COMEXPRESS board setup";
++	compatible = "marvell,armada7020-comexpress", "marvell,armada7020",
++			"marvell,armada-ap806";
++
++	memory@0 {
++		device_type = "memory";
++		reg = <0x0 0x0 0x0 0x40000000>;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	aliases {
++		ethernet0 = &cp0_emac0;
++		ethernet1 = &cp0_emac2;
++	};
++
++};
++
++&i2c0 {
++	status = "okay";
++	clock-frequency = <100000>;
++};
++
++&spi0 {
++	status = "okay";
++};
++
++&uart0 {
++	status = "okay";
++};
++
++&cpm_ethernet {
++	status = "okay";
++};
++
++&cp0_emac0 {
++	status = "okay";
++	phy-mode = "10gbase-kr";
++};
++
++&cp0_emac2 {
++	status = "okay";
++	phy = <&phy0>;
++	phy-mode = "rgmii-id";
++};
++
++&cp0_ppv22 {
++	status = "okay";
++	l4_chksum_jumbo_port = <0>;
++};
++
++&cp0_eth0 {
++	status = "okay";
++};
++
++&cp0_eth1 {
++	status = "okay";
++};
++
++&cpm_i2c0 {
++	status = "okay";
++	clock-frequency = <100000>;
++};
++
++&cpm_mdio {
++	status = "okay";
++
++	phy0: ethernet-phy@1 {
++		reg = <0x10>;
++	};
++};
++
++&cpm_nand {
++	status = "okay";
++
++	nand@0 {
++		reg = <0>;
++		label = "main-storage";
++		nand-rb = <0>;
++		nand-ecc-mode = "hw";
++		nand-on-flash-bbt;
++		nand-ecc-strength = <8>;
++		nand-ecc-step-size = <512>;
++
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				/* boot - 4MB (dual image of 2M each) */
++				label = "uboot";
++				reg = <0 0x400000>;
++				read-only;
++			};
++			partition@400000 { 
++				/* uboot-env - 1MB */
++				label = "uboot-env";
++				reg = <0x400000 0x100000>;
++				env_size = <0x10000>;
++			};
++			partition@500000 {
++				/* onie - 30MB */
++				label = "ONIE";
++				reg = <0x500000 0x1e00000>;
++			};
++		};
++	};
++};
++
++&cpm_pcie0 {
++	status = "okay";
++	num-lanes = <4>;
++	num-viewport = <8>;
++
++	ranges = <0x81000000 0x0 0xfa000000 0x0 0xfa000000 0x0 0x00010000
++		  0x82000000 0x0 0x00000000 0x8 0x00000000 0x2 0x00000000>;
++};
++
++&cpm_sata0 {
++	status = "okay";
++};
++
++&cpm_sdhci0 {
++	status = "okay";
++	bus-width = <4>;
++	no-1-8-v;
++	broken-cd;
++};
+-- 
+2.7.4
+

@@ -1,0 +1,97 @@
+From ea7579ea87d81abc94eff5fca2b8ac07228a3cf0 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Thu, 24 Oct 2019 18:16:56 +0800
+Subject: [PATCH] Add information for mbdetect in common rangeley platform.
+
+---
+ include/mb_detect.h   |  7 ++++++-
+ miscutils/mb_detect.c | 41 +++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 45 insertions(+), 3 deletions(-)
+
+diff --git a/include/mb_detect.h b/include/mb_detect.h
+index b852983..4fe87cc 100644
+--- a/include/mb_detect.h
++++ b/include/mb_detect.h
+@@ -23,7 +23,12 @@ typedef __s32 s32;
+ 
+ 
+ enum {
+-	MB_LAST = 0
++	MERCEDES = 0,
++	MERCEDES2,
++	BUGATTI,
++	JAGUAR,
++	BUGATTI2,
++	MB_LAST
+ };
+ 
+ typedef struct {
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+index c4621bb..738fa58 100644
+--- a/miscutils/mb_detect.c
++++ b/miscutils/mb_detect.c
+@@ -6,8 +6,12 @@
+ 
+ extern void mbdetect_usage(void);
+ 
+-SysBoardInfo sysBoardInfo[1] = {
+-	{ 0x00, "project_name",  "product_name\0",  "platform_name\0", 0 }
++SysBoardInfo sysBoardInfo[5] = {
++	{ 0x01, "mercedes", "FM_6254_RN_F\0", "fm_6254_rn_f\0", 0 },
++	{ 0x02, "mercedes2", "FM_6254_RN_F\0", "fm_6254_rn_f\0", 1 },
++	{ 0x04, "bugatti", "FB_6032_RN_F\0", "fb_6032_rn_f\0", 0 },
++	{ 0x05, "jaguar",  "FB_6256_RN_B\0",  "fb_6256_rn_b\0", 0 },
++	{ 0x07, "bugatti2",  "FB_6032_RN_F\0",  "fb_6032_rn_f\0", 1 }
+ };
+ 
+ static u32 mb_id_get_from_cpld(void)
+@@ -70,6 +74,36 @@ error:
+ 	return board_id;
+ }
+ 
++static s32 mb_mercedes2_info_check(SysBoardInfo *bdinfo)
++{
++	u8 data = 0;
++
++	if(i2c_mux_pca9544_select(MB_DETECT_I2C_BUS, 0x73, 0) == 0)
++	{
++		if(i2c_read(MB_DETECT_I2C_BUS, 0x74, 0, &data, 1) == 0)
++		{
++			data = data >> 5;
++		}
++		i2c_mux_release(MB_DETECT_I2C_BUS, 0x73);
++	} else {
++		return -1;
++	}
++
++	switch (data) {
++	case 3:
++	case 4:
++	case 6:
++	case 7:
++		bdinfo->machine_rev = 2;
++		break;
++	default:
++		bdinfo->machine_rev = 1;
++		break;
++	}
++
++	return 0;
++}
++
+ /*
+  *  This macro defines the mbdetect command line command.
+  */
+@@ -136,6 +170,9 @@ s32 sys_board_info_get(SysBoardInfo *bdinfo)
+ 
+ 	if(index < MB_LAST) {
+ 		memcpy(bdinfo, &sysBoardInfo[index], sizeof(SysBoardInfo));
++		if (index == 0x02) {
++			mb_mercedes2_info_check(bdinfo);
++		}
+ 		return 0;
+ 	}
+ 
+-- 
+2.17.1
+

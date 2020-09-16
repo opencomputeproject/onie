@@ -1,0 +1,77 @@
+From 828d1e794395596ca2976f045ad3e0b2122c8c15 Mon Sep 17 00:00:00 2001
+From: GeorgeWu <george_wu@pegatroncorp.com>
+Date: Mon, 28 Oct 2019 15:53:19 +0800
+Subject: [PATCH] Add force option for sys_eeprom
+
+---
+ miscutils/sys_eeprom.c | 25 +++++++++++++++++++------
+ 1 file changed, 19 insertions(+), 6 deletions(-)
+ mode change 100644 => 100755 miscutils/sys_eeprom.c
+
+diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
+old mode 100644
+new mode 100755
+index a24d6bb..74d7533
+--- a/miscutils/sys_eeprom.c
++++ b/miscutils/sys_eeprom.c
+@@ -54,18 +54,20 @@ int onie_syseeprom_main(int argc, char **argv)
+     char *value, *subopts, *tname;
+     int index, c, i, option_index, tcode;
+     char tlv_value[TLV_DECODE_VALUE_MAX_LEN];
++    int force_write_eeprom=0;
+ 
+     const size_t tlv_code_count = sizeof(tlv_code_list) /
+ 	sizeof(tlv_code_list[0]);
+ 
+     char *tokens[(tlv_code_count*2) + 1];
+-    const char *short_options = "hels:g:";
++    const char *short_options = "helfs:g:";
+     const struct option long_options[] = {
+ 	{"help",    no_argument,          0,    'h'},
+ 	{"list",    no_argument,          0,    'l'},
+ 	{"erase",   no_argument,          0,    'e'},
+ 	{"set",     required_argument,    0,    's'},
+ 	{"get",     required_argument,    0,    'g'},
++	{"force",   no_argument,          0,    'f'},
+ 	{0,         0,                    0,      0},
+     };
+ 
+@@ -153,6 +155,10 @@ int onie_syseeprom_main(int argc, char **argv)
+             }
+             goto syseeprom_err;
+ 	break;
++	case 'f':
++		force_write_eeprom=1;
++		update = 1;
++	break;
+ 
+ 	default:
+ 	    cmd_usage();
+@@ -172,12 +178,19 @@ int onie_syseeprom_main(int argc, char **argv)
+ 	    show_eeprom(eeprom);
+ 	}
+     }
++
+     if (update) {
+-	if (prog_eeprom(eeprom)) {
+-            err = 1;
+-            goto syseeprom_err;
+-        }
+-	show_eeprom(eeprom);
++		if ((force_write_eeprom==0) && (tcode != TLV_CODE_ONIE_VERSION)) {
++			printf("WARNING: EEPROM is under write-protect. Use \"-f\" to force write.\n", tcode);
++	        err = 1;
++	        goto syseeprom_err;
++		}
++
++		if (prog_eeprom(eeprom)) {
++	            err = 1;
++	            goto syseeprom_err;
++	        }
++		show_eeprom(eeprom);
+     }
+ syseeprom_err:
+     for (i = 0; i < tlv_code_count; i++) {
+-- 
+2.17.1
+

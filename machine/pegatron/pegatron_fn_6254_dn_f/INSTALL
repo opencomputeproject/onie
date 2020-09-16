@@ -1,0 +1,137 @@
+====================================
+Installing ONIE on common Denverton (Intel c3000 family) platform with Coreboot
+====================================
+
+Prerequisites 
+====================
+
+1. Denverton (Intel c3000 family) platform
+2. Coreboot as primary bootloader (BIOS/UEFI replacement)
+3. Grub2 as Coreboot payload
+4. console connection with the same baud rate as your coreboot settings are
+
+  Specification
+===============
+ - Modularized CPU board design
+ - 1 RJ-45 out-of-band management port (10/100/1000M)
+ - 1 RJ-45 console port
+ - 1 8GB DDR3 SDRAM
+ - 1 M.2 SATA SSD 16GB
+ - 1 USB 3.0 port
+ 
+Cross-Compiling ONIE
+====================
+
+To compile ONIE change directories to ``build-config`` and then
+type ``"make MACHINEROOT=../machine/pegatron MACHINE=pegatron_fn_6254_dn_f all"``.
+For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/pegatron MACHINE=pegatron_fn_6254_dn_f all
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-rw-r-- 1 user user 22609920 Dec  1 11:20 onie-recovery-x86_64-pegatron_fn_6254_dn_f-r0.iso
+-rw-rw-r-- 1 user user  9975671 Dec  1 11:19 onie-updater-x86_64-pegatron_fn_6254_dn_f-r0
+-rw-rw-r-- 1 user user  6212276 Dec  1 11:19 pegatron_fn_6254_dn_f-r0.initrd
+-rw-rw-r-- 1 user user  3821648 Dec  1 11:18 pegatron_fn_6254_dn_f-r0.vmlinuz
+
+
+pegatron_fn_6254_dn_f-r0.vmlinuz                  -- This is the ONIE kernel image
+
+pegatron_fn_6254_dn_f-r0.initrd                   -- This is the ONIE initramfs (filesystem)
+
+onie-updater-x86_64-pegatron_fn_6254_dn_f-r0      -- This is the ONIE self-update image.
+                                                     This image is a self-extracting archive used for installing ONIE.
+
+onie-recovery-x86_64-pegatron_fn_6254_dn_f-r0.iso -- This is a recovery ISO image
+                                                     that can be install as a CDROM image.
+
+Installing ONIE on a Blank Machine
+==================================
+
+To install ONIE on a new machine use one of the onie-recovery images.
+
+An "ONIE recovery image" is used for:
+
+1. installing ONIE on a blank machine, i.e. what manufacturing would
+   use.
+
+2. recovering a destroyed ONIE system.
+
+The recovery image is:
+
+. <machine>.iso       -- a hybrid ISO image.
+
+ISO Recovery Image
+------------------
+
+The .iso image is used to create the usb recovery disk.
+
+You can use the .iso image to create a bootable USB memory stick.
+Use ``dd`` to copy the .iso image to a USB stick and boot from that::
+
+  dd if=onie-recovery-x86_64-pegatron_fn_6254_dn_f-r0.iso of=/dev/sdX bs=10M
+
+For can find the correct ``/dev/sdX`` by inspecing the ``dmesg``
+output after inserting the USB stick into your work station.
+
+To enable booting from USB in the Coreboot Grub2 payload:
+
+1. Insert the USB stick
+
+2. Power on the Pegatron Denverton Switch
+
+3. Boot to your coreboot's grub2
+
+4. While seeing ``Loading GRUB2 ...``, press ESC to interrupt
+  You shall see
+
+                     GNU GRUB  version 2.03
+
+ +----------------------------------------------------------------------------+
+ | Scan for grub.cfg on USB drive                                             |
+ | Scan for grub.cfg on SATA drive                                            |
+ | Scan for grub.cfg on ONIE drive                                            |
+ |*ONIE_RECOVERY                                                              |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            | 
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line.
+
+
+5. Choose 'ONIE_RECOVERY' to enter ONIE's ISO menu
+
+                     GNU GRUB  version 2.03
+
+ +----------------------------------------------------------------------------+
+ | ONIE: Rescue                                                               | 
+ |*ONIE: Embed ONIE                                                           |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            |
+ |                                                                            | 
+ +----------------------------------------------------------------------------+
+
+      Use the ^ and v keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line. ESC to return
+      previous menu.
+
+6. Choose ``ONIE: Embed ONIE``, then ONIE will be ready after reboot.
+
+7. ``ONIE: Rescue`` for ONIE rescue mode on USB disk shall also provide
+  an debugging environment.

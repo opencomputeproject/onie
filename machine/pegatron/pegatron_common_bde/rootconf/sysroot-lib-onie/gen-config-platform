@@ -1,0 +1,69 @@
+onie_pegatron_machine_dflt=pegatron_common_bde
+
+set_onie_machine()
+{
+    machine_product=$(/usr/bin/mbdetect -d | awk '{print $1}' | awk '{print tolower($0)}' | sed -e 's/-/_/g')
+    machine_platform=$(/usr/bin/mbdetect -f | awk '{print $1}' | awk '{print tolower($0)}')
+    
+    if [ -z "${machine_product}" ] || [ "${machine_product}" = "error:" ] ; then
+        machine_product="common_bde"
+    fi
+    
+    if [ -z "${machine_platform}" ] || [ "${machine_platform}" = "error:" ] ; then
+        machine_platform=$(cat /etc/machine-build.conf | grep 'onie_build_platform=' | cut -d "=" -f 2)
+    fi
+        
+    machine_platform_model=$(echo "$machine_platform" | awk -F'-' '{print $2}' | sed -e 's/pegatron_//')
+    machine_dev_ver=$(echo "$machine_platform" | awk -F'-' '{print $3}' | sed -e 's/r//')
+    machine_model=""
+    
+    if [ "${machine_product}" = "${machine_platform_model}" ]; then
+        machine_model=${machine_product}
+    else
+        machine_model=${machine_platform_model}
+    fi
+
+    machine_asic=$(echo "$machine_model" | awk -F'_' '{print $1}')
+    live_machine="pegatron_${machine_model}"
+    live_dev_version="${machine_dev_ver}"
+    case "$machine_asic" in
+    fb)
+        live_asic=bcm
+        ;;
+    fm)
+        live_asic=mvl
+        ;;
+    fn)
+        live_asic=nephos
+        ;;
+    *)
+        live_asic=none
+        ;;
+    esac
+}
+
+gen_live_config()
+{
+    onie_build_machine=$(cat /etc/machine-build.conf | grep 'onie_build_machine=' | cut -d "=" -f 2)
+    if [ "$onie_build_machine" = "$onie_pegatron_machine_dflt" ]; then
+        set_onie_machine
+    fi
+
+    # Source build-time machine configuration
+    . /etc/machine-build.conf
+    if [ -n "$live_machine" ] ; then
+        cat<<EOF
+# Runtime ONIE Machine
+onie_machine=$live_machine
+onie_machine_rev=${live_dev_version}
+onie_platform=${onie_arch}-${live_machine}-r${onie_machine_rev}
+EOF
+    fi
+    
+    if [ -n "$live_asic" ] ; then
+        cat<<EOF
+# Runtime ONIE ASIC
+onie_switch_asic="$live_asic"
+EOF
+    fi
+}

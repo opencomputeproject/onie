@@ -1,0 +1,27 @@
+gen_live_config()
+{
+    # Delay to wait for CP2112 I2C bus probe
+    local delay=70
+    local cnt=0
+    while [ $cnt -lt $delay ] ; do
+        device=/dev/i2c-1
+        [ -e "$device" ] && break;
+        cnt=$(( $cnt + 1 ))
+        sleep 0.1
+    done
+
+    if [ -x "/usr/bin/mb_detect" ]; then
+        platform=$(/usr/bin/mb_detect -f)
+    elif [ -x "/usr/bin/mbdetect" ]; then
+        platform=$(/usr/bin/mbdetect -f)
+    fi
+
+    local live_machine="$platform"
+
+    if [ -n "$live_machine" ] ; then
+        cat<<EOF
+# Runtime ONIE Machine
+onie_machine="$live_machine"
+EOF
+    fi
+}
