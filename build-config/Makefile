@@ -6,6 +6,7 @@
 #  Copyright (C) 2014,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
+#  Copyright (C) 2020 Alex Doyle <adoyle@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
 #
@@ -172,6 +173,15 @@ INITRAMFSDIR	=  $(MBUILDDIR)/initramfs
 
 # These directories are needed per machine
 TREEDIRS     += $(STAMPDIR) $(STAGE_SYSROOT) $(INITRAMFSDIR)
+
+#-------------------------------------------------------------------------------
+#
+# If TRUE, look for all code that would be downloaded from the mirror server to
+# be under /var/cache/onie/downloads
+#
+
+ONIE_USE_SYSTEM_DOWNLOAD_CACHE ?= FALSE
+export ONIE_USE_SYSTEM_DOWNLOAD_CACHE 
 
 XTOOLS_ENABLE ?= yes
 
@@ -510,7 +520,7 @@ machine-prefix:
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  gperf device-tree-compiler python-all-dev xorriso \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
-				  realpath gawk libncurses5 libncurses5-dev bc \
+				  gawk libncurses5 libncurses5-dev bc \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
 				  libexpat1-dev fakeroot python-sphinx rst2pdf \
 				  libefivar-dev libnss3-tools libnss3-dev libpopt-dev \

@@ -1,0 +1,59 @@
+From 309fe90bfda3aa4b482c0013d157d0e5c79c7cd5 Mon Sep 17 00:00:00 2001
+From: gilt <gilt@marvell.com>
+Date: Mon, 26 Aug 2019 13:43:39 +0300
+Subject: [PATCH 4/5] ARM64/PCI: Allow userspace to mmap PCI resources
+
+Change-Id: I87ef6492e4956c77c75470ec010a4f11a9a8bdaf
+---
+ arch/arm64/include/asm/pci.h |  4 ++++
+ arch/arm64/kernel/pci.c      | 19 +++++++++++++++++++
+ 2 files changed, 23 insertions(+)
+
+diff --git a/arch/arm64/include/asm/pci.h b/arch/arm64/include/asm/pci.h
+index b9a7ba9..8a18915 100644
+--- a/arch/arm64/include/asm/pci.h
++++ b/arch/arm64/include/asm/pci.h
+@@ -31,6 +31,10 @@ static inline int pci_get_legacy_ide_irq(struct pci_dev *dev, int channel)
+ 	return -ENODEV;
+ }
+ 
++#define HAVE_PCI_MMAP
++extern int pci_mmap_page_range(struct pci_dev *dev, struct vm_area_struct *vma,
++			       enum pci_mmap_state mmap_state,
++			       int write_combine);
+ static inline int pci_proc_domain(struct pci_bus *bus)
+ {
+ 	return 1;
+diff --git a/arch/arm64/kernel/pci.c b/arch/arm64/kernel/pci.c
+index 1b3eb67..db6dd98 100644
+--- a/arch/arm64/kernel/pci.c
++++ b/arch/arm64/kernel/pci.c
+@@ -54,6 +54,25 @@ int pcibios_alloc_irq(struct pci_dev *dev)
+ 	return 0;
+ }
+ 
++int pci_mmap_page_range(struct pci_dev *dev, struct vm_area_struct *vma,
++			enum pci_mmap_state mmap_state, int write_combine)
++{
++	if (mmap_state == pci_mmap_io)
++		return -EINVAL;
++
++	/*
++	 * Mark this as IO
++	 */
++	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
++
++	if (remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff,
++			     vma->vm_end - vma->vm_start,
++			     vma->vm_page_prot))
++		return -EAGAIN;
++
++	return 0;
++}
++
+ /*
+  * raw_pci_read/write - Platform-specific PCI config space access.
+  */
+-- 
+2.6.3
+
