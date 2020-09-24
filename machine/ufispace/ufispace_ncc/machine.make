@@ -32,7 +32,7 @@ SWITCH_ASIC_VENDOR = none
 # Vendor ID -- IANA Private Enterprise Number:
 # http://www.iana.org/assignments/enterprise-numbers
 # Open Compute Project IANA number
-VENDOR_ID = 11
+VENDOR_ID = 51242
 
 # Skip the i2ctools and the onie-syseeprom command for this platform
 I2CTOOLS_ENABLE = no
@@ -58,8 +58,6 @@ SKIP_ETHMGMT_MACS = yes
 
 # Enable building of secure boot binaries
 SECURE_BOOT_ENABLE = yes
-
-SERIAL_CONSOLE_ENABLE = no
 
 # ONIE_VENDOR_SECRET_KEY_PEM -- file system path to private RSA key
 # encoded in PEM format.
