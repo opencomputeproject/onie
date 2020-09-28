@@ -1,0 +1,70 @@
+diff --git a/grub-core/disk/efi/efidisk.c b/grub-core/disk/efi/efidisk.c
+index 3b79f7b..70ae709 100644
+--- a/grub-core/disk/efi/efidisk.c
++++ b/grub-core/disk/efi/efidisk.c
+@@ -381,6 +381,54 @@ enumerate_disks (void)
+   free_devices (devices);
+ }
+
++static grub_err_t
++grub_efidisk_scan (struct grub_efidisk_data *device)
++{
++  grub_efi_uintn_t num_handles;
++  grub_efi_handle_t *handles;
++  grub_efi_handle_t *handle;
++  grub_err_t ret = GRUB_ERR_UNKNOWN_DEVICE;
++
++  if (! device)
++    return ret;
++
++  /* Find handles which support the disk io interface.  */
++  handles = grub_efi_locate_handle (GRUB_EFI_BY_PROTOCOL, &block_io_guid, 0, &num_handles);
++  if (! handles)
++    return ret;
++
++  /* Make a linked list of devices.  */
++  for (handle = handles; num_handles--; handle++)
++  {
++      grub_efi_device_path_t *dp;
++      grub_efi_device_path_t *ldp;
++      int r;
++
++      dp = grub_efi_get_device_path (*handle);
++      if (! dp)
++        continue;
++
++      ldp = grub_efi_find_last_device_path (dp);
++      if (! ldp)
++        /* This is empty. Why?  */
++        continue;
++
++     r = grub_efi_compare_device_paths (device->last_device_path, ldp);
++     if (r == 0){
++       r = grub_efi_compare_device_paths (device->device_path, dp);
++       if (r == 0)
++       {
++         ret = GRUB_ERR_NONE;
++         break;
++       }
++     }
++  }
++
++  grub_free (handles);
++
++  return ret;
++}
++
+ static int
+ grub_efidisk_iterate (grub_disk_dev_iterate_hook_t hook, void *hook_data,
+                      grub_disk_pull_t pull)
+@@ -396,6 +444,10 @@ grub_efidisk_iterate (grub_disk_dev_iterate_hook_t hook, void *hook_data,
+        {
+          grub_snprintf (buf, sizeof (buf), "hd%d", count);
+          grub_dprintf ("efidisk", "iterating %s\n", buf);
++          if (GRUB_ERR_NONE != grub_efidisk_scan(d)) {
++            grub_dprintf ("efidisk", "no such device.\n");
++            continue;
++          }
+          if (hook (buf, hook_data))
+            return 1;
+        }

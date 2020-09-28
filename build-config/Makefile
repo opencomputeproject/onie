@@ -199,10 +199,7 @@ KNOWN_ASIC_VENDORS = \
   nephos \
   none   \
   barefoot \
-  qemu   \
-  hp     \
-  dell   \
-  cisco
+  qemu
 
 ifneq (,$(MAKECMDGOALS))
   ifeq (,$(filter onie-release-tag help distclean %build-host, $(MAKECMDGOALS)))
