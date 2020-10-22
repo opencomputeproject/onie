@@ -22,7 +22,7 @@ endif
 # in the ONIE waterfall.  This string should be the stock ticker
 # symbol of the ASIC vendor, in lower case.  The value in this example
 # here is completely fictitious.
-SWITCH_ASIC_VENDOR = none
+SWITCH_ASIC_VENDOR = hp
 
 # The VENDOR_VERSION string is appended to the overal ONIE version
 # string.  HW vendors can use this to appended their own versioning
