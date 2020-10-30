@@ -1,4 +1,4 @@
-# Alpha Networks SPX60D0-082F
+# Alpha Networks SPX70D0-082F
 
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
