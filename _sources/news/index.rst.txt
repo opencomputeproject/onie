@@ -7,6 +7,9 @@
 ************
 Project News
 ************
+November 14, 2020
+  Released version `2020.11
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/144>`_
 
 August 18, 2020
   Released version `2020.08
