@@ -1,0 +1,1 @@
+../init.d/write-onie-version.sh
