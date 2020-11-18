@@ -120,6 +120,8 @@ RECOVERY_DEFAULT_ENTRY = embed
 # share code between the ONIE run-time and the installer.
 UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/test-install-sharing
 
+OPENSSL_ENABLE = yes
+
 #-------------------------------------------------------------------------------
 #
 # Local Variables:
