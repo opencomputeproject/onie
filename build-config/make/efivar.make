@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2020 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -10,9 +11,9 @@
 # This is a makefile fragment that defines the build of efivar
 #
 
-EFIVAR_VERSION			= 30
+EFIVAR_VERSION			= 37
 EFIVAR_TARBALL			= efivar-$(EFIVAR_VERSION).tar.bz2
-EFIVAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/rhinstaller/efivar/releases/download/$(EFIVAR_VERSION)
+EFIVAR_TARBALL_URLS		+= $(ONIE_MIRROR)https://github.com/rhboot/efivar/releases/download/${EFIVAR_VERSION}/${EFIVAR_TARBALL}
 EFIVAR_BUILD_DIR		= $(USER_BUILDDIR)/efivar
 EFIVAR_DIR			= $(EFIVAR_BUILD_DIR)/efivar-$(EFIVAR_VERSION)
 
@@ -34,10 +35,10 @@ PHONY += efivar efivar-download efivar-source efivar-patch \
 
 EFIVAR_BINS = efivar
 EFIVAR_LIBS = \
-	libefivar.so.1.30 \
+	libefivar.so.1.$(EFIVAR_VERSION) \
 	libefivar.so.1 \
 	libefivar.so \
-	libefiboot.so.1.30 \
+	libefiboot.so.1.$(EFIVAR_VERSION) \
 	libefiboot.so.1 \
 	libefiboot.so
 

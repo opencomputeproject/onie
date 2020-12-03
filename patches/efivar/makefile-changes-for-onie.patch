@@ -1,63 +1,66 @@
 Makefile changes for ONIE patch
 
+Copyright (C) 2020 Alex Doyle <adoyle@nvidia.com>
 Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
 
 SPDX-License-Identifier:     GPL-2.0
 
 Minor Makefile changes for ONIE build environment.
+Updated for efivar 37 - Alex
 
 diff --git a/Make.defaults b/Make.defaults
-index aa974d9..4f8be6a 100644
+index 57cee6e..cf91cd1 100644
 --- a/Make.defaults
 +++ b/Make.defaults
-@@ -12,6 +12,8 @@ CROSS_COMPILE	?=
- PKG_CONFIG = $(CROSS_COMPILE)pkg-config
- CC	:= $(if $(filter default,$(origin CC)),$(CROSS_COMPILE)gcc,$(CC))
+@@ -16,6 +16,8 @@ CC_FOR_BUILD	?= cc
+ CC	:= $(if $(filter default,$(origin CC)),$(CROSS_COMPILE)$(COMPILER),$(CC))
+ CCLD_FOR_BUILD	?= $(CC_FOR_BUILD)
  CCLD	:= $(if $(filter undefined,$(origin CCLD)),$(CC),$(CCLD))
 +HOST_CC	:= gcc
 +HOST_CCLD := $(HOST_CC)
  OPTIMIZE ?= -O2 -flto
  CFLAGS	?= $(OPTIMIZE) -g3
  CFLAGS	:= $(CFLAGS)
-@@ -29,11 +31,19 @@ cflags	= $(CFLAGS) -I${TOPDIR}/src/include/efivar/ \
- 	$(if $(findstring clang,$(CC)),$(clang_cflags),) \
- 	$(if $(findstring gcc,$(CC)),$(gcc_cflags),) \
- 	$(call pkg-config-cflags)
-+
+@@ -29,6 +31,10 @@ ABIDIFF := abidiff
+ 
+ PKGS	=
+ 
 +host_cflags := $(HOST_CFLAGS) -I${TOPDIR}/src/include/efivar/ \
 +	$(if $(findstring clang,$(HOST_CC)),$(clang_cflags),) \
 +	$(if $(findstring gcc,$(HOST_CC)),$(gcc_cflags),)
 +
- clang_ccldflags =
- gcc_ccldflags =
- ccldflags = $(cflags) -L. $(CCLDFLAGS) $(LDFLAGS) \
- 	$(if $(findstring clang,$(CCLD)),$(clang_ccldflags),) \
+ clang_cflags = -D_GNU_SOURCE -std=gnu11 -Wno-address-of-packed-member
+ gcc_cflags = -specs=$(TOPDIR)/gcc.specs
+ cflags	= $(CFLAGS) -I${TOPDIR}/src/include/ \
+@@ -44,6 +50,9 @@ ccldflags = $(cflags) -L. $(CCLDFLAGS) $(LDFLAGS) \
+ 	$(if $(findstring ccc-analyzer,$(CCLD)),$(clang_ccldflags),) \
  	$(if $(findstring gcc,$(CCLD)),$(gcc_ccldflags),) \
- 	$(call pkg-config-ccldflags)
+ 	$(call pkg-config-ldflags)
 +host_ccldflags := $(host_cflags) -L. $(HOST_CCLDFLAGS) $(HOST_LDFLAGS) \
 +	$(if $(findstring clang,$(HOST_CCLD)),$(clang_ccldflags),) \
 +	$(if $(findstring gcc,$(HOST_CCLD)),$(gcc_ccldflags),)
  SOFLAGS=-shared
  LDLIBS=$(foreach lib,$(LIBS),-l$(lib)) $(call pkg-config-ldlibs)
+ 
 diff --git a/Make.rules b/Make.rules
-index a7d6a23..4bd36fc 100644
+index 042585b..6227eb7 100644
 --- a/Make.rules
 +++ b/Make.rules
-@@ -46,6 +46,7 @@ define substitute-version
+@@ -58,6 +58,7 @@ define substitute-version
  	sed						\
  		-e "s,@@VERSION@@,$(VERSION),g"		\
- 		-e "s,@@LIBDIR@@,$(libdir),g"		\
+ 		-e "s,@@LIBDIR@@,$(LIBDIR),g"		\
 +		-e "s,@@DESTDIR@@,$(DESTDIR),g"		\
- 		$(1) > $(2)
- endef
- 
+ 		-e "s,@@PREFIX@@,$(PREFIX),g"		\
+ 		-e "s,@@EXEC_PREFIX@@,$(EXEC_PREFIX),g"		\
+ 		-e "s,@@INCLUDEDIR@@,$(INCLUDEDIR),g"		\
 diff --git a/Makefile b/Makefile
-index 643cf0d..59c2170 100644
+index 8c67b9d..5ea8280 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -4,7 +4,12 @@ include $(TOPDIR)/Make.version
- include $(TOPDIR)/Make.rules
- include $(TOPDIR)/Make.defaults
+@@ -7,7 +7,12 @@ include $(TOPDIR)/Make.defaults
+ include $(TOPDIR)/Make.coverity
+ include $(TOPDIR)/Make.scan-build
  
 -SUBDIRS := src docs
 +# ONIE build environment changes
@@ -70,14 +73,14 @@ index 643cf0d..59c2170 100644
  all : | efivar.spec Make.version
  all :
 diff --git a/src/Makefile b/src/Makefile
-index 322af14..fb37e6d 100644
+index 76bc474..533d1bd 100644
 --- a/src/Makefile
 +++ b/src/Makefile
-@@ -38,6 +38,7 @@ include/efivar/efivar-guids.h : makeguids guids.txt
+@@ -55,6 +55,7 @@ include/efivar/efivar-guids.h : makeguids guids.txt
  makeguids : CPPFLAGS+=-DEFIVAR_BUILD_ENVIRONMENT
  makeguids : LIBS=dl
  makeguids : $(MAKEGUIDS_SOURCES)
 +	$(HOST_CCLD) $(host_ccldflags) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
+ makeguids : CCLD=$(CCLD_FOR_BUILD)
  
  guids.o : guids.S | guids.bin names.bin
- 

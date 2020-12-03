@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2020 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -44,7 +45,7 @@ PHONY += xtools xtools-prep xtools-download xtools-config \
 # List of common packages needed by crosstool-NG
 CT_NG_COMPONENTS =	\
 	autoconf-2.69.tar.xz		\
-	automake-1.15.tar.xz		\
+	automake-1.15.1.tar.xz		\
 	duma_2_5_15.tar.gz		\
 	gettext-0.19.8.1.tar.xz		\
 	libelf-0.8.13.tar.gz		\
@@ -55,7 +56,19 @@ CT_NG_COMPONENTS =	\
 	make-4.2.1.tar.bz2		\
 	ncurses-6.0.tar.gz
 
-ifeq ($(GCC_VERSION),6.3.0)
+ifeq ($(GCC_VERSION),8.3.0)
+CT_NG_COMPONENTS +=	\
+	binutils-2.28.1.tar.bz2 \
+	expat-2.2.6.tar.bz2	    \
+	gcc-8.3.0.tar.xz		\
+	gdb-7.12.1.tar.xz       \
+	gmp-6.1.2.tar.xz		\
+	isl-0.16.1.tar.xz		\
+	mpc-1.0.3.tar.gz        \
+	mpfr-3.1.6.tar.xz		\
+	strace-4.26.tar.xz      \
+	zlib-1.2.11.tar.xz      
+else ifeq ($(GCC_VERSION),6.3.0)
 CT_NG_COMPONENTS +=	\
 	gcc-6.3.0.tar.bz2		\
 	binutils-2.28.tar.bz2		\
@@ -121,7 +134,7 @@ xtools-download-only: $(XTOOLS_BUILD_DIR)/.config $(CROSSTOOL_NG_BUILD_STAMP)
 xtools-build: $(XTOOLS_BUILD_STAMP)
 $(XTOOLS_BUILD_STAMP): $(XTOOLS_BUILD_DIR)/.config $(XTOOLS_DOWNLOAD_STAMP) $(CROSSTOOL_NG_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "====  Building xtools for $(XTOOLS_VERSION) ===="
+	$(Q) echo "====  Building xtools for $(XTOOLS_VERSION) in $(XTOOLS_BUILD_DIR) ===="
 	$(Q) cd $(XTOOLS_BUILD_DIR) && \
 		$(CROSSTOOL_NG_DIR)/ct-ng build || (rm $(XTOOLS_BUILD_DIR)/.config.2 && false)
 	$(Q) touch $@
