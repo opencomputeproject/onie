@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2020 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
@@ -184,6 +185,8 @@ ifeq ($(REQUIRE_CXX_LIBS),yes)
     SYSROOT_LIBS += libstdc++.so.6.0.22
   else ifeq ($(GCC_VERSION),4.9.2)
     SYSROOT_LIBS += libstdc++.so.6.0.20
+  else ifeq ($(GCC_VERSION),8.3.0)
+    SYSROOT_LIBS += libstdc++.so.6.0.25
   else
     $(error C++ support: Unsupported GCC version: $(GCC_VERSION))
   endif
@@ -216,7 +219,7 @@ $(SYSROOT_CHECK_STAMP): $(PACKAGES_INSTALL_STAMPS)
 			find $(DEV_SYSROOT)/lib64 $(DEV_SYSROOT)/lib -name $$file | xargs -i cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
 		else \
 		    [ -r "$(DEV_SYSROOT)/lib/$$file" ] || { \
-			    echo "ERROR: Missing SYSROOT_LIB: $$file" ; \
+			    echo "ERROR: Missing SYSROOT_LIB: $$file under $(DEV_SYSROOT)/lib" ; \
 			    exit 1; } ; \
 			find $(DEV_SYSROOT)/lib -name $$file | xargs -i cp -av {} $(SYSROOTDIR)/lib/ || exit 1 ; \
 		fi; \
