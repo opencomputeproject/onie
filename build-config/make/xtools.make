@@ -58,7 +58,7 @@ CT_NG_COMPONENTS =	\
 
 ifeq ($(GCC_VERSION),8.3.0)
 CT_NG_COMPONENTS +=	\
-	binutils-2.28.1.tar.bz2 \
+	binutils-2.32.tar.bz2 \
 	expat-2.2.6.tar.bz2	    \
 	gcc-8.3.0.tar.xz		\
 	gdb-7.12.1.tar.xz       \
