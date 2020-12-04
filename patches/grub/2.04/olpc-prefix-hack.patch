@@ -1,0 +1,51 @@
+From f268916868b7b2a6b0012a23fb6f434eb208b834 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Mon, 13 Jan 2014 12:12:50 +0000
+Subject: Hack prefix for OLPC
+
+This sucks, but it's better than what OFW was giving us.
+
+Patch-Name: olpc-prefix-hack.patch
+---
+ grub-core/kern/ieee1275/init.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/grub-core/kern/ieee1275/init.c b/grub-core/kern/ieee1275/init.c
+index d483e35ee..8b089b48d 100644
+--- a/grub-core/kern/ieee1275/init.c
++++ b/grub-core/kern/ieee1275/init.c
+@@ -76,6 +76,7 @@ grub_exit (void)
+   grub_ieee1275_exit ();
+ }
+ 
++#ifndef __i386__
+ /* Translate an OF filesystem path (separated by backslashes), into a GRUB
+    path (separated by forward slashes).  */
+ static void
+@@ -90,9 +91,18 @@ grub_translate_ieee1275_path (char *filepath)
+       backslash = grub_strchr (filepath, '\\');
+     }
+ }
++#endif
+ 
+ void (*grub_ieee1275_net_config) (const char *dev, char **device, char **path,
+                                   char *bootpath);
++#ifdef __i386__
++void
++grub_machine_get_bootlocation (char **device __attribute__ ((unused)),
++			       char **path __attribute__ ((unused)))
++{
++  grub_env_set ("prefix", "(sd,1)/");
++}
++#else
+ void
+ grub_machine_get_bootlocation (char **device, char **path)
+ {
+@@ -146,6 +156,7 @@ grub_machine_get_bootlocation (char **device, char **path)
+     }
+   grub_free (bootpath);
+ }
++#endif
+ 
+ /* Claim some available memory in the first /memory node. */
+ #ifdef __sparc__

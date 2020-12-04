@@ -1,0 +1,57 @@
+From b24fac0f34fcf007c54adcd9e67d26235843c735 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:24 +0000
+Subject: Skip Windows os-prober entries on Wubi systems
+
+Since we're already being booted from the Windows boot loader, including
+entries that take us back to it mostly just causes confusion, and stops
+us from being able to hide the menu if there are no other OSes
+installed.
+
+https://blueprints.launchpad.net/ubuntu/+spec/foundations-o-wubi
+
+Forwarded: not-needed
+Last-Update: 2013-11-26
+
+Patch-Name: wubi-no-windows.patch
+---
+ util/grub.d/30_os-prober.in | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/util/grub.d/30_os-prober.in b/util/grub.d/30_os-prober.in
+index b7e1147c4..271044f59 100644
+--- a/util/grub.d/30_os-prober.in
++++ b/util/grub.d/30_os-prober.in
+@@ -110,6 +110,8 @@ EOF
+ 
+ used_osprober_linux_ids=
+ 
++wubi=
++
+ for OS in ${OSPROBED} ; do
+   DEVICE="`echo ${OS} | cut -d ':' -f 1`"
+   LONGNAME="`echo ${OS} | cut -d ':' -f 2 | tr '^' ' '`"
+@@ -146,6 +148,23 @@ for OS in ${OSPROBED} ; do
+   case ${BOOT} in
+     chain)
+ 
++      case ${LONGNAME} in
++	Windows*)
++	  if [ -z "$wubi" ]; then
++	    if [ -x /usr/share/lupin-support/grub-mkimage ] && \
++	       /usr/share/lupin-support/grub-mkimage --test; then
++	      wubi=yes
++	    else
++	      wubi=no
++	    fi
++	  fi
++	  if [ "$wubi" = yes ]; then
++	    echo "Skipping ${LONGNAME} on Wubi system" >&2
++	    continue
++	  fi
++	  ;;
++      esac
++
+ 	  onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
+       cat << EOF
+ menuentry '$(echo "${LONGNAME} $onstr" | grub_quote)' $CLASS --class os \$menuentry_id_option 'osprober-chain-$(grub_get_device_id "${DEVICE}")' {

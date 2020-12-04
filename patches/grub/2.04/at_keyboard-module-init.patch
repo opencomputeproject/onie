@@ -1,0 +1,44 @@
+From 274c57260b4b599874e9ede10ea417b7bb7c98e2 Mon Sep 17 00:00:00 2001
+From: Jeroen Dekkers <jeroen@dekkers.ch>
+Date: Sat, 12 Jan 2019 21:02:18 +0100
+Subject: at_keyboard: initialize keyboard in module init if keyboard is ready
+
+The change in 0c62a5b2 caused at_keyboard to fail on some
+machines. Immediately initializing the keyboard in the module init if
+the keyboard is ready makes the problem go away.
+
+Bug-Debian: https://bugs.debian.org/741464
+Last-Update: 2019-02-09
+
+Patch-Name: at_keyboard-module-init.patch
+---
+ grub-core/term/at_keyboard.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/grub-core/term/at_keyboard.c b/grub-core/term/at_keyboard.c
+index f0a986eb1..d4395c201 100644
+--- a/grub-core/term/at_keyboard.c
++++ b/grub-core/term/at_keyboard.c
+@@ -244,6 +244,14 @@ grub_at_keyboard_getkey (struct grub_term_input *term __attribute__ ((unused)))
+   return ret;
+ }
+ 
++static grub_err_t
++grub_keyboard_controller_mod_init (struct grub_term_input *term __attribute__ ((unused))) {
++  if (KEYBOARD_COMMAND_ISREADY (grub_inb (KEYBOARD_REG_STATUS)))
++    grub_keyboard_controller_init ();
++
++  return GRUB_ERR_NONE;
++}
++
+ static void
+ grub_keyboard_controller_init (void)
+ {
+@@ -314,6 +322,7 @@ grub_at_restore_hw (void)
+ static struct grub_term_input grub_at_keyboard_term =
+   {
+     .name = "at_keyboard",
++    .init = grub_keyboard_controller_mod_init,
+     .fini = grub_keyboard_controller_fini,
+     .getkey = grub_at_keyboard_getkey
+   };

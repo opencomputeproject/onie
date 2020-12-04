@@ -1,0 +1,107 @@
+From 4493c7ab311c8f0b898a17b407939d042edf66cd Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:06 +0000
+Subject: "single" -> "recovery" when friendly-recovery is installed
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If configured with --enable-ubuntu-recovery, also set nomodeset for
+recovery mode, and disable 'set gfxpayload=keep' even if the system
+normally supports it.  See
+https://launchpad.net/ubuntu/+spec/desktop-o-xorg-tools-and-processes.
+
+Author: Stéphane Graber <stgraber@ubuntu.com>
+Forwarded: no
+Last-Update: 2013-12-25
+
+Patch-Name: mkconfig-ubuntu-recovery.patch
+---
+ configure.ac                | 11 +++++++++++
+ util/grub.d/10_linux.in     | 16 ++++++++++++++--
+ util/grub.d/30_os-prober.in |  2 +-
+ 3 files changed, 26 insertions(+), 3 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 7656f2434..1e5abc67d 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1846,6 +1846,17 @@ fi
+ AC_SUBST([LIBZFS])
+ AC_SUBST([LIBNVPAIR])
+ 
++AC_ARG_ENABLE([ubuntu-recovery],
++              [AS_HELP_STRING([--enable-ubuntu-recovery],
++                              [adjust boot options for the Ubuntu recovery mode (default=no)])],
++              [], [enable_ubuntu_recovery=no])
++if test x"$enable_ubuntu_recovery" = xyes ; then
++  UBUNTU_RECOVERY=1
++else
++  UBUNTU_RECOVERY=0
++fi
++AC_SUBST([UBUNTU_RECOVERY])
++
+ LIBS=""
+ 
+ AC_SUBST([FONT_SOURCE])
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index 8c22c79f6..0509ac680 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -20,6 +20,7 @@ set -e
+ prefix="@prefix@"
+ exec_prefix="@exec_prefix@"
+ datarootdir="@datarootdir@"
++ubuntu_recovery="@UBUNTU_RECOVERY@"
+ 
+ . "$pkgdatadir/grub-mkconfig_lib"
+ 
+@@ -84,6 +85,15 @@ esac
+ 
+ title_correction_code=
+ 
++if [ -x /lib/recovery-mode/recovery-menu ]; then
++    GRUB_CMDLINE_LINUX_RECOVERY=recovery
++else
++    GRUB_CMDLINE_LINUX_RECOVERY=single
++fi
++if [ "$ubuntu_recovery" = 1 ]; then
++    GRUB_CMDLINE_LINUX_RECOVERY="$GRUB_CMDLINE_LINUX_RECOVERY nomodeset"
++fi
++
+ linux_entry ()
+ {
+   os="$1"
+@@ -123,7 +133,9 @@ linux_entry ()
+       if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ]; then
+ 	  echo "	load_video" | sed "s/^/$submenu_indentation/"
+       fi
+-      echo "	set gfxpayload=$GRUB_GFXPAYLOAD_LINUX" | sed "s/^/$submenu_indentation/"
++      if [ "$ubuntu_recovery" = 0 ] || [ x$type != xrecovery ]; then
++	  echo "	set gfxpayload=$GRUB_GFXPAYLOAD_LINUX" | sed "s/^/$submenu_indentation/"
++      fi
+   fi
+ 
+   echo "	insmod gzio" | sed "s/^/$submenu_indentation/"
+@@ -280,7 +292,7 @@ while [ "x$list" != "x" ] ; do
+               "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
+   if [ "x${GRUB_DISABLE_RECOVERY}" != "xtrue" ]; then
+     linux_entry "${OS}" "${version}" recovery \
+-                "single ${GRUB_CMDLINE_LINUX}"
++                "${GRUB_CMDLINE_LINUX_RECOVERY} ${GRUB_CMDLINE_LINUX}"
+   fi
+ 
+   list=`echo $list | tr ' ' '\n' | fgrep -vx "$linux" | tr '\n' ' '`
+diff --git a/util/grub.d/30_os-prober.in b/util/grub.d/30_os-prober.in
+index 515a68c7a..775ceb2e0 100644
+--- a/util/grub.d/30_os-prober.in
++++ b/util/grub.d/30_os-prober.in
+@@ -220,7 +220,7 @@ EOF
+ 	fi
+ 
+ 	onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
+-	recovery_params="$(echo "${LPARAMS}" | grep single)" || true
++	recovery_params="$(echo "${LPARAMS}" | grep 'single\|recovery')" || true
+ 	counter=1
+ 	while echo "$used_osprober_linux_ids" | grep 'osprober-gnulinux-$LKERNEL-${recovery_params}-$counter-$boot_device_id' > /dev/null; do
+ 	    counter=$((counter+1));

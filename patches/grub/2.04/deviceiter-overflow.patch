@@ -1,0 +1,51 @@
+From 4bb7f63fd56a4b1408d871eadbdc24cd73c9e9ed Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Fri, 24 Jul 2020 11:30:46 +0100
+Subject: deviceiter: Fix integer overflow in grub_util_iterate_devices
+
+This adjusts Debian's grub-mkdevicemap restoration patch to perform safe
+allocation.
+
+Signed-off-by: Colin Watson <cjwatson@debian.org>
+
+Patch-Name: deviceiter-overflow.patch
+---
+ util/deviceiter.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/util/deviceiter.c b/util/deviceiter.c
+index dddc50da7..3a8f2770e 100644
+--- a/util/deviceiter.c
++++ b/util/deviceiter.c
+@@ -35,6 +35,7 @@
+ #include <grub/list.h>
+ #include <grub/misc.h>
+ #include <grub/emu/misc.h>
++#include <grub/safemath.h>
+ 
+ #ifdef __linux__
+ # if !defined(__GLIBC__) || \
+@@ -576,7 +577,7 @@ grub_util_iterate_devices (int (*hook) (const char *, int, void *), void *hook_d
+ 	struct device *devs;
+ 	size_t devs_len = 0, devs_max = 1024, dev;
+ 
+-	devs = xmalloc (devs_max * sizeof (*devs));
++	devs = xcalloc (devs_max, sizeof (*devs));
+ 
+ 	/* Dump all the directory entries into names, resizing if
+ 	   necessary.  */
+@@ -598,8 +599,13 @@ grub_util_iterate_devices (int (*hook) (const char *, int, void *), void *hook_d
+ 	      continue;
+ 	    if (devs_len >= devs_max)
+ 	      {
++		size_t sz;
++
+ 		devs_max *= 2;
+-		devs = xrealloc (devs, devs_max * sizeof (*devs));
++		sz = devs_max;
++		if (grub_mul (sz, sizeof (*devs), &sz))
++		  grub_util_error ("%s", _("overflow is detected"));
++		devs = xrealloc (devs, sz);
+ 	      }
+ 	    devs[devs_len].stable =
+ 	      xasprintf ("/dev/disk/by-id/%s", entry->d_name);

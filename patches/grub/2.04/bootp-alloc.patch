@@ -1,0 +1,29 @@
+From d8c9aaa767a83470147c843acc6d97f70140ebdf Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Fri, 24 Jul 2020 11:24:28 +0100
+Subject: bootp: Improve allocation handling in parse_dhcp6_option
+
+This adjusts Debian's net_bootp6 patch to perform safe allocation.  (In
+practice this isn't a security problem because `ln` is 16 bits so it
+can't overflow after promotion to 32 bits.)
+
+Signed-off-by: Colin Watson <cjwatson@debian.org>
+
+Patch-Name: bootp-alloc.patch
+---
+ grub-core/net/bootp.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/grub-core/net/bootp.c b/grub-core/net/bootp.c
+index dd0ffcdae..efa92b89b 100644
+--- a/grub-core/net/bootp.c
++++ b/grub-core/net/bootp.c
+@@ -857,7 +857,7 @@ parse_dhcp6_option (const struct grub_net_dhcp6_option *opt, void *data)
+ 	      break;
+ 	    }
+ 	  dhcp6->num_dns_server = ln = len >> 4;
+-	  dhcp6->dns_server_addrs = la = grub_zalloc (ln * sizeof (*la));
++	  dhcp6->dns_server_addrs = la = grub_calloc (ln, sizeof (*la));
+ 
+ 	  for (po = opt->data; ln > 0; po += 0x10, la++, ln--)
+ 	    {

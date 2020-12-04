@@ -1,0 +1,290 @@
+From f892ba14f3ec78b03cd3feb2f5845a223786823f Mon Sep 17 00:00:00 2001
+From: Evan Broder <evan@ebroder.net>
+Date: Mon, 13 Jan 2014 12:13:29 +0000
+Subject: Add configure option to enable gfxpayload=keep dynamically
+
+Set GRUB_GFXPAYLOAD_LINUX=keep unless it's known to be unsupported on
+the current hardware.  See
+https://blueprints.launchpad.net/ubuntu/+spec/packageselection-foundations-n-grub2-boot-framebuffer.
+
+Author: Colin Watson <cjwatson@ubuntu.com>
+Forwarded: no
+Last-Update: 2019-05-25
+
+Patch-Name: gfxpayload-dynamic.patch
+---
+ configure.ac                         |  11 ++
+ grub-core/Makefile.core.def          |   8 ++
+ grub-core/commands/i386/pc/hwmatch.c | 146 +++++++++++++++++++++++++++
+ include/grub/file.h                  |   1 +
+ util/grub.d/10_linux.in              |  37 ++++++-
+ 5 files changed, 200 insertions(+), 3 deletions(-)
+ create mode 100644 grub-core/commands/i386/pc/hwmatch.c
+
+diff --git a/configure.ac b/configure.ac
+index 7dda5bb32..dbc429ce0 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1879,6 +1879,17 @@ else
+ fi
+ AC_SUBST([QUICK_BOOT])
+ 
++AC_ARG_ENABLE([gfxpayload-dynamic],
++              [AS_HELP_STRING([--enable-gfxpayload-dynamic],
++                              [use GRUB_GFXPAYLOAD_LINUX=keep unless explicitly unsupported on current hardware (default=no)])],
++              [], [enable_gfxpayload_dynamic=no])
++if test x"$enable_gfxpayload_dynamic" = xyes ; then
++  GFXPAYLOAD_DYNAMIC=1
++else
++  GFXPAYLOAD_DYNAMIC=0
++fi
++AC_SUBST([GFXPAYLOAD_DYNAMIC])
++
+ LIBS=""
+ 
+ AC_SUBST([FONT_SOURCE])
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index 67a98abbb..836bf0a59 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -971,6 +971,14 @@ module = {
+   common = lib/hexdump.c;
+ };
+ 
++module = {
++  name = hwmatch;
++  i386_pc = commands/i386/pc/hwmatch.c;
++  enable = i386_pc;
++  cflags = '$(CFLAGS_POSIX) $(CFLAGS_GNULIB)';
++  cppflags = '$(CPPFLAGS_POSIX) $(CPPFLAGS_GNULIB)';
++};
++
+ module = {
+   name = keystatus;
+   common = commands/keystatus.c;
+diff --git a/grub-core/commands/i386/pc/hwmatch.c b/grub-core/commands/i386/pc/hwmatch.c
+new file mode 100644
+index 000000000..6de07cecc
+--- /dev/null
++++ b/grub-core/commands/i386/pc/hwmatch.c
+@@ -0,0 +1,146 @@
++/* hwmatch.c - Match hardware against a whitelist/blacklist.  */
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2011  Free Software Foundation, Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <grub/dl.h>
++#include <grub/misc.h>
++#include <grub/command.h>
++#include <grub/pci.h>
++#include <grub/normal.h>
++#include <grub/file.h>
++#include <grub/env.h>
++#include <grub/i18n.h>
++#include <regex.h>
++
++GRUB_MOD_LICENSE ("GPLv3+");
++
++/* Context for grub_cmd_hwmatch.  */
++struct hwmatch_ctx
++{
++  grub_file_t matches_file;
++  int class_match;
++  int match;
++};
++
++/* Helper for grub_cmd_hwmatch.  */
++static int
++hwmatch_iter (grub_pci_device_t dev, grub_pci_id_t pciid, void *data)
++{
++  struct hwmatch_ctx *ctx = data;
++  grub_pci_address_t addr;
++  grub_uint32_t class, baseclass, vendor, device;
++  grub_pci_id_t subpciid;
++  grub_uint32_t subvendor, subdevice, subclass;
++  char *id, *line;
++
++  addr = grub_pci_make_address (dev, GRUB_PCI_REG_CLASS);
++  class = grub_pci_read (addr);
++  baseclass = class >> 24;
++
++  if (ctx->class_match != baseclass)
++    return 0;
++
++  vendor = pciid & 0xffff;
++  device = pciid >> 16;
++
++  addr = grub_pci_make_address (dev, GRUB_PCI_REG_SUBVENDOR);
++  subpciid = grub_pci_read (addr);
++
++  subclass = (class >> 16) & 0xff;
++  subvendor = subpciid & 0xffff;
++  subdevice = subpciid >> 16;
++
++  id = grub_xasprintf ("v%04xd%04xsv%04xsd%04xbc%02xsc%02x",
++		       vendor, device, subvendor, subdevice,
++		       baseclass, subclass);
++
++  grub_file_seek (ctx->matches_file, 0);
++  while ((line = grub_file_getline (ctx->matches_file)) != NULL)
++    {
++      char *anchored_line;
++      regex_t regex;
++      int ret;
++
++      if (! *line || *line == '#')
++	{
++	  grub_free (line);
++	  continue;
++	}
++
++      anchored_line = grub_xasprintf ("^%s$", line);
++      ret = regcomp (&regex, anchored_line, REG_EXTENDED | REG_NOSUB);
++      grub_free (anchored_line);
++      if (ret)
++	{
++	  grub_free (line);
++	  continue;
++	}
++
++      ret = regexec (&regex, id, 0, NULL, 0);
++      regfree (&regex);
++      grub_free (line);
++      if (! ret)
++	{
++	  ctx->match = 1;
++	  return 1;
++	}
++    }
++
++  return 0;
++}
++
++static grub_err_t
++grub_cmd_hwmatch (grub_command_t cmd __attribute__ ((unused)),
++		  int argc, char **args)
++{
++  struct hwmatch_ctx ctx = { .match = 0 };
++  char *match_str;
++
++  if (argc < 2)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, "list file and class required");
++
++  ctx.matches_file = grub_file_open (args[0], GRUB_FILE_TYPE_HWMATCH);
++  if (! ctx.matches_file)
++    return grub_errno;
++
++  ctx.class_match = grub_strtol (args[1], 0, 10);
++
++  grub_pci_iterate (hwmatch_iter, &ctx);
++
++  match_str = grub_xasprintf ("%d", ctx.match);
++  grub_env_set ("match", match_str);
++  grub_free (match_str);
++
++  grub_file_close (ctx.matches_file);
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_command_t cmd;
++
++GRUB_MOD_INIT(hwmatch)
++{
++  cmd = grub_register_command ("hwmatch", grub_cmd_hwmatch,
++			       N_("MATCHES-FILE CLASS"),
++			       N_("Match PCI devices."));
++}
++
++GRUB_MOD_FINI(hwmatch)
++{
++  grub_unregister_command (cmd);
++}
+diff --git a/include/grub/file.h b/include/grub/file.h
+index 31567483c..e3c4cae2b 100644
+--- a/include/grub/file.h
++++ b/include/grub/file.h
+@@ -122,6 +122,7 @@ enum grub_file_type
+     GRUB_FILE_TYPE_FS_SEARCH,
+     GRUB_FILE_TYPE_AUDIO,
+     GRUB_FILE_TYPE_VBE_DUMP,
++    GRUB_FILE_TYPE_HWMATCH,
+ 
+     GRUB_FILE_TYPE_LOADENV,
+     GRUB_FILE_TYPE_SAVEENV,
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index 51cdb5e1d..2f5217358 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -23,6 +23,7 @@ datarootdir="@datarootdir@"
+ ubuntu_recovery="@UBUNTU_RECOVERY@"
+ quiet_boot="@QUIET_BOOT@"
+ quick_boot="@QUICK_BOOT@"
++gfxpayload_dynamic="@GFXPAYLOAD_DYNAMIC@"
+ 
+ . "$pkgdatadir/grub-mkconfig_lib"
+ 
+@@ -145,9 +146,10 @@ linux_entry ()
+       if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ]; then
+ 	  echo "	load_video" | sed "s/^/$submenu_indentation/"
+       fi
+-      if [ "$ubuntu_recovery" = 0 ] || [ x$type != xrecovery ]; then
+-	  echo "	set gfxpayload=$GRUB_GFXPAYLOAD_LINUX" | sed "s/^/$submenu_indentation/"
+-      fi
++  fi
++  if ([ "$ubuntu_recovery" = 0 ] || [ x$type != xrecovery ]) && \
++     ([ "x$GRUB_GFXPAYLOAD_LINUX" != x ] || [ "$gfxpayload_dynamic" = 1 ]); then
++      echo "	set gfxpayload=\$linux_gfx_mode" | sed "s/^/$submenu_indentation/"
+   fi
+ 
+   echo "	insmod gzio" | sed "s/^/$submenu_indentation/"
+@@ -226,6 +228,35 @@ prepare_root_cache=
+ boot_device_id=
+ title_correction_code=
+ 
++# Use ELILO's generic "efifb" when it's known to be available.
++# FIXME: We need an interface to select vesafb in case efifb can't be used.
++if [ "x$GRUB_GFXPAYLOAD_LINUX" != x ] || [ "$gfxpayload_dynamic" = 0 ]; then
++  echo "set linux_gfx_mode=$GRUB_GFXPAYLOAD_LINUX"
++else
++  cat << EOF
++if [ "\${recordfail}" != 1 ]; then
++  if [ -e \${prefix}/gfxblacklist.txt ]; then
++    if hwmatch \${prefix}/gfxblacklist.txt 3; then
++      if [ \${match} = 0 ]; then
++        set linux_gfx_mode=keep
++      else
++        set linux_gfx_mode=text
++      fi
++    else
++      set linux_gfx_mode=text
++    fi
++  else
++    set linux_gfx_mode=keep
++  fi
++else
++  set linux_gfx_mode=text
++fi
++EOF
++fi
++cat << EOF
++export linux_gfx_mode
++EOF
++
+ # Extra indentation to add to menu entries in a submenu. We're not in a submenu
+ # yet, so it's empty. In a submenu it will be equal to '\t' (one tab).
+ submenu_indentation=""

@@ -1,0 +1,193 @@
+From cb2746b915b7d8b5a3c78fae3d40fc0ccc41b650 Mon Sep 17 00:00:00 2001
+From: Steve McIntyre <93sam@debian.org>
+Date: Fri, 14 Jun 2019 16:37:11 +0100
+Subject: Deal with --force-extra-removable with signed shim too
+
+In this case, we need both the signed shim as /EFI/BOOT/BOOTXXX.EFI
+and signed Grub as /EFI/BOOT/grubXXX.efi.
+
+Also install the BOOTXXX.CSV into /EFI/debian, and FBXXX.EFI into
+/EFI/BOOT/ so that it can work when needed (*iff* we're updating the
+NVRAM).
+
+[cjwatson: Refactored also_install_removable somewhat for brevity and so
+that we're using consistent case-insensitive logic.]
+
+Bug-Debian: https://bugs.debian.org/930531
+Last-Update: 2019-06-14
+
+Patch-Name: grub-install-removable-shim.patch
+---
+ util/grub-install.c | 84 ++++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 67 insertions(+), 17 deletions(-)
+
+diff --git a/util/grub-install.c b/util/grub-install.c
+index fdec5dd83..666cef3d2 100644
+--- a/util/grub-install.c
++++ b/util/grub-install.c
+@@ -883,17 +883,13 @@ check_component_exists(const char *dir,
+ static void
+ also_install_removable(const char *src,
+ 		       const char *base_efidir,
+-		       const char *efi_suffix_upper)
++		       const char *efi_file,
++		       int is_needed)
+ {
+-  char *efi_file = NULL;
+   char *dst = NULL;
+   char *cur = NULL;
+   char *found = NULL;
+ 
+-  if (!efi_suffix_upper)
+-    grub_util_error ("%s", _("efi_suffix_upper not set"));
+-  efi_file = xasprintf ("BOOT%s.EFI", efi_suffix_upper);
+-
+   /* We need to install in $base_efidir/EFI/BOOT/$efi_file, but we
+    * need to cope with case-insensitive stuff here. Build the path one
+    * component at a time, checking for existing matches each time. */
+@@ -927,10 +923,9 @@ also_install_removable(const char *src,
+   cur = xstrdup (dst);
+   free (dst);
+   free (found);
+-  grub_install_copy_file (src, cur, 1);
++  grub_install_copy_file (src, cur, is_needed);
+ 
+   free (cur);
+-  free (efi_file);
+ }
+ 
+ int
+@@ -2078,11 +2073,14 @@ main (int argc, char *argv[])
+     case GRUB_INSTALL_PLATFORM_IA64_EFI:
+       {
+ 	char *dst = grub_util_path_concat (2, efidir, efi_file);
++	char *removable_file = xasprintf ("BOOT%s.EFI", efi_suffix_upper);
++
+ 	if (uefi_secure_boot)
+ 	  {
+ 	    char *shim_signed = NULL;
+ 	    char *mok_signed = NULL, *mok_file = NULL;
+ 	    char *fb_signed = NULL, *fb_file = NULL;
++	    char *csv_file = NULL;
+ 	    char *config_dst;
+ 	    FILE *config_dst_f;
+ 
+@@ -2091,11 +2089,15 @@ main (int argc, char *argv[])
+ 	    mok_file = xasprintf ("mm%s.efi", efi_suffix);
+ 	    fb_signed = xasprintf ("fb%s.efi.signed", efi_suffix);
+ 	    fb_file = xasprintf ("fb%s.efi", efi_suffix);
++	    csv_file = xasprintf ("BOOT%s.CSV", efi_suffix_upper);
++
++	    /* If we have a signed shim binary, install that and all
++	       its helpers in the normal vendor path */
+ 
+ 	    if (grub_util_is_regular (shim_signed))
+ 	      {
+ 		char *chained_base, *chained_dst;
+-		char *mok_src, *mok_dst, *fb_src, *fb_dst;
++		char *mok_src, *mok_dst, *fb_src, *fb_dst, *csv_src, *csv_dst;
+ 		if (!removable)
+ 		  {
+ 		    free (efi_file);
+@@ -2107,8 +2109,6 @@ main (int argc, char *argv[])
+ 		chained_base = xasprintf ("grub%s.efi", efi_suffix);
+ 		chained_dst = grub_util_path_concat (2, efidir, chained_base);
+ 		grub_install_copy_file (efi_signed, chained_dst, 1);
+-		free (chained_dst);
+-		free (chained_base);
+ 
+ 		/* Not critical, so not an error if they are not present (as it
+ 		   won't be for older releases); but if we have them, make
+@@ -2119,8 +2119,6 @@ main (int argc, char *argv[])
+ 						    mok_file);
+ 		grub_install_copy_file (mok_src,
+ 					mok_dst, 0);
+-		free (mok_src);
+-		free (mok_dst);
+ 
+ 		fb_src = grub_util_path_concat (2, "/usr/lib/shim/",
+ 						    fb_signed);
+@@ -2128,27 +2126,79 @@ main (int argc, char *argv[])
+ 						    fb_file);
+ 		grub_install_copy_file (fb_src,
+ 					fb_dst, 0);
++
++		csv_src = grub_util_path_concat (2, "/usr/lib/shim/",
++						    csv_file);
++		csv_dst = grub_util_path_concat (2, efidir,
++						    csv_file);
++		grub_install_copy_file (csv_src,
++					csv_dst, 0);
++
++		/* Install binaries into .../EFI/BOOT too:
++		   the shim binary
++		   the grub binary
++		   the shim fallback binary (not fatal on failure) */
++		if (force_extra_removable)
++		  {
++		    grub_util_info ("Secure boot: installing shim and image into rm path");
++		    also_install_removable (shim_signed, base_efidir, removable_file, 1);
++
++		    also_install_removable (efi_signed, base_efidir, chained_base, 1);
++
++		    /* If we're updating the NVRAM, add fallback too - it
++			will re-update the NVRAM later if things break */
++		    if (update_nvram)
++		      also_install_removable (fb_src, base_efidir, fb_file, 0);
++		  }
++
++		free (chained_dst);
++		free (chained_base);
++		free (mok_src);
++		free (mok_dst);
+ 		free (fb_src);
+ 		free (fb_dst);
++		free (csv_src);
++		free (csv_dst);
+ 	      }
+ 	    else
+-	      grub_install_copy_file (efi_signed, dst, 1);
++	      {
++		/* Tried to install for secure boot, but no signed
++		   shim found. Fall back to just installing the signed
++		   grub binary */
++		grub_util_info ("Secure boot (no shim): installing signed grub binary");
++		grub_install_copy_file (efi_signed, dst, 1);
++		if (force_extra_removable)
++		  {
++		    grub_util_info ("Secure boot (no shim): installing signed grub binary into rm path");
++		    also_install_removable (efi_signed, base_efidir, removable_file, 1);
++		  }
++	      }
+ 
++	    /* In either case, install our grub.cfg */
+ 	    config_dst = grub_util_path_concat (2, efidir, "grub.cfg");
+ 	    grub_install_copy_file (load_cfg, config_dst, 1);
+ 	    config_dst_f = grub_util_fopen (config_dst, "ab");
+ 	    fprintf (config_dst_f, "configfile $prefix/grub.cfg\n");
+ 	    fclose (config_dst_f);
+ 	    free (config_dst);
+-	    if (force_extra_removable)
+-	      also_install_removable(efi_signed, base_efidir, efi_suffix_upper);
++
++	    free (csv_file);
++	    free (fb_file);
++	    free (fb_signed);
++	    free (mok_file);
++	    free (mok_signed);
++	    free (shim_signed);
+ 	  }
+ 	else
+ 	  {
++	    /* No secure boot - just install our newly-generated image */
++	    grub_util_info ("No Secure Boot: installing core image");
+ 	    grub_install_copy_file (imgfile, dst, 1);
+ 	    if (force_extra_removable)
+-	      also_install_removable(imgfile, base_efidir, efi_suffix_upper);
++	      also_install_removable (imgfile, base_efidir, removable_file, 1);
+ 	  }
++
++	free (removable_file);
+ 	free (dst);
+       }
+       if (!removable && update_nvram)

@@ -1,0 +1,33 @@
+From 29f69269fdb282c41ae0204c080a73e3a5f380c3 Mon Sep 17 00:00:00 2001
+From: Chad MILLER <chad.miller@canonical.com>
+Date: Thu, 27 Oct 2016 17:15:07 -0400
+Subject: Tell zpool to emit full device names
+
+zfs-initramfs currently provides extraneous, undesired symlinks to
+devices directly underneath /dev/ to satisfy zpool's historical output
+of unqualified device names. By including this environment variable to
+signal our intent to zpool, zfs-linux packages can drop the symlink
+behavior when updating to its upstream or backported output behavior.
+
+Bug: https://savannah.gnu.org/bugs/?43653
+Bug-Debian: https://bugs.debian.org/824974
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1527727
+Last-Update: 2016-11-01
+
+Patch-Name: zpool-full-device-name.patch
+---
+ grub-core/osdep/unix/getroot.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/grub-core/osdep/unix/getroot.c b/grub-core/osdep/unix/getroot.c
+index 46d7116c6..da102918d 100644
+--- a/grub-core/osdep/unix/getroot.c
++++ b/grub-core/osdep/unix/getroot.c
+@@ -243,6 +243,7 @@ grub_util_find_root_devices_from_poolname (char *poolname)
+   argv[2] = poolname;
+   argv[3] = NULL;
+ 
++  setenv ("ZPOOL_VDEV_NAME_PATH", "YES", 1);
+   pid = grub_util_exec_pipe (argv, &fd);
+   if (!pid)
+     return NULL;
