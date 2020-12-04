@@ -1,0 +1,44 @@
+From 174c02f9a4e9b1963071a5e8eca6295a577bbdfe Mon Sep 17 00:00:00 2001
+From: Alex Doyle <adoyle@nvidia.com>
+Date: Thu, 15 Oct 2020 12:53:32 -0700
+Subject: [PATCH] Disable udevadm call in grub-install
+
+The ONIE GRUB install environment does not have udevadm installed.
+For the 2.02 release, this was not an issue - the attempt to
+use udevadm in hostdisk.c would fail and install would continue.
+
+With the 2.04 release, the on_exit handler is enabled, which attempts
+to clean up if there is an error.
+
+Since udevadm is not installed, that call errors, triggers the
+exit handler, and it deletes all the files in /mnt/onie-boot/grub/i386-pc, and the install fails.
+
+A silent failure is fine as the install will proceed.
+---
+ grub-core/osdep/linux/hostdisk.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/grub-core/osdep/linux/hostdisk.c b/grub-core/osdep/linux/hostdisk.c
+index 8b92f85..6f7b703 100644
+--- a/grub-core/osdep/linux/hostdisk.c
++++ b/grub-core/osdep/linux/hostdisk.c
+@@ -106,6 +106,16 @@ sysfs_partition_path (const char *dev, const char *entry)
+   size_t len = 0;
+   char *path = NULL;
+ 
++  /*
++   * The ONIE install environment doesn't have udevadm installed, which causes:
++   *  The forked call to return an error,
++   *  ...which triggers the  on_exit cleanup routine
++   *  ...which deletes everything under /mnt/onie-boot/grub/i386-pc/
++   *  ...which then destroys the embed install.
++   *  returning NULL gracefully fails it.
++   */
++  return NULL;
++
+   argv[0] = "udevadm";
+   argv[1] = "info";
+   argv[2] = "--query";
+-- 
+2.20.1
+

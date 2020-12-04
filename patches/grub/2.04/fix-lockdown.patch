@@ -1,0 +1,45 @@
+From ea65cb74601fd4c8229349d6d937d18033af796e Mon Sep 17 00:00:00 2001
+From: Luca Boccassi <bluca@debian.org>
+Date: Tue, 15 May 2018 11:36:46 +0100
+Subject: Do not overwrite sentinel byte in boot_params, breaks lockdown
+
+grub currently copies the entire boot_params, which includes setting
+sentinel byte to 0xff, which triggers sanitize_boot_params in the kernel
+which in turn clears various boot_params variables, including the
+indication that the bootloader chain is verified and thus the kernel
+disables lockdown mode.  According to the information on the Fedora bug
+tracker, only the information from byte 0x1f1 is necessary, so start
+copying from there instead.
+
+Author: Luca Boccassi <bluca@debian.org>
+Bug-Fedora: https://bugzilla.redhat.com/show_bug.cgi?id=1418360
+Forwarded: no
+
+Patch-Name: fix-lockdown.patch
+---
+ grub-core/loader/i386/efi/linux.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/grub-core/loader/i386/efi/linux.c b/grub-core/loader/i386/efi/linux.c
+index 16372a0c8..34605dfed 100644
+--- a/grub-core/loader/i386/efi/linux.c
++++ b/grub-core/loader/i386/efi/linux.c
+@@ -28,6 +28,7 @@
+ #include <grub/lib/cmdline.h>
+ #include <grub/linux.h>
+ #include <grub/efi/efi.h>
++#include <stddef.h>
+ 
+ GRUB_MOD_LICENSE ("GPLv3+");
+ 
+@@ -334,7 +335,9 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
+       lh.code32_start = (grub_uint32_t)(grub_addr_t) kernel_mem;
+     }
+ 
+-  grub_memcpy (params, &lh, 2 * 512);
++  /* do not overwrite below boot_params->hdr to avoid setting the sentinel byte */
++  start = offsetof (struct linux_kernel_params, setup_sects);
++  grub_memcpy ((grub_uint8_t *)params + start, (grub_uint8_t *)&lh + start, 2 * 512 - start);
+ 
+   params->type_of_loader = 0x21;
+ 

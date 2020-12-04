@@ -1,0 +1,77 @@
+From be1a470babffb9305a41aae735cc62c509d63b27 Mon Sep 17 00:00:00 2001
+From: Steve Langasek <steve.langasek@ubuntu.com>
+Date: Tue, 30 Oct 2018 15:04:16 -0700
+Subject: If we don't have writable grubenv and we're on EFI, always show the
+ menu
+
+If we don't have writable grubenv, recordfail doesn't work, which means our
+quickboot behavior - with a timeout of 0 - leaves the user without a
+reliable way to access the boot menu if they're on UEFI, because unlike
+BIOS, UEFI does not support checking the state of modifier keys (i.e.
+holding down shift at boot is not detectable).
+
+Handle this corner case by always using a non-zero timeout on EFI when
+save_env doesn't work.
+
+Reuse GRUB_RECORDFAIL_TIMEOUT to avoid introducing another variable.
+
+Signed-off-by: Steve Langasek <steve.langasek@canonical.com>
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1800722
+Last-Update: 2019-06-24
+
+Patch-Name: quick-boot-lvm.patch
+---
+ util/grub.d/00_header.in | 18 +++++++++++++++---
+ 1 file changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/util/grub.d/00_header.in b/util/grub.d/00_header.in
+index 674a76140..b7135b655 100644
+--- a/util/grub.d/00_header.in
++++ b/util/grub.d/00_header.in
+@@ -115,7 +115,7 @@ EOF
+           cat <<EOF
+   # GRUB lacks write support for $abstraction, so recordfail support is disabled.
+ EOF
+-          return
++          return 1
+           ;;
+       esac
+     done
+@@ -126,7 +126,7 @@ EOF
+ 	cat <<EOF
+   # GRUB lacks write support for $FS, so recordfail support is disabled.
+ EOF
+-	return
++	return 1
+ 	;;
+     esac
+ 
+@@ -135,7 +135,9 @@ EOF
+ EOF
+   }
+ 
+-  check_writable
++  if ! check_writable; then
++    recordfail_broken=1
++  fi
+ 
+   cat <<EOF
+ }
+@@ -379,6 +381,16 @@ EOF
+   fi
+ fi
+ EOF
++if [ "$recordfail_broken" = 1 ]; then
++  cat << EOF
++if [ \$grub_platform = efi ]; then
++  set timeout=${GRUB_RECORDFAIL_TIMEOUT:-30}
++  if [ x\$feature_timeout_style = xy ] ; then
++    set timeout_style=menu
++  fi
++fi
++EOF
++fi
+ }
+ 
+ if [ "x$GRUB_BUTTON_CMOS_ADDRESS" != "x" ]; then

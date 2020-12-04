@@ -1,0 +1,67 @@
+From 269cf7f9c74d192d33dc899cadcd4ee120e494e1 Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Wed, 24 Apr 2019 10:03:04 -0400
+Subject: Forbid the "devicetree" command when Secure Boot is enabled.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+Signed-off-by: Steve McIntyre <93sam@debian.org>
+
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=927888#15
+Bug-Debian: https://bugs.debian.org/927888
+Last-Update: 2019-05-04
+
+Patch-Name: no-devicetree-if-secure-boot.patch
+---
+ grub-core/loader/arm/linux.c | 12 ++++++++++++
+ grub-core/loader/efi/fdt.c   |  8 ++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/grub-core/loader/arm/linux.c b/grub-core/loader/arm/linux.c
+index 51684914c..092e8e307 100644
+--- a/grub-core/loader/arm/linux.c
++++ b/grub-core/loader/arm/linux.c
+@@ -30,6 +30,10 @@
+ #include <grub/linux.h>
+ #include <grub/verify.h>
+ 
++#ifdef GRUB_MACHINE_EFI
++#include <grub/efi/efi.h>
++#endif
++
+ GRUB_MOD_LICENSE ("GPLv3+");
+ 
+ static grub_dl_t my_mod;
+@@ -471,6 +475,14 @@ grub_cmd_devicetree (grub_command_t cmd __attribute__ ((unused)),
+   if (argc != 1)
+     return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("filename expected"));
+ 
++#ifdef GRUB_MACHINE_EFI
++  if (grub_efi_secure_boot ())
++    {
++      return grub_error (GRUB_ERR_ACCESS_DENIED,
++		  "Secure Boot forbids loading devicetree from %s", argv[0]);
++    }
++#endif
++
+   dtb = grub_file_open (argv[0], GRUB_FILE_TYPE_DEVICE_TREE_IMAGE);
+   if (!dtb)
+     return grub_errno;
+diff --git a/grub-core/loader/efi/fdt.c b/grub-core/loader/efi/fdt.c
+index ee9c5592c..f0c2d91be 100644
+--- a/grub-core/loader/efi/fdt.c
++++ b/grub-core/loader/efi/fdt.c
+@@ -123,6 +123,14 @@ grub_cmd_devicetree (grub_command_t cmd __attribute__ ((unused)),
+       return GRUB_ERR_NONE;
+     }
+ 
++#ifdef GRUB_MACHINE_EFI
++  if (grub_efi_secure_boot ())
++    {
++      return grub_error (GRUB_ERR_ACCESS_DENIED,
++		  "Secure Boot forbids loading devicetree from %s", argv[0]);
++    }
++#endif
++
+   dtb = grub_file_open (argv[0], GRUB_FILE_TYPE_DEVICE_TREE_IMAGE);
+   if (!dtb)
+     goto out;

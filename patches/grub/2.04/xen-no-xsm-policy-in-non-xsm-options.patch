@@ -1,0 +1,35 @@
+From 3017210d8539946c516003270cba7f3de569f2b3 Mon Sep 17 00:00:00 2001
+From: Ian Jackson <ian.jackson@eu.citrix.com>
+Date: Wed, 27 May 2020 17:00:45 +0100
+Subject: 20_linux_xen: Do not load XSM policy in non-XSM options
+
+For complicated reasons, even if you have XSM/FLASK disabled (as is
+the default) the Xen build system still builds a policy file and puts
+it in /boot.
+
+Even so, we shouldn't be loading this in the usual non-"XSM enabled"
+entries.  It doesn't do any particular harm but it is quite confusing.
+
+Signed-off-by: Ian Jackson <ian.jackson@eu.citrix.com>
+
+Bug-Debian: https://bugs.debian.org/961673
+Last-Update: 2020-05-29
+
+Patch-Name: xen-no-xsm-policy-in-non-xsm-options.patch
+---
+ util/grub.d/20_linux_xen.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/util/grub.d/20_linux_xen.in b/util/grub.d/20_linux_xen.in
+index 7a092b898..cbad5f95a 100644
+--- a/util/grub.d/20_linux_xen.in
++++ b/util/grub.d/20_linux_xen.in
+@@ -173,7 +173,7 @@ EOF
+ 	${module_loader}	--nounzip   $(echo $initrd_path)
+ EOF
+   fi
+-  if test -n "${xenpolicy}" ; then
++  if ${xsm} && test -n "${xenpolicy}" ; then
+     message="$(gettext_printf "Loading XSM policy ...")"
+     sed "s/^/$submenu_indentation/" << EOF
+ 	echo	'$(echo "$message" | grub_quote)'

@@ -1,0 +1,48 @@
+From cb6e90c39f78e1bacc5b8213d8fef90eb3230a1a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Herv=C3=A9=20Werner?= <dud225@hotmail.com>
+Date: Mon, 28 Jan 2019 17:24:23 +0100
+Subject: Fix setup on Secure Boot systems where cryptodisk is in use
+
+On full-encrypted systems, including /boot, the current code omits
+cryptodisk commands needed to open the drives if Secure Boot is enabled.
+This prevents grub2 from reading any further configuration residing on
+the encrypted disk.
+This patch fixes this issue by adding the needed "cryptomount" commands in
+the load.cfg file that is then copied in the EFI partition.
+
+Bug-Debian: https://bugs.debian.org/917117
+Last-Update: 2019-02-10
+
+Patch-Name: uefi-secure-boot-cryptomount.patch
+---
+ util/grub-install.c | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/util/grub-install.c b/util/grub-install.c
+index ab79828a5..ba06e1350 100644
+--- a/util/grub-install.c
++++ b/util/grub-install.c
+@@ -1523,6 +1523,23 @@ main (int argc, char *argv[])
+ 	  || uefi_secure_boot)
+ 	{
+ 	  char *uuid = NULL;
++
++	  if (uefi_secure_boot && config.is_cryptodisk_enabled)
++	    {
++	      if (grub_dev->disk)
++		probe_cryptodisk_uuid (grub_dev->disk);
++
++	      for (curdrive = grub_drives + 1; *curdrive; curdrive++)
++		{
++		  grub_device_t dev = grub_device_open (*curdrive);
++		  if (!dev)
++		    continue;
++		  if (dev->disk)
++		    probe_cryptodisk_uuid (dev->disk);
++		  grub_device_close (dev);
++		}
++	    }
++
+ 	  /*  generic method (used on coreboot and ata mod).  */
+ 	  if (!force_file_id
+ 	      && grub_fs->fs_uuid && grub_fs->fs_uuid (grub_dev, &uuid))

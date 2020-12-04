@@ -1,0 +1,39 @@
+From d768f3c486db716fe662b32afc1327f27fad012b Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Mon, 13 Jan 2014 12:12:57 +0000
+Subject: Disable gfxpayload=keep by default
+
+Setting gfxpayload=keep has been known to cause efifb to be
+inappropriately enabled.  In any case, with the current Linux kernel the
+result of this option is that early kernelspace will be unable to print
+anything to the console, so (for example) if boot fails and you end up
+dumped to an initramfs prompt, you won't be able to see anything on the
+screen.  As such it shouldn't be enabled by default in Debian, no matter
+what kernel options are enabled.
+
+gfxpayload=keep is a good idea but rather ahead of its time ...
+
+Bug-Debian: http://bugs.debian.org/567245
+Forwarded: no
+Last-Update: 2013-12-25
+
+Patch-Name: gfxpayload-keep-default.patch
+---
+ util/grub.d/10_linux.in | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index 4532266be..dd5a60c71 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -114,10 +114,6 @@ linux_entry ()
+   # FIXME: We need an interface to select vesafb in case efifb can't be used.
+   if [ "x$GRUB_GFXPAYLOAD_LINUX" = x ]; then
+       echo "	load_video" | sed "s/^/$submenu_indentation/"
+-      if grep -qx "CONFIG_FB_EFI=y" "${config}" 2> /dev/null \
+-	  && grep -qx "CONFIG_VT_HW_CONSOLE_BINDING=y" "${config}" 2> /dev/null; then
+-	  echo "	set gfxpayload=keep" | sed "s/^/$submenu_indentation/"
+-      fi
+   else
+       if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ]; then
+ 	  echo "	load_video" | sed "s/^/$submenu_indentation/"

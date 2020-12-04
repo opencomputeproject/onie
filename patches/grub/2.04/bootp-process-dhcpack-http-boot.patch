@@ -1,0 +1,122 @@
+From 1728caae46b17a42da4f1fb86b5d194d879bd4aa Mon Sep 17 00:00:00 2001
+From: Michael Chang <mchang@suse.com>
+Date: Thu, 27 Oct 2016 17:42:19 -0400
+Subject: bootp: Add processing DHCPACK packet from HTTP Boot
+
+The vendor class identifier with the string "HTTPClient" is used to denote the
+packet as responding to HTTP boot request. In DHCP4 config, the filename for
+HTTP boot is the URL of the boot file while for PXE boot it is the path to the
+boot file. As a consequence, the next-server becomes obseleted because the HTTP
+URL already contains the server address for the boot file. For DHCP6 config,
+there's no difference definition in existing config as dhcp6.bootfile-url can
+be used to specify URL for both HTTP and PXE boot file.
+
+This patch adds processing for "HTTPClient" vendor class identifier in DHCPACK
+packet by treating it as HTTP format, not as the PXE format.
+
+Signed-off-by: Michael Chang <mchang@suse.com>
+Signed-off-by: Ken Lin <ken.lin@hpe.com>
+
+Patch-Name: bootp-process-dhcpack-http-boot.patch
+---
+ grub-core/net/bootp.c | 60 ++++++++++++++++++++++++++++++++++++++++++-
+ include/grub/net.h    |  1 +
+ 2 files changed, 60 insertions(+), 1 deletion(-)
+
+diff --git a/grub-core/net/bootp.c b/grub-core/net/bootp.c
+index 21c1824ef..558d97ba1 100644
+--- a/grub-core/net/bootp.c
++++ b/grub-core/net/bootp.c
+@@ -154,7 +154,7 @@ struct grub_dhcp_request_options
+   {
+     grub_uint8_t type;
+     grub_uint8_t len;
+-    grub_uint8_t data[7];
++    grub_uint8_t data[8];
+   } GRUB_PACKED 	parameter_request;
+   grub_uint8_t end;
+ } GRUB_PACKED;
+@@ -498,6 +498,63 @@ grub_net_configure_by_dhcp_ack (const char *name,
+   if (opt && opt_len)
+     grub_env_set_net_property (name, "extensionspath", (const char *) opt, opt_len);
+   
++  opt = find_dhcp_option (bp, size, GRUB_NET_BOOTP_VENDOR_CLASS_IDENTIFIER,
++			  &opt_len);
++  if (opt && opt_len)
++    {
++      grub_env_set_net_property (name, "vendor_class_identifier",
++				 (const char *) opt, opt_len);
++      if (opt_len == sizeof ("HTTPClient") - 1 &&
++	  grub_memcmp (opt, "HTTPClient", sizeof ("HTTPClient") - 1) == 0)
++	{
++	  char *proto, *ip, *pa;
++
++	  if (!dissect_url (bp->boot_file, &proto, &ip, &pa))
++	    return inter;
++
++	  grub_env_set_net_property (name, "boot_file", pa, grub_strlen (pa));
++	  if (is_def)
++	    {
++	      grub_net_default_server = grub_strdup (ip);
++	      grub_env_set ("net_default_interface", name);
++	      grub_env_export ("net_default_interface");
++	    }
++	  if (device && !*device)
++	    {
++	      *device = grub_xasprintf ("%s,%s", proto, ip);
++	      grub_print_error ();
++	    }
++	  if (path)
++	    {
++	      *path = grub_strdup (pa);
++	      grub_print_error ();
++	      if (*path)
++		{
++		  char *slash;
++		  slash = grub_strrchr (*path, '/');
++		  if (slash)
++		    *slash = 0;
++		  else
++		    **path = 0;
++		}
++	    }
++	  grub_net_add_ipv4_local (inter, mask);
++	  inter->dhcp_ack = grub_malloc (size);
++	  if (inter->dhcp_ack)
++	    {
++	      grub_memcpy (inter->dhcp_ack, bp, size);
++	      inter->dhcp_acklen = size;
++	    }
++	  else
++	    grub_errno = GRUB_ERR_NONE;
++
++	  grub_free (proto);
++	  grub_free (ip);
++	  grub_free (pa);
++	  return inter;
++	}
++    }
++
+   inter->dhcp_ack = grub_malloc (size);
+   if (inter->dhcp_ack)
+     {
+@@ -572,6 +629,7 @@ send_dhcp_packet (struct grub_net_network_level_interface *iface)
+ 	  GRUB_NET_BOOTP_HOSTNAME,
+ 	  GRUB_NET_BOOTP_ROOT_PATH,
+ 	  GRUB_NET_BOOTP_EXTENSIONS_PATH,
++	  GRUB_NET_BOOTP_VENDOR_CLASS_IDENTIFIER,
+ 	},
+       },
+       GRUB_NET_BOOTP_END,
+diff --git a/include/grub/net.h b/include/grub/net.h
+index 58cff96d2..b5f9e617e 100644
+--- a/include/grub/net.h
++++ b/include/grub/net.h
+@@ -523,6 +523,7 @@ enum
+     GRUB_NET_BOOTP_DOMAIN = 0x0f,
+     GRUB_NET_BOOTP_ROOT_PATH = 0x11,
+     GRUB_NET_BOOTP_EXTENSIONS_PATH = 0x12,
++    GRUB_NET_BOOTP_VENDOR_CLASS_IDENTIFIER = 0x3C,
+     GRUB_NET_DHCP_REQUESTED_IP_ADDRESS = 50,
+     GRUB_NET_DHCP_OVERLOAD = 52,
+     GRUB_NET_DHCP_MESSAGE_TYPE = 53,

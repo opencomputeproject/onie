@@ -1,0 +1,195 @@
+From 83446ff328321ff05818fee1ed150f8efd4730b8 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:10 +0000
+Subject: Read /etc/default/grub.d/*.cfg after /etc/default/grub
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/901600
+Forwarded: no
+Last-Update: 2014-01-28
+
+Patch-Name: default-grub-d.patch
+---
+ grub-core/osdep/unix/config.c | 114 +++++++++++++++++++++++++++-------
+ util/grub-mkconfig.in         |   5 ++
+ 2 files changed, 98 insertions(+), 21 deletions(-)
+
+diff --git a/grub-core/osdep/unix/config.c b/grub-core/osdep/unix/config.c
+index 65effa9f3..5478030fd 100644
+--- a/grub-core/osdep/unix/config.c
++++ b/grub-core/osdep/unix/config.c
+@@ -24,6 +24,8 @@
+ #include <grub/emu/config.h>
+ #include <grub/util/install.h>
+ #include <grub/util/misc.h>
++#include <grub/list.h>
++#include <assert.h>
+ #include <string.h>
+ #include <sys/types.h>
+ #include <sys/wait.h>
+@@ -61,13 +63,27 @@ grub_util_get_localedir (void)
+   return LOCALEDIR;
+ }
+ 
++struct cfglist
++{
++  struct cfglist *next;
++  struct cfglist *prev;
++  char *path;
++};
++
+ void
+ grub_util_load_config (struct grub_util_config *cfg)
+ {
+   pid_t pid;
+   const char *argv[4];
+-  char *script, *ptr;
++  char *script = NULL, *ptr;
+   const char *cfgfile, *iptr;
++  char *cfgdir;
++  grub_util_fd_dir_t d;
++  struct cfglist *cfgpaths = NULL, *cfgpath, *next_cfgpath;
++  int num_cfgpaths = 0;
++  size_t len_cfgpaths = 0;
++  char **sorted_cfgpaths = NULL;
++  int i;
+   FILE *f = NULL;
+   int fd;
+   const char *v;
+@@ -83,29 +99,75 @@ grub_util_load_config (struct grub_util_config *cfg)
+     cfg->grub_distributor = xstrdup (v);
+ 
+   cfgfile = grub_util_get_config_filename ();
+-  if (!grub_util_is_regular (cfgfile))
+-    return;
++  if (grub_util_is_regular (cfgfile))
++    {
++      ++num_cfgpaths;
++      len_cfgpaths += strlen (cfgfile) * 4 + sizeof (". ''; ") - 1;
++    }
++
++  cfgdir = xasprintf ("%s.d", cfgfile);
++  d = grub_util_fd_opendir (cfgdir);
++  if (d)
++    {
++      grub_util_fd_dirent_t de;
++
++      while ((de = grub_util_fd_readdir (d)))
++	{
++	  const char *ext = strrchr (de->d_name, '.');
++
++	  if (!ext || strcmp (ext, ".cfg") != 0)
++	    continue;
++
++	  cfgpath = xmalloc (sizeof (*cfgpath));
++	  cfgpath->path = grub_util_path_concat (2, cfgdir, de->d_name);
++	  grub_list_push (GRUB_AS_LIST_P (&cfgpaths), GRUB_AS_LIST (cfgpath));
++	  ++num_cfgpaths;
++	  len_cfgpaths += strlen (cfgpath->path) * 4 + sizeof (". ''; ") - 1;
++	}
++      grub_util_fd_closedir (d);
++    }
++
++  if (num_cfgpaths == 0)
++    goto out;
++
++  sorted_cfgpaths = xmalloc (num_cfgpaths * sizeof (*sorted_cfgpaths));
++  i = 0;
++  if (grub_util_is_regular (cfgfile))
++    sorted_cfgpaths[i++] = xstrdup (cfgfile);
++  FOR_LIST_ELEMENTS_SAFE (cfgpath, next_cfgpath, cfgpaths)
++    {
++      sorted_cfgpaths[i++] = cfgpath->path;
++      free (cfgpath);
++    }
++  assert (i == num_cfgpaths);
++  qsort (sorted_cfgpaths + 1, num_cfgpaths - 1, sizeof (*sorted_cfgpaths),
++	 (int (*) (const void *, const void *)) strcmp);
+ 
+   argv[0] = "sh";
+   argv[1] = "-c";
+ 
+-  script = xmalloc (4 * strlen (cfgfile) + 300);
++  script = xmalloc (len_cfgpaths + 300);
+ 
+   ptr = script;
+-  memcpy (ptr, ". '", 3);
+-  ptr += 3;
+-  for (iptr = cfgfile; *iptr; iptr++)
++  for (i = 0; i < num_cfgpaths; i++)
+     {
+-      if (*iptr == '\\')
++      memcpy (ptr, ". '", 3);
++      ptr += 3;
++      for (iptr = sorted_cfgpaths[i]; *iptr; iptr++)
+ 	{
+-	  memcpy (ptr, "'\\''", 4);
+-	  ptr += 4;
+-	  continue;
++	  if (*iptr == '\\')
++	    {
++	      memcpy (ptr, "'\\''", 4);
++	      ptr += 4;
++	      continue;
++	    }
++	  *ptr++ = *iptr;
+ 	}
+-      *ptr++ = *iptr;
++      memcpy (ptr, "'; ", 3);
++      ptr += 3;
+     }
+ 
+-  strcpy (ptr, "'; printf \"GRUB_ENABLE_CRYPTODISK=%s\\nGRUB_DISTRIBUTOR=%s\\n\" "
++  strcpy (ptr, "printf \"GRUB_ENABLE_CRYPTODISK=%s\\nGRUB_DISTRIBUTOR=%s\\n\" "
+ 	  "\"$GRUB_ENABLE_CRYPTODISK\" \"$GRUB_DISTRIBUTOR\"");
+ 
+   argv[2] = script;
+@@ -125,15 +187,25 @@ grub_util_load_config (struct grub_util_config *cfg)
+       waitpid (pid, NULL, 0);
+     }
+   if (f)
+-    return;
++    goto out;
+ 
+-  f = grub_util_fopen (cfgfile, "r");
+-  if (f)
++  for (i = 0; i < num_cfgpaths; i++)
+     {
+-      grub_util_parse_config (f, cfg, 0);
+-      fclose (f);
++      f = grub_util_fopen (sorted_cfgpaths[i], "r");
++      if (f)
++	{
++	  grub_util_parse_config (f, cfg, 0);
++	  fclose (f);
++	}
++      else
++	grub_util_warn (_("cannot open configuration file `%s': %s"),
++			cfgfile, strerror (errno));
+     }
+-  else
+-    grub_util_warn (_("cannot open configuration file `%s': %s"),
+-		    cfgfile, strerror (errno));
++
++out:
++  free (script);
++  for (i = 0; i < num_cfgpaths; i++)
++    free (sorted_cfgpaths[i]);
++  free (sorted_cfgpaths);
++  free (cfgdir);
+ }
+diff --git a/util/grub-mkconfig.in b/util/grub-mkconfig.in
+index 45cd4cc54..8a1bc0441 100644
+--- a/util/grub-mkconfig.in
++++ b/util/grub-mkconfig.in
+@@ -157,6 +157,11 @@ fi
+ if test -f ${sysconfdir}/default/grub ; then
+   . ${sysconfdir}/default/grub
+ fi
++for x in ${sysconfdir}/default/grub.d/*.cfg ; do
++  if [ -e "${x}" ]; then
++    . "${x}"
++  fi
++done
+ 
+ # XXX: should this be deprecated at some point?
+ if [ "x${GRUB_TERMINAL}" != "x" ] ; then

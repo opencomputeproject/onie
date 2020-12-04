@@ -1,0 +1,358 @@
+From 2184aa277150cf09db79c9e44b36556899ddc5c4 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:28 +0000
+Subject: Add configure option to bypass boot menu if possible
+
+If other operating systems are installed, then automatically unhide the
+menu.  Otherwise, if GRUB_HIDDEN_TIMEOUT is 0, then use keystatus if
+available to check whether Shift is pressed.  If it is, show the menu,
+otherwise boot immediately.  If keystatus is not available, then fall
+back to a short delay interruptible with Escape.
+
+This may or may not remain Ubuntu-specific, although it's not obviously
+wanted upstream.  It implements a requirement of
+https://wiki.ubuntu.com/DesktopExperienceTeam/KarmicBootExperienceDesignSpec#Bootloader.
+
+If the previous boot failed (defined as failing to get to the end of one
+of the normal runlevels), then show the boot menu regardless.
+
+Author: Richard Laager <rlaager@wiktel.com>
+Author: Robie Basak <robie.basak@ubuntu.com>
+Forwarded: no
+Last-Update: 2015-09-04
+
+Patch-Name: quick-boot.patch
+---
+ configure.ac                | 11 ++++++
+ docs/grub.texi              | 14 +++++++
+ grub-core/normal/menu.c     | 24 ++++++++++++
+ util/grub-mkconfig.in       |  3 +-
+ util/grub.d/00_header.in    | 77 +++++++++++++++++++++++++++++++------
+ util/grub.d/10_linux.in     |  4 ++
+ util/grub.d/30_os-prober.in | 21 ++++++++++
+ 7 files changed, 141 insertions(+), 13 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index ea00ccd69..7dda5bb32 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1868,6 +1868,17 @@ else
+ fi
+ AC_SUBST([QUIET_BOOT])
+ 
++AC_ARG_ENABLE([quick-boot],
++              [AS_HELP_STRING([--enable-quick-boot],
++                              [bypass boot menu if possible (default=no)])],
++              [], [enable_quick_boot=no])
++if test x"$enable_quick_boot" = xyes ; then
++  QUICK_BOOT=1
++else
++  QUICK_BOOT=0
++fi
++AC_SUBST([QUICK_BOOT])
++
+ LIBS=""
+ 
+ AC_SUBST([FONT_SOURCE])
+diff --git a/docs/grub.texi b/docs/grub.texi
+index 87795075a..a835d0ae4 100644
+--- a/docs/grub.texi
++++ b/docs/grub.texi
+@@ -1522,6 +1522,20 @@ This option may be set to a list of GRUB module names separated by spaces.
+ Each module will be loaded as early as possible, at the start of
+ @file{grub.cfg}.
+ 
++@item GRUB_RECORDFAIL_TIMEOUT
++If this option is set, it overrides the default recordfail setting.  A
++setting of -1 causes GRUB to wait for user input indefinitely.  However, a
++false positive in the recordfail mechanism may occur if power is lost during
++boot before boot success is recorded in userspace.  The default setting is
++30, which causes GRUB to wait for user input for thirty seconds before
++continuing.  This default allows interactive users the opportunity to switch
++to a different, working kernel, while avoiding a false positive causing the
++boot to block indefinitely on headless and appliance systems where access to
++a console is restricted or limited.
++
++This option is only effective when GRUB was configured with the
++@option{--enable-quick-boot} option.
++
+ @end table
+ 
+ The following options are still accepted for compatibility with existing
+diff --git a/grub-core/normal/menu.c b/grub-core/normal/menu.c
+index ebf5a0f10..42c82290d 100644
+--- a/grub-core/normal/menu.c
++++ b/grub-core/normal/menu.c
+@@ -604,6 +604,30 @@ run_menu (grub_menu_t menu, int nested, int *auto_boot)
+       static struct grub_term_coordinate *pos;
+       int entry = -1;
+ 
++      if (timeout == 0)
++	{
++	  /* If modifier key statuses can't be detected without a delay,
++	     then a hidden timeout of zero cannot be interrupted in any way,
++	     which is not very helpful.  Bump it to three seconds in this
++	     case to give the user a fighting chance.  */
++	  grub_term_input_t term;
++	  int nterms = 0;
++	  int mods_detectable = 1;
++
++	  FOR_ACTIVE_TERM_INPUTS(term)
++	  {
++	    if (!term->getkeystatus)
++	      {
++		mods_detectable = 0;
++		break;
++	      }
++	    else
++	      nterms++;
++	  }
++	  if (!mods_detectable || !nterms)
++	    timeout = 3;
++	}
++
+       if (timeout_style == TIMEOUT_STYLE_COUNTDOWN && timeout)
+ 	{
+ 	  pos = grub_term_save_pos ();
+diff --git a/util/grub-mkconfig.in b/util/grub-mkconfig.in
+index 8a1bc0441..8752777e0 100644
+--- a/util/grub-mkconfig.in
++++ b/util/grub-mkconfig.in
+@@ -243,7 +243,8 @@ export GRUB_DEFAULT \
+   GRUB_ENABLE_CRYPTODISK \
+   GRUB_BADRAM \
+   GRUB_OS_PROBER_SKIP_LIST \
+-  GRUB_DISABLE_SUBMENU
++  GRUB_DISABLE_SUBMENU \
++  GRUB_RECORDFAIL_TIMEOUT
+ 
+ if test "x${grub_cfg}" != "x"; then
+   rm -f "${grub_cfg}.new"
+diff --git a/util/grub.d/00_header.in b/util/grub.d/00_header.in
+index 93a90233e..674a76140 100644
+--- a/util/grub.d/00_header.in
++++ b/util/grub.d/00_header.in
+@@ -21,6 +21,8 @@ prefix="@prefix@"
+ exec_prefix="@exec_prefix@"
+ datarootdir="@datarootdir@"
+ grub_lang=`echo $LANG | cut -d . -f 1`
++grubdir="`echo "/@bootdirname@/@grubdirname@" | sed 's,//*,/,g'`"
++quick_boot="@QUICK_BOOT@"
+ 
+ export TEXTDOMAIN=@PACKAGE@
+ export TEXTDOMAINDIR="@localedir@"
+@@ -44,6 +46,7 @@ if [ "x${GRUB_TIMEOUT_BUTTON}" = "x" ] ; then GRUB_TIMEOUT_BUTTON="$GRUB_TIMEOUT
+ 
+ cat << EOF
+ if [ -s \$prefix/grubenv ]; then
++  set have_grubenv=true
+   load_env
+ fi
+ EOF
+@@ -96,7 +99,50 @@ function savedefault {
+     save_env saved_entry
+   fi
+ }
++EOF
++
++if [ "$quick_boot" = 1 ]; then
++    cat <<EOF
++function recordfail {
++  set recordfail=1
++EOF
++
++  check_writable () {
++    abstractions="$(grub-probe --target=abstraction "${grubdir}")"
++    for abstraction in $abstractions; do
++      case "$abstraction" in
++        diskfilter | lvm)
++          cat <<EOF
++  # GRUB lacks write support for $abstraction, so recordfail support is disabled.
++EOF
++          return
++          ;;
++      esac
++    done
++
++    FS="$(grub-probe --target=fs "${grubdir}")"
++    case "$FS" in
++      btrfs | cpiofs | newc | odc | romfs | squash4 | tarfs | zfs)
++	cat <<EOF
++  # GRUB lacks write support for $FS, so recordfail support is disabled.
++EOF
++	return
++	;;
++    esac
++
++    cat <<EOF
++  if [ -n "\${have_grubenv}" ]; then if [ -z "\${boot_once}" ]; then save_env recordfail; fi; fi
++EOF
++  }
++
++  check_writable
+ 
++  cat <<EOF
++}
++EOF
++fi
++
++cat <<EOF
+ function load_video {
+ EOF
+ if [ -n "${GRUB_VIDEO_BACKEND}" ]; then
+@@ -282,10 +328,16 @@ fi
+ 
+ make_timeout ()
+ {
++    cat << EOF
++if [ "\${recordfail}" = 1 ] ; then
++  set timeout=${GRUB_RECORDFAIL_TIMEOUT:-30}
++else
++EOF
+     if [ "x${3}" != "x" ] ; then
+ 	timeout="${2}"
+ 	style="${3}"
+-    elif [ "x${1}" != "x" ] && [ "x${1}" != "x0" ] ; then
++    elif [ "x${1}" != "x" ] && \
++	 ([ "$quick_boot" = 1 ] || [ "x${1}" != "x0" ]) ; then
+ 	# Handle the deprecated GRUB_HIDDEN_TIMEOUT scheme.
+ 	timeout="${1}"
+ 	if [ "x${2}" != "x0" ] ; then
+@@ -304,26 +356,27 @@ make_timeout ()
+ 	style="menu"
+     fi
+     cat << EOF
+-if [ x\$feature_timeout_style = xy ] ; then
+-  set timeout_style=${style}
+-  set timeout=${timeout}
++  if [ x\$feature_timeout_style = xy ] ; then
++    set timeout_style=${style}
++    set timeout=${timeout}
+ EOF
+     if [ "x${style}" = "xmenu" ] ; then
+ 	cat << EOF
+-# Fallback normal timeout code in case the timeout_style feature is
+-# unavailable.
+-else
+-  set timeout=${timeout}
++  # Fallback normal timeout code in case the timeout_style feature is
++  # unavailable.
++  else
++    set timeout=${timeout}
+ EOF
+     else
+ 	cat << EOF
+-# Fallback hidden-timeout code in case the timeout_style feature is
+-# unavailable.
+-elif sleep${verbose} --interruptible ${timeout} ; then
+-  set timeout=0
++  # Fallback hidden-timeout code in case the timeout_style feature is
++  # unavailable.
++  elif sleep${verbose} --interruptible ${timeout} ; then
++    set timeout=0
+ EOF
+     fi
+     cat << EOF
++  fi
+ fi
+ EOF
+ }
+diff --git a/util/grub.d/10_linux.in b/util/grub.d/10_linux.in
+index 2e4dff9fb..51cdb5e1d 100644
+--- a/util/grub.d/10_linux.in
++++ b/util/grub.d/10_linux.in
+@@ -22,6 +22,7 @@ exec_prefix="@exec_prefix@"
+ datarootdir="@datarootdir@"
+ ubuntu_recovery="@UBUNTU_RECOVERY@"
+ quiet_boot="@QUIET_BOOT@"
++quick_boot="@QUICK_BOOT@"
+ 
+ . "$pkgdatadir/grub-mkconfig_lib"
+ 
+@@ -129,6 +130,9 @@ linux_entry ()
+   else
+       echo "menuentry '$(echo "$os" | grub_quote)' ${CLASS} \$menuentry_id_option 'gnulinux-simple-$boot_device_id' {" | sed "s/^/$submenu_indentation/"
+   fi      
++  if [ "$quick_boot" = 1 ]; then
++      echo "	recordfail" | sed "s/^/$submenu_indentation/"
++  fi
+   if [ x$type != xrecovery ] ; then
+       save_default_entry | grub_add_tab
+   fi
+diff --git a/util/grub.d/30_os-prober.in b/util/grub.d/30_os-prober.in
+index 271044f59..da5f28876 100644
+--- a/util/grub.d/30_os-prober.in
++++ b/util/grub.d/30_os-prober.in
+@@ -20,12 +20,26 @@ set -e
+ prefix="@prefix@"
+ exec_prefix="@exec_prefix@"
+ datarootdir="@datarootdir@"
++quick_boot="@QUICK_BOOT@"
+ 
+ export TEXTDOMAIN=@PACKAGE@
+ export TEXTDOMAINDIR="@localedir@"
+ 
+ . "$pkgdatadir/grub-mkconfig_lib"
+ 
++found_other_os=
++
++adjust_timeout () {
++  if [ "$quick_boot" = 1 ] && [ "x${found_other_os}" != "x" ]; then
++    cat << EOF
++set timeout_style=menu
++if [ "\${timeout}" = 0 ]; then
++  set timeout=10
++fi
++EOF
++  fi
++}
++
+ if [ "x${GRUB_DISABLE_OS_PROBER}" = "xtrue" ]; then
+   exit 0
+ fi
+@@ -42,6 +56,7 @@ if [ -z "${OSPROBED}" ] ; then
+ fi
+ 
+ osx_entry() {
++    found_other_os=1
+     if [ x$2 = x32 ]; then
+         # TRANSLATORS: it refers to kernel architecture (32-bit)
+ 	bitstr="$(gettext "(32-bit)")"
+@@ -165,6 +180,7 @@ for OS in ${OSPROBED} ; do
+ 	  ;;
+       esac
+ 
++      found_other_os=1
+ 	  onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
+       cat << EOF
+ menuentry '$(echo "${LONGNAME} $onstr" | grub_quote)' $CLASS --class os \$menuentry_id_option 'osprober-chain-$(grub_get_device_id "${DEVICE}")' {
+@@ -195,6 +211,7 @@ EOF
+     ;;
+     efi)
+ 
++	found_other_os=1
+ 	EFIPATH=${DEVICE#*@}
+ 	DEVICE=${DEVICE%@*}
+ 	onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
+@@ -243,6 +260,7 @@ EOF
+ 	  [ "${prepare_boot_cache}" ] || continue
+ 	fi
+ 
++	found_other_os=1
+ 	onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
+ 	recovery_params="$(echo "${LPARAMS}" | grep 'single\|recovery')" || true
+ 	counter=1
+@@ -311,6 +329,7 @@ EOF
+       fi
+     ;;
+     hurd)
++      found_other_os=1
+       onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
+       cat << EOF
+ menuentry '$(echo "${LONGNAME} $onstr" | grub_quote)' --class hurd --class gnu --class os \$menuentry_id_option 'osprober-gnuhurd-/boot/gnumach.gz-false-$(grub_get_device_id "${DEVICE}")' {
+@@ -353,3 +372,5 @@ EOF
+     ;;
+   esac
+ done
++
++adjust_timeout

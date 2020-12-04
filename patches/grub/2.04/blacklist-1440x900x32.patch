@@ -1,0 +1,34 @@
+From e36b83c8b3b320365deddc2a3df266a57857fda7 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:11 +0000
+Subject: Blacklist 1440x900x32 from VBE preferred mode handling
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/701111
+Forwarded: no
+Last-Update: 2013-11-14
+
+Patch-Name: blacklist-1440x900x32.patch
+---
+ grub-core/video/i386/pc/vbe.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/grub-core/video/i386/pc/vbe.c b/grub-core/video/i386/pc/vbe.c
+index b7f911926..4b1bd7d5e 100644
+--- a/grub-core/video/i386/pc/vbe.c
++++ b/grub-core/video/i386/pc/vbe.c
+@@ -1054,6 +1054,15 @@ grub_video_vbe_setup (unsigned int width, unsigned int height,
+ 	      || vbe_mode_info.y_resolution > height)
+ 	    /* Resolution exceeds that of preferred mode.  */
+ 	    continue;
++
++	  /* Blacklist 1440x900x32 from preferred mode handling until a
++	     better solution is available.  This mode causes problems on
++	     many Thinkpads.  See:
++	       https://bugs.launchpad.net/ubuntu/+source/grub2/+bug/701111  */
++	  if (vbe_mode_info.x_resolution == 1440 &&
++	      vbe_mode_info.y_resolution == 900 &&
++	      vbe_mode_info.bits_per_pixel == 32)
++	    continue;
+ 	}
+       else
+ 	{

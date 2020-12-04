@@ -1,0 +1,91 @@
+From cf15ef6dc47c0304d0bcf5308a8f42da8da54100 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@ubuntu.com>
+Date: Mon, 13 Jan 2014 12:13:05 +0000
+Subject: Fall back to non-EFI if booted using EFI but -efi is missing
+
+It may be possible, particularly in recovery situations, to be booted
+using EFI on x86 when only the i386-pc target is installed, or on ARM
+when only the arm-uboot target is installed.  There's nothing actually
+stopping us installing i386-pc or arm-uboot from an EFI environment, and
+it's better than returning a confusing error.
+
+Author: Steve McIntyre <93sam@debian.org>
+Forwarded: no
+Last-Update: 2019-05-24
+
+Patch-Name: install-efi-fallback.patch
+---
+ grub-core/osdep/linux/platform.c | 40 ++++++++++++++++++++++++++++----
+ 1 file changed, 35 insertions(+), 5 deletions(-)
+
+diff --git a/grub-core/osdep/linux/platform.c b/grub-core/osdep/linux/platform.c
+index e28a79dab..2e7f72086 100644
+--- a/grub-core/osdep/linux/platform.c
++++ b/grub-core/osdep/linux/platform.c
+@@ -19,10 +19,12 @@
+ #include <config.h>
+ 
+ #include <grub/util/install.h>
++#include <grub/emu/config.h>
+ #include <grub/emu/exec.h>
+ #include <grub/emu/misc.h>
+ #include <sys/types.h>
+ #include <dirent.h>
++#include <stdlib.h>
+ #include <string.h>
+ 
+ #include <sys/utsname.h>
+@@ -128,9 +130,24 @@ const char *
+ grub_install_get_default_arm_platform (void)
+ {
+   if (is_efi_system())
+-    return "arm-efi";
+-  else
+-    return "arm-uboot";
++    {
++      const char *pkglibdir = grub_util_get_pkglibdir ();
++      const char *platform;
++      char *pd;
++      int found;
++
++      platform = "arm-efi";
++
++      pd = grub_util_path_concat (2, pkglibdir, platform);
++      found = grub_util_is_directory (pd);
++      free (pd);
++      if (found)
++	return platform;
++      else
++	grub_util_info ("... but %s platform not available", platform);
++    }
++
++  return "arm-uboot";
+ }
+ 
+ const char *
+@@ -138,10 +155,23 @@ grub_install_get_default_x86_platform (void)
+ {
+   if (is_efi_system())
+     {
++      const char *pkglibdir = grub_util_get_pkglibdir ();
++      const char *platform;
++      char *pd;
++      int found;
++
+       if (read_platform_size() == 64)
+-	return "x86_64-efi";
++	platform = "x86_64-efi";
++      else
++	platform = "i386-efi";
++
++      pd = grub_util_path_concat (2, pkglibdir, platform);
++      found = grub_util_is_directory (pd);
++      free (pd);
++      if (found)
++	return platform;
+       else
+-	return "i386-efi";
++	grub_util_info ("... but %s platform not available", platform);
+     }
+ 
+   grub_util_info ("Looking for /proc/device-tree ..");
