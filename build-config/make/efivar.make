@@ -13,7 +13,7 @@
 
 EFIVAR_VERSION			= 37
 EFIVAR_TARBALL			= efivar-$(EFIVAR_VERSION).tar.bz2
-EFIVAR_TARBALL_URLS		+= $(ONIE_MIRROR)https://github.com/rhboot/efivar/releases/download/${EFIVAR_VERSION}/${EFIVAR_TARBALL}
+EFIVAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/rhboot/efivar/releases/download/${EFIVAR_VERSION}/${EFIVAR_TARBALL}
 EFIVAR_BUILD_DIR		= $(USER_BUILDDIR)/efivar
 EFIVAR_DIR			= $(EFIVAR_BUILD_DIR)/efivar-$(EFIVAR_VERSION)
 
