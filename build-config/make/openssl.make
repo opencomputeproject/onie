@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2020 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -9,7 +10,7 @@
 # This is a makefile fragment that defines the build of openssl
 #
 
-OPENSSL_VERSION		= 1.0.2l
+OPENSSL_VERSION		= 1.1.1g
 OPENSSL_TARBALL		= openssl-$(OPENSSL_VERSION).tar.gz
 OPENSSL_TARBALL_URLS	+= $(ONIE_MIRROR) \
 			   https://www.openssl.org/source
@@ -31,9 +32,9 @@ PHONY += openssl openssl-download openssl-source \
 	 openssl-download-clean
 
 OPENSSL_LIBS	= \
-	engines \
-	libcrypto.so libcrypto.so.1.0.0 \
-	libssl.so libssl.so.1.0.0
+	engines-1.1 \
+	libcrypto.so libcrypto.so.1.1 \
+	libssl.so libssl.so.1.1
 
 OPENSSL_BINS	= openssl
 
@@ -84,7 +85,7 @@ $(OPENSSL_BUILD_STAMP): $(OPENSSL_NEW_FILES) $(OPENSSL_CONFIGURE_STAMP)
 	$(Q) echo "====  Building openssl-$(OPENSSL_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(OPENSSL_DIR)
 	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(OPENSSL_DIR) \
-		INSTALL_PREFIX=$(DEV_SYSROOT) install_sw
+		DESTDIR=$(DEV_SYSROOT) install_sw install_ssldirs
 	$(Q) for file in $(OPENSSL_LIBS) ; do \
 		chmod u+w -R $(DEV_SYSROOT)/usr/lib/$$file ; \
 	     done
