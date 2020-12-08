@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2020 Alex Doyle <adoyle@cumulusnetworks.com>
 #  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -9,7 +10,7 @@
 # This is a makefile fragment that defines the build of mokutil
 #
 
-MOKUTIL_VERSION			= 0.3.0
+MOKUTIL_VERSION			= 0.4.0
 MOKUTIL_TARBALL			= $(MOKUTIL_VERSION).tar.gz
 MOKUTIL_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/lcp/mokutil/archive
 MOKUTIL_BUILD_DIR		= $(USER_BUILDDIR)/mokutil
