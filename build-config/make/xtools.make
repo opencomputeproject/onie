@@ -63,9 +63,9 @@ CT_NG_COMPONENTS +=	\
 	gcc-8.3.0.tar.xz		\
 	gdb-7.12.1.tar.xz       \
 	gmp-6.1.2.tar.xz		\
-	isl-0.16.1.tar.xz		\
-	mpc-1.0.3.tar.gz        \
-	mpfr-3.1.6.tar.xz		\
+	isl-0.20.tar.xz		\
+	mpc-1.1.0.tar.gz        \
+	mpfr-4.1.0.tar.xz		\
 	strace-4.26.tar.xz      \
 	zlib-1.2.11.tar.xz      
 else ifeq ($(GCC_VERSION),6.3.0)
