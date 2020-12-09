@@ -118,9 +118,16 @@ $(XTOOLS_DOWNLOAD_STAMP): $(XTOOLS_PREP_STAMP) | $(KERNEL_DOWNLOAD_STAMP) $(UCLI
 		done
 	$(Q) touch $@
 
+#
+# Set CT_LINUX_VERSION and CT_LINUX_V_a_b=y in the new uClibc config.
+#
+CT_LINUX_V = $(subst .,_,$(LINUX_VERSION))
 $(XTOOLS_BUILD_DIR)/.config: $(XTOOLS_CONFIG) $(XTOOLS_PREP_STAMP)
 	$(Q) echo "==== Copying $(XTOOLS_CONFIG) to $@ ===="
-	$(Q) cp -v $< $@
+	$(Q) cp -v $< $(XTOOLS_BUILD_DIR)/.config
+	$(Q) echo "==== Setting kernel version to $(LINUX_VERSION).$(LINUX_MINOR_VERSION) in .config ===="
+	$(Q) sed -i 's/CT_LINUX_VERSION=.*"/CT_LINUX_VERSION="$(LINUX_VERSION).$(LINUX_MINOR_VERSION)"/g' $(XTOOLS_BUILD_DIR)/.config
+	$(Q) sed -i 's/CT_LINUX_V_$(CT_LINUX_V) is not set/CT_LINUX_V_$(CT_LINUX_V)=y/g' $(XTOOLS_BUILD_DIR)/.config
 
 xtools-config: $(XTOOLS_BUILD_DIR)/.config $(CROSSTOOL_NG_BUILD_STAMP)
 	$(Q) cd $(XTOOLS_BUILD_DIR) && $(CROSSTOOL_NG_DIR)/ct-ng menuconfig
