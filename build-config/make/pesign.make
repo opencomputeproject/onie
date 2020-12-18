@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2020 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -9,7 +10,7 @@
 # This is a makefile fragment that defines the build of pesign
 #
 
-PESIGN_VERSION			= 0.112
+PESIGN_VERSION			= 113
 PESIGN_TARBALL			= pesign-$(PESIGN_VERSION).tar.bz2
 PESIGN_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/rhinstaller/pesign/releases/download/$(PESIGN_VERSION)
 PESIGN_BUILD_DIR		= $(USER_BUILDDIR)/pesign
