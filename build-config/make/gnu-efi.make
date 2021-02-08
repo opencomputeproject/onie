@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of gnu-efi
 #
 
-GNU_EFI_VERSION			= 3.0.6
+GNU_EFI_VERSION			= 3.0.12
 GNU_EFI_TARBALL			= gnu-efi-$(GNU_EFI_VERSION).tar.bz2
 GNU_EFI_TARBALL_URLS		+= $(ONIE_MIRROR) https://downloads.sourceforge.net/project/gnu-efi
 GNU_EFI_BUILD_DIR		= $(USER_BUILDDIR)/gnu-efi
