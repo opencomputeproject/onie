@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of shim
 #
 
-SHIM_VERSION		= 13
+SHIM_VERSION		= 15
 SHIM_TARBALL		= shim-$(SHIM_VERSION).tar.bz2
 SHIM_TARBALL_URLS	+= $(ONIE_MIRROR) \
 				https://github.com/rhinstaller/shim/releases/download/$(SHIM_VERSION)
