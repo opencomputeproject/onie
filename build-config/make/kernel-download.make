@@ -16,9 +16,9 @@
 #-------------------------------------------------------------------------------
 # Need the Linux kernel downloaded before building xtools
 
-LINUX_VERSION		?= 4.19
+LINUX_VERSION		?= 5.4
 LINUX_MAJOR_VERSION	= $(firstword $(subst ., ,$(LINUX_VERSION)))
-LINUX_MINOR_VERSION	?= 143
+LINUX_MINOR_VERSION	?= 86
 LINUX_RELEASE		?= $(LINUX_VERSION).$(LINUX_MINOR_VERSION)
 LINUX_TARBALL		?= linux-$(LINUX_RELEASE).tar.xz
 export LINUX_TARBALL
