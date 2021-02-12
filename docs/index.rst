@@ -1,4 +1,5 @@
-.. Copyright (C) 2019,2020 Alex Doyle <adoyle@cumulusnetworks.com>
+.. Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+   Copyright (C) 2019,2020 Alex Doyle <adoyle@cumulusnetworks.com>
    Copyright (C) 2013,2014,2015,2016,2017,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
@@ -24,6 +25,16 @@ Open Network Install Environment
 News
 ====
 
+February 11, 2021
+  Released version `2021.02
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/160>`_
+
+January 12, 2021
+  Introduced development branch `component-upgrade-2020
+  <https://github.com/opencomputeproject/onie/commits/component-upgrade-2020>`_
+  It features newer software components, and much less testing.
+
+
 November 14, 2020
   Released version `2020.11
   <https://ocp-all.groups.io/g/OCP-ONIE/message/144>`_
@@ -35,6 +46,10 @@ August 18, 2020
 May 14, 2020
   Released version `2020.05
   <https://ocp-all.groups.io/g/OCP-ONIE/message/121>`_
+
+April 24, 2020
+  Open Compute talk on `Buiding ONIE in a Docker container
+  <https://www.youtube.com/watch?v=-5onRbZA0QQ>`_
 
 February 19, 2020
   Released version `2020.02
