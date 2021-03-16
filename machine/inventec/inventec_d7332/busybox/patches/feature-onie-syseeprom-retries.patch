@@ -1,0 +1,52 @@
+diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
+index ccc0965..cab2467 100644
+--- a/miscutils/24cXX.c
++++ b/miscutils/24cXX.c
+@@ -39,9 +39,12 @@ static int i2c_write_1b(struct eeprom *e, __u8 buf)
+ 
+ static int i2c_write_2b(struct eeprom *e, __u8 buf[2])
+ {
+-	int r;
++	int r=-1, retries;
+ 	// we must simulate a plain I2C byte write with SMBus functions
++	for (retries=0;retries<50 && r<0;retries++)
++	{
+ 	r = i2c_smbus_write_byte_data(e->fd, buf[0], buf[1]);
++	}
+ 	if(r < 0)
+ 		fprintf(stderr, "Error i2c_write_2b: %s\n", strerror(errno));
+ 	usleep(SYS_EEPROM_I2C_WRITE_2B_DELAY);
+@@ -50,10 +53,13 @@ static int i2c_write_2b(struct eeprom *e, __u8 buf[2])
+ 
+ static int i2c_write_3b(struct eeprom *e, __u8 buf[3])
+ {
+-	int r;
++	int r=-1, retries;
+ 	// we must simulate a plain I2C byte write with SMBus functions
+ 	// the __u16 data field will be byte swapped by the SMBus protocol
++	for (retries=0;retries<50 && r<0;retries++)
++	{
+ 	r = i2c_smbus_write_word_data(e->fd, buf[0], buf[2] << 8 | buf[1]);
++	}
+ 	if(r < 0)
+ 		fprintf(stderr, "Error i2c_write_3b: %s\n", strerror(errno));
+ 	usleep(SYS_EEPROM_I2C_WRITE_3B_DELAY);
+@@ -147,7 +153,9 @@ int eeprom_read_current_byte(struct eeprom* e)
+ 
+ int eeprom_read_byte(struct eeprom* e, __u16 mem_addr)
+ {
+-	int r;
++	int r=-1, retries;
++	for (retries=0;retries<50 && r<0;retries++)
++	{
+ 	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
+ 	if(e->type == EEPROM_TYPE_8BIT_ADDR)
+ 	{
+@@ -163,6 +171,7 @@ int eeprom_read_byte(struct eeprom* e, __u16 mem_addr)
+ 	if (r < 0)
+ 		return r;
+ 	r = i2c_smbus_read_byte(e->fd);
++	}
+ 	return r;
+ }
+ 
