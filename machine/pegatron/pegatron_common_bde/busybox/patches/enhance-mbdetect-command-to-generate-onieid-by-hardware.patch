@@ -1,0 +1,293 @@
+From c240c5c8b9788ed95e58be0d4dbfb28879002445 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Mon, 29 Mar 2021 16:53:07 +0800
+Subject: [PATCH] Enhance 'mbdetect' command to generate ONIE ID by
+ hardware.
+
+---
+ include/mb_detect.h   |  11 ++-
+ miscutils/mb_detect.c | 192 ++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 195 insertions(+), 8 deletions(-)
+
+diff --git a/include/mb_detect.h b/include/mb_detect.h
+index b10cb88..6fffdfb 100644
+--- a/include/mb_detect.h
++++ b/include/mb_detect.h
+@@ -15,13 +15,22 @@ typedef __s32 s32;
+ #define MB_DETECT_I2C_BUS               0
+ #define MB_DETECT_I2C_MUX_ADDR          0x73
+ #define MB_DETECT_I2C_MUX_CHANNEL       0
++#define MB_DETECT_I2C_MUXB_CHANNEL      1
++#define MB_DETECT_I2C_MUXC_CHANNEL      2
+ #define MB_BOARDID0_I2C_ADDR            0xFE
+ #define MB_BOARDID1_I2C_ADDR            0xFF
+ #define MB_BOARDID_I2C_MUX_ADDR         0x74
++#define MB_BOARDID_I2C_MUXB_ADDR        0x75
++#define MB_BOARDID_I2C_MUXC_ADDR        0x76
+ #define SYS_PRODUCT_NAME_SIZE           31  /* max. product name size */
+ #define SYS_MODEL_NAME_SIZE             31  /* max. model name size */
+ #define SYS_ASIC_NAME_SIZE              16  /* max. asic name size */
+-
++#define MCU_I2C_MUX_ADDR                0x72
++#define MCU_I2C_MUX_CHANNEL             3
++#define MCU_FAN_EEPROM_ADDR             0x70
++#define MCU_FAN_EEPROM_OFFSET           0x40
++#define BMC_CHIP_READ                   "ipmitool raw 0x3C 0x0C"
++#define BMC_MCU_FAN_READ                "ipmitool raw 0x3C 0xE0 0x00 0x70 0x40 0x01"
+ 
+ enum {
+ 	BUGATTI = 0,
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+index 805d3dd..ba88636 100644
+--- a/miscutils/mb_detect.c
++++ b/miscutils/mb_detect.c
+@@ -16,17 +16,35 @@ SysBoardInfo sysBoardInfo[] = {
+ 	{ 0x09, "gemini(BMC)",		"FM6256_BAF\0", "fm6256_baf\0", 0, 1 }
+ };
+ 
+-static u32 mb_id_get_from_cpld(void)
++static u32 mb_id_get_from_cpld(int cpld)
+ {
+ 	u32 board_id = 0, extended = 0;
+ 	u8 data = 0;
+ 	s32 i2c_bus = 0;
++	u8 i2c_channel = 0;
++	u32 cpld_addr = 0;
+ 
+ 	i2c_bus = mb_i2c_info_get();
+ 
+-	if(i2c_mux_select(i2c_bus, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
++	switch (cpld) {
++	case 0xB:
++		i2c_channel = MB_DETECT_I2C_MUXB_CHANNEL;
++		cpld_addr = MB_BOARDID_I2C_MUXB_ADDR;
++		break;
++	case 0xC:
++		i2c_channel = MB_DETECT_I2C_MUXC_CHANNEL;
++		cpld_addr = MB_BOARDID_I2C_MUXC_ADDR;
++		break;
++	case 0xA:
++	default:
++		i2c_channel = MB_DETECT_I2C_MUX_CHANNEL;
++		cpld_addr = MB_BOARDID_I2C_MUX_ADDR;
++		break;
++	}
++
++	if(i2c_mux_select(i2c_bus, MB_DETECT_I2C_MUX_ADDR, i2c_channel) == 0)
+ 	{
+-		if(i2c_read(i2c_bus, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID0_I2C_ADDR, &data, 1) == 0)
++		if(i2c_read(i2c_bus, cpld_addr, MB_BOARDID0_I2C_ADDR, &data, 1) == 0)
+ 		{
+ 			extended = data >> 7;
+ 			board_id = data & 0x7F;
+@@ -36,9 +54,9 @@ static u32 mb_id_get_from_cpld(void)
+ 
+ 	if (extended)
+ 	{
+-		if(i2c_mux_select(i2c_bus, MB_DETECT_I2C_MUX_ADDR, MB_DETECT_I2C_MUX_CHANNEL) == 0)
++		if(i2c_mux_select(i2c_bus, MB_DETECT_I2C_MUX_ADDR, i2c_channel) == 0)
+ 		{
+-			if(i2c_read(i2c_bus, MB_BOARDID_I2C_MUX_ADDR, MB_BOARDID1_I2C_ADDR, &data, 1) == 0)
++			if(i2c_read(i2c_bus, cpld_addr, MB_BOARDID1_I2C_ADDR, &data, 1) == 0)
+ 			{
+ 				board_id = data;
+ 			}
+@@ -68,7 +86,11 @@ static u32 mb_id_get_from_gpio(void)
+ 	}
+ 
+ 	if (id[3]) {
+-		cpld_board_id = mb_id_get_from_cpld();
++		for (index = 0xA; index <= 0xC; index++) {
++			cpld_board_id = mb_id_get_from_cpld(index);
++			if (cpld_board_id)
++				break;
++		}
+ 		if (cpld_board_id == 0)
+ 			id[3] = 0;
+ 	}
+@@ -165,6 +187,153 @@ static int find_i2c_busses(char* adapter_name)
+ 	return dev_bus;
+ }
+ 
++static int fan_status_get_from_i2c (u8 *type)
++{
++	u32 status = 0;
++	u8 data = 0;
++	s32 i2c_bus = 0;
++
++	i2c_bus = mb_i2c_info_get();
++	if (i2c_mux_pca9544_select(i2c_bus, MCU_I2C_MUX_ADDR, MCU_I2C_MUX_CHANNEL) == 0) {
++		if(i2c_read(i2c_bus, MCU_FAN_EEPROM_ADDR, MCU_FAN_EEPROM_OFFSET, &data, 1) == 0)
++		{
++			status = data & 0x03;
++		}
++		i2c_mux_release(i2c_bus, MCU_I2C_MUX_ADDR);
++	} else {
++		return -1;
++	}
++
++	switch (status) {
++	case 0x00:
++		*type = 'F';
++		break;
++	case 0x01:
++		*type = 'B';
++		break;
++	case 0x02:
++		*type = 'F';
++		break;
++	case 0x03:
++		*type = 'B';
++		break;
++	default:
++		break;
++	}
++
++	return 0;
++}
++
++static int fan_status_get_from_ipmi (u8 *type)
++{
++	FILE *fd;
++	u32 status = 0, data = 0;
++	char buf[64]={0};
++
++	fd = popen(BMC_MCU_FAN_READ, "r");
++	if (fd == NULL) {
++		return -1;
++	}
++
++	fgets(buf, sizeof(buf), fd);
++	pclose(fd);
++
++	if (strlen(buf) > 4) {
++		return -1;
++	}
++
++	sscanf(buf, "%2x", &data);
++	status = data & 0x03;
++
++	switch (status) {
++	case 0x00:
++		*type = 'F';
++		break;
++	case 0x01:
++		*type = 'B';
++		break;
++	case 0x02:
++		*type = 'F';
++		break;
++	case 0x03:
++		*type = 'B';
++		break;
++	default:
++		break;
++	}
++
++	return 0;
++}
++
++static int fan_status_info_get (SysBoardInfo *bdinfo)
++{
++	u8 type = 0;
++	int rc = -1, i = 0;
++	int len = strlen(bdinfo->productName);
++	int offset = len - 1;
++
++	if (bdinfo->motherboard_id == 0xA) {
++		offset = len - 2;
++	}
++
++	type = bdinfo->productName[offset];
++	if (bdinfo->is_bmc_available) {
++		for (i = 0; i < 3; i++) {
++			rc = fan_status_get_from_ipmi(&type);
++			if (rc == 0)
++				break;
++		}
++	}
++
++	if (rc) {
++		rc = fan_status_get_from_i2c(&type);
++	}
++
++	bdinfo->productName[offset] = type;
++	bdinfo->modelName[offset] = type + 32;
++
++	return 0;
++}
++
++static int bmc_chip_info_get (SysBoardInfo *bdinfo)
++{
++	FILE *fd;
++	u32 data;
++	u8 type = 0;
++	int len = strlen(bdinfo->productName);
++	int offset = len - 2;
++
++	if (!bdinfo->is_bmc_available)
++		return 0;
++
++	if (bdinfo->motherboard_id == 0xA) {
++		offset = len - 4;
++	}
++
++	type = bdinfo->productName[offset];
++	fd = popen(BMC_CHIP_READ, "r");
++	if (fd) {
++		fscanf(fd, "%2x", &data);
++		pclose(fd);
++	}
++
++	switch (data) {
++	case 0x00:
++		type = 'A';
++		break;
++	case 0x01:
++		type = 'A';
++		break;
++	default:
++		break;
++	}
++
++	bdinfo->productName[offset] = type;
++	bdinfo->modelName[offset] = type + 32;
++
++	return 0;
++}
++
+ /*
+  *  This macro defines the mbdetect command line command.
+  */
+@@ -222,11 +391,16 @@ s32 mb_i2c_info_get(void)
+ u32 mb_id_get(void)
+ {
+ 	u32 board_id = 0;
++	int index=0;
+ 
+ 	board_id = mb_id_get_from_gpio();
+ 
+ 	if (board_id == 0xF) {
+-		board_id = mb_id_get_from_cpld();
++		for (index = 0xA; index <= 0xC; index++) {
++			board_id = mb_id_get_from_cpld(index);
++			if (board_id)
++				break;
++		}
+ 	}
+ 
+ 	return board_id;
+@@ -281,6 +455,10 @@ s32 sys_board_info_get(SysBoardInfo *bdinfo)
+ 
+ 	if(index < MB_LAST) {
+ 		memcpy(bdinfo, &sysBoardInfo[index], sizeof(SysBoardInfo));
++
++		bmc_chip_info_get(bdinfo);
++		fan_status_info_get(bdinfo);
++
+ 		return 0;
+ 	}
+ 
+-- 
+2.25.1
+
