@@ -67,7 +67,7 @@ some general comments regarding patch submission:
       anonymous github user IDs.
   1.  A short one line summary. When the patch is for a specific
       machine include the machine name or company as a prefix to the
-      summary, e.g. "machine\_xyz\_123: update installer config".
+      summary, e.g. "machine\_xyz\_123: Update installer config".
   1.  What problem the patch solves (why do we need the patch).
   1.  How you tested the patch.
 
