@@ -21,7 +21,7 @@ effort. It is based on how other projects (Linux kernel and U-Boot,
 for example) manage.
 
 Please read
-[The Lifecycle of a Patch](http://www.linuxfoundation.org/content/22-lifecycle-patch).
+[The Lifecycle of a Patch](https://www.kernel.org/doc/html/latest/process/2.Process.html#the-lifecycle-of-a-patch).
 
 Here is how git "open source" development works. For nearly everything
 written below, you could replace the word "ONIE" with "Linux kernel".
