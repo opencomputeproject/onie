@@ -5,14 +5,23 @@
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
+ed25519_var=onie_dropbear_ed25519_host_key
 ecdsa_var=onie_dropbear_ecdsa_host_key
 rsa_var=onie_dropbear_rsa_host_key
-dss_var=onie_dropbear_dss_host_key
 
 # The RSA and DSS keys are stored in U-Boot environment variables.  If
 # the variables are empty generate the keys and store the results for
 # future boots.
 get_keys_arch() {
+    ed25519_val=$(fw_printenv -n "$ed25519_var" 2> /dev/null)
+    if [ -n "$ed25519_val" ] ; then
+        # decode base64 string
+        echo "$ed25519_val" | tr '@#' ' \n' | uudecode -o $ED25519_KEY
+    else
+        # genereate ed25519 key
+        dropbearkey -t ed25519 -f $ED25519_KEY > /dev/null 2>&1
+    fi
+
     ecdsa_val=$(fw_printenv -n "$ecdsa_var" 2> /dev/null)
     if [ -n "$ecdsa_val" ] ; then
         # decode base64 string
@@ -31,18 +40,13 @@ get_keys_arch() {
         dropbearkey -t rsa -s 1024 -f $RSA_KEY > /dev/null 2>&1
     fi
 
-    dss_val=$(fw_printenv -n "$dss_var" 2> /dev/null)
-    if [ -n "$dss_val" ] ; then
-        # decode base64 string
-        echo "$dss_val" | tr '@#' ' \n' | uudecode -o $DSS_KEY
-    else
-        # genereate dss key
-        dropbearkey -t dss -s 1024 -f $DSS_KEY > /dev/null 2>&1
-    fi
-
-    if [ -z "$ecdsa_val" ] || [ -z "$rsa_val" ] || [ -z "$dss_val" ] ; then
+    if [ -z "$ed25519_val" ] || [ -z "$ecdsa_val" ] || [ -z "$rsa_val" ] ; then
         tmp_env=$(mktemp)
         # encode key values
+        if [ -z "$ed25519_val" ] ; then
+            ed25519_val=$(uuencode -m $ED25519_KEY r | tr ' \n' '@#')
+            echo "$ed25519_var $ed25519_val" >> $tmp_env
+        fi
         if [ -z "$ecdsa_val" ] ; then
             ecdsa_val=$(uuencode -m $ECDSA_KEY r | tr ' \n' '@#')
             echo "$ecdsa_var $ecdsa_val" >> $tmp_env
@@ -50,10 +54,6 @@ get_keys_arch() {
         if [ -z "$rsa_val" ] ; then
             rsa_val=$(uuencode -m $RSA_KEY r | tr ' \n' '@#')
             echo "$rsa_var $rsa_val" >> $tmp_env
-        fi
-        if [ -z "$dss_val" ] ; then
-            dss_val=$(uuencode -m $DSS_KEY d | tr ' \n' '@#')
-            echo "$dss_var $dss_val" >> $tmp_env
         fi
         fw_setenv -f -s $tmp_env || {
             log_failure_msg "Unable to save dropbear ssh server keys"
