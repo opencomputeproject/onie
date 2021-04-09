@@ -15,6 +15,15 @@ get_keys_arch() {
     # The ONIE-CONFIG partition is unavailable during recovery.
     [ "$boot_env" = "recovery" ] && return 1
 
+    if [ -r "$onie_config_dir/$ED25519_KEY" ] ; then
+        cp "$onie_config_dir/$ED25519_KEY" $ED25519_KEY
+    else
+        # genereate ed25519 key
+        dropbearkey -t ed25519 -f $ED25519_KEY > /dev/null 2>&1
+        mkdir -p "$(dirname $onie_config_dir/$ED25519_KEY)"
+        cp $ED25519_KEY "$onie_config_dir/$ED25519_KEY"
+    fi
+
     if [ -r "$onie_config_dir/$ECDSA_KEY" ] ; then
         cp "$onie_config_dir/$ECDSA_KEY" $ECDSA_KEY
     else
@@ -31,15 +40,6 @@ get_keys_arch() {
         dropbearkey -t rsa -s 1024 -f $RSA_KEY > /dev/null 2>&1
         mkdir -p "$(dirname $onie_config_dir/$RSA_KEY)"
         cp $RSA_KEY "$onie_config_dir/$RSA_KEY"
-    fi
-
-    if [ -r "$onie_config_dir/$DSS_KEY" ] ; then
-        cp "$onie_config_dir/$DSS_KEY" $DSS_KEY
-    else
-        # genereate dss key
-        dropbearkey -t dss -s 1024 -f $DSS_KEY > /dev/null 2>&1
-        mkdir -p "$(dirname $onie_config_dir/$DSS_KEY)"
-        cp $DSS_KEY "$onie_config_dir/$DSS_KEY"
     fi
 
 }
