@@ -64,14 +64,16 @@ RECOVERY_ISO_IMAGE=${12}
     echo "ERROR: Unable to read recovery config directory: $RECOVERY_CONF_DIR"
     exit 1
 }
-[ -r "${GRUB_TARGET_LIB_I386_DIR}/biosdisk.mod" ] || {
-    echo "ERROR: Does not look like valid GRUB i386-pc library directory: $GRUB_TARGET_LIB_I386_DIR"
-    exit 1
-}
-[ -x "${GRUB_HOST_BIN_I386_DIR}/grub-mkimage" ] || {
-    echo "ERROR: Does not look like valid GRUB i386-pc bin directory: $GRUB_HOST_BIN_I386_DIR"
-    exit 1
-}
+if [ "$UEFI_ENABLE" != "yes" ] ; then
+    [ -r "${GRUB_TARGET_LIB_I386_DIR}/biosdisk.mod" ] || {
+        echo "ERROR: Does not look like valid GRUB i386-pc library directory: $GRUB_TARGET_LIB_I386_DIR"
+        exit 1
+    }
+    [ -x "${GRUB_HOST_BIN_I386_DIR}/grub-mkimage" ] || {
+        echo "ERROR: Does not look like valid GRUB i386-pc bin directory: $GRUB_HOST_BIN_I386_DIR"
+        exit 1
+    }
+fi
 if [ "$UEFI_ENABLE" = "yes" ] ; then
     [ -r "${GRUB_TARGET_LIB_UEFI_DIR}/efinet.mod" ] || {
         echo "ERROR: Does not look like valid GRUB ${ARCH}-efi library directory: $GRUB_TARGET_LIB_UEFI_DIR"
@@ -207,7 +209,6 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
 	loadenv
 	loopback
 	linux
-	linuxefi
 	lsefi
 	lsefimmap
 	lsefisystab
@@ -242,6 +243,10 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
 	zfscrypt
 	zfsinfo
 "
+
+    if [ ${ARCH} != "arm64" ]; then
+        GRUB_MODULES=$GRUB_MODULES" linuxefi"
+    fi
     # Generate UEFI format GRUB image
     mkdir -p $RECOVERY_EFI_BOOT_DIR
     $GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \

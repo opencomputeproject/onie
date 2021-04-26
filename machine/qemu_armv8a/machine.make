@@ -48,6 +48,8 @@ PXE_EFI64_ENABLE = yes
 
 LINUX_VERSION = 4.4
 LINUX_MINOR_VERSION = 30
+KERNEL_DTB = arm/vexpress-v2f-1xv7-ca53x2.dtb
+KERNEL_DTB_PATH = dts/$(KERNEL_DTB)
 
 # The VENDOR_VERSION string is appended to the overal ONIE version
 # string.  HW vendors can use this to appended their own versioning
