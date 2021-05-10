@@ -18,7 +18,7 @@ endif
 # string.  HW vendors can use this to appended their own versioning
 # information to the base ONIE version string.
 # ONIE Version = onie-release version + VENDOR_VERSION
-VENDOR_VERSION = v08
+VENDOR_VERSION = v10
 
 # Enable UEFI support
 UEFI_ENABLE = yes
@@ -34,6 +34,9 @@ VENDOR_ID = 51242
 # Enable the i2ctools command for this platform
 I2CTOOLS_ENABLE = yes
 IPMITOOL_ENABLE = yes
+
+# Enable ioget/ioset tools
+IOACCESS_ENABLE = yes
 
 #
 # Console parameters can be defined here (default values are in
