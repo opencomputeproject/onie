@@ -1,3 +1,4 @@
+.. Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
 .. Copyright (C) 2014,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
@@ -76,10 +77,10 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  2020.11 | Wed, Oct 21, 2020 | Wed, Nov 18, 2020
-  2021.02 | Wed, Jan 20, 2020 | Wed, Feb 17, 2020
-  2021.05 | Wed, Apr 21, 2021 | Wed, May 19, 2021
   2021.08 | Wed, Jul 14, 2021 | Wed, Aug 18, 2021
+  2021.11 | Wed, Oct 20, 2021 | Wed, Nov 24, 2021
+  2022.02 | Wed, Jan 19, 2022 | Wed, Feb 16, 2022
+  2022.05 | Wed, Apr 20, 2022 | Wed, May 18, 2022  
 
 Making a Release
 ----------------
@@ -149,4 +150,4 @@ github release, the git statistics and the complete release notes.
 
 Add anything else that is worthy of highlighting towards the top.
 Look at a previous email for an `example
-<http://lists.opencompute.org/pipermail/opencompute-onie/2018-May/001688.html>`_.
+<https://ocp-all.groups.io/g/OCP-ONIE/message/186>`_.
