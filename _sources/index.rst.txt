@@ -25,6 +25,10 @@ Open Network Install Environment
 News
 ====
 
+May 12, 2021
+  Released version `2021.05
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/186>`_
+
 February 11, 2021
   Released version `2021.02
   <https://ocp-all.groups.io/g/OCP-ONIE/message/160>`_
@@ -33,7 +37,6 @@ January 12, 2021
   Introduced development branch `component-upgrade-2020
   <https://github.com/opencomputeproject/onie/commits/component-upgrade-2020>`_
   It features newer software components, and much less testing.
-
 
 November 14, 2020
   Released version `2020.11

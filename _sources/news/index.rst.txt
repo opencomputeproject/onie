@@ -8,10 +8,13 @@
 ************
 Project News
 ************
+May 12, 2021
+  Released version `2021.05
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/186>`_
+
 February 11, 2021
   Released version `2021.02
   <https://ocp-all.groups.io/g/OCP-ONIE/message/160>`_
-
 
 November 14, 2020
   Released version `2020.11
