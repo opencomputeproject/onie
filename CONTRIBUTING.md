@@ -92,7 +92,7 @@ some general comments regarding patch submission:
     [git format-patch](https://www.kernel.org/pub/software/scm/git/docs/git-format-patch.html). This
     ensures the patch is appropriately attributed to you.
   1.  Information on the mailing list: https://ocp-all.groups.io/g/OCP-ONIE
-  1.  Follow these guidelines: https://www.kernel.org/doc/Documentation/email-clients.txt
+  1.  Follow these guidelines: https://www.kernel.org/doc/html/v5.11/_sources/process/email-clients.rst.txt
   1.  Using `git send-email` is *strongly* recommended to avoid encoding problems
   1.  Inline text patches are preferred as we can comment directly in email replies (avoid attachments)
   1.  Attachments of types other than `text/plain` will not be accepted.
