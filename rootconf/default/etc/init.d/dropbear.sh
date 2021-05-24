@@ -32,9 +32,9 @@ get_keys() {
         # genereate ecdsa key
         dropbearkey -t ecdsa -s 256 -f $ECDSA_KEY > /dev/null 2>&1
         # genereate rsa key
-        dropbearkey -t rsa -s 1024 -f $RSA_KEY > /dev/null 2>&1
+        dropbearkey -t rsa -s 2048 -f $RSA_KEY > /dev/null 2>&1
         # genereate dss key
-        dropbearkey -t dss -s 1024 -f $DSS_KEY > /dev/null 2>&1
+        dropbearkey -t dss -s 2048 -f $DSS_KEY > /dev/null 2>&1
     }
 }
 
