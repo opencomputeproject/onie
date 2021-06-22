@@ -10,7 +10,7 @@
 # This is a makefile fragment that defines the build of dropbear
 #
 
-DROPBEAR_VERSION		= 2016.74
+DROPBEAR_VERSION		= 2020.81
 DROPBEAR_TARBALL		= dropbear-$(DROPBEAR_VERSION).tar.bz2
 DROPBEAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://matt.ucc.asn.au/dropbear/releases
 DROPBEAR_BUILD_DIR		= $(USER_BUILDDIR)/dropbear
@@ -72,16 +72,17 @@ $(DROPBEAR_CONFIGURE_STAMP): $(DROPBEAR_SOURCE_STAMP) $(ZLIB_BUILD_STAMP) \
 		$(DROPBEAR_DIR)/configure			\
 		--prefix=/usr					\
 		--host=$(TARGET)				\
+		--disable-harden				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
 		LDFLAGS="$(ONIE_LDFLAGS)"
 	$(Q) touch $@
 
-$(DROPBEAR_DIR)/options.h: $(DROPBEAR_CONFIG_H) $(DROPBEAR_CONFIGURE_STAMP)
+$(DROPBEAR_DIR)/localoptions.h: $(DROPBEAR_CONFIG_H) $(DROPBEAR_CONFIGURE_STAMP)
 	$(Q) echo "==== Copying $(DROPBEAR_CONFIG_H) to $@ ===="
 	$(Q) cp -v $< $@
 
 dropbear-build: $(DROPBEAR_BUILD_STAMP)
-$(DROPBEAR_BUILD_STAMP): $(DROPBEAR_DIR)/options.h $(DROPBEAR_NEW_FILES)
+$(DROPBEAR_BUILD_STAMP): $(DROPBEAR_DIR)/localoptions.h $(DROPBEAR_NEW_FILES)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building dropbear-$(DROPBEAR_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DROPBEAR_DIR) DESTDIR=$(DEV_SYSROOT) \
