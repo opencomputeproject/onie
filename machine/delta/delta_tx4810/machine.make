@@ -1,6 +1,6 @@
 # Makefile fragment for Delta TX4810
 
-VENDOR_VERSION = -V01
+VENDOR_VERSION = -V02
 ONIE_ARCH ?= armv8a
 SWITCH_ASIC_VENDOR = mvl
 

@@ -21,7 +21,7 @@ effort. It is based on how other projects (Linux kernel and U-Boot,
 for example) manage.
 
 Please read
-[The Lifecycle of a Patch](http://www.linuxfoundation.org/content/22-lifecycle-patch).
+[The Lifecycle of a Patch](https://www.kernel.org/doc/html/latest/process/2.Process.html#the-lifecycle-of-a-patch).
 
 Here is how git "open source" development works. For nearly everything
 written below, you could replace the word "ONIE" with "Linux kernel".
@@ -67,7 +67,8 @@ some general comments regarding patch submission:
       anonymous github user IDs.
   1.  A short one line summary. When the patch is for a specific
       machine include the machine name or company as a prefix to the
-      summary, e.g. "machine\_xyz\_123: updated installer config".
+      summary, e.g.:
+      > machine\_xyz\_123: Update installer config
   1.  What problem the patch solves (why do we need the patch).
   1.  How you tested the patch.
 
@@ -91,7 +92,7 @@ some general comments regarding patch submission:
     [git format-patch](https://www.kernel.org/pub/software/scm/git/docs/git-format-patch.html). This
     ensures the patch is appropriately attributed to you.
   1.  Information on the mailing list: https://ocp-all.groups.io/g/OCP-ONIE
-  1.  Follow these guidelines: https://www.kernel.org/doc/Documentation/email-clients.txt
+  1.  Follow these guidelines: [https://www.kernel.org/doc/html/v5.11/_sources/process/email-clients.rst.txt](https://www.kernel.org/doc/html/v5.11/_sources/process/email-clients.rst.txt)
   1.  Using `git send-email` is *strongly* recommended to avoid encoding problems
   1.  Inline text patches are preferred as we can comment directly in email replies (avoid attachments)
   1.  Attachments of types other than `text/plain` will not be accepted.

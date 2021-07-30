@@ -1,10 +1,10 @@
 #!/bin/sh
-sed -i "s/onie_machine=.*/onie_machine=pegatron_fm_6256_bn_f/g" /etc/machine.conf
+sed -i "s/onie_machine=.*/onie_machine=pegatron_fm6256_bnf/g" /etc/machine.conf
 sed -i "s/onie_machine_rev=.*/onie_machine_rev=0/g" /etc/machine.conf
-sed -i "s/onie_platform=.*/onie_platform=x86_64-pegatron_fm_6256_bn_f-r0/g" /etc/machine.conf
-onie-syseeprom -f -s 0x21=FM-6256-BN-F
-onie-syseeprom -f -s 0x27=pegatron_fm_6256_bn_f
-onie-syseeprom -f -s 0x28=x86_64-pegatron_fm_6256_bn_f-r0
+sed -i "s/onie_platform=.*/onie_platform=x86_64-pegatron_fm6256_bnf-r0/g" /etc/machine.conf
+onie-syseeprom -f -s 0x21=FM6256-BNF
+onie-syseeprom -f -s 0x27=pegatron_fm6256_bnf
+onie-syseeprom -f -s 0x28=x86_64-pegatron_fm6256_bnf-r0
 onie-syseeprom -f -s 0x2b=PEGATRON
 onie-syseeprom -f -s 0x2c=TW
 onie-syseeprom -f -s 0x2d=PEGATRON

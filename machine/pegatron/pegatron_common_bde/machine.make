@@ -21,6 +21,9 @@ VENDOR_ID = 32022
 I2CTOOLS_ENABLE = yes
 I2CTOOLS_SYSEEPROM = no
 
+# Enable ipmitool
+IPMITOOL_ENABLE = yes
+
 # Enable UEFI support
 UEFI_ENABLE = yes
 
