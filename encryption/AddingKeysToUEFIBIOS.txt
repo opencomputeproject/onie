@@ -1,0 +1,178 @@
+Steps for installing public keys in UEFI BIOS
+------------------------------------
+
+These instructions apply to the ONIE KVM virtual machine:
+  kvm_x86_64
+...but the workflow should apply to other UEFI BIOSes
+
+
+What should be signed?
+----------------------
+  PK - Platform Key
+  KEK - Key Exchange Key
+  db  - Signature database - must be signed by PK or KEK
+
+  shimx64.efi <- Third party signed (typically Microsoft) <- KEK and a db
+  grubx64.efi <- ONIE_VENDOR_SECRET_KEY_PEM (makefiles handle this for kvm)
+
+
+Secure boot key steps
+---------------------
+
+1)  First install - 2 grub boot options
+ ONIE: Rescue
+ ONIE: Embed ONIE     <- take this one
+
+NOTE: if you see Install OS as an option, the onie-x86-demo.qcow2 has been used before.
+ A 'make-secure-kvm.sh clean' will reset that.
+
+ KVM reboots.
+
+2 ) New menu:
+
+ ONIE: Install OS  <- take this one
+ ONIE: Rescue
+ ONIE: Uninstall OS
+ ONIE: Update ONIE
+ ONIE: Embed ONIE
+
+# The demo OS has been copied into the 'kvm' directory in the USB drive, so
+# to install:
+
+3 ) type: onie-stop  <- stop discovery process
+4 ) type: blkid      <- list available volumes
+
+ This should look like:
+
+   ${ONIE_MACHINE_TARGET}-OS:/mnt/usb # blkid
+   /dev/vdb: LABEL="ONIE USB-DR" UUID="0195-B0CB"
+   /dev/vda3: LABEL="ONIE-DEMO-OS" UUID="803e6b44-398e-42e4-ae35-5083ff784d36"
+   /dev/vda2: LABEL="ONIE-BOOT" UUID="c73d5c0d-290e-458b-9273-2fb74269ab3a"
+   /dev/vda1: LABEL="EFI System" UUID="86B3-739F"
+
+
+5 ) type: mount /dev/vdb /mnt/usb <- mount the USB drive that has all the keys
+
+6 ) type: onie-nos-install /mnt/usb/kvm/demo-installer-x86_64-${ONIE_MACHINE}.bin <- demo image on USB
+
+...system reboots into DemoOS:
+
+Installing the keys in the UEFI BIOS
+------------------------------------
+
+Now, we need to put keys into UEFI.
+  Those keys are on the USB drive,
+  And key insertion can only happen in UEFI, so we'll boot into that
+
+7 ) type: efibootmgr
+ This should look like:
+
+   ${ONIE_MACHINE_TARGET}-OS:/mnt/usb # efibootmgr
+   BootCurrent: 000B
+   Timeout: 0 seconds
+   BootOrder: 000B,000A,0000,0001,0002,0003,0004,0005,0006,0007,0008,0009
+   Boot0000* UiApp
+   Boot0001* UEFI QEMU DVD-ROM QM00003
+   Boot0002* UEFI Floppy
+   Boot0003* UEFI Floppy 2
+   Boot0004* UEFI Misc Device
+   Boot0005* UEFI Non-Block Boot Device
+   Boot0006* UEFI PXEv4 (MAC:525400133479)
+   Boot0007* UEFI PXEv4 (MAC:525400133479) 2
+   Boot0008* UEFI HTTPv4 (MAC:525400133479)
+   Boot0009* EFI Internal Shell
+   Boot000A* ONIE: Open Network Install Environment
+   Boot000B* ONIE-DEMO-OS
+
+Note the number of 'EFI Internal Shell' - 0009 in this example
+
+8 ) type:  efibootmgr --bootnext 0009  <- for EFI Internal Shell
+
+9 ) type: efibootmgr
+     You should now see a BooNext: 000X at the top
+
+10 ) type:  reboot
+
+UEFI TIPS
+-----------
+If you are not familiar with the UEFI CLI, here are a few useful commands
+  cls          - clear screen
+  cls <0-7>    - change background color to #
+  ctrl-h       - backspace
+  ls           - list current directory contents
+  dmpstore     - print variables
+  edit         - minimal file editor
+  help -b      - help options
+  mode 100 31  - get more console columns/rows
+  reset        - reboot
+  ..\          - directory up - DOS style
+
+Once UEFI boots
+----------------
+
+11 ) Press esc key to stop countdown and  drop into Shell>
+
+Go to the USB drive. I don't see a clear way to ID this by anything
+ other than what' it's not. It has an F3 in it, - Alias(s):F3 - and it
+ isn't a cd or floppy
+
+
+12 ) type: fs2:  <- will be fs1 if you didn't embed ONIE,
+                    OR if you are running from DemoOS
+13 ) type: ls    <- should see keys and .pem files
+
+14 ) cd keys
+
+# Add db and KEK keys
+Either:
+ 15 ) type: write-keys.nsh to run a script to update db and KEK
+OR
+ 15a ) type: cd efi-binaries
+ 15b ) type: .\efi-binaries\UpdateVars.efi db ..\db-all.auth
+ 15c ) type: .\efi-binaries\UpdateVars.efi KEK ..\kek-all.auth
+
+NOTE: 'dmpstore db' will not print a value. This is expected
+
+16 ) type: exit
+
+# Add PK
+< you should be in the UEFI CURSES-style menu now >
+To navigate down to set the PK, it is not immediately obvious.
+Use arrow keys and <enter> to set values.
+
+Device Manager
+Secure Boot Configuration
+  Secure Boot Mode <custom mode>
+  Custom Secure Boot Options
+    PK Options
+     Enroll PK
+      Enroll PK Using File
+       Select ONIE USB-DR, [PciRoot(0x0)/Pci(0x5,0x0)]
+         <keys>
+		  platform-key.der <- If PK_BIOS_KEY was set in machine-security make
+		   ...otherwise keep browsing for a .der file to use, like:
+            <hw-vendor>
+              hw-vendor-PK-cert.der  <- this has to be a .der key
+          Commit Changes and exit
+        Keep hitting F10 to save and exit sub menus.
+      ....
+      F10 At 'Current Secure Boot State  Enabled' to activate secure boot
+     Esc At 'Secure Boot Configuration'
+   Continue - at top menu
+  Enter - Should get 'Configuration changed. Reboot to apply' message
+
+Secure Boot should now be enabled.
+
+When the system comes back up:
+ Info: Secure Boot: Active.  <- This should scroll by before login.
+ 
+When you log back in to ONIE:
+ If secure boot extensions are enabled, you'll need to log in with
+ user: root password: onie
+
+Once logged in
+Use:
+  mokutil --sb-status
+
+..should say 'Secure Boot enabled'
+
