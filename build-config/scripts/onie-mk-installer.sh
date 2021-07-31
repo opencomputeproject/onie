@@ -157,7 +157,8 @@ if [ "$rootfs_arch" = "grub-arch" -a "$update_type" = "onie" ] ; then
     echo -n "."
 
     if [ "$SERIAL_CONSOLE_ENABLE" = "yes" ] ; then
-        DEFAULT_GRUB_SERIAL_COMMAND="serial --port=$CONSOLE_PORT --speed=$CONSOLE_SPEED --word=8 --parity=no --stop=1"
+		# Use --unit serial port abstraction to support newer (i.e. non-legacy) hardware.
+        DEFAULT_GRUB_SERIAL_COMMAND="serial --unit=$CONSOLE_DEV --speed=$CONSOLE_SPEED --word=8 --parity=no --stop=1"
         DEFAULT_GRUB_CMDLINE_LINUX="console=tty0 console=ttyS${CONSOLE_DEV},${CONSOLE_SPEED}n8"
         DEFAULT_GRUB_TERMINAL_INPUT="serial"
         DEFAULT_GRUB_TERMINAL_OUTPUT="serial"
