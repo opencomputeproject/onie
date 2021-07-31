@@ -775,11 +775,6 @@ install_uefi_loader()
             echo "ERROR: problems installing shim and grub on: $boot_dev"
             exit 1
         }
-    else
-        install_uefi_grub "$uefi_dir" "$boot_dev" "$boot_dir" || {
-            echo "ERROR: problems installing grub on: $boot_dev"
-            exit 1
-        }
     fi
 
     if [ "$onie_boot_reason" = "embed" ] ; then
@@ -796,6 +791,43 @@ install_uefi_loader()
     
     install_grub_config $boot_dir
 
+    # Create default EFI loader BOOT/BOOTX64.efi
+    local loader_dir="${uefi_dir}/EFI/onie"
+    local BOOT_dir="${uefi_dir}/EFI/BOOT"
+    mkdir -p $BOOT_dir
+    cp -rf $loader_dir/* ${BOOT_dir}/ || {
+        echo "ERROR: Unable to copy loader directory: $loader_dir to ${BOOT_dir}"
+        return 1
+    }
+    if [ "$image_secure_boot" = "yes" ]; then
+        # Make shim the default fallback loader
+        mv "${BOOT_dir}/shimx64.efi" "${BOOT_dir}/BOOTX64.EFI"
+        # Remove unneeded mmx from /BOOT folder
+        if [ -f ${BOOT_dir}/mm${image_uefi_arch}.efi ] ; then
+            rm ${BOOT_dir}/mm${image_uefi_arch}.efi
+        fi
+        # Remove fallback efi file from efi/onie as the efi/EFI/BOOT
+		# version is the one that will be used in fallback.
+        if [ -f $loader_dir/fb${image_uefi_arch}.efi ] ; then
+            rm $loader_dir/fb${image_uefi_arch}.efi
+        fi
+        if [ -e "$onie_root_dir/grub/BOOT.CSV_secured" ] ; then
+            mv "$onie_root_dir/grub/BOOT.CSV_secured" "${loader_dir}/BOOT.CSV"
+        fi
+        if [ -e "$onie_root_dir/grub/BOOT.CSV" ] ; then
+            rm "$onie_root_dir/grub/BOOT.CSV"
+        fi
+    else
+        # Make GRUB the default fallback loader		
+        mv "${BOOT_dir}/grubx64.efi" "${BOOT_dir}/BOOTX64.EFI"
+        if [ -e "$onie_root_dir/grub/BOOT.CSV" ] ; then
+            mv "$onie_root_dir/grub/BOOT.CSV" "${loader_dir}/BOOT.CSV"
+        fi
+		# Remove secure config if not on a Secure Boot system
+        if [ -e "$onie_root_dir/grub/BOOT.CSV_secured" ] ; then
+            rm "$onie_root_dir/grub/BOOT.CSV_secured"
+        fi
+    fi
 }
 
 # This function is run by install.sh *after* the onie-update.tar file
@@ -922,6 +954,10 @@ install_image()
             echo "Error: Problems installing GRUB on device: ${onie_boot_dev}, $onie_boot_mnt"
             exit 1
         }
+        # Clean BOOT.CSV file that is relevant just for UEFI boot
+        if ls "$onie_root_dir/grub/"BOOT.CSV* 1> /dev/null 2>&1; then
+            rm "$onie_root_dir/grub/"BOOT.CSV*
+        fi
     fi
 
     # Restore the previous grubenv file
