@@ -19,10 +19,12 @@
 ROOTCONFDIR		= $(CONFDIR)
 SYSROOT_CPIO		= $(MBUILDDIR)/sysroot.cpio
 SYSROOT_CPIO_XZ		= $(IMAGEDIR)/$(MACHINE_PREFIX).initrd
+SYSROOT_CPIO_XZ_SIG = $(SYSROOT_CPIO_XZ).sig
 ITB_IMAGE		= $(IMAGEDIR)/$(MACHINE_PREFIX).itb
 
 UPDATER_ITB		= $(MBUILDDIR)/onie.itb
 UPDATER_INITRD		= $(MBUILDDIR)/onie.initrd
+UPDATER_INITRD_SIG  = $(MBUILDDIR)/onie.initrd.sig
 UPDATER_ONIE_TOOLS	= $(MBUILDDIR)/onie-tools.tar.xz
 
 UPDATER_IMAGE		= $(IMAGEDIR)/onie-updater-$(ARCH)-$(MACHINE_PREFIX)
@@ -114,6 +116,10 @@ endif
 
 ifeq ($(KEYUTILS_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(KEYUTILS_INSTALL_STAMP)
+endif
+
+ifeq ($(SECURE_GRUB),no)
+  GPG_SIGN_SECRING = ''
 endif
 
 ifndef MAKE_CLEAN
@@ -319,6 +325,9 @@ endif
 ifeq ($(SECURE_BOOT_EXT),yes)
 	$(Q) echo "onie_secure_boot_ext=$(SECURE_BOOT_EXT)" >> $(MACHINE_CONF)
 endif
+ifeq ($(SECURE_GRUB),yes)
+	$(Q) echo "onie_secure_grub=$(SECURE_GRUB)" >> $(MACHINE_CONF)
+endif
 ifeq ($(SECURE_BOOT_ENABLE),yes)
 	$(Q) echo "onie_secure_boot=$(SECURE_BOOT_ENABLE)" >> $(MACHINE_CONF)
 endif
@@ -332,9 +341,17 @@ $(SYSROOT_CPIO_XZ) : $(SYSROOT_COMPLETE_STAMP)
 	$(Q) echo "==== Create xz compressed sysroot for bootstrap ===="
 	$(Q) fakeroot -- $(SCRIPTDIR)/make-sysroot.sh $(SYSROOTDIR) $(SYSROOT_CPIO)
 	$(Q) xz --compress --force --check=crc32 --stdout -8 $(SYSROOT_CPIO) > $@
+ifeq ($(SECURE_GRUB),yes)
+	# Create a detached signature so that grub can verify it
+	$(Q) echo "==== GPG sign file $(SYSROOT_CPIO_XZ) ===="
+	$(Q) fakeroot -- $(SCRIPTDIR)/gpg-sign.sh $(GPG_SIGN_SECRING) $(SYSROOT_CPIO_XZ)
+endif
 
 $(UPDATER_INITRD) : $(SYSROOT_CPIO_XZ)
 	ln -sf $< $@
+ifeq ($(SECURE_GRUB),yes)
+	ln -sf $(SYSROOT_CPIO_XZ_SIG) $(UPDATER_INITRD_SIG)
+endif
 
 ifndef MAKE_CLEAN
 ONIE_TOOLS_FILES = $(shell \
@@ -394,6 +411,8 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(UPDATER_IMAGE_PARTS_PL
 	     EXTRA_CMDLINE_LINUX="$(EXTRA_CMDLINE_LINUX)" \
 	     SERIAL_CONSOLE_ENABLE=$(SERIAL_CONSOLE_ENABLE) \
 	     UEFI_BOOT_LOADER=$(UEFI_BOOT_LOADER) \
+	     GPG_SIGN_SECRING=$(GPG_SIGN_SECRING) \
+	     SECURE_GRUB=$(SECURE_GRUB) \
 	     fakeroot -- $(SCRIPTDIR)/onie-mk-installer.sh onie $(ROOTFS_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS) $(UPDATER_IMAGE_PARTS_PLATFORM)

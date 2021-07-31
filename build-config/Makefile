@@ -349,6 +349,11 @@ SECURE_BOOT_ENABLE ?= no
 # Secure boot extended enables ONIE password, so far
 SECURE_BOOT_EXT ?= no
 
+# If yes, enable the following for GRUB
+# - grub file verification with detached signatures
+# - grub password protection.
+SECURE_GRUB ?= no
+
 ifeq ($(SECURE_BOOT_ENABLE),yes)
   SHIM_ENABLE = yes
   PESIGN_ENABLE = yes
@@ -465,6 +470,28 @@ ifeq ($(SECURE_BOOT_ENABLE),yes)
 # doing developer or release builds.
   include $(MACHINE_SECURITY_MAKEFILE)
 
+
+# If initrd verification included, check key variables
+# This uses gpg keys, which Secure Boot doesn't.
+  ifeq ($(SECURE_BOOT_EXT),yes)
+# Secure Boot is a pre requisite for secure grub
+    ifeq ($(SECURE_GRUB),yes)
+      GENERATE_KEYS_MSG = " check the $(MACHINE_SECURITY_MAKEFILE) file."
+# Validate GPG keys used by GRUB
+      ifeq ($(GPG_SIGN_PUBRING),)
+        $(error GPG_SIGN_PUBRING key location is not set. Disable SECURE_GRUB or $(GENERATE_KEYS_MSG))
+      endif
+      ifeq ($(GPG_SIGN_SECRING),)
+        $(error GPG_SIGN_SECRING key location is not set. Disable SECURE_GRUB or $(GENERATE_KEYS_MSG))
+      endif
+# Validate password for GRUB
+      ifeq ($(GRUB_PASSWD_PLAINTEXT),)
+        ifeq ($(GRUB_PASSWD_HASHED),)
+          $(error GRUB_PASSWD_PLAINTEXT or GRUB_PASSWD_HASHED are not set - $(GENERATE_KEYS_MSG))
+        endif
+      endif
+    endif
+  endif
 endif
 
 # Note that the Shim include must follow the machine-security.make

@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+#  Copyright (C) 2021 Andriy Dobush <andriyd@nvidia.com>
 #  Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -12,6 +14,15 @@ ARCH="$1"
 GRUB_HOST_BIN_UEFI_DIR="$2"
 GRUB_TARGET_LIB_UEFI_DIR="$3"
 OUTPUT_IMAGE="$4"
+# if 'yes' then verify signatures and use passwords 
+SECURE_GRUB="$5"
+# GPG sign pubring
+GPG_SIGN_PUBRING="$6"
+# Grub user
+GRUB_USER="$7"
+# Grub passwords
+GRUB_PASSWD_PLAINTEXT="$8"
+GRUB_PASSWD_HASHED="$9"
 
 grub_mkimage="${GRUB_HOST_BIN_UEFI_DIR}/grub-mkimage"
 [ -x "$grub_mkimage" ] || {
@@ -88,18 +99,101 @@ GRUB_MODULES="
 	video
 	zfs
 	zfscrypt
-	zfsinfo
+	zfsinfo 
 "
+
+# Encryption specific modules
+GRUB_ENCRYPTION_MODULES=" 	fshelp
+	gcry_dsa
+	gcry_rsa
+	gcry_sha1
+	gcry_sha256
+	gcry_sha512
+	efi_gop
+	efi_uga
+	crypto
+	bufio
+	archelp
+	is_sb_enabled
+"
+
 
 # Make an embedded config that reads a grub.cfg from the EFI directory
 # where the final grub binary is running.
 tmp_config=$(mktemp)
-cat <<EOF > $tmp_config
-configfile \$cmdpath/grub.cfg
+
+# SECURE_GRUB enables grub password
+if [ "$SECURE_GRUB" = "yes" ] ; then
+	# include the extended modules
+	GRUB_MODULES="$GRUB_MODULES $GRUB_ENCRYPTION_MODULES"
+	
+    if [ -z "$GRUB_USER" ]; then
+        echo "ERROR: GRUB_USER is not set"
+        exit 1
+    fi
+    # Generate hashed password for GRUB if password is provided with plaintext
+	# Use the host system's copy of grub-mkpasswd-pbkdf2 
+    if [ -n "$GRUB_PASSWD_PLAINTEXT" ] ; then
+		if [ -x "$(command -v ${GRUB_HOST_BIN_UEFI_DIR}/grub-mkpasswd-pbkdf2)" ]; then
+            MKPASSWD_HASH=$( "${GRUB_HOST_BIN_UEFI_DIR}/grub-mkpasswd-pbkdf2" << EOF
+${GRUB_PASSWD_PLAINTEXT}
+${GRUB_PASSWD_PLAINTEXT}
+EOF
+						 )
+		elif [ -x "$(command -v "grub2-mkpasswd-pbkdf2")" ]; then
+			MKPASSWD_HASH=$( "grub2-mkpasswd-pbkdf2" << EOF
+${GRUB_PASSWD_PLAINTEXT}
+${GRUB_PASSWD_PLAINTEXT}
+EOF
+						 )
+		fi
+		GRUB_PASSWORD_HASH=$(echo "$MKPASSWD_HASH" | grep -o "grub.*")
+    elif [ -n "$GRUB_PASSWD_HASHED" ]; then
+        # Use hashed pasword if it is provided by user
+        GRUB_PASSWORD_HASH="$GRUB_PASSWD_HASHED"
+    else
+        echo "ERROR: Grub password is not set: GRUB_PASSWD_PLAINTEXT or GRUB_PASSWD_HASHED"
+        exit 1
+    fi
+
+	# Add public key to grub core, if GRUB_GPG_PUB_RING is defined
+	# Grub will verify all the files it opens with this public key
+	if [ -e "${GPG_SIGN_PUBRING}" ]; then	
+		echo "$0 Setting gpg pub key to $GPG_SIGN_PUBRING"
+		GPG_PUB_KEY=" --pubkey ${GPG_SIGN_PUBRING} "
+	else
+		# if there is a key problem
+		echo "ERROR: Secure Grub failed to find GPG signing keyring [ $GPG_SIGN_PUBRING ]"
+		exit 1
+	fi
+	
+    # Make an embedded config that:
+    # - enables grub password
+    # - reads a grub.cfg from the EFI directory where the final grub binary is running.
+    cat <<EOF > $tmp_config
+set superusers="$GRUB_USER"
+export superusers
+password_pbkdf2 $GRUB_USER $GRUB_PASSWORD_HASH
+configfile \$cmdpath/grub.cfg"
 EOF
 
-"$grub_mkimage" --format="${ARCH}-efi" --directory="$GRUB_TARGET_LIB_UEFI_DIR" \
-                --prefix="/bogus" --config="$tmp_config" --output="$OUTPUT_IMAGE" \
-                $GRUB_MODULES
+else
+	# Not building secure GRUB
+	GPG_PUB_KEY=" "	
+    # Make an embedded config without security features that
+	# reads a grub.cfg from the EFI directory
+    # where the final grub binary is running.
+    cat <<EOF > $tmp_config
+configfile \$cmdpath/grub.cfg"
+EOF
+fi
+
+
+"$grub_mkimage" --format="${ARCH}-efi" \
+				--directory="$GRUB_TARGET_LIB_UEFI_DIR" \
+	            --prefix="/bogus" \
+				--config="$tmp_config" ${GPG_PUB_KEY} \
+				--output="$OUTPUT_IMAGE" \
+				$GRUB_MODULES
 
 rm -f $tmp_config

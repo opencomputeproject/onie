@@ -1,5 +1,6 @@
 #!/bin/sh
 
+#  Copyright (C) 2021 Alex Doyle <adoyle@cumulusnetworks.com>
 #  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016 david_yang <david_yang@accton.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
@@ -253,6 +254,11 @@ demo_install_uefi_grub()
         exit 1
     }
 
+	# Note that if "$onie_secure_boot_ext" = "yes", the installer will
+	# need to bring its own grub to the install, since it will have
+	# to generate it's configuration, which will not be signed...
+	# Copying the existing signed one will break things.
+		
     if [ "$onie_secure_boot" = "yes" ] ; then
         # ONIE is booting via shim, so the demo needs to also
         local loader_dir="/boot/efi/EFI/$demo_volume_label"
@@ -275,7 +281,7 @@ demo_install_uefi_grub()
         cat<< EOF > "${loader_dir}/grub.cfg"
 search.fs_uuid $demo_boot_uuid root
 echo "Search for uuid $demo_boot_uuid"
-ecoh "Found root: \$root"
+echo "Found root: \$root"
 set prefix=(\$root)'/grub'
 configfile \$prefix/grub.cfg
 EOF

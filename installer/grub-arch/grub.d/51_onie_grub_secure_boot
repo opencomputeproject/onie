@@ -1,0 +1,106 @@
+#!/bin/sh
+
+#  Copyright (C) 2021 Andriy Dobush <andriyd@nvidia.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# This file provides a GRUB menu entry for ONIE for extended secure boot mode.
+#
+## DO NOT remove the following line:
+##   ONIE_SUPPORT_BOOTCMD_FEEDING
+#
+# This file is supposed to be executed during build.
+# Script generates grub config files:
+# grub.cf     - starter config file, that points to grub_sb.cfg
+#  This is under the /boot/efi/EFI/onie directory, and is the
+#  first config loaded by GRUB.
+#  It checks for Secure Boot being enabled. If it is NOT
+#  enabled, signature checking is turned off at this point.
+#
+# grub_sb.cfg - main config file with menu entries
+#
+# There are two parts to the operation.
+#
+# Step 1 -- Create hardcoded grub.cfg
+#
+# Step 2 -- Create ONIE's GRUB configuration
+#
+
+tmp_install_dir=$(dirname "$0")/../
+grub_dir=$tmp_install_dir/grub
+grub_sb_cfg_name=grub.cfg
+grub_sb_cfg=$tmp_install_dir/grub_sb.cfg
+
+# Generate tiny grub config to be stored with grub.efi
+cat<< EOF > "${tmp_install_dir}/grub.cfg"
+# Set configuration to use in /mnt/onie-boot/grub
+is_sb_enabled
+set sb_enabled="\$?"
+if [ "\$sb_enabled" = "1" ] ; then
+  set check_signatures=enforce
+  set grub_cfg_name="grub_sb.cfg"
+else
+   set check_signatures=no
+   set grub_cfg_name="grub.cfg"
+fi
+export check_signatures
+search --no-floppy --label --set=root ONIE-BOOT
+set prefix=(\$root)'/grub'
+configfile \$prefix/\$grub_cfg_name
+EOF
+
+if [ -z "$GRUB_ONIE_SERIAL_COMMAND" ] ||
+    [ -z "$GRUB_CMDLINE_LINUX" ] ; then
+. $grub_dir/grub-variables
+fi
+
+rm -f $grub_sb_cfg
+touch $grub_sb_cfg
+
+if echo -n "$GRUB_CMDLINE_LINUX" | grep -q ttyS ; then
+    cat <<EOF >> $grub_sb_cfg
+# begin: serial console config
+
+$GRUB_ONIE_SERIAL_COMMAND
+terminal_input serial
+terminal_output serial
+
+# end: serial console config
+EOF
+fi
+
+# Look for an ONIE compatible DIAG image and add a boot entry for it.
+cat <<EOF >> $grub_sb_cfg
+# begin: diag boot command
+
+EOF
+if [ -n "$diag_label" ]  ; then
+    # TODO check diag_bootcmd. In most cases it is empty
+    # Check with 50_onie_grub
+    echo "Skipped add_diag_bootcmd"
+fi
+cat <<EOF >> $grub_sb_cfg
+
+# end: diag boot command
+EOF
+
+# add the ONIE machine configuration data
+cat $grub_dir/grub-machine.cfg >> $grub_sb_cfg
+
+# add extra platform specific kernel command line options
+cat $grub_dir/grub-extra.cfg >> $grub_sb_cfg
+
+cat <<EOF >> $grub_sb_cfg
+# begin: ONIE bootargs
+
+onie_initargs="$GRUB_CMDLINE_LINUX"
+onie_initargs_default="$GRUB_CMDLINE_LINUX_DEFAULT"
+onie_platformargs="$GRUB_ONIE_PLATFORM_ARGS"
+onie_debugargs="$GRUB_ONIE_DEBUG_ARGS"
+GRUB_ONIE_CMDLINE_LINUX="$GRUB_ONIE_CMDLINE_LINUX"
+
+# end: ONIE bootargs
+EOF
+
+# add ONIE configuration common to all ONIE boot modes
+cat $grub_dir/grub-common.cfg >> $grub_sb_cfg

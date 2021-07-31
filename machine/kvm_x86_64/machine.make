@@ -64,6 +64,10 @@ SECURE_BOOT_ENABLE = yes
 #  Activates - ONIE password
 SECURE_BOOT_EXT = yes
 
+# Enable GRUB verification of files and passwords
+# Requires secure boot
+SECURE_GRUB = yes
+
 # Define the makefile with security settings, to
 # provide the option of using another file with different settings.
 MACHINE_SECURITY_MAKEFILE ?= $(MACHINEDIR)/machine-security.make
@@ -90,6 +94,20 @@ MACHINE_SECURITY_MAKEFILE ?= $(MACHINEDIR)/machine-security.make
 # Include additional files in the installer image.  This is useful to
 # share code between the ONIE run-time and the installer.
 UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/test-install-sharing
+
+# Secure GRUB requires Secure Boot extensions
+ifeq ($(SECURE_GRUB),yes)
+	SECURE_BOOT_EXT = yes
+endif
+
+# Secure boot extended requires secure boot to be active.
+# This will enable onie/grub passwords, detached signatures, etc
+ifeq ($(SECURE_BOOT_EXT),yes)
+	SECURE_BOOT_ENABLE = yes
+endif
+
+
+
 
 #-------------------------------------------------------------------------------
 #

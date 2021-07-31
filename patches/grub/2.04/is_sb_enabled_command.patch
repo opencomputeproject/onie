@@ -1,0 +1,94 @@
+From 0269b30263899d047f53df9b6a8acb61f6a61cb6 Mon Sep 17 00:00:00 2001
+From: Andriy Dobush <andriyd@nvidia.com>
+Date: Wed, 26 May 2021 11:12:27 +0300
+Subject: [PATCH] Add cli to enable check in config file if secure boot is
+ enabled Disbale gpg verification if UEFI secure boot is disabled
+
+Signed-off-by: Andriy Dobush  <andriyd@nvidia.com>
+
+Patch-Name: is_sb_enabled_command.patch
+---
+ grub-core/Makefile.core.def            |  6 ++++
+ grub-core/commands/efi/is_sb_enabled.c | 52 ++++++++++++++++++++++++++++++++++
+ grub-core/commands/pgp.c               |  6 ++++
+ 3 files changed, 64 insertions(+)
+ create mode 100644 grub-core/commands/efi/is_sb_enabled.c
+
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index 836bf0a..3fb985f 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -799,6 +799,12 @@ module = {
+ };
+ 
+ module = {
++  name = is_sb_enabled;
++  common = commands/efi/is_sb_enabled.c;
++  enable = efi;
++};
++
++module = {
+   name = efifwsetup;
+   efi = commands/efi/efifwsetup.c;
+   enable = efi;
+diff --git a/grub-core/commands/efi/is_sb_enabled.c b/grub-core/commands/efi/is_sb_enabled.c
+new file mode 100644
+index 0000000..2955416
+--- /dev/null
++++ b/grub-core/commands/efi/is_sb_enabled.c
+@@ -0,0 +1,52 @@
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2012  Free Software Foundation, Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ */
++#include <grub/efi/efi.h>
++#include <grub/efi/api.h>
++#include <grub/command.h>
++
++GRUB_MOD_LICENSE ("GPLv3+");
++
++static grub_err_t
++grub_cmd_is_sb_enabled (grub_command_t cmd __attribute__ ((unused)),
++                         int argc __attribute__ ((unused)),
++                         char **args __attribute__ ((unused)))
++{
++  if (grub_efi_secure_boot ())
++  {
++    grub_printf ("Secure Boot enabled");
++    return 1;
++  }
++  else
++  {
++    grub_printf ("Secure Boot disabled");
++    return 0;
++  }
++}
++
++static grub_command_t cmd;
++
++GRUB_MOD_INIT(is_sb_enabled)
++{
++  cmd = grub_register_command ("is_sb_enabled", grub_cmd_is_sb_enabled,
++                                "", "Show if secure boot is enabled");
++}
++
++GRUB_MOD_FINI(is_sb_enabled)
++{
++  grub_unregister_command (cmd);
++}
+--
+2.11.0
+

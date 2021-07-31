@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+#  Copyright (C) 2021 Andriy Dobush <andriyd@nvidia.com>
 #  Copyright (C) 2013,2014,2015,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Mandeep Sandhu <mandeep.sandhu@cyaninc.com>
@@ -207,6 +209,18 @@ EOF
 
     sed -i -e "s/%%UEFI_BOOT_LOADER%%/$UEFI_BOOT_LOADER/" \
         $tmp_installdir/grub.d/50_onie_grub
+	if [ "$SECURE_GRUB" = "yes" ];then
+		if [ -e "$GPG_SIGN_SECRING" ] ; then
+			# If Grub signing, generate detached signatures that get built
+			# into the installer
+			$tmp_installdir/grub.d/51_onie_grub_secure_boot
+			SCRIPT_DIR=$(dirname "$0")
+			$SCRIPT_DIR/gpg-sign.sh $GPG_SIGN_SECRING $tmp_installdir/grub_sb.cfg
+			$SCRIPT_DIR/gpg-sign.sh $GPG_SIGN_SECRING $tmp_installdir/grub.cfg
+		else
+			echo "Error: Secure Grub is enabled, but failed to find key $GPG_SIGN_SECRING"
+		fi
+	fi
 fi
 
 sed -e 's/onie_/image_/' $machine_conf > $tmp_installdir/machine-build.conf || exit 1
