@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #>
-#
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+#  Copyright (C) 2021 Andriy Dobush <andriyd@nvidia.com>
 #  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015 Carlos Cardenas <carlos@cumulusnetworks.com>
 #  Copyright (C) 2014,2017 david_yang <david_yang@accton.com>
@@ -344,12 +345,13 @@ ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 
 # By default do not enable secure boot
 SECURE_BOOT_ENABLE ?= no
+
 ifeq ($(SECURE_BOOT_ENABLE),yes)
+  SHIM_ENABLE = yes
   PESIGN_ENABLE = yes
   GNU_EFI_ENABLE = yes
   OPENSSL_ENABLE = yes
   MOKUTIL_ENABLE = yes
-  SHIM_ENABLE = yes
   KEYUTILS_ENABLE = yes
 endif
 
@@ -438,12 +440,31 @@ endif
 ifeq ($(MOKUTIL_ENABLE),yes)
   include make/mokutil.make
 endif
-ifeq ($(SHIM_ENABLE),yes)
-  include make/shim.make
-endif
+
 ifeq ($(KEYUTILS_ENABLE),yes)
   include make/keyutils.make
 endif
+
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+# Makefile to handle signing keys and security
+  include make/signing-keys.make
+
+# Machine specific makefile that details:
+#  Key locations
+#  Security configuration details
+# This defaults to the machine's machine-security.make,
+#  but anither configuration can be specified, for
+# doing developer or release builds.
+  include $(MACHINE_SECURITY_MAKEFILE)
+
+endif
+
+# Note that the Shim include must follow the machine-security.make
+#  as it has definitions that shim will use.
+ifeq ($(SHIM_ENABLE),yes)
+  include make/shim.make
+endif
+
 include make/images.make
 include make/demo.make
 

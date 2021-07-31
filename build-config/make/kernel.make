@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2013,2014,2015,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -107,7 +108,7 @@ $(KERNEL_BUILD_STAMP): $(KERNEL_SOURCE_STAMP) $(LINUX_NEW_FILES) $(LINUXDIR)/.co
 	    $(MAKE) -C $(LINUXDIR)		\
 		ARCH=$(KERNEL_ARCH)		\
 		CROSS_COMPILE=$(CROSSPREFIX)	\
-		MODULE_SIG_KEY_SRCPREFIX=$(MACHINEDIR)/x509/ \
+		MODULE_SIG_KEY_SRCPREFIX=$(ONIE_MODULE_SIG_KEY_SRCPREFIX)/ \
 		V=$(V) 				\
 		all
 	$(Q) touch $@

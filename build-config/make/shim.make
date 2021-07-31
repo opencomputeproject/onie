@@ -104,6 +104,8 @@ SHIM_BUILD_ARGS = \
 	EFI_PATH="$(GNU_EFI_LIB_PATH)" \
 	EFI_INCLUDE="$(GNU_EFI_INCLUDE)"
 
+# Note that ONIE_VENDOR_CERT_DIR must reference the key to be
+#  embedded in the shim
 shim-build: $(SHIM_BUILD_STAMP)
 $(SHIM_BUILD_STAMP): $(SHIM_PATCH_STAMP) $(SHIM_NEW_FILES) $(GNU_EFI_INSTALL_STAMP) \
 			$(PESIGN_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
@@ -120,6 +122,9 @@ $(SHIM_BUILD_STAMP): $(SHIM_PATCH_STAMP) $(SHIM_NEW_FILES) $(GNU_EFI_INSTALL_STA
 			install-as-data
 	$(Q) touch $@
 
+# Note that this requires a signed shim in the 'safe place' - either
+#  built using shim-build  and then signed by a third party, or
+# generated using 'make shim-self-sign'
 shim-install: $(SHIM_INSTALL_STAMP)
 ifeq ($(SHIM_USE_PREBUILT),yes)
 $(SHIM_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(SHIM_BIN_DIR)/shim$(EFI_ARCH).efi
@@ -137,15 +142,25 @@ endif
 	done
 	$(Q) touch $@
 
-shim-self-sign: $(SHIM_SELF_SIGN_STAMP)
+shim-self-sign: $(SHIM_SELF_SIGN_STAMP) 
 $(SHIM_SELF_SIGN_STAMP): $(SHIM_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+# Save copies of unsigned binaries as *.unsigned if signing with
+# different keys is required.
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Self signing shim-$(SHIM_VERSION) ===="
-	$(Q) echo "This is for testing purposes only."
+	$(Q) echo " This is for testing purposes only."
+	$(Q) echo " Signed EFI binaries will be in $(SAFE_PLACE_DIRECTORY)"
 	$(Q) sbsign --key $(SHIM_SELF_SIGN_SECRET_KEY_PEM) \
-		--cert $(SHIM_SELF_SIGN_PUBLIC_CERT_PEM) \
-		--output "$(SHIM_INSTALL_DIR)/shim$(EFI_ARCH).efi.signed" \
-		"$(SHIM_INSTALL_DIR)/shim$(EFI_ARCH).efi"
+	--cert $(SHIM_SELF_SIGN_PUBLIC_CERT_PEM) \
+	--output "$(SHIM_DIR)/shim$(EFI_ARCH).efi.signed" \
+	"$(SHIM_DIR)/shim$(EFI_ARCH).efi"
+	$(Q) cp "$(SHIM_DIR)/shim$(EFI_ARCH).efi.signed" "$(SAFE_PLACE_DIRECTORY)"
+	$(Q) cp "$(SAFE_PLACE_DIRECTORY)/shim$(EFI_ARCH).efi.signed" "$(SAFE_PLACE_DIRECTORY)/shim$(EFI_ARCH).efi"
+	$(Q) cp "$(SHIM_DIR)/shim$(EFI_ARCH).efi" "$(SAFE_PLACE_DIRECTORY)/shim$(EFI_ARCH).efi.unsigned"
+	$(Q) cp "$(SHIM_DIR)/fb$(EFI_ARCH).efi" "$(SAFE_PLACE_DIRECTORY)"
+	$(Q) cp "$(SHIM_DIR)/mm$(EFI_ARCH).efi" "$(SAFE_PLACE_DIRECTORY)"
+	$(Q) echo "== Signed output self signed shim from $(SHIM_INSTALL_DIR)/shim$(EFI_ARCH).efi to $(SAFE_PLACE_DIRECTORY)"
+	$(Q) echo "== Copied self signed shim binaries from $(SHIM_DIR) to $(SAFE_PLACE_DIRECTORY)"
 	$(Q) touch $@
 
 MACHINE_CLEAN += shim-clean
