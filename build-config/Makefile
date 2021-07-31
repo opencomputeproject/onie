@@ -346,6 +346,9 @@ ONIE_MIRROR	?= http://mirror.opencompute.org/onie
 # By default do not enable secure boot
 SECURE_BOOT_ENABLE ?= no
 
+# Secure boot extended enables ONIE password, so far
+SECURE_BOOT_EXT ?= no
+
 ifeq ($(SECURE_BOOT_ENABLE),yes)
   SHIM_ENABLE = yes
   PESIGN_ENABLE = yes
@@ -443,6 +446,11 @@ endif
 
 ifeq ($(KEYUTILS_ENABLE),yes)
   include make/keyutils.make
+endif
+
+ifeq ($(SECURE_BOOT_EXT),yes)
+# Secure Boot is a pre requisite for secure boot extended
+    SECURE_BOOT_ENABLE = yes
 endif
 
 ifeq ($(SECURE_BOOT_ENABLE),yes)

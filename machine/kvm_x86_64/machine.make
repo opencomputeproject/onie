@@ -60,6 +60,10 @@ SKIP_ETHMGMT_MACS = yes
 # Enable building of secure boot binaries
 SECURE_BOOT_ENABLE = yes
 
+# Enable extended secure boot:
+#  Activates - ONIE password
+SECURE_BOOT_EXT = yes
+
 # Define the makefile with security settings, to
 # provide the option of using another file with different settings.
 MACHINE_SECURITY_MAKEFILE ?= $(MACHINEDIR)/machine-security.make

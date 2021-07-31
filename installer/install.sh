@@ -1,5 +1,6 @@
 #!/bin/sh
 
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2013-2014,2016 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015,2017 david_yang <david_yang@accton.com>
 #
@@ -151,6 +152,17 @@ update_syseeprom()
         [ "$verbose" = "yes" ] && cat $syseeprom_log
         rm -f $syseeprom_log
     fi
+}
+
+set_default_passwd()
+{
+    # If secure boot extended is enabled, there is an option
+	# to set default password.
+    # This function is a template, and it is expected that the
+	# machine's install-platform file will have an instance of
+	# this function to override it.
+	#  The template defaults to doing nothing.
+    return 0
 }
 
 [ -r ./install-platform ] && . ./install-platform

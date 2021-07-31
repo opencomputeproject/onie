@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 #
-#  Copyright (C) 2020 Alex Doyle <adoyle@nvidia.com>
+#  Copyright (C) 2020,2021 Alex Doyle <adoyle@nvidia.com>
+#  Copyright (C) 2021 Andriy Dobush <andriyd@nvidia.com>
 #  Copyright (C) 2013,2014,2015,2016,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2014,2015,2016,2017 david_yang <david_yang@accton.com>
 #  Copyright (C) 2014 Stephen Su <sustephen@juniper.net>
@@ -273,8 +274,20 @@ $(SYSROOT_COMPLETE_STAMP): $(SYSROOT_CHECK_STAMP)
 	     fi
 	$(Q) if [ -d $(MACHINEDIR)/rootconf/sysroot-etc ] ; then \
 		cp -ar $(MACHINEDIR)/rootconf/sysroot-etc/* $(SYSROOTDIR)/etc/ ; \
-		cp -ar $(MACHINEDIR)/rootconf/sysroot-etc/* $(SYSROOTDIR)/etc/ ; \
 	     fi
+ifeq ($(SECURE_BOOT_EXT),yes)
+# Allow passwords to be disabled if Secure Boot is off.
+# Copy the console open that uses /bin/sh as onie-console-open
+	$(Q) cp $(SYSROOTDIR)/bin/onie-console $(SYSROOTDIR)/bin/onie-console-open
+# Dynamically create a secured console version that uses login instead of /bin/sh
+	$(Q) sed -i 's/exec \/bin\/sh -l/exec \/bin\/login/' $(SYSROOTDIR)/bin/onie-console
+# Save a copy of the secured.
+	$(Q) cp $(SYSROOTDIR)/bin/onie-console $(SYSROOTDIR)/bin/onie-console-secure
+# Apply machine specific ONIE password file
+	$(Q) if [ -e $(MACHINEDIR)/rootconf/sysroot-etc/passwd-secured ] ; then \
+                cp -a $(MACHINEDIR)/rootconf/sysroot-etc/passwd-secured $(SYSROOTDIR)/etc/passwd ; \
+             fi
+endif
 	$(Q) cd $(SYSROOTDIR) && ln -fs sbin/init ./init
 	$(Q) rm -f $(LSB_RELEASE_FILE)
 	$(Q) echo "DISTRIB_ID=onie" >> $(LSB_RELEASE_FILE)
@@ -302,6 +315,9 @@ ifeq ($(UEFI_ENABLE),yes)
 	$(Q) echo "onie_grub_image_name=$(UEFI_BOOT_LOADER)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_uefi_boot_loader=$(UEFI_BOOT_LOADER)" >> $(MACHINE_CONF)
 	$(Q) echo "onie_uefi_arch=$(EFI_ARCH)" >> $(MACHINE_CONF)
+endif
+ifeq ($(SECURE_BOOT_EXT),yes)
+	$(Q) echo "onie_secure_boot_ext=$(SECURE_BOOT_EXT)" >> $(MACHINE_CONF)
 endif
 ifeq ($(SECURE_BOOT_ENABLE),yes)
 	$(Q) echo "onie_secure_boot=$(SECURE_BOOT_ENABLE)" >> $(MACHINE_CONF)
