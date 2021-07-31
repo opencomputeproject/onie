@@ -58,6 +58,12 @@ FIRMWARE_UPDATE_ENABLE = yes
 SKIP_ETHMGMT_MACS = yes
 
 # Enable building of secure boot binaries
+# NOTE that disabling Secure Boot will require
+#  editing the kernel/config file for kvm_x86_64
+#  as it defaults to expecting the paths and keys
+#  that this provides.
+# The kernel/config-insecure file is provided as
+#  an example.
 SECURE_BOOT_ENABLE = yes
 
 # Enable extended secure boot:
