@@ -150,16 +150,14 @@ $(SHIM_SELF_SIGN_STAMP): $(SHIM_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) echo "====  Self signing shim-$(SHIM_VERSION) ===="
 	$(Q) echo " This is for testing purposes only."
 	$(Q) echo " Signed EFI binaries will be in $(SAFE_PLACE_DIRECTORY)"
-	$(Q) sbsign --key $(SHIM_SELF_SIGN_SECRET_KEY_PEM) \
-	--cert $(SHIM_SELF_SIGN_PUBLIC_CERT_PEM) \
-	--output "$(SHIM_DIR)/shim$(EFI_ARCH).efi.signed" \
-	"$(SHIM_DIR)/shim$(EFI_ARCH).efi"
-	$(Q) cp "$(SHIM_DIR)/shim$(EFI_ARCH).efi.signed" "$(SAFE_PLACE_DIRECTORY)"
-	$(Q) cp "$(SAFE_PLACE_DIRECTORY)/shim$(EFI_ARCH).efi.signed" "$(SAFE_PLACE_DIRECTORY)/shim$(EFI_ARCH).efi"
-	$(Q) cp "$(SHIM_DIR)/shim$(EFI_ARCH).efi" "$(SAFE_PLACE_DIRECTORY)/shim$(EFI_ARCH).efi.unsigned"
-	$(Q) cp "$(SHIM_DIR)/fb$(EFI_ARCH).efi" "$(SAFE_PLACE_DIRECTORY)"
-	$(Q) cp "$(SHIM_DIR)/mm$(EFI_ARCH).efi" "$(SAFE_PLACE_DIRECTORY)"
-	$(Q) echo "== Signed output self signed shim from $(SHIM_INSTALL_DIR)/shim$(EFI_ARCH).efi to $(SAFE_PLACE_DIRECTORY)"
+	$(Q) for f in $(SHIM_BINS) ; do \
+		$(SCRIPTDIR)/efi-sign.sh $(SHIM_SELF_SIGN_SECRET_KEY_PEM) \
+			$(SHIM_SELF_SIGN_PUBLIC_CERT_PEM) \
+			$(SHIM_DIR)/$$f \
+			$(SHIM_DIR)/$$f.signed; \
+			cp -v  $(SHIM_DIR)/$$f $(SAFE_PLACE_DIRECTORY)/$$f.unsigned ;\
+			cp -v  $(SHIM_DIR)/$$f.signed $(SAFE_PLACE_DIRECTORY)/$$f ;\
+	done
 	$(Q) echo "== Copied self signed shim binaries from $(SHIM_DIR) to $(SAFE_PLACE_DIRECTORY)"
 	$(Q) touch $@
 
