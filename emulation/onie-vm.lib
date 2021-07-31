@@ -1,0 +1,661 @@
+#-------------------------------------------------------------------------------
+#
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+#
+#-------------------------------------------------------------------------------
+
+# SCRIPT_PURPOSE: Functions for running emulated ONIE machine targets
+
+# User instructions to read for UEFI
+UEFI_INSTRUCTIONS_TXT="ReadmeUEFI.txt"
+
+# Set for exit trap
+LOOPBACK_MOUNT=""
+
+function fxnCleanLoopback()
+{
+    if [ -e "$LOOPBACK_MOUNT" ];then
+        sudo /sbin/losetup -d "$LOOPBACK_MOUNT"
+    fi
+}
+trap fxnCleanLoopback EXIT
+
+#
+# Configuration instructions for running the KVM
+#
+function fxnWriteReadmeUEFI()
+{
+    cat <<EOF >  ${UEFI_INSTRUCTIONS_TXT}
+Steps for handling keys and VM setup
+------------------------------------
+Generated on $(date) by $0
+
+UEFI TIPS
+-----------
+If you are not familiar with the UEFI CLI, here are a few useful commands
+  cls          - clear screen
+  cls <0-7>    - change background color to #
+  ctrl-h       - backspace
+  ls           - list current directory contents
+  dmpstore     - print variables
+  edit         - minimal file editor
+  help -b      - help options
+  mode 100 31  - get more console columns/rows
+  reset        - reboot
+  ..\          - directory up - DOS style
+
+
+EOF
+
+    # Keep a copy of this with the images so it can be read outside of
+    # running ONIE.
+
+}
+
+#
+# Put files into the USB transfer directory to be copied on to the
+# USB filesystem.
+function fxnPopulateUSBTransfer()
+{
+    #
+    # Since the "USB Drive" of additional files can get created outside
+    # the container, use this directory to hold all the files from
+    # inside the container we'd like to see on that drive.
+    # The kvm-tool.sh script will have created the USB_TRANSFER_DIR
+    #
+
+    if [ -e "./build/usb-xfer" ];then
+        # Alex this will stomp files copied in by the user. make optional?
+        echo "NOT Updating USB drive with build directory files from ./build/usb-xfer"
+#       fxnPS "Updating usb drive with build directory files from ./build/usb-xfer"
+#       rsync -r ./build/usb-xfer/* ${USB_TRANSFER_DIR}/
+    fi
+
+    #
+    # copy everything, then move so files like kek-all.auth stay at the top level.
+    #
+
+
+    # copy over key instructions
+    if [ ! -e ./${UEFI_INSTRUCTIONS_TXT} ];then
+        fxnPS "Secure: generating post-install key manipulation instructions as ${UEFI_INSTRUCTIONS_TXT}"
+        fxnWriteReadmeUEFI
+    fi
+    fxnPS "Copying ${UEFI_INSTRUCTIONS_TXT} into ${USB_TRANSFER_DIR}/"
+    sudo cp ./${UEFI_INSTRUCTIONS_TXT} ${USB_TRANSFER_DIR}/
+
+    if [ -e ../encryption/keys ];then
+        fxnPS "Copying ../encryption/keys into ${USB_TRANSFER_DIR}/"
+        cp -r ../encryption/keys ${USB_TRANSFER_DIR}/
+    fi
+
+}
+
+#
+# Populating a qcow2 image involves a loop back mount,
+# which containers only support if they're run in
+#   --privileged
+# mode, so this is a separate step in case it is being run
+# OUTSIDE of the container, as root.
+#
+# Takes: if $1 = TRUE, delete existing drive and create fresh."
+function fxnUSBStoreFiles()
+{
+    local loop
+    local deleteExistingDrive="$1"
+
+    # If it has been built, then return.
+    if [  -e "$USB_IMG" ];then
+        if [ "$deleteExistingDrive" = "rebuild" ];then
+            echo "Deleting existing virtual USB drive at [ $USB_IMG ] "
+            rm "$USB_IMG"
+        else
+            fxnPS "$USB_IMG is present. Continuing."
+            return 0
+        fi
+    fi
+
+    echo "#####################################################"
+    echo "#                                                   #"
+    echo "# Building virtual USB drive /dev/vdb               #"
+    echo "#                                                   #"
+    echo "#####################################################"
+
+    echo ""
+    echo " Run as root "
+    echo ""
+
+    # Are we in a container?
+    if [  -e /.dockerenv ]; then
+        # In a container, then
+        echo ""
+        losetup --find
+        if [ $? = 0 ];then
+            echo "Found loop back in Docker container. Running --privileged. Continuing."
+        else
+            fxnWARN "Failed to find loop back devices in container."
+            echo "The container was probably not run with host /dev mounted and '--privileged'."
+            echo "You can run the creation of the USB filesystem image outside of container."
+            return 1
+        fi
+    fi
+
+    if [ ! -e "$USB_MNT_DIR" ];then
+        echo "Creating mount point for loop back of USB file system."
+        mkdir -p "$USB_MNT_DIR"
+    fi
+
+    fxnPS "Creating '$USB_IMG'"
+    fxnEC qemu-img create -f raw "${USB_IMG}.raw" "$USB_SIZE" || exit 1
+
+    # And this would be the part one needs to be external for.
+    # Try it in case the container is running --privileged
+    loop="$( sudo /sbin/losetup  -f "${USB_IMG}.raw" --show )"
+    if [ $? != 0 ];then
+        echo "ERROR! Loop back mount of USB drive filesystem failed. (sudo /sbin/losetup  -f ${USB_IMG}.raw --show )"
+        if [  -e /.dockerenv ]; then
+            echo "Try virtual-usb outside of the container as root."
+            echo ""
+            exit 1
+        fi
+    fi
+    echo " Accessing $USB_IMG raw filesystem via $loop"
+    sudo mkdosfs -n "ONIE USB-DRIVE " "$loop" || exit 1
+    if [ ! -e "$USB_MNT_DIR" ];then
+        mkdir -p "$USB_MNT_DIR" || exit 1
+    fi
+    sudo mount "$loop" "$USB_MNT_DIR" || exit 1
+
+    #
+    # If changing keys around, make sure the USB drive is populated from
+    # the usb transfer area
+    fxnPopulateUSBTransfer
+
+    # Leave a file in the USB to get a sense of when it was updated.
+    # Can help with debugging stale keys.
+    ls -al "${USB_MNT_DIR}"
+    sudo rm "${USB_TRANSFER_DIR}/usb-update-time"*
+    sudo rm "${USB_MNT_DIR}/usb-update-time"*
+    # rsync is not a fan of file names with ':'
+    sudo touch "${USB_TRANSFER_DIR}/usb-update-time-$(date |  tr ':' '-')"
+    #   sudo touch "${USB_TRANSFER_DIR}/usb-update-time-1"
+    #
+    # Since loop back mounts will only work in a container if it has been
+    # run with docker --privileged, having all the files copied into USB_TRANSFER_DIR
+    # as a staging area allows the this step to be run outside of a container as
+    # well as inside one.
+    #
+    fxnPS "Secure: Copying over everything from $USB_TRANSFER_DIR to $USB_MNT_DIR"
+
+    # As this is a relative path, it should work in and out of the container.
+    # Use rsync to skip copy of GPG sockets.
+    # Note --archive doesn't work because it is a fat32 filesystem
+    #  Use --times to preserve modification times, at least.
+    fxnEC sudo rsync --times  --recursive --no-specials --no-devices "$USB_TRANSFER_DIR"/* "$USB_MNT_DIR"/ || exit 1
+
+    echo "============== USB Drive contains =========================="
+    echo "== ${USB_MNT_DIR}"
+    tree "${USB_MNT_DIR}"
+    echo "============== End USB Drive contents ======================"
+    # Install of external sbverify not guaranteed
+    #   echo "  sbverify --no-verify $USB_MNT_DIR/kvm-images/${ONIE_MACHINE}.vmlinuz"
+    #   sbverify --no-verify $USB_MNT_DIR/kvm-images/${ONIE_MACHINE}.vmlinuz || exit 1
+    #   fxnPS "Confirmed  $USB_MNT_DIR/kvm-images/${ONIE_MACHINE}.vmlinuz is signed."
+
+    sudo umount "$loop"
+    # let the exit trap catch it and sudo /sbin/losetup -d "$LOOPBACK_MOUNT"
+    LOOPBACK_MOUNT="$loop"
+
+
+    fxnPS "Secure: converting $USB_IMG format from .raw to .qcow2 in $EMULATION_DIR"
+    qemu-img convert -f raw -O qcow2 "${USB_IMG}.raw" "${USB_IMG}.qcow2" || exit 1
+    echo ""
+    fxnPS "Secure: Done creating virtual usb drive using $USB_TRANSFER_DIR"
+    ls -l "${USB_DIR}"/*.qcow2
+    echo ""
+    echo "  Use  --m-usb-drive with $0 to make the virtual USB drive accessible."
+    echo ""
+}
+
+
+# Takes: paths to debs
+# Does: This breaks open the two linux-image*-debug-*.debs to get the
+#        bzImage and vmlinux required to run in qemu and correlate
+#        symbols for gdb, and stores them in UNPACK_LINUX_DEB_DIR, where
+#        they can be used by the run functions
+# Example debs:
+#        linux-image-4.19.0-cl-1-debug-amd64-dbg_4.19.149-1+cl4.2.1u2_amd64.deb
+#        linux-image-4.19.0-cl-1-debug-amd64_4.19.149-1+cl4.2.1u2_amd64.deb
+
+function fxnUnpackLinuxDeb()
+{
+
+    local theDeb="$1"
+    local theOtherDeb="$2"
+
+    if [ ! -e "$theDeb" ];then
+        echo "Failed to find  deb to extract at [ $theDeb ]"
+        exit 1
+    fi
+
+    if [ ! -e "$theOtherDeb" ];then
+        echo "Failed to find dbg deb to extract at [ $theOtherDeb ]"
+        exit 1
+    fi
+
+    echo "#########################################################"
+    echo "#                                                       #"
+    echo "# Extracting vmlinuz and bzImage from Linux deb         #"
+    echo "#                                                       #"
+    echo "#########################################################"
+
+    if [ -e "$UNPACK_LINUX_DEB_DIR" ];then
+        echo "Deleting $UNPACK_LINUX_DEB_DIR"
+        rm -rf "$UNPACK_LINUX_DEB_DIR"
+    fi
+    echo "Creating directory $UNPACK_LINUX_DEB_DIR"
+    mkdir "$UNPACK_LINUX_DEB_DIR"
+
+    echo "Unpacking [ $theDeb ] (this may take a bit...)"
+    fxnEC dpkg -x "$theDeb" "$UNPACK_LINUX_DEB_DIR" || exit 1
+
+    echo "Unpacking [ $theOtherDeb ] (this may take a bit...)"
+    fxnEC dpkg -x "$theOtherDeb" "$UNPACK_LINUX_DEB_DIR" || exit 1
+
+
+    debugVmlinux="$( basename "$( ls "${UNPACK_LINUX_DEB_DIR}/usr/lib/debug/boot/vmlinux-*" )")"
+    if [ "$debugVmlinux" = "" ];then
+        echo "ERROR! Failed to find vmlinux* file at ${UNPACK_LINUX_DEB_DIR}/usr/lib/debug/boot/vmlinux-*  Exiting."
+        exit 1
+    fi
+    cp "${UNPACK_LINUX_DEB_DIR}/usr/lib/debug/boot/${debugVmlinux}" "${UNPACK_LINUX_DEB_DIR}/vmlinux"
+
+    echo "Kernel is at: ${UNPACK_LINUX_DEB_DIR}/vmlinuz* - copying to be bzimage"
+    ls -l "${UNPACK_LINUX_DEB_DIR}/boot"/vmlinuz*
+    cp "${UNPACK_LINUX_DEB_DIR}/boot"/vmlinuz* "${UNPACK_LINUX_DEB_DIR}/bzImage"
+    ls -l "${UNPACK_LINUX_DEB_DIR}"/bzImage
+
+
+    echo "Debug file for gdb is at: ${UNPACK_LINUX_DEB_DIR}/vmlinux"
+    ls -l "${UNPACK_LINUX_DEB_DIR}/vmlinux"
+
+    exit
+
+}
+
+
+# This takes an ONIE image installer
+# Note:
+#  You'll want to have built the debug kernel that is in the installer on the same system that
+#  you're running qemu debug on. The kernel build of the debug files hard codes the path to the
+#  source files in it, so you want that to be present when you're running the debug.
+#  Otherwise you have to copy the source and fake the path - which does work...
+function fxnExtractInstaller()
+{
+    local theInstaller="$1"
+    local installerName=""
+
+    if [[ "$theInstaller" == *"http"*"bin" ]];then
+        echo "Installer location looks like an URL - downloading."
+
+        wget --directory-prefix ../ "$theInstaller"
+        # trim off URL, and reference above dir with ../
+        theInstaller=../${theInstaller##*/}
+    fi
+
+    if [ ! -e "$theInstaller" ];then
+        echo "Error! Failed to find installer at [ $theInstaller ]"
+        exit 1
+    fi
+
+    echo "#########################################################"
+    echo "#                                                       #"
+    echo "# Extracting vmlinuz and bzImage from $theInstaller "
+    echo "#                                                       #"
+    echo "#########################################################"
+
+    installerName=$( basename "$theInstaller")
+    if [ -e "$UNPACK_INSTALLER_DIR" ];then
+        echo "Deleting $UNPACK_INSTALLER_DIR"
+        rm -rf "$UNPACK_INSTALLER_DIR"
+    fi
+
+    mkdir "$UNPACK_INSTALLER_DIR"
+    cp "$theInstaller" "$UNPACK_INSTALLER_DIR"
+
+    fxnEC cd "$UNPACK_INSTALLER_DIR" || exit 1
+    echo "Unpacking [ $theInstaller ] in [ $UNPACK_INSTALLER_DIR ]"
+
+    # If it has an extract option
+    # chmod a+x "$installerName"
+    # ./${installerName} extract $(pwd)
+
+    # Default to what extract would do
+    sed -e '1,/^exit_marker$/d'  "$installerName" | tar xf -
+
+    echo "Extracted: "
+    ls -l "$UNPACK_INSTALLER_DIR"
+
+    echo "Checking initrd file type:"
+    theInitrd="$( find ${UNPACK_INSTALLER_DIR} -iname "*initrd" )"
+    file "$theInitrd"
+
+    echo "Checking kernel file type:"
+    theKernel="$( find ${UNPACK_INSTALLER_DIR} -iname "vmlinuz" )"
+    file "$theKernel"
+
+    # Copy files to a known filename so debugger can find it.
+    fxnEC cp "$theInitrd" ./initrd || exit 1
+    fxnEC cp "$theKernel" kernel || exit 1
+
+}
+
+
+# Auto generate the header for a script to run gdb.
+# The specific commands will be appended depending on what
+# is getting run
+function fxnMakeGDBScript()
+{
+    gdbCommand="$1"
+    # Wipe out the old one
+    echo "#!/bin/bash" > $RUN_GDB_SCRIPT
+    echo "# Auto gen script to run gdb from $0 on $(date)" >> $RUN_GDB_SCRIPT
+    echo "" >> $RUN_GDB_SCRIPT
+    echo 'echo ""' >> $RUN_GDB_SCRIPT
+    chmod a+x $RUN_GDB_SCRIPT
+
+
+    echo 'echo "###############################################" ' >> $RUN_GDB_SCRIPT
+    echo "echo 'Running $gdbCommand'" | sed -e 's/ -/\n -/g'      >> $RUN_GDB_SCRIPT
+    echo 'echo "###############################################" ' >> $RUN_GDB_SCRIPT
+    echo "$gdbCommand" >> $RUN_GDB_SCRIPT
+}
+
+
+# Takes:
+#  1 - kernel
+#  2 - initrd
+#  3 - vmlinux - for gdb
+function fxnRunKernel()
+{
+    # GDB Arguments
+    # -s telnet port on 1234
+    # -S pause until gdb continue is received
+    local useGDBArgs=" -s -S"
+    local kernelPath="$1"
+    local initrdPath="$2"
+    local vmlinuxPath="$3"
+
+    # Be less dynamic with arguments by default.
+    local hardcodeRun="TRUE"
+
+    echo "##############################################################################"
+    echo "#                                                                            #"
+    echo "# Kernel:  $kernelPath"
+    echo "# Initrd:  $initrdPath"
+    echo "# Vmlinux: $vmlinuxPath"
+    echo "#"
+    echo "# Look for the [ $RUN_GDB_SCRIPT ] to set up gdb parameters."
+    echo "# Exit qemu with Ctrl-a c  quit "
+    echo "#                                                                            #"
+    echo "##############################################################################"
+
+
+    if [ ! -e "$kernelPath" ];then
+        echo "Kernel not found at [ $kernelPath ]. Has it been built/extracted? Exiting."
+        exit 1
+    fi
+
+    # Not all invocations use an initrd
+    if [ "$initrdPath" != "" ];then
+        # For now we expect it to come out of an installer
+        # TODO - ONIE case here?
+        if [ ! -e "$initrdPath" ];then
+            echo "ERROR! Failed to find intrd at [ $initrdPath ]. Has the installer been unpacked ( --unpack-installer )? Exiting."
+            exit 1
+        fi
+    fi
+    if [ "$vmlinuxPath" = "" ];then
+        # No vmlinux, no point in running gdb...
+        useGDBArgs=""
+    fi
+
+
+    RUN_COMMAND="qemu-system-x86_64 \
+    --append console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel \
+    -kernel $kernelPath \
+    -nographic \
+    -initrd $initrdPath \
+    -m 512 \
+    --enable-kvm \
+    -cpu host \
+    $useGDBArgs "
+
+    echo "# Running: $RUN_COMMAND " | sed -e 's/ -/\n -/g'
+
+    echo "# Exit qemu with:  Ctrl-a c ,  quit"
+    echo ""
+
+    #
+    # only whip up a gdb script if there was a vmlinux
+    #
+    if [ "$useGDBArgs" = "" ];then
+        if [ -e "$RUN_GDB_SCRIPT" ];then
+            echo "Deleting GDB script."
+            rm "$RUN_GDB_SCRIPT"
+        fi
+        echo "Not using vmlinux, so no gdb script needed."
+    else
+        GDB_COMMAND="gdb -ex 'file $vmlinuxPath' \
+           -ex 'add-auto-load-safe-path ../build/${ONIE_MACHINE}/kernel/${ONIE_KERNEL_VERSION}/scripts/gdb/vmlinux-gdb.py' \
+           -ex 'target remote localhost:1234' \
+           -ex 'break start_kernel'"
+        # Create header
+        fxnMakeGDBScript "$GDB_COMMAND"
+
+        echo "Run gdb on $kernelPath  with: "
+        echo " cd $(pwd) "
+        echo " ./$RUN_GDB_SCRIPT"
+    fi
+
+    # add to machine target kernel/config to get debug
+    #CONFIG_DEBUG_INFO=y
+    #CONFIG_DEBUG_KERNEL=y
+    #CONFIG_GDB_SCRIPTS=y
+    #CONFIG_MAGIC_SYSRQ=y
+    #CONFIG_MAGIC_SYSRQ_DEFAULT_MASK=0x1
+
+    #
+    #  TODO: figure out how to pass --append line as the quoted string, rather than hardcoding.
+    #
+
+    # Regular kernel arguments
+    # --append "console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel "
+    # Possible kernel arguments for debug NOS install.
+    # --append "onie_interactive onie_root=LABEL=<nos install here>  BOOT_DEBUG=3 mem=2016M --- console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel " \
+
+    if [ "$hardcodeRun" = "TRUE" ];then
+        qemu-system-x86_64 \
+            --append "onie_interactive onie_root=LABEL=NOS-INSTALL BOOT_DEBUG=3 mem=2016M console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel " \
+            -kernel "$kernelPath" \
+            -nographic \
+            -initrd "$initrdPath" \
+            -m 2016 \
+            --enable-kvm \
+            -cpu host \
+            -drive file="$HARD_DRIVE",media=disk,if=virtio,index=0 \
+            $useGDBArgs
+    else
+        $RUN_COMMAND
+    fi
+
+}
+
+
+#
+# List things that could be run, or used in running.
+#
+function fxnListRunables() {
+    echo ""
+    echo "- Runtime components available."
+    echo "-------------------------------------------------------------"
+    echo "# Extracted installer kernel and initrd:"
+    if [ -e "$UNPACK_INSTALLER_DIR" ];then
+        ls -l  $UNPACK_INSTALLER_DIR
+    else
+        echo "  None"
+    fi
+    echo ""
+
+    echo "# Files extracted from *.debs"
+    if [ -e "$UNPACK_LINUX_DEB_DIR" ];then
+        ls -l  $UNPACK_LINUX_DEB_DIR
+    else
+        echo "  None"
+    fi
+    echo ""
+
+    echo "# Target qcow2 hard drive:"
+    if [ -e "$HARD_DRIVE" ];then
+        echo "   $HARD_DRIVE"
+    else
+        echo "  None"
+    fi
+    echo ""
+
+    echo "# Unmodified qcow2 hard drive:"
+    if [ -e "$CLEAN_HARD_DRIVE" ];then
+        echo "   $CLEAN_HARD_DRIVE"
+    else
+        echo "  None"
+    fi
+    echo ""
+
+    echo "# ONIE bootable recovery iso:"
+    if [ -e "$ONIE_RECOVERY_ISO" ];then
+        echo "   $ONIE_RECOVERY_ISO"
+    else
+        echo "  None"
+    fi
+    echo ""
+
+    echo "# ONIE kernel $ONIE_KERNEL_VERSION built for $ONIE_MACHINE:"
+    if [ -e "$ONIE_KERNEL" ];then
+        echo "   $ONIE_KERNEL"
+    else
+        echo "  None"
+    fi
+    echo ""
+
+    echo "# ONIE initrd $ONIE_KERNEL_VERSION built for $ONIE_MACHINE:"
+    if [ -e "$ONIE_INITRD" ];then
+        echo "   $ONIE_INITRD"
+    else
+        echo "  None"
+    fi
+    echo ""
+
+    echo "# ONIE vmlinux for gdb $ONIE_KERNEL_VERSION built for $ONIE_MACHINE:"
+    if [ -e "$ONIE_VMLINUX" ];then
+        echo "   $ONIE_VMLINUX"
+    else
+        echo "  None"
+    fi
+    echo ""
+
+    echo "# ONIE Demo install image;:"
+    if [ -e "$ONIE_DEMO_INSTALLER" ];then
+        echo "   $ONIE_DEMO_INSTALLER"
+    else
+        echo "  None"
+    fi
+    echo ""
+    echo "-------------------------------------------------------------"
+    echo "Done"
+    echo ""
+}
+
+# Given existing runables, what runtime options are available?
+function fxnRunOptions()
+{
+    echo ""
+    echo "- Possible run commands, given current extracted components "
+    echo "-------------------------------------------------------------"
+    echo "- List of found components follows: "
+
+
+    echo -n "# run or qemu-hd-clean "
+    if [ -e "$HARD_DRIVE" ];then
+        echo "YES"
+        echo "    Found: $HARD_DRIVE"
+        echo -n "# qemu-embed-onie "
+        if [ -e "$ONIE_RECOVERY_ISO" ];then
+            echo "YES"
+            echo "    Found: $ONIE_RECOVERY_ISO"
+        else
+            echo "NO"
+            echo "  - missing $ONIE_RECOVERY_ISO"
+        fi
+    else
+        echo "NO"
+        echo "     - missing [ $HARD_DRIVE ]"
+    fi
+
+    echo -n "#  rk-onie "
+    if [ -e "$ONIE_KERNEL" ] && [ -e "$ONIE_INITRD" ] && [ -e "$ONIE_VMLINUX" ];then
+        echo "YES"
+        echo "    Found: $ONIE_KERNEL "
+        echo "    Found: $ONIE_INITRD "
+        echo "    Found: $ONIE_VMLINUX "
+    else
+        echo "NO"
+        echo "   - missing at least one of: "
+        echo "     [ $ONIE_KERNEL ] "
+        echo "     [ $ONIE_INITRD ] "
+        echo "     [ $ONIE_VMLINUX ]"
+    fi
+
+    echo -n "#  rk-installer "
+    if [ -e "$INSTALLER_KERNEL" ] && [ -e "$INSTALLER_INITRD" ];then
+        echo "YES"
+        echo "    Found: $INSTALLER_KERNEL "
+        echo "    Found: $INSTALLER_INITRD "
+    else
+        echo "NO"
+        echo "   - missing at least one of: "
+        echo "     [ $INSTALLER_KERNEL ]"
+        echo "     [ $INSTALLER_INITRD ] "
+    fi
+
+    echo -n "# rk-deb-kernel-debug "
+    if [ -e "$DEB_KERNEL" ] && [ -e "$INSTALLER_INITRD" ] && [ -e "$DEB_VMLINUX" ];then
+        echo "YES"
+        echo "    Found: $DEB_KERNEL"
+        echo "    Found: $INSTALLER_INITRD"
+        echo "    Found: $DEB_VMLINUX "
+    else
+        echo "NO"
+        echo "   - missing at least one of: "
+        echo "     [ $DEB_KERNEL ]"
+        echo "     [ $INSTALLER_INITRD ]"
+        echo "     [ $DEB_VMLINUX ]"
+    fi
+    echo ""
+    echo "-------------------------------------------------------------"
+    echo "Done"
+    echo ""
+}
+
+
+
+######################################################################
+# Editor hints for sh syntax interpretation
+# Append as necessary.
+######################################################################
+
+# For Emacs
+# Local Variables:
+# mode: sh
+# End:
+
+
