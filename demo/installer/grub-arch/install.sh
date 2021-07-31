@@ -266,25 +266,22 @@ demo_install_uefi_grub()
             echo "ERROR: Unable to create directory: $loader_dir"
             exit 1
         }
-        # Use ONIE's .efi binaries
-        cp -a /boot/efi/EFI/onie/*${onie_uefi_arch}.efi "$loader_dir" || {
-            echo "ERROR: Unable to copy ONIE .efi binaries to: $loader_dir"
-            exit 1
-        }
+
+		# Copy installer specific shim/grub to efi destination.
+		# This would be files required for Secure Boot,  like:
+		#  shimx64.efi
+		#  grubx64.efi
+		#  grub.cfg
+		#  grub.cfg.sig
+		cp "${demo_mnt}"/demo-efi/* "$loader_dir" || {
+			echo "ERROR: failed to find ${demo_mnt}/demo-efi directory with demo efi binaries."
+			return 1
+			}
 
         local demo_boot_uuid=$(grub-probe --target=fs_uuid $demo_mnt) || {
             echo "ERROR: Unable to determine UUID of GRUB boot directory: $demo_mnt"
             return 1
         }
-
-        # Generate tiny grub config for monolithic image
-        cat<< EOF > "${loader_dir}/grub.cfg"
-search.fs_uuid $demo_boot_uuid root
-echo "Search for uuid $demo_boot_uuid"
-echo "Found root: \$root"
-set prefix=(\$root)'/grub'
-configfile \$prefix/grub.cfg
-EOF
 
         # Install primary grub config in $demo_mnt
         grub_dir="${demo_mnt}/grub"
@@ -363,6 +360,10 @@ mount -t ext4 -o defaults,rw $demo_dev $demo_mnt || {
 
 # Copy kernel and initramfs to demo file system
 cp demo.vmlinuz demo.initrd $demo_mnt
+# Copy any signed files required for Secure Boot
+if [ -d demo-efi ];then
+	cp -r demo-efi $demo_mnt/
+fi
 
 # store installation log in demo file system
 onie-support $demo_mnt
@@ -447,9 +448,11 @@ fi
 EOF
 
     # Add a menu entry for the DEMO OS
+	# Use --unrestricted so it does not ask the user for
+	# Grub login/password to execute.
     demo_grub_entry="Demo $demo_type"
     cat <<EOF >> $grub_cfg
-menuentry '$demo_grub_entry' {
+menuentry '$demo_grub_entry' --unrestricted {
         search --no-floppy --label --set=root $demo_volume_label
         echo    'Loading ONIE Demo $demo_type kernel ...'
         linux   /demo.vmlinuz $GRUB_CMDLINE_LINUX \$ONIE_EXTRA_CMDLINE_LINUX DEMO_TYPE=$demo_type

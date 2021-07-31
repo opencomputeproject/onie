@@ -11,10 +11,11 @@ machine=$2
 platform=$3
 installer_dir=$4
 platform_conf=$5
-output_file=$6
-demo_type=$7
+efi_binary_dir=$6
+output_file=$7
+demo_type=$8
 
-shift 7
+shift 8
 
 if  [ ! -d $installer_dir ] || \
     [ ! -r $installer_dir/sharch_body.sh ] ; then
@@ -68,6 +69,19 @@ tmp_installdir="$tmp_dir/installer"
 mkdir $tmp_installdir || clean_up 1
 
 cp $installer_dir/$arch_dir/install.sh $tmp_installdir || clean_up 1
+if [ -e "$efi_binary_dir" ];then
+	# If Secure Boot is active, then the Demo OS will need it's own
+	# signed efi binaries to install in /boot/efi/EFI/ONIE-DEMO-OS.
+	# If Secure Grub is active, a detached signature for the cfg file
+	# will be needed as well.
+	# This directory may contain:
+	#  grubx64.efi
+	#  shmx64.efi
+	#  grub.cfg
+	#  grub.cfg.sig
+	cp -r "${efi_binary_dir}" "$tmp_installdir"/ || clean_up 1
+
+fi
 
 # Tailor the demo installer for OS mode or DIAG mode
 sed -i -e "s/%%DEMO_TYPE%%/$demo_type/g" \

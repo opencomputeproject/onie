@@ -20,6 +20,9 @@ DEMO_UIMAGE		= $(IMAGEDIR)/demo-$(PLATFORM).itb
 DEMO_OS_BIN		= $(IMAGEDIR)/demo-installer-$(PLATFORM).bin
 DEMO_DIAG_BIN		= $(IMAGEDIR)/demo-diag-installer-$(PLATFORM).bin
 
+# Files for the installer to put under /boot/efi/EFI/ONIE-DEMO-OS
+DEMO_EFI_DIR = $(MBUILDDIR)/demo-efi
+
 DEMO_SYSROOT_COMPLETE_STAMP	= $(STAMPDIR)/demo-sysroot-complete
 DEMO_KERNEL_COMPLETE_STAMP	= $(STAMPDIR)/demo-kernel-complete
 DEMO_UIMAGE_COMPLETE_STAMP	= $(STAMPDIR)/demo-uimage-complete
@@ -107,11 +110,25 @@ endif
 
 define demo_MKIMAGE
 	./scripts/onie-mk-demo.sh $(ROOTFS_ARCH) $(MACHINE) $(PLATFORM) \
-		$(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf $(1) $(2) $(DEMO_IMAGE_PARTS) 
+		$(DEMO_INSTALLER_DIR) $(MACHINEDIR)/demo/platform.conf $(DEMO_EFI_DIR) \
+		$(1) $(2) $(DEMO_IMAGE_PARTS) 
 endef
 
 $(DEMO_OS_BIN) : $(DEMO_IMAGE_PARTS_COMPLETE) $(MACHINE_DEMO_DIR)/*
 	$(Q) echo "==== Create demo OS $(PLATFORM) self-extracting archive ===="
+	$(Q) mkdir -p $(DEMO_EFI_DIR)
+    ifeq ($(SECURE_BOOT_ENABLE),yes)
+		$(Q) echo "==== Copying in signed efi binaries. ===="
+	    $(Q) cp $(MBUILDDIR)/grubx64.efi $(DEMO_EFI_DIR)
+	    $(Q) cp $(MBUILDDIR)/shim/install/shimx64.efi $(DEMO_EFI_DIR)
+		$(Q) cp $(DEMO_INSTALLER_DIR)/grub-arch/grub.cfg $(DEMO_EFI_DIR)
+# Sign the Demo OS grub config file
+        ifeq ($(SECURE_GRUB),yes)
+# Use the Demo OS grub.cfg that disables further GRUB detached signature checking
+# Naturally, this has to have a detached signature to be used by GRUB
+	      $(SCRIPTDIR)/gpg-sign.sh $(GPG_SIGN_SECRING) $(DEMO_EFI_DIR)/grub.cfg			
+        endif
+      endif
 	$(Q) $(call demo_MKIMAGE, $@, OS)
 
 $(DEMO_DIAG_BIN) : $(DEMO_OS_BIN)
@@ -126,6 +143,7 @@ $(DEMO_IMAGE_COMPLETE_STAMP): $(DEMO_ARCH_BINS)
 MACHINE_CLEAN += demo-clean
 demo-clean:
 	$(Q) rm -rf $(DEMO_SYSROOTDIR)
+	$(Q) rm -rf $(DEMO_EFI_DIR)
 	$(Q) rm -f $(MBUILDDIR)/demo-* $(DEMO_IMAGE_PARTS) $(DEMO_OS_BIN) $(DEMO_DIAG_BIN)
 	$(Q) rm -f $(DEMO_SYSROOT_COMPLETE_STAMP) $(DEMO_IMAGE_COMPLETE_STAMP)
 	$(Q) rm -f $(DEMO_IMAGE_PARTS_COMPLETE)
