@@ -15,11 +15,20 @@ so this script is provided as a starting point.
 # Getting Started.
 
 
-#Build the KVM virtual machine
-
-    cd onie/build-config
-    make MACHINE=kvm_x86_64 all demo recovery-iso
-...and do something else while it builds.
+# Build the KVM virtual machine
+Since the KVM has Secure Boot enabled by default, encryption keys and a signed shim efi binary are now required, even if Secure Boot is not active at run time.
+## Steps
+### 1 Enter the build directory  
+    `cd onie/build-config`  
+### 2 Generate cryptographic signing keys in ./encryption  
+    `make MACHINE=kvm_x86_64 signing-keys-generate`  
+### 3 Copy the keys to ./emulation for run time use  
+    `make MACHINE=kvm_x86_64 signing-keys-generate`  
+### 4 Build a self-signed shim efi bootloader  
+    `make MACHINE=kvm_x86_64 -j4 shim-self-sign`  
+### 5 Build ONIE, the boot iso, and the Demo OS  
+    `make MACHINE=kvm_x86_64 -j4 all demo recovery-iso`  
+    ...and do something else while it builds.  ``
 
 Once the compilation has completed, `onie/build/images` will have:  
 
@@ -65,22 +74,22 @@ The `onie-vm.sh` script has the following commands:
 
 # Options
 
-##Target selection options:
+## Target selection options:
     --machine-name  <name> - Name of build target machine - ex mlnx_x86
     --machine-revision <r> - The -rX version at the end of the --machine-name
 
-##Runtime options:
+## Runtime options:
     --m-onie-iso <path>    - Boot off of recovery ISO at <path> and install onto qcow2
     --m-embed-onie         - Boot to embed onie. Requires --m-onie-iso <path>
     --m-boot-cd            - Boot off of rescue CD to start.
     --m-secure             - Set --m-usb-drive and --m-bios-uefi for secure boot.
 
-##BIOS configuration:     Default: Legacy BIOS.
+## BIOS configuration:     Default: Legacy BIOS.
     --m-bios-uefi          - Use UEFI rather than legacy bios.
     --m-bios-vars-file <f> - Use a copy of a previously saved OVMF_VARS file at: <file>
     --m-bios-clean         - Delete OVMF_VARS.fd and replace with empty copy to erase all set UEFI vars.
 
-##Emulation instance configuration:
+## Emulation instance configuration:
     --m-telnet-port<num>   - Set telnet port number.          Default: [ 9300 ]
     --m-vnc-port   <num>   - Set vnc port number.             Default: [ 128 ]
     --m-ssh-port   <num>   - Set local ssh port forward.      Default: [ 4022 ]
@@ -88,17 +97,17 @@ The `onie-vm.sh` script has the following commands:
     --m-network-mac <xx>   - Two hex digits for a unique MAC. Default: [ 1E ]
     --m-gdb                - Enable gdb through QEMU.
 
-##Storage:
+## Storage:
     --m-hd-clean           - Replace target 'hard drive' with an empty one  and run install.
     --m-hd-file <file>     - Use a previously configured drive file.
     --m-nvme-drive         - Have QEMU emulate storage as NVME drives.
     --m-usb-drive          - Make virtual USB drive available at KVM runtime.  
 
-##Help
+## Help
     --help                  - This output.
     --help-examples         - Examples of use.
 
-#Files
+# Files
 A fully populated emulation directory may look like this.
 Note that some files only appear after certain run time arguments,
 like `--m-usb-drive` or `--m-bios-uefi` have been used.
@@ -106,31 +115,31 @@ like `--m-usb-drive` or `--m-bios-uefi` have been used.
      onie-vm.lib    <- library functions used by the emulation script  
      onie-vm.sh     <- Run emulation script  
 
-##./emulation-files:  
+## ./emulation-files:  
     onie-kvm_x86_64-clean.qcow2   <- Pre-formatted target file system  
     onie-kvm_x86_64-demo.qcow2	  <- Target file system used by QEMU  
-##./emulation-files/uefi-bios:  
+## ./emulation-files/uefi-bios:  
     OVMF_CODE.fd    <- UEFI BIOS Firmware  
     OVMF_VARS.fd    <- UEFI BIOS variable storage.  
-##./emulation-files/usb:  
+## ./emulation-files/usb:  
      usb-drive.qcow2   <- Virtual USB drive fileysystem  
      usb-drive.raw	   <- Intermediate stage of virtual drive  
 
-##./emulation-files/usb/usb-data:  
+## ./emulation-files/usb/usb-data:  
 Holds files to put into varietal USB drive  
 
     README.txt         <- Notes on the virtual USB file system  
     ReadmeUEFI.txt     <- Notes on the UEFI shell environment  
 
-##./emulation-files/usb/usb-mount:  
+## ./emulation-files/usb/usb-mount:  
 Loopback mount point for creating virtual file system  
 
 This exists if emulation runs have been performed with the virtual usb drive, and
 UEFI BIOS as an emulation option
   
   
-#Examples
-##Ways to run just a kernel
+# Examples
+## Ways to run just a kernel
 
 ### Kernel and intird from the ONIE build
     Cmd: onie-vm.sh rk-onie
@@ -150,37 +159,37 @@ UEFI BIOS as an emulation option
     Cmd: onie-vm.sh extract-linux-deb
 
 
-##Runtime info
+## Runtime info
 ### List things that could be run
     Cmd: onie-vm.sh info-runables
 ### List things that can currently be run
     Cmd: onie-vm.sh info-run-options
 
-##Running a qcow2 image
+## Running a qcow2 image
 
-###Boot off a recovery iso, install onie in an empty qcow2 with legacy BIOS
+### Boot off a recovery iso, install onie in an empty qcow2 with legacy BIOS
     Cmd: onie-vm.sh run --m-embed-onie --m-hd-clean
 
-###Run a qcow2 that has onie embedded (see above)
+### Run a qcow2 that has onie embedded (see above)
     Cmd: onie-vm.sh run
 
-###Run and install ONIE on an empty qcow2 hard drive file using UEFI BIOS
+### Run and install ONIE on an empty qcow2 hard drive file using UEFI BIOS
     Cmd: onie-vm.sh run --m-onie-iso <path to recovery iso> --m-usb-drive --m-bios-uefi --m-secure --m-hd-clean --m-bios-clean
 
-###Run qcow2 hard drive file that has ONIE installed using UEFI BIOS
+### Run qcow2 hard drive file that has ONIE installed using UEFI BIOS
     Cmd: onie-vm.sh run  --m-bios-uefi
 
-###Run Secure Boot and install ONIE on an empty qcow2 and keep UEFI vars
+### Run Secure Boot and install ONIE on an empty qcow2 and keep UEFI vars
     Cmd: onie-vm.sh run --m-secure --m-hd-clean --m-embed-onie
 
-###Run Secure Boot using previously embedded image (see above)
+### Run Secure Boot using previously embedded image (see above)
     Cmd: onie-vm.sh run --m-secure
 
-###Run new secure boot while another QEMU is running:
+### Run new secure boot while another QEMU is running:
     Cmd: onie-vm.sh --m-network-mac 21 --m-telnet-port 9400 --m-vnc-port 127 --m-ssh-port 4122 --m-embed-onie --m-secure  --m-hd-clean  --m-bios-clean
 
 
-#Quick setup:
+# Quick setup:
  To embed ONIE on a virtual hard drive file, type:  
     `./onie-vm.sh run --m-usb-drive --m-bios-uefi --m-secure --m-hd-clean --m-bios-clean --m-onie-iso ../build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso`  
 
@@ -193,7 +202,7 @@ UEFI BIOS as an emulation option
 
 
 
-#More Examples:
+# More Examples:
 
 ## Embed KVM ONIE on an empty virtual file system. This should be the first step.
 `onie-vm.sh run --m-embed-onie --m-boot-cd ../build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso`
@@ -201,27 +210,27 @@ Where
  `--m-embed-onie`  - install ONIE on empty file system
  `--m-boot-cd`     - boot off the recovery iso to start
 
-##Run ONIE after embedding
+## Run ONIE after embedding
 
 `onie-vm.sh run`
 
-##Run ONIE with a UEFI BIOS
+## Run ONIE with a UEFI BIOS
 `onie-vm.sh run --m-bios-uefi`
 NOTE: for the UEFI bios boot entries to be aware of ONIE, you should install ONIE first, as:
 `onie-vm.sh run --m-bios-uefi --m-embed-onie --m-boot-cd ../build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso`
 
-##Run ONIE with the virtual USB drive
+## Run ONIE with the virtual USB drive
 `onie-vm.sh run --m-usb-drive`
 NOTE: once the system has booted, mount the drive with:
   mount /dev/vdb /mnt/usb
 
 
-##Run just the locally built ONIE kernel and intird with gdb:
+## Run just the locally built ONIE kernel and intird with gdb:
 `./onie-vm.sh rk-onie`
 ...and follow the instructions for attaching with GDB
 
 
-##Debug an installer kernel
+## Debug an installer kernel
  This uses the demo OS installer, but any ONIE compatible NOS installer should work
 
  ./onie-vm.sh --unpack-installer  ../build/images/demo-installer-x86_64-kvm_x86_64-r0.bin
@@ -229,7 +238,7 @@ NOTE: once the system has booted, mount the drive with:
  ./onie-vm.sh rk-installer
 
 
-##Debug a NOS packaged kernel
+## Debug a NOS packaged kernel
 
 Here Debian packages are used as an example, but whatever packaging architecture
 the NOS uses can be added to the script.
@@ -251,7 +260,7 @@ Extract package contents ( using a dpkg -x - other packaging systems will be dif
 Now run:
  ./onie-vm.sh rk-deb-kernel-debug
 
-#Notes on using UEFI
+# Notes on using UEFI
 The OVMF_VARS.fd file can be preserved after configuration for subsequent runs.
 However, unless the filesystems it is used with have the same UUID, the system
 will fail to boot.
