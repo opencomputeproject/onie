@@ -77,10 +77,10 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  2021.08 | Wed, Jul 14, 2021 | Wed, Aug 18, 2021
   2021.11 | Wed, Oct 20, 2021 | Wed, Nov 24, 2021
   2022.02 | Wed, Jan 19, 2022 | Wed, Feb 16, 2022
-  2022.05 | Wed, Apr 20, 2022 | Wed, May 18, 2022  
+  2022.05 | Wed, Apr 20, 2022 | Wed, May 18, 2022
+  2022.08 | Wed, Jul 20, 2022 | Wed, Aug 18, 2022    
 
 Making a Release
 ----------------

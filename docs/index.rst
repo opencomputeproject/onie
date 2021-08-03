@@ -24,6 +24,10 @@ Open Network Install Environment
 
 News
 ====
+Aug 03, 2021
+  Released version `2021.08
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/200>`_
+  This is the last widely compatible release before component upgrade requires platform updates.
 
 May 12, 2021
   Released version `2021.05
