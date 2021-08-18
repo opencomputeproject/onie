@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #
 #  SPDX-License-Identifier:     GPL-2.0
@@ -9,7 +10,12 @@
 # This is a makefile fragment that defines the build of parted
 #
 
-PARTED_VERSION		= 3.1
+ifeq ($(ONIE_ARCH),armv8a)
+  PARTED_VERSION		= 3.4
+else
+  PARTED_VERSION		= 3.1
+endif
+
 PARTED_TARBALL		= parted-$(PARTED_VERSION).tar.xz
 PARTED_TARBALL_URLS	+= $(ONIE_MIRROR) http://ftp.gnu.org/gnu/parted/
 PARTED_BUILD_DIR	= $(USER_BUILDDIR)/parted
@@ -29,7 +35,7 @@ PARTED_STAMP		= $(PARTED_SOURCE_STAMP) \
 
 PHONY += parted parted-download parted-source \
 	 parted-configure parted-build parted-install parted-clean \
-	 parted-download-clean
+	 parted-download-clean parted-configure-help
 
 PARTED_SBIN = parted partprobe
 
@@ -72,6 +78,11 @@ $(PARTED_CONFIGURE_STAMP): $(PARTED_SOURCE_STAMP) $(E2FSPROGS_BUILD_STAMP) $(LVM
 		CFLAGS="$(ONIE_CFLAGS)"				\
 		LDFLAGS="$(ONIE_LDFLAGS)"
 	$(Q) touch $@
+
+# Print configure options for debug
+parted-configure-help: $(PARTED_CONFIGURE_STAMP)
+	$(Q) echo "====  Configure parted-$(PARTED_VERSION) ===="
+	$(Q) $(PARTED_DIR)/configure -help
 
 parted-build: $(PARTED_BUILD_STAMP)
 $(PARTED_BUILD_STAMP): $(PARTED_CONFIGURE_STAMP)
