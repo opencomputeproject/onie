@@ -9,8 +9,8 @@
 # This is a makefile fragment that defines the build of some libraries
 # from the util-linux package.
 #
-
-UTILLINUX_VERSION		= 2.27
+UTILLINUX_MAJOR_VERSION = 2.37
+UTILLINUX_VERSION		= $(UTILLINUX_MAJOR_VERSION).2
 UTILLINUX_TARBALL		= util-linux-$(UTILLINUX_VERSION).tar.xz
 UTILLINUX_TARBALL_URLS		+= $(ONIE_MIRROR) \
 					https://www.kernel.org/pub/linux/utils/util-linux/v$(UTILLINUX_VERSION)/
@@ -36,7 +36,8 @@ UTILLINUX_STAMP			= $(UTILLINUX_SOURCE_STAMP) \
 					$(UTILLINUX_INSTALL_STAMP)
 
 PHONY += util-linux util-linux-download util-linux-source util-linux-configure \
-	util-linux-build util-linux-install util-linux-clean util-linux-download-clean
+	util-linux-build util-linux-install util-linux-clean util-linux-download-clean \
+	util-linux-configure-help 
 
 UTILLINUX_CONFIG	= --enable-libuuid
 UTILLINUX_LIBS		= \
@@ -77,6 +78,11 @@ UTILLINUX_NEW_FILES = $(shell test -d $(UTILLINUX_DIR) && test -f $(UTILLINUX_BU
 	              find -L $(UTILLINUX_DIR) -newer $(UTILLINUX_BUILD_STAMP) -type f \
 			\! -name libblkid.so.1.1.0T -print -quit)
 endif
+
+util-linux-configure-help: $(UTILLINUX_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+	$(Q) echo "====  Configure help for util-linux-$(UTILLINUX_VERSION) ===="
+	$(Q) cd $(UTILLINUX_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		$(UTILLINUX_DIR)/configure --help
 
 util-linux-configure: $(UTILLINUX_CONFIGURE_STAMP)
 $(UTILLINUX_CONFIGURE_STAMP): $(UTILLINUX_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
