@@ -40,7 +40,7 @@ XTOOLS_STAMP		= $(XTOOLS_PREP_STAMP) \
 export XTOOLS_INSTALL_DIR
 
 PHONY += xtools xtools-prep xtools-download xtools-config \
-	 xtools-build xtools-clean xtools-distclean
+	 xtools-build xtools-clean xtools-distclean uclibc-menuconfig
 
 # List of common packages needed by crosstool-NG
 CT_NG_COMPONENTS =	\
@@ -95,6 +95,7 @@ else
 endif
 
 ifeq ($(XTOOLS_LIBC),glibc)
+# https://ftp.gnu.org/gnu/glibc/glibc-2.34.tar.xz
   CT_NG_COMPONENTS += glibc-$(XTOOLS_LIBC_VERSION).tar.xz
 endif
 
@@ -165,6 +166,20 @@ xtools-distclean:
 		echo " done ===" ; done
 	$(Q) rm -rf $(XTOOLS_ROOT)
 	$(Q) echo "=== Finished making $@ ==="
+
+
+# The config for uclibc is passed in for build.
+# However, if the uclibc configuration options are needed for
+#  upgrade or debug, the menuconfig can be run here.
+#  The new .config will need to be merged (or upgraded) 
+#  with the existing one to actually be applied, though.
+uclibc-menuconfig:
+# The rest of the path can be hardcodeed since only x86 uses uClibc
+	$(Q)  cd  $(XTOOLS_BUILD_DIR)/build/x86_64-onie-linux-uclibc/src/uClibc \
+			&& make menuconfig
+	$(Q)  echo "=== uClibc config file is here: ==="
+	$(Q)  echo "$(XTOOLS_BUILD_DIR)/build/x86_64-onie-linux-uclibc/src/uClibc"
+	$(Q)  ls -al $(XTOOLS_BUILD_DIR)/build/x86_64-onie-linux-uclibc/src/uClibc
 
 #-------------------------------------------------------------------------------
 #
