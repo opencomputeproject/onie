@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of kexec-tools
 #
 
-KEXEC_VERSION		= 2.0.9
+KEXEC_VERSION		= 2.0.22
 KEXEC_TARBALL		= kexec-tools-$(KEXEC_VERSION).tar.xz
 KEXEC_TARBALL_URLS	+= $(ONIE_MIRROR) \
 			   https://www.kernel.org/pub/linux/utils/kernel/kexec
@@ -33,7 +33,8 @@ PHONY += kexec-tools kexec-tools-download kexec-tools-source kexec-tools-patch \
 	 kexec-tools-configure kexec-tools-build kexec-tools-install kexec-tools-clean \
 	 kexec-tools-download-clean
 
-KEXEC_SBIN = kexec kdump
+KEXEC_SBIN = kexec
+#KEXEC_SBIN = kexec kdump
 
 kexec-tools: $(KEXEC_STAMP)
 
