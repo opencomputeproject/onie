@@ -20,7 +20,7 @@ GCC_VERSION 			?= 8.3.0
 
 # https://uclibc-ng.org/
 XTOOLS_LIBC 			?= uClibc-ng
-XTOOLS_LIBC_VERSION 		?= 1.0.35
+XTOOLS_LIBC_VERSION 		?= 1.0.38
 
 # http://crosstool-ng.github.io/
 CROSSTOOL_NG_DESC		= crosstool-NG
@@ -53,7 +53,7 @@ export CROSSTOOL_NG_LOCAL_PATCHDIR
 
 PHONY += crosstool-ng crosstool-ng-download crosstool-ng-source crosstool-ng-patch \
 	 crosstool-ng-configure crosstool-ng-build crosstool-ng-clean \
-	 crosstool-ng-download-clean
+	 crosstool-ng-download-clean crosstool-ng-menuconfig
 
 crosstool-ng: $(CROSSTOOL_NG_STAMP)
 
@@ -102,6 +102,11 @@ $(CROSSTOOL_NG_BUILD_STAMP): $(CROSSTOOL_NG_CONFIGURE_STAMP)
 	$(Q) echo "====  Building crosstool-ng-$(CROSSTOOL_NG_VERSION) ===="
 	$(Q) $(MAKE) -C $(CROSSTOOL_NG_DIR) MAKELEVEL=0
 	$(Q) touch $@
+
+# To explore crosstool-ng options
+crosstool-ng-menuconfig:
+	$(Q) $(CROSSTOOL_NG_DIR)/ct-ng menuconfig
+
 
 DIST_CLEAN += crosstool-ng-clean
 crosstool-ng-clean:
