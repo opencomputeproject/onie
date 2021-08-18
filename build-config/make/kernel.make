@@ -90,9 +90,15 @@ $(LINUXDIR)/.config : $(LINUX_CONFIG) $(KERNEL_PATCH_STAMP)
 	$(Q) $(LINUXDIR)/scripts/kconfig/merge_config.sh -r -m -O  $(LINUXDIR) $(LINUXDIR)/.config $(MACHINE_KERNEL_PATCHDIR)/config
 
 
+# Interactive update. User selects options, or not
 kernel-old-config: $(LINUXDIR)/.config
 	$(Q) $(MAKE) -C $(LINUXDIR) ARCH=$(KERNEL_ARCH) oldconfig
 
+# Update kernel config - set all defaults, non-interactive
+kernel-old-defconfig: $(LINUXDIR)/.config
+	$(Q) $(MAKE) -C $(LINUXDIR) ARCH=$(KERNEL_ARCH) olddefconfig
+
+# User can browse for options
 kernel-config: $(LINUXDIR)/.config
 	$(Q) $(MAKE) -C $(LINUXDIR) ARCH=$(KERNEL_ARCH) menuconfig
 
