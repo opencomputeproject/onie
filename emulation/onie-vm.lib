@@ -385,15 +385,20 @@ function fxnRunKernel()
     local kernelPath="$1"
     local initrdPath="$2"
     local vmlinuxPath="$3"
-
+	# DTB if emulating ARM
+	local dtbPath="$4" 
     # Be less dynamic with arguments by default.
     local hardcodeRun="TRUE"
+
 
     echo "##############################################################################"
     echo "#                                                                            #"
     echo "# Kernel:  $kernelPath"
     echo "# Initrd:  $initrdPath"
     echo "# Vmlinux: $vmlinuxPath"
+	if [ "$ONIE_ARCH" = 'arm64' ];then
+		echo "# dtb:     $dtbPath"
+	fi
     echo "#"
     echo "# Look for the [ $RUN_GDB_SCRIPT ] to set up gdb parameters."
     echo "# Exit qemu with Ctrl-a c  quit "
@@ -405,13 +410,13 @@ function fxnRunKernel()
         echo "Kernel not found at [ $kernelPath ]. Has it been built/extracted? Exiting."
         exit 1
     fi
-
+	
     # Not all invocations use an initrd
     if [ "$initrdPath" != "" ];then
         # For now we expect it to come out of an installer
         # TODO - ONIE case here?
         if [ ! -e "$initrdPath" ];then
-            echo "ERROR! Failed to find intrd at [ $initrdPath ]. Has the installer been unpacked ( --unpack-installer )? Exiting."
+            echo "ERROR! Failed to find initrd at [ $initrdPath ]. Has the installer been unpacked ( --unpack-installer )? Exiting."
             exit 1
         fi
     fi
@@ -420,16 +425,18 @@ function fxnRunKernel()
         useGDBArgs=""
     fi
 
-
-    RUN_COMMAND="qemu-system-x86_64 \
+	set -x
+    RUN_COMMAND="qemu-system-${QEMU_ARCH} \
+    $QEMU_PROCESSOR_ARGS \
     --append console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel \
     -kernel $kernelPath \
     -nographic \
-    -initrd $initrdPath \
     -m 512 \
-    --enable-kvm \
-    -cpu host \
     $useGDBArgs "
+
+	if [ "$ONIE_ARCH" = "x86" ];then
+		RUN_COMMAND+="  -initrd $initrdPath "
+	fi
 
     echo "# Running: $RUN_COMMAND " | sed -e 's/ -/\n -/g'
 
@@ -475,7 +482,8 @@ function fxnRunKernel()
     # --append "onie_interactive onie_root=LABEL=<nos install here>  BOOT_DEBUG=3 mem=2016M --- console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel " \
 
     if [ "$hardcodeRun" = "TRUE" ];then
-        qemu-system-x86_64 \
+		if [ "$ONIE_ARCH" = "x86" ];then
+        qemu-system-${QEMU_ARCH} \
             --append "onie_interactive onie_root=LABEL=NOS-INSTALL BOOT_DEBUG=3 mem=2016M console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel " \
             -kernel "$kernelPath" \
             -nographic \
@@ -485,6 +493,38 @@ function fxnRunKernel()
             -cpu host \
             -drive file="$HARD_DRIVE",media=disk,if=virtio,index=0 \
             $useGDBArgs
+		fi
+
+		if [ "$ONIE_ARCH" = "arm64" ];then
+			# onie/build/images/qemu_armv8a-r0.vmlinuz 
+			echo "kernel $kernelPath"
+			# onie/build/images/qemu_armv8a-r0.initrd 
+			echo "initrd $initrdPath"
+			# Initrd will only be present if the image has built.
+			if [ -e "$initrdPath"  ];then
+				initrdCmd=" -initrd $initrdPath "
+			else
+				echo "Failed to find initrd, running without."
+			fi
+			qemu-system-aarch64 \
+				$QEMU_PROCESSOR_ARGS \
+				-kernel "$kernelPath" \
+				$initrdCmd \
+				-nographic 
+
+			exit
+			echo "ARM64"
+        qemu-system-${QEMU_ARCH} \
+            --append "onie_interactive onie_root=LABEL=NOS-INSTALL BOOT_DEBUG=3 mem=2016M console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel " \
+            -kernel "$kernelPath" \
+            -nographic \
+            -m 2016 \
+			-machine virt \
+			-cpu cortex-a57 \
+            -drive file="$HARD_DRIVE",media=disk,if=virtio,index=0 \
+            $useGDBArgs
+
+		fi
     else
         $RUN_COMMAND
     fi

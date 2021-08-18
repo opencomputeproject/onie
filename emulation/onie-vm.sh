@@ -34,9 +34,6 @@ if [ "$1" = "--debug" ];then
     set -x
 fi
 
-# Default to running ONIE KVM - can be overridden on command line.
-ONIE_MACHINE_TARGET="kvm_x86_64"
-
 # If true, defaults set in fxnApplyDefaults are set.
 # Leave unset to specify everything on the command line.
 APPLY_HARDCODE_DEFAULTS="TRUE"
@@ -51,6 +48,7 @@ EMULATION_DIR="${ONIE_TOP_DIR}/emulation-files"
 # Defaults based on machine type, or is user specified.
 ONIE_RECOVERY_ISO=""
 
+FLASH_FILES_DIR="${EMULATION_DIR}/flash-files"
 #
 # Files in this directory get added to a virtual USB drive
 #
@@ -62,24 +60,19 @@ USB_TRANSFER_DIR="${USB_DIR}/usb-data"
 # Path to the USB image We'll stuff the whole world in here
 USB_IMG="${USB_DIR}/usb-drive"
 
-#USB_SIZE="256M"
+USB_SIZE="256M"
 # Supersize it for installer debug
-USB_SIZE="2G"
+#USB_SIZE="2G"
 
 # Local mount point in host for loop back mount of USB filesystem.
 # ( will require root privileges )
 USB_MNT_DIR="${USB_DIR}/usb-mount"
 
-# Virtual target hard drive to install on
-HARD_DRIVE=${EMULATION_DIR}/onie-${ONIE_MACHINE_TARGET}-demo.qcow2
 
 # Size in GB of virtual drive
-HARD_DRIVE_SIZE=2G
+#HARD_DRIVE_SIZE=2G
+HARD_DRIVE_SIZE=1G
 
-# Formatting takes a while, so once that is done, keep a copy
-# of the empty formatted drive so that clean installs
-# can be re-run without having to rebuild.
-CLEAN_HARD_DRIVE=${EMULATION_DIR}/onie-${ONIE_MACHINE_TARGET}-clean.qcow2
 
 #
 # UEFI BIOS emulation files
@@ -190,7 +183,7 @@ function fxnHelp()
     echo "---------"
     echo ""
     echo "  Target selection options:"
-    echo "   --machine-name  <name> - Name of build target machine - ex mlnx_x86"
+    echo "   --machine-name  <name> - Name of build target machine - ex mlnx_x86, qemu_armv8a"
     echo "   --machine-revision <r> - The -rX version at the end of the --machine-name"
     echo ""
     echo "  Runtime options:"
@@ -199,7 +192,7 @@ function fxnHelp()
     echo "   --m-boot-cd            - Boot off of rescue CD to start."
     echo "   --m-mount-cd           - CD is accessible when booting off hard drive."
     echo "   --m-cpu                - Set number of virutal processors."
-    echo "   --m-secure-default     - Set multple --m options to demonstrate secure boot."
+    echo "   --m-secure-default     - Set --m-bios-uefi --m-usb-drive --m-boot-cd to demonstrate secure boot."
     echo ""
     echo "  BIOS configuration:     Default: Legacy BIOS."
     echo "   --m-bios-uefi          - Use UEFI rather than legacy bios."
@@ -287,7 +280,7 @@ function fxnHelpExamples()
     echo "
 Quick setup:
  To embed ONIE to initialize system, type:
-   $0 run --m-usb-drive --m-bios-uefi --m-secure --m-onie-iso ../build/images/onie-recovery-x86_64-${ONIE_MACHINE}.iso --m-hd-clean --m-bios-clean
+   $0 run --m-usb-drive --m-bios-uefi --m-secure --m-onie-iso ../build/images/onie-recovery-${ONIE_ARCH}-${ONIE_MACHINE}.iso --m-hd-clean --m-bios-clean
  In a separate window, type:
   telnet localhost $QEMU_TELNET_PORT
 
@@ -346,6 +339,12 @@ function fxnMakeClean()
         rm -rf "$USB_TRANSFER_DIR"
     fi
 
+    # Used in ARM emulation
+    if [ -e "${FLASH_FILES_DIR}" ];then
+        echo "  Deleting      ${FLASH_FILES_DIR}"
+        rm -rf "$FLASH_FILES_DIR"
+    fi
+
     if [ -e "${HARD_DRIVE}" ];then
         echo "  Deleting      $HARD_DRIVE"
         rm "$HARD_DRIVE"
@@ -393,6 +392,7 @@ function fxnRunEmulation()
     #QEMU_MEMORY_M=2048
     # UEFI firmware
     #    OVMF="${EMULATION_DIR}/OVMF.fd"
+
     USB_DRIVE="${USB_IMG}.qcow2"
     CDROM="$ONIE_RECOVERY_ISO"
 
@@ -412,8 +412,17 @@ function fxnRunEmulation()
         echo "Emulating NVME drives for storage."
         DRIVE_LINE="          -drive file=${HARD_DRIVE},if=none,id=nvme0 -device nvme,drive=nvme0,serial=nvme1,num_queues=4 "
     else
-        # default to standard vda drive
-        DRIVE_LINE=" -drive file=${HARD_DRIVE},media=disk,if=virtio,index=0 "
+        case "$ONIE_ARCH" in
+            'x86_64' )
+                DRIVE_LINE=" -drive file=${HARD_DRIVE},media=disk,if=virtio,index=0 "
+                #DRIVE_LINE=" -drive index=0,if=none,file=${HARD_DRIVE},id=hd  -device virtio-blk-pci,drive=hd,bootindex=0 "
+                # This ^^ totally breaks everything
+                ;;
+
+            'arm64' )
+                DRIVE_LINE=" -drive index=0,if=none,file=${HARD_DRIVE},id=hd  -device virtio-blk-pci,drive=hd,bootindex=0 "
+                ;;
+        esac
     fi
 
     if [ "$QEMU_MONITOR_PORT" != "" ];then
@@ -430,7 +439,9 @@ function fxnRunEmulation()
     # Use OVMF bios for UEFI and the local file to store changes.
     #
     if [ "$DO_QEMU_UEFI_BIOS" = "TRUE" ];then
-        BIOS_LINE="-drive if=pflash,format=raw,readonly,file=${UEFI_BIOS_CODE} -drive if=pflash,format=raw,file=${UEFI_BIOS_VARS}"
+		if [ "$ONIE_ARCH" = "x86_64" ];then
+			BIOS_LINE="-drive if=pflash,format=raw,readonly,file=${UEFI_BIOS_CODE} -drive if=pflash,format=raw,file=${UEFI_BIOS_VARS}"
+		fi
     fi
 
     # specify a mac address, and you get network.
@@ -442,11 +453,28 @@ function fxnRunEmulation()
     if [ "$DO_QEMU_USB_DRIVE" = "TRUE" ];then
         # Attach an additional USB drive to carry files. Not all installers handle
         # more than one potential storage target well, so it is optional
-        USB_DRIVE_LINE=" -drive file=$USB_DRIVE,media=disk,if=virtio,index=1"
+
+        case "$ONIE_ARCH" in
+            'x86_64' )
+                USB_DRIVE_LINE=" -drive file=$USB_DRIVE,media=disk,if=virtio,index=1"
+                ;;
+
+            'arm64' )
+                USB_DRIVE_LINE=" -drive if=none,file=${USB_DRIVE},id=usb-hd -device virtio-blk-pci,drive=usb-hd "
+                ;;
+        esac
     fi
 
     if [ "$DO_BOOT_FROM_CD" = "TRUE" ];then
-        BOOT_LINE=" -boot $boot $cdrom "
+        case "$ONIE_ARCH" in
+            'x86_64' )
+                BOOT_LINE=" -boot $boot $cdrom "
+                ;;
+
+            'arm64' )
+                BOOT_LINE=" $cdrom "
+                ;;
+        esac
     else
         # Not booting off cd, but keeping it accessible from the hard drive
         if [ "$DO_MOUNT_CD" = "TRUE" ];then
@@ -456,24 +484,28 @@ function fxnRunEmulation()
             CD_DRIVE_LINE=" -drive file=$CDROM,media=cdrom,if=virtio,index=2 "
         fi
     fi
-    RUN_COMMAND="qemu-system-x86_64 --enable-kvm \
-         -cpu host \
+
+    # QEMU_PROCESSOR_ARGS is set when determining architecture off
+    # $ONIE_MACHINE_TARGET
+    RUN_COMMAND="qemu-system-${QEMU_ARCH} \
+         ${QEMU_PROCESSOR_ARGS} \
          -smp $QEMU_CPUS \
          -m $QEMU_MEMORY_M \
          -name onie \
          $USE_GDB \
          $QEMU_MONITOR \
          $BIOS_LINE \
-         $NETWORK_LINE \
          $BOOT_LINE \
          $DRIVE_LINE \
          $CD_DRIVE_LINE \
          $USB_DRIVE_LINE \
+         $NETWORK_LINE \
          -nographic \
          -serial telnet:localhost:$QEMU_TELNET_PORT,server"
 
     echo "Invoking QEMU with:"
-    echo "$RUN_COMMAND > $kvm_log 2>&1" | sed -e 's/ -/\n -/g'
+	    echo "$RUN_COMMAND " | sed -e 's/ -/\n -/g' 
+
 
     echo ""
     echo " Instructions:"
@@ -491,8 +523,22 @@ function fxnRunEmulation()
     echo "   1 - Embed ONIE  <Installs and reboots>"
     echo "   2 - Install OS  <Boots in to ONIE>"
     if [ "$USB_DRIVE_LINE" != "" ];then
-        echo "   3 - Access virtual USB drive by typing:  'mount /dev/vdb /mnt/usb'"
+        echo "   3 - Access virtual USB drive by typing:  'mount /dev/vdX /mnt/usb'"
+        echo "        (Where X is the only /dev/vd* without a partition number.)"
         echo "   4 - ls /mnt/usb"
+        # The USB drive wants to be part of the install in arm64, thus
+        #  it will be erased if 'embed onie' is chosen.
+        # Otherwise it and the CD can coexist.
+        if [ "$DO_BOOT_FROM_CD" = "TRUE" ] && [ "$ONIE_ARCH" = "arm64" ];then
+            echo ""
+            echo "#####################################################################"
+            echo "#                                                                   #"
+            echo "#   WARNING: 'USB drive' will be erased if 'Embed ONIE' is chosen.  #"
+            echo "#             The two can co-exist otherwise.                       #"
+            echo "#                                                                   #"
+            echo "#####################################################################"
+            echo ""
+        fi
     fi
     echo "  Note, ping does not work in kvm, but other network utils do!"
 
@@ -521,7 +567,7 @@ function fxnRunONIEKernel()
     echo "#                                                       #"
     echo "#########################################################"
     #
-    RUN_COMMAND="qemu-system-x86_64 \
+    RUN_COMMAND="qemu-system-${QEMU_ARCH} \
     -kernel $kernelPath \
     -nographic \
     -append 'console=ttyS0' -append 'debug' \
@@ -554,6 +600,12 @@ function fxnRunONIEKernel()
 # One stop to set default values for the run.
 function fxnApplyDefaults()
 {
+    # Default to running ONIE KVM - can be overridden on command line.
+    if [ "$ONIE_MACHINE_TARGET" = "" ];then
+        ONIE_MACHINE_TARGET="kvm_x86_64"
+        ONIE_ARCH="x86_64"
+    fi
+
     # KVM defaults
     DO_QEMU_NVME_DRIVE="FALSE"
     DO_QEMU_UEFI_BIOS="FALSE"
@@ -564,26 +616,13 @@ function fxnApplyDefaults()
         echo ""
         echo "NOTE: Applying QEMU/ONIE hardcode default settings."
         echo ""
-        MACHINE_REVISION="-r0"
         MAC_ADDRESS_ENDS_IN="1E"
         DO_QEMU_GDB="FALSE"
         QEMU_MONITOR_PORT=""
         QEMU_TELNET_PORT="9300"
         QEMU_VNC_PORT="128"
         QEMU_SSH_PORT="4022"
-        ONIE_MACHINE_REVISION="-r0"
     fi
-
-    # And the values that get set from the above
-    ONIE_MACHINE="${ONIE_MACHINE_TARGET}${ONIE_MACHINE_REVISION}"
-
-    # Default to the first kernel version found. Should only be one.
-    ONIE_KERNEL_VERSION="$( basename "$( ls -d "${BUILD_DIR}/${ONIE_MACHINE}"/kernel/linux-* | head -n 1 )" )"
-    ONIE_KERNEL="${BUILD_DIR}/${ONIE_MACHINE}/kernel/${ONIE_KERNEL_VERSION}/arch/x86_64/boot/bzImage"
-    ONIE_INITRD="${BUILD_DIR}/images/${ONIE_MACHINE}.initrd"
-    ONIE_VMLINUX="${BUILD_DIR}/${ONIE_MACHINE}/kernel/${ONIE_KERNEL_VERSION}/vmlinux"
-    ONIE_RECOVERY_ISO="${BUILD_DIR}/images/onie-recovery-x86_64-${ONIE_MACHINE}.iso"
-    ONIE_DEMO_INSTALLER="${BUILD_DIR}/images/demo-installer-x86_64-${ONIE_MACHINE}.bin"
 
 
 }
@@ -599,7 +638,7 @@ function fxnPrintSettings()
     echo "#--------------------------------------------------"
     echo "#  Running in         [ $(pwd) ]"
     echo "#  Machine name       [ $ONIE_MACHINE_TARGET ] "
-    echo "#  Machine revision   [ $MACHINE_REVISION ]"
+    echo "#  Machine revision   [ $ONIE_MACHINE_REVISION ]"
     echo "#  Boot from CD       [ $DO_BOOT_FROM_CD ]"
     echo "#   Path to CD        [ $ONIE_RECOVERY_ISO ]"
     echo "#  QEMU processors    [ $QEMU_CPUS ]"
@@ -617,7 +656,7 @@ function fxnPrintSettings()
         echo "#  ONIE Kernel        [ $ONIE_KERNEL_VERSION ]"
     fi
     echo "#  ONIE machine tgt   [ $ONIE_MACHINE_TARGET ]"
-    echo "#  ONIE machine rev   [ $ONIE_MACHINE_REVISION ]"
+
     if [ "$DO_QEMU_USB_DRIVE" = "TRUE" ];then
         echo "#  USB stage dir      [ $USB_TRANSFER_DIR ]"
         echo "#  USB filesystem     [ $USB_IMG ]"
@@ -633,19 +672,65 @@ function fxnPrintSettings()
 function fxnSetupUEFIBIOS()
 {
 
-	if [ ! -d "$UEFI_BIOS_DIR" ];then
-		fxnEC mkdir -p "$UEFI_BIOS_DIR" || exit 1
-	fi
-	
-    # Is there a backup UEFI variable storage file
-    # that might have been pre-configured to
-    # have keys?
-    echo "   Copying $UEFI_BIOS_SOURCE_VARS to $UEFI_BIOS_VARS "
-    cp "$UEFI_BIOS_SOURCE_VARS" "$UEFI_BIOS_VARS" || exit 1
+    if [ ! -d "$UEFI_BIOS_DIR" ];then
+        fxnEC mkdir -p "$UEFI_BIOS_DIR" || exit 1
+    fi
 
-    # Copy over the runtime code for the BIOS
-    echo "   Copying $UEFI_BIOS_SOURCE_CODE to $UEFI_BIOS_CODE "
-    cp "$UEFI_BIOS_SOURCE_CODE" "$UEFI_BIOS_CODE" || exit 1
+    if [ "$ONIE_ARCH" = "x86_64" ];then
+        # Is there a backup UEFI variable storage file
+        # that might have been pre-configured to
+        # have keys?
+        echo "   Copying $UEFI_BIOS_SOURCE_VARS to $UEFI_BIOS_VARS "
+        cp "$UEFI_BIOS_SOURCE_VARS" "$UEFI_BIOS_VARS" || exit 1
+
+        # Copy over the runtime code for the BIOS
+        echo "   Copying $UEFI_BIOS_SOURCE_CODE to $UEFI_BIOS_CODE "
+        cp "$UEFI_BIOS_SOURCE_CODE" "$UEFI_BIOS_CODE" || exit 1
+    fi
+    #
+    # UEFI BIOS for arm
+    if [ "$ONIE_ARCH" = "arm64" ];then
+        armUEFIBIOS="QEMU_EFI.fd"
+
+
+        if [ ! -e "${UEFI_BIOS_DIR}/${armUEFIBIOS}" ];then
+            UEFI_BIOS_SOURCE='linaro-uefi'
+            echo "   Getting UEFI BIOS for ARM from: [ $UEFI_BIOS_SOURCE ]"
+
+            case "$UEFI_BIOS_SOURCE" in
+                'linaro-uefi' )
+                    # This is a known working version
+                    #wget http://releases.linaro.org/components/kernel/uefi-linaro/16.02/release/qemu64/"${armUEFIBIOS}"
+					wget http://mirror.opencompute.org/onie/onie-emulation-bios/armv8a/linaro-16.02-QEMU_EFI.fd
+                    mv linaro-16.02-QEMU_EFI.fd "${UEFI_BIOS_DIR}/${armUEFIBIOS}"
+                    ;;
+
+                'linaro-tianocore' )
+                    # This version hangs when ONIE is coming up in both rescue and embed
+                    wget http://snapshots.linaro.org/components/kernel/leg-virt-tianocore-edk2-upstream/4319/QEMU-AARCH64/RELEASE_CLANG38/"${armUEFIBIOS}"
+                    cp "${armUEFIBIOS}" "${UEFI_BIOS_DIR}/${armUEFIBIOS}"					
+                    ;;
+
+                'host-qemu-efi' )
+                    # This version hangs when ONIE is coming up in both rescue and embed
+                    if [ -e /usr/share/qemu-efi/QEMU_EFI.fd ];then
+                        fxnEC cp /usr/share/qemu-efi/QEMU_EFI.fd  "${UEFI_BIOS_DIR}/${armUEFIBIOS}"  || exit 1
+                    else
+                        echo "Install qemu-efi package to get ARM UEFI BIOS. Improvising for now..."
+                    fi
+            esac
+
+            echo "   Creating flash0 in $FLASH_FILES_DIR"
+            # Format the img file that will hold ARM UEFI BIOS data
+            # They have to be exactly 64M in size.
+            dd if=/dev/zero of="${FLASH_FILES_DIR}/flash0.img" bs=1M count=64
+            # Add the UEFI BIOS data from our reference file
+            dd if="${UEFI_BIOS_DIR}/${armUEFIBIOS}" of="${FLASH_FILES_DIR}/flash0.img" conv=notrunc
+            echo "   Creating flash1 in $FLASH_FILES_DIR"
+            # Format the image that will hold BIOS configuration
+            dd if=/dev/zero of="${FLASH_FILES_DIR}/flash1.img" bs=1M count=64
+        fi
+    fi
 
 }
 
@@ -657,6 +742,8 @@ function fxnSetUpEmulationDir()
 
         echo "Creating $EMULATION_DIR to hold runtime files."
         mkdir -p "$EMULATION_DIR"
+        echo "Creating $FLASH_FILES_DIR to hold flash for ARM emulation."
+        mkdir -p "$FLASH_FILES_DIR"
         echo "Creating $USB_TRANSFER_DIR to hold files for the virtual USB drive."
         mkdir -p "$USB_TRANSFER_DIR"
         echo "Files in $USB_TRANSFER_DIR are added to the virtual USB drive" > "${USB_TRANSFER_DIR}/README.txt"
@@ -683,7 +770,8 @@ function fxnCleanEmulationDir()
     # wipe out generated files
     if [ -d "$EMULATION_DIR" ];then
         echo " - Deleting [ $EMULATION_DIR ]"
-        sudo rm -rf "$EMULATION_DIR"
+        #        sudo rm -rf "$EMULATION_DIR"
+        rm -rf "$EMULATION_DIR"
     fi
 
     # --but always keep the usb transfer directory around
@@ -700,6 +788,10 @@ function fxnCleanEmulationDir()
         rm -f "$RUN_GDB_SCRIPT"
     fi
 
+    if [ -e 'QEMU_EFI.fd' ];then
+        echo " - Deleting downloaded ARM UEFI BIOS."
+        rm QEMU_EFI.fd*
+    fi
     echo " Done cleaning the emulation directory."
 }
 
@@ -752,7 +844,7 @@ do
     case $term in
 
         # Run qemu using a qcow2 filesystem
-        'run' )
+        'run' | --run )
             DO_RUN_KVM="TRUE"
             ;;
 
@@ -841,14 +933,12 @@ do
         # Onie kernel and initrd, run on their own
         'rk-onie' )
             # just run the kernel and initrd
-            fxnRunKernel "$ONIE_KERNEL" "$ONIE_INITRD" "$ONIE_VMLINUX"
-            exit
+			DO_RUN_ONIE_KERNEL="TRUE"			
             ;;
 
         # Run the kernel and initrd pulled from the installer
         'rk-installer' )
-            fxnRunKernel "$INSTALLER_KERNEL" "$INSTALLER_INITRD"
-            exit
+			DO_RUN_INSTALLER_KERNEL="TRUE"			
             ;;
 
         'rk-deb-kernel-debug' )
@@ -863,8 +953,7 @@ do
                 echo " Exiting."
                 exit 1
             fi
-            fxnRunKernel "$DEB_KERNEL" "$INSTALLER_INITRD" "$DEB_VMLINUX"
-            exit
+			DO_RUN_DEBIAN_KERNEL="TRUE"
             ;;
 
         # Use a copy of a previously configured BIOS via it's OVMF_VARS.fd file
@@ -923,7 +1012,7 @@ do
             shift
             ;;
 
-        --machine-name )
+        --machine-name | -n )
             if [ "$2" = "" ];then
                 echo "ERROR! Must supply a machine name: ex 'mlnx_x86'. Exiting."
                 exit 1
@@ -1005,14 +1094,9 @@ do
             # Create a second filesystem to store keys that must be loaded
             # in to the bios, and have that present as a USB drive.
             DO_QEMU_USB_DRIVE="TRUE"
-            # iso image to boot off of for initial ONIE install
-            ONIE_RECOVERY_ISO="../build/images/onie-recovery-x86_64-${ONIE_MACHINE}.iso"
-            if [ ! -e "$ONIE_RECOVERY_ISO" ];then
-                echo "ERROR! --m-secure-default found no ISO image at [ $ONIE_RECOVERY_ISO ]"
-                echo " Are --machine-name and --machine-revision set correctly?"
-                echo "Exiting."
-                exit 1
-            fi
+            # Require iso image to boot off of for initial ONIE install
+            # Check to see that it is configured after argument parsing.
+            SET_DEFAULT_ONIE_RECOVERY_ISO="TRUE"
             ;;
 
         # Given a Debian linux-image deb, pull the kernel (no initrd exists)
@@ -1072,8 +1156,86 @@ do
 done
 
 #
+# Set variables that depend on user input
+
+
+#
+# Map machines to processor architectures
+case "$ONIE_MACHINE_TARGET" in
+    'kvm_x86_64' )
+        ONIE_ARCH="x86_64"
+        QEMU_ARCH="x86_64"
+        QEMU_PROCESSOR_ARGS=" --enable-kvm -cpu host "
+        ;;
+    'qemu_armv8a' )
+        ONIE_ARCH="arm64"
+        # Name of QEMU to run
+        QEMU_ARCH="aarch64"
+        # Specify ARM virtual machine for QEMU
+        QEMU_PROCESSOR_ARGS=" -machine virt -cpu cortex-a57 \
+        -drive if=pflash,format=raw,readonly,file=${FLASH_FILES_DIR}/flash0.img \
+        -drive if=pflash,format=raw,file=${FLASH_FILES_DIR}/flash1.img "
+
+
+        ;;
+
+    'qemu_armv7a' )
+        ONIE_ARCH="arm64"
+        QEMU_ARCH="arm"
+        QEMU_PROCESSOR_ARGS=" -machine virt -cpu cortex-a15 \
+        -drive if=pflash,format=raw,file=${FLASH_FILES_DIR}/flash0.img \
+        -drive if=pflash,format=raw,file=${FLASH_FILES_DIR}/flash1.img "
+
+        ;;
+
+    * )
+        echo "ERROR! Unrecognized emulation target --machine-name [ $ONIE_MACHINE_TARGET ]. Exiting."
+        exit 1
+        ;;
+
+esac
+
+ONIE_MACHINE_REVISION=${ONIE_MACHINE_REVISION:="-r0"}
+# And the values that get set from the above
+ONIE_MACHINE="${ONIE_MACHINE_TARGET}${ONIE_MACHINE_REVISION}"
+
+# Virtual target hard drive to install on
+HARD_DRIVE=${EMULATION_DIR}/onie-${ONIE_MACHINE_TARGET}-demo.qcow2
+
+# Formatting takes a while, so once that is done, keep a copy
+# of the empty formatted drive so that clean installs
+# can be re-run without having to rebuild.
+CLEAN_HARD_DRIVE=${EMULATION_DIR}/onie-${ONIE_MACHINE_TARGET}-clean.qcow2
+
+# Set values based off of user entries
+ONIE_KERNEL_VERSION=${ONIE_KERNEL_VERSION:="$( basename "$( ls -d "${BUILD_DIR}/${ONIE_MACHINE}"/kernel/linux-* | head -n 1 )" )"}
+if [ "$ONIE_ARCH" = 'x86_64' ];then
+	ONIE_KERNEL=${ONIE_KERNEL:="${BUILD_DIR}/${ONIE_MACHINE}/kernel/${ONIE_KERNEL_VERSION}/arch/${ONIE_ARCH}/boot/bzImage"}
+fi
+if [ "$ONIE_ARCH" = 'arm64' ];then
+	ONIE_KERNEL=${ONIE_KERNEL:="${BUILD_DIR}/images/${ONIE_MACHINE}.vmlinuz"}
+	ONIE_DTB=${ONIE_DTB:="${BUILD_DIR}/images/${ONIE_MACHINE}.dtb"}
+fi
+ONIE_INITRD=${ONIE_INITRD:="${BUILD_DIR}/images/${ONIE_MACHINE}.initrd"}
+ONIE_VMLINUX=${ONIE_VMLINUX:="${BUILD_DIR}/${ONIE_MACHINE}/kernel/${ONIE_KERNEL_VERSION}/vmlinux"}
+
+ONIE_RECOVERY_ISO=${ONIE_RECOVERY_ISO:="${BUILD_DIR}/images/onie-recovery-${ONIE_ARCH}-${ONIE_MACHINE}.iso"}
+ONIE_DEMO_INSTALLER=${ONIE_DEMO_INSTALLER:="${BUILD_DIR}/images/demo-installer-${ONIE_ARCH}-${ONIE_MACHINE}.bin"}
+
+#
 # Sanity checking.
 #
+
+# Was a recovery ISO required, and does it exist?
+if [ "$SET_DEFAULT_ONIE_RECOVERY_ISO" = "TRUE" ];then
+    # This will have been set by default, if not directly supplied.
+    if [ ! -e "$ONIE_RECOVERY_ISO" ];then
+        echo "ERROR! --m-secure-default found no ISO image at [ $ONIE_RECOVERY_ISO ]"
+        echo " Are --machine-name and --machine-revision set correctly?"
+        echo "Exiting."
+        exit 1
+    fi
+fi
 
 # Are qemu utilities installed ?
 if [ "$(which qemu-img)" = "" ];then
@@ -1081,8 +1243,8 @@ if [ "$(which qemu-img)" = "" ];then
     exit 1
 fi
 # Is qemu installed
-if [ "$(which qemu-system-x86_64)" = "" ];then
-    echo "Failed to find qemu-system-x86_64. Try installing qemu-system-x86."
+if [ "$(which qemu-system-${QEMU_ARCH})" = "" ];then
+    echo "Failed to find qemu-system-${QEMU_ARCH}. Try installing qemu-system-x86 or qemu-system-aarch64. Exiting."
     exit 1
 fi
 # Are UEFI BIOS files available for emulation use?
@@ -1091,6 +1253,36 @@ if [ ! -e "$UEFI_BIOS_SOURCE_VARS" ];then
     echo "Try installing ovmf "
     exit 1
 fi
+
+#############################################
+#
+# If running just a kernel configuration
+#
+#############################################
+if [ "$DO_RUN_ONIE_KERNEL" = "TRUE" ];then
+	if [ "$ONIE_ARCH" = 'arm64' ];then
+		fxnRunKernel "$ONIE_KERNEL" "" "" "$ONIE_DTB"
+	else
+		fxnRunKernel "$ONIE_KERNEL" "$ONIE_INITRD" "$ONIE_VMLINUX" 
+	fi
+    exit
+fi
+
+if [ "$DO_RUN_INSTALLER_KERNEL" = "TRUE" ];then
+    fxnRunKernel "$INSTALLER_KERNEL" "$INSTALLER_INITRD"
+    exit
+fi
+
+if [ "$DO_RUN_DEBIAN_KERNEL" = "TRUE" ];then
+	fxnRunKernel "$DEB_KERNEL" "$INSTALLER_INITRD" "$DEB_VMLINUX"
+	exit
+fi
+
+#############################################
+#
+# Full ONIE emulation
+#
+#############################################
 
 # If a virtual CD is being booted from, or made avaliable
 # after a hard drive boot, make sure it exists.
