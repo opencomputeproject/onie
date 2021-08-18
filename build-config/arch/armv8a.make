@@ -1,6 +1,7 @@
 # This file is derived from https://github.com/opencomputeproject/onie/blob/master/build-config/arch/armv7a/armv7a.make
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #  Copyright (C) 2016 Curt Brune <curt@cumulusnetworks.com>
 #
@@ -10,7 +11,8 @@
 #
 
 ARCH        ?= arm64
-TARGET	    ?= aarch64-onie-linux-gnueabi
+#TARGET	    ?= aarch64-onie-linux-gnueabi
+TARGET	    ?= aarch64-onie-linux-gnu
 CROSSPREFIX ?= $(TARGET)-
 CROSSBIN    ?= $(XTOOLS_INSTALL_DIR)/$(TARGET)/bin
 EFI_ARCH    ?= aa64
@@ -25,8 +27,10 @@ KERNEL_IMAGE_FILE	= $(LINUX_BOOTDIR)/Image.gz
 KERNEL_INSTALL_DEPS	+= $(KERNEL_VMLINUZ_INSTALL_STAMP) $(KERNEL_DTB_INSTALL_STAMP)
 
 #Toolchain Options
+# Note glibc used, rather than uClibc
 XTOOLS_LIBC ?= glibc
-XTOOLS_LIBC_VERSION ?= 2.25
+#XTOOLS_LIBC_VERSION ?= 2.34
+XTOOLS_LIBC_VERSION ?= 2.29
 
 STRACE_ENABLE ?= yes
 
@@ -95,6 +99,7 @@ I2CTOOLS_ENABLE ?= yes
 # Include lvm2 tools (needed for parted)
 LVM2_ENABLE = yes
 # Currently armv8a requires a special version of lvm2
+#LVM2_VERSION ?= 2_02_188
 LVM2_VERSION ?= 2_02_155
 
 # Include ethtool by default
