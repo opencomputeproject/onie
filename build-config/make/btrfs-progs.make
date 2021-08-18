@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of btrfs-progs
 #
 
-BTRFSPROGS_VERSION		= v4.3.1
+BTRFSPROGS_VERSION		= v4.9.1
 BTRFSPROGS_TARBALL		= btrfs-progs-$(BTRFSPROGS_VERSION).tar.xz
 BTRFSPROGS_TARBALL_URLS		+= $(ONIE_MIRROR) \
 				   https://www.kernel.org/pub/linux/kernel/people/kdave/btrfs-progs
@@ -80,6 +80,7 @@ $(BTRFSPROGS_CONFIGURE_STAMP): $(E2FSPROGS_BUILD_STAMP) \
 		--host=$(TARGET)				\
 		--disable-documentation				\
 		--disable-backtrace				\
+		--disable-convert				\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"				\
 		$(ONIE_PKG_CONFIG)
