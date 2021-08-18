@@ -2,6 +2,8 @@
 
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+#  Copyright (C) 2021 Shi Lei <shil@centecnetworks.com>
 #  Copyright (C) 2015 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2015 david_yang <david_yang@accton.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
@@ -43,6 +45,32 @@ GRUB_HOST_BIN_UEFI_DIR=${10}
 FIRMWARE_TYPE=${11}
 RECOVERY_ISO_IMAGE=${12}
 
+echo " $0 Arguments: "
+echo " --------------------------------------"
+echo "|  ARCH=$1 "
+echo "|  RECOVERY_KERNEL=$2 "
+echo "|  RECOVERY_INITRD=$3 "
+echo "|  RECOVERY_DIR=$4 "
+echo "|  MACHINE_CONF=$5 "
+echo "|  RECOVERY_CONF_DIR=$6 "
+echo "|  GRUB_TARGET_LIB_I386_DIR=$7 "
+echo "|  GRUB_HOST_BIN_I386_DIR=$8 "
+echo "|  GRUB_TARGET_LIB_UEFI_DIR=$9 "
+echo "|  GRUB_HOST_BIN_UEFI_DIR=${10} "
+echo "|  FIRMWARE_TYPE=${11} "
+echo "|  RECOVERY_ISO_IMAGE=${12} "
+echo "|  UEFI_STARTUP_NSH=${13} "
+echo "|"
+echo " --------------------------------------"
+echo ""
+echo " $0 Variables: "
+echo " --------------------------------------"
+echo "|  UEFI_ENABLE=$UEFI_ENABLE"
+echo "|"
+echo " --------------------------------------"
+echo ""
+
+
 # Sanity check the arguments
 [ -r "$RECOVERY_KERNEL" ] || {
     echo "ERROR: Unable to read recovery kernel image: $RECOVERY_KERNEL"
@@ -64,14 +92,16 @@ RECOVERY_ISO_IMAGE=${12}
     echo "ERROR: Unable to read recovery config directory: $RECOVERY_CONF_DIR"
     exit 1
 }
-[ -r "${GRUB_TARGET_LIB_I386_DIR}/biosdisk.mod" ] || {
-    echo "ERROR: Does not look like valid GRUB i386-pc library directory: $GRUB_TARGET_LIB_I386_DIR"
-    exit 1
-}
-[ -x "${GRUB_HOST_BIN_I386_DIR}/grub-mkimage" ] || {
-    echo "ERROR: Does not look like valid GRUB i386-pc bin directory: $GRUB_HOST_BIN_I386_DIR"
-    exit 1
-}
+if [ "$UEFI_ENABLE" != "yes" ] ; then
+    [ -r "${GRUB_TARGET_LIB_I386_DIR}/biosdisk.mod" ] || {
+        echo "ERROR: Does not look like valid GRUB i386-pc library directory: $GRUB_TARGET_LIB_I386_DIR"
+        exit 1
+    }
+    [ -x "${GRUB_HOST_BIN_I386_DIR}/grub-mkimage" ] || {
+        echo "ERROR: Does not look like valid GRUB i386-pc bin directory: $GRUB_HOST_BIN_I386_DIR"
+        exit 1
+    }
+fi
 if [ "$UEFI_ENABLE" = "yes" ] ; then
     [ -r "${GRUB_TARGET_LIB_UEFI_DIR}/efinet.mod" ] || {
         echo "ERROR: Does not look like valid GRUB ${ARCH}-efi library directory: $GRUB_TARGET_LIB_UEFI_DIR"
@@ -126,13 +156,23 @@ MCOPY=$(which mcopy) || {
     exit 1
 }
 
+# Name efi binaries appropriately
+case "$ARCH" in
+	'arm64' )
+		EFI_INFIX='aa64'
+		;;
+	* )
+		EFI_INFIX='x64'
+		;;	
+esac
+
 RECOVERY_ISO_SYSROOT="$RECOVERY_DIR/iso-sysroot"
 RECOVERY_CORE_IMG="$RECOVERY_DIR/core.img"
 RECOVERY_EFI_DIR="$RECOVERY_DIR/EFI"
 RECOVERY_EFI_BOOT_DIR="$RECOVERY_EFI_DIR/BOOT"
-RECOVERY_EFI_BOOTX86_IMG="$RECOVERY_EFI_BOOT_DIR/bootx64.efi"
-RECOVERY_GRUBX86_IMG="$RECOVERY_DIR/grubx64.efi"
-RECOVERY_EFI_GRUBX86_IMG="$RECOVERY_EFI_BOOT_DIR/grubx64.efi"
+RECOVERY_EFI_BOOTX86_IMG="$RECOVERY_EFI_BOOT_DIR/boot${EFI_INFIX}.efi"
+RECOVERY_GRUBX86_IMG="$RECOVERY_DIR/grub${EFI_INFIX}.efi"
+RECOVERY_EFI_GRUBX86_IMG="$RECOVERY_EFI_BOOT_DIR/grub${EFI_INFIX}.efi"
 RECOVERY_ELTORITO_IMG="$RECOVERY_ISO_SYSROOT/boot/eltorito.img"
 RECOVERY_EMBEDDED_IMG="$RECOVERY_DIR/embedded.img"
 RECOVERY_UEFI_IMG="$RECOVERY_ISO_SYSROOT/boot/efi.img"
@@ -207,7 +247,6 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
 	loadenv
 	loopback
 	linux
-	linuxefi
 	lsefi
 	lsefimmap
 	lsefisystab
@@ -242,6 +281,10 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
 	zfscrypt
 	zfsinfo
 "
+	# linuxefi is an x86 specific
+    if [ ${ARCH} != "arm64" ]; then
+        GRUB_MODULES=$GRUB_MODULES" linuxefi"
+    fi
     # Generate UEFI format GRUB image
     mkdir -p $RECOVERY_EFI_BOOT_DIR
     $GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \
