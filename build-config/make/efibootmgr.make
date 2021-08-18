@@ -9,10 +9,11 @@
 # This is a makefile fragment that defines the build of efibootmgr
 #
 
-EFIBOOTMGR_VERSION		= 15
+EFIBOOTMGR_VERSION		= 16
 EFIBOOTMGR_TARBALL		= efibootmgr-$(EFIBOOTMGR_VERSION).tar.bz2
 EFIBOOTMGR_TARBALL_URLS		+= $(ONIE_MIRROR) \
-				   https://github.com/rhinstaller/efibootmgr/releases/download/$(EFIBOOTMGR_VERSION)
+	https://github.com/rhboot/efibootmgr/releases/download/$(EFIBOOTMGR_VERSION)/$(EFIBOOTMGR_TARBALL)
+
 EFIBOOTMGR_BUILD_DIR		= $(USER_BUILDDIR)/efibootmgr
 EFIBOOTMGR_DIR			= $(EFIBOOTMGR_BUILD_DIR)/efibootmgr-$(EFIBOOTMGR_VERSION)
 
@@ -28,6 +29,10 @@ EFIBOOTMGR_STAMP		= $(EFIBOOTMGR_SOURCE_STAMP) \
 				  $(EFIBOOTMGR_INSTALL_STAMP)
 
 EFIBOOTMGR_PROGRAMS		= efibootmgr efibootdump
+
+ifeq ($(ARCH),arm64)
+  ARM_PKG_CONFIG_PATH=$(DEV_SYSROOT)/usr/lib64/pkgconfig
+endif
 
 PHONY += efibootmgr efibootmgr-download efibootmgr-source efibootmgr-patch \
 	efibootmgr-build efibootmgr-install efibootmgr-clean efibootmgr-download-clean
@@ -73,6 +78,7 @@ $(EFIBOOTMGR_BUILD_STAMP): $(EFIBOOTMGR_PATCH_STAMP) $(EFIBOOTMGR_NEW_FILES) $(E
 		$(MAKE) -C $(EFIBOOTMGR_DIR) CROSS_COMPILE=$(CROSSPREFIX) \
 			CFLAGS="$(ONIE_CFLAGS)" LDFLAGS="$(ONIE_LDFLAGS)" \
 			PKG_CONFIG=pkg-config $(ONIE_PKG_CONFIG) \
+			PKG_CONFIG_PATH=$(ARM_PKG_CONFIG_PATH) \
 			EFIDIR=onie
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	\
 		$(MAKE) -C $(EFIBOOTMGR_DIR) CROSS_COMPILE=$(CROSSPREFIX) \
