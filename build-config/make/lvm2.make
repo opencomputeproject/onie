@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
 #
+#  Copyright (C) 2021 Alex Doyle <adoyle@nivida.com>
 #  Copyright (C) 2014,2017 Curt Brune <curt@cumulusnetworks.com>
 #  Copyright (C) 2016 Pankaj Bansal <pankajbansal3073@gmail.com>
 #
@@ -16,17 +17,21 @@ LVM2_TARBALL_URLS	+= $(ONIE_MIRROR) https://git.fedorahosted.org/cgit/lvm2.git/s
 LVM2_BUILD_DIR		= $(USER_BUILDDIR)/lvm2
 LVM2_DIR		= $(LVM2_BUILD_DIR)/lvm2-$(LVM2_VERSION)
 
+LVM2_SRCPATCHDIR	= $(PATCHDIR)/lvm2
 LVM2_DOWNLOAD_STAMP	= $(DOWNLOADDIR)/lvm2-$(LVM2_VERSION)-download
 LVM2_SOURCE_STAMP	= $(USER_STAMPDIR)/lvm2-source
+LVM2_PATCH_STAMP	= $(USER_STAMPDIR)/lvm2-patch
 LVM2_CONFIGURE_STAMP	= $(USER_STAMPDIR)/lvm2-configure
 LVM2_BUILD_STAMP	= $(USER_STAMPDIR)/lvm2-build
 LVM2_INSTALL_STAMP	= $(STAMPDIR)/lvm2-install
 LVM2_STAMP		= $(LVM2_SOURCE_STAMP) \
+			  $(LVM2_PATCH_STAMP) \
 			  $(LVM2_CONFIGURE_STAMP) \
 			  $(LVM2_BUILD_STAMP) \
 			  $(LVM2_INSTALL_STAMP)
 
 PHONY += lvm2 lvm2-download lvm2-source lvm2-configure \
+	lvm2-patch \
 	lvm2-build lvm2-install lvm2-clean lvm2-download-clean
 
 # List of libraries and programs to install in the final sysroot for
@@ -98,6 +103,13 @@ $(LVM2_SOURCE_STAMP): $(USER_TREE_STAMP) | $(LVM2_DOWNLOAD_STAMP)
 	$(Q) $(SCRIPTDIR)/extract-package $(LVM2_BUILD_DIR) $(DOWNLOADDIR)/$(LVM2_TARBALL)
 	$(Q) touch $@
 
+lvm2-patch: $(LVM2_PATCH_STAMP)
+$(LVM2_PATCH_STAMP): $(LVM2_SOURCE_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "====  Patching lvm2-$(LVM2_VERSION) ===="
+	$(Q) $(SCRIPTDIR)/apply-patch-series $(LVM2_SRCPATCHDIR)/series $(LVM2_DIR)
+	$(Q) touch $@
+
 # The lvm2 configure script is a bit pessimistic about a few things
 # while cross compiling.  Let it know things are fine...
 LVM2_CONFIGURE_OVERRIDES	= \
@@ -110,7 +122,8 @@ LVM2_CONFIGURE_OVERRIDES	= \
 
 
 lvm2-configure: $(LVM2_CONFIGURE_STAMP)
-$(LVM2_CONFIGURE_STAMP): $(LVM2_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(LVM2_CONFIGURE_STAMP): $(LVM2_SOURCE_STAMP) $(LVM2_PATCH_STAMP)\
+	| $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure lvm2-$(LVM2_VERSION) ===="
 	$(Q) cd $(LVM2_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
