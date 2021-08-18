@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of e2fsprogs
 #
 
-E2FSPROGS_VERSION		= 1.42.13
+E2FSPROGS_VERSION		= 1.46.3
 E2FSPROGS_TARBALL		= e2fsprogs-$(E2FSPROGS_VERSION).tar.xz
 E2FSPROGS_TARBALL_URLS		+= $(ONIE_MIRROR) \
 				   https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v$(E2FSPROGS_VERSION)
@@ -31,7 +31,7 @@ E2FSPROGS_STAMP			= $(E2FSPROGS_SOURCE_STAMP) \
 
 PHONY += e2fsprogs e2fsprogs-download e2fsprogs-source e2fsprogs-patch \
 	 e2fsprogs-configure e2fsprogs-build e2fsprogs-install e2fsprogs-clean \
-	 e2fsprogs-download-clean
+	 e2fsprogs-download-clean e2fsprogs-configure-help
 
 E2FSPROGS_LIB_DIRS	= et e2p ext2fs
 E2FSPROGS_LIBS		= \
@@ -65,6 +65,15 @@ $(E2FSPROGS_PATCH_STAMP): $(E2FSPROGS_SRCPATCHDIR)/* $(E2FSPROGS_SOURCE_STAMP)
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(E2FSPROGS_SRCPATCHDIR)/series $(E2FSPROGS_DIR)
 	$(Q) touch $@
 
+e2fsprogs-configure-help: $(ZLIB_BUILD_STAMP) $(LZO_BUILD_STAMP) \
+			      $(UTILLINUX_BUILD_STAMP) $(E2FSPROGS_PATCH_STAMP) | \
+			      $(DEV_SYSROOT_INIT_STAMP)
+	$(Q) echo "====  Configure help for e2fsprogs-$(E2FSPROGS_VERSION) ===="
+	$(Q) cd $(E2FSPROGS_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		$(E2FSPROGS_DIR)/configure --help=recursive
+
+# Note that libblkid comes out of the util-linux build, so it is
+# disabled here.
 e2fsprogs-configure: $(E2FSPROGS_CONFIGURE_STAMP)
 $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_BUILD_STAMP) $(LZO_BUILD_STAMP) \
 			      $(UTILLINUX_BUILD_STAMP) $(E2FSPROGS_PATCH_STAMP) | \
@@ -80,7 +89,7 @@ $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_BUILD_STAMP) $(LZO_BUILD_STAMP) \
 		--disable-defrag				\
 		--enable-symlink-build				\
 		--disable-libuuid				\
-		--disable-libblkid				\
+        --disable-libblkid \
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"				\
 		LDFLAGS="$(ONIE_LDFLAGS)"			\
