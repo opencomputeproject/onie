@@ -12,12 +12,18 @@ For anyone new to emulation, the number of arguments and
 options to run emulation using QEMU can be overwhelming,
 so this script is provided as a starting point.
 
+# Supported architectures
+
+kvm_x86_64  - a 64 bit Intel target.  
+qemu_armv8a - a 64 bit ARM target ( see below ).
+
 # Getting Started.
 
 
-# Build the KVM virtual machine
+## Build the kvm_x86_64 virtual machine with all security options.
 Since the KVM has Secure Boot enabled by default, encryption keys and a signed shim efi binary are now required, even if Secure Boot is not active at run time.
-## Steps
+
+### Steps:
 ### 1 Enter the build directory  
     `cd onie/build-config`  
 ### 2 Generate cryptographic signing keys in ./encryption  
@@ -45,51 +51,80 @@ Once the compilation has completed, `onie/build/images` will have:
 |                                            |                                          |
 
 
-
 Now the emulation tools have something to work with.
 
+## Build the qemu_armv8a virutal machine
 
-# Commands
+Currently the qemu_armv8a target does not support Secure Boot, but can also be run using the `onie-vm.sh` script below.  
+
+### Steps:  
+### 1 Enter the build directory  
+    `cd onie/build-config`  
+### 2 Build ONIE, the boot iso, and the Demo OS  
+    `make MACHINE=qemu_armv8a -j4 all demo recovery-iso`  
+    ...and do something else while it builds.  `  
+
+
+Once the compilation has completed, `onie/build/images` will have:  
+
+
+
+|File                                        |Purpose                                   |
+|--------------------------------------------|------------------------------------------|
+|demo-diag-installer-arm64-qemu_armv8a-r0.bin|diagnostic OS sample for ARM64            |
+|demo-installer-arm64-qemu_armv8a-r0.bin     |demonstration OS for ARM64                |
+|qemu_armv8a-r0.initrd                       |initial ramdisk                           |
+|qemu_armv8a-r0.vmlinuz                      |kernel                                    |
+|qemu_armv8a-r0.dtb                          |ARM Device Tree Blob binary               |
+|onie-recovery-arm64-qemu_armv8a-r0.iso      |Recovery boot CD (used for ONIE install)  |
+|onie-updater-arm64-qemu_armv8a-r0.is        |Binary to update ONIE                     |
+|                                            |                                          |
+
+# Running a virtual image in emulation  
+The onie/emulation directory has the `onie-vm.sh` script which generates a valid QEMU configuration to create virtual hardware for ONIE to install on to, and run from. As these configurations can be...complex the `onie-vm.sh` script both simplifies the process of getting images to run, and provides examples of various working configurations. These may (or may not) include UEFI BIOS, an additional USB drive for storage, booting from an iso image, etc.  
+There is also some experimental support for running kernels without a full filesystem (very useful for debug), but at this stage it is more of a suggestion of how such things work than a polished implementation.  
+
+## Commands
 The `onie-vm.sh` script has the following commands:  
 
-## Running:
+### Running:
     run                     - Run from boot device selected with runtime options.  
     rk-onie                 - Run just the initrd/kernel from the ONIE ../build directory.  
     rk-installer            - Run a kernel/initrd extracted from an ONIE installer (see below)  
     rk-deb-kernel-debug     - Use deb extracted kernel and installer initrd with rk-installer. (see below)  
 
-### Informational commands:
+#### Informational commands:
     info-runables           - Print kernels and filesystems available for use.
     info-run-options        - Print what could be run, given what was found.
 
-### Utility commands:
+#### Utility commands:
     update-m-usb <dir>      - Create a 'USB drive' qcow2 filesystem for QEMU use.
                               if <dir> is not passed, will default to
                               adding files from [  onie/emulation/emulation-files/usb/usb-data ]
     clean                   - Delete generated directories.
 
-### Unpacking other kernels/initrds:
+#### Unpacking other kernels/initrds:
     extract-linux-deb <v><b>- Extract passed vmlinux,bzImage debs to ../unpack-linux-deb
     extract-installer <nos> - Extract kernel/initrd from NOS image installer.
 
-# Options
+### Options
 
-## Target selection options:
-    --machine-name  <name> - Name of build target machine - ex mlnx_x86
+#### Target selection options:
+    --machine-name  <name> - Name of build target machine - ex mlnx_x86, qemu_armv8a, etc.
     --machine-revision <r> - The -rX version at the end of the --machine-name
 
-## Runtime options:
+#### Runtime options:
     --m-onie-iso <path>    - Boot off of recovery ISO at <path> and install onto qcow2
     --m-embed-onie         - Boot to embed onie. Requires --m-onie-iso <path>
     --m-boot-cd            - Boot off of rescue CD to start.
     --m-secure             - Set --m-usb-drive and --m-bios-uefi for secure boot.
 
-## BIOS configuration:     Default: Legacy BIOS.
+#### BIOS configuration:     Default: Legacy BIOS.
     --m-bios-uefi          - Use UEFI rather than legacy bios.
     --m-bios-vars-file <f> - Use a copy of a previously saved OVMF_VARS file at: <file>
     --m-bios-clean         - Delete OVMF_VARS.fd and replace with empty copy to erase all set UEFI vars.
 
-## Emulation instance configuration:
+#### Emulation instance configuration:
     --m-telnet-port<num>   - Set telnet port number.          Default: [ 9300 ]
     --m-vnc-port   <num>   - Set vnc port number.             Default: [ 128 ]
     --m-ssh-port   <num>   - Set local ssh port forward.      Default: [ 4022 ]
@@ -97,13 +132,13 @@ The `onie-vm.sh` script has the following commands:
     --m-network-mac <xx>   - Two hex digits for a unique MAC. Default: [ 1E ]
     --m-gdb                - Enable gdb through QEMU.
 
-## Storage:
+#### Storage:
     --m-hd-clean           - Replace target 'hard drive' with an empty one  and run install.
     --m-hd-file <file>     - Use a previously configured drive file.
     --m-nvme-drive         - Have QEMU emulate storage as NVME drives.
     --m-usb-drive          - Make virtual USB drive available at KVM runtime.  
 
-## Help
+#### Help
     --help                  - This output.
     --help-examples         - Examples of use.
 
@@ -118,9 +153,15 @@ like `--m-usb-drive` or `--m-bios-uefi` have been used.
 ## ./emulation-files:  
     onie-kvm_x86_64-clean.qcow2   <- Pre-formatted target file system  
     onie-kvm_x86_64-demo.qcow2	  <- Target file system used by QEMU  
-## ./emulation-files/uefi-bios:  
+
+## ./emulation-files/uefi-bios (x86_64 files):  
     OVMF_CODE.fd    <- UEFI BIOS Firmware  
     OVMF_VARS.fd    <- UEFI BIOS variable storage.  
+
+## ./emulation-files/flash-files (ARM64 files):  
+    flash0.img      <- UEFI BIOS Firmware  
+    flash1.img      <- UEFI BIOS variable storage.  
+
 ## ./emulation-files/usb:  
      usb-drive.qcow2   <- Virtual USB drive fileysystem  
      usb-drive.raw	   <- Intermediate stage of virtual drive  
@@ -139,7 +180,7 @@ UEFI BIOS as an emulation option
   
   
 # Examples
-## Ways to run just a kernel
+## Ways to run just a kernel (experimental, but useful for reference).  
 
 ### Kernel and intird from the ONIE build
     Cmd: onie-vm.sh rk-onie
@@ -188,9 +229,13 @@ UEFI BIOS as an emulation option
 ### Run new secure boot while another QEMU is running:
     Cmd: onie-vm.sh --m-network-mac 21 --m-telnet-port 9400 --m-vnc-port 127 --m-ssh-port 4122 --m-embed-onie --m-secure  --m-hd-clean  --m-bios-clean
 
+### Install an ARM64 image
+    Cmd: onie-vm.sh run --machine-name qemu_armv8a --m-embed-onie --m-bios-uefi 
 
-# Quick setup:
- To embed ONIE on a virtual hard drive file, type:  
+
+# Quick setup:  
+## X86_64 ONIE  
+ To embed x86_64 ONIE on a virtual hard drive file, type:  
     `./onie-vm.sh run --m-usb-drive --m-bios-uefi --m-secure --m-hd-clean --m-bios-clean --m-onie-iso ../build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso`  
 
  In a separate window, type:  
@@ -199,7 +244,15 @@ UEFI BIOS as an emulation option
  To run after embedding ONIE, type:  
     `./onie-vm.sh run --m-usb-drive --m-bios-uefi --m-secure`
 
+## ARM64 ONIE  
+ To embed x86_64 ONIE on a virtual hard drive file, type:  
+    `./onie-vm.sh run --machine-name qemu_armv8a --m-bios-uefi --m-hd-clean --m-bios-clean --m-embed-onie`  
 
+ In a separate window, type:  
+    `telnet localhost 9300`
+
+ To run after embedding ONIE, type:  
+    `./onie-vm.sh run --m-usb-drive --m-bios-uefi`
 
 
 # More Examples:
