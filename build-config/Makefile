@@ -575,6 +575,13 @@ machine-prefix:
 	$(Q) echo $(MACHINE_PREFIX)
 
 # Install required build packages for a x86_64 debian based build host
+# Note:  depending on your release of Debian, and the ONIE release
+# you need to build for, this may not be the best solution.
+# The ONIE FAQ: https://opencomputeproject.github.io/onie/faq/index.html
+# has information on how to use Docker containers to (re-)create a build
+# environment.
+# The onie/build-config/scripts/onie-build-targets.json file lists
+#  platforms and known working build environments.
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
 				  gperf device-tree-compiler python-all-dev xorriso \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
@@ -589,6 +596,7 @@ PHONY += debian-prepare-build-host
 debian-prepare-build-host:
 	$(Q) sudo apt-get update
 	$(Q) sudo apt-get install -y $(DEBIAN_BUILD_HOST_PACKAGES)
+	$(Q) echo "=== See the online ONIE documentation for building with Docker images. ==="
 
 PHONY += ldd
 
