@@ -27,6 +27,8 @@
 # build process end up in ../build.  The dependencies follow a source,
 # patch, build, install sequence and use stamps to track targets.
 #
+# To see all make targets, type: make help-all
+#
 # When building multiple machines, common components are only built
 # once per toolchain.
 #
@@ -603,5 +605,18 @@ ldd:
 	$(Q) echo "Running cross-ldd on file: $(LDD_FILE)"
 	$(Q) echo "Using SYSROOT directory  : $(SYSROOT)"
 	$(Q) PATH='$(CROSSBIN):$(PATH)' $(CROSSBIN)/$(CROSSPREFIX)ldd --root $(SYSROOTDIR) $(LDD_FILE)
+
+PHONY += help-all
+
+# Print every possible make target, now that PHONY should be fully updated.
+help-all:
+	$(Q) sed -n -e "/^#>/,/^#</{s/^#[ <>]*//;s/\.PHONY *://;p}" $(THIS_MAKEFILE)
+	$(Q) echo ""
+	$(Q) echo "TARGETS"
+	$(Q) for I in $(sort $(PHONY)); do echo "    $$I"; done
+	$(Q) echo ""
+	$(Q) echo "Typical usage is to checkout a tree and type:"
+	$(Q) echo "  make MACHINEROOT=../machine/<vendor> MACHINE=<platform> all demo"
+	$(Q) echo ""
 
 .PHONY: $(PHONY)
