@@ -592,6 +592,18 @@ debian-prepare-build-host:
 
 PHONY += ldd
 
+# Store already downloaded packges on the build system.
+# wget –recursive –cut-dirs=2 –no-host-directories –no-parent –reject “index.html” http://mirror.opencompute.org/onie/
+PHONY += system-download-cache-update
+system-download-cache-update:
+	$(Q) echo "=== Adding packages from ../build/download to /var/cache/onie/download. ==="
+	$(Q) sudo mkdir -p /var/cache/onie/download 
+	$(Q) cp -vr ../build/download/* /var/cache/onie/download
+# Trim download completion files.
+	$(Q) rm -f /var/cache/onie/download/*-download
+	$(Q) echo "=== Use ONIE_USE_SYSTEM_DOWNLOAD_CACHE=TRUE to access during build. ==="
+
+
 # Run the cross ldd for the target platform
 ifeq ($(word 1, $(MAKECMDGOALS)),ldd)
   ifeq ($(LDD_TARGET),)
