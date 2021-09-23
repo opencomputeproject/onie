@@ -48,7 +48,7 @@ EMULATION_DIR="${ONIE_TOP_DIR}/emulation-files"
 # Defaults based on machine type, or is user specified.
 ONIE_RECOVERY_ISO=""
 
-FLASH_FILES_DIR="${EMULATION_DIR}/flash-files"
+
 #
 # Files in this directory get added to a virtual USB drive
 #
@@ -60,37 +60,40 @@ USB_TRANSFER_DIR="${USB_DIR}/usb-data"
 # Path to the USB image We'll stuff the whole world in here
 USB_IMG="${USB_DIR}/usb-drive"
 
+# Virtual USB Drive size in MB
 USB_SIZE="256M"
-# Supersize it for installer debug
-#USB_SIZE="2G"
 
 # Local mount point in host for loop back mount of USB filesystem.
 # ( will require root privileges )
 USB_MNT_DIR="${USB_DIR}/usb-mount"
 
-
-# Size in GB of virtual drive
-#HARD_DRIVE_SIZE=2G
+# Virtual Hard Drive size in GB
 HARD_DRIVE_SIZE=1G
-
 
 #
 # UEFI BIOS emulation files
 #
 
+# Any downloaded BIOS files can be cached here.
+UEFI_DOWNLOADS_DIR="${EMULATION_DIR}/uefi-downloads"
+
 # Copy from ovmf package installed on host system (Debian Linux example)
 UEFI_BIOS_SOURCE_VARS=/usr/share/OVMF/OVMF_VARS.fd
 # Put UEFI BIOS files here
 UEFI_BIOS_DIR="${EMULATION_DIR}/uefi-bios"
+
+UEFI_X86_BIOS_DIR="${UEFI_BIOS_DIR}/x86"
+
 # File for storing set UEFI variables.
 # Can be modified by user.
-UEFI_BIOS_VARS="${UEFI_BIOS_DIR}/OVMF_VARS.fd"
+UEFI_BIOS_VARS="${UEFI_X86_BIOS_DIR}/OVMF_VARS.fd"
 
 
 UEFI_BIOS_SOURCE_CODE=/usr/share/OVMF/OVMF_CODE.fd
 # Source code file for UEFI BIOS
-UEFI_BIOS_CODE="${UEFI_BIOS_DIR}/OVMF_CODE.fd"
+UEFI_BIOS_CODE="${UEFI_X86_BIOS_DIR}/OVMF_CODE.fd"
 
+ARM_FLASH_FILES_DIR="${UEFI_BIOS_DIR}/arm-flash-files"
 #
 # Include additional functions for supporting emulation.
 # Broken out for code clarity.
@@ -222,7 +225,8 @@ function fxnHelp()
 # Show, don't tell
 function fxnHelpExamples()
 {
-    local thisScript="$( basename "$0" )"
+    local thisScript
+    thisScript="$( basename "$0" )"	
     echo "
  Help Examples
 -----------------------------
@@ -340,9 +344,9 @@ function fxnMakeClean()
     fi
 
     # Used in ARM emulation
-    if [ -e "${FLASH_FILES_DIR}" ];then
-        echo "  Deleting      ${FLASH_FILES_DIR}"
-        rm -rf "$FLASH_FILES_DIR"
+    if [ -e "${ARM_FLASH_FILES_DIR}" ];then
+        echo "  Deleting      ${ARM_FLASH_FILES_DIR}"
+        rm -rf "$ARM_FLASH_FILES_DIR"
     fi
 
     if [ -e "${HARD_DRIVE}" ];then
@@ -400,7 +404,6 @@ function fxnRunEmulation()
     boot="order=cd,once=d"
     cdrom="-cdrom $CDROM"
 
-    kvm_log=$(mktemp)
 
     echo "#########################################"
     echo "#                                       #"
@@ -567,14 +570,14 @@ function fxnRunONIEKernel()
     echo "#                                                       #"
     echo "#########################################################"
     #
-    RUN_COMMAND="qemu-system-${QEMU_ARCH} \
-    -kernel $kernelPath \
-    -nographic \
-    -append 'console=ttyS0' -append 'debug' \
-    -initrd $initrdPath \
-    -m 512 \
-    --enable-kvm \
-    -cpu host \
+    RUN_COMMAND="qemu-system-${QEMU_ARCH} 
+    -kernel $kernelPath 
+    -nographic 
+    -append 'console=ttyS0' -append 'debug' 
+    -initrd $initrdPath 
+    -m 512 
+    --enable-kvm 
+    -cpu host 
     -s -S "
 
     echo "# Running: $RUN_COMMAND " | sed -e 's/ -/\n -/g'
@@ -582,9 +585,9 @@ function fxnRunONIEKernel()
     echo "# Exit qemu with:  Ctrl-a, c quit"
     echo ""
 
-    GDB_COMMAND="gdb -ex 'file $ONIE_VMLINUX' \
-           -ex 'add-auto-load-safe-path ../build/${ONIE_MACHINE}/kernel/linux-4.9.95/scripts/gdb/vmlinux-gdb.py' \
-           -ex 'target remote localhost:1234' \
+    GDB_COMMAND="gdb -ex 'file $ONIE_VMLINUX' 
+           -ex 'add-auto-load-safe-path ../build/${ONIE_MACHINE}/kernel/linux-4.9.95/scripts/gdb/vmlinux-gdb.py' 
+           -ex 'target remote localhost:1234' 
            -ex 'break start_kernel'"
     # Create header
     fxnMakeGDBScript "$GDB_COMMAND"
@@ -669,67 +672,79 @@ function fxnPrintSettings()
 
 
 # Put fresh UEFI bios files in the install area
+# If $1 = clean, then reset files
 function fxnSetupUEFIBIOS()
 {
-
-    if [ ! -d "$UEFI_BIOS_DIR" ];then
-        fxnEC mkdir -p "$UEFI_BIOS_DIR" || exit 1
-    fi
+	local doClean="$1"
 
     if [ "$ONIE_ARCH" = "x86_64" ];then
-        # Is there a backup UEFI variable storage file
-        # that might have been pre-configured to
-        # have keys?
-        echo "   Copying $UEFI_BIOS_SOURCE_VARS to $UEFI_BIOS_VARS "
-        cp "$UEFI_BIOS_SOURCE_VARS" "$UEFI_BIOS_VARS" || exit 1
+		if [ "$doClean" = "clean" ];then
+			echo "Deleting $UEFI_X86_BIOS_DIR contents."
+			rm -rf "${UEFI_X86_BIOS_DIR}"
+		fi
+		
+		if [ ! -d "$UEFI_X86_BIOS_DIR" ];then
+			fxnEC mkdir -p "$UEFI_X86_BIOS_DIR" || exit 1
+		fi
+		
+		if [  ! -e "$UEFI_BIOS_VARS" ];then
+			# Is there a backup UEFI variable storage file
+			# that might have been pre-configured to
+			# have keys?
+			echo "   Copying $UEFI_BIOS_SOURCE_VARS to $UEFI_BIOS_VARS "
+			cp "$UEFI_BIOS_SOURCE_VARS" "$UEFI_BIOS_VARS" || exit 1
 
-        # Copy over the runtime code for the BIOS
-        echo "   Copying $UEFI_BIOS_SOURCE_CODE to $UEFI_BIOS_CODE "
-        cp "$UEFI_BIOS_SOURCE_CODE" "$UEFI_BIOS_CODE" || exit 1
+			# Copy over the runtime code for the BIOS
+			echo "   Copying $UEFI_BIOS_SOURCE_CODE to $UEFI_BIOS_CODE "
+			cp "$UEFI_BIOS_SOURCE_CODE" "$UEFI_BIOS_CODE" || exit 1
+		fi
     fi
     #
     # UEFI BIOS for arm
+
     if [ "$ONIE_ARCH" = "arm64" ];then
-        armUEFIBIOS="QEMU_EFI.fd"
 
+		if [ "$doClean" = "clean" ];then
+			echo "Deleting $ARM_FLASH_FILES_DIR contents"
+			rm -rf "${ARM_FLASH_FILES_DIR}"
+		fi
 
-        if [ ! -e "${UEFI_BIOS_DIR}/${armUEFIBIOS}" ];then
-            UEFI_BIOS_SOURCE='linaro-uefi'
+        if [ ! -e "${ARM_FLASH_FILES_DIR}" ];then
+			echo "Creating ${ARM_FLASH_FILES_DIR}"
+			mkdir -p "${ARM_FLASH_FILES_DIR}"
+		fi
+
+		# Currently this is the only known working ARM BIOS
+        UEFI_BIOS_SOURCE='linaro-uefi'
+		ARM_UEFI_BIOS_FILE="linaro-16.02-QEMU_EFI.fd"
+		
+		# Has ARM source BIOS been downloaded?
+		if [ ! -e "${UEFI_DOWNLOADS_DIR}/${ARM_UEFI_BIOS_FILE}" ];then			
             echo "   Getting UEFI BIOS for ARM from: [ $UEFI_BIOS_SOURCE ]"
-
             case "$UEFI_BIOS_SOURCE" in
                 'linaro-uefi' )
                     # This is a known working version
-                    #wget http://releases.linaro.org/components/kernel/uefi-linaro/16.02/release/qemu64/"${armUEFIBIOS}"
-					wget http://mirror.opencompute.org/onie/onie-emulation-bios/armv8a/linaro-16.02-QEMU_EFI.fd
-                    mv linaro-16.02-QEMU_EFI.fd "${UEFI_BIOS_DIR}/${armUEFIBIOS}"
+                    #wget http://releases.linaro.org/components/kernel/uefi-linaro/16.02/release/qemu64/linaro-16.02-QEMU_EFI.fd
+					wget --directory-prefix="$UEFI_DOWNLOADS_DIR" http://mirror.opencompute.org/onie/onie-emulation-bios/armv8a/"$ARM_UEFI_BIOS_FILE"
                     ;;
-
-                'linaro-tianocore' )
-                    # This version hangs when ONIE is coming up in both rescue and embed
-                    wget http://snapshots.linaro.org/components/kernel/leg-virt-tianocore-edk2-upstream/4319/QEMU-AARCH64/RELEASE_CLANG38/"${armUEFIBIOS}"
-                    cp "${armUEFIBIOS}" "${UEFI_BIOS_DIR}/${armUEFIBIOS}"					
-                    ;;
-
-                'host-qemu-efi' )
-                    # This version hangs when ONIE is coming up in both rescue and embed
-                    if [ -e /usr/share/qemu-efi/QEMU_EFI.fd ];then
-                        fxnEC cp /usr/share/qemu-efi/QEMU_EFI.fd  "${UEFI_BIOS_DIR}/${armUEFIBIOS}"  || exit 1
-                    else
-                        echo "Install qemu-efi package to get ARM UEFI BIOS. Improvising for now..."
-                    fi
             esac
+		fi
 
-            echo "   Creating flash0 in $FLASH_FILES_DIR"
+		# Flash 0 and 1 have the same roles of BIOS code and BIOS storage that
+		# OVMF_CODE.fd and OVMF_VARS.fd do for x86. flash0 and 1 seem to be a
+		# naming convention, so the names have been left that way.
+		if [ ! -e "${ARM_FLASH_FILES_DIR}/flash0.img" ];then
+            echo "   Creating flash0 in $ARM_FLASH_FILES_DIR"
             # Format the img file that will hold ARM UEFI BIOS data
             # They have to be exactly 64M in size.
-            dd if=/dev/zero of="${FLASH_FILES_DIR}/flash0.img" bs=1M count=64
+            dd if=/dev/zero of="${ARM_FLASH_FILES_DIR}/flash0.img" bs=1M count=64
             # Add the UEFI BIOS data from our reference file
-            dd if="${UEFI_BIOS_DIR}/${armUEFIBIOS}" of="${FLASH_FILES_DIR}/flash0.img" conv=notrunc
-            echo "   Creating flash1 in $FLASH_FILES_DIR"
+            dd if="${UEFI_DOWNLOADS_DIR}/${ARM_UEFI_BIOS_FILE}" of="${ARM_FLASH_FILES_DIR}/flash0.img" conv=notrunc
+            echo "   Creating flash1 in $ARM_FLASH_FILES_DIR"
             # Format the image that will hold BIOS configuration
-            dd if=/dev/zero of="${FLASH_FILES_DIR}/flash1.img" bs=1M count=64
-        fi
+            dd if=/dev/zero of="${ARM_FLASH_FILES_DIR}/flash1.img" bs=1M count=64
+		fi
+ 
     fi
 
 }
@@ -742,13 +757,15 @@ function fxnSetUpEmulationDir()
 
         echo "Creating $EMULATION_DIR to hold runtime files."
         mkdir -p "$EMULATION_DIR"
-        echo "Creating $FLASH_FILES_DIR to hold flash for ARM emulation."
-        mkdir -p "$FLASH_FILES_DIR"
+        echo "Creating $ARM_FLASH_FILES_DIR to hold flash for ARM emulation."
+        mkdir -p "$ARM_FLASH_FILES_DIR"
         echo "Creating $USB_TRANSFER_DIR to hold files for the virtual USB drive."
         mkdir -p "$USB_TRANSFER_DIR"
         echo "Files in $USB_TRANSFER_DIR are added to the virtual USB drive" > "${USB_TRANSFER_DIR}/README.txt"
         echo "Creating $UEFI_BIOS_DIR to hold UEFI BIOS files."
         mkdir -p "$UEFI_BIOS_DIR"
+        mkdir -p "$UEFI_DOWNLOADS_DIR"
+		
     fi
 
 }
@@ -804,11 +821,9 @@ function fxnSetupEnvironment()
         fxnCreateHardDrive
     fi
 
-    # are bios files present
-    if [ ! -e "$UEFI_BIOS_VARS" ];then
-        fxnSetupUEFIBIOS
-    fi
-
+    # Get BIOS files if needed.
+	fxnSetupUEFIBIOS
+	
     # does a usb drive need to be set up
     if [ ! -e "${USB_IMG}.qcow2" ];then
         fxnUSBStoreFiles
@@ -886,21 +901,9 @@ do
 
         # Wipe out the modified qcow2 and restore from backup.
         --m-hd-clean )
-            echo "Running a clean install:"
-            if [ -e "${HARD_DRIVE}" ];then
-                echo "  Deleting      $HARD_DRIVE"
-                rm "$HARD_DRIVE"
-            fi
-            if [ -e "$CLEAN_HARD_DRIVE" ];then
-                # Copying the backup is faster than formatting a new one.
-                echo "   Creating empty hard drive from formatted backup $CLEAN_HARD_DRIVE."
-                echo -n  "   "
-                ls -lh "$CLEAN_HARD_DRIVE"
-                rsync --progress  "$CLEAN_HARD_DRIVE" "$HARD_DRIVE"
-            fi
             DO_BOOT_FROM_CD="TRUE"
-
             DO_RUN_KVM="TRUE"
+			DO_HD_CLEAN="TRUE"
             ;;
 
 
@@ -974,12 +977,7 @@ do
         # Delete the OVMF_VARS.fd file and replace with a clean copy
         # to wipe out any variables that have been set.
         --m-bios-clean )
-            if [ -e "${UEFI_BIOS_DIR}/OVMF_VARS.fd" ];then
-                echo "  Deleting  UEFI BIOS file OVMF_VARS.fd"
-                rm "$UEFI_BIOS_VARS"
-                # Put fresh UEFI BIOS files in
-                fxnSetupUEFIBIOS
-            fi
+			DO_BIOS_CLEAN="TRUE"
             ;;
 
 
@@ -1173,18 +1171,16 @@ case "$ONIE_MACHINE_TARGET" in
         QEMU_ARCH="aarch64"
         # Specify ARM virtual machine for QEMU
         QEMU_PROCESSOR_ARGS=" -machine virt -cpu cortex-a57 \
-        -drive if=pflash,format=raw,readonly,file=${FLASH_FILES_DIR}/flash0.img \
-        -drive if=pflash,format=raw,file=${FLASH_FILES_DIR}/flash1.img "
-
-
+        -drive if=pflash,format=raw,readonly,file=${ARM_FLASH_FILES_DIR}/flash0.img \
+        -drive if=pflash,format=raw,file=${ARM_FLASH_FILES_DIR}/flash1.img "
         ;;
 
     'qemu_armv7a' )
         ONIE_ARCH="arm64"
         QEMU_ARCH="arm"
         QEMU_PROCESSOR_ARGS=" -machine virt -cpu cortex-a15 \
-        -drive if=pflash,format=raw,file=${FLASH_FILES_DIR}/flash0.img \
-        -drive if=pflash,format=raw,file=${FLASH_FILES_DIR}/flash1.img "
+        -drive if=pflash,format=raw,file=${ARM_FLASH_FILES_DIR}/flash0.img \
+        -drive if=pflash,format=raw,file=${ARM_FLASH_FILES_DIR}/flash1.img "
 
         ;;
 
@@ -1237,13 +1233,13 @@ if [ "$SET_DEFAULT_ONIE_RECOVERY_ISO" = "TRUE" ];then
     fi
 fi
 
-# Are qemu utilities installed ?
-if [ "$(which qemu-img)" = "" ];then
+# Are qemu utilities installed?
+if [ "$(command -v qemu-img)" = "" ];then
     echo "Failed to find qemu-img. Try installing qemu-utils."
     exit 1
 fi
-# Is qemu installed
-if [ "$(which qemu-system-${QEMU_ARCH})" = "" ];then
+# Is qemu installed?
+if [ "$(command -v qemu-system-${QEMU_ARCH})" = "" ];then
     echo "Failed to find qemu-system-${QEMU_ARCH}. Try installing qemu-system-x86 or qemu-system-aarch64. Exiting."
     exit 1
 fi
@@ -1284,6 +1280,21 @@ fi
 #
 #############################################
 
+if [ "$DO_HD_CLEAN" = "TRUE" ];then
+    echo "Running a clean install:"
+    if [ -e "${HARD_DRIVE}" ];then
+        echo "  Deleting      $HARD_DRIVE"
+        rm "$HARD_DRIVE"
+    fi
+    if [ -e "$CLEAN_HARD_DRIVE" ];then
+        # Copying the backup is faster than formatting a new one.
+        echo "   Creating empty hard drive from formatted backup $CLEAN_HARD_DRIVE."
+        echo -n  "   "
+        ls -lh "$CLEAN_HARD_DRIVE"
+        rsync --progress  "$CLEAN_HARD_DRIVE" "$HARD_DRIVE"
+    fi
+fi
+
 # If a virtual CD is being booted from, or made avaliable
 # after a hard drive boot, make sure it exists.
 #
@@ -1312,6 +1323,13 @@ if [ "$DO_RUN_KVM" = "TRUE" ];then
     # get emulation directory set up
     fxnSetupEnvironment
 
+	# If resetting BIOS, do it after ONIE_ARCH has been set
+	# to delete and restore the appropriate ARM/x86 BIOS files
+	if [ "$DO_BIOS_CLEAN" = "TRUE" ];then
+		# Put fresh UEFI BIOS files in
+		fxnSetupUEFIBIOS 'clean'
+	fi
+	
     # Running with a pre configured OVMF file?
     # Bring it in here after any UEFI cleans ran above
     # Handy to test different pre-configured BIOS settings

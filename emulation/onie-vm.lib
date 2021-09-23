@@ -1,3 +1,4 @@
+#!/bin/bash
 #-------------------------------------------------------------------------------
 #
 #  Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
@@ -82,11 +83,11 @@ function fxnPopulateUSBTransfer()
         fxnWriteReadmeUEFI
     fi
     fxnPS "Copying ${UEFI_INSTRUCTIONS_TXT} into ${USB_TRANSFER_DIR}/"
-    sudo cp ./${UEFI_INSTRUCTIONS_TXT} ${USB_TRANSFER_DIR}/
+    sudo cp ./"${UEFI_INSTRUCTIONS_TXT}" "${USB_TRANSFER_DIR}"/
 
     if [ -e ../encryption/keys ];then
         fxnPS "Copying ../encryption/keys into ${USB_TRANSFER_DIR}/"
-        cp -r ../encryption/keys ${USB_TRANSFER_DIR}/
+        cp -r ../encryption/keys "${USB_TRANSFER_DIR}"/
     fi
 
 }
@@ -168,7 +169,7 @@ function fxnUSBStoreFiles()
     echo " Accessing $USB_IMG raw filesystem via $loop"
     sudo mkdosfs -n "ONIE USB-DRIVE " "$loop" || exit 1
     if [ ! -e "$USB_MNT_DIR" ];then
-        mkdir -p "$USB_MNT_DIR" || exit 1
+        fxnEC mkdir -p "$USB_MNT_DIR" || exit 1
     fi
     sudo mount "$loop" "$USB_MNT_DIR" || exit 1
 
@@ -214,7 +215,7 @@ function fxnUSBStoreFiles()
 
 
     fxnPS "Secure: converting $USB_IMG format from .raw to .qcow2 in $EMULATION_DIR"
-    qemu-img convert -f raw -O qcow2 "${USB_IMG}.raw" "${USB_IMG}.qcow2" || exit 1
+    fxnEC qemu-img convert -f raw -O qcow2 "${USB_IMG}.raw" "${USB_IMG}.qcow2" || exit 1
     echo ""
     fxnPS "Secure: Done creating virtual usb drive using $USB_TRANSFER_DIR"
     ls -l "${USB_DIR}"/*.qcow2
@@ -343,11 +344,11 @@ function fxnExtractInstaller()
     ls -l "$UNPACK_INSTALLER_DIR"
 
     echo "Checking initrd file type:"
-    theInitrd="$( find ${UNPACK_INSTALLER_DIR} -iname "*initrd" )"
+    theInitrd="$( find "${UNPACK_INSTALLER_DIR}" -iname "*initrd" )"
     file "$theInitrd"
 
     echo "Checking kernel file type:"
-    theKernel="$( find ${UNPACK_INSTALLER_DIR} -iname "vmlinuz" )"
+    theKernel="$( find "${UNPACK_INSTALLER_DIR}" -iname "vmlinuz" )"
     file "$theKernel"
 
     # Copy files to a known filename so debugger can find it.
@@ -364,17 +365,17 @@ function fxnMakeGDBScript()
 {
     gdbCommand="$1"
     # Wipe out the old one
-    echo "#!/bin/bash" > $RUN_GDB_SCRIPT
-    echo "# Auto gen script to run gdb from $0 on $(date)" >> $RUN_GDB_SCRIPT
-    echo "" >> $RUN_GDB_SCRIPT
-    echo 'echo ""' >> $RUN_GDB_SCRIPT
-    chmod a+x $RUN_GDB_SCRIPT
+    echo "#!/bin/bash" > "$RUN_GDB_SCRIPT"
+    echo "# Auto gen script to run gdb from $0 on $(date)" >> "$RUN_GDB_SCRIPT"
+    echo "" >> "$RUN_GDB_SCRIPT"
+    echo 'echo ""' >> "$RUN_GDB_SCRIPT"
+    chmod a+x "$RUN_GDB_SCRIPT"
 
 
-    echo 'echo "###############################################" ' >> $RUN_GDB_SCRIPT
-    echo "echo 'Running $gdbCommand'" | sed -e 's/ -/\n -/g'      >> $RUN_GDB_SCRIPT
-    echo 'echo "###############################################" ' >> $RUN_GDB_SCRIPT
-    echo "$gdbCommand" >> $RUN_GDB_SCRIPT
+    echo 'echo "###############################################" ' >> "$RUN_GDB_SCRIPT"
+    echo "echo 'Running $gdbCommand'" | sed -e 's/ -/\n -/g'      >> "$RUN_GDB_SCRIPT"
+    echo 'echo "###############################################" ' >> "$RUN_GDB_SCRIPT"
+    echo "$gdbCommand" >> "$RUN_GDB_SCRIPT"
 }
 
 
@@ -431,7 +432,6 @@ function fxnRunKernel()
         useGDBArgs=""
     fi
 
-	set -x
     RUN_COMMAND="qemu-system-${QEMU_ARCH} \
     $QEMU_PROCESSOR_ARGS \
     --append console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel \
@@ -489,7 +489,7 @@ function fxnRunKernel()
 
     if [ "$hardcodeRun" = "TRUE" ];then
 		if [ "$ONIE_ARCH" = "x86" ];then
-        qemu-system-${QEMU_ARCH} \
+        qemu-system-"${QEMU_ARCH}" \
             --append "onie_interactive onie_root=LABEL=NOS-INSTALL BOOT_DEBUG=3 mem=2016M console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel " \
             -kernel "$kernelPath" \
             -nographic \
@@ -518,18 +518,6 @@ function fxnRunKernel()
 				$initrdCmd \
 				-nographic 
 
-			exit
-			echo "ARM64"
-        qemu-system-${QEMU_ARCH} \
-            --append "onie_interactive onie_root=LABEL=NOS-INSTALL BOOT_DEBUG=3 mem=2016M console=ttyS0 console=ttyS0,115200 debug earlyprintk=ttyS0,115200 ignore_loglevel " \
-            -kernel "$kernelPath" \
-            -nographic \
-            -m 2016 \
-			-machine virt \
-			-cpu cortex-a57 \
-            -drive file="$HARD_DRIVE",media=disk,if=virtio,index=0 \
-            $useGDBArgs
-
 		fi
     else
         $RUN_COMMAND
@@ -547,7 +535,7 @@ function fxnListRunables() {
     echo "-------------------------------------------------------------"
     echo "# Extracted installer kernel and initrd:"
     if [ -e "$UNPACK_INSTALLER_DIR" ];then
-        ls -l  $UNPACK_INSTALLER_DIR
+        ls -l  "$UNPACK_INSTALLER_DIR"
     else
         echo "  None"
     fi
@@ -555,7 +543,7 @@ function fxnListRunables() {
 
     echo "# Files extracted from *.debs"
     if [ -e "$UNPACK_LINUX_DEB_DIR" ];then
-        ls -l  $UNPACK_LINUX_DEB_DIR
+        ls -l  "$UNPACK_LINUX_DEB_DIR"
     else
         echo "  None"
     fi
