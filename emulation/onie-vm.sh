@@ -725,7 +725,7 @@ function fxnSetupUEFIBIOS()
                 'linaro-uefi' )
                     # This is a known working version
                     #wget http://releases.linaro.org/components/kernel/uefi-linaro/16.02/release/qemu64/linaro-16.02-QEMU_EFI.fd
-					wget --directory-prefix="$UEFI_DOWNLOADS_DIR" http://mirror.opencompute.org/onie/onie-emulation-bios/armv8a/"$ARM_UEFI_BIOS_FILE"
+					fxnEC wget --directory-prefix="$UEFI_DOWNLOADS_DIR" http://mirror.opencompute.org/onie/onie-emulation-bios/armv8a/"$ARM_UEFI_BIOS_FILE" || exit 1
                     ;;
             esac
 		fi
@@ -1204,7 +1204,12 @@ HARD_DRIVE=${EMULATION_DIR}/onie-${ONIE_MACHINE_TARGET}-demo.qcow2
 CLEAN_HARD_DRIVE=${EMULATION_DIR}/onie-${ONIE_MACHINE_TARGET}-clean.qcow2
 
 # Set values based off of user entries
-ONIE_KERNEL_VERSION=${ONIE_KERNEL_VERSION:="$( basename "$( ls -d "${BUILD_DIR}/${ONIE_MACHINE}"/kernel/linux-* | head -n 1 )" )"}
+# If no kernel was found, kernel debug will not happen but ONIE install from a
+# recovery .iso is possible, so note the lack of kernel and continue.
+ONIE_KERNEL_VERSION=${ONIE_KERNEL_VERSION:="$( basename "$( ls -d "${BUILD_DIR}/${ONIE_MACHINE}"/kernel/linux-* 2>/dev/null | head -n 1 )" )"}
+if [ "$ONIE_KERNEL_VERISON" = "" ];then
+	ONIE_KERNEL_VERSION="NoKernelInBuildDir"
+fi
 if [ "$ONIE_ARCH" = 'x86_64' ];then
 	ONIE_KERNEL=${ONIE_KERNEL:="${BUILD_DIR}/${ONIE_MACHINE}/kernel/${ONIE_KERNEL_VERSION}/arch/${ONIE_ARCH}/boot/bzImage"}
 fi
@@ -1243,11 +1248,14 @@ if [ "$(command -v qemu-system-${QEMU_ARCH})" = "" ];then
     echo "Failed to find qemu-system-${QEMU_ARCH}. Try installing qemu-system-x86 or qemu-system-aarch64. Exiting."
     exit 1
 fi
-# Are UEFI BIOS files available for emulation use?
-if [ ! -e "$UEFI_BIOS_SOURCE_VARS" ];then
-    echo "Failed to find $UEFI_BIOS_SOURCE_VARS"
-    echo "Try installing ovmf "
-    exit 1
+# x86 uses UEFI BIOS files that can be pulled from an install on the host.
+# In Debian, the ovmf package supplies these. Your environment may be different.
+if [ "$(uname -m)" = "x86_64" ];then
+	if [ ! -e "$UEFI_BIOS_SOURCE_VARS" ];then
+		echo "Failed to find $UEFI_BIOS_SOURCE_VARS"
+		echo "Try installing ovmf "
+		exit 1
+	fi
 fi
 
 #############################################
