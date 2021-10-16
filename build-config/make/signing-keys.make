@@ -33,9 +33,10 @@ KEYS_INSTALL_STAMP	= $(KEYS_STAMPDIR)/signing-keys-install
 KEYS_STAMP		= $(KEYS_GENERATE_STAMP)  $(KEYS_INSTALL_STAMP)
 
 PHONY += signing-keys-install \
+          signing-keys-generate \
           signing-keys-clean \
-		  signing-keys-distclean \
-		  signing-keys-values
+          signing-keys-distclean \
+          signing-keys-values
 
 
 signing-keys: $(KEYS_STAMP)
