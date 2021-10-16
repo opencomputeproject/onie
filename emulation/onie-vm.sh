@@ -678,7 +678,7 @@ function fxnSetupUEFIBIOS()
 	local doClean="$1"
 
     if [ "$ONIE_ARCH" = "x86_64" ];then
-		if [ "$doClean" = "clean" ];then
+		if [ "$doClean" = "bios-clean" ];then
 			echo "Deleting $UEFI_X86_BIOS_DIR contents."
 			rm -rf "${UEFI_X86_BIOS_DIR}"
 		fi
@@ -703,8 +703,7 @@ function fxnSetupUEFIBIOS()
     # UEFI BIOS for arm
 
     if [ "$ONIE_ARCH" = "arm64" ];then
-
-		if [ "$doClean" = "clean" ];then
+		if [ "$doClean" = "bios-clean" ];then
 			echo "Deleting $ARM_FLASH_FILES_DIR contents"
 			rm -rf "${ARM_FLASH_FILES_DIR}"
 		fi
@@ -821,8 +820,8 @@ function fxnSetupEnvironment()
         fxnCreateHardDrive
     fi
 
-    # Get BIOS files if needed.
-	fxnSetupUEFIBIOS
+    # Get BIOS files, and clean if needed.
+	fxnSetupUEFIBIOS $DO_BIOS_CLEAN
 	
     # does a usb drive need to be set up
     if [ ! -e "${USB_IMG}.qcow2" ];then
@@ -976,8 +975,8 @@ do
 
         # Delete the OVMF_VARS.fd file and replace with a clean copy
         # to wipe out any variables that have been set.
-        --m-bios-clean )
-			DO_BIOS_CLEAN="TRUE"
+        --m-bios-clean )			
+			DO_BIOS_CLEAN="bios-clean"
             ;;
 
 
@@ -1333,9 +1332,9 @@ if [ "$DO_RUN_KVM" = "TRUE" ];then
 
 	# If resetting BIOS, do it after ONIE_ARCH has been set
 	# to delete and restore the appropriate ARM/x86 BIOS files
-	if [ "$DO_BIOS_CLEAN" = "TRUE" ];then
+	if [ "$DO_BIOS_CLEAN" != "" ];then
 		# Put fresh UEFI BIOS files in
-		fxnSetupUEFIBIOS 'clean'
+		fxnSetupUEFIBIOS $DO_BIOS_CLEAN
 	fi
 	
     # Running with a pre configured OVMF file?
