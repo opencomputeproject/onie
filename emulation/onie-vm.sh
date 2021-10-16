@@ -186,12 +186,12 @@ function fxnHelp()
     echo "---------"
     echo ""
     echo "  Target selection options:"
-    echo "   --machine-name  <name> - Name of build target machine - ex mlnx_x86, qemu_armv8a"
+    echo "   --machine-name  <name> - Name of build target machine - ex kvm_x86_64, qemu_armv8a"
     echo "   --machine-revision <r> - The -rX version at the end of the --machine-name"
     echo ""
     echo "  Runtime options:"
-    echo "   --m-onie-iso <path>    - Boot off of recovery ISO at <path> and install onto qcow2"
-    echo "   --m-embed-onie         - Boot to embed onie. Requires --m-onie-iso <path>"
+    echo "   --m-onie-iso <file>    - Boot off of recovery ISO at <file> and install onto qcow2"
+    echo "   --m-embed-onie         - Boot to embed onie. Requires --m-onie-iso <file>"
     echo "   --m-boot-cd            - Boot off of rescue CD to start."
     echo "   --m-mount-cd           - CD is accessible when booting off hard drive."
     echo "   --m-cpu                - Set number of virutal processors."
@@ -258,7 +258,7 @@ function fxnHelpExamples()
     Cmd: $thisScript info-run-options
 
 #
-# Running a qcow2 image
+# Running a qcow2 image as a virtual hard drive
 # ---------------------------
 # Boot off a recovery iso, install onie in an empty qcow2 with legacy BIOS
     Cmd: $thisScript run --m-embed-onie --m-hd-clean
@@ -283,13 +283,21 @@ function fxnHelpExamples()
 "
     echo "
 Quick setup:
- To embed ONIE to initialize system, type:
-   $0 run --m-usb-drive --m-bios-uefi --m-secure --m-onie-iso ../build/images/onie-recovery-${ONIE_ARCH}-${ONIE_MACHINE}.iso --m-hd-clean --m-bios-clean
- In a separate window, type:
+ To embed ONIE on a virtual hard drive:
+ -  kvm_x86_64
+      ./onie-vm.sh run --machine-name kvm_x86_64 --machine-revision r0 --m-usb-drive --m-bios-uefi --m-bios-clean --m-hd-clean --m-embed-onie --m-boot-cd --m-onie-iso ../build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso  
+ - qemu_armv8a
+      ./onie-vm.sh run --machine-name qemu_armv8a --m-bios-uefi --m-bios-clean --m-hd-clean --m-embed-onie --m-onie-iso ../build/images/onie-recovery-arm64-qemu_armv8a-r0.iso 
+
+ In a separate window, start the virtual machine by logging in with:
   telnet localhost $QEMU_TELNET_PORT
 
  To run after embedding ONIE, type:
-  $0 run --m-usb-drive --m-bios-uefi --m-secure
+ -  kvm_x86_64
+    $0 run --machine-name kvm_x86_64 --m-usb-drive --m-bios-uefi
+ - qemu_armv8a
+    $0 run --machine-name qemu_armv8a --m-usb-drive --m-bios-uefi
+
 "
 }
 
