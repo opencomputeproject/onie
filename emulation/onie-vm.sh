@@ -1169,7 +1169,17 @@ case "$ONIE_MACHINE_TARGET" in
         # Name of QEMU to run
         QEMU_ARCH="aarch64"
         # Specify ARM virtual machine for QEMU
-        QEMU_PROCESSOR_ARGS=" -machine virt -cpu cortex-a57 \
+		# If the host is arm64, use kvm emulation and the host
+		# This is MUCH faster, but the user must be a member of
+		# the kvm group, else kvm module errors occur at runtime.
+		if [ "$(uname -m)" = "aarch64" ];then
+			ARM_CPU_EMULATION=" --enable-kvm -cpu host "
+		else
+			# emulate the cortex-a57
+			ARM_CPU_EMULATION=" --cpu cortex-a57 "
+		fi
+        QEMU_PROCESSOR_ARGS=" -machine virt \
+		$ARM_CPU_EMULATION \
         -drive if=pflash,format=raw,readonly,file=${ARM_FLASH_FILES_DIR}/flash0.img \
         -drive if=pflash,format=raw,file=${ARM_FLASH_FILES_DIR}/flash1.img "
         ;;
