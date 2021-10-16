@@ -765,6 +765,16 @@ install_uefi_loader()
     local boot_dev="$2"
     local boot_dir="$3"
 
+	local CSVSuffix="X64"
+	local CSVBootArch="amd64"
+	# File name changes for ARM64
+	if [ "$image_uefi_arch" = "aa64" ];then
+		# Name of CSV file
+		CSVSuffix="AA64"
+		# Used to select from ONIE CSV files.
+		CSVBootArch="arm64"		
+	fi
+	
     install_uefi_grub "$uefi_dir" "$boot_dev" "$boot_dir" || {
         echo "ERROR: problems installing grub on: $boot_dev"
         exit 1
@@ -791,7 +801,7 @@ install_uefi_loader()
     
     install_grub_config $boot_dir
 
-    # Create default EFI loader BOOT/BOOTX64.efi
+    # Create default EFI loader BOOT/BOOTX64.efi or BOOTAA64.efi
     local loader_dir="${uefi_dir}/EFI/onie"
     local BOOT_dir="${uefi_dir}/EFI/BOOT"
     mkdir -p $BOOT_dir
@@ -801,7 +811,7 @@ install_uefi_loader()
     }
     if [ "$image_secure_boot" = "yes" ]; then
         # Make shim the default fallback loader
-        mv "${BOOT_dir}/shimx64.efi" "${BOOT_dir}/BOOTX64.EFI"
+        mv "${BOOT_dir}/shim${image_uefi_arch}.efi" "${BOOT_dir}/BOOT${CSVSuffix}.EFI"
         # Remove unneeded mmx from /BOOT folder
         if [ -f ${BOOT_dir}/mm${image_uefi_arch}.efi ] ; then
             rm ${BOOT_dir}/mm${image_uefi_arch}.efi
@@ -811,21 +821,21 @@ install_uefi_loader()
         if [ -f $loader_dir/fb${image_uefi_arch}.efi ] ; then
             rm $loader_dir/fb${image_uefi_arch}.efi
         fi
-        if [ -e "$onie_root_dir/grub/BOOT.CSV_secured" ] ; then
-            mv "$onie_root_dir/grub/BOOT.CSV_secured" "${loader_dir}/BOOT.CSV"
+        if [ -e "$onie_root_dir/grub/BOOT.CSV_${CSVBootArch}_secured" ]; then
+            mv "$onie_root_dir/grub/BOOT.CSV_${CSVBootArch}_secured" "${loader_dir}/BOOT.CSV"
         fi
         if [ -e "$onie_root_dir/grub/BOOT.CSV" ] ; then
             rm "$onie_root_dir/grub/BOOT.CSV"
         fi
     else
         # Make GRUB the default fallback loader		
-        mv "${BOOT_dir}/grubx64.efi" "${BOOT_dir}/BOOTX64.EFI"
-        if [ -e "$onie_root_dir/grub/BOOT.CSV" ] ; then
-            mv "$onie_root_dir/grub/BOOT.CSV" "${loader_dir}/BOOT.CSV"
+        mv "${BOOT_dir}/grub${image_uefi_arch}.efi" "${BOOT_dir}/BOOT${CSVSuffix}.EFI"
+        if [ -e "$onie_root_dir/grub/BOOT.CSV_${CSVBootArch}" ] ; then
+            cp "$onie_root_dir/grub/BOOT.CSV_${CSVBootArch}" "${loader_dir}/BOOT.CSV"
         fi
 		# Remove secure config if not on a Secure Boot system
-        if [ -e "$onie_root_dir/grub/BOOT.CSV_secured" ] ; then
-            rm "$onie_root_dir/grub/BOOT.CSV_secured"
+        if [ -e "$onie_root_dir/grub/BOOT.CSV_${CSVBootArch}_secured" ] ; then
+            rm "$onie_root_dir/grub/BOOT.CSV_${CSVBootArch}_secured"
         fi
     fi
 }
