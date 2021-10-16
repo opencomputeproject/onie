@@ -177,6 +177,8 @@ function fxnHelp()
     echo "                              if <dir> is not passed, will default to"
     echo "                              adding files from [ $USB_TRANSFER_DIR ]"
     echo "  clean                   - Delete generated directories."
+	echo "  export-emulation <name> - Create tar file of all emulation files to run elsewhere. Name is optional."
+	echo ""
     echo ""
     echo " Unpacking other kernels/initrds:"
     echo "  extract-linux-deb <v><b>- Extract passed vmlinux,bzImage debs to $UNPACK_LINUX_DEB_DIR"
@@ -936,10 +938,19 @@ do
             ;;
 
         'clean' )
+			# wipe out all generated files.
             fxnCleanEmulationDir
             exit
             ;;
 
+		'export-emulation' )
+			# Pack emulation files in to a tar archive
+			# to run elsewhere. The second parameter
+			# is optional.
+			fxnExportEmulationFiles $2
+			exit
+			;;
+		
         # Onie kernel and initrd, run on their own
         'rk-onie' )
             # just run the kernel and initrd
