@@ -49,7 +49,7 @@ true ${onie_config_version=0}
 # assign the value from onie_machine.
 onie_build_machine=${onie_build_machine:-$onie_machine}
 
-args="hivfqx${args_arch}"
+args="hivfqxj${args_arch}"
 
 usage()
 {
@@ -76,6 +76,8 @@ COMMAND LINE OPTIONS
 	-f
 		Force ONIE update opteration, bypassing any safety
 		checks.
+	-j
+		Debug.
 
 $usage_arch
 EOF
@@ -107,6 +109,10 @@ while getopts "$args" a ; do
             cat ./machine-build.conf
             exit 0
             ;;
+        j)
+            set -x
+            ;;
+        
         *)
             parse_arg_arch "$a" "$OPTARG" || {
                 echo "Unknown argument: $a"

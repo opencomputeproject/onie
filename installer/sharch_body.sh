@@ -16,11 +16,16 @@
 
 extract=no
 quiet=no
-args=":xq"
+do_debug=no
+args=":xqj"
 while getopts "$args" a ; do
     case $a in
         x)
             extract=yes
+            ;;
+        j)
+            set -x
+            do_debug="yes"
             ;;
         q)
             quiet=yes
@@ -40,7 +45,9 @@ if [ "$sha1" != "$payload_sha1" ] ; then
     echo "ERROR: Unable to verify archive checksum"
     echo "Expected: $payload_sha1"
     echo "Found   : $sha1"
-    exit 1
+    if [ "$do_debug" = "no" ];then
+        exit 1
+    fi
 fi
 
 [ "$quiet" = "no" ] && echo " OK."
