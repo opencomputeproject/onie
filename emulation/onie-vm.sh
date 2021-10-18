@@ -832,11 +832,13 @@ function fxnSetupEnvironment()
 
     # Get BIOS files, and clean if needed.
 	fxnSetupUEFIBIOS $DO_BIOS_CLEAN
-	
-    # does a usb drive need to be set up
-    if [ ! -e "${USB_IMG}.qcow2" ];then
-        fxnUSBStoreFiles
-    fi
+
+	if [ "$DO_QEMU_USB_DRIVE" = "TRUE" ];then
+		# does a usb drive need to be set up
+		if [ ! -e "${USB_IMG}.qcow2" ];then
+			fxnUSBStoreFiles
+		fi
+	fi
 
 
 }
