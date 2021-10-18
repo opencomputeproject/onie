@@ -53,7 +53,7 @@ Once the compilation has completed, `onie/build/images` will have:
 
 Now the emulation tools have something to work with.
 
-## Build the qemu_armv8a virutal machine
+## Build the qemu_armv8a virtual machine
 
 Currently the qemu_armv8a target does not support Secure Boot, but can also be run using the `onie-vm.sh` script below.  
 
@@ -82,26 +82,27 @@ Once the compilation has completed, `onie/build/images` will have:
 
 # Running a virtual image in emulation  
 The onie/emulation directory has the `onie-vm.sh` script which generates a valid QEMU configuration to create virtual hardware for ONIE to install on to, and run from. As these configurations can be...complex the `onie-vm.sh` script both simplifies the process of getting images to run, and provides examples of various working configurations. These may (or may not) include UEFI BIOS, an additional USB drive for storage, booting from an iso image, etc.  
-There is also some experimental support for running kernels without a full filesystem (very useful for debug), but at this stage it is more of a suggestion of how such things work than a polished implementation.  
+There is also some experimental support for running kernels without a full file system (very useful for debug), but at this stage it is more of a suggestion of how such things work than a polished implementation.  
 
 ## Commands
 The `onie-vm.sh` script has the following commands:  
 
 ### Running:
-    run                     - Run from boot device selected with runtime options.  
+    run                     - Run from boot device selected with run time options.  
     rk-onie                 - Run just the initrd/kernel from the ONIE ../build directory.  
     rk-installer            - Run a kernel/initrd extracted from an ONIE installer (see below)  
     rk-deb-kernel-debug     - Use deb extracted kernel and installer initrd with rk-installer. (see below)  
 
 #### Informational commands:
-    info-runables           - Print kernels and filesystems available for use.
+    info-runables           - Print kernels and file systems available for use.
     info-run-options        - Print what could be run, given what was found.
 
 #### Utility commands:
-    update-m-usb <dir>      - Create a 'USB drive' qcow2 filesystem for QEMU use.
+    update-m-usb <dir>      - Create a 'USB drive' qcow2 file system for QEMU use.
                               if <dir> is not passed, will default to
                               adding files from [  onie/emulation/emulation-files/usb/usb-data ]
     clean                   - Delete generated directories.
+    export-emulation <name> - Create tar file of all emulation files to run elsewhere. Name is optional.
 
 #### Unpacking other kernels/initrds:
     extract-linux-deb <v><b>- Extract passed vmlinux,bzImage debs to ../unpack-linux-deb
@@ -110,7 +111,7 @@ The `onie-vm.sh` script has the following commands:
 ### Options
 
 #### Target selection options:
-    --machine-name  <name> - Name of build target machine - ex mlnx_x86, qemu_armv8a, etc.
+    --machine-name  <name> - Name of build target machine - ex kvm_x86_64, qemu_armv8a, etc.
     --machine-revision <r> - The -rX version at the end of the --machine-name
 
 #### Runtime options:
@@ -136,7 +137,7 @@ The `onie-vm.sh` script has the following commands:
     --m-hd-clean           - Replace target 'hard drive' with an empty one  and run install.
     --m-hd-file <file>     - Use a previously configured drive file.
     --m-nvme-drive         - Have QEMU emulate storage as NVME drives.
-    --m-usb-drive          - Make virtual USB drive available at KVM runtime.  
+    --m-usb-drive          - Make virtual USB drive available at KVM run time.  
 
 #### Help
     --help                  - This output.
@@ -163,7 +164,7 @@ like `--m-usb-drive` or `--m-bios-uefi` have been used.
     flash1.img      <- UEFI BIOS variable storage.  
 
 ## ./emulation-files/usb:  
-     usb-drive.qcow2   <- Virtual USB drive fileysystem  
+     usb-drive.qcow2   <- Virtual USB drive file system  
      usb-drive.raw	   <- Intermediate stage of virtual drive  
 
 ## ./emulation-files/usb/usb-data:  
@@ -178,6 +179,11 @@ Loopback mount point for creating virtual file system
 This exists if emulation runs have been performed with the virtual usb drive, and
 UEFI BIOS as an emulation option
   
+#Emulation Tips
+    - X86 emulation will run the fastest on a host system where the user is a member of the KVM group, so that QEMU can use the host processor directly.  
+        - If the emulation is occurring in a virtual environment already (say, a VirtualBox instance) then execution will proceed, but will be slower.  
+    - ARM64 execution can be sped up by using the onie-vm.sh script's  `export-emulation` option to export the emulation files to an ARM64 system, where QEMU can take advantage of the host processor. In testing, a Raspberry Pi 4 performed about as well as a high-end x86PC performing emulation.  
+
   
 # Examples
 ## Ways to run just a kernel (experimental, but useful for reference).  
@@ -236,12 +242,14 @@ UEFI BIOS as an emulation option
 # Quick setup:  
 ## X86_64 ONIE  
  To embed x86_64 ONIE on a virtual hard drive file, type:  
-    `./onie-vm.sh run --m-usb-drive --m-bios-uefi --m-secure --m-hd-clean --m-bios-clean --m-onie-iso ../build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso`  
+    `./onie-vm.sh run --machine-name kvm_x86_64 --m-usb-drive --m-bios-uefi --m-secure --m-hd-clean --m-bios-clean --m-onie-iso ../build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso`  
+    Or let onie-vm.sh assume defaults and you can type:  
+    `./onie-vm.sh run --machine-name kvm_x86_64  --m-usb-drive --m-bios-uefi --m-embed-onie`  
 
  In a separate window, type:  
     `telnet localhost 9300`
 
- To run after embedding ONIE, type:  
+ To run **after** embedding ONIE, type:  
     `./onie-vm.sh run --m-usb-drive --m-bios-uefi --m-secure`
 
 ## ARM64 ONIE  
@@ -251,7 +259,7 @@ UEFI BIOS as an emulation option
  In a separate window, type:  
     `telnet localhost 9300`
 
- To run after embedding ONIE, type:  
+ To run **after** embedding ONIE, type:  
     `./onie-vm.sh run --m-usb-drive --m-bios-uefi`
 
 
@@ -315,10 +323,10 @@ Now run:
 
 # Notes on using UEFI
 The OVMF_VARS.fd file can be preserved after configuration for subsequent runs.
-However, unless the filesystems it is used with have the same UUID, the system
+However, unless the file systems it is used with have the same UUID, the system
 will fail to boot.
 
-If you are testing somehing like Secure Boot, where a set of keys would be
+If you are testing something like Secure Boot, where a set of keys would be
 configured, one possible workflow is to:  
     1. Boot into the UEFI shell or BIOS menus  
     2. Add keys and configuration  
@@ -326,8 +334,10 @@ configured, one possible workflow is to:
     4. Halt the emulation  
     5. Copy the modified OVMF_VARS.fd file to a 'safe place'
     6. ...then, on subsequent runs, copy it in for an ONIE embed and NOS
-install so that the generated filesystem UUIDs in the bios will match
+install so that the generated file system UUIDs in the bios will match
 the partitions on the QCOW2 drive.  
+
+
 
 
 

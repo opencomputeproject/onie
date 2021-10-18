@@ -63,7 +63,7 @@ USB_IMG="${USB_DIR}/usb-drive"
 # Virtual USB Drive size in MB
 USB_SIZE="256M"
 
-# Local mount point in host for loop back mount of USB filesystem.
+# Local mount point in host for loop back mount of USB file system.
 # ( will require root privileges )
 USB_MNT_DIR="${USB_DIR}/usb-mount"
 
@@ -163,17 +163,17 @@ function fxnHelp()
     echo "---------"
     echo ""
     echo " Running:"
-    echo "  run                     - Run from boot device selected with runtime options."
+    echo "  run                     - Run from boot device selected with run time options."
     echo "  rk-onie                 - Run just the initrd/kernel from the ONIE ../build directory."
     echo "  rk-installer            - Run a kernel/initrd extracted from an ONIE installer (see below)"
     echo "  rk-deb-kernel-debug     - Use deb extracted kernel and installer initrd with rk-installer. (see below)"
     echo ""
     echo " Informational commands:"
-    echo "  info-runables           - Print kernels and filesystems available for use."
+    echo "  info-runables           - Print kernels and file systems available for use."
     echo "  info-run-options        - Print what could be run, given what was found."
     echo ""
     echo " Utility commands:"
-    echo "  update-m-usb <dir>      - Create a 'USB drive' qcow2 filesystem for QEMU use."
+    echo "  update-m-usb <dir>      - Create a 'USB drive' qcow2 file system for QEMU use."
     echo "                              if <dir> is not passed, will default to"
     echo "                              adding files from [ $USB_TRANSFER_DIR ]"
     echo "  clean                   - Delete generated directories."
@@ -196,7 +196,7 @@ function fxnHelp()
     echo "   --m-embed-onie         - Boot to embed onie. Requires --m-onie-iso <file>"
     echo "   --m-boot-cd            - Boot off of rescue CD to start."
     echo "   --m-mount-cd           - CD is accessible when booting off hard drive."
-    echo "   --m-cpu                - Set number of virutal processors."
+    echo "   --m-cpu                - Set number of virtual processors."
     echo "   --m-secure-default     - Set --m-bios-uefi --m-usb-drive --m-boot-cd to demonstrate secure boot."
     echo ""
     echo "  BIOS configuration:     Default: Legacy BIOS."
@@ -216,7 +216,7 @@ function fxnHelp()
     echo "   --m-hd-clean           - Replace target 'hard drive' with an empty one  and run install."
     echo "   --m-hd-file <file>     - Use a previously configured drive file."
     echo "   --m-nvme-drive         - Have QEMU emulate storage as NVME drives."
-    echo "   --m-usb-drive          - Make virtual USB drive available at KVM runtime."
+    echo "   --m-usb-drive          - Make virtual USB drive available at KVM run time."
     echo ""
     echo "  Help:"
     echo "   --help                 - This output."
@@ -288,6 +288,8 @@ Quick setup:
  To embed ONIE on a virtual hard drive:
  -  kvm_x86_64
       ./onie-vm.sh run --machine-name kvm_x86_64 --machine-revision r0 --m-usb-drive --m-bios-uefi --m-bios-clean --m-hd-clean --m-embed-onie --m-boot-cd --m-onie-iso ../build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso  
+      OR, using defaults
+      ./onie-vm.sh run --machine-name kvm_x86_64  --m-usb-drive --m-bios-uefi --m-embed-onie
  - qemu_armv8a
       ./onie-vm.sh run --machine-name qemu_armv8a --m-bios-uefi --m-bios-clean --m-hd-clean --m-embed-onie --m-onie-iso ../build/images/onie-recovery-arm64-qemu_armv8a-r0.iso 
 
@@ -764,7 +766,7 @@ function fxnSetUpEmulationDir()
     # is the emulation directory set up
     if [ ! -e "$EMULATION_DIR" ];then
 
-        echo "Creating $EMULATION_DIR to hold runtime files."
+        echo "Creating $EMULATION_DIR to hold run time files."
         mkdir -p "$EMULATION_DIR"
         echo "Creating $ARM_FLASH_FILES_DIR to hold flash for ARM emulation."
         mkdir -p "$ARM_FLASH_FILES_DIR"
@@ -1203,7 +1205,7 @@ case "$ONIE_MACHINE_TARGET" in
         # Specify ARM virtual machine for QEMU
 		# If the host is arm64, use kvm emulation and the host
 		# This is MUCH faster, but the user must be a member of
-		# the kvm group, else kvm module errors occur at runtime.
+		# the kvm group, else kvm module errors occur at run time.
 		if [ "$(uname -m)" = "aarch64" ];then
 			ARM_CPU_EMULATION=" --enable-kvm -cpu host "
 		else
@@ -1248,7 +1250,7 @@ CLEAN_HARD_DRIVE=${EMULATION_DIR}/onie-${ONIE_MACHINE_TARGET}-clean.qcow2
 # If no kernel was found, kernel debug will not happen but ONIE install from a
 # recovery .iso is possible, so note the lack of kernel and continue.
 ONIE_KERNEL_VERSION=${ONIE_KERNEL_VERSION:="$( basename "$( ls -d "${BUILD_DIR}/${ONIE_MACHINE}"/kernel/linux-* 2>/dev/null | head -n 1 )" )"}
-if [ "$ONIE_KERNEL_VERISON" = "" ];then
+if [ "$ONIE_KERNEL_VERSION" = "" ];then
 	ONIE_KERNEL_VERSION="NoKernelInBuildDir"
 fi
 if [ "$ONIE_ARCH" = 'x86_64' ];then
@@ -1344,7 +1346,7 @@ if [ "$DO_HD_CLEAN" = "TRUE" ];then
     fi
 fi
 
-# If a virtual CD is being booted from, or made avaliable
+# If a virtual CD is being booted from, or made available
 # after a hard drive boot, make sure it exists.
 #
 if [ "$DO_BOOT_FROM_CD" = "TRUE" ] || [ "$DO_MOUNT_CD"  = "TRUE" ];then
