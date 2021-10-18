@@ -1179,11 +1179,22 @@ done
 
 #
 # Map machines to processor architectures
+QEMU_PROCESSOR_ARGS=""
 case "$ONIE_MACHINE_TARGET" in
     'kvm_x86_64' )
         ONIE_ARCH="x86_64"
         QEMU_ARCH="x86_64"
-        QEMU_PROCESSOR_ARGS=" --enable-kvm -cpu host "
+        # Is KVM present?
+        if [ "$( lsmod | grep 'kvm_' )" != "" ];then
+            # Use the host CPU for speed if KVM is installed.
+            QEMU_PROCESSOR_ARGS=" --enable-kvm -cpu host "
+        else
+            # This may be an emulation environment with no KVM,
+            # or KVM is not installed. Do not let that stop things
+            # from running.
+            echo "No kvm module was loaded. NOT using host cpu."
+        fi
+
         ;;
     'qemu_armv8a' )
         ONIE_ARCH="arm64"
