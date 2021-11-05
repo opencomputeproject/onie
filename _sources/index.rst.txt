@@ -24,6 +24,15 @@ Open Network Install Environment
 
 News
 ====
+Aug 31, 2021
+  Release candidate version `2021.11-rc1
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/202>`_
+
+  This releaese has many upgraded components, so building the master branch requires Debian 10, and platforms that have not been updated can still build in a Debian 9 environment using the 2021.08 branch.
+
+  An `ONIE Secure Boot build and demonstration
+  <https://youtu.be/Oq4FWw9lkwQ>`_ tutorial is available to introduce the new features in this release.  
+
 Aug 03, 2021
   Released version `2021.08
   <https://ocp-all.groups.io/g/OCP-ONIE/message/200>`_
