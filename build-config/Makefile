@@ -511,6 +511,13 @@ ifeq ($(FIRMWARE_UPDATE_ENABLE),yes)
   include make/firmware-update.make
 endif
 
+# Pre Debian 11 environments just had /usr/bin/python
+# Now the environment distinguishes between python2 and python3
+# If 'python' is not present, default to python2
+ifeq (, $(shell which python ))
+  export PYTHON=python2
+endif
+
 
 #-------------------------------------------------------------------------------
 #
