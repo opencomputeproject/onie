@@ -192,7 +192,8 @@ function fxnHelp()
     echo "   --machine-revision <r> - The -rX version at the end of the --machine-name"
     echo ""
     echo "  Runtime options:"
-    echo "   --m-onie-iso <file>    - Boot off of recovery ISO at <file> and install onto qcow2"
+    echo "   --m-onie-iso  <file>   - Boot off of recovery ISO at <file> and install onto qcow2"
+    echo "   --m-onie-arch <arch>   - Define target architecture as one of x86_64 or arm64."	
     echo "   --m-embed-onie         - Boot to embed onie. Requires --m-onie-iso <file>"
     echo "   --m-boot-cd            - Boot off of rescue CD to start."
     echo "   --m-mount-cd           - CD is accessible when booting off hard drive."
@@ -282,6 +283,10 @@ function fxnHelpExamples()
 
 # Run new secure boot while another QEMU is running:
     Cmd: $thisScript --m-network-mac 21 --m-telnet-port 9400 --m-vnc-port 127 --m-ssh-port 4122 --m-embed-onie --m-secure  --m-hd-clean  --m-bios-clean
+
+# Embed ONIE on a new arm64 emulation target built from ../machine/myvendor/mynewmachine that is not qemu_armv8a
+# Note that --m-onie-arch is required. Known targets can default their architecture. New ones need it supplied.
+./onie-vm.sh run --m-bios-uefi --m-bios-clean --m-hd-clean --m-embed-onie --machine-name mynewmachine --m-onie-arch arm64
 "
     echo "
 Quick setup:
@@ -656,6 +661,7 @@ function fxnPrintSettings()
     echo "#  Machine revision   [ $ONIE_MACHINE_REVISION ]"
     echo "#  Boot from CD       [ $DO_BOOT_FROM_CD ]"
     echo "#   Path to CD        [ $ONIE_RECOVERY_ISO ]"
+    echo "#  ONIE architecture  [ $ONIE_ARCH ]"	
     echo "#  QEMU processors    [ $QEMU_CPUS ]"
     echo "#  QEMU MAC ends in   [ $MAC_ADDRESS_ENDS_IN ]"
     echo "#  QEMU UEFI BIOS     [ $DO_QEMU_UEFI_BIOS ]"
@@ -885,6 +891,15 @@ do
             ONIE_RECOVERY_ISO="$(realpath "$2")"
             shift
             ;;
+		
+		--m-onie-arch )
+			# Specify target architecture. Use this for a new emulation target that
+			# is not one of the currently known defaults.
+            if [ "$2" != "" ];then
+                ONIE_ARCH="$2"
+            fi
+        	shift
+			;;
 
         --m-embed-onie )
             # boot off of rescue cd to initialize an empty qcow2 filesystem
@@ -1100,6 +1115,7 @@ do
             ;;
 
         --m-cpu )
+			# Number of virtual processors to emulate
             if [ "$2" != "" ];then
                 QEMU_CPUS="$2"
             fi
@@ -1182,58 +1198,49 @@ done
 #
 # Map machines to processor architectures
 QEMU_PROCESSOR_ARGS=""
+
+if [ "$( find ../build/images -type f -name onie-recovery*$ONIE_MACHINE_TARGET*)" != "" ];then
+   echo "$ONIE_MACHINE_TARGET exists."
+else
+	echo "$ONIE_MACHINE_TARGET not found under ../build/images. Exiting."
+	exit 1
+fi
+	   
+# If the emulation is a known target, set ONIE_ARCH for default configuration.
 case "$ONIE_MACHINE_TARGET" in
     'kvm_x86_64' )
-        ONIE_ARCH="x86_64"
-        QEMU_ARCH="x86_64"
-        # Is KVM present?
-        if [ "$( lsmod | grep 'kvm_' )" != "" ];then
-            # Use the host CPU for speed if KVM is installed.
-            QEMU_PROCESSOR_ARGS=" --enable-kvm -cpu host "
-        else
-            # This may be an emulation environment with no KVM,
-            # or KVM is not installed. Do not let that stop things
-            # from running.
-            echo "No kvm module was loaded. NOT using host cpu."
-        fi
-
+		ONIE_ARCH='x86_64'
         ;;
     'qemu_armv8a' )
-        ONIE_ARCH="arm64"
-        # Name of QEMU to run
-        QEMU_ARCH="aarch64"
-        # Specify ARM virtual machine for QEMU
-		# If the host is arm64, use kvm emulation and the host
-		# This is MUCH faster, but the user must be a member of
-		# the kvm group, else kvm module errors occur at run time.
-		if [ "$(uname -m)" = "aarch64" ];then
-			ARM_CPU_EMULATION=" --enable-kvm -cpu host "
-		else
-			# emulate the cortex-a57
-			ARM_CPU_EMULATION=" --cpu cortex-a57 "
-		fi
-        QEMU_PROCESSOR_ARGS=" -machine virt \
-		$ARM_CPU_EMULATION \
-        -drive if=pflash,format=raw,readonly,file=${ARM_FLASH_FILES_DIR}/flash0.img \
-        -drive if=pflash,format=raw,file=${ARM_FLASH_FILES_DIR}/flash1.img "
+		ONIE_ARCH='arm64'
         ;;
 
     'qemu_armv7a' )
-        ONIE_ARCH="arm64"
-        QEMU_ARCH="arm"
-        QEMU_PROCESSOR_ARGS=" -machine virt -cpu cortex-a15 \
-        -drive if=pflash,format=raw,file=${ARM_FLASH_FILES_DIR}/flash0.img \
-        -drive if=pflash,format=raw,file=${ARM_FLASH_FILES_DIR}/flash1.img "
-
-        ;;
-
-    * )
-        echo "ERROR! Unrecognized emulation target --machine-name [ $ONIE_MACHINE_TARGET ]. Exiting."
-        exit 1
+		ONIE_ARCH='arm32'		
         ;;
 
 esac
 
+
+case "$ONIE_ARCH" in
+	'x86_64' )
+		fxnEmulationDefaultsX86_64
+        ;;
+    'arm64' )
+		fxnEmulationDefaultsARM64
+        ;;
+
+    'arm32' )
+		fxnEmulationDefaultsARM32
+        ;;
+
+    * )
+        echo "ERROR! Unsupported archtecture --m-cpu-arch  [ $ONIE_ARCH ]. Exiting."
+        exit 1
+        ;;
+		
+
+esac
 ONIE_MACHINE_REVISION=${ONIE_MACHINE_REVISION:="-r0"}
 # And the values that get set from the above
 ONIE_MACHINE="${ONIE_MACHINE_TARGET}${ONIE_MACHINE_REVISION}"
