@@ -147,10 +147,16 @@ XORRISO=$(which xorriso) || {
     echo "ERROR: unable to find xorriso binary"
     exit 1
 }
-MKDOSFS=$(which mkdosfs) || {
-    echo "ERROR: unable to find mkdosfs binary"
-    exit 1
-}
+# mkdosfs may not be in the user's search path.
+if [ -e /sbin/mkdosfs ];then
+	MKDOSFS="/sbin/mkdosfs"
+else
+	MKDOSFS=$(which mkdosfs) || {
+		echo "ERROR: unable to find mkdosfs binary"
+		exit 1
+	}
+fi
+
 MCOPY=$(which mcopy) || {
     echo "ERROR: unable to find mcopy binary"
     exit 1
