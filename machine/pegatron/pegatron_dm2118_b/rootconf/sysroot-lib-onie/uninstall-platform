@@ -1,0 +1,57 @@
+# U-Boot specific uninstall routine
+
+#  Copyright (C) 2014,2015 Curt Brune <curt@cumulusnetworks.com>
+#  Copyright (C) 2016 david_yang <david_yang@accton.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# get running machine from conf file
+[ -r /etc/machine.conf ] && . /etc/machine.conf
+
+[ -r "$lib_dir/onie-uninstaller-common" ] || {
+    echo "ERROR: Unable to find onie-uninstaller-common"
+    exit 1
+}
+. $lib_dir/onie-uninstaller-common
+
+uninstall_emmc_partition()
+{
+    mmc_device="${onie_mmc_device}"
+    mmc_device_partition_list=$(ls -r ${onie_mmc_device}*)
+    mmc_partition_type=$(/usr/sbin/parted $mmc_device print | grep "Partition Table" | awk -F: '{print $2}' | sed 's/ //g')
+    # Find ONIE partition
+    mmc_onie_partition=$(blkid | grep ONIE-BOOT | awk -F: '{print $1}')
+    diag_partition=$(blkid | grep PEGATRON-DIAG | awk -F: '{print $1}')
+
+    # Delete all partition except ONIE and PEGATRON-DIAG
+    for f in ${mmc_device_partition_list} ; do
+        if [ "${f}" != "${mmc_onie_partition}" ] && [ "${f}" != "${diag_partition}" ] ; then
+            part_num=$(echo "${f}" | sed -e "s?${onie_mmc_device}??")
+            if [ "${mmc_partition_type}" = "gpt" ]; then
+                sgdisk -d ${part_num} -s ${mmc_device} > /dev/null 2>&1
+            else
+                parted -s $mmc_device rm $part_num > /dev/null 2>&1
+            fi
+        fi
+    done
+    partprobe
+}
+
+uninstall_system()
+{
+    uninstall_emmc_partition
+    
+    # erase u-boot env NOR flash region
+    # do this even during testing
+    if [ -h /dev/mtd-uboot-env ] ; then
+        printf "${log_pre}Erasing 'nos_bootcmd' in u-boot environment NOR flash region\n"
+        fw_setenv -f nos_bootcmd echo > /dev/null 2>&1
+    fi
+
+    return 0
+}
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
