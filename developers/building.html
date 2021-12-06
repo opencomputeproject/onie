@@ -104,13 +104,18 @@
     <div class="sidebar-localtoc">
       <ul>
 <li><a class="reference internal" href="#">Build Instructions</a><ul>
-<li><a class="reference internal" href="#machine-definition-files">Machine Definition Files</a></li>
+<li><a class="reference internal" href="#branches-and-build-environment-compatibility">Branches and Build Environment Compatibility</a></li>
+<li><a class="reference internal" href="#preparing-an-onie-build-environment">Preparing an ONIE Build Environment</a><ul>
+<li><a class="reference internal" href="#dedicated-user-environment-docker-images">Dedicated User Environment Docker Images</a></li>
+<li><a class="reference internal" href="#traditional-docker-image">Traditional Docker Image</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#preparing-a-new-build-machine">Preparing a New Build Machine</a><ul>
 <li><a class="reference internal" href="#debian-systems">Debian Systems</a></li>
-<li><a class="reference internal" href="#docker-image">Docker Image</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#preparing-a-new-build-user-account">Preparing a New Build User Account</a></li>
+<li><a class="reference internal" href="#machine-definition-files">Machine Definition Files</a></li>
 <li><a class="reference internal" href="#cross-compiler-toolchain">Cross-Compiler Toolchain</a></li>
 <li><a class="reference internal" href="#cross-compiling-onie">Cross-Compiling ONIE</a></li>
 <li><a class="reference internal" href="#installing-the-onie-binary">Installing the ONIE Binary</a></li>
@@ -159,13 +164,63 @@
             
   <div class="section" id="build-instructions">
 <h1>Build Instructions<a class="headerlink" href="#build-instructions" title="Permalink to this headline">¶</a></h1>
-<div class="section" id="machine-definition-files">
-<h2>Machine Definition Files<a class="headerlink" href="#machine-definition-files" title="Permalink to this headline">¶</a></h2>
-<p>In order to compile ONIE for a particular platform, you need the
-platform’s machine definition, located in
-<code class="docutils literal notranslate"><span class="pre">$ONIE_ROOT/machine/&lt;vendor&gt;/&lt;vendor&gt;_&lt;model&gt;</span></code>.</p>
-<p>See the INSTALL file in <code class="docutils literal notranslate"><span class="pre">machine/&lt;vendor&gt;/&lt;vendor&gt;_&lt;model&gt;</span></code> for
-additional information about a particular platform.</p>
+<div class="section" id="branches-and-build-environment-compatibility">
+<h2>Branches and Build Environment Compatibility<a class="headerlink" href="#branches-and-build-environment-compatibility" title="Permalink to this headline">¶</a></h2>
+<p>Be aware: the master branch, from release
+<a class="reference external" href="https://github.com/opencomputeproject/onie/tree/2021.11">2021.11</a>
+on contains upgraded software components that break backwards compatibility
+with most machine builds and require a Debian 10 build environment.
+For clarity, a list of ONIE branches and build environments for all machine targets is maintained here:
+<a class="reference external" href="https://github.com/opencomputeproject/onie/blob/master/build-config/scripts/onie-build-targets.json">onie/build-config/scripts/onie-build-targets.json</a></p>
+<p>For some context about the upgrade process, see the <a class="reference external" href="https://www.youtube.com/watch?v=8H4S7eSZWJ4">2021 ONIE Status Update</a></p>
+<p>Machine targets that have not yet been upgraded for the master branch, can still be built
+from the <a class="reference external" href="https://github.com/opencomputeproject/onie/tree/2021.08">2021.08 release</a>
+branch or the Debian9BuildEnvironment tag by using a Debian 9 build environment.
+This process can be made much easier by using a Docker container - see below.</p>
+</div>
+<div class="section" id="preparing-an-onie-build-environment">
+<h2>Preparing an ONIE Build Environment<a class="headerlink" href="#preparing-an-onie-build-environment" title="Permalink to this headline">¶</a></h2>
+<p>ONIE build environments can be either configured directly on the
+host machine (see “Preparing a New Build Machine” below) or run
+in <a class="reference external" href="http://www.docker.com">Docker</a> containers for systems that have
+either docker.io (from Debian) or docker-ce (from Docker) installed.</p>
+<p>The latter approach is preferred, as building ONIE will require build
+environments based off of Debian 10 Buster for the 2021.11 release
+on, or Debian 9 Stretch for backwards compatible builds before the
+<a class="reference external" href="https://github.com/opencomputeproject/onie/tree/2021.08">2021.08 release</a>,</p>
+<div class="section" id="dedicated-user-environment-docker-images">
+<h3>Dedicated User Environment Docker Images<a class="headerlink" href="#dedicated-user-environment-docker-images" title="Permalink to this headline">¶</a></h3>
+<p>Since developing while logged in to a Docker container can be frustrating,
+in that a developer’s configuration isn’t present, host file systems
+have to be explicitly mounted to save files, etc, ONIE build images
+are available with Dedicated User Environment <a class="reference external" href="https://github.com/cumulusnetworks/DUE">DUE</a></p>
+<p>DUE is the recommended environment for building ONIE as
+it has been used for debug and release generation since 2019.</p>
+<p>This MIT licensed open source project can create Docker (or Podman) ONIE
+build environments from different Debian releases, and preserves the
+user’s identity and home directory while running them, creating the
+experience of very little changing from a developers native environment.
+Additionally, users will be building in the same environment that has
+been used to build ONIE releases, vastly simplifying the
+process of debugging build issues.</p>
+<p>While DUE is available via apt in Debian 11 Bullseye, the source code
+<a class="reference external" href="https://github.com/cumulusnetworks/DUE">https://github.com/cumulusnetworks/DUE</a>
+can be run from its checkout directory on Red Hat and Ubuntu systems as well.</p>
+<p>To get started with DUE, configuration instructions can be found at
+<a class="reference external" href="https://github.com/CumulusNetworks/DUE/tree/master/templates/onie">ONIE build environment creation example</a>, and there is a video tutorial available at this <a class="reference external" href="https://www.youtube.com/watch?v=evzkiiRRIvw">YouTube link</a>.</p>
+</div>
+<div class="section" id="traditional-docker-image">
+<h3>Traditional Docker Image<a class="headerlink" href="#traditional-docker-image" title="Permalink to this headline">¶</a></h3>
+<p>If you want to use Docker containers without DUE, the ONIE project
+provides a Debian build environment as a Docker image.  For more
+info, see the <a class="reference external" href="https://github.com/opencomputeproject/onie/tree/master/contrib/build-env">Docker image README</a>.</p>
+<p>That is a good starting point, but for long term development you may
+want to install the development packages natively on your system.
+Have a look at the top-level <code class="docutils literal notranslate"><span class="pre">Makefile</span></code> and the
+<code class="docutils literal notranslate"><span class="pre">$(DEBIAN_BUILD_HOST_PACKAGES)</span></code> variable.  Then install the
+corresponding packages for your distribution that provide the same
+tools.</p>
+</div>
 </div>
 <div class="section" id="preparing-a-new-build-machine">
 <h2>Preparing a New Build Machine<a class="headerlink" href="#preparing-a-new-build-machine" title="Permalink to this headline">¶</a></h2>
@@ -187,18 +242,6 @@ $ make debian-prepare-build-host
 </pre></div>
 </div>
 </div>
-<div class="section" id="docker-image">
-<h3>Docker Image<a class="headerlink" href="#docker-image" title="Permalink to this headline">¶</a></h3>
-<p>As a starting point, the ONIE project provides a Debian build
-environment as a Docker image.  For more info, see the <a class="reference external" href="https://github.com/opencomputeproject/onie/tree/master/contrib/build-env">Docker image
-README</a>.</p>
-<p>That is a good starting point, but for long term development you may
-want to install the development packages natively on your system.
-Have a look at the top-level <code class="docutils literal notranslate"><span class="pre">Makefile</span></code> and the
-<code class="docutils literal notranslate"><span class="pre">$(DEBIAN_BUILD_HOST_PACKAGES)</span></code> variable.  Then install the
-corresponding packages for your distribution that provide the same
-tools.</p>
-</div>
 </div>
 <div class="section" id="preparing-a-new-build-user-account">
 <h2>Preparing a New Build User Account<a class="headerlink" href="#preparing-a-new-build-user-account" title="Permalink to this headline">¶</a></h2>
@@ -208,6 +251,14 @@ in the <code class="docutils literal notranslate"><span class="pre">$PATH</span>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">export</span> <span class="n">PATH</span><span class="o">=</span><span class="s2">&quot;/sbin:/usr/sbin:$PATH&quot;</span>
 </pre></div>
 </div>
+</div>
+<div class="section" id="machine-definition-files">
+<h2>Machine Definition Files<a class="headerlink" href="#machine-definition-files" title="Permalink to this headline">¶</a></h2>
+<p>In order to compile ONIE for a particular platform, you need the
+platform’s machine definition, located in
+<code class="docutils literal notranslate"><span class="pre">$ONIE_ROOT/machine/&lt;vendor&gt;/&lt;vendor&gt;_&lt;model&gt;</span></code>.</p>
+<p>See the INSTALL file in <code class="docutils literal notranslate"><span class="pre">machine/&lt;vendor&gt;/&lt;vendor&gt;_&lt;model&gt;</span></code> for
+additional information about a particular platform.</p>
 </div>
 <div class="section" id="cross-compiler-toolchain">
 <h2>Cross-Compiler Toolchain<a class="headerlink" href="#cross-compiler-toolchain" title="Permalink to this headline">¶</a></h2>
@@ -233,8 +284,8 @@ $ make -j4 MACHINEROOT=../machine/&lt;vendor&gt; MACHINE=&lt;vendor&gt;_&lt;mode
 </div>
 <p>When complete, the following ONIE binaries are created in the <code class="docutils literal notranslate"><span class="pre">build/images</span></code>
 directory:</p>
-<span id="onie-build-products"></span><table border="1" class="docutils" id="id1">
-<caption><span class="caption-text">ONIE Build Products</span><a class="headerlink" href="#id1" title="Permalink to this table">¶</a></caption>
+<span id="onie-build-products"></span><table border="1" class="docutils" id="id3">
+<caption><span class="caption-text">ONIE Build Products</span><a class="headerlink" href="#id3" title="Permalink to this table">¶</a></caption>
 <colgroup>
 <col width="50%" />
 <col width="50%" />
