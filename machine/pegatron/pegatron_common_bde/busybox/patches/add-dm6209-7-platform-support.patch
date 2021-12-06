@@ -1,0 +1,77 @@
+From 9eb37417fb53aef82bc10b0c5eba13031ce5255a Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Wed, 17 Nov 2021 09:58:15 +0800
+Subject: [PATCH] Add 'dm6209-7' platform support.
+
+---
+ include/mb_detect.h        | 1 +
+ miscutils/mb_detect.c      | 7 ++++---
+ miscutils/sys_eeprom_i2c.c | 8 ++++++++
+ 3 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/include/mb_detect.h b/include/mb_detect.h
+index 6fffdfb..8ea1a92 100644
+--- a/include/mb_detect.h
++++ b/include/mb_detect.h
+@@ -40,6 +40,7 @@ enum {
+ 	ASTONMARTINWITHBMC,
+ 	GEMINI,
+ 	GEMINIWITHBMC,
++	FHGW,
+ 	MB_LAST
+ };
+ 
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+index ba88636..98271c0 100644
+--- a/miscutils/mb_detect.c
++++ b/miscutils/mb_detect.c
+@@ -13,7 +13,8 @@ SysBoardInfo sysBoardInfo[] = {
+ 	{ 0x08, "astonMartin",		"FN8032_BNF\0", "fn8032_bnf\0", 0, 0 },
+ 	{ 0x08, "astonMartin(BMC)",	"FN8032_BAF\0", "fn8032_baf\0", 0, 1 },
+ 	{ 0x09, "gemini",		"FM6256_BNF\0", "fm6256_bnf\0", 0, 0 },
+-	{ 0x09, "gemini(BMC)",		"FM6256_BAF\0", "fm6256_baf\0", 0, 1 }
++	{ 0x09, "gemini(BMC)",		"FM6256_BAF\0", "fm6256_baf\0", 0, 1 },
++	{ 0x0A, "fhgw",			"DM6209_7\0", "dm6209_7\0", 0, 0 }
+ };
+ 
+ static u32 mb_id_get_from_cpld(int cpld)
+@@ -273,7 +274,7 @@ static int fan_status_info_get (SysBoardInfo *bdinfo)
+ 	int offset = len - 1;
+ 
+ 	if (bdinfo->motherboard_id == 0xA) {
+-		offset = len - 2;
++		return 0;
+ 	}
+ 
+ 	type = bdinfo->productName[offset];
+@@ -307,7 +308,7 @@ static int bmc_chip_info_get (SysBoardInfo *bdinfo)
+ 		return 0;
+ 
+ 	if (bdinfo->motherboard_id == 0xA) {
+-		offset = len - 4;
++		return 0;
+ 	}
+ 
+ 	type = bdinfo->productName[offset];
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index bc451da..3b9dfd4 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -71,6 +71,14 @@ struct mb_info mb_i2c_info[] = {
+ 		.wp_disable = 0x00,
+ 		.wp_enable = 0x04
+ 	},
++	{
++		.motherboard_id = 0xA, /* FHGW */
++		.mux = {.addr = 0x73, .channel = 1},
++		.eeprom_addr = 0x75,
++		.eeprom_offset = 0x14,
++		.wp_disable = 0x01,
++		.wp_enable = 0x03
++	},
+ 	{
+ 		.motherboard_id = 0xff,
+ 		.mux = {.addr = 0xff, .channel = 0xff},
+-- 
+2.25.1
+

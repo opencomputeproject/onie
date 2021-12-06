@@ -206,6 +206,41 @@ erase_diag_storage()
     fi
 }
 
+# Remove UEFI Boot numbers that reference non-existent files
+uefi_diag_rm_stale_bootnum()
+{
+    efibootmgr -v | grep ')/File(' | awk '{ print $1 }' | while read boot_num ; do
+        local boot_num=${boot_num%\*}
+        local boot_path=$(efibootmgr -v | grep $boot_num | sed -e 's/.*)\/File(//' -e 's/).*//' -e 's/\\/\//g')
+        [ -f "$uefi_esp_mnt/$boot_path" ] || {
+            boot_num=${boot_num#Boot}
+            efibootmgr --quiet -b $boot_num -B
+        }
+    done
+}
+
+uefi_diag_clean_up()
+{
+    # Remove unused files from /boot/efi
+    ls -d $uefi_esp_mnt/EFI/* | while read dir ; do
+        case "$dir" in
+            *-DIAG)
+                # remove the rest
+                rm -rf $dir
+        esac
+    done
+
+    uefi_diag_rm_stale_bootnum
+}
+
+# For UEFI firmware, configure the system to boot ONIE into install
+# mode at the next boot.
+uefi_diag_boot_onie_install()
+{
+    # Return to install mode on the next boot
+    onie-boot-mode -q -o install
+}
+
 uninstall_system()
 {
     # Clean up block device that contains ONIE
@@ -215,6 +250,11 @@ uninstall_system()
         echo "Error: Unable to determine block device of ONIE install"
         exit 1
     }
+
+    if [ "${firmware}" = "uefi" ] ; then
+        uefi_diag_clean_up
+        uefi_diag_boot_onie_install
+    fi
 
     erase_diag_storage $blk_dev
     
