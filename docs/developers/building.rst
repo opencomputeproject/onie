@@ -1,19 +1,83 @@
-.. Copyright (C) 2014,2015,2016,2017,2018 Curt Brune <curt@cumulusnetworks.com>
+.. Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+   Copyright (C) 2014,2015,2016,2017,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
 
 Build Instructions
 ==================
 
-Machine Definition Files
-------------------------
 
-In order to compile ONIE for a particular platform, you need the
-platform's machine definition, located in
-``$ONIE_ROOT/machine/<vendor>/<vendor>_<model>``.
+Branches and Build Environment Compatibility
+--------------------------------------------
 
-See the INSTALL file in ``machine/<vendor>/<vendor>_<model>`` for
-additional information about a particular platform.
+Be aware: the master branch, from release
+`2021.11 <https://github.com/opencomputeproject/onie/tree/2021.11>`_
+on contains upgraded software components that break backwards compatibility
+with most machine builds and require a Debian 10 build environment.
+For clarity, a list of ONIE branches and build environments for all machine targets is maintained here:
+`onie/build-config/scripts/onie-build-targets.json <https://github.com/opencomputeproject/onie/blob/master/build-config/scripts/onie-build-targets.json>`_
+
+For some context about the upgrade process, see the `2021 ONIE Status Update <https://www.youtube.com/watch?v=8H4S7eSZWJ4>`_
+
+Machine targets that have not yet been upgraded for the master branch, can still be built
+from the `2021.08 release <https://github.com/opencomputeproject/onie/tree/2021.08>`_
+branch or the Debian9BuildEnvironment tag by using a Debian 9 build environment.
+This process can be made much easier by using a Docker container - see below.
+
+
+Preparing an ONIE Build Environment
+-----------------------------------
+ONIE build environments can be either configured directly on the
+host machine (see "Preparing a New Build Machine" below) or run
+in `Docker <http://www.docker.com>`_ containers for systems that have
+either docker.io (from Debian) or docker-ce (from Docker) installed.
+
+The latter approach is preferred, as building ONIE will require build
+environments based off of Debian 10 Buster for the 2021.11 release
+on, or Debian 9 Stretch for backwards compatible builds before the
+`2021.08 release <https://github.com/opencomputeproject/onie/tree/2021.08>`_,
+
+Dedicated User Environment Docker Images
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Since developing while logged in to a Docker container can be frustrating,
+in that a developer's configuration isn't present, host file systems
+have to be explicitly mounted to save files, etc, ONIE build images
+are available with Dedicated User Environment `DUE <https://github.com/cumulusnetworks/DUE>`_
+
+DUE is the recommended environment for building ONIE as
+it has been used for debug and release generation since 2019.
+
+This MIT licensed open source project can create Docker (or Podman) ONIE
+build environments from different Debian releases, and preserves the
+user's identity and home directory while running them, creating the
+experience of very little changing from a developers native environment.
+Additionally, users will be building in the same environment that has
+been used to build ONIE releases, vastly simplifying the
+process of debugging build issues.
+
+While DUE is available via apt in Debian 11 Bullseye, the source code
+`https://github.com/cumulusnetworks/DUE <https://github.com/cumulusnetworks/DUE>`_
+can be run from its checkout directory on Red Hat and Ubuntu systems as well.
+
+To get started with DUE, configuration instructions can be found at
+`ONIE build environment creation example <https://github.com/CumulusNetworks/DUE/tree/master/templates/onie>`_, and there is a video tutorial available at this `YouTube link <https://www.youtube.com/watch?v=evzkiiRRIvw>`_.
+
+Traditional Docker Image
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you want to use Docker containers without DUE, the ONIE project
+provides a Debian build environment as a Docker image.  For more
+info, see the `Docker image README
+<https://github.com/opencomputeproject/onie/tree/master/contrib/build-env>`_.
+
+That is a good starting point, but for long term development you may
+want to install the development packages natively on your system.
+Have a look at the top-level ``Makefile`` and the
+``$(DEBIAN_BUILD_HOST_PACKAGES)`` variable.  Then install the
+corresponding packages for your distribution that provide the same
+tools.
+
 
 Preparing a New Build Machine
 -----------------------------
@@ -39,21 +103,6 @@ package installation requires root privileges::
   $ sudo apt-get install build-essential
   $ make debian-prepare-build-host
 
-Docker Image
-^^^^^^^^^^^^
-
-As a starting point, the ONIE project provides a Debian build
-environment as a Docker image.  For more info, see the `Docker image
-README
-<https://github.com/opencomputeproject/onie/tree/master/contrib/build-env>`_.
-
-That is a good starting point, but for long term development you may
-want to install the development packages natively on your system.
-Have a look at the top-level ``Makefile`` and the
-``$(DEBIAN_BUILD_HOST_PACKAGES)`` variable.  Then install the
-corresponding packages for your distribution that provide the same
-tools.
-
 
 Preparing a New Build User Account
 ----------------------------------
@@ -63,6 +112,16 @@ in the ``$PATH`` environment variable.  As an example, when using the
 ``bash`` shell add the following near the end of ``$HOME/.bashrc``::
 
   export PATH="/sbin:/usr/sbin:$PATH"
+
+Machine Definition Files
+------------------------
+
+In order to compile ONIE for a particular platform, you need the
+platform's machine definition, located in
+``$ONIE_ROOT/machine/<vendor>/<vendor>_<model>``.
+
+See the INSTALL file in ``machine/<vendor>/<vendor>_<model>`` for
+additional information about a particular platform.
 
 Cross-Compiler Toolchain
 ------------------------
