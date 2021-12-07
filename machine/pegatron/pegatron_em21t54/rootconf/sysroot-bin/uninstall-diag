@@ -1,0 +1,57 @@
+#!/bin/sh
+
+#  Copyright (C) 2014,2018 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+##
+## Uninstall the system.
+##
+## This assumes the shell is ash/dash.
+##
+
+this_script=$(basename $(realpath $0))
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+
+. $lib_dir/functions
+syslog_tag=onie-uninstall-diag
+
+import_cmdline
+
+uninstall_diag_partition()
+{
+    echo "INFO: Format DIAG Partition" 
+    local diag_volume_label="PEGATRON-DIAG"
+    local diag_dev=$(blkid | grep ${diag_volume_label} | awk -F: '{print $1}')
+
+    mkfs.ext4 -F -L $diag_volume_label $diag_dev || {
+        echo "Error: Unable to create file system on $diag_dev"
+        exit 1
+    }
+}
+
+uninstall_system()
+{
+    uninstall_diag_partition
+    
+    # erase u-boot env NOR flash region
+    # do this even during testing
+    if [ -h /dev/mtd-uboot-env ] ; then
+        printf "${log_pre}Set 'mfg_flag' to false in u-boot environment NOR flash region\n"
+        fw_setenv -f mfg_boot_flag false > /dev/null 2>&1
+    fi
+
+    return 0
+}
+
+uninstall_system || {
+    printf "${log_pre}ERROR: Problems uninstalling system..."
+    exit 1
+}
+
+printf "${log_pre}Uninstall complete.\n"
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
