@@ -1,0 +1,533 @@
+From 3455a90104a87e8db1e882044b4ac667130e5764 Mon Sep 17 00:00:00 2001
+From: Build User <build@example.com>
+Date: Thu, 27 May 2021 08:26:00 +0000
+Subject: [PATCH] [PATCH] SuperIO NCT6779D Driver
+
+---
+ drivers/i2c/busses/Kconfig        |   7 +
+ drivers/i2c/busses/Makefile       |   1 +
+ drivers/i2c/busses/i2c-nct6779d.c | 482 ++++++++++++++++++++++++++++++
+ 3 files changed, 490 insertions(+)
+ create mode 100644 drivers/i2c/busses/i2c-nct6779d.c
+
+diff --git a/drivers/i2c/busses/Kconfig b/drivers/i2c/busses/Kconfig
+index d252276..cb1fe89 100644
+--- a/drivers/i2c/busses/Kconfig
++++ b/drivers/i2c/busses/Kconfig
+@@ -132,6 +132,13 @@ config I2C_I801
+ 	  This driver can also be built as a module.  If so, the module
+ 	  will be called i2c-i801.
+ 
++config I2C_NCT6779D
++    tristate "Super IO NCT6779D"
++    depends on X86
++    select I2C_SMBUS
++    help
++        If you say yes to this option, support will be included for the Super IO nCT6779D.
++
+ config I2C_ISCH
+ 	tristate "Intel SCH SMBus 1.0"
+ 	depends on PCI
+diff --git a/drivers/i2c/busses/Makefile b/drivers/i2c/busses/Makefile
+index 29764cc..fd2be00 100644
+--- a/drivers/i2c/busses/Makefile
++++ b/drivers/i2c/busses/Makefile
+@@ -13,6 +13,7 @@ obj-$(CONFIG_I2C_AMD756)	+= i2c-amd756.o
+ obj-$(CONFIG_I2C_AMD756_S4882)	+= i2c-amd756-s4882.o
+ obj-$(CONFIG_I2C_AMD8111)	+= i2c-amd8111.o
+ obj-$(CONFIG_I2C_I801)		+= i2c-i801.o
++obj-$(CONFIG_I2C_NCT6779D)  += i2c-nct6779d.o
+ obj-$(CONFIG_I2C_ISCH)		+= i2c-isch.o
+ obj-$(CONFIG_I2C_ISMT)		+= i2c-ismt.o
+ obj-$(CONFIG_I2C_NFORCE2)	+= i2c-nforce2.o
+diff --git a/drivers/i2c/busses/i2c-nct6779d.c b/drivers/i2c/busses/i2c-nct6779d.c
+new file mode 100644
+index 0000000..fc507ff
+--- /dev/null
++++ b/drivers/i2c/busses/i2c-nct6779d.c
+@@ -0,0 +1,482 @@
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/delay.h>
++#include <linux/i2c.h>
++
++#define SM_DATA 0
++#define SM_WRITE_SIZE 1
++#define SM_COMMAND 2
++#define SM_INDEX 3
++#define SM_CONTROL 4
++#define SM_ADDRESS 5
++#define SM_FERQ 6
++#define BS_MASK	(~7)
++#define ERROR_STATUS 9
++#define SMCTL3 0xE
++
++#define SIO_ADDR            0x2e
++#define SIO_NCT6779_ID      0xc560
++
++#define MAX_RETRIES         500
++#define DRIVER_NAME         "suio-nct6779d"
++int smbus_clock = 2;        //0x2=0010=200KHz=100KHz of waveform
++module_param(smbus_clock, int, 0);
++
++static struct platform_device suio_smbus_device = {
++    .name = "suio-nct6779d",
++    .id = -1,
++};
++
++struct suio_smbus_priv {
++    struct i2c_adapter adap;
++    struct i2c_msg *msg;
++    struct device *dev;
++    struct mutex acpi_lock;
++    int bs_addr;
++};
++
++/*-----------------------------------------------------------------------------*/
++/*Enter Extend Function Mode                                                   */
++/*-----------------------------------------------------------------------------*/
++static inline int superio_enter(int ioreg){
++    if (!request_muxed_region(ioreg, 2, DRIVER_NAME))
++        return -EBUSY;
++    // two successive writes of 0x87
++    outb(0x87, ioreg);
++    outb(0x87, ioreg);
++    return 0;
++}
++
++/*-----------------------------------------------------------------------------*/
++/* Select Logical Device                                                       */
++/*-----------------------------------------------------------------------------*/
++static inline void superio_select(int ioreg, int logic_dev){
++    outb(0x7, ioreg);
++    outb(logic_dev, ioreg + 1);
++}
++
++/*-----------------------------------------------------------------------------*/
++/* Read Value of Control Register of Logical Device                            */
++/*-----------------------------------------------------------------------------*/
++static inline int superio_inb(int ioreg, int ctrl_reg){
++    outb(ctrl_reg, ioreg);
++    return inb(ioreg + 1);
++}
++
++/*-----------------------------------------------------------------------------*/
++/* Write Value of Control Register of Logical Device                           */
++/*-----------------------------------------------------------------------------*/
++static inline void superio_outb(int ioreg, int ctrl_reg, int val){
++    outb(ctrl_reg, ioreg);
++    outb(val, ioreg + 1);
++}
++
++/*-----------------------------------------------------------------------------*/
++/* Exit Extend Function Mode                                                   */
++/*-----------------------------------------------------------------------------*/
++static inline void superio_exit(int ioreg){
++    outb(0xaa, ioreg);
++
++    outb(0x02, ioreg);
++    outb(0x02, ioreg + 1);
++    release_region(ioreg, 2);
++}
++
++static int suio_init(struct suio_smbus_priv *priv){
++    int enable_val,ret=0;
++    u16 val;
++    u16 val_1A,val_1B,val_2F,val_27;
++    int dev8_bs_addr;
++
++    ret = superio_enter(SIO_ADDR);
++    if (ret)
++        goto error;
++
++    superio_select(SIO_ADDR, 0x0b);
++
++    val = (superio_inb(SIO_ADDR, 0x62) << 8) | superio_inb(SIO_ADDR, 0x63 );
++
++    priv->bs_addr = val & BS_MASK;
++    enable_val = superio_inb(SIO_ADDR, 0x30);
++    if (!enable_val){
++        superio_outb(SIO_ADDR, 0x30, enable_val | 0x01);
++    }
++
++    val = (superio_inb(SIO_ADDR, 0x20) << 8) | superio_inb(SIO_ADDR, 0x21);
++    switch (val & 0xFFF8) {
++        case SIO_NCT6779_ID:
++            printk(KERN_ALERT "chip ID:nct6779.\n");
++        break;
++        default:
++            if (val != 0xffff)
++                pr_debug("unsupported chip ID: 0x%04x\n", val);
++            superio_exit(SIO_ADDR);
++            return -ENODEV;
++    }
++    val_2F = superio_inb(SIO_ADDR, 0x2F);
++    val_1A = superio_inb(SIO_ADDR, 0x1A);
++    val_1B = superio_inb(SIO_ADDR, 0x1B);
++    val_27 = superio_inb(SIO_ADDR, 0x27);
++
++    superio_outb(SIO_ADDR, 0x2F, val_2F&0xFD);
++    superio_outb(SIO_ADDR, 0x1A, val_1A&0xf0);
++    superio_outb(SIO_ADDR, 0x1B, val_1B&0xF9);
++    superio_outb(SIO_ADDR, 0x27, (val_27|0x10));
++
++    val_27 = superio_inb(SIO_ADDR, 0x27);
++
++    /*Select Logical Device 8*/
++    superio_select(SIO_ADDR, 0x08);
++
++    dev8_bs_addr = (superio_inb(SIO_ADDR, 0x60) << 8) | superio_inb(SIO_ADDR, 0x61 );
++
++    enable_val = superio_inb(SIO_ADDR, 0x30);
++    superio_outb(SIO_ADDR, 0x30, enable_val | 0x08);
++
++    val = superio_inb(SIO_ADDR, 0x30);
++
++    /*Select Logical Device 9*/
++    superio_select(SIO_ADDR, 0x09);
++    enable_val = superio_inb(SIO_ADDR, 0x30);
++    superio_outb(SIO_ADDR, 0x30, enable_val | 0x40);
++
++    val = superio_inb(SIO_ADDR, 0x30);
++
++    superio_exit(SIO_ADDR);
++
++    /*Software Rest*/
++    outb_p(0x40, priv->bs_addr + SM_CONTROL);
++    msleep(1);
++    outb_p(0x0, priv->bs_addr + SM_CONTROL);
++    msleep(1);
++    outb_p(smbus_clock, priv->bs_addr + SM_FERQ);
++
++    /*Set GPIO6*/
++    outb_p(0x6, dev8_bs_addr + 0);
++    outb_p(0x2, dev8_bs_addr + 2);
++    outb_p(0x0, dev8_bs_addr + 1);
++
++    val = inb(dev8_bs_addr + 0);
++    pr_debug("gpio group = 0x%x\n", val);
++
++    val = inb(dev8_bs_addr + 1);
++    pr_debug("gpio direction = 0x%x\n", val);
++
++    val = inb(dev8_bs_addr + 2);
++    pr_debug("gpio data = 0x%x\n", val);
++
++error:
++    return ret;
++}
++
++static s32 suio_smbus_recovery(void){
++    int ret = 0;
++    u8 val_1A = 0;
++    u8 val_30 = 0;
++    u8 debug_val = 0;
++    u8 clk_cycle = 0;
++
++    ret = superio_enter(SIO_ADDR);
++    if (ret)
++        return ret;
++
++    /*Set Pin52 as GP41*/
++    val_1A = superio_inb(SIO_ADDR, 0x1A);
++    superio_outb(SIO_ADDR, 0x1A, val_1A | 0x8);
++    val_1A = superio_inb(SIO_ADDR, 0x1A);
++    printk("[Recovery]Set CLK Pin as GP41, CR 1A %02x\n",val_1A);
++
++    /*Select Logicl Device 9*/
++    superio_select(SIO_ADDR, 0x09);
++
++    /*Active GPIO4*/
++    val_30 = superio_inb(SIO_ADDR, 0x30);
++    superio_outb(SIO_ADDR, 0x30, val_30 | 0x10);
++    debug_val = superio_inb(SIO_ADDR, 0x30);
++    printk("[Recovery]Active GPIO4, CR 30 %02x\n",debug_val);
++
++    /*Set GPIO4 I/O as Output*/
++    superio_outb(SIO_ADDR, 0xF0, 0x0);
++    debug_val = superio_inb(SIO_ADDR, 0xf0);
++    printk("[Recovery]Set GPIO4 as output, CR F0 %02x\n",debug_val);
++
++    /*Simulate GPIO CLK HIGH and LOW*/
++    for(clk_cycle=0; clk_cycle<10; clk_cycle++){
++        superio_outb(SIO_ADDR, 0xf1, 0x0);
++        usleep_range(1000, 5000);
++        superio_outb(SIO_ADDR, 0xf1, 0xff);
++        usleep_range(1000, 5000);
++    }
++    usleep_range(100, 500);
++    /*Set Pin52 as MSCL,bit3-2*/
++    val_1A = superio_inb(SIO_ADDR, 0x1A);
++    superio_outb(SIO_ADDR, 0x1A, val_1A & 0xF0);
++    val_1A = superio_inb(SIO_ADDR, 0x1A);
++    printk("[Recovery]Set Pin52 as MSCL CR 1A %02x\n",val_1A);
++
++    /*Select Logicl Device 9*/
++    superio_select(SIO_ADDR, 0x09);
++
++    /*Inactive GPIO4*/
++    val_30 = superio_inb(SIO_ADDR, 0x30);
++    superio_outb(SIO_ADDR, 0x30, val_30 & 0xef);
++    debug_val = superio_inb(SIO_ADDR, 0x30);
++    printk("[Recovery]Inactive GPIO4, CR 30 %02x\n",debug_val);
++
++    superio_exit(SIO_ADDR);
++
++    return ret;
++}
++static s32 suio_smbus_access(struct i2c_adapter *adap, u16 addr, unsigned short flags,
++        char read_write, u8 command, int size, union i2c_smbus_data *data){
++    struct suio_smbus_priv *priv = i2c_get_adapdata(adap);
++    int ret = 0;
++    int i;
++    int len=0, cnt=0;
++    int timeout=0;
++    int val=0;
++
++    //illegal BMC command filter
++    if(data != NULL && data->block[0] == 0x0 && addr == 0x3e && command != 0xff){
++        dev_err(priv->dev, "Unsupported command 0x%x\n",command);
++        ret = -EOPNOTSUPP;
++        return ret;
++    }
++
++    mutex_lock(&priv->acpi_lock);
++
++    //Software Rest
++    outb_p(0x40, priv->bs_addr + SM_CONTROL);
++    outb_p(0x0, priv->bs_addr + SM_CONTROL);
++
++    //Set CLK Seq
++    outb_p(smbus_clock, priv->bs_addr + SM_FERQ);
++
++    switch (size) {
++        case I2C_SMBUS_QUICK:
++            outb_p(((addr & 0x7f) << 1) | (read_write & 0x01), priv->bs_addr + SM_ADDRESS);
++            outb_p(0x0, priv->bs_addr + SM_INDEX);
++            if (read_write == I2C_SMBUS_WRITE){
++                outb_p(0x8, priv->bs_addr + SM_COMMAND);
++                outb_p(command, priv->bs_addr + SM_DATA);
++            }else{
++                outb_p(0x0, priv->bs_addr + SM_COMMAND);
++            }
++        break;
++        case I2C_SMBUS_BYTE:
++            //Chip not support the command I2C_SMBUS_BYTE.
++            outb_p(((addr & 0x7f) << 1) | (read_write & 0x01), priv->bs_addr + SM_ADDRESS);
++            outb_p(0x0, priv->bs_addr + SM_INDEX);
++            if (read_write == I2C_SMBUS_WRITE){
++                outb_p(0x8, priv->bs_addr + SM_COMMAND);
++                outb_p(command, priv->bs_addr + SM_DATA);
++            }else{
++                outb_p(0x0, priv->bs_addr + SM_COMMAND);
++            }
++            break;
++        case I2C_SMBUS_BYTE_DATA:
++            outb_p(((addr & 0x7f) << 1) | (read_write & 0x01), priv->bs_addr + SM_ADDRESS);
++            outb_p(command, priv->bs_addr + SM_INDEX);
++            if (read_write == I2C_SMBUS_WRITE){
++                outb_p(0x8, priv->bs_addr + SM_COMMAND);
++                outb_p(data->byte, priv->bs_addr + SM_DATA);
++            }else{
++                outb_p(0x0, priv->bs_addr + SM_COMMAND);
++            }
++            break;
++        case I2C_SMBUS_WORD_DATA:
++            outb_p((addr << 1) | read_write, priv->bs_addr + SM_ADDRESS);
++            outb_p(command, priv->bs_addr + SM_INDEX);
++            if (read_write == I2C_SMBUS_WRITE){
++                outb_p(data->word & 0xff, priv->bs_addr + SM_DATA);
++                outb_p((data->word & 0xff00) >> 8, priv->bs_addr + SM_DATA);
++                outb_p(0x9, priv->bs_addr + SM_COMMAND);
++            }else{
++                outb_p(0x1, priv->bs_addr + SM_COMMAND);
++            }
++            break;
++        case I2C_SMBUS_BLOCK_DATA:
++            outb_p(((addr & 0x7f) << 1) | (read_write & 0x01), priv->bs_addr + SM_ADDRESS);
++            outb_p(command, priv->bs_addr + SM_INDEX);
++
++            len = data->block[0];
++            if (read_write == I2C_SMBUS_WRITE){
++                outb_p(0x0A, priv->bs_addr + SM_COMMAND);
++                outb_p(data->block[0], priv->bs_addr + SM_WRITE_SIZE);
++                cnt = 1;
++                if (len >= 4) {
++                    for (i = cnt; i <= 4; i++) {
++                        outb_p(data->block[i], priv->bs_addr + SM_DATA);
++                    }
++                    len -= 4;
++                    cnt += 4;
++                }
++                else {
++                    for (i = cnt; i <= len; i++ ) {
++                        outb_p(data->block[i], priv->bs_addr + SM_DATA);
++                    }
++                    len = 0;
++                }
++            }
++            else{
++                outb_p(0x02, priv->bs_addr + SM_COMMAND);
++                msleep(1);
++            }
++            break;
++        default:
++            dev_err(priv->dev, "Unsupported transaction %d\n",size);
++            ret = -EOPNOTSUPP;
++            goto out;
++    }
++    /*Active Manul Mode*/
++    outb_p(0x80, priv->bs_addr + SM_CONTROL);
++
++    while ((size == I2C_SMBUS_BLOCK_DATA) && (len > 0)) {
++        if (read_write == I2C_SMBUS_WRITE) {
++            timeout = 0;
++            while ((inb_p(SMCTL3) & 1) == 0){
++                if(timeout > MAX_RETRIES){
++                    ret=-ETIMEDOUT;
++                    goto out;
++                }
++                usleep_range(250, 500);
++                timeout++;
++            }
++            //Load more bytes into FIFO
++            if (len >= 4) {
++                for (i = cnt; i <= (cnt + 4); i++) {
++                    outb_p(data->block[i], priv->bs_addr + SM_DATA);
++                }
++            len -= 4;
++            cnt += 4;
++            }
++            else {
++                for (i = cnt; i <= (cnt + len); i++) {
++                    outb_p(data->block[i], priv->bs_addr + SM_DATA);
++                }
++                len = 0;
++            }
++        }
++    }
++
++    timeout = 0;
++    while ((inb(priv->bs_addr + SMCTL3) & 0x04) != 0){
++        if(timeout > MAX_RETRIES){
++            ret=-ETIMEDOUT;
++            suio_smbus_recovery();
++            goto out;
++        }
++        usleep_range(250, 500);
++        timeout++;
++    }
++    val = inb_p(priv->bs_addr + ERROR_STATUS);
++    if ((val & 0x32) != 0) {
++        ret=-ENXIO;
++        goto out;
++    }
++    else if ((read_write == I2C_SMBUS_WRITE) || (size == I2C_SMBUS_QUICK)) {
++        mutex_unlock(&priv->acpi_lock);
++        return ret;
++    }
++    switch (size) {
++        case I2C_SMBUS_QUICK:
++        case I2C_SMBUS_BYTE:
++        case I2C_SMBUS_BYTE_DATA:
++            data->byte = inb(priv->bs_addr + SM_DATA);
++        break;
++        case I2C_SMBUS_WORD_DATA:
++            data->word = inb_p(priv->bs_addr + SM_DATA) + (inb_p(priv->bs_addr + SM_DATA) << 8);
++            break;
++        case I2C_SMBUS_BLOCK_DATA:
++            data->block[0]= inb(priv->bs_addr + SM_DATA);
++            for (i=1;i<=data->block[0];i++)
++                data->block[i] = inb(priv->bs_addr + SM_DATA);
++        break;
++    }
++out:
++    mutex_unlock(&priv->acpi_lock);
++    return ret;
++}
++
++static u32 suio_smbus_func(struct i2c_adapter *adapter){
++    // Do not support I2C_FUNC_SMBUS_QUICK | I2C_FUNC_SMBUS_BYTE
++    return (I2C_FUNC_SMBUS_BYTE_DATA | I2C_FUNC_SMBUS_WORD_DATA |I2C_FUNC_SMBUS_BLOCK_DATA | I2C_FUNC_SMBUS_BLOCK_PROC_CALL) ;
++}
++
++static const struct i2c_algorithm smbus_algorithm = {
++    .smbus_xfer = suio_smbus_access,
++    .functionality = suio_smbus_func,
++};
++
++static int suio_smbus_probe(struct platform_device *pdev){
++    struct suio_smbus_priv *priv;
++    int ret=0;
++    int val = 0;
++    int offset = 0;
++
++    priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
++    if (!priv)
++        return -ENOMEM;
++    strlcpy(priv->adap.name, "SuperIO NCT6779D", sizeof(priv->adap.name));
++    priv->dev = &pdev->dev;
++    priv->adap.owner = THIS_MODULE;
++    priv->adap.algo = &smbus_algorithm;
++    priv->adap.algo_data = priv;
++    priv->adap.dev.parent = &pdev->dev;
++    i2c_set_adapdata(&priv->adap, priv);
++    platform_set_drvdata(pdev, priv);
++    mutex_init(&priv->acpi_lock);
++    ret = i2c_add_adapter(&priv->adap);
++    if (ret < 0) {
++        dev_err(&pdev->dev, "failed to add bus to i2c core\n");
++        goto error;
++    }
++
++    ret = suio_init(priv);
++    for (offset=0x0; offset<=0x14;offset++){
++        val = inb(priv->bs_addr + offset);
++    }
++
++error:
++    return ret;
++}
++
++static int suio_smbus_remove(struct platform_device *pdev){
++    struct suio_smbus_priv *priv = platform_get_drvdata(pdev);
++    i2c_del_adapter(&priv->adap);
++    return 0;
++}
++
++static struct platform_driver suio_smbus_driver = {
++    .probe  = suio_smbus_probe,
++    .remove = suio_smbus_remove,
++    .driver = {
++        .name = "suio-nct6779d",
++    },
++};
++
++static int suio_smbus_init(void){
++    int ret = 0;
++    ret = platform_device_register(&suio_smbus_device);
++    if (ret)
++        goto error;
++    ret = platform_driver_register(&suio_smbus_driver);
++    if (ret)
++        goto error;
++    return 0;
++error:
++    return 1;
++}
++
++void suio_smbus_exit(void){
++    platform_device_unregister(&suio_smbus_device);
++    platform_driver_unregister(&suio_smbus_driver);
++    printk(KERN_ALERT "suio-nct6779d Driver removed.\n");
++}
++
++module_init(suio_smbus_init);
++module_exit(suio_smbus_exit);
++
++MODULE_LICENSE("GPL") ;
++MODULE_AUTHOR("Vicky Wei <vicky.wei@senao.com>");
++MODULE_DESCRIPTION("This is suio smbus module.");
+-- 
+2.17.1
+
