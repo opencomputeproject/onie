@@ -1,0 +1,324 @@
+From 05cd1f204e267f409cc15ebf58c2898c2b56c4f3 Mon Sep 17 00:00:00 2001
+From: Build User <build@example.com>
+Date: Thu, 11 Nov 2021 07:23:40 +0000
+Subject: [PATCH] SND9000 EEPROM Read and Write
+
+---
+ include/24cXX.h            |   2 +
+ include/sys_eeprom.h       |   2 +-
+ miscutils/24cXX.c          |  15 +++++++
+ miscutils/onie_tlvinfo.c   |  68 ++++++++++++++--------------
+ miscutils/sys_eeprom_i2c.c | 108 +++++++++++++++++++++++++++++++++++----------
+ 5 files changed, 136 insertions(+), 59 deletions(-)
+ mode change 100644 => 100755 miscutils/sys_eeprom_i2c.c
+
+diff --git a/include/24cXX.h b/include/24cXX.h
+index 5fb4641..3b8d9dc 100644
+--- a/include/24cXX.h
++++ b/include/24cXX.h
+@@ -63,4 +63,6 @@ int eeprom_read_current_byte(struct eeprom *e);
+  */
+ int eeprom_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data);
+ 
++int senao_eeprom_read_block(struct eeprom *e, __u8 *data, int *data_len);
++int senao_eeprom_write_block(struct eeprom *e, int reg, __u8 *data, int data_len);
+ #endif
+diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
+index 94dfd5a..b0d100a 100644
+--- a/include/sys_eeprom.h
++++ b/include/sys_eeprom.h
+@@ -1,2 +1,2 @@
+-int read_sys_eeprom(void *eeprom_data, int offset, int len);
++int read_sys_eeprom(void *eeprom_data, int *total_len);
+ int write_sys_eeprom(void *eeprom_data, int len);
+diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
+index ccc0965..2798feb 100644
+--- a/miscutils/24cXX.c
++++ b/miscutils/24cXX.c
+@@ -180,3 +180,18 @@ int eeprom_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data)
+ 		return -1;
+ 	}
+ }
++
++int senao_eeprom_read_block(struct eeprom *e, __u8 *data, int *data_len){
++    int r = 0;
++
++    r = i2c_smbus_read_block_data(e->fd, 0xff, data);
++    *data_len = r;
++    return r;
++}
++
++int senao_eeprom_write_block(struct eeprom *e, int reg, __u8 *data, int data_len){
++    int r = 0;
++
++    r = i2c_smbus_write_block_data(e->fd, reg, data_len, data);
++    return r;
++}
+diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
+index 26b6ec5..c7fcfff 100644
+--- a/miscutils/onie_tlvinfo.c
++++ b/miscutils/onie_tlvinfo.c
+@@ -317,7 +317,6 @@ static void decode_tlv(tlvinfo_tlv_t * tlv)
+ {
+     char name[DECODE_NAME_MAX];
+     char value[TLV_DECODE_VALUE_MAX_LEN];
+-    int i;
+ 
+     decode_tlv_value(tlv, value);
+ 
+@@ -344,22 +343,22 @@ static bool is_checksum_valid(u_int8_t *eeprom)
+ 
+     // Is the eeprom header valid?
+     if (!is_valid_tlvinfo_header(eeprom_hdr)) {
+-	return(FALSE);
++        return(FALSE);
+     }
+ 
+     // Is the last TLV a CRC?
+     eeprom_crc = (tlvinfo_tlv_t *) &eeprom[sizeof(tlvinfo_header_t) +
+-					   be16_to_cpu(eeprom_hdr->totallen) -
+-					   (sizeof(tlvinfo_tlv_t) + 4)];
++                    be16_to_cpu(eeprom_hdr->totallen) -
++                    (sizeof(tlvinfo_tlv_t) + 4)];
+     if ((eeprom_crc->type != TLV_CODE_CRC_32) || (eeprom_crc->length != 4)) {
+-	return(FALSE);
++        return(FALSE);
+     }
+ 
+     // Calculate the checksum
+     calc_crc = crc32(0, (void *)eeprom, sizeof(tlvinfo_header_t) +
+-		     be16_to_cpu(eeprom_hdr->totallen) - 4);
++        be16_to_cpu(eeprom_hdr->totallen) - 4);
+     stored_crc = ((eeprom_crc->value[0] << 24) | (eeprom_crc->value[1] << 16) |
+-		  (eeprom_crc->value[2] <<  8) | eeprom_crc->value[3]);
++          (eeprom_crc->value[2] <<  8) | eeprom_crc->value[3]);
+     return(calc_crc == stored_crc);
+ }
+ 
+@@ -443,7 +442,7 @@ void show_eeprom(u_int8_t *eeprom)
+ 
+ #ifdef DEBUG
+     printf("EEPROM dump: (0x%x bytes)", SYS_EEPROM_SIZE);
+-    for (i = 0; i < SYS_EEPROM_SIZE; i++) {
++    for (int i = 0; i < SYS_EEPROM_SIZE; i++) {
+ 	if ((i % 16) == 0)
+ 	    printf("\n%02X: ", i);
+ 	printf("%02X ", eeprom[i]);
+@@ -461,34 +460,34 @@ void show_eeprom(u_int8_t *eeprom)
+ int read_eeprom(u_int8_t *eeprom)
+ {
+     int ret;
++    int total_len = 0;
+     tlvinfo_header_t *eeprom_hdr = (tlvinfo_header_t *) eeprom;
+-    tlvinfo_tlv_t *eeprom_tlv = (tlvinfo_tlv_t *)&eeprom[
+-	sizeof(tlvinfo_header_t)];
++    tlvinfo_tlv_t *eeprom_tlv = (tlvinfo_tlv_t *)&eeprom[sizeof(tlvinfo_header_t)];
+ 
+     if (has_been_read)
+-	return 0;
+-
+-    /* Read the header */
+-    ret = read_sys_eeprom((void *)eeprom_hdr, 0, sizeof(tlvinfo_header_t));
+-    /* If the header was successfully read, read the TLVs */
+-    if ((ret == 0) && is_valid_tlvinfo_header(eeprom_hdr)) {
+-	ret = read_sys_eeprom((void *)eeprom_tlv, sizeof(tlvinfo_header_t),
+-			      be16_to_cpu(eeprom_hdr->totallen));
+-    }
++        return 0;
++
++    ret = read_sys_eeprom((void *)eeprom_tlv, &total_len);
++    /* TLV header */
++    strcpy(eeprom_hdr->signature, TLV_INFO_ID_STRING);
++    eeprom_hdr->version = TLV_INFO_VERSION;
++    eeprom_hdr->totallen = cpu_to_be16(total_len);
++    /* Update CRC*/
++    update_crc(eeprom);
+     // If the contents are invalid, start over with default contents
+     if (!is_valid_tlvinfo_header(eeprom_hdr))
+-	fprintf(stderr,
+-                "Notice:  Invalid TLV header found.  Using default contents.\n");
++        fprintf(stderr,
++            "Notice:  Invalid TLV header found.  Using default contents.\n");
+     if (!is_checksum_valid(eeprom))
+-	fprintf(stderr,
+-                "Notice:  Invalid TLV checksum found.  Using default contents.\n");
++        fprintf(stderr,
++            "Notice:  Invalid TLV checksum found.  Using default contents.\n");
+     if ( !is_valid_tlvinfo_header(eeprom_hdr) || !is_checksum_valid(eeprom) ){
+-	strcpy(eeprom_hdr->signature, TLV_INFO_ID_STRING);
+-	eeprom_hdr->version = TLV_INFO_VERSION;
+-	eeprom_hdr->totallen = cpu_to_be16(0);
+-	update_crc(eeprom);
+-	/* Note that the contents of the hardware is not valid */
+-	hw_eeprom_valid = 0;
++        strcpy(eeprom_hdr->signature, TLV_INFO_ID_STRING);
++        eeprom_hdr->version = TLV_INFO_VERSION;
++        eeprom_hdr->totallen = cpu_to_be16(0);
++        update_crc(eeprom);
++        /* Note that the contents of the hardware is not valid */
++        hw_eeprom_valid = 0;
+     }
+     has_been_read = 1;
+ 
+@@ -507,12 +506,11 @@ int prog_eeprom(u_int8_t * eeprom)
+     int ret = 0;
+     tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
+     int eeprom_len;
+-
+-    eeprom_len = sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen);
+-    ret = write_sys_eeprom(eeprom, eeprom_len);
+-    if (ret) {
+-	printf("Programming failed.\n");
+-	return -1;
++    eeprom_len = be16_to_cpu(eeprom_hdr->totallen);
++    ret = write_sys_eeprom(eeprom + sizeof(tlvinfo_header_t), eeprom_len);
++    if (ret != 0) {
++        printf("Programming failed.\n");
++        return -1;
+     }
+ 
+     /* After writing the HW contents are valid */
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+old mode 100644
+new mode 100755
+index ed3235b..54b02ca
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -11,26 +11,74 @@
+     #define EEPROM_TYPE EEPROM_TYPE_UNKNOWN
+ #endif
+ 
++
++#define SENAO_EEPRON_READ_REG 0x1
++#define SENAO_EEPRON_WRITE_REG 0x2
++
++int senao_support_tlv_list[] = {
++    TLV_CODE_PRODUCT_NAME,  //0x21
++    TLV_CODE_PART_NUMBER,   //0x22
++    TLV_CODE_SERIAL_NUMBER, //0x23
++    TLV_CODE_MAC_BASE,      //0x24
++    TLV_CODE_MANUF_DATE,    //0x25
++    TLV_CODE_DEVICE_VERSION,//0x26
++    TLV_CODE_LABEL_REVISION,//0x27
++    TLV_CODE_PLATFORM_NAME, //0x28
++    TLV_CODE_ONIE_VERSION,  //0x29
++    TLV_CODE_MAC_SIZE,      //0x2A
++    TLV_CODE_MANUF_NAME,    //0x2B
++    TLV_CODE_MANUF_COUNTRY, //0x2C
++    TLV_CODE_VENDOR_NAME,   //0x2D
++    TLV_CODE_DIAG_VERSION,  //0x2E
++    TLV_CODE_SERVICE_TAG   //0x2F
++};
++
++#define SENAO_SUPPORT_NUM sizeof(senao_support_tlv_list)/sizeof(int)
+ /*
+  * read_sys_eeprom - read the hwinfo from i2c EEPROM
+  */
+-int read_sys_eeprom(void *eeprom_data, int offset, int len)
++int read_sys_eeprom(void *eeprom_data, int *total_len)
+ {
+     int ret = 0;
+-    struct eeprom e;
+-    int i = 0;
++    int idx = 0;
++    int data_len = 0;
++    u_int8_t type = 0;
++    u_int8_t len = 0;
++    u_int8_t select_info[2] = {0};
++    u_int8_t data[32] = {0};
+     u_int8_t *c;
+-    int addr = SYS_EEPROM_OFFSET + offset;
++    struct eeprom e;
+ 
++    /*TLV Data*/
+     c = eeprom_data;
+     if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-		    EEPROM_TYPE, &e)) {
+-	printf("ERROR: Cannot open I2C device\n");
+-	return -1;
++            EEPROM_TYPE, &e)) {
++        printf("ERROR: Cannot open I2C device\n");
++        return -1;
+     }
+-    for (i = 0; i < len; i++) {
+-	*c = eeprom_read_byte(&e, addr);
+-	c++; addr++;
++    for(idx=0; idx<SENAO_SUPPORT_NUM ;idx++){
++        type = senao_support_tlv_list[idx] & 0xff;
++        select_info[0] = type;
++        select_info[1] = 0xaa;
++        if (senao_eeprom_write_block(&e, SENAO_EEPRON_READ_REG, select_info, 2) < 0){
++            eeprom_close(&e);
++            return -1;
++        }
++
++        sleep(0.5);
++
++        if(senao_eeprom_read_block(&e, data, &data_len) < 0){
++            eeprom_close(&e);
++            return -1;
++        }
++        len = (*data & 0xff);
++        *c = type;
++        *(c+1) = len;
++        if(len > 0){
++            memcpy(c+2, data+1, len);
++            c+=(len+2);
++            *total_len+=(len+2);
++        }
+     }
+     eeprom_close(&e);
+     return ret;
+@@ -42,22 +90,36 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ int write_sys_eeprom(void *eeprom_data, int len)
+ {
+     int ret = 0;
+-    struct eeprom e;
+-    int i = 0;
++    int total_len = 6;
+     u_int8_t *c;
+-    u_int16_t  addr = SYS_EEPROM_OFFSET;
++    u_int8_t type = 0;
++    u_int8_t data_len = 0;
++    u_int8_t tlv_len = 0;
++    u_int8_t data[64] = {0};
++    struct eeprom e;
+ 
+     c = eeprom_data;
+-    for (i = 0; i < len; i++) {
+-	if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
+-			EEPROM_TYPE, &e)) {
+-	    printf("ERROR: Cannot open I2C device\n");
+-	    return -1;
+-	}
+-	eeprom_write_byte(&e, addr, *c);
+-	eeprom_close(&e);
+-	c++; addr++;
++    while(len != total_len){
++        type = *c;
++        data_len = *(c+1);
++        tlv_len = data_len + 2;
++        memcpy(data, c, sizeof(u_int8_t)*tlv_len);
++        if(type != TLV_CODE_CRC_32 && type != 0 && data_len != 0){
++            if (eeprom_open(SYS_EEPROM_I2C_DEVICE, SYS_EEPROM_I2C_ADDR,
++                EEPROM_TYPE, &e)) {
++                printf("ERROR: Cannot open I2C device\n");
++                return -1;
++            }
++            if (senao_eeprom_write_block(&e, SENAO_EEPRON_WRITE_REG, data, tlv_len) < 0){
++                eeprom_close(&e);
++                return -1;
++            }
++            sleep(1);
++            total_len += tlv_len;
++            c += tlv_len;
++            eeprom_close(&e);
++        }
++        memset(data, 0, sizeof(u_int8_t)*64);
+     }
+-
+     return ret;
+ }
+-- 
+2.11.0
+
