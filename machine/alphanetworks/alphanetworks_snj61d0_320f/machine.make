@@ -1,13 +1,17 @@
-# Alpha Networks SNJ60D0-320F
+# Alpha Networks SNJ61D0-320F
 
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
 
-VENDOR_REV ?= 0
+VENDOR_REV ?= 2
 
 # Translate hardware revision to ONIE hardware revision
 ifeq ($(VENDOR_REV),0)
   MACHINE_REV = 0
+else ifeq ($(VENDOR_REV),1)
+  MACHINE_REV = 1
+else ifeq ($(VENDOR_REV),2)
+  MACHINE_REV = 2
 else
   $(warning Unknown VENDOR_REV '$(VENDOR_REV)' for MACHINE '$(MACHINE)')
   $(error Unknown VENDOR_REV)
@@ -36,9 +40,13 @@ UEFI_ENABLE = yes
 LINUX_VERSION		= 4.9
 LINUX_MINOR_VERSION	= 95
 
-# Older GCC required for older 3.14.27 kernel
-#GCC_VERSION = 4.9.2
+# Set GCC version
+GCC_VERSION = 8.3.0
 
+# Set uClibc-ng version
+XTOOLS_LIBC_VERSION = 1.0.35
+
+include $(MACHINEDIR)/rootconf/grub-machine.make
 
 #-------------------------------------------------------------------------------
 #
