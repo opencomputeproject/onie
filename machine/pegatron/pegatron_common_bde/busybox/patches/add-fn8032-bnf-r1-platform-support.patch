@@ -1,0 +1,80 @@
+From 000db99a9ffa89ccada5f00627daf5a82f6b1c46 Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Wed, 17 Nov 2021 10:05:19 +0800
+Subject: [PATCH] Add 'fn8032_bnf-r1' platform support.
+
+---
+ miscutils/mb_detect.c | 43 ++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 42 insertions(+), 1 deletion(-)
+
+diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
+index 2d79dd4..f209220 100644
+--- a/miscutils/mb_detect.c
++++ b/miscutils/mb_detect.c
+@@ -189,6 +189,32 @@ static int find_i2c_busses(char* adapter_name)
+ 	return dev_bus;
+ }
+ 
++static int find_cpu_model(char* cpu_model)
++{
++	const char *const cpu_info_path = "/proc/cpuinfo";
++	char name[128];
++	char *pos;
++	FILE *fp;
++	int ret = 0;
++
++	fp = fopen(cpu_info_path, "r");
++	if (fp != NULL) {
++		while (fgets(name, sizeof(name), fp)) {
++			pos = strstr(name, "model name");
++			if (pos == NULL)
++				continue;
++
++			pos = strstr(name, cpu_model);
++			if (pos != NULL)
++				ret = 1;
++			break;
++		}
++		fclose(fp);
++	}
++
++	return ret;
++}
++
+ static int fan_status_get_from_i2c (u8 *type)
+ {
+ 	u32 status = 0;
+@@ -336,6 +362,21 @@ static int bmc_chip_info_get (SysBoardInfo *bdinfo)
+ 	return 0;
+ }
+ 
++static int cpu_info_get (SysBoardInfo *bdinfo)
++{
++	u32 machine_rev = 0;
++	int ret;
++
++	if (bdinfo->motherboard_id == 0x08) {
++		ret = find_cpu_model("D-1627");
++		if (ret)
++			machine_rev = 1;
++		bdinfo->machine_rev = machine_rev;
++	}
++
++	return 0;
++}
++
+ /*
+  *  This macro defines the mbdetect command line command.
+  */
+@@ -461,7 +502,7 @@ s32 sys_board_info_get(SysBoardInfo *bdinfo)
+ 
+ 		bmc_chip_info_get(bdinfo);
+ 		fan_status_info_get(bdinfo);
+-
++		cpu_info_get(bdinfo);
+ 		return 0;
+ 	}
+ 
+-- 
+2.25.1
+
