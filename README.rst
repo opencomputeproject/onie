@@ -8,6 +8,13 @@ provisioning.
 
 Read the `ONIE Documentation <https://opencomputeproject.github.io/onie>`_ for more info.
 
+********************************
+Building ONIE
+********************************
+
+The recommended way to set up an ONIE build environment is to use a Docker image, as described
+in the ONIE Documentation under `Preparing An ONIE Build Environment <https://opencomputeproject.github.io/onie/developers/building.html#preparing-an-onie-build-environment>`_.
+
 ******************************
 Mailing List and Collaboration
 ******************************
