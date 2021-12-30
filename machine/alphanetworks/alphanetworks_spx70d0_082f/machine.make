@@ -1,4 +1,4 @@
-# Alpha Networks SPX60D0-082F
+# Alpha Networks SPX70D0-082F
 
 ONIE_ARCH ?= x86_64
 SWITCH_ASIC_VENDOR = bcm
@@ -39,8 +39,11 @@ UEFI_ENABLE = yes
 LINUX_VERSION		= 4.9
 LINUX_MINOR_VERSION	= 95
 
-# Older GCC required for older 3.14.27 kernel
-#GCC_VERSION = 4.9.2
+# Set GCC version
+GCC_VERSION = 8.3.0
+
+# Set uClibc-ng version
+XTOOLS_LIBC_VERSION = 1.0.35
 
 include $(MACHINEDIR)/rootconf/grub-machine.make
 
