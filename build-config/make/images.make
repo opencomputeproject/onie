@@ -180,7 +180,8 @@ SYSROOT_LIBS	= ld-$(XTOOLS_LIBC_VERSION).so \
 		  libutil.so.1 libutil-$(XTOOLS_LIBC_VERSION).so \
 		  libdl.so.2 libdl-$(XTOOLS_LIBC_VERSION).so \
 		  libpthread.so.0 libpthread-$(XTOOLS_LIBC_VERSION).so \
-		  librt.so.1 librt-$(XTOOLS_LIBC_VERSION).so
+		  librt.so.1 librt-$(XTOOLS_LIBC_VERSION).so \
+		  libnss_files.so.2 libnss_files-$(XTOOLS_LIBC_VERSION).so
   ifeq ($(ARCH),arm64)
     SYSROOT_LIBS	+= ld-linux-aarch64.so.1
   endif
