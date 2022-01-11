@@ -1,0 +1,54 @@
+# This script fragment is sourced by /etc/init.d/init-arch.sh,
+# which in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+init_platform_post_arch()
+{
+    #Init PCA9548
+    #echo pca9548 0x70 > /sys/bus/i2c/devices/i2c-0/new_device
+
+    #Check EEPROM
+    sleep 1.5
+    i=10
+    while true; do
+        if onie-syseeprom >/dev/null 2>&1; then
+            echo "EEPROM device found.\n"
+            break
+        fi
+        if [ $i -le 0 ]; then
+            echo "EEPROM device unavailable.]n"
+            break;
+        fi
+        if [ $(($i % 10)) -eq 0 ]; then
+            echo "Waiting for EEPROM device to become" \
+                 "available... $(($i / 10)) \n"
+        fi
+        sleep 0.1
+        i=$(($i - 1))
+    done
+
+    # Find u-boot environment device-tree node
+    env_file=$(find /proc/device-tree/ -name env_size)
+    [ -n "$env_file" ] || {
+        log_failure_msg "Unable to find u-boot environment device-tree node"
+        return 1
+    }
+    # Find u-boot environment size
+    env_sz="0x$(hd $env_file | awk 'FNR==1 {print $2 $3 $4 $5}')"
+    [ -n "$env_sz" ] || {
+        log_failure_msg "Unable to find u-boot environment size"
+        return 1
+    }
+    # Find u-boot environment mtd device
+    mtd=$(grep uboot-env /proc/mtd | sed -e 's/:.*$//')
+    [ -c "/dev/$mtd" ] || {
+        log_failure_msg "Unable to find u-boot environment mtd device: /dev/$mtd"
+        return 1
+    }
+    (cat <<EOF
+# MTD device name       Device offset   Env. size       Flash sector size
+/dev/$mtd               0x00000000      $env_sz         0x00010000
+EOF
+) > /etc/fw_env.config
+}
+
