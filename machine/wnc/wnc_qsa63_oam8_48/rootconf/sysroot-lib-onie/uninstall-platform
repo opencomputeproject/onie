@@ -1,0 +1,27 @@
+# Platform specific uninstall routine
+
+uninstall_system()
+{
+    # Erase open NOR flash region
+    if [ -h /dev/mtd-open ] ; then
+        printf "${log_pre}Erasing unused NOR flash region\n"
+        flash_unlock /dev/mtd-open > /dev/null 2>&1
+        flash_erase /dev/mtd-open 0 0
+    fi
+
+    # Erase fixed mass storage device
+    dt_prop="/proc/device-tree/mass_storage/device"
+    if [ -f "$dt_prop" ] ; then
+        device=$(cat "$dt_prop")
+        erase_mass_storage $device
+    fi
+
+    # Delete the one time onie_boot_reason variable
+    fw_setenv -f onie_boot_reason > /dev/null 2>&1
+
+    # Set nos_bootcmd to a no-op to keep us in this state until NOS is installed
+    fw_setenv -f nos_bootcmd true > /dev/null 2>&1
+
+    return 0
+}
+

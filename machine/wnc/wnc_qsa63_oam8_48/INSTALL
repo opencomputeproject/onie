@@ -1,0 +1,40 @@
+=========================================
+Installing ONIE on WNC Tomcat
+=========================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to "build-config" to compile ONIE.
+
+To compile ONIE first change directories to "build-config" and then
+type "make MACHINEROOT=../machine/wnc MACHINE=wnc_qsa63_oam8_48 all V=1".  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/wnc MACHINE=wnc_qsa63_oam8_48 all V=1
+
+When complete, the ONIE binaries are located in
+build/images:
+	wnc_qsa63_oam8_48-r0.itb
+
+Installing the ONIE binaries
+============================
+Step 1: Install ONIE kernel+rootfs (wnc_qsa63_oam8_48-r0.itb) onto SPI FLASH
+
+	=> tftp 0x206000000 $serverip:wnc_qsa63_oam8_48-r0.itb
+	=> sf probe 
+	=> sf erase 0x410000 +0x1000000
+	=> sf update 206000000 410000 1000000
+
+Boot argument in uBoot:
+	=> sf probe ; 
+	## load from SPI and boot into ONIE:
+	=> sf read 205000000 410000 1000000
+        => set bootargs 'console=ttyS0,115200 earlycon=uart8250,mmio32,0x7f012000 cpuidle.off=1'
+	=> bootm 205000000
+
+
+----------------------------------
+Step 2 -- Configure Serial Console
+
+	Defaults serial console baud rate is 115200_8N1.
