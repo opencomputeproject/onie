@@ -1,4 +1,4 @@
-.. Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+.. Copyright (C) 2021,2022 Alex Doyle <adoyle@nvidia.com>
    Copyright (C) 2019,2020 Alex Doyle <adoyle@cumulusnetworks.com>
    Copyright (C) 2017,2018 Curt Brune <curt@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
@@ -8,6 +8,12 @@
 ************
 Project News
 ************
+Feb 12, 2022
+  Released version `2022.22
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/232>`_
+
+  The master branch supports four new hardware platforms, and DropBear was upgraded.
+
 Nov 16, 2021
   Released version `2021.11
   <https://ocp-all.groups.io/g/OCP-ONIE/message/222>`_

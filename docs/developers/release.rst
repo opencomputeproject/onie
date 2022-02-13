@@ -1,4 +1,5 @@
-.. Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+.. Copyright (C) 2021,2022 Alex Doyle <adoyle@nvidia.com>
+.. Copyright (C) 2019,2020 Alex Doyle <adoyle@cumulusnetworks.com>   
 .. Copyright (C) 2014,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
    SPDX-License-Identifier:     GPL-2.0
@@ -77,10 +78,10 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  2021.11 | Wed, Oct 20, 2021 | Wed, Nov 24, 2021
-  2022.02 | Wed, Jan 19, 2022 | Wed, Feb 16, 2022
   2022.05 | Wed, Apr 20, 2022 | Wed, May 18, 2022
-  2022.08 | Wed, Jul 20, 2022 | Wed, Aug 18, 2022    
+  2022.08 | Wed, Jul 20, 2022 | Wed, Aug 18, 2022
+  2022.11 | Wed, Oct 19, 2022 | Wed, Nov 16, 2022
+  2023.02 | Wed, Jan 18, 2022 | Wed, Feb 15, 2022  
 
 Making a Release
 ----------------
