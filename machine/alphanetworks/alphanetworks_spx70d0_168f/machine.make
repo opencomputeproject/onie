@@ -30,17 +30,20 @@ I2CTOOLS_ENABLE = yes
 IPMITOOL_ENABLE = yes
 
 # Console parameters
-CONSOLE_DEV = 0
+CONSOLE_DEV = 1
 
 # Enable UEFI support
 UEFI_ENABLE = yes
 
 # Set Linux kernel version
-LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
+LINUX_VERSION = 4.9
+LINUX_MINOR_VERSION = 95
 
-# Older GCC required for older 3.14.27 kernel
-#GCC_VERSION = 4.9.2
+# Set GCC version
+GCC_VERSION = 8.3.0
+
+# Set uClibc-ng version
+XTOOLS_LIBC_VERSION = 1.0.38
 
 include $(MACHINEDIR)/rootconf/grub-machine.make
 
