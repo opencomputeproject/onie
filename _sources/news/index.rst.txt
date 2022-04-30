@@ -8,8 +8,14 @@
 ************
 Project News
 ************
+May 01, 2022
+  Released version `2022.05
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/248>`_
+
+  The master branch supports three new hardware platforms, and an Alpha Networks design update.
+
 Feb 12, 2022
-  Released version `2022.22
+  Released version `2022.02
   <https://ocp-all.groups.io/g/OCP-ONIE/message/232>`_
 
   The master branch supports four new hardware platforms, and DropBear was upgraded.
