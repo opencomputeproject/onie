@@ -1,6 +1,6 @@
 # Makefile fragment for Delta TN48M
 
-VENDOR_VERSION = -V03
+VENDOR_VERSION = -V04
 ONIE_ARCH ?= armv8a
 SWITCH_ASIC_VENDOR = mvl
 
