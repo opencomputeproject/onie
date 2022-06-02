@@ -1,0 +1,1710 @@
+From b85f03781e6394f47feb09ac007706585b799178 Mon Sep 17 00:00:00 2001
+From: Will Chao <will.chao@wnc.com.tw>
+Date: Thu, 16 Sep 2021 17:50:50 +0800
+Subject: [PATCH 2/3] Modify for WNC AC5 device
+
+---
+ arch/arm/dts/Makefile                |  96 ++---
+ arch/arm/dts/alleycat-5-rd.dts       | 259 ++++++++++++++
+ arch/arm/dts/alleycat-5-tomcat.dts   | 259 ++++++++++++++
+ arch/arm/mach-mvebu/allycat5/soc.c   |  11 +-
+ cmd/ubifs.c                          |   4 +-
+ configs/mvebu_rd_alleycat5_defconfig | 107 ++++++
+ configs/tomcat_alleycat5_defconfig   | 109 ++++++
+ drivers/mtd/nand/pxa3xx_nand.c       | 503 +++++++++++++--------------
+ drivers/mtd/nand/pxa3xx_nand.h       |  69 ----
+ drivers/mtd/spi/spi_flash_ids.c      |   2 +-
+ fs/ubifs/debug.h                     |  11 +-
+ fs/ubifs/ubifs.c                     |   2 +-
+ include/ubifs_uboot.h                |   2 +-
+ 13 files changed, 1050 insertions(+), 384 deletions(-)
+ create mode 100644 arch/arm/dts/alleycat-5-rd.dts
+ create mode 100755 arch/arm/dts/alleycat-5-tomcat.dts
+ create mode 100644 configs/mvebu_rd_alleycat5_defconfig
+ create mode 100644 configs/tomcat_alleycat5_defconfig
+
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 7af9a3f..cab63c6 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -87,53 +87,55 @@ dtb-$(CONFIG_TEGRA) += tegra20-harmony.dtb \
+ 	tegra210-p2571.dtb
+ 
+ dtb-$(CONFIG_ARCH_MVEBU) +=			\
+-	armada-3720-db.dtb			\
+-	armada-3720-ddr3-db-v2-B.dtb		\
+-	armada-3720-ddr3-db-v2-C.dtb		\
+-	armada-3720-ddr3-db-v1-A.dtb		\
+-	armada-3720-ddr3-db-v1-B.dtb		\
+-	armada-3720-ddr3-db-v1-C.dtb		\
+-	armada-3720-ddr4-db-v3-A.dtb		\
+-	armada-3720-ddr4-db-v3-B.dtb		\
+-	armada-3720-ddr4-db-v3-C.dtb		\
+-	armada-3720-ddr4-db-v1-A.dtb		\
+-	armada-3720-ddr4-db-v1-B.dtb		\
+-	armada-3720-espressobin.dtb		\
+-	armada-3720-espressobin-emmc.dtb	\
+-	armada-375-db.dtb			\
+-	armada-388-clearfog.dtb			\
+-	armada-388-gp.dtb			\
+-	armada-385-amc.dtb			\
+-	armada-3900-vd-A.dtb			\
+-	armada-3900-vd-B.dtb			\
+-	armada-7020-amc.dtb			\
+-	armada-7040-pcac.dtb	                \
+-	armada-7040-db.dtb			\
+-	armada-7040-db-B.dtb			\
+-	armada-7040-db-C.dtb                    \
+-	armada-7040-db-D.dtb			\
+-	armada-7040-db-E.dtb			\
+-	armada-8040-db.dtb			\
+-	armada-8040-db-B.dtb			\
+-	armada-8040-db-C.dtb			\
+-	armada-8040-db-D.dtb			\
+-	armada-8040-db-E.dtb			\
+-	armada-8040-db-F.dtb			\
+-	armada-8040-db-G.dtb			\
+-	armada-8040-db-H.dtb			\
+-	armada-8040-mcbin.dtb			\
+-	armada-8040-mcbin-single-shot.dtb	\
+-	armada-8040-ocp.dtb			\
+-	armada-8040-ucpe.dtb			\
+-	armada-xp-gp.dtb			\
+-	armada-xp-maxbcm.dtb			\
+-	armada-xp-synology-ds414.dtb		\
+-	armada-xp-theadorable.dtb		\
+-	armada-38x-controlcenterdc.dtb		\
+-	cn9130-db-A.dtb				\
+-	cn9130-db-B.dtb				\
+-	cn9131-db-A.dtb				\
+-	cn9131-db-B.dtb
++	alleycat-5-tomcat.dtb
++#	alleycat-5-rd.dtb                       \
++#	armada-3720-db.dtb			\
++#	armada-3720-ddr3-db-v2-B.dtb		\
++#	armada-3720-ddr3-db-v2-C.dtb		\
++#	armada-3720-ddr3-db-v1-A.dtb		\
++#	armada-3720-ddr3-db-v1-B.dtb		\
++#	armada-3720-ddr3-db-v1-C.dtb		\
++#	armada-3720-ddr4-db-v3-A.dtb		\
++#	armada-3720-ddr4-db-v3-B.dtb		\
++#	armada-3720-ddr4-db-v3-C.dtb		\
++#	armada-3720-ddr4-db-v1-A.dtb		\
++#	armada-3720-ddr4-db-v1-B.dtb		\
++#	armada-3720-espressobin.dtb		\
++#	armada-3720-espressobin-emmc.dtb	\
++#	armada-375-db.dtb			\
++#	armada-388-clearfog.dtb			\
++#	armada-388-gp.dtb			\
++#	armada-385-amc.dtb			\
++#	armada-3900-vd-A.dtb			\
++#	armada-3900-vd-B.dtb			\
++#	armada-7020-amc.dtb			\
++#	armada-7040-pcac.dtb	                \
++#	armada-7040-db.dtb			\
++#	armada-7040-db-B.dtb			\
++#	armada-7040-db-C.dtb                    \
++#	armada-7040-db-D.dtb			\
++#	armada-7040-db-E.dtb			\
++#	armada-8040-db.dtb			\
++#	armada-8040-db-B.dtb			\
++#	armada-8040-db-C.dtb			\
++#	armada-8040-db-D.dtb			\
++#	armada-8040-db-E.dtb			\
++#	armada-8040-db-F.dtb			\
++#	armada-8040-db-G.dtb			\
++#	armada-8040-db-H.dtb			\
++#	armada-8040-mcbin.dtb			\
++#	armada-8040-mcbin-single-shot.dtb	\
++#	armada-8040-ocp.dtb			\
++#	armada-8040-ucpe.dtb			\
++#	armada-xp-gp.dtb			\
++#	armada-xp-maxbcm.dtb			\
++#	armada-xp-synology-ds414.dtb		\
++#	armada-xp-theadorable.dtb		\
++#	armada-38x-controlcenterdc.dtb		\
++#	cn9130-db-A.dtb				\
++#	cn9130-db-B.dtb				\
++#	cn9131-db-A.dtb				\
++#	cn9131-db-B.dtb
+ 
+ dtb-$(CONFIG_ARCH_UNIPHIER_LD11) += \
+ 	uniphier-ld11-global.dtb \
+diff --git a/arch/arm/dts/alleycat-5-rd.dts b/arch/arm/dts/alleycat-5-rd.dts
+new file mode 100644
+index 0000000..5627c9a
+--- /dev/null
++++ b/arch/arm/dts/alleycat-5-rd.dts
+@@ -0,0 +1,259 @@
++
++/dts-v1/;
++
++/ {
++        compatible = "marvell,armada7040";
++        #address-cells = <0x2>;
++        #size-cells = <0x2>;
++        model = "Marvell RD-AC5 board";
++
++        aliases {
++                serial0 = "/config-space/serial@2000";
++                serial1 = "/config-space/serial@2100";
++                spi0 = "/config-space/spi@805a0000";
++                spi1 = "/config-space/spi@805a8000";
++                i2c0 = &AC5_I2C0;
++                i2c1 = &AC5_I2C1;
++                usb0 = &AC5_USB0;
++                usb1 = &AC5_USB1;
++		ethernet0 = &AC5_ETH0;
++		ethernet1 = &AC5_ETH1;
++		pinctrl0 = "/config-space/pinctl@80020100";
++		gpio0 = "/config-space/gpio@18100";
++                pcie0 = &AC5_PCIE;
++        };
++
++        psci {
++                compatible = "arm,psci-0.2";
++                method = "smc";
++        };
++
++        config-space {
++                #address-cells = <0x1>;
++                #size-cells = <0x1>;
++                compatible = "simple-bus";
++
++                serial@2000 {
++                        compatible = "snps,dw-apb-uart";
++                        reg = <0x7F012000 0x100>;
++                        reg-shift = <0x2>;
++                        reg-io-width = <0x1>;
++                        status = "okay";
++                        clock-frequency = <0x11E1A300>;
++                };
++
++                serial@2100 {
++                        compatible = "snps,dw-apb-uart";
++                        reg = <0x7F012100 0x100>;
++                        reg-shift = <0x2>;
++                        reg-io-width = <0x1>;
++                        status = "disabled";
++                };
++
++                AC5_I2C0:i2c@11000 {
++                        status = "okay";
++                        compatible = "marvell,mv78230-i2c";
++                        reg = <0x7f011000 0x20>;
++                        #address-cells = <1>;
++                        #size-cells = <0>;
++                        clock-frequency = <100000>;
++                };
++
++                AC5_I2C1:i2c@11100 {
++                        status = "okay";
++                        compatible = "marvell,mv78230-i2c";
++                        reg = <0x7f011100 0x20>;
++                        #address-cells = <1>;
++                        #size-cells = <0>;
++                        clock-frequency = <100000>;
++                };
++
++                spi0: spi@805a0000 {
++                        compatible = "marvell,armada-3700-spi";
++                        reg = <0x805a0000 0x50>;
++                        #address-cells = <0x1>;
++                        #size-cells = <0x0>;
++                        #clock-cells = <0x0>;
++                        clock-frequency = <200000000>;
++                        spi-max-frequency = <20000000>;
++                        status = "okay";
++                };
++
++                spi1: spi@805a8000 {
++                        compatible = "marvell,armada-3700-spi";
++                        reg = <0x805a8000 0x50>;
++                        #address-cells = <0x1>;
++                        #size-cells = <0x0>;
++                        #clock-cells = <0x0>;
++                        clock-frequency = <200000000>;
++                        spi-max-frequency = <20000000>;
++                        status = "okay";
++                };
++
++                AC5_ETH0: neta@7F020000 {
++                        compatible = "marvell,armada-ac5-neta";
++                        reg = <0x7f020000 0x20>;
++                        dma-ranges = <0 2 0 0x40000000>;
++                        status = "okay";
++                        phy-mode = "sgmii";
++                        fixed-link {
++                            speed = <1000>;
++                            full-duplex;
++                        };
++                };
++
++                AC5_ETH1: neta@7F024000 {
++                        compatible = "marvell,armada-ac5-neta";
++                        reg = <0x7f024000 0x20>;
++                        dma-ranges = <0 2 0 0x40000000>;
++                        status = "okay";
++                        phy-mode = "sgmii";
++                        fixed-link {
++                            speed = <1000>;
++                            full-duplex;
++                        };
++                };
++
++                sdhci@805c0000 {
++                        compatible = "marvell,armada-8k-sdhci",
++                        "marvell,sdhci-xenon";
++                        reg = <0x805c0000 0x300>;
++                        bus-width = <4>;
++                        status = "disabled";
++                };
++
++               nand@805B0000 {
++                       status = "okay";
++                       compatible = "marvell,mvebu-pxa3xx-nand";
++                       reg = <0x805B0000 0x54>, // NDCR
++                             <0x840F8204 0x4>,  // Device Sample at Reset(SAR) and Bonding Status1
++                             <0x80013010 0x20>; // SoC Dev multiplex reg, same as A385 0x18208
++                       reg-names = "ctrl_base",
++                                   "flash_clock",
++                                   "dev_mux";
++                       #address-cells = <1>;
++                       nand-enable-arbiter;
++                       num-cs = <1>;
++                       nand-ecc-strength = <12>;
++                       nand-ecc-step-size = <512>;
++               };
++
++               pinctl@80020100 {
++                       status = "okay";
++                        compatible = "marvell,mvebu-pinctrl";
++                        reg = <0x80020100 0x20>;
++                        pin-count = <46>;
++                        max-func = <0xf>;
++
++                       /* MPP Bus:  MPP#     mode#
++                        * NAND      [00-11]  0x2
++                        * SPI       [12-15]  0x1
++                        * NAND      [16-17]  0x2
++                        * TSEN_INT  [18]     0x1
++                        * GPIO(in)  [19]     0x0
++                        * DSPI      [20-23]  0x3
++                        * GPIO(out) [24]     0x0
++                        * GPIO(out) [25]     0x0
++                        * I2C0      [26-27]  0x1
++                        * M0_MDC    [28]     0x2
++                        * M0_MDIO   [29]     0x2
++                        * M1_MDC    [30]     0x2
++                        * M1_MDIO   [31]     0x2
++                        * UA0_TXD   [32]     0x1
++                        * UA0_RXD   [33]     0x1
++                        * OOB_MDIO  [34]     0x1
++                        * OOB_MDC   [35]     0x1
++                        * GPIO(out) [36]     0x0
++                        * LED_STB   [37]     0x1
++                        * GPIO(out) [38]     0x0
++                        * GPIO(out) [39]     0x0
++                        * GPIO(out) [40]     0x0
++                        * GPIO(in)  [41]     0x0
++                        * AVS_IN    [42]     0x1
++                        * GPIO(in)  [43]     0x0
++                        * LED0_STB  [44]     0x1
++                        * GPIO(in)  [45]     0x0
++                        */
++                               /*   0    1    2    3    4    5    6    7    8    9 */
++                       pin-func = < 2    2    2    2    2    2    2    2    2    2
++                                    2    2    1    1    1    1    2    2    1    0
++                                    3    3    3    3    0    0    1    1    2    2
++                                    2    2    1    1    1    1    0    1    0    0
++                                    0    0    1    0    1    0    >;
++
++                       ac5_i2c0_pins: ac5-i2c-pins-0 {
++                                marvell,pins = < 26 27 >;
++                                marvell,function = <0x1>;
++                       };
++                };
++
++               gpio@18100 {
++                       status = "okay";
++                        compatible = "marvell,orion-gpio";
++                        reg = <0x7F018100 0x40>;
++                        ngpios = <32>;
++                        gpiobase = <20>;
++                        gpio-controller;
++                        #gpio-cells = <2>;
++                    };
++
++               AC5_USB0: usb@80000 {
++                       compatible = "marvell,ac5-ehci";
++                       reg = <0x7f080000 0x500>;
++                       status = "okay";
++               };
++
++               AC5_USB1: usb@A0000 {
++                       compatible = "marvell,ac5-ehci";
++                       reg = <0x7f0A0000 0x500>;
++                       status = "okay";
++               };
++
++		AC5_PCIE: pcie@800a0000 {
++			compatible = "marvell,armada-ac5-pcie", "snps,dw-pcie";
++			reg = <0x800a0000 0x10000> , <0x30000000 0x10000>;
++			reg-names = "ctrl", "config";
++			#address-cells = <3>;
++			#size-cells = <2>;
++			#interrupt-cells = <1>;
++			device_type = "pci";
++			dma-coherent;
++			bus-range = <0 0xff>;
++			/* ranges for the PCI memory and I/O regions */
++			ranges = <0x82000000 0 0x30000000 0x30000000 0 0x10000000>;
++			num-lanes = <1>;
++			status = "okay";
++			// force_enable;
++
++			/*clocks = <&cpm_syscon0 1 13>;*/
++		};
++        };
++
++        cpus {
++                #address-cells = <0x1>;
++                #size-cells = <0x0>;
++
++                cpu@000 {
++                        device_type = "cpu";
++                        compatible = "arm,cortex-a55", "arm,armv8";
++                        reg = <0x0>;
++                        enable-method = "psci";
++                };
++
++                cpu@001 {
++                        device_type = "cpu";
++                        compatible = "arm,cortex-a55", "arm,armv8";
++                        reg = <0x1>;
++                        enable-method = "psci";
++                };
++        };
++
++        chosen {
++                stdout-path = "serial0:9479n8";
++        };
++
++        memory@200000000 {
++                device_type = "memory";
++                reg = <0x2 0x0 0x0 0x80000000>; /* 2GB */
++        };
++};
+diff --git a/arch/arm/dts/alleycat-5-tomcat.dts b/arch/arm/dts/alleycat-5-tomcat.dts
+new file mode 100755
+index 0000000..85d9049
+--- /dev/null
++++ b/arch/arm/dts/alleycat-5-tomcat.dts
+@@ -0,0 +1,259 @@
++
++/dts-v1/;
++
++/ {
++        compatible = "marvell,armada7040";
++        #address-cells = <0x2>;
++        #size-cells = <0x2>;
++        model = "WNC Tomcat AC5 board";
++
++        aliases {
++                serial0 = "/config-space/serial@2000";
++                serial1 = "/config-space/serial@2100";
++                spi0 = "/config-space/spi@805a0000";
++                spi1 = "/config-space/spi@805a8000";
++                i2c0 = &AC5_I2C0;
++                i2c1 = &AC5_I2C1;
++                usb0 = &AC5_USB0;
++                usb1 = &AC5_USB1;
++		ethernet0 = &AC5_ETH0;
++		ethernet1 = &AC5_ETH1;
++		pinctrl0 = "/config-space/pinctl@80020100";
++		gpio0 = "/config-space/gpio@18100";
++                pcie0 = &AC5_PCIE;
++                nand0 = "/config-space/nand@805B0000";
++        };
++
++        psci {
++                compatible = "arm,psci-0.2";
++                method = "smc";
++        };
++
++        config-space {
++                #address-cells = <0x1>;
++                #size-cells = <0x1>;
++                compatible = "simple-bus";
++
++                serial@2000 {
++                        compatible = "snps,dw-apb-uart";
++                        reg = <0x7F012000 0x100>;
++                        reg-shift = <0x2>;
++                        reg-io-width = <0x1>;
++                        status = "okay";
++                        clock-frequency = <0x11E1A300>;
++                };
++
++                serial@2100 {
++                        compatible = "snps,dw-apb-uart";
++                        reg = <0x7F012100 0x100>;
++                        reg-shift = <0x2>;
++                        reg-io-width = <0x1>;
++                        status = "disabled";
++                };
++
++                AC5_I2C0:i2c@11000 {
++                        status = "okay";
++                        compatible = "marvell,mv78230-i2c";
++                        reg = <0x7f011000 0x20>;
++                        #address-cells = <1>;
++                        #size-cells = <0>;
++                        clock-frequency = <100000>;
++                };
++
++                AC5_I2C1:i2c@11100 {
++                        status = "okay";
++                        compatible = "marvell,mv78230-i2c";
++                        reg = <0x7f011100 0x20>;
++                        #address-cells = <1>;
++                        #size-cells = <0>;
++                        clock-frequency = <100000>;
++                };
++
++                spi0: spi@805a0000 {
++                        compatible = "marvell,armada-3700-spi";
++                        reg = <0x805a0000 0x50>;
++                        #address-cells = <0x1>;
++                        #size-cells = <0x0>;
++                        #clock-cells = <0x0>;
++                        clock-frequency = <200000000>;
++                        spi-max-frequency = <20000000>;
++                        status = "okay";
++                };
++
++                spi1: spi@805a8000 {
++                        compatible = "marvell,armada-3700-spi";
++                        reg = <0x805a8000 0x50>;
++                        #address-cells = <0x1>;
++                        #size-cells = <0x0>;
++                        #clock-cells = <0x0>;
++                        clock-frequency = <200000000>;
++                        spi-max-frequency = <20000000>;
++                        status = "okay";
++                };
++
++                AC5_ETH0: neta@7F020000 {
++                        compatible = "marvell,armada-ac5-neta";
++                        reg = <0x7f020000 0x20>;
++                        dma-ranges = <0 2 0 0x40000000>;
++                        status = "okay";
++                        phy-mode = "sgmii";
++                        fixed-link {
++                            speed = <1000>;
++                            full-duplex;
++                        };
++                };
++
++                AC5_ETH1: neta@7F024000 {
++                        compatible = "marvell,armada-ac5-neta";
++                        reg = <0x7f024000 0x20>;
++                        dma-ranges = <0 2 0 0x40000000>;
++                        status = "okay";
++                        phy-mode = "sgmii";
++                        fixed-link {
++                            speed = <1000>;
++                            full-duplex;
++                        };
++                };
++
++                sdhci@805c0000 {
++                        compatible = "marvell,armada-8k-sdhci",
++                        "marvell,sdhci-xenon";
++                        reg = <0x805c0000 0x300>;
++                        bus-width = <4>;
++                        status = "disabled";
++                };
++
++               nand@805B0000 {
++                       status = "okay";
++                       compatible = "marvell,mvebu-pxa3xx-nand";
++                       reg = <0x805B0000 0x54>, // NDCR
++                             <0x840F8204 0x4>,  // Device Sample at Reset(SAR) and Bonding Status1
++                             <0x80013010 0x20>; // SoC Dev multiplex reg, same as A385 0x18208
++                       reg-names = "ctrl_base",
++                                   "flash_clock",
++                                   "dev_mux";
++                       #address-cells = <1>;
++                       nand-enable-arbiter;
++                       num-cs = <1>;
++                       nand-ecc-strength = <4>;
++                       nand-ecc-step-size = <512>;
++               };
++
++               pinctl@80020100 {
++                       status = "okay";
++                        compatible = "marvell,mvebu-pinctrl";
++                        reg = <0x80020100 0x20>;
++                        pin-count = <46>;
++                        max-func = <0xf>;
++
++                       /* MPP Bus:  MPP#     mode#
++                        * NAND      [00-11]  0x2
++                        * SPI       [12-15]  0x1
++                        * NAND      [16-17]  0x2
++                        * TSEN_INT  [18]     0x1
++                        * GPIO(in)  [19]     0x0
++                        * DSPI      [20-23]  0x3
++                        * GPIO(in)  [24]     0x0
++                        * GPIO(out) [25]     0x0
++                        * I2C0      [26-27]  0x1
++                        * M0_MDC    [28]     0x2
++                        * M0_MDIO   [29]     0x2
++                        * M1_MDC    [30]     0x2
++                        * M1_MDIO   [31]     0x2
++                        * UA0_TXD   [32]     0x1
++                        * UA0_RXD   [33]     0x1
++                        * OOB_MDIO  [34]     0x1
++                        * OOB_MDC   [35]     0x1
++                        * GPIO(out) [36]     0x0
++                        * LED_STB   [37]     0x1
++                        * GPIO(out) [38]     0x0
++                        * GPIO(out) [39]     0x0
++                        * GPIO(out) [40]     0x0
++                        * I2C1      [41-42]  0x5
++                        * GPIO(in)  [43]     0x0
++                        * LED0_STB  [44]     0x1
++                        * GPIO(in)  [45]     0x0
++                        */
++                               /*   0    1    2    3    4    5    6    7    8    9 */
++                       pin-func = < 2    2    2    2    2    2    2    2    2    2
++                                    2    2    1    1    1    1    2    2    1    0
++                                    3    3    3    3    0    0    1    1    2    2
++                                    2    2    1    1    1    1    0    1    0    0
++                                    0    5    5    0    1    0    >;
++
++                       ac5_i2c0_pins: ac5-i2c-pins-0 {
++                                marvell,pins = < 26 27 >;
++                                marvell,function = <0x1>;
++                       };
++                };
++
++               gpio@18100 {
++                       status = "okay";
++                        compatible = "marvell,orion-gpio";
++                        reg = <0x7F018100 0x40>;
++                        ngpios = <32>;
++                        gpiobase = <20>;
++                        gpio-controller;
++                        #gpio-cells = <2>;
++                    };
++
++               AC5_USB0: usb@80000 {
++                       compatible = "marvell,ac5-ehci";
++                       reg = <0x7f080000 0x500>;
++                       status = "okay";
++               };
++
++               AC5_USB1: usb@A0000 {
++                       compatible = "marvell,ac5-ehci";
++                       reg = <0x7f0A0000 0x500>;
++                       status = "disabled";
++               };
++
++		AC5_PCIE: pcie@800a0000 {
++			compatible = "marvell,armada-ac5-pcie", "snps,dw-pcie";
++			reg = <0x800a0000 0x10000> , <0x30000000 0x10000>;
++			reg-names = "ctrl", "config";
++			#address-cells = <3>;
++			#size-cells = <2>;
++			#interrupt-cells = <1>;
++			device_type = "pci";
++			dma-coherent;
++			bus-range = <0 0xff>;
++			/* ranges for the PCI memory and I/O regions */
++			ranges = <0x82000000 0 0x30000000 0x30000000 0 0x10000000>;
++			num-lanes = <1>;
++			status = "okay";
++			// force_enable;
++
++			/*clocks = <&cpm_syscon0 1 13>;*/
++		};
++        };
++
++        cpus {
++                #address-cells = <0x1>;
++                #size-cells = <0x0>;
++
++                cpu@000 {
++                        device_type = "cpu";
++                        compatible = "arm,cortex-a55", "arm,armv8";
++                        reg = <0x0>;
++                        enable-method = "psci";
++                };
++
++                cpu@001 {
++                        device_type = "cpu";
++                        compatible = "arm,cortex-a55", "arm,armv8";
++                        reg = <0x1>;
++                        enable-method = "psci";
++                };
++        };
++
++        chosen {
++                stdout-path = "serial0:9479n8";
++        };
++
++        memory@200000000 {
++                device_type = "memory";
++                reg = <0x2 0x0 0x0 0x80000000>; /* 2GB */
++        };
++};
+diff --git a/arch/arm/mach-mvebu/allycat5/soc.c b/arch/arm/mach-mvebu/allycat5/soc.c
+index 31331ab..1789bb0 100755
+--- a/arch/arm/mach-mvebu/allycat5/soc.c
++++ b/arch/arm/mach-mvebu/allycat5/soc.c
+@@ -162,7 +162,16 @@ void soc_print_system_cache_info(void)
+ /* Return NAND clock in Hz */
+ u32 mvebu_get_nand_clock(void __iomem *nand_flash_clk_ctrl_reg)
+ {
+-	return 200 * CLOCK_1Mhz;
++	u32 reg;
++
++	if (!nand_flash_clk_ctrl_reg)
++		return 0;
++
++	reg = readl(nand_flash_clk_ctrl_reg);
++	if (reg & NF_CLOCK_SEL_MASK)
++		return 400 * CLOCK_1Mhz;
++	else
++		return 250 * CLOCK_1Mhz;
+ }
+ 
+ /* Select NAND in the device bus multiplexer */
+diff --git a/cmd/ubifs.c b/cmd/ubifs.c
+index 5e9d357..9c0e198 100644
+--- a/cmd/ubifs.c
++++ b/cmd/ubifs.c
+@@ -104,8 +104,8 @@ static int do_ubifs_load(cmd_tbl_t *cmdtp, int flag, int argc,
+ 	char *filename;
+ 	char *endp;
+ 	int ret;
+-	u32 addr;
+-	u32 size = 0;
++	u64 addr;
++	u64 size = 0;
+ 
+ 	if (!ubifs_mounted) {
+ 		printf("UBIFS not mounted, use ubifs mount to mount volume first!\n");
+diff --git a/configs/mvebu_rd_alleycat5_defconfig b/configs/mvebu_rd_alleycat5_defconfig
+new file mode 100644
+index 0000000..58aaf12
+--- /dev/null
++++ b/configs/mvebu_rd_alleycat5_defconfig
+@@ -0,0 +1,107 @@
++CONFIG_ARM=y
++CONFIG_ARCH_MVEBU=y
++CONFIG_SYS_TEXT_BASE=0x200000000
++CONFIG_SYS_MALLOC_F_LEN=0x2000
++CONFIG_TARGET_MVEBU_ALLEYCAT5=y
++CONFIG_MVEBU_SAR=y
++CONFIG_SMBIOS_PRODUCT_NAME=""
++CONFIG_DEBUG_UART=y
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_CLEAR_ON_INIT is not set
++CONFIG_BOOTDELAY=-1
++CONFIG_BOOTCOMMAND="run get_images; run set_bootargs; booti $kernel_addr $ramfs_addr $fdt_addr"
++CONFIG_SYS_CONSOLE_ENV_OVERWRITE=y
++CONFIG_SYS_CONSOLE_INFO_QUIET=y
++# CONFIG_DISPLAY_CPUINFO is not set
++CONFIG_ARCH_EARLY_INIT_R=y
++CONFIG_ARCH_MISC_INIT=y
++# CONFIG_BOARD_EARLY_INIT_F is not set
++CONFIG_SYS_PROMPT="Marvell>> "
++CONFIG_CMD_MVEBU_SAR=y
++CONFIG_CMD_BOOTZ=y
++# CONFIG_CMD_FLASH is not set
++CONFIG_CMD_MEMORY=y
++CONFIG_CMD_MEMTEST=y
++CONFIG_CMD_FUSE=y
++CONFIG_CMD_GPIO=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_PCI=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_SPI=y
++CONFIG_CMD_USB=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_CMD_CACHE=y
++CONFIG_CMD_TIME=y
++CONFIG_CMD_MVEBU_BUBT=y
++CONFIG_CMD_MVEBU_PHY_FW_DOWNLOAD=y
++CONFIG_CMD_MVEBU_HW_INFO=y
++CONFIG_CMD_MVEBU_RX_TRAINING=y
++CONFIG_CMD_REGULATOR=y
++CONFIG_CMD_EXT4_WRITE=y
++CONFIG_MAC_PARTITION=y
++# CONFIG_OF_SEPARATE is not set
++CONFIG_OF_EMBED=y
++CONFIG_ENV_IS_IN_SPI_FLASH=y
++CONFIG_MVEBU_A3700_SPI=y
++CONFIG_BLOCK_CACHE=y
++CONFIG_MVEBU_EFUSE=y
++CONFIG_DM_GPIO=y
++CONFIG_DM_PCA953X=y
++CONFIG_DM_I2C=y
++CONFIG_SYS_I2C_MVTWSI=y
++CONFIG_MVMDIO=y
++CONFIG_MISC=y
++CONFIG_DM_MMC=y
++CONFIG_MMC_SDHCI=y
++CONFIG_MMC_SDHCI_XENON=y
++CONFIG_NAND=y
++CONFIG_NAND_PXA3XX=y
++# CONFIG_DM_SPI=y
++# CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_SPI_FLASH_MACRONIX=y
++CONFIG_SPI_FLASH_SPANSION=y
++CONFIG_SPI_FLASH_STMICRO=y
++CONFIG_SPI_FLASH_GIGADEVICE=y
++CONFIG_PHY_MARVELL=y
++CONFIG_PHY_GIGE=y
++CONFIG_E1000=y
++CONFIG_MVPP2=y
++CONFIG_MVNETA=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_PCIE_DW_MVEBU=y
++CONFIG_MVEBU_COMPHY_SUPPORT=y
++CONFIG_PINCTRL=y
++CONFIG_PINCTRL_ARMADA_8K=y
++CONFIG_DM_REGULATOR_FIXED=y
++CONFIG_DM_RTC=y
++CONFIG_MARVELL_RTC=y
++CONFIG_DM_SCSI=y
++CONFIG_DM_REGULATOR_GPIO=y
++# CONFIG_SPL_SERIAL_PRESENT is not set
++CONFIG_DEBUG_UART_BASE=0xf0512000
++CONFIG_DEBUG_UART_CLOCK=200000000
++CONFIG_DEBUG_UART_SHIFT=2
++CONFIG_DEBUG_UART_ANNOUNCE=y
++CONFIG_SYS_NS16550=y
++#CONFIG_KIRKWOOD_SPI=y
++CONFIG_DM_THERMAL=y
++CONFIG_MVEBU_THERMAL_SENSOR_28NM=y
++CONFIG_MVEBU_THERMAL_EXT_SENSOR_28NM=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_EHCI_HCD=y
++CONFIG_USB_STORAGE=y
++CONFIG_USB_HOST_ETHER=y
++CONFIG_USB_ETHER_ASIX=y
++CONFIG_USB_ETHER_ASIX88179=y
++CONFIG_USB_ETHER_MCS7830=y
++CONFIG_USB_ETHER_RTL8152=y
++CONFIG_USB_ETHER_SMSC95XX=y
++CONFIG_SMBIOS_MANUFACTURER=""
++CONFIG_FIT=y
++CONFIG_FIT_ENABLE_SHA256_SUPPORT=y
++
+diff --git a/configs/tomcat_alleycat5_defconfig b/configs/tomcat_alleycat5_defconfig
+new file mode 100644
+index 0000000..d8d2798
+--- /dev/null
++++ b/configs/tomcat_alleycat5_defconfig
+@@ -0,0 +1,109 @@
++CONFIG_ARM=y
++CONFIG_ARCH_MVEBU=y
++CONFIG_SYS_TEXT_BASE=0x200000000
++CONFIG_SYS_MALLOC_F_LEN=0x2000
++CONFIG_TARGET_MVEBU_ALLEYCAT5=y
++CONFIG_MVEBU_SAR=y
++CONFIG_SMBIOS_PRODUCT_NAME=""
++CONFIG_DEBUG_UART=y
++CONFIG_DISTRO_DEFAULTS=y
++# CONFIG_SYS_MALLOC_CLEAR_ON_INIT is not set
++CONFIG_BOOTDELAY=3
++CONFIG_BOOTCOMMAND="run get_images; run set_bootargs; booti $kernel_addr $ramfs_addr $fdt_addr"
++CONFIG_SYS_CONSOLE_ENV_OVERWRITE=y
++CONFIG_SYS_CONSOLE_INFO_QUIET=y
++# CONFIG_DISPLAY_CPUINFO is not set
++CONFIG_ARCH_EARLY_INIT_R=y
++CONFIG_ARCH_MISC_INIT=y
++# CONFIG_BOARD_EARLY_INIT_F is not set
++CONFIG_SYS_PROMPT="Marvell>> "
++CONFIG_CMD_MVEBU_SAR=y
++CONFIG_CMD_BOOTZ=y
++# CONFIG_CMD_FLASH is not set
++CONFIG_CMD_MEMORY=y
++CONFIG_CMD_MEMTEST=y
++CONFIG_CMD_FUSE=y
++CONFIG_CMD_GPIO=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_PCI=y
++CONFIG_CMD_SF=y
++CONFIG_CMD_SPI=y
++CONFIG_CMD_USB=y
++# CONFIG_CMD_SETEXPR is not set
++CONFIG_CMD_CACHE=y
++CONFIG_CMD_TIME=y
++CONFIG_CMD_MVEBU_BUBT=y
++CONFIG_CMD_MVEBU_PHY_FW_DOWNLOAD=y
++CONFIG_CMD_MVEBU_HW_INFO=y
++CONFIG_CMD_MVEBU_RX_TRAINING=y
++CONFIG_CMD_REGULATOR=y
++CONFIG_CMD_EXT4_WRITE=y
++CONFIG_MAC_PARTITION=y
++# CONFIG_OF_SEPARATE is not set
++CONFIG_OF_EMBED=y
++CONFIG_ENV_IS_IN_SPI_FLASH=y
++CONFIG_MVEBU_A3700_SPI=y
++CONFIG_BLOCK_CACHE=y
++CONFIG_MVEBU_EFUSE=y
++CONFIG_DM_GPIO=y
++CONFIG_DM_PCA953X=y
++CONFIG_DM_I2C=y
++CONFIG_SYS_I2C_MVTWSI=y
++CONFIG_MVMDIO=y
++CONFIG_MISC=y
++CONFIG_DM_MMC=y
++CONFIG_MMC_SDHCI=y
++CONFIG_MMC_SDHCI_XENON=y
++CONFIG_NAND=y
++CONFIG_NAND_PXA3XX=y
++# CONFIG_DM_SPI=y
++# CONFIG_DM_SPI_FLASH=y
++CONFIG_SPI_FLASH=y
++CONFIG_SPI_FLASH_MACRONIX=y
++CONFIG_SPI_FLASH_SPANSION=y
++CONFIG_SPI_FLASH_STMICRO=y
++CONFIG_SPI_FLASH_GIGADEVICE=y
++CONFIG_PHY_MARVELL=y
++CONFIG_PHY_GIGE=y
++CONFIG_E1000=y
++CONFIG_MVPP2=y
++CONFIG_MVNETA=y
++CONFIG_PCI=y
++CONFIG_DM_PCI=y
++CONFIG_PCIE_DW_MVEBU=y
++CONFIG_MVEBU_COMPHY_SUPPORT=y
++CONFIG_PINCTRL=y
++CONFIG_PINCTRL_ARMADA_8K=y
++CONFIG_DM_REGULATOR_FIXED=y
++CONFIG_DM_RTC=y
++CONFIG_MARVELL_RTC=y
++CONFIG_DM_SCSI=y
++CONFIG_DM_REGULATOR_GPIO=y
++# CONFIG_SPL_SERIAL_PRESENT is not set
++CONFIG_DEBUG_UART_BASE=0xf0512000
++CONFIG_DEBUG_UART_CLOCK=200000000
++CONFIG_DEBUG_UART_SHIFT=2
++CONFIG_DEBUG_UART_ANNOUNCE=y
++CONFIG_SYS_NS16550=y
++#CONFIG_KIRKWOOD_SPI=y
++CONFIG_DM_THERMAL=y
++CONFIG_MVEBU_THERMAL_SENSOR_28NM=y
++CONFIG_MVEBU_THERMAL_EXT_SENSOR_28NM=y
++CONFIG_USB=y
++CONFIG_DM_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_EHCI_HCD=y
++CONFIG_USB_STORAGE=y
++CONFIG_USB_HOST_ETHER=y
++CONFIG_USB_ETHER_ASIX=y
++CONFIG_USB_ETHER_ASIX88179=y
++CONFIG_USB_ETHER_MCS7830=y
++CONFIG_USB_ETHER_RTL8152=y
++CONFIG_USB_ETHER_SMSC95XX=y
++CONFIG_SMBIOS_MANUFACTURER=""
++CONFIG_FIT=y
++CONFIG_FIT_ENABLE_SHA256_SUPPORT=y
++CONFIG_SPI_FLASH_4BAIS=y
++CONFIG_CMD_BOOTD=y
++CONFIG_CMD_UBI=y
+diff --git a/drivers/mtd/nand/pxa3xx_nand.c b/drivers/mtd/nand/pxa3xx_nand.c
+index c07ab79..46b63ec 100644
+--- a/drivers/mtd/nand/pxa3xx_nand.c
++++ b/drivers/mtd/nand/pxa3xx_nand.c
+@@ -188,61 +188,6 @@ static struct pxa3xx_nand_flash builtin_flash_types[] = {
+ 	{ 0xda98,  8,  8, &timing[4] },
+ };
+ 
+-#define MARVELL_NTDR0(trp, trh, trpe, tre_edge, twp, twh, resrv, tcs, tch, rd_cnt_del, selcnrl, tadl)	\
+-		{\
+-			.fields = {\
+-				.tRP = trp,					/* 0-2   */\
+-				.tRH = trh,					/* 3-5   */\
+-				.tRPE = trpe,				/* 6     */\
+-				.tRE_edge = tre_edge,		/* 7     */\
+-				.tWP = twp,					/* 8-10  */\
+-				.tWH = twh,					/* 11-13 */\
+-				.reserved = resrv,			/* 14-15 */\
+-				.tCS = tcs,					/* 16-18 */\
+-				.tCH = tch,					/* 19-21 */\
+-				.Rd_Cnt_Del = rd_cnt_del,	/* 22-25 */\
+-				.selCnrl = selcnrl,			/* 26    */\
+-				.tADL = tadl,				/* 27-31 */\
+-			}\
+-		}
+-
+-#define MARVELL_NTDR1(tar, twhr, trhw, resrv, prescale, waiting_mode, tr)	\
+-		{\
+-			.fields = {\
+-				.tAR = tar,					/* 0-3   */\
+-				.tWHR = twhr,				/* 4-7   */\
+-				.tRHW = trhw,				/* 8-9   */\
+-				.reserved = resrv,			/* 10-13 */\
+-				.Prescale = prescale,		/* 14    */\
+-				.wait_mode = waiting_mode,	/* 15    */\
+-				.tR = tr,					/* 16-31 */\
+-			}\
+-		}
+-
+-/* ndtr0_modes and ndtr1_modes values are optimal values tested with Marvell NFC with correlation to ONFI modes*/
+-pxa3xx_nand_ndtr0_arr ndtr0_modes[PXA3XX_NAND_NDTR_NUM_OF_SET] =
+-{
+-	/* value tested with AC5 */
+-	{
+-		MARVELL_NTDR0(7,7,1,0,7,7,0,7,7,0,1,31),
+-		MARVELL_NTDR0(6,3,0,0,4,4,0,7,7,1,1,15),
+-		MARVELL_NTDR0(4,3,0,0,3,3,0,7,7,2,1,15),
+-		MARVELL_NTDR0(2,2,0,0,2,1,0,1,0,2,1,15)
+-	}
+-};
+-
+-pxa3xx_nand_ndtr1_arr ndtr1_modes[PXA3XX_NAND_NDTR_NUM_OF_SET] =
+-{
+-	/* value tested with AC5 */
+-	{
+-		MARVELL_NTDR1(15,15,3,0,0,1,8191),
+-		MARVELL_NTDR1(15,15,3,0,0,1,8191),
+-		MARVELL_NTDR1(15,15,3,0,0,1,8191),
+-		MARVELL_NTDR1(11,11,2,0,0,1,8191)
+-	}
+-};
+-
+-
+ #ifdef CONFIG_SYS_NAND_USE_FLASH_BBT
+ static u8 bbt_pattern[] = {'M', 'V', 'B', 'b', 't', '0' };
+ static u8 bbt_mirror_pattern[] = {'1', 't', 'b', 'B', 'V', 'M' };
+@@ -268,59 +213,104 @@ static struct nand_bbt_descr bbt_mirror_descr = {
+ };
+ #endif
+ 
+-struct marvell_hw_ecc_layout {
+-	int 				page_size;
+-	int 				strength;
+-	unsigned int		ecc_size;
+-	unsigned int		nfullchunks;
+-	unsigned int		chunk_size;
+-	unsigned int		spare_size;
+-	unsigned int		last_chunk_size;
+-	unsigned int		last_spare_size;
++static struct nand_ecclayout ecc_layout_2KB_bch4bit = {
++	.eccbytes = 32,
++	.eccpos = {
++		32, 33, 34, 35, 36, 37, 38, 39,
++		40, 41, 42, 43, 44, 45, 46, 47,
++		48, 49, 50, 51, 52, 53, 54, 55,
++		56, 57, 58, 59, 60, 61, 62, 63},
++	.oobfree = { {2, 30} }
++};
++
++static struct nand_ecclayout ecc_layout_2KB_bch8bit = {
++	.eccbytes = 64,
++	.eccpos = {
++		64,  65,  66,  67,  68,  69,  70,  71,
++		72,  73,  74,  75,  76,  77,  78,  79,
++		80,  81,  82,  83,  84,  85,  86,  87,
++		88,  89,  90,  91,  92,  93,  94,  95,
++		96,  97,  98,  99,  100, 101, 102, 103,
++		104, 105, 106, 107, 108, 109, 110, 111,
++		112, 113, 114, 115, 116, 117, 118, 119,
++		120, 121, 122, 123, 124, 125, 126, 127},
++	.oobfree = { {1, 4}, {6, 26} }
++};
++
++static struct nand_ecclayout ecc_layout_4KB_bch4bit = {
++	.eccbytes = 64,
++	.eccpos = {
++		32,  33,  34,  35,  36,  37,  38,  39,
++		40,  41,  42,  43,  44,  45,  46,  47,
++		48,  49,  50,  51,  52,  53,  54,  55,
++		56,  57,  58,  59,  60,  61,  62,  63,
++		96,  97,  98,  99,  100, 101, 102, 103,
++		104, 105, 106, 107, 108, 109, 110, 111,
++		112, 113, 114, 115, 116, 117, 118, 119,
++		120, 121, 122, 123, 124, 125, 126, 127},
++	/* Bootrom looks in bytes 0 & 5 for bad blocks */
++	.oobfree = { {6, 26}, { 64, 32} }
++};
++
++static struct nand_ecclayout ecc_layout_8KB_bch4bit = {
++	.eccbytes = 128,
++	.eccpos = {
++		32,  33,  34,  35,  36,  37,  38,  39,
++		40,  41,  42,  43,  44,  45,  46,  47,
++		48,  49,  50,  51,  52,  53,  54,  55,
++		56,  57,  58,  59,  60,  61,  62,  63,
++
++		96,  97,  98,  99,  100, 101, 102, 103,
++		104, 105, 106, 107, 108, 109, 110, 111,
++		112, 113, 114, 115, 116, 117, 118, 119,
++		120, 121, 122, 123, 124, 125, 126, 127,
++
++		160, 161, 162, 163, 164, 165, 166, 167,
++		168, 169, 170, 171, 172, 173, 174, 175,
++		176, 177, 178, 179, 180, 181, 182, 183,
++		184, 185, 186, 187, 188, 189, 190, 191,
++
++		224, 225, 226, 227, 228, 229, 230, 231,
++		232, 233, 234, 235, 236, 237, 238, 239,
++		240, 241, 242, 243, 244, 245, 246, 247,
++		248, 249, 250, 251, 252, 253, 254, 255},
++
++	/* Bootrom looks in bytes 0 & 5 for bad blocks */
++	.oobfree = { {1, 4}, {6, 26}, { 64, 32}, {128, 32}, {192, 32} }
++};
++
++static struct nand_ecclayout ecc_layout_4KB_bch8bit = {
++	.eccbytes = 128,
++	.eccpos = {
++		32,  33,  34,  35,  36,  37,  38,  39,
++		40,  41,  42,  43,  44,  45,  46,  47,
++		48,  49,  50,  51,  52,  53,  54,  55,
++		56,  57,  58,  59,  60,  61,  62,  63},
++	.oobfree = { }
+ };
+ 
+-static const struct marvell_hw_ecc_layout nfc_layouts[] = {
+-	/*strength 	page_size 	strength	ecc_size 	nfullchunks 	chunk_size 	spare_size	last_chunk_size	last_spare_size*/
+-	{	 512, 		 1 , 		8,			1,			512,		8,			0,					0		},
+-	{ 	 2048, 		 1 ,		24,			1,			2048,		40,			0,					0		},
+-
+-	{ 	 2048, 		 4 ,		32,			1,			2048,		32,			0,					0		},
+-	{ 	 2048, 		 8 ,		32,			1,			1024,		0,			1024,				32		},
+-	{ 	 2048, 		 12 ,		32,			2,			704,		0,			640,				0		},
+-	{ 	 2048, 		 16 ,		32,			4,			512,		0,			0,					32		},
+-
+-	{	 4096, 		 4 , 		32,			2,			2048,		32,			0,					0		},
+-	{ 	 4096, 		 8 ,		32,			4,			1024,		0,			0,					64		},
+-	{ 	 4096, 		 12 ,		32,			5,			704,		0,			576,				32		},
+-	{ 	 4096, 		 16 ,		32,			8,			512,		0,			0,					32		},
+-
+-	{ 	 8192, 		 4 ,		32,			4,			2048,		32,			0,					0		},
+-	{	 8192, 		 8 , 		32,			8,			1024,		0,			0,					160		},
+-	{ 	 8192, 		 12 ,		32,			11,			704,		0,			448,				64		},
+-	{ 	 8192, 		 16 ,		32,			16,			512,		0,			0,					32		},
+-	{},
++static struct nand_ecclayout ecc_layout_8KB_bch8bit = {
++	.eccbytes = 256,
++	.eccpos = {},
++	/* HW ECC handles all ECC data and all spare area is free for OOB */
++	.oobfree = {{0, 160} }
+ };
+ 
+-static struct nand_ecclayout ecc_layout_empty = {
++static struct nand_ecclayout ecc_layout_4KB_bch12bit = {
+ 	.eccbytes = 0,
+ 	.eccpos = {
+ 			  },
+ 	.oobfree = { }
+ };
+ 
+-
+-#define NDTR0_tADL(c)	(min((c), 0x1f) << 27)
+ #define NDTR0_tCH(c)	(min((c), 7) << 19)
+ #define NDTR0_tCS(c)	(min((c), 7) << 16)
+ #define NDTR0_tWH(c)	(min((c), 7) << 11)
+ #define NDTR0_tWP(c)	(min((c), 7) << 8)
+-#define NDTR0_etRP(c)	(min((c), 1) << 6)
+ #define NDTR0_tRH(c)	(min((c), 7) << 3)
+ #define NDTR0_tRP(c)	(min((c), 7) << 0)
+ 
+-
+-#define NDTR1_tR(c)		(min((c), 65535) << 16)
+-#define NDTR1_tRHW(c)	(min((c), 3) << 8)
++#define NDTR1_tR(c)	(min((c), 65535) << 16)
+ #define NDTR1_tWHR(c)	(min((c), 15) << 4)
+ #define NDTR1_tAR(c)	(min((c), 15) << 0)
+ 
+@@ -333,31 +323,6 @@ static enum pxa3xx_nand_variant pxa3xx_nand_get_variant(void)
+ 	return PXA3XX_NAND_VARIANT_ARMADA370;
+ }
+ 
+-static void pxa3xx_nand_set_timing_ndtr_marvell_mode(struct pxa3xx_nand_info *info,int mode)
+-{
+-	pxa3xx_nand_timing_mode_set_t modes_set = info->pdata->marvell_ndtr_set;
+-
+-	if (modes_set >= info->pdata->max_mode_number )
+-	{
+-		dev_warn(&info->pdev->dev,
+-				"Warning: not supported timing registers set,use set number 0 by default\n");
+-		modes_set = PXA3XX_NAND_NDTR_SET_0;
+-	}
+-
+-	if (mode >= NUM_OF_TIMING_MODES )
+-	{
+-		dev_warn(&info->pdev->dev,
+-				"Warning: not supported timing registers mode,use mode 0 by default\n");
+-		mode = 0;
+-	}
+-
+-	/* set timing registers */
+-	info->ndtr0cs0 = ndtr0_modes[modes_set][mode].regValue;
+-	info->ndtr1cs0 = ndtr1_modes[modes_set][mode].regValue;
+-	nand_writel(info, NDTR0CS0, info->ndtr0cs0 );
+-	nand_writel(info, NDTR1CS0, info->ndtr1cs0 );
+-}
+-
+ static int pxa3xx_nand_set_timing(struct pxa3xx_nand_host *host,
+ 				  const struct pxa3xx_nand_timing *t)
+ {
+@@ -444,76 +409,59 @@ static int pxa3xx_nand_init_timings(struct pxa3xx_nand_host *host)
+ 	const struct nand_sdr_timings *timings;
+ 	struct nand_chip *chip = &host->chip;
+ 	struct pxa3xx_nand_info *info = host->info_data;
+-	struct pxa3xx_nand_platform_data *pdata = info->pdata;
+ 	const struct pxa3xx_nand_flash *f = NULL;
+ 	struct mtd_info *mtd = nand_to_mtd(&host->chip);
+ 	int mode, id, ntypes, i, ret;
+ 
+ 	mode = onfi_get_async_timing_mode(chip);
+ 	if (mode == ONFI_TIMING_MODE_UNKNOWN) {
+-		if(pdata->use_marvell_modes_value  ){
+-			/* Didn't recive the timing mode from ONFI. Expected to get value from dts,
+-			 * else set to mode 0 and give warn message*/
+-			if (pdata->timing_mode_level < 0)
+-				dev_warn(&info->pdev->dev, "Warning: \"nand-timings-mode\" was not found in dts file, set to mode 0 \n");
+-			pxa3xx_nand_set_timing_ndtr_marvell_mode(info,  (pdata->timing_mode_level >=0) ? pdata->timing_mode_level : 0);
+-		}
+-		else
+-		{
+-			ntypes = ARRAY_SIZE(builtin_flash_types);
+-
+-			chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
++		ntypes = ARRAY_SIZE(builtin_flash_types);
+ 
+-			id = chip->read_byte(mtd);
+-			id |= chip->read_byte(mtd) << 0x8;
++		chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
+ 
+-			for (i = 0; i < ntypes; i++) {
+-				f = &builtin_flash_types[i];
++		id = chip->read_byte(mtd);
++		id |= chip->read_byte(mtd) << 0x8;
+ 
+-				if (f->chip_id == id)
+-					break;
+-			}
++		for (i = 0; i < ntypes; i++) {
++			f = &builtin_flash_types[i];
+ 
+-			if (i == ntypes) {
+-				dev_err(&info->pdev->dev, "Error: timings not found\n");
+-				return -EINVAL;
+-			}
++			if (f->chip_id == id)
++				break;
++		}
+ 
+-			ret = pxa3xx_nand_set_timing(host, f->timing);
+-			if (ret)
+-				return ret;
++		if (i == ntypes) {
++			dev_err(&info->pdev->dev, "Error: timings not found\n");
++			return -EINVAL;
++		}
+ 
+-			if (f->flash_width == 16) {
+-				info->reg_ndcr |= NDCR_DWIDTH_M;
+-				chip->options |= NAND_BUSWIDTH_16;
+-			}
++		ret = pxa3xx_nand_set_timing(host, f->timing);
++		if (ret)
++			return ret;
+ 
+-			info->reg_ndcr |= (f->dfc_width == 16) ? NDCR_DWIDTH_C : 0;
++		if (f->flash_width == 16) {
++			info->reg_ndcr |= NDCR_DWIDTH_M;
++			chip->options |= NAND_BUSWIDTH_16;
+ 		}
++
++		info->reg_ndcr |= (f->dfc_width == 16) ? NDCR_DWIDTH_C : 0;
+ 	} else {
+ 		mode = fls(mode) - 1;
+ 		if (mode < 0)
+ 			mode = 0;
+ 
+-		if(pdata->use_marvell_modes_value)
+-		{
+-			/*  use the max mode supported by the chip */
+-			if(mode > pdata->max_mode_number)
+-				mode = pdata->max_mode_number;
+-			pxa3xx_nand_set_timing_ndtr_marvell_mode(info, (pdata->timing_mode_level >=0) ? pdata->timing_mode_level : mode);
+-		}
+-		else
+-		{
+-			timings = onfi_async_timing_mode_to_sdr_timings(mode);
+-			if (IS_ERR(timings))
+-				return PTR_ERR(timings);
+-
+-			ret = pxa3xx_nand_set_sdr_timing(host, timings);
+-			if (ret)
+-				return ret;
+-		}
++		timings = onfi_async_timing_mode_to_sdr_timings(mode);
++		if (IS_ERR(timings))
++			return PTR_ERR(timings);
++
++		ret = pxa3xx_nand_set_sdr_timing(host, timings);
++		if (ret)
++			return ret;
+ 	}
+ 
++	chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
++	id = chip->read_byte(mtd);
++	id |= chip->read_byte(mtd) << 0x8;
++	printf("### NAND_ID = 0x%X\n", id);
+ 	return 0;
+ }
+ 
+@@ -526,7 +474,6 @@ static int pxa3xx_nand_init_timings(struct pxa3xx_nand_host *host)
+ static void pxa3xx_nand_start(struct pxa3xx_nand_info *info)
+ {
+ 	uint32_t ndcr;
+-	u32 ts;
+ 
+ 	ndcr = info->reg_ndcr;
+ 
+@@ -551,17 +498,6 @@ static void pxa3xx_nand_start(struct pxa3xx_nand_info *info)
+ 
+ 	/* clear status bits and run */
+ 	nand_writel(info, NDSR, NDSR_MASK);
+-
+-	ts = get_timer(0);
+-	while (nand_readl(info, NDCR) & NDCR_ND_RUN)
+-	{
+-		if (get_timer(ts) > CHIP_DELAY_TIMEOUT) {
+-			dev_warn(&info->pdev->dev,
+-				"Timeout on ND_RUN\n");
+-			break;
+-		}
+-	};
+-
+ 	nand_writel(info, NDCR, 0);
+ 	nand_writel(info, NDCR, ndcr);
+ }
+@@ -665,6 +601,9 @@ static irqreturn_t pxa3xx_nand_irq(struct pxa3xx_nand_info *info)
+ 		cmd_done        = NDSR_CS1_CMDD;
+ 	}
+ 
++	/* TODO - find out why we need the delay during write operation. */
++	ndelay(1);
++
+ 	status = nand_readl(info, NDSR);
+ 
+ 	if (status & NDSR_UNCORERR)
+@@ -1393,17 +1332,11 @@ static int pxa3xx_nand_sensing(struct pxa3xx_nand_host *host)
+ 	info->reg_ndcr |= NDCR_SPARE_EN; /* enable spare by default */
+ 
+ 	/* use the common timing to make a try */
+-	if (pdata->use_marvell_modes_value)
+-		pxa3xx_nand_set_timing_ndtr_marvell_mode(info,0);
+-	else
+-	{
+-		printk("pxa3xx_nand_sensing PXA3XX_NAND_GEN\n");
+-		timings = onfi_async_timing_mode_to_sdr_timings(0);
+-		if (IS_ERR(timings))
+-			return PTR_ERR(timings);
++	timings = onfi_async_timing_mode_to_sdr_timings(0);
++	if (IS_ERR(timings))
++		return PTR_ERR(timings);
+ 
+-		pxa3xx_nand_set_sdr_timing(host, timings);
+-	}
++	pxa3xx_nand_set_sdr_timing(host, timings);
+ 
+ 	chip->cmdfunc(mtd, NAND_CMD_RESET, 0, 0);
+ 	ret = chip->waitfunc(mtd, chip);
+@@ -1417,50 +1350,133 @@ static int pxa_ecc_init(struct pxa3xx_nand_info *info,
+ 			struct nand_ecc_ctrl *ecc,
+ 			int strength, int ecc_stepsize, int page_size)
+ {
+-	int i=0;
+-
+-	/*  if ecc strength is 1 ecc algo is Hamming else bch */
+-	info->ecc_bch = ( strength == 1 ) ? 0 : 1;
+-
+-	ecc->mode = NAND_ECC_HW;
+-
+-	/* ecc->layout is not in use for pxa driver (but shouldn't be NULL)*/
+-	if ( info->ecc_bch == 1 ) ecc->layout = &ecc_layout_empty;
+-
+-	/* for bch actual ecc strength is 16 per chunk */
+-	ecc->strength = (info->ecc_bch == 1) ? 16 : 1;
+-
+-	/* for bch the ecc is calculated per chunk size and for Hamming it is 512 */
+-	ecc->size = ( info->ecc_bch ) ? info->chunk_size : 512;
+-
+-	/* nand_scan_tail func perform  validity tests for ECC strength, and it
+-	 * assumes that all chunks are with same size. in our case when ecc is 12
+-	 * the chunk size is 704 but the last chunk is with different size so
+-	 * we cheat it nand_scan_tail validity tests by set info->ecc_size value to 512*/
+-	if ( strength == 12 ) ecc->size = 512;
+-
+-	while(nfc_layouts[i].strength)
+-	{
+-		if (strength == nfc_layouts[i].strength && page_size == nfc_layouts[i].page_size)
+-		{
+-			info->nfullchunks = nfc_layouts[i].nfullchunks;
+-			info->chunk_size = nfc_layouts[i].chunk_size;
+-			info->spare_size = nfc_layouts[i].spare_size;
+-			info->last_chunk_size = nfc_layouts[i].last_chunk_size;
+-			info->last_spare_size = nfc_layouts[i].last_spare_size;
+-			info->ntotalchunks = (info->last_spare_size || info->last_chunk_size) ? info->nfullchunks+1 : info->nfullchunks ;
+-			info->ecc_size = nfc_layouts[i].ecc_size;
+-			break;
+-		}
+-		++i;
+-	}
++	if (strength == 1 && ecc_stepsize == 512 && page_size == 2048) {
++		info->nfullchunks = 1;
++		info->ntotalchunks = 1;
++		info->chunk_size = 2048;
++		info->spare_size = 40;
++		info->ecc_size = 24;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = 512;
++		ecc->strength = 1;
++
++	} else if (strength == 1 && ecc_stepsize == 512 && page_size == 512) {
++		info->nfullchunks = 1;
++		info->ntotalchunks = 1;
++		info->chunk_size = 512;
++		info->spare_size = 8;
++		info->ecc_size = 8;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = 512;
++		ecc->strength = 1;
+ 
+-	if ( ecc_stepsize != 512 || !(nfc_layouts[i].strength)) {
+-			dev_err(&info->pdev->dev,
+-				"ECC strength %d at page size %d is not supported\n",
+-				strength, page_size);
+-			return -ENODEV;
+-	}		
++	/*
++	 * Required ECC: 4-bit correction per 512 bytes
++	 * Select: 16-bit correction per 2048 bytes
++	 */
++	} else if (strength == 4 && ecc_stepsize == 512 && page_size == 2048) {
++		info->ecc_bch = 1;
++		info->nfullchunks = 1;
++		info->ntotalchunks = 1;
++		info->chunk_size = 2048;
++		info->spare_size = 32;
++		info->ecc_size = 32;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = info->chunk_size;
++		ecc->layout = &ecc_layout_2KB_bch4bit;
++		ecc->strength = 16;
++
++	} else if (strength == 4 && ecc_stepsize == 512 && page_size == 4096) {
++		info->ecc_bch = 1;
++		info->nfullchunks = 2;
++		info->ntotalchunks = 2;
++		info->chunk_size = 2048;
++		info->spare_size = 32;
++		info->ecc_size = 32;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = info->chunk_size;
++		ecc->layout = &ecc_layout_4KB_bch4bit;
++		ecc->strength = 16;
++
++	} else if (strength == 4 && ecc_stepsize == 512 && page_size == 8192) {
++		info->ecc_bch = 1;
++		info->nfullchunks = 4;
++		info->ntotalchunks = 4;
++		info->chunk_size = 2048;
++		info->spare_size = 32;
++		info->ecc_size = 32;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = info->chunk_size;
++		ecc->layout = &ecc_layout_8KB_bch4bit;
++		ecc->strength = 16;
++
++	/*
++	 * Required ECC: 8-bit correction per 512 bytes
++	 * Select: 16-bit correction per 1024 bytes
++	 */
++	} else if (strength == 8 && ecc_stepsize == 512 && page_size == 2048) {
++		info->ecc_bch = 1;
++		info->nfullchunks = 1;
++		info->ntotalchunks = 2;
++		info->chunk_size = 1024;
++		info->spare_size = 0;
++		info->last_chunk_size = 1024;
++		info->last_spare_size = 64;
++		info->ecc_size = 32;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = info->chunk_size;
++		ecc->layout = &ecc_layout_2KB_bch8bit;
++		ecc->strength = 16;
++
++	} else if (strength == 8 && ecc_stepsize == 512 && page_size == 4096) {
++		info->ecc_bch = 1;
++		info->nfullchunks = 4;
++		info->ntotalchunks = 5;
++		info->chunk_size = 1024;
++		info->spare_size = 0;
++		info->last_chunk_size = 0;
++		info->last_spare_size = 64;
++		info->ecc_size = 32;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = info->chunk_size;
++		ecc->layout = &ecc_layout_4KB_bch8bit;
++		ecc->strength = 16;
++
++	} else if (strength == 8 && ecc_stepsize == 512 && page_size == 8192) {
++		info->ecc_bch = 1;
++		info->nfullchunks = 8;
++		info->ntotalchunks = 9;
++		info->chunk_size = 1024;
++		info->spare_size = 0;
++		info->last_chunk_size = 0;
++		info->last_spare_size = 160;
++		info->ecc_size = 32;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = info->chunk_size;
++		ecc->layout = &ecc_layout_8KB_bch8bit;
++		ecc->strength = 16;
++
++	} else if (strength == 12 && ecc_stepsize == 512 && page_size == 4096) {
++		info->ecc_bch = 1;
++		info->nfullchunks = 5;
++		info->ntotalchunks = 6;
++		info->chunk_size = 704;
++		info->spare_size = 0;
++		info->last_chunk_size = 576;
++		info->last_spare_size = 32;
++		info->ecc_size = 32;
++		ecc->mode = NAND_ECC_HW;
++		ecc->size = 512;    /* since chunk size is not a fixed size and nand_scan_tail func perform
++		                       validity tests for ECC, we cheat it by set its value to 512*/
++		ecc->layout = &ecc_layout_4KB_bch12bit;
++		ecc->strength = 16;
++
++	} else {
++		dev_err(&info->pdev->dev,
++			"ECC strength %d at page size %d is not supported\n",
++			strength, page_size);
++		return -ENODEV;
++	}
+ 
+ 	return 0;
+ }
+@@ -1645,18 +1661,8 @@ static int pxa3xx_nand_probe_dt(struct pxa3xx_nand_info *info)
+ 
+ 	/* Get address decoding nodes from the FDT blob */
+ 	do {
+-		pdata->compatible = PXA3XX_NAND_GEN;
+-
+ 		node = fdt_node_offset_by_compatible(blob, node,
+-						"marvell,mvebu-ac5-pxa3xx-nand");
+-
+-		if (node >= 0)
+-			pdata->compatible = PXA3XX_NAND_AC5;
+-		else
+-			node = fdt_node_offset_by_compatible(blob, node,
+-								 "marvell,mvebu-pxa3xx-nand");
+-
+-
++						     "marvell,mvebu-pxa3xx-nand");
+ 		if (node < 0)
+ 			break;
+ 
+@@ -1714,21 +1720,6 @@ static int pxa3xx_nand_probe_dt(struct pxa3xx_nand_info *info)
+ 		pdata->ecc_step_size = fdtdec_get_int(blob, node,
+ 						      "nand-ecc-step-size", 0);
+ 
+-		/* nand-timing-mode */
+-		/* to do: update document*/
+-		pdata->timing_mode_level = fdtdec_get_int(blob, node,
+-						      "nand-timing-mode", -1);
+-
+-		/* should timing be set by Marvell modes predefined values or
+-		 * use ONFI (each set has few modes level) */
+-		pdata->use_marvell_modes_value = false;
+-		if (pdata->compatible == PXA3XX_NAND_AC5)
+-		{
+-			pdata->use_marvell_modes_value = true;
+-			pdata->marvell_ndtr_set = PXA3XX_NAND_NDTR_SET_0;
+-			pdata->max_mode_number = 3;
+-		}
+-
+ 		info->pdata = pdata;
+ 
+ 		/* Currently support only a single NAND controller */
+diff --git a/drivers/mtd/nand/pxa3xx_nand.h b/drivers/mtd/nand/pxa3xx_nand.h
+index 5b6c9ab..a375ad0 100644
+--- a/drivers/mtd/nand/pxa3xx_nand.h
++++ b/drivers/mtd/nand/pxa3xx_nand.h
+@@ -4,48 +4,6 @@
+ #include <linux/mtd/mtd.h>
+ #include <linux/mtd/partitions.h>
+ 
+-/* NFC ndtr0 */
+-typedef union  pxa3xx_nand_ndtr0
+-{
+-	struct {
+-		unsigned  int tRP                 :3;  /* 0-2   */
+-		unsigned  int tRH                 :3;  /* 3-5   */
+-		unsigned  int tRPE                :1;  /* 6     */
+-		unsigned  int tRE_edge            :1;  /* 7     */
+-		unsigned  int tWP                 :3;  /* 8-10  */
+-		unsigned  int tWH                 :3;  /* 11-13 */
+-		unsigned  int reserved            :2;  /* 14-15 */
+-		unsigned  int tCS                 :3;  /* 16-18 */
+-		unsigned  int tCH                 :3;  /* 19-21 */
+-		unsigned  int Rd_Cnt_Del          :4;  /* 22-25 */
+-		unsigned  int selCnrl             :1;  /* 26    */
+-		unsigned  int tADL                :5;  /* 27-31 */
+-	} fields;
+-	unsigned  int  regValue;
+-}pxa3xx_nand_ndtr0_t;
+-
+-/* NFC ndtr1 */
+-typedef union  pxa3xx_nand_ndtr1
+-{
+-	struct {
+-		unsigned  int tAR                 :4;  /* 0-3   */
+-		unsigned  int tWHR                :4;  /* 4-7   */
+-		unsigned  int tRHW                :2;  /* 8-9   */
+-		unsigned  int reserved            :4;  /* 10-13 */
+-		unsigned  int Prescale            :1;  /* 14    */
+-		unsigned  int wait_mode           :1;  /* 15    */
+-		unsigned  int tR                  :16; /* 16-31 */
+-	} fields;
+-	unsigned  int  regValue;
+-}pxa3xx_nand_ndtr1_t;
+-
+-
+-#define NUM_OF_TIMING_MODES	6
+-
+-/* arrays of NFC timings modes */
+-typedef pxa3xx_nand_ndtr0_t pxa3xx_nand_ndtr0_arr[NUM_OF_TIMING_MODES];
+-typedef pxa3xx_nand_ndtr1_t pxa3xx_nand_ndtr1_arr[NUM_OF_TIMING_MODES];
+-
+ struct pxa3xx_nand_timing {
+ 	unsigned int	tCH;  /* Enable signal hold time */
+ 	unsigned int	tCS;  /* Enable signal setup time */
+@@ -78,21 +36,6 @@ struct pxa3xx_nand_flash {
+ 
+ /* The max num of chip select current support */
+ #define NUM_CHIP_SELECT		(2)
+-
+-
+-typedef enum {
+-	PXA3XX_NAND_GEN,
+-	PXA3XX_NAND_AC5,
+-}pxa3xx_nand_compatible_t;
+-
+-/* which ndtr0,1 set to use , each set has few modes level */
+-typedef enum {
+-	PXA3XX_NAND_NDTR_SET_0, 		/*tested with ac5*/
+-
+-	PXA3XX_NAND_NDTR_NUM_OF_SET,
+-	PXA3XX_NAND_NDTR_SET_NON = PXA3XX_NAND_NDTR_NUM_OF_SET
+-}pxa3xx_nand_timing_mode_set_t;
+-
+ struct pxa3xx_nand_platform_data {
+ 	/* the data flash bus is shared between the Static Memory
+ 	 * Controller and the Data Flash Controller,  the arbiter
+@@ -117,18 +60,6 @@ struct pxa3xx_nand_platform_data {
+ 
+ 	const struct pxa3xx_nand_flash		*flash;
+ 	size_t					num_flash;
+-
+-	/* compatibility */
+-	pxa3xx_nand_compatible_t	compatible;
+-
+-	/* nand-timing-mode from dts */
+-	int		timing_mode_level;
+-	/* indicate if should use marvell modes value */
+-	bool	use_marvell_modes_value;
+-	/* upported mode by NFC (max mode that supported) */
+-	unsigned int max_mode_number;
+-	/* which set of modes to use from pre defined array */
+-	pxa3xx_nand_timing_mode_set_t		marvell_ndtr_set;
+ };
+ 
+ enum pxa3xx_nand_variant {
+diff --git a/drivers/mtd/spi/spi_flash_ids.c b/drivers/mtd/spi/spi_flash_ids.c
+index 8b72d71..bc1aa17 100644
+--- a/drivers/mtd/spi/spi_flash_ids.c
++++ b/drivers/mtd/spi/spi_flash_ids.c
+@@ -83,7 +83,7 @@ const struct spi_flash_info spi_flash_ids[] = {
+ 	{"mx25l3205d",	   INFO(0xc22016, 0x0, 64 * 1024,    64, 0) },
+ 	{"mx25l6405d",	   INFO(0xc22017, 0x0, 64 * 1024,   128, 0) },
+ 	{"mx25l12805",	   INFO(0xc22018, 0x0, 64 * 1024,   256, RD_FULL | WR_QPP) },
+-	{"mx25l25635f",	   INFO(0xc22019, 0x0, 64 * 1024,   512, RD_FULL | WR_QPP) },
++	{"mx25l25745g",	   INFO(0xc22019, 0x0, 64 * 1024,   512, RD_FULL | WR_QPP) },
+ 	{"mx25l51235f",	   INFO(0xc2201a, 0x0, 64 * 1024,  1024, RD_FULL | WR_QPP) },
+ 	{"mx25u3235f",     INFO(0xc22536, 0x0, 64 * 1024,    64, RD_FULL | WR_QPP) },
+ 	{"mx25u6435f",	   INFO(0xc22537, 0x0, 64 * 1024,   128, RD_FULL | WR_QPP) },
+diff --git a/fs/ubifs/debug.h b/fs/ubifs/debug.h
+index 9814083..9e088ce 100644
+--- a/fs/ubifs/debug.h
++++ b/fs/ubifs/debug.h
+@@ -166,12 +166,11 @@ struct ubifs_global_debug_info {
+ 		 dbg_snprintf_key(c, key, __tmp_key_buf, DBG_KEY_BUF_LEN));    \
+ } while (0)
+ #else
+-#define ubifs_assert(expr) do {                                                \
+-	if (unlikely(!(expr))) {                                               \
+-		pr_crit("UBIFS assert failed in %s at %u\n",                   \
+-		       __func__, __LINE__);                                    \
+-		dump_stack();                                                  \
+-	}                                                                      \
++/* Use "if (0)" to make compiler check arguments even if debugging is off */
++#define ubifs_assert(expr)  do {                                               \
++	if (0 && (expr))                                                       \
++		printk(KERN_CRIT "UBIFS assert failed in %s at %u (pid %d)\n", \
++		       __func__, __LINE__, 0);                      \
+ } while (0)
+ 
+ #define ubifs_assert_cmt_locked(c) do {                                        \
+diff --git a/fs/ubifs/ubifs.c b/fs/ubifs/ubifs.c
+index 4465523..8948ab6 100644
+--- a/fs/ubifs/ubifs.c
++++ b/fs/ubifs/ubifs.c
+@@ -928,7 +928,7 @@ void ubifs_close(void)
+ }
+ 
+ /* Compat wrappers for common/cmd_ubifs.c */
+-int ubifs_load(char *filename, u32 addr, u32 size)
++int ubifs_load(char *filename, u64 addr, u64 size)
+ {
+ 	loff_t actread;
+ 	int err;
+diff --git a/include/ubifs_uboot.h b/include/ubifs_uboot.h
+index d86da27..91811f2 100644
+--- a/include/ubifs_uboot.h
++++ b/include/ubifs_uboot.h
+@@ -19,7 +19,7 @@ int ubifs_init(void);
+ int uboot_ubifs_mount(char *vol_name);
+ void uboot_ubifs_umount(void);
+ int ubifs_is_mounted(void);
+-int ubifs_load(char *filename, u32 addr, u32 size);
++int ubifs_load(char *filename, u64 addr, u64 size);
+ 
+ int ubifs_set_blk_dev(struct blk_desc *rbdd, disk_partition_t *info);
+ int ubifs_ls(const char *dir_name);
+-- 
+2.17.1
+

@@ -1,0 +1,59 @@
+# This script fragment is sourced by /etc/init.d/init-arch.sh, which
+# in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+# A machine can use this feature to run any early boot scripts needed
+# by the machine.  A typical usage would be to initialize specific
+# hardware devices.
+
+# Use this function to perform any initializations required by the
+# architecture specific initialization.  This function executes before
+# the architecture initializations.
+
+#init_platform_pre_arch()
+#{
+#}
+
+init_arch()
+{
+    # Disable Watchdog
+    i2cset -f -y 0 0x66  0x1C 0x0
+
+    # Clean Watchdog Timer
+    i2cset -f -y 0 0x66 0x1B 0x0
+
+    echo "Watchdog already disable ..."
+
+    # Find u-boot environment device-tree node
+    env_file=$(find /proc/device-tree/ -name env_size)
+    [ -n "$env_file" ] || {
+        log_failure_msg "Unable to find u-boot environment device-tree node"
+        return 1
+    }
+    # Find u-boot environment size
+    env_sz="0x$(hd $env_file | awk 'FNR==1 {print $2 $3 $4 $5}')"
+    [ -n "$env_sz" ] || {
+        log_failure_msg "Unable to find u-boot environment size"
+        return 1
+    }
+    # Find u-boot environment mtd device
+    mtd=$(grep uboot-env /proc/mtd | sed -e 's/:.*$//')
+    [ -c "/dev/$mtd" ] || {
+        log_failure_msg "Unable to find u-boot environment mtd device: /dev/$mtd"
+        return 1
+    }
+    (cat <<EOF
+# MTD device name       Device offset   Env. size       Flash sector size
+/dev/$mtd               0x00000000      $env_sz         0x00010000
+EOF
+) > /etc/fw_env.config
+
+
+}
+
+# Use this function to perform any post-initializations or clean-up.
+# This function executes after the architecture initializations.
+#init_platform_post_arch()
+#{
+#}
+
