@@ -1,0 +1,154 @@
+From 42990921684c61a1b83767647dcf6ee1d1d7c79b Mon Sep 17 00:00:00 2001
+From: Will Chao <will.chao@wnc.com.tw>
+Date: Tue, 5 Oct 2021 16:38:41 +0800
+Subject: [PATCH] Add tomcat ac5 env for onie
+
+---
+ include/configs/tomcat_alleycat5.h | 135 +++++++++++++++++++++++++++++
+ 1 file changed, 135 insertions(+)
+ create mode 100644 include/configs/tomcat_alleycat5.h
+
+diff --git a/include/configs/tomcat_alleycat5.h b/include/configs/tomcat_alleycat5.h
+new file mode 100644
+index 0000000..3cc1d12
+--- /dev/null
++++ b/include/configs/tomcat_alleycat5.h
+@@ -0,0 +1,135 @@
++opyright (C) 2015 Marvell International Ltd.
++ * ***************************************************************************
++ * This program is free software: you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the Free
++ * Software Foundation, either version 2 of the License, or any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ * ***************************************************************************
++ */
++
++#ifndef __TOMCAT_ALLEYCAT5_H
++#define __TOMCAT_ALLEYCAT5_H
++
++#include "common_config.h"
++
++/* Version */
++#define CONFIG_BOOTP_VCI_STRING         "U-boot.armv8.armada8k"
++
++/*
++#define MV_INCLUDE_SDIO
++#define MV_INCLUDE_INTEG_SATA
++#define MV_INCLUDE_CLK_PWR_CNTRL
++
++#define MV_INCLUDE_RCVR
++#define MV_INCLUDE_NAND
++#define MV_INCLUDE_SPI
++#define MV_INCLUDE_XOR
++#define MV_INCLUDE_SATA
++#define MV_INCLUDE_USB
++#define CONFIG_MV_ETH_NETA
++#define MV_INCLUDE_GPIO
++#define MV_INCLUDE_I2C
++#define MV_INCLUDE_PEX
++*/
++#define CONFIG_GZIP_COMPRESSED
++
++#undef CONFIG_GICV3
++#define CONFIG_GICV2
++
++#define CONFIG_GENERIC_TIMER
++#define CONFIG_REMAKE_ELF
++
++/* Clock Definitions */
++#ifndef CONFIG_PALLADIUM
++#define COUNTER_FREQUENCY	(25 * 1000000)
++#define CONFIG_MSS_FREQUENCY	(200 * 1000000)
++#else
++#define COUNTER_FREQUENCY	(48000)
++#define CONFIG_MSS_FREQUENCY	(384000)
++#endif
++#if defined(CONFIG_MVEBU_RTC)
++#define ERRATA_FE_3124064
++#endif
++
++#ifdef CONFIG_SPL_BUILD
++/* SPL */
++/* Defines for SPL */
++#define CONFIG_SPL_TEXT_BASE		0xFFE1C048
++#define CONFIG_SPL_MAX_SIZE		(0x27000)
++
++#ifndef __ASSEMBLY__
++extern char __end_of_spl[];
++#endif /* __ASSEMBLY__ */
++#define CONFIG_SYS_SPL_MALLOC_START	((ulong)__end_of_spl)
++#define CONFIG_SYS_SPL_MALLOC_SIZE	(0x4000)
++#endif /* CONFIG_SPL_BUILD */
++#define CONFIG_SPL_LDSCRIPT		"arch/arm/cpu/mvebu-common/u-boot-armv8-spl.lds"
++
++#define CONFIG_SYS_NS16550
++/*
++ * Include the generic MVEBU configuration file.
++ * The generic file is affected by the defines above.
++ */
++#include "mvebu-common.h"
++
++#undef CONFIG_MVEBU_UBOOT_DFLT_NAME
++#define CONFIG_MVEBU_UBOOT_DFLT_NAME	"flash-image.bin"
++
++#define CONFIG_SYS_PCI_64BIT	/* enable 64-bit PCI resources */
++
++#define CONFIG_ENV_SIZE             (64 << 10) /* 64KiB */
++#define CONFIG_ENV_SECT_SIZE        (64 << 10) /* 64KiB sectors */
++#define CONFIG_ENV_OFFSET           0x400000
++
++/* Platform environment variables needed by the common env infrastructure */
++/* 	"onie_start=0x410000\0" \
++ */
++#define CONFIG_PLATFORM_ENV    \
++	"onie_sz.b=0x01200000\0"
++#ifndef CONFIG_ONIE_COMMON_UBOOT_ENV
++#define CONFIG_ONIE_COMMON_UBOOT_ENV ""
++#endif
++#define CONFIG_EXTRA_ENV_SETTINGS \
++	CONFIG_PLATFORM_ENV       \
++	CONFIG_EXTRA_ENV_CFG      \
++	CONFIG_ONIE_COMMON_UBOOT_ENV
++
++/*
++ * SOC specific overrides
++ * Add here all config values that differ
++ * from the generic value in mvebu-common.h
++ */
++
++/* Emulation specific setting */
++#ifdef CONFIG_PALLADIUM
++
++#undef CONFIG_BOOTDELAY
++#define CONFIG_BOOTDELAY                -1
++
++#undef CONFIG_BAUDRATE
++#define CONFIG_BAUDRATE                 115200
++
++#undef CONFIG_BOOTARGS
++#define CONFIG_BOOTARGS		"console=ttyS0,115200 earlycon=uart8250,mmio32,0x7f012000 cpuidle.off=1 " \
++				"mem=256M init=/bin/sh root=/dev/ram0 rw"
++
++#undef CONFIG_EXTRA_ENV_SETTINGS
++#define CONFIG_EXTRA_ENV_SETTINGS	"kernel_addr=0x202000000\0"	\
++					"fdt_addr=0x201000000\0"		\
++					"ramfs_addr=0x206000000\0"	\
++					"fdt_high=0xffffffffffffffff\0"		\
++					"initrd_high=0xffffffffffffffff\0"
++
++#undef CONFIG_BOOTCOMMAND
++#define CONFIG_BOOTCOMMAND		"sf probe;sf read 206000000 410000 c00000;unzip 206000000 202000000; sf read 201000000 1010000 100000; sf read 206000000 1110000 500000; booti $kernel_addr $ramfs_addr $fdt_addr"
++
++#endif /*CONFIG_PALLADIUM*/
++
++#endif /* __TOMCAT_ALLEYCAT5_H */
+-- 
+2.17.1
+
