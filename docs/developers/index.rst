@@ -17,3 +17,5 @@ For Developers
    demo_diag
    multiple_cpu
    release
+   project_lead_tasks
+   
