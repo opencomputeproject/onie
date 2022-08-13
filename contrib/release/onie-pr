@@ -1,0 +1,52 @@
+#!/bin/sh
+
+# Copyright 2022 Nivida Corporation
+# Copyright 2015 Cumulus Networks, Inc.
+# All rights reserved.
+#
+
+# Use the 'hub' command to integrate github pull requests
+
+PR=$1
+ONIE_GH_URL=https://github.com/opencomputeproject/onie/pull
+
+URL="${ONIE_GH_URL}/$PR"
+
+#
+# /usr/local/bin/hub is where hub will be found if this is executing
+# in an ONIE build container.
+#
+HUB_LOCS="$HOME/bin/hub /mnt/behemoth1/devtools/hub/hub /bulk/curt/bin/hub /usr/local/bin/hub"
+for h in $HUB_LOCS ; do
+    if [ -x "$h" ] ; then
+        HUB="$h"
+        break
+    fi
+done
+
+[ -n "$HUB" ] || {
+    echo "ERROR:  Unable to find hub binary."
+	echo "Are you in an ONIE build environment?"
+    exit 1
+}
+
+[ -x "$HUB" ] || {
+    echo "ERROR:  Unable to execute hub program: $HUB"
+    exit 1
+}
+
+NON_MASTER_OK="${2:-no}"
+
+
+# verify we're on the master branch
+branch=$(git rev-parse --abbrev-ref HEAD)
+[ "$branch" = "master" ] || {
+    echo "WARNING:  Not on the master branch"
+    git status
+    [ "$NON_MASTER_OK" != "no" ] || exit 1
+}
+
+# pull in the PR
+echo "Pulling in: $URL"
+$HUB am -3 --signoff "$URL"
+
