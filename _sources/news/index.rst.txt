@@ -8,6 +8,12 @@
 ************
 Project News
 ************
+Aug 13, 2022
+  Released version `2022.08
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/255>`_
+
+  The master branch supports four new platforms, and DNS resolution has been fixed for armv8a builds.
+
 May 01, 2022
   Released version `2022.05
   <https://ocp-all.groups.io/g/OCP-ONIE/message/248>`_
