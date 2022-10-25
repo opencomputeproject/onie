@@ -1,0 +1,254 @@
+From 9b6a8f3c4ba23ee7a5777ad53b2b5a412e58bfeb Mon Sep 17 00:00:00 2001
+From: Wolf Lin <Wolf_Lin@pegatroncorp.com>
+Date: Mon, 26 Jul 2021 13:58:36 +0800
+Subject: [PATCH] Pegatron DM6218_B device tree
+
+---
+ arch/arm64/boot/dts/marvell/cn9130-db-A.dts | 58 +++++------------
+ arch/arm64/boot/dts/marvell/cn9130-db.dtsi  | 69 ++++-----------------
+ 2 files changed, 26 insertions(+), 101 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/marvell/cn9130-db-A.dts b/arch/arm64/boot/dts/marvell/cn9130-db-A.dts
+index 4d1c03b22663..98eea6c77fc1 100644
+--- a/arch/arm64/boot/dts/marvell/cn9130-db-A.dts
++++ b/arch/arm64/boot/dts/marvell/cn9130-db-A.dts
+@@ -38,9 +38,7 @@
+ 	pinctrl-names = "default";
+ 	bus-width = <8>;
+ 	status = "okay";
+-	mmc-ddr-1_8v;
+-	mmc-hs400-1_8v;
+-	vqmmc-supply = <&ap0_reg_sd_vccq>;
++	mmc-ddr-3_3v;
+ };
+ 
+ /*
+@@ -64,37 +62,7 @@
+ 
+ /* U54 */
+ &cp0_nand_controller {
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&nand_pins>;
+-
+-	nand@0 {
+-		reg = <0>;
+-		label = "main-storage";
+-		nand-rb = <0>;
+-		nand-ecc-mode = "hw";
+-		nand-on-flash-bbt;
+-		nand-ecc-strength = <8>;
+-		nand-ecc-step-size = <512>;
+-
+-		partitions {
+-			compatible = "fixed-partitions";
+-			#address-cells = <1>;
+-			#size-cells = <1>;
+-
+-			partition@0 {
+-				label = "U-Boot";
+-				reg = <0 0x200000>;
+-			};
+-			partition@200000 {
+-				label = "Linux";
+-				reg = <0x200000 0xe00000>;
+-			};
+-			partition@1000000 {
+-				label = "Filesystem";
+-				reg = <0x1000000 0x3f000000>;
+-			};
+-		};
+-	};
++	status = "disabled";
+ };
+ 
+ /* U55 */
+@@ -119,13 +87,20 @@
+ 			#size-cells = <1>;
+ 
+ 			partition@0 {
+-				label = "U-Boot";
+-				reg = <0x0 0x200000>;
++				label = "uboot";
++				reg = <0x0 0x003f0000>;
++			};
++
++			partition@3f0000 {
++				/* 64KB */
++				label = "uboot-env";
++				reg = <0x003f0000 0x00010000>;
++				env_size = <0x10000>;
+ 			};
+ 
+ 			partition@400000 {
+ 				label = "Filesystem";
+-				reg = <0x200000 0xe00000>;
++				reg = <0x400000 0x600000>;
+ 			};
+ 		};
+ 	};
+@@ -160,10 +135,7 @@
+ 
+ &cp0_mdio {
+ 	status = "okay";
+-	phy0: ethernet-phy@0 {
+-		reg = <0>;
+-	};
+-	phy1: ethernet-phy@1 {
++	phy0: ethernet-phy@1 {
+ 		reg = <1>;
+ 	};
+ };
+@@ -191,7 +163,5 @@
+ 
+ /* CON57 */
+ &cp0_eth2 {
+-	status = "okay";
+-	phy = <&phy1>;
+-	phy-mode = "rgmii-id";
++	status = "disabled";
+ };
+diff --git a/arch/arm64/boot/dts/marvell/cn9130-db.dtsi b/arch/arm64/boot/dts/marvell/cn9130-db.dtsi
+index d2584a411cca..f2c2ae00eee0 100644
+--- a/arch/arm64/boot/dts/marvell/cn9130-db.dtsi
++++ b/arch/arm64/boot/dts/marvell/cn9130-db.dtsi
+@@ -17,7 +17,6 @@
+ 		regulator-min-microvolt = <5000000>;
+ 		regulator-max-microvolt = <5000000>;
+ 		enable-active-high;
+-		gpio = <&expander0 0 GPIO_ACTIVE_HIGH>;
+ 	};
+ 
+ 	cp0_usb3_0_phy0: cp0_usb3_phy0 {
+@@ -31,7 +30,6 @@
+ 		regulator-min-microvolt = <5000000>;
+ 		regulator-max-microvolt = <5000000>;
+ 		enable-active-high;
+-		gpio = <&expander0 1 GPIO_ACTIVE_HIGH>;
+ 	};
+ 
+ 	cp0_usb3_0_phy1: cp0_usb3_phy1 {
+@@ -44,7 +42,6 @@
+ 		regulator-name = "cp0_sd_vccq";
+ 		regulator-min-microvolt = <1800000>;
+ 		regulator-max-microvolt = <3300000>;
+-		gpios = <&expander0 15 GPIO_ACTIVE_HIGH>;
+ 		states = <1800000 0x1
+ 			  3300000 0x0>;
+ 	};
+@@ -54,7 +51,6 @@
+ 		regulator-name = "ap0_sd_vccq";
+ 		regulator-min-microvolt = <1800000>;
+ 		regulator-max-microvolt = <3300000>;
+-		gpios = <&expander0 8 GPIO_ACTIVE_HIGH>;
+ 		states = <1800000 0x1
+ 			  3300000 0x0>;
+ 	};
+@@ -64,18 +60,12 @@
+ 		regulator-name = "cp0_sd_vcc";
+ 		regulator-min-microvolt = <3300000>;
+ 		regulator-max-microvolt = <3300000>;
+-		gpio = <&expander0 14 GPIO_ACTIVE_HIGH>;
+ 		enable-active-high;
+ 		regulator-always-on;
+ 	};
+ 
+ 	cp0_sfp_eth0: sfp-eth0 {
+ 		compatible = "sff,sfp";
+-		i2c-bus = <&cp0_sfpp0_i2c>;
+-		los-gpio = <&cp0_moudle_expander1 11 GPIO_ACTIVE_HIGH>;
+-		mod-def0-gpio = <&cp0_moudle_expander1 10 GPIO_ACTIVE_LOW>;
+-		tx-disable-gpio = <&cp0_moudle_expander1 9 GPIO_ACTIVE_HIGH>;
+-		tx-fault-gpio = <&cp0_moudle_expander1 8 GPIO_ACTIVE_HIGH>;
+ 		status = "disabled";
+ 	};
+ };
+@@ -84,74 +74,39 @@
+  * CP0
+  */
+ &cp0_i2c0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&cp0_i2c0_pins>;
++	status = "okay";
+ 	clock-frequency = <100000>;
+ 
+-	/* U36 */
+-	expander0: pca953x@21 {
+-		compatible = "nxp,pca9555";
+-		pinctrl-names = "default";
+-		gpio-controller;
+-		#gpio-cells = <2>;
+-		reg = <0x21>;
+-		status = "okay";
+-	};
+-
+-	/* U42 */
+-	eeprom0: eeprom@50 {
+-		compatible = "atmel,24c64";
+-		reg = <0x50>;
+-		pagesize = <0x20>;
+-	};
+-
+-	/* U38 */
+-	eeprom1: eeprom@57 {
+-		compatible = "atmel,24c64";
+-		reg = <0x57>;
+-		pagesize = <0x20>;
+-	};
+-};
+-
+-&cp0_i2c1 {
+-	clock-frequency = <100000>;
+-
+-	/* SLM-1521-V2 - U3 */
+-	i2c-mux@72 { /* verify address - depends on dpr */
+-		compatible = "nxp,pca9544";
++	i2c-switch@72 { /* verify address - depends on dpr */
++		compatible = "nxp,pca9548";
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 		reg = <0x72>;
+-		cp0_sfpp0_i2c: i2c@0 {
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+-			reg = <0>;
+-		};
+ 
+ 		i2c@1 {
+ 			#address-cells = <1>;
+ 			#size-cells = <0>;
+ 			reg = <1>;
+-			/* U12 */
+-			cp0_moudle_expander1: pca9555@21 {
+-				compatible = "nxp,pca9555";
+-				pinctrl-names = "default";
+-				gpio-controller;
+-				#gpio-cells = <2>;
+-				reg = <0x21>;
++			eeprom0: eeprom@50 {
++				compatible = "atmel,24c02";
++				reg = <0x50>;
+ 			};
+-
+ 		};
+ 	};
+ };
+ 
++&cp0_i2c1 {
++	clock-frequency = <100000>;
++};
++
+ 
+ &cp0_sdhci0 {
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&cp0_sdhci_pins
+ 		     &cp0_sdhci_cd_pins>;
+ 	bus-width = <4>;
+-	cd-gpios = <&cp0_gpio2 11 GPIO_ACTIVE_LOW>;
+-	vqmmc-supply = <&cp0_reg_sd_vccq>;
+-	vmmc-supply = <&cp0_reg_sd_vcc>;
+ };
+ 
+ &cp0_utmi0 {
+-- 
+2.25.1
+

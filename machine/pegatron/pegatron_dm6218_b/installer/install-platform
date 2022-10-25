@@ -1,0 +1,220 @@
+# override default install_onie_kernel
+
+# get running machine from conf file
+[ -r /etc/machine.conf ] && . /etc/machine.conf
+
+create_diag_gpt_partition()
+{
+    echo "INFO: Create DIAG Partition"
+    local diag_boot_part=2
+    local mmcblkdev="/dev/mmcblk0"
+    local diag_dev="/dev/mmcblk0p2"
+    local diag_bitmask="0x1"
+    local diag_volume_label="PEGATRON-DIAG"
+    local onie_volume_start=$(( 2048 + 128 * 2048 ))
+    local diag_volume_start=$(( $onie_volume_start + 2048 ))
+    local diag_volume_size=$(( $diag_volume_start + 3072 * 2048 ))
+    
+    diag_volume_part=$(sgdisk -p $mmcblkdev | grep -E "${diag_volume_label}" | awk '{print $1}')
+    if [ -n "$diag_volume_part" ] ; then
+       echo "INFO: ${diag_volume_label} Partition had been created"
+       return
+    fi
+
+    sgdisk --new=${diag_boot_part}:${diag_volume_start}:${diag_volume_size} \
+        --attributes=${diag_boot_part}:=:$diag_bitmask \
+        --change-name=${diag_boot_part}:$diag_volume_label "$mmcblkdev" || {
+        echo "Error: Unable to create partition $diag_boot_part on $mmcblkdev"
+        exit 1
+    }
+    partprobe
+
+    mkfs.ext4 -F -L $diag_volume_label $diag_dev || {
+        echo "Error: Unable to create file system on $diag_dev"
+        exit 1
+    }
+}
+
+create_diag_msdos_partition()
+{
+    echo "INFO: Create DIAG Partition"
+    local diag_boot_part=2
+    local mmcblkdev="/dev/mmcblk0"
+    local diag_dev="/dev/mmcblk0p2"
+    local diag_volume_label="PEGATRON-DIAG"
+    local onie_volume_start=$(( 2048 + 128 * 2048 ))
+    local diag_volume_start=$(( $onie_volume_start + 1 ))
+    local diag_volume_size=$(( $diag_volume_start + 3072 * 2048 ))
+
+    part_info="$(blkid | grep -E "${diag_volume_label}" | awk -F: '{print $1}')"
+    if [ -n "$part_info" ] ; then
+        echo "INFO: ${diag_volume_label} Partition had been created"
+        return
+    fi
+
+    parted -s --align optimal $mmcblkdev unit s \
+      mkpart primary $diag_boot_part $diag_volume_size set $diag_boot_part boot on || {
+        echo "ERROR: Problems creating demo msdos partition $diag_boot_part on: $mmcblkdev"
+        exit 1
+    }
+    partprobe
+    
+    mkfs.ext4 -F -L $diag_volume_label $diag_dev || {
+        echo "Error: Unable to create file system on $diag_dev"
+        exit 1
+    }
+}
+
+init_gpt_partition_table()
+{
+    local mmcblkdev="/dev/mmcblk0"
+    local sgdisk_log=$(mktemp)
+
+    sgdisk --zap-all "$mmcblkdev" > $sgdisk_log 2>&1 || {
+        # retry again for fixing the issue:
+        # Invalid partition data!
+        sgdisk --zap-all "$blkdev" >> $sgdisk_log 2>&1 || {
+            echo "ERROR: Problems wiping GPT and MBR on: $mmcblkdev"
+            cat $sgdisk_log && rm -f $sgdisk_log
+            exit 1
+        }
+    }
+
+    sgdisk --clear --mbrtogpt "$mmcblkdev" > $sgdisk_log 2>&1 || {
+        echo "ERROR: Problems creating GPT disk label on: $mmcblkdev"
+        cat $sgdisk_log && rm -f $sgdisk_log
+        exit 1
+    }
+
+    rm -f $sgdisk_log
+}
+
+create_gpt_partition_table()
+{
+    init_gpt_partition_table
+
+    # Create ONIE partition
+    local mmcblkdev="/dev/mmcblk0"
+    local onie_volume_part=1
+    local onie_volume_start=2048
+    local onie_volume_size=$(( onie_volume_start + 128 * 2048 ))
+    local onie_attr_bitmask="0x0"
+    local onie_volume_label="ONIE-BOOT"
+
+    echo "Creating onie partition ${mmcblkdev}p$onie_volume_part ..."
+    sgdisk --new=${onie_volume_part}:${onie_volume_start}:${onie_volume_size} \
+        --attributes=${onie_volume_part}:=:$onie_attr_bitmask  \
+        --change-name=${onie_volume_part}:$onie_volume_label "$mmcblkdev" || {
+        echo "Error: Unable to create partition $onie_volume_part on $mmcblkdev"
+        exit 1
+    }
+
+    partprobe
+}
+
+init_msdos_partition_table()
+{
+    local mmcblkdev="/dev/mmcblk0"
+    local sgdisk_log=$(mktemp)
+
+    sgdisk --zap-all "$mmcblkdev" > $sgdisk_log 2>&1 || {
+        # retry again for fixing the issue:
+        # Invalid partition data!
+        sgdisk --zap-all "$blkdev" >> $sgdisk_log 2>&1 || {
+            echo "ERROR: Problems wiping GPT and MBR on: $mmcblkdev"
+            cat $sgdisk_log && rm -f $sgdisk_log
+            exit 1
+        }
+    }
+
+    rm -f $sgdisk_log
+
+    parted -s "$mmcblkdev" mklabel msdos || {
+        echo "ERROR: Problems creating msdos disk label on: $mmcblkdev"
+        exit 1
+    }
+}
+
+create_msdos_partition_table()
+{
+    init_msdos_partition_table
+
+    # Create ONIE partition
+    local mmc_device="/dev/mmcblk0"
+    local onie_volume_label="ONIE-BOOT"
+    local onie_volume_part=1
+    local onie_volume_start=2048
+    local onie_volume_size=$(( 128 * 2048 ))
+    local onie_attr_bitmask="0x0"
+    local boot_flags="set $onie_volume_part boot on"
+
+    # Create a new partition with the given start and size in units of
+    # sectors.
+    parted -s --align optimal "$mmc_device" unit s \
+      mkpart primary $onie_volume_start $(( $onie_volume_start + $onie_volume_size - 1 )) $boot_flags || {
+        echo "ERROR: Problems creating msdos $onie_volume_label partition $onie_volume_part on: $mmc_device"
+        exit 1
+    }
+
+    partprobe
+}
+
+create_onie_partition()
+{
+    local onie_volume_label="ONIE-BOOT"
+    local mmcblkdev="/dev/mmcblk0p1"
+
+    if [ "${onie_partition_type}" = "gpt" ]; then
+        create_gpt_partition_table
+    else
+        create_msdos_partition_table
+    fi
+
+    mkfs.ext4 -F -L $onie_volume_label $mmcblkdev || {
+        echo "Error: Unable to create file system on $mmcblkdev"
+        exit 1
+    }
+}
+
+create_diag_partition()
+{
+    if [ "${onie_partition_type}" = "gpt" ]; then
+        create_diag_gpt_partition
+    else
+        create_diag_msdos_partition
+    fi
+}
+
+install_onie_kernel()
+{
+    echo "Updating pegatorn_dm6218_b ONIE kernel ..."
+    onie_initrd_file="${onie_machine}-r${onie_machine_rev}.initrd"
+    onie_itb_file="${onie_machine}-r${onie_machine_rev}.itb"
+
+    blk_dev=$(blkid | grep ONIE-BOOT | awk -F: '{print $1}')
+
+    if [ "$onie_boot_reason" = "embed" ] ; then
+       create_onie_partition
+       blk_dev=$(blkid | grep ONIE-BOOT | awk -F: '{print $1}')
+    fi
+
+    [ -b "$blk_dev" ] || {
+        echo "Error: Unable to determine block partition of ONIE install"
+        exit 1
+    }
+
+    tmp_dir=$(mktemp -d)
+    mount ${blk_dev} ${tmp_dir} > /dev/null 2>&1
+    cp -f onie.itb ${tmp_dir}/${onie_itb_file}
+    mkdir -p ${tmp_dir}/onie
+    cp -f ${onie_initrd_file} ${tmp_dir}/onie/initrd.img-onie
+    sync
+    umount ${tmp_dir}
+
+    create_diag_partition
+}
+
+install_onie_uboot()
+{
+    echo "Skip Updating pegatorn_dm6218_b ONIE Uboot ..."
+}
