@@ -1,0 +1,64 @@
+From 77fd4c8aa82bfcba6bb69fed55345e135b604e89 Mon Sep 17 00:00:00 2001
+From: Yuval Shaia <yshaia@marvell.com>
+Date: Mon, 24 Feb 2020 13:02:32 +0000
+Subject: [PATCH] PCI: Fix missing IRQ in Falcon
+
+Note: This is a temporray hack and needs to be reverted when upgrading to
+latest upstream kernel.
+
+When PCI device (or bridge) is identified, the kernel tries to set it as a
+PCI-X device, if it fails then it tries as PCI and drop to legacy mode when
+this fails.
+
+As part of PCI-X/PCI configuration, the kernel queries the config space in
+an attempt to retrieve MSI table entry for AER and PME.
+Kernel 4.14-76 exits with an error in case that entry number is invalid
+while upstream code is okay with this. When 4.14-76 exits with error it
+drops to legacy mode and this leaves the IRQ number for the bridge as it
+was (i.e. the virt-irq) and the IRQ number for the Packet Processor is not
+configured at all.
+Fix this by accepting the upstream way and do not get upset when AER entry
+is invalid.
+
+A second problematic place is when the Packet Processor is discovered
+during the PCI scan. Kernel 4.4 has special implementation for arch ARM to
+setup IRQ for a device (pcibios_add_device) by reading it from device tree.
+Both 4.14-76 and upstream do not have it.
+By adopting the 4.4-52 way, the IRQ for the Packet Processor is setup
+correctly to a legacy mode
+
+Change-Id: I38b9647246c05ab94ae5ead636c376b0891c3065
+Signed-off-by: Yuval Shaia <yshaia@marvell.com>
+---
+ drivers/pci/pci.c               | 1 +
+ drivers/pci/pcie/portdrv_core.c | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/pci/pci.c b/drivers/pci/pci.c
+index 57a87a001b4f..38cab5c1874b 100644
+--- a/drivers/pci/pci.c
++++ b/drivers/pci/pci.c
+@@ -1779,6 +1779,7 @@ EXPORT_SYMBOL(pcim_pin_device);
+  */
+ int __weak pcibios_add_device(struct pci_dev *dev)
+ {
++	dev->irq = of_irq_parse_and_map_pci(dev, 0, 0);
+ 	return 0;
+ }
+ 
+diff --git a/drivers/pci/pcie/portdrv_core.c b/drivers/pci/pcie/portdrv_core.c
+index 7c37d815229e..25bfc8d71c86 100644
+--- a/drivers/pci/pcie/portdrv_core.c
++++ b/drivers/pci/pcie/portdrv_core.c
+@@ -104,7 +104,7 @@ static int pcie_port_enable_irq_vec(struct pci_dev *dev, int *irqs, int mask)
+ 
+ 	/* Allocate the maximum possible number of MSI/MSI-X vectors */
+ 	nr_entries = pci_alloc_irq_vectors(dev, 1, PCIE_PORT_MAX_MSI_ENTRIES,
+-			PCI_IRQ_MSIX | PCI_IRQ_MSI);
++			PCI_IRQ_MSI);
+ 	if (nr_entries < 0)
+ 		return nr_entries;
+ 
+-- 
+2.17.1
+
