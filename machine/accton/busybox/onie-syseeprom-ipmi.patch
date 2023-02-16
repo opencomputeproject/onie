@@ -15,10 +15,10 @@ index 72ddcd1..944a610 100644
  lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
 diff --git a/miscutils/sys_eeprom_alt.c b/miscutils/sys_eeprom_alt.c
 new file mode 100644
-index 0000000..5667b57
+index 0000000..df55d18
 --- /dev/null
 +++ b/miscutils/sys_eeprom_alt.c
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,135 @@
 +#include "libbb.h"
 +#include "onie_tlvinfo.h"
 +#include "sys_eeprom.h"
@@ -130,10 +130,6 @@ index 0000000..5667b57
 +{
 +    unsigned int data = 0;
 +    FILE *fd;
-+    if (system("ipmitool raw 0x34 0x61 >/dev/null 2>&1") != 0) {
-+        return 1;
-+    }
-+    usleep(1000);
 +    fd = popen("ipmitool raw 0x34 0x95 2>/dev/null || echo 0", "r");
 +    if (fd == NULL) {
 +        return -1;
@@ -149,10 +145,6 @@ index 0000000..5667b57
 +    {
 +        return ipmi_read_sys_eeprom(eeprom_data, offset, len);
 +    }
-+    else
-+    {
-+        return i2c_read_sys_eeprom(eeprom_data, offset, len);
-+    }
 +}
 +
 +int write_sys_eeprom(void *eeprom_data, int len)
@@ -161,16 +153,12 @@ index 0000000..5667b57
 +    {
 +        return ipmi_write_sys_eeprom(eeprom_data, len);
 +    }
-+    else
-+    {
-+        return i2c_write_sys_eeprom(eeprom_data, len);
-+    }
 +}
 diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
-index f86b155..06664d1 100644
+index ed3235b..7ae2f27 100644
 --- a/miscutils/sys_eeprom_i2c.c
 +++ b/miscutils/sys_eeprom_i2c.c
-@@ -47,7 +47,7 @@ void correct_eeprom_i2c_addr()
+@@ -14,7 +14,7 @@
  /*
   * read_sys_eeprom - read the hwinfo from i2c EEPROM
   */
@@ -179,7 +167,7 @@ index f86b155..06664d1 100644
  {
      int ret = 0;
      struct eeprom e;
-@@ -72,7 +72,7 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+@@ -39,7 +39,7 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
  /*
   * write_sys_eeprom - write the hwinfo to i2c EEPROM
   */
