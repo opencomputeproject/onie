@@ -1,0 +1,91 @@
+From 4e12f997f8b6af76ef65e7045c232b7d642a1af4 Mon Sep 17 00:00:00 2001
+From: dann frazier <dann.frazier@canonical.com>
+Date: Mon, 17 Aug 2020 13:11:15 -0600
+Subject: [PATCH] Fix parsing for nvme-subsystem devices
+
+nvme-subsystem devices have a link that looks like:
+  ../../devices/virtual/nvme-subsystem/nvme-subsys0/nvme0n1
+
+However, the current code expects an additional /nvme0/ component, i.e.:
+  ../../devices/virtual/nvme-subsystem/nvme-subsys0/nvme0/nvme0n1
+
+Fix this by adding a separate branch for parsing nvme-subsystem devices.
+
+Resolves github issue #157.
+
+Signed-off-by: dann frazier <dann.frazier@canonical.com>
+
+[ dannf: Context adjustments due to upstream whitespace cleanup and
+  dbgmk() calls ]
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1891718
+Bug: https://github.com/rhboot/efivar/issues/157
+Origin: upstream, https://github.com/rhboot/efivar/commit/4e12f997f8b6af76ef65e7045c232b7d642a1af4
+Last-Updated: 2020-10-08
+
+Index: efivar/src/linux-nvme.c
+===================================================================
+--- efivar.orig/src/linux-nvme.c
++++ efivar/src/linux-nvme.c
+@@ -57,7 +57,7 @@ static ssize_t
+ parse_nvme(struct device *dev, const char *path, const char *root UNUSED)
+ {
+ 	const char *current = path;
+-        int rc;
++	int i, rc;
+         int32_t tosser0, tosser1, tosser2, ctrl_id, ns_id, partition;
+         uint8_t *filebuf = NULL;
+ 	int pos0 = -1, pos1 = -1, pos2 = -1;
+@@ -78,7 +78,7 @@ parse_nvme(struct device *dev, const cha
+ 	/*
+ 	 * in this case, *any* of these is okay.
+ 	 */
+-	for (int i = 0; subdirs[i].name; i++) {
++	for (i = 0; subdirs[i].name; i++) {
+ 		debug("searching for %s", subdirs[i].name);
+ 		pos0 = tosser0 = pos1 = -1;
+ 		rc = sscanf(current, subdirs[i].fmt, &pos0, &pos1, &pos2);
+@@ -91,18 +91,31 @@ parse_nvme(struct device *dev, const cha
+ 		}
+ 	}
+ 
+-	debug("searching for nvme0/nvme0n1 or nvme0/nvme0n1/nvme0n1p1");
+-	rc = sscanf(current, "%nnvme%d/nvme%dn%d%n/nvme%dn%dp%d%n",
+-	            &pos0, &tosser0, &ctrl_id, &ns_id, &pos1,
+-	            &tosser1, &tosser2, &partition, &pos2);
+-	debug("current:'%s' rc:%d pos0:%d pos1:%d pos2:%d\n", current, rc, pos0, pos1, pos2);
+-        /*
+-         * If it isn't of that form, it's not one of our nvme devices.
+-         */
+-        if (rc != 3 && rc != 6)
+-                return 0;
+-	if (rc == 3)
+-		pos2 = pos1;
++	if (!subdirs[i].name)
++		return 0;
++
++	debug("searching for nvme-subsysN/");
++	if (!strncmp("nvme-subsysN/", subdirs[i].name, 13)) {
++		debug("searching for nvme0n1");
++		rc = sscanf(current, "%nnvme%dn%d%n",
++			    &pos0, &ctrl_id, &ns_id, &pos1);
++		debug("current:'%s' rc:%d pos0:%d pos1:%d\n", current, rc, pos0, pos1);
++		if (rc != 2)
++			return 0;
++	} else {
++		debug("searching for nvme0/nvme0n1 or nvme0/nvme0n1/nvme0n1p1");
++		rc = sscanf(current, "%nnvme%d/nvme%dn%d%n/nvme%dn%dp%d%n",
++			    &pos0, &tosser0, &ctrl_id, &ns_id, &pos1,
++			    &tosser1, &tosser2, &partition, &pos2);
++		debug("current:'%s' rc:%d pos0:%d pos1:%d pos2:%d\n", current, rc, pos0, pos1, pos2);
++		/*
++		 * If it isn't of that form, it's not one of our nvme devices.
++		 */
++		if (rc != 3 && rc != 6)
++			return 0;
++		if (rc == 3)
++			pos2 = pos1;
++	}
+ 
+         dev->nvme_info.ctrl_id = ctrl_id;
+         dev->nvme_info.ns_id = ns_id;
