@@ -1,0 +1,209 @@
+From c9c1424d0e09bf33b747d37c43177c63367b1290 Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Fri, 11 Oct 2019 14:20:54 -0400
+Subject: [PATCH] Try even harder to find disk device symlinks in sysfs.
+
+Today's realization is that the thing encoded into the structure of
+sysfs is, in the best case, the dependency graph of the makefile targets
+to build a device driver.
+
+In the case of nvme-fabric, or really wherever the kernel has
+class_create() and device_create() in the same function, there's an
+extra level of indirection.
+
+Anyway, in this patch we stop pretending sysfs isn't completely absurd,
+and just try adding "/device" in the middle of the driver symlink path,
+until we actually either get ENOENT on the device symlink or find a
+device symlink that actually has a driver symlink under it.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+
+[ dannf: Context adjustments due to upstream whitespace cleanup;
+  Adjust to omit efi_error_pop() call that didn't exist in v37;
+  included to simplify application of later patches in series ]
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1891718
+Bug: https://github.com/rhboot/efivar/issues/157
+Origin: upstream, https://github.com/rhboot/efivar/commit/c9c1424d0e09bf33b747d37c43177c63367b1290
+Last-Updated: 2020-09-30
+
+Index: efivar-37/src/linux-nvme.c
+===================================================================
+--- efivar-37.orig/src/linux-nvme.c
++++ efivar-37/src/linux-nvme.c
+@@ -88,13 +88,12 @@ parse_nvme(struct device *dev, const cha
+         /*
+          * now fish the eui out of sysfs is there is one...
+          */
+-        rc = read_sysfs_file(&filebuf,
+-                             "class/block/nvme%dn%d/eui",
+-                             ctrl_id, ns_id);
+-        if ((rc < 0 && errno == ENOENT) || filebuf == NULL) {
+-                rc = read_sysfs_file(&filebuf,
+-                             "class/block/nvme%dn%d/device/eui",
+-                             ctrl_id, ns_id);
++	char *euipath = NULL;
++	rc = read_sysfs_file(&filebuf, "class/block/nvme%dn%d/eui", ctrl_id, ns_id);
++	if (rc < 0 && (errno == ENOENT || errno == ENOTDIR)) {
++		rc = find_device_file(&euipath, "eui", "class/block/nvme%dn%d", ctrl_id, ns_id);
++		if (rc >= 0 && euipath != NULL)
++			rc = read_sysfs_file(&filebuf, "%s", euipath);
+         }
+         if (rc >= 0 && filebuf != NULL) {
+                 uint8_t eui[8];
+Index: efivar-37/src/linux.c
+===================================================================
+--- efivar-37.orig/src/linux.c
++++ efivar-37/src/linux.c
+@@ -410,24 +410,32 @@ struct device HIDDEN
+                 goto err;
+         }
+ 
+-        if (dev->device[0] != 0) {
+-                rc = sysfs_readlink(&tmpbuf, "block/%s/device/driver", dev->disk_name);
++	/*
++	 * So, on a normal disk, you get something like:
++	 * /sys/block/sda/device -> ../../0:0:0:0
++	 * /sys/block/sda/device/driver -> ../../../../../../../bus/scsi/drivers/sd
++	 *
++	 * On a directly attached nvme device you get:
++	 * /sys/block/nvme0n1/device -> ../../nvme0
++	 * /sys/block/nvme0n1/device/device -> ../../../0000:6e:00.0
++	 * /sys/block/nvme0n1/device/device/driver -> ../../../../bus/pci/drivers/nvme
++	 *
++	 * On a fabric-attached nvme device, you get something like:
++	 * /sys/block/nvme0n1/device -> ../../nvme0
++	 * /sys/block/nvme0n1/device/device -> ../../ctl
++	 * /sys/block/nvme0n1/device/device/device -> ../../../../../0000:6e:00.0
++	 * /sys/block/nvme0n1/device/device/device/driver -> ../../../../../../bus/pci/drivers/nvme-fabrics
++	 *
++	 * ... I think?  I don't have one in front of me.
++	 */
++
++	char *filepath = NULL;
++	rc = find_device_file(&filepath, "driver", "block/%s", dev->disk_name);
++	if (rc >= 0) {
++		rc = sysfs_readlink(&tmpbuf, "%s", filepath);
+                 if (rc < 0 || !tmpbuf) {
+-                        if (errno == ENOENT) {
+-                                /*
+-                                 * nvme, for example, will have nvme0n1/device point
+-                                 * at nvme0, and we need to look for device/driver
+-                                 * there.
+-                                 */
+-                                rc = sysfs_readlink(&tmpbuf,
+-                                                    "block/%s/device/device/driver",
+-                                                    dev->disk_name);
+-                        }
+-                        if (rc < 0 || !tmpbuf) {
+-                                efi_error("readlink of /sys/block/%s/device/driver failed",
+-                                          dev->disk_name);
+-                                goto err;
+-                        }
++			efi_error("readlink of /sys/%s failed", filepath);
++	                goto err;
+                 }
+ 
+                 linkbuf = pathseg(tmpbuf, -1);
+@@ -438,7 +446,7 @@ struct device HIDDEN
+ 
+                 dev->driver = strdup(linkbuf);
+         } else {
+-                dev->driver = strdup("");
++		dev->driver = strdup("");
+         }
+ 
+         if (!dev->driver) {
+Index: efivar-37/src/linux.h
+===================================================================
+--- efivar-37.orig/src/linux.h
++++ efivar-37/src/linux.h
+@@ -1,6 +1,6 @@
+ /*
+  * libefiboot - library for the manipulation of EFI boot variables
+- * Copyright 2012-2015 Red Hat, Inc.
++ * Copyright 2012-2019 Red Hat, Inc.
+  * Copyright (C) 2001 Dell Computer Corporation <Matt_Domsch@dell.com>
+  *
+  * This library is free software; you can redistribute it and/or
+@@ -196,6 +196,22 @@ extern ssize_t HIDDEN make_mac_path(uint
+                 bufsize_;                                               \
+         })
+ 
++#define sysfs_access(mode, fmt, args...)				\
++	({								\
++		int rc_;						\
++		char *pn_;						\
++									\
++		rc_ = asprintfa(&pn_, "/sys/" fmt, ## args);		\
++		if (rc_ >= 0) {						\
++			rc_ = access(pn_, mode);			\
++			if (rc_ < 0)					\
++				efi_error("could not access %s", pn_);  \
++		} else {						\
++			efi_error("could not allocate memory");		\
++		}							\
++		rc_;							\
++	})
++
+ #define sysfs_readlink(linkbuf, fmt, args...)                           \
+         ({                                                              \
+                 char *_lb = alloca(PATH_MAX+1);                         \
+@@ -251,6 +267,57 @@ extern ssize_t HIDDEN make_mac_path(uint
+                 dir_;                                                   \
+         })
+ 
++/*
++ * Iterate a /sys/block directory looking for device/foo, device/device/foo,
++ * etc.  I'm not proud of this method.
++ */
++#define find_device_file(result, name, fmt, args...)				\
++	({									\
++		int rc_ = 0;							\
++		debug("searching for %s from in %s", name, dev->disk_name);	\
++		for (unsigned int try_ = 0; true; try_++) {			\
++			char slashdev_[sizeof("device")				\
++				       + try_ * strlen("/device")];		\
++										\
++			char *nul_ = stpcpy(slashdev_, "device");		\
++			for (unsigned int i_ = 0; i_ < try_; i_++)		\
++				nul_ = stpcpy(nul_, "/device");			\
++										\
++			debug("trying /sys/" fmt "/%s/%s",			\
++			      ## args, slashdev_, name);			\
++										\
++			rc_ = sysfs_access(F_OK, fmt "/%s", ## args, slashdev_);\
++			if (rc_ < 0) {						\
++				if (errno == ENOENT) {				\
++					break;					\
++				}						\
++				efi_error("cannot access /sys/"fmt"/%s: %m",	\
++					  ## args, slashdev_);			\
++				goto find_device_link_err_;			\
++			}							\
++										\
++			rc_ = sysfs_access(F_OK, fmt "/%s/%s",			\
++					   ## args, slashdev_, name);		\
++			if (rc_ < 0) {						\
++				if (errno == ENOENT) {				\
++					break;					\
++				}						\
++				efi_error("cannot access /sys/"fmt"/%s/%s: %m",	\
++					  ## args, slashdev_, name);		\
++				goto find_device_link_err_;			\
++			}							\
++										\
++			rc_ = asprintfa(result, fmt "/%s/%s",			\
++					## args, slashdev_, name);		\
++			if (rc_ < 0) {						\
++				efi_error("cannot allocate memory: %m");	\
++				goto find_device_link_err_;			\
++			}							\
++		}								\
++find_device_link_err_:								\
++		rc_;								\
++	})
++
+ #define DEV_PROVIDES_ROOT       1
+ #define DEV_PROVIDES_HD         2
+ #define DEV_ABBREV_ONLY         4

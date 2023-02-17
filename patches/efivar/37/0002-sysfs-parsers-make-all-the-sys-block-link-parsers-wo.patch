@@ -1,0 +1,92 @@
+From 4718694094647b981b74453445d000b0296b6544 Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Tue, 15 Oct 2019 16:53:27 -0400
+Subject: [PATCH] sysfs parsers: make all the /sys/block link parsers work the
+ same way
+
+Apparently I wrote some of these one way and some the other, and the one
+special case where everything was "current+sz" instead of some form of
+"current += pos; sz += pos; ...; return sz;" or the subtraction version.
+
+Make them all the same, where possible.
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+
+[ dannf: Restrict to just linux-nvme.c;
+  Context adjustments due to upstream whitespace cleanup;
+  drop call to dbgmk() call - it didn't exist in v37;
+  included to simplify application of later patches in series ]
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1891718
+Bug: https://github.com/rhboot/efivar/issues/157
+Origin: upstream, https://github.com/rhboot/efivar/commit/4718694094647b981b74453445d000b0296b6544
+Last-Updated: 2020-09-30
+
+Index: efivar-37/src/linux-nvme.c
+===================================================================
+--- efivar-37.orig/src/linux-nvme.c
++++ efivar-37/src/linux-nvme.c
+@@ -24,6 +24,7 @@
+ #include <fcntl.h>
+ #include <inttypes.h>
+ #include <stdint.h>
++#include <sys/param.h>
+ #include <unistd.h>
+ 
+ #include "efiboot.h"
+@@ -48,25 +49,28 @@
+  */
+ 
+ static ssize_t
+-parse_nvme(struct device *dev, const char *current, const char *root UNUSED)
++parse_nvme(struct device *dev, const char *path, const char *root UNUSED)
+ {
++	const char *current = path;
+         int rc;
+         int32_t tosser0, tosser1, tosser2, ctrl_id, ns_id, partition;
+         uint8_t *filebuf = NULL;
+-        int pos0 = 0, pos1 = 0;
++	int pos0 = -1, pos1 = -1, pos2 = -1;
+ 
+         debug("entry");
+ 
+         debug("searching for nvme/nvme0/nvme0n1 or nvme/nvme0/nvme0n1/nvme0n1p1");
+-        rc = sscanf(current, "nvme/nvme%d/nvme%dn%d%n/nvme%dn%dp%d%n",
+-                    &tosser0, &ctrl_id, &ns_id, &pos0,
+-                    &tosser1, &tosser2, &partition, &pos1);
+-        debug("current:\"%s\" rc:%d pos0:%d pos1:%d\n", current, rc, pos0, pos1);
++	rc = sscanf(current, "%nnvme/nvme%d/nvme%dn%d%n/nvme%dn%dp%d%n",
++	            &pos0, &tosser0, &ctrl_id, &ns_id,
++		    &pos1, &tosser1, &tosser2, &partition, &pos2);
++	debug("current:\"%s\" rc:%d pos0:%d pos1:%d pos2:%d\n", current, rc, pos0, pos1, pos2);
+         /*
+          * If it isn't of that form, it's not one of our nvme devices.
+          */
+         if (rc != 3 && rc != 6)
+                 return 0;
++	if (rc == 3)
++		pos2 = pos1;
+ 
+         dev->nvme_info.ctrl_id = ctrl_id;
+         dev->nvme_info.ns_id = ns_id;
+@@ -77,8 +81,9 @@ parse_nvme(struct device *dev, const cha
+                 if (dev->part == -1)
+                         dev->part = partition;
+ 
+-                pos0 = pos1;
++	        pos1 = pos2;
+         }
++	current += pos1;
+ 
+         /*
+          * now fish the eui out of sysfs is there is one...
+@@ -110,7 +115,8 @@ parse_nvme(struct device *dev, const cha
+                 memcpy(dev->nvme_info.eui, eui, sizeof(eui));
+         }
+ 
+-        return pos0;
++	debug("current:'%s' sz:%zd", current, current - path);
++	return current - path;
+ }
+ 
+ static ssize_t

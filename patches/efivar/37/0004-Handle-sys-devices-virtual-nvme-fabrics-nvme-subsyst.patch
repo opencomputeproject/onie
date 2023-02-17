@@ -1,0 +1,309 @@
+From c41da0bdce04ab0f99b992d51ff6fd0ab55d040a Mon Sep 17 00:00:00 2001
+From: Peter Jones <pjones@redhat.com>
+Date: Wed, 2 Oct 2019 17:04:12 -0400
+Subject: [PATCH] Handle /sys/devices/virtual/{nvme-fabrics,nvme-subsystem}
+ devices
+
+Signed-off-by: Peter Jones <pjones@redhat.com>
+
+[ dannf: Context adjustments due to upstream whitespace cleanup and
+  dbgmk() calls;
+  drop new calls to dbgmk() - it didn't exist in v37 ]
+
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1891718
+Bug: https://github.com/rhboot/efivar/issues/157
+Origin: upstream, https://github.com/rhboot/efivar/commit/c41da0bdce04ab0f99b992d51ff6fd0ab55d040a
+Last-Updated: 2020-09-30
+
+Index: efivar-37/src/linux-nvme.c
+===================================================================
+--- efivar-37.orig/src/linux-nvme.c
++++ efivar-37/src/linux-nvme.c
+@@ -15,7 +15,6 @@
+  * You should have received a copy of the GNU Lesser General Public
+  * License along with this library; if not, see
+  * <http://www.gnu.org/licenses/>.
+- *
+  */
+ 
+ #include "fix_coverity.h"
+@@ -35,6 +34,12 @@
+  * /sys/dev/block/$major:$minor looks like:
+  * 259:0 -> ../../devices/pci0000:00/0000:00:1d.0/0000:05:00.0/nvme/nvme0/nvme0n1
+  * 259:1 -> ../../devices/pci0000:00/0000:00:1d.0/0000:05:00.0/nvme/nvme0/nvme0n1/nvme0n1p1
++ * or:
++ * 259:0 ->../../devices/virtual/nvme-fabrics/ctl/nvme0/nvme0n1
++ * 259:1 ->../../devices/virtual/nvme-fabrics/ctl/nvme0/nvme0n1/nvme0n1p1
++ * or:
++ * 259:5 -> ../../devices/virtual/nvme-subsystem/nvme-subsys0/nvme0n1
++ * 259:6 -> ../../devices/virtual/nvme-subsystem/nvme-subsys0/nvme0n1/nvme0n1p1
+  *
+  * /sys/dev/block/259:0/device looks like:
+  * device -> ../../nvme0
+@@ -56,14 +61,41 @@ parse_nvme(struct device *dev, const cha
+         int32_t tosser0, tosser1, tosser2, ctrl_id, ns_id, partition;
+         uint8_t *filebuf = NULL;
+ 	int pos0 = -1, pos1 = -1, pos2 = -1;
++	ssize_t sz = 0;
++	struct subdir {
++		const char * const name;
++		const char * const fmt;
++		int *pos0, *pos1;
++	} subdirs[] = {
++		{"nvme-subsysN/", "%nnvme-subsys%d/%n", &pos0, &pos2},
++		{"ctl/", "%nctl/%n%n", &pos0, &pos1},
++		{"nvme/", "%nnvme/%n%n", &pos0, &pos1},
++		{NULL, }
++	};
+ 
+         debug("entry");
+ 
+-        debug("searching for nvme/nvme0/nvme0n1 or nvme/nvme0/nvme0n1/nvme0n1p1");
+-	rc = sscanf(current, "%nnvme/nvme%d/nvme%dn%d%n/nvme%dn%dp%d%n",
+-	            &pos0, &tosser0, &ctrl_id, &ns_id,
+-		    &pos1, &tosser1, &tosser2, &partition, &pos2);
+-	debug("current:\"%s\" rc:%d pos0:%d pos1:%d pos2:%d\n", current, rc, pos0, pos1, pos2);
++	/*
++	 * in this case, *any* of these is okay.
++	 */
++	for (int i = 0; subdirs[i].name; i++) {
++		debug("searching for %s", subdirs[i].name);
++		pos0 = tosser0 = pos1 = -1;
++		rc = sscanf(current, subdirs[i].fmt, &pos0, &pos1, &pos2);
++		debug("current:'%s' rc:%d pos0:%d pos1:%d\n", current, rc,
++		      *subdirs[i].pos0, *subdirs[i].pos1);
++		if (*subdirs[i].pos0 >= 0 && *subdirs[i].pos1 >= *subdirs[i].pos0) {
++			sz += *subdirs[i].pos1;
++			current += *subdirs[i].pos1;
++			break;
++		}
++	}
++
++	debug("searching for nvme0/nvme0n1 or nvme0/nvme0n1/nvme0n1p1");
++	rc = sscanf(current, "%nnvme%d/nvme%dn%d%n/nvme%dn%dp%d%n",
++	            &pos0, &tosser0, &ctrl_id, &ns_id, &pos1,
++	            &tosser1, &tosser2, &partition, &pos2);
++	debug("current:'%s' rc:%d pos0:%d pos1:%d pos2:%d\n", current, rc, pos0, pos1, pos2);
+         /*
+          * If it isn't of that form, it's not one of our nvme devices.
+          */
+@@ -81,13 +113,15 @@ parse_nvme(struct device *dev, const cha
+                 if (dev->part == -1)
+                         dev->part = partition;
+ 
+-	        pos1 = pos2;
++		pos1 = pos2;
+         }
++
+ 	current += pos1;
+ 
+         /*
+          * now fish the eui out of sysfs is there is one...
+          */
++	debug("looking for the eui");
+ 	char *euipath = NULL;
+ 	rc = read_sysfs_file(&filebuf, "class/block/nvme%dn%d/eui", ctrl_id, ns_id);
+ 	if (rc < 0 && (errno == ENOENT || errno == ENOTDIR)) {
+@@ -110,6 +144,9 @@ parse_nvme(struct device *dev, const cha
+                         errno = EINVAL;
+                         return -1;
+                 }
++		debug("eui is %02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
++		      eui[0], eui[1], eui[2], eui[3],
++		      eui[4], eui[5], eui[6], eui[7]);
+                 dev->nvme_info.has_eui = 1;
+                 memcpy(dev->nvme_info.eui, eui, sizeof(eui));
+         }
+Index: efivar-37/src/linux-virtual-root.c
+===================================================================
+--- /dev/null
++++ efivar-37/src/linux-virtual-root.c
+@@ -0,0 +1,87 @@
++/*
++ * libefiboot - library for the manipulation of EFI boot variables
++ * Copyright 2012-2019 Red Hat, Inc.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public License as
++ * published by the Free Software Foundation; either version 2.1 of the
++ * License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, see
++ * <http://www.gnu.org/licenses/>.
++ */
++
++#include "fix_coverity.h"
++
++#include <errno.h>
++#include <fcntl.h>
++#include <inttypes.h>
++#include <stdint.h>
++#include <unistd.h>
++
++#include "efiboot.h"
++
++/*
++ * Support virtually rooted devices (fibre+nvme, etc.)
++ *
++ * /sys/dev/block/$major:$minor looks like:
++ * 259:0 ->../../devices/virtual/nvme-fabrics/ctl/nvme0/nvme0n1
++ * 259:1 ->../../devices/virtual/nvme-fabrics/ctl/nvme0/nvme0n1/nvme0n1p1
++ * or:
++ * 259:5 -> ../../devices/virtual/nvme-subsystem/nvme-subsys0/nvme0n1
++ * 259:6 -> ../../devices/virtual/nvme-subsystem/nvme-subsys0/nvme0n1/nvme0n1p1
++ */
++
++static ssize_t
++parse_virtual_root(struct device *dev UNUSED, const char *current, const char *root UNUSED)
++{
++	int rc;
++	ssize_t sz;
++	int pos0 = 0, pos1 = 0;
++	struct subdir {
++		const char * const name;
++		const char * const fmt;
++	} subdirs[] = {
++		{"../../devices/virtual", "%n../../devices/virtual/%n"},
++		{"nvme-subsystem/", "%nnvme-subsystem/%n"},
++		{"nvme-fabrics/ctl/", "%nnvme-fabrics/ctl/%n"},
++		{NULL, NULL}
++	};
++
++	debug("entry");
++
++	for (int i = 0; subdirs[i].name; i++) {
++		debug("searching for %s", subdirs[i].name);
++		pos0 = pos1 = -1;
++		rc = sscanf(current, subdirs[i].fmt, &pos0, &pos1);
++		debug("current:'%s' rc:%d pos0:%d pos1:%d\n", current, rc, pos0, pos1);
++		if (rc == 1) {
++			sz += pos1;
++			current += pos1;
++			if (i > 0)
++				goto found;
++		}
++	}
++
++	sz = 0;
++found:
++	debug("current:'%s' sz:%zd\n", current, sz);
++	return sz;
++}
++
++static enum interface_type virtual_root_iftypes[] = { virtual_root, unknown };
++
++struct dev_probe HIDDEN virtual_root_parser = {
++	.name = "virtual_root",
++	.iftypes = virtual_root_iftypes,
++	.flags = DEV_ABBREV_ONLY|DEV_PROVIDES_ROOT,
++	.parse = parse_virtual_root,
++};
++
++// vim:fenc=utf-8:tw=75:noet
+Index: efivar-37/src/linux.h
+===================================================================
+--- efivar-37.orig/src/linux.h
++++ efivar-37/src/linux.h
+@@ -99,7 +99,8 @@ struct emmc_info {
+ 
+ enum interface_type {
+         unknown,
+-        isa, acpi_root, pci_root, soc_root, pci, network,
++	isa, acpi_root, pci_root, soc_root, virtual_root,
++	pci, network,
+         ata, atapi, scsi, sata, sas,
+         usb, i1394, fibre, i2o,
+         md, virtblk,
+@@ -344,6 +345,7 @@ extern struct dev_probe pmem_parser;
+ extern struct dev_probe pci_root_parser;
+ extern struct dev_probe acpi_root_parser;
+ extern struct dev_probe soc_root_parser;
++extern struct dev_probe virtual_root_parser;
+ extern struct dev_probe pci_parser;
+ extern struct dev_probe sas_parser;
+ extern struct dev_probe sata_parser;
+Index: efivar-37/src/linux.c
+===================================================================
+--- efivar-37.orig/src/linux.c
++++ efivar-37/src/linux.c
+@@ -170,16 +170,17 @@ int HIDDEN
+ set_disk_and_part_name(struct device *dev)
+ {
+ 	int rc = -1;
+-
+-        /*
+-         * results are like such:
+-         * maj:min -> ../../devices/pci$PCI_STUFF/$BLOCKDEV_STUFF/block/$DISK/$PART
+-         */
+-
+         char *ultimate = pathseg(dev->link, -1);
+         char *penultimate = pathseg(dev->link, -2);
+         char *approximate = pathseg(dev->link, -3);
+         char *proximate = pathseg(dev->link, -4);
++	char *psl5 = pathseg(dev->link, -5);
++
++
++	/*
++	 * devlinks look something like:
++	 * maj:min -> ../../devices/pci$PCI_STUFF/$BLOCKDEV_STUFF/block/$DISK/$PART
++	 */
+ 
+         errno = 0;
+         debug("dev->disk_name:%p dev->part_name:%p", dev->disk_name, dev->part_name);
+@@ -188,6 +189,7 @@ set_disk_and_part_name(struct device *de
+         debug("penultimate:\"%s\"", penultimate ? : "");
+         debug("approximate:\"%s\"", approximate ? : "");
+         debug("proximate:\"%s\"", proximate ? : "");
++	debug("psl5:'%s'", psl5 ? : "");
+ 
+         if (ultimate && penultimate &&
+             ((proximate && !strcmp(proximate, "nvme")) ||
+@@ -232,6 +234,34 @@ set_disk_and_part_name(struct device *de
+                 set_disk_name(dev, "%s", ultimate);
+                 debug("disk:%s", ultimate);
+ 		rc = 0;
++	} else if ((proximate && ultimate && !strcmp(proximate, "nvme-fabrics")) ||
++		    (approximate && ultimate && !strcmp(approximate, "nvme-subsystem"))) {
++		/*
++		 * 259:0 ->../../devices/virtual/nvme-fabrics/ctl/nvme0/nvme0n1
++		 *				 ^ proximate            ^ ultimate
++		 * or
++		 * 259:5 -> ../../devices/virtual/nvme-subsystem/nvme-subsys0/nvme0n1
++		 *                                ^ approximate  ^ penultimate
++		 *                                                   ultimate ^
++		 */
++		set_disk_name(dev, "%s", ultimate);
++		debug("disk:%s", ultimate);
++		rc = 0;
++	} else if ((psl5 && penultimate && ultimate && !strcmp(psl5, "nvme-fabrics")) ||
++		   (proximate && penultimate && ultimate && !strcmp(proximate, "nvme-subsystem"))) {
++		/*
++		 * 259:1 -> ../../devices/virtual/nvme-fabrics/ctl/nvme0/nvme0n1/nvme0n1p1
++		 *                                ^psl5                  ^ penultimate
++		 *                                                      ultimate ^
++		 * or
++		 * 259:6 -> ../../devices/virtual/nvme-subsystem/nvme-subsys0/nvme0n1/nvme0n1p1
++		 *                                ^ proximate                 ^ penultimate
++		 *                                                           ultimate ^
++		 */
++		set_disk_name(dev, "%s", penultimate);
++		set_part_name(dev, "%s", ultimate);
++		debug("disk:%s part:%s", penultimate, ultimate);
++		rc = 0;
+         }
+ 
+ 	if (rc < 0)
+@@ -248,6 +278,7 @@ static struct dev_probe *dev_probes[] =
+         &acpi_root_parser,
+         &pci_root_parser,
+         &soc_root_parser,
++	&virtual_root_parser,
+         &pci_parser,
+         &virtblk_parser,
+         &sas_parser,
