@@ -78,10 +78,10 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  2022.11 | Wed, Oct 19, 2022 | Wed, Nov 16, 2022
-  2023.02 | Wed, Jan 18, 2023 | Wed, Feb 15, 2023
+  2023.02 | Wed, Jan 18, 2023 | Mon, Feb 20, 2023
   2023.05 | Wed, Apr 19, 2023 | Wed, May 17, 2023
   2023.08 | Wed, Jul 19, 2023 | Wed, Aug 16, 2023  
+  2023.11 | Wed, Oct 18, 2023 | Wed, Nov 15, 2023
 
 Making a Release
 ----------------

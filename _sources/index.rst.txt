@@ -24,6 +24,12 @@ Open Network Install Environment
 
 News
 ====
+Feb 20, 2023
+  Released version `2023.02
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/265>`_
+
+  Add support of 6 new Pegatron platforms.
+
 Aug 13, 2022
   Released version `2022.08
   <https://ocp-all.groups.io/g/OCP-ONIE/message/255>`_
