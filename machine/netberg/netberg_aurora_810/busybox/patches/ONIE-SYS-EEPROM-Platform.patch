@@ -1,0 +1,104 @@
+From c3ba5852f65966f5b1d2e6239f3ecbdfec56e17b Mon Sep 17 00:00:00 2001
+From: Build User <build@example.com>
+Date: Wed, 16 Sep 2020 01:53:12 +0000
+Subject: [PATCH] ONIE-SYS-EEPROM-Platform
+
+---
+ miscutils/24cXX.c          | 43 +++++++++++++++----------------------------
+ miscutils/sys_eeprom_i2c.c |  4 ++--
+ 2 files changed, 17 insertions(+), 30 deletions(-)
+
+diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
+index ccc0965..6cb1752 100644
+--- a/miscutils/24cXX.c
++++ b/miscutils/24cXX.c
+@@ -26,10 +26,13 @@
+ #include <string.h>
+ #include "24cXX.h"
+ 
++#define NETBERG_SYS_EEPROM_DELAY 5000
++
+ static int i2c_write_1b(struct eeprom *e, __u8 buf)
+ {
+ 	int r;
+ 	// we must simulate a plain I2C byte write with SMBus functions
++
+ 	r = i2c_smbus_write_byte(e->fd, buf);
+ 	if(r < 0)
+ 		fprintf(stderr, "Error i2c_write_1b: %s\n", strerror(errno));
+@@ -85,8 +88,6 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ 
+ 
+ 	// check for req funcs
+-	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_BYTE );
+-	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_BYTE );
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_BYTE_DATA );
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_BYTE_DATA );
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_WORD_DATA );
+@@ -147,36 +148,22 @@ int eeprom_read_current_byte(struct eeprom* e)
+ 
+ int eeprom_read_byte(struct eeprom* e, __u16 mem_addr)
+ {
+-	int r;
++    int r;
++	__u8 buf =  mem_addr & 0x0ff;
++    
+ 	ioctl(e->fd, BLKFLSBUF); // clear kernel read buffer
+-	if(e->type == EEPROM_TYPE_8BIT_ADDR)
+-	{
+-		__u8 buf =  mem_addr & 0x0ff;
+-		r = i2c_write_1b(e, buf);
+-	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
+-		__u8 buf[2] = { (mem_addr >> 8) & 0x0ff, mem_addr & 0x0ff };
+-		r = i2c_write_2b(e, buf);
+-	} else {
+-		fprintf(stderr, "ERR: unknown eeprom type\n");
+-		return -1;
+-	}
+-	if (r < 0)
+-		return r;
+-	r = i2c_smbus_read_byte(e->fd);
++    
++    r = i2c_smbus_read_byte_data(e->fd, buf);
++    usleep(NETBERG_SYS_EEPROM_DELAY);
+ 	return r;
+ }
+ 
+ int eeprom_write_byte(struct eeprom *e, __u16 mem_addr, __u8 data)
+ {
+-	if(e->type == EEPROM_TYPE_8BIT_ADDR) {
+-		__u8 buf[2] = { mem_addr & 0x00ff, data };
+-		return i2c_write_2b(e, buf);
+-	} else if(e->type == EEPROM_TYPE_16BIT_ADDR) {
+-		__u8 buf[3] =
+-			{ (mem_addr >> 8) & 0x00ff, mem_addr & 0x00ff, data };
+-		return i2c_write_3b(e, buf);
+-	} else {
+-		fprintf(stderr, "ERR: unknown eeprom type\n");
+-		return -1;
+-	}
++    int r;
++	__u8 buf =  mem_addr & 0x0ff;
++	
++    r = i2c_smbus_write_byte_data(e->fd, buf, data);
++    usleep(NETBERG_SYS_EEPROM_DELAY);
++    return r;
+ }
+diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
+index ed3235b..86655f4 100644
+--- a/miscutils/sys_eeprom_i2c.c
++++ b/miscutils/sys_eeprom_i2c.c
+@@ -29,8 +29,8 @@ int read_sys_eeprom(void *eeprom_data, int offset, int len)
+ 	return -1;
+     }
+     for (i = 0; i < len; i++) {
+-	*c = eeprom_read_byte(&e, addr);
+-	c++; addr++;
++	    *c = eeprom_read_byte(&e, addr);
++	    c++; addr++;
+     }
+     eeprom_close(&e);
+     return ret;
+-- 
+2.11.0
+
