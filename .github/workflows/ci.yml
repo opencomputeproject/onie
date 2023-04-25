@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: "Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)"
+        required: false
+        default: false
+  pull_request:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: [self-hosted, lab, he, simple]
+    steps:
+      - name: Set up QEMU for Docker Buildkit
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: |
+            env.BUILDKIT_STEP_LOG_MAX_SIZE=-1
+            env.BUILDKIT_STEP_LOG_MAX_SPEED=-1
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install due
+        run: |
+          sudo apt-get install -y wget git rsync jq curl
+          git clone https://github.com/CumulusNetworks/DUE.git
+          cd DUE
+          git checkout v4.0.1
+          sed -i -e 's/^install:.*/install:/' Makefile
+          make install
+          cd ..
+          rm -rf DUE
+      - name: Pull our due builder image
+        run: |
+          docker pull ghcr.io/githedgehog/due-honie-build:latest
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build ONIE
+        run: |
+          due --run --build --use-directory $PWD/build-config --jobs 1 --machine kvm_x86_64 --build-targets all recovery-iso
+      - name: Setup tmate session for debug
+        #if: ${{ failure() && github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30
+        with:
+          limit-access-to-actor: true
