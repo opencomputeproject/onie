@@ -1,0 +1,22 @@
+patches for platform
+
+diff --git a/miscutils/24cXX.c b/miscutils/24cXX.c
+index ccc0965..8aea629 100644
+--- a/miscutils/24cXX.c
++++ b/miscutils/24cXX.c
+@@ -92,6 +92,15 @@ int eeprom_open(char *dev_fqn, int addr, int type, struct eeprom* e)
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_READ_WORD_DATA );
+ 	CHECK_I2C_FUNC( funcs, I2C_FUNC_SMBUS_WRITE_WORD_DATA );
+ 
++	{
++		if( ( r = ioctl(fd, I2C_SLAVE, 0x70)) < 0)
++			return r;
++		r = i2c_smbus_write_byte_data(fd, 0, 0x20);
++		if(r < 0)
++			fprintf(stderr, "Error: setting channel: %s\n", strerror(errno));
++		usleep(10);
++	}
++
+ 	// set working device
+ 	if( ( r = ioctl(fd, I2C_SLAVE, addr)) < 0)
+ 		return r;
