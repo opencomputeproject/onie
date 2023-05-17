@@ -1,4 +1,5 @@
-.. Copyright (C) 2021,2022 Alex Doyle <adoyle@nvidia.com>
+.. Copyright (C) 2022,2023 Michael Shych <michaelsh@nvidia.com>
+   Copyright (C) 2021,2022 Alex Doyle <adoyle@nvidia.com>
    Copyright (C) 2019,2020 Alex Doyle <adoyle@cumulusnetworks.com>
    Copyright (C) 2013,2014,2015,2016,2017,2018 Curt Brune <curt@cumulusnetworks.com>
    Copyright (C) 2014 Pete Bratach <pete@cumulusnetworks.com>
@@ -24,6 +25,12 @@ Open Network Install Environment
 
 News
 ====
+May 17, 2023
+  Released version `2023.05
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/280>`_
+
+   Add support of 3 new Accton and 1 Netberg platforms, patches of efivars package.
+
 Feb 20, 2023
   Released version `2023.02
   <https://ocp-all.groups.io/g/OCP-ONIE/message/265>`_
