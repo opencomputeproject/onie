@@ -29,10 +29,10 @@ I2CTOOLS_SYSEEPROM = no
 CONSOLE_DEV = 1
 
 # Specify Linux kernel version
-LINUX_VERSION = 4.9
-LINUX_MINOR_VERSION = 95
+LINUX_VERSION = 5.4
+LINUX_MINOR_VERSION = 86
 
-GCC_VERSION = 4.9.2
+GCC_VERSION = 8.3.0
 
 #-------------------------------------------------------------------------------
 #

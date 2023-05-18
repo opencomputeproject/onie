@@ -1,93 +1,240 @@
 changes for ebof board
 
-diff --git a/drivers/net/ethernet/intel/intel-igb/e1000_api.c b/drivers/net/ethernet/intel/intel-igb/e1000_api.c
-index 2e4444f..b0fa862 100644
---- a/drivers/net/ethernet/intel/intel-igb/e1000_api.c
-+++ b/drivers/net/ethernet/intel/intel-igb/e1000_api.c
-@@ -86,6 +86,7 @@ s32 e1000_init_nvm_params(struct e1000_hw *hw)
- s32 e1000_init_phy_params(struct e1000_hw *hw)
- {
- 	s32 ret_val = E1000_SUCCESS;
-+	return E1000_SUCCESS;
+diff --git a/drivers/net/ethernet/intel/igb/e1000_82575.c b/drivers/net/ethernet/intel/igb/e1000_82575.c
+index 158c277..637e14b 100644
+--- a/drivers/net/ethernet/intel/igb/e1000_82575.c
++++ b/drivers/net/ethernet/intel/igb/e1000_82575.c
+@@ -200,6 +200,7 @@ static s32 igb_init_phy_params_82575(struct e1000_hw *hw)
+ 	struct e1000_phy_info *phy = &hw->phy;
+ 	s32 ret_val = 0;
+ 	u32 ctrl_ext;
++	return 0;
  
- 	if (hw->phy.ops.init_params) {
- 		ret_val = hw->phy.ops.init_params(hw);
-@@ -436,6 +437,7 @@ s32 e1000_reset_hw(struct e1000_hw *hw)
-  **/
- s32 e1000_init_hw(struct e1000_hw *hw)
- {
-+	return E1000_SUCCESS;
- 	if (hw->mac.ops.init_hw)
- 		return hw->mac.ops.init_hw(hw);
+ 	if (hw->phy.media_type != e1000_media_type_copper) {
+ 		phy->type = e1000_phy_none;
+@@ -1545,6 +1546,7 @@ static s32 igb_init_hw_82575(struct e1000_hw *hw)
+ 	struct e1000_mac_info *mac = &hw->mac;
+ 	s32 ret_val;
+ 	u16 i, rar_count = mac->rar_entry_count;
++	return 0;
  
-diff --git a/drivers/net/ethernet/intel/intel-igb/igb_main.c b/drivers/net/ethernet/intel/intel-igb/igb_main.c
-index 466ea85..6c9d242 100644
---- a/drivers/net/ethernet/intel/intel-igb/igb_main.c
-+++ b/drivers/net/ethernet/intel/intel-igb/igb_main.c
-@@ -4724,6 +4724,7 @@ bool igb_has_link(struct igb_adapter *adapter)
+ 	if ((hw->mac.type >= e1000_i210) &&
+ 	    !(igb_get_flash_presence_i210(hw))) {
+diff --git a/drivers/net/ethernet/intel/igb/igb_main.c b/drivers/net/ethernet/intel/igb/igb_main.c
+index 6bd30d5..bc2c521 100644
+--- a/drivers/net/ethernet/intel/igb/igb_main.c
++++ b/drivers/net/ethernet/intel/igb/igb_main.c
+@@ -4450,6 +4450,7 @@ bool igb_has_link(struct igb_adapter *adapter)
  {
  	struct e1000_hw *hw = &adapter->hw;
- 	bool link_active = FALSE;
+ 	bool link_active = false;
 +	return true;
  
  	/* get_link_status is set on LSC (link status) interrupt or
  	 * rx sequence error interrupt.  get_link_status will stay
 diff --git a/drivers/net/ethernet/intel/ixgbe/ixgbe_main.c b/drivers/net/ethernet/intel/ixgbe/ixgbe_main.c
-index f45caae..a1c5b74 100644
+index ac9835e..fcd9b0a 100644
 --- a/drivers/net/ethernet/intel/ixgbe/ixgbe_main.c
 +++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_main.c
-@@ -7105,6 +7105,46 @@ static int ixgbe_open(struct net_device *netdev)
- #elif defined(HAVE_VXLAN_RX_OFFLOAD)
- 	vxlan_get_rx_port(netdev);
- #endif /* HAVE_UDP_ENC_RX_OFFLOAD */
-+
+@@ -6592,6 +6592,76 @@ int ixgbe_open(struct net_device *netdev)
+ 	ixgbe_clear_udp_tunnel_port(adapter, IXGBE_VXLANCTRL_ALL_UDPPORT_MASK);
+ 	udp_tunnel_get_rx_info(netdev);
+ 
 +	if (adapter->hw.device_id == IXGBE_DEV_ID_X550EM_A_SGMII_L) {
 +		struct ixgbe_hw ext_hw;
 +		struct ixgbe_hw *hw_p = &ext_hw;
 +		memcpy(hw_p, &adapter->hw, sizeof(struct ixgbe_hw));
-+		hw_p->phy.addr = 0x09;
++		hw_p->phy.mdio.prtad = 0x09;
 +		hw_p->phy.ops.write_reg(hw_p, 0x00, 0x00, 0x104A);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x05;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x05;
 +		hw_p->phy.ops.write_reg(hw_p, 0x1A, 0x1A, 0xA100);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x04;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x04;
 +		hw_p->phy.ops.write_reg(hw_p, 0x1A, 0x1A, 0xFC80);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x04;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x04;
 +		hw_p->phy.ops.write_reg(hw_p, 0x00, 0x00, 0x100A);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x05;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x05;
 +		hw_p->phy.ops.write_reg(hw_p, 0x1A, 0x1A, 0x0A02);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x04;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x04;
 +		hw_p->phy.ops.write_reg(hw_p, 0x1A, 0x1A, 0xFC82);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x1C;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1C;
 +		hw_p->phy.ops.write_reg(hw_p, 0x19, 0x19, 0x2000);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x1C;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1C;
 +		hw_p->phy.ops.write_reg(hw_p, 0x18, 0x18, 0x8284);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x1C;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1C;
 +		hw_p->phy.ops.write_reg(hw_p, 0x19, 0x19, 0x9340);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x1C;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1C;
 +		hw_p->phy.ops.write_reg(hw_p, 0x18, 0x18, 0x8684);
-+		msec_delay(50);
-+		hw_p->phy.addr = 0x04;
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x04;
 +		hw_p->phy.ops.write_reg(hw_p, 0x04, 0x04, 0x007F);
-+		msec_delay(50);
++		mdelay(50);
++		/* config 6109x */
++		hw_p->phy.mdio.prtad = 0x0a;
++		hw_p->phy.ops.write_reg(hw_p, 0x00, 0x00, 0x0009);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1C;
++		hw_p->phy.ops.write_reg(hw_p, 0x19, 0x19, 0x2000);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1C;
++		hw_p->phy.ops.write_reg(hw_p, 0x18, 0x18, 0x82A4);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1C;
++		hw_p->phy.ops.write_reg(hw_p, 0x19, 0x19, 0xA040);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1C;
++		hw_p->phy.ops.write_reg(hw_p, 0x18, 0x18, 0x86A4);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1c;
++		hw_p->phy.ops.write_reg(hw_p, 0x19, 0x19, 0x2004);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1c;
++		hw_p->phy.ops.write_reg(hw_p, 0x18, 0x18, 0x82a4);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1c;
++		hw_p->phy.ops.write_reg(hw_p, 0x19, 0x19, 0x0020);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x1c;
++		hw_p->phy.ops.write_reg(hw_p, 0x18, 0x18, 0x86a4);
++		mdelay(50);
++		hw_p->phy.mdio.prtad = 0x05;
++		hw_p->phy.ops.write_reg(hw_p, 0x04, 0x04, 0x007F);
++		mdelay(50);
 +	}
 +
- 	return IXGBE_SUCCESS;
+ 	return 0;
  
  err_set_queues:
 diff --git a/drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c b/drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c
-index 2b366d9..07552ce 100644
+index a37c951..717bb45 100644
 --- a/drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c
 +++ b/drivers/net/ethernet/intel/ixgbe/ixgbe_x550.c
-@@ -584,8 +584,6 @@ static s32 ixgbe_identify_phy_fw(struct ixgbe_hw *hw)
+@@ -307,6 +307,101 @@ static void ixgbe_check_cs4227(struct ixgbe_hw *hw)
+ 	msleep(hw->eeprom.semaphore_delay);
+ }
+ 
++static s32 ixgbe_read_phy_reg_x550a(struct ixgbe_hw *hw, u32 reg_addr,
++				    u32 device_type, u16 *phy_data);
++static s32 ixgbe_write_phy_reg_x550a(struct ixgbe_hw *hw, u32 reg_addr,
++				     u32 device_type, u16 phy_data);
++ /**
++ * ixgbe_read_phy_reg_mdi_22 - Read from a clause 22 PHY register without lock
++ * @hw: pointer to hardware structure
++ * @reg_addr: 32 bit address of PHY register to read
++ * @dev_type: always unused
++ * @phy_data: Pointer to read data from PHY register
++ */
++static s32 ixgbe_read_phy_reg_mdi_22(struct ixgbe_hw *hw, u32 reg_addr,
++				     u32 dev_type, u16 *phy_data)
++{
++	u32 i, data, command;
++
++
++        //hw->phy.addr=0x09;
++	/* Setup and write the read command */
++	command = (reg_addr << IXGBE_MSCA_DEV_TYPE_SHIFT) |
++		  (hw->phy.mdio.prtad << IXGBE_MSCA_PHY_ADDR_SHIFT) |
++		  IXGBE_MSCA_OLD_PROTOCOL | IXGBE_MSCA_READ_AUTOINC |
++		  IXGBE_MSCA_MDI_COMMAND;
++
++	IXGBE_WRITE_REG(hw, IXGBE_MSCA, command);
++
++	/* Check every 10 usec to see if the access completed.
++	 * The MDI Command bit will clear when the operation is
++	 * complete
++	 */
++	for (i = 0; i < IXGBE_MDIO_COMMAND_TIMEOUT; i++) {
++		udelay(10);
++
++		command = IXGBE_READ_REG(hw, IXGBE_MSCA);
++		if (!(command & IXGBE_MSCA_MDI_COMMAND))
++			break;
++	}
++
++	if (command & IXGBE_MSCA_MDI_COMMAND) {
++		hw_dbg(hw, "PHY read command did not complete.\n");
++		return IXGBE_ERR_PHY;
++	}
++
++	/* Read operation is complete.  Get the data from MSRWD */
++	data = IXGBE_READ_REG(hw, IXGBE_MSRWD);
++	data >>= IXGBE_MSRWD_READ_DATA_SHIFT;
++	*phy_data = (u16)data;
++
++	return 0;
++}
++
++/**
++ * ixgbe_write_phy_reg_mdi_22 - Write to a clause 22 PHY register without lock
++ * @hw: pointer to hardware structure
++ * @reg_addr: 32 bit PHY register to write
++ * @dev_type: always unused
++ * @phy_data: Data to write to the PHY register
++ */
++static s32 ixgbe_write_phy_reg_mdi_22(struct ixgbe_hw *hw, u32 reg_addr,
++				      u32 dev_type, u16 phy_data)
++{
++	u32 i, command;
++
++        //hw->phy.addr = 0x09;
++	/* Put the data in the MDI single read and write data register*/
++	IXGBE_WRITE_REG(hw, IXGBE_MSRWD, (u32)phy_data);
++
++	/* Setup and write the write command */
++	command = (reg_addr << IXGBE_MSCA_DEV_TYPE_SHIFT) |
++		  (hw->phy.mdio.prtad << IXGBE_MSCA_PHY_ADDR_SHIFT) |
++		  IXGBE_MSCA_OLD_PROTOCOL | IXGBE_MSCA_WRITE |
++		  IXGBE_MSCA_MDI_COMMAND;
++
++	IXGBE_WRITE_REG(hw, IXGBE_MSCA, command);
++
++	/* Check every 10 usec to see if the access completed.
++	 * The MDI Command bit will clear when the operation is
++	 * complete
++	 */
++	for (i = 0; i < IXGBE_MDIO_COMMAND_TIMEOUT; i++) {
++		udelay(10);
++
++		command = IXGBE_READ_REG(hw, IXGBE_MSCA);
++		if (!(command & IXGBE_MSCA_MDI_COMMAND))
++			break;
++	}
++
++	if (command & IXGBE_MSCA_MDI_COMMAND) {
++		hw_dbg(hw, "PHY write cmd didn't complete\n");
++		return IXGBE_ERR_PHY;
++	}
++
++	return 0;
++}
++
+ /** ixgbe_identify_phy_x550em - Get PHY type based on device id
+  *  @hw: pointer to hardware structure
+  *
+@@ -353,9 +448,12 @@ static s32 ixgbe_identify_phy_x550em(struct ixgbe_hw *hw)
+ 		break;
+ 	case IXGBE_DEV_ID_X550EM_A_1G_T:
+ 	case IXGBE_DEV_ID_X550EM_A_1G_T_L:
++	case IXGBE_DEV_ID_X550EM_A_SGMII_L:
+ 		hw->phy.type = ixgbe_phy_fw;
+-		hw->phy.ops.read_reg = NULL;
+-		hw->phy.ops.write_reg = NULL;
++		hw->phy.ops.read_reg_mdi = ixgbe_read_phy_reg_mdi_22;
++		hw->phy.ops.write_reg_mdi = ixgbe_write_phy_reg_mdi_22;
++		hw->phy.ops.read_reg = ixgbe_read_phy_reg_x550a;
++		hw->phy.ops.write_reg = ixgbe_write_phy_reg_x550a;
+ 		if (hw->bus.lan_id)
+ 			hw->phy.phy_semaphore_mask |= IXGBE_GSSR_PHY1_SM;
+ 		else
+@@ -554,8 +652,6 @@ static s32 ixgbe_identify_phy_fw(struct ixgbe_hw *hw)
  		hw->phy.phy_semaphore_mask = IXGBE_GSSR_PHY0_SM;
  
  	hw->phy.type = ixgbe_phy_fw;
@@ -96,19 +243,3 @@ index 2b366d9..07552ce 100644
  	return ixgbe_get_phy_id_fw(hw);
  }
  
-@@ -2364,10 +2362,11 @@ s32 ixgbe_init_phy_ops_X550em(struct ixgbe_hw *hw)
- 	switch (hw->device_id) {
- 	case IXGBE_DEV_ID_X550EM_A_1G_T:
- 	case IXGBE_DEV_ID_X550EM_A_1G_T_L:
--		phy->ops.read_reg_mdi = NULL;
--		phy->ops.write_reg_mdi = NULL;
--		hw->phy.ops.read_reg = NULL;
--		hw->phy.ops.write_reg = NULL;
-+	case IXGBE_DEV_ID_X550EM_A_SGMII_L:
-+		phy->ops.read_reg_mdi = ixgbe_read_phy_reg_mdi_22;
-+		phy->ops.write_reg_mdi = ixgbe_write_phy_reg_mdi_22;
-+		hw->phy.ops.read_reg = ixgbe_read_phy_reg_x550a;
-+		hw->phy.ops.write_reg = ixgbe_write_phy_reg_x550a;
- 		phy->ops.check_overtemp = ixgbe_check_overtemp_fw;
- 		if (hw->bus.lan_id)
- 			hw->phy.phy_semaphore_mask |= IXGBE_GSSR_PHY1_SM;
