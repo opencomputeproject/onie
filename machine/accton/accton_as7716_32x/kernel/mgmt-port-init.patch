@@ -1,0 +1,104 @@
+diff --git a/drivers/net/ethernet/broadcom/tg3.c b/drivers/net/ethernet/broadcom/tg3.c
+index 70bd79d..1855f74 100644
+--- a/drivers/net/ethernet/broadcom/tg3.c
++++ b/drivers/net/ethernet/broadcom/tg3.c
+@@ -66,6 +66,9 @@
+ #include <uapi/linux/net_tstamp.h>
+ #include <linux/ptp_clock_kernel.h>
+ 
++static int bid = 0;
++#include <linux/i2c.h>
++
+ #define BAR_0	0
+ #define BAR_2	2
+ 
+@@ -1497,6 +1500,7 @@ static void tg3_mdio_config_5785(struct tg3 *tp)
+ static void tg3_mdio_start(struct tg3 *tp)
+ {
+ 	tp->mi_mode &= ~MAC_MI_MODE_AUTO_POLL;
++	tp->mi_mode |= MAC_MI_MODE_SHORT_PREAMBLE;
+ 	tw32_f(MAC_MI_MODE, tp->mi_mode);
+ 	udelay(80);
+ 
+@@ -11726,6 +11730,52 @@ static void tg3_stop(struct tg3 *tp)
+ 	tg3_free_consistent(tp);
+ }
+ 
++static int tg3_get_board_id(struct net_device *dev)
++{
++    struct tg3 *tp = netdev_priv(dev);
++    struct i2c_client *client;
++    struct i2c_adapter * i2cadap;
++    int rc, i2caddr;
++
++    /* bus 0 */
++    i2cadap = i2c_get_adapter(0);
++
++    /* 0x77[0] = 1 */
++    i2caddr = 0x77;
++    client = i2c_new_dummy(i2cadap, i2caddr);
++    if (client == NULL)
++        goto err;
++
++    i2c_smbus_write_byte_data(client, 0x00, 1);
++    i2c_unregister_device(client);
++
++    /* 0x76[0] = 4 */
++    i2caddr = 0x76;
++    client = i2c_new_dummy(i2cadap, i2caddr);
++    if (client == NULL)
++        goto err;
++
++    i2c_smbus_write_byte_data(client, 0x00, 4);
++    i2c_unregister_device(client);
++
++    /* read CPLD1 0x60[0] */
++    i2caddr = 0x60;
++    client = i2c_new_dummy(i2cadap, i2caddr);
++    if (client == NULL)
++        goto err;
++
++    rc = i2c_smbus_read_byte_data(client, 0x00);
++    i2c_unregister_device(client);
++
++    netdev_notice(tp->dev, "CPLD1(%#x) offset 0 = %#x\n", i2caddr, rc);
++    rc = (rc >> 2) & 0x03;
++    return rc;
++
++err:
++	netdev_notice(tp->dev, "Failed to create new i2c device %#x\n", i2caddr);
++    return -1;
++}
++
+ static int tg3_open(struct net_device *dev)
+ {
+ 	struct tg3 *tp = netdev_priv(dev);
+@@ -11780,6 +11830,28 @@ static int tg3_open(struct net_device *dev)
+ 		pci_set_power_state(tp->pdev, PCI_D3hot);
+ 	}
+ 
++	printk(KERN_INFO "finding Accton board...\n");
++	bid = tg3_get_board_id(dev);
++	if( bid < 0){
++		bid = 0;
++		netdev_notice(tp->dev, "Unable to get valid board ID.\nUse default value, board ID = %#x\n", bid);
++	}
++	netdev_notice(tp->dev,"Accton board PCB ID = %#x\n", bid);
++
++	if(bid == 3){
++		netdev_notice(tp->dev, "enable PHY, SerDes mode.\n");
++		__tg3_writephy(tp, 0x8, 0x10, 0x1d0);
++		__tg3_writephy(tp, 0x1f, 0x00, 0x8140);
++		udelay(10000);
++		__tg3_writephy(tp, 0x1f, 0x1c, 0xfc0d);
++		__tg3_writephy(tp, 0x1f, 0x00, 0x1140);
++
++	}else{
++		netdev_notice(tp->dev,"enable PHY, SGMII mode.\n");
++		__tg3_writephy(tp, 0x8, 0x10, 0x1d0);
++		__tg3_writephy(tp, 0x1f, 0x4, 0x5e1);
++	}
++
+ 	return err;
+ }
+ 
