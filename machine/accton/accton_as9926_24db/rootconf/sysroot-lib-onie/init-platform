@@ -1,0 +1,47 @@
+# -*- shell-script -*-
+
+# Demonstration of the init-platform functionality
+
+# This script fragment is sourced by /etc/init.d/init-arch.sh, which
+# in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+# A machine can use this feature to run any early boot scripts needed
+# by the machine.  A typical usage would be to initialize specific
+# hardware devices.
+
+# Use this function to perform any initializations required by the
+# architecture specific initialization.  This function executes before
+# the architecture initializations.
+init_platform_pre_arch()
+{
+    local cnt=0
+    local max_cnt=20
+    while [ $cnt -lt $max_cnt ] ; do
+        if ipmitool mc info >/dev/null 2>&1 ; then
+            break
+        fi
+        echo "remove,kcs,i/o,0xca2" > /sys/module/ipmi_si/parameters/hotmod
+        echo "add,kcs,i/o,0xca2" > /sys/module/ipmi_si/parameters/hotmod
+        cnt=$(( $cnt + 1 ))
+        sleep 3
+    done
+    local status=$(ipmitool raw 0x34 0x95 2>/dev/null | awk '{print $1}')
+    if [ "$status" = "01" ] ; then
+        ipmitool raw 0x34 0x60 >/dev/null 2>&1
+        sleep 7
+    fi
+    _log_info_msg "Info: Setting TX-Enable on OOBF ports... "
+    i2cset -y -f 0 0x77 0x01 >/dev/null 2>&1
+    i2cset -y -f 0 0x76 0x10 >/dev/null 2>&1
+    i2cset -y -f 0 0x62 0x21 0x00 >/dev/null 2>&1
+    if [ $? -eq 0 ] ; then
+        _log_info_msg "done.\n"
+    else
+        _log_info_msg "failed.\n"
+    fi
+    if [ "$status" = "01" ] ; then
+        ipmitool raw 0x34 0x61 >/dev/null 2>&1
+        sleep 4
+    fi
+}
