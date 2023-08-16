@@ -25,6 +25,12 @@ Open Network Install Environment
 
 News
 ====
+Aug 16, 2023
+  Released version `2023.08
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/291>`_
+
+  Add support of 2 new Accton platforms and multple changes of existing Accton systems.
+
 May 17, 2023
   Released version `2023.05
   <https://ocp-all.groups.io/g/OCP-ONIE/message/280>`_
