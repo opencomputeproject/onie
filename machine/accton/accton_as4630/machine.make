@@ -1,4 +1,4 @@
-# Accton AS4630_54PE
+# Accton AS4630
 
 # Vendor's version number can be defined here.
 # Available variable is 'VENDOR_VERSION'.
@@ -22,6 +22,8 @@ endif
 # http://www.iana.org/assignments/enterprise-numbers
 # Accton Technology Corporation IANA number
 VENDOR_ID = 259
+
+SKIP_ETHMGMT_MACS = yes
 
 UEFI_ENABLE = yes
 PXE_EFI64_ENABLE = yes

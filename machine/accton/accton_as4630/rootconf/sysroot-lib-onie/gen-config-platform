@@ -1,0 +1,35 @@
+
+gen_live_config()
+{
+    local board_id=
+    local live_machine=
+
+    i2cset -y 1 0x77 0 2 >/dev/null 2>&1
+    board_id=$(i2cget -y 1 0x60 0 2>/dev/null)
+    if [ -z "$board_id" ] ; then
+        return 0
+    fi
+    board_id=$(printf '%02x' $(( $board_id & 0x8f )))
+    case "$board_id" in
+        0b)
+            live_machine=accton_as4630_54pe
+            ;;
+        03)
+            live_machine=accton_as4630_54te
+            ;;
+        0d)
+            live_machine=accton_as4630_54npe
+            ;;
+        8d)
+            live_machine=accton_as4630_54npem
+            ;;
+        *)
+            ;;
+    esac
+
+    if [ -n "$live_machine" ] ; then
+        cat<<EOF
+onie_machine=$live_machine
+EOF
+    fi
+}
