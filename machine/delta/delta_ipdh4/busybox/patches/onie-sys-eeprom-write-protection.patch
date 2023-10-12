@@ -1,0 +1,77 @@
+diff --git a/include/sys_eeprom.h b/include/sys_eeprom.h
+old mode 100644
+new mode 100755
+index 94dfd5a..5fcbd24
+--- a/include/sys_eeprom.h
++++ b/include/sys_eeprom.h
+@@ -1,2 +1,10 @@
+ int read_sys_eeprom(void *eeprom_data, int offset, int len);
+ int write_sys_eeprom(void *eeprom_data, int len);
++
++#define SYS_EEPROM_I2C_SW_I2C_BUS       1
++#define SYS_EEPROM_I2C_SW_CMD_SZ        50
++
++/* sys eeprom write protection disable*/
++#define SYS_EEPROM_WP_CPLD_ADDR         0x31
++#define SYS_EEPROM_WP_CPLD_REG_OFFSET   0x04
++#define SYS_EEPROM_WP_CPLD_REG_BIT4     0x10
+diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
+old mode 100644
+new mode 100755
+index 26b6ec5..7ab7148
+--- a/miscutils/onie_tlvinfo.c
++++ b/miscutils/onie_tlvinfo.c
+@@ -508,13 +508,53 @@ int prog_eeprom(u_int8_t * eeprom)
+     tlvinfo_header_t * eeprom_hdr = (tlvinfo_header_t *) eeprom;
+     int eeprom_len;
+ 
++    FILE *fp = NULL;
++    unsigned char cpld_write_orig = 0;
++    unsigned char set_value = 0 ;
++    char i2c_cpld_read_cmd[SYS_EEPROM_I2C_SW_CMD_SZ];
++
+     eeprom_len = sizeof(tlvinfo_header_t) + be16_to_cpu(eeprom_hdr->totallen);
++
++    memset(i2c_cpld_read_cmd, 0, SYS_EEPROM_I2C_SW_CMD_SZ);
++    snprintf(i2c_cpld_read_cmd, SYS_EEPROM_I2C_SW_CMD_SZ, "i2cget -y %d 0x%x 0x%x ",
++       SYS_EEPROM_I2C_SW_I2C_BUS, SYS_EEPROM_WP_CPLD_ADDR, SYS_EEPROM_WP_CPLD_REG_OFFSET);
++
++    fp = popen(i2c_cpld_read_cmd, "r");
++    if (fp == NULL) {
++        printf("Can't Execute command:\n  %s\n", i2c_cpld_read_cmd);
++        return -1;
++    }
++    fgets(i2c_cpld_read_cmd, SYS_EEPROM_I2C_SW_CMD_SZ, fp);
++    pclose(fp);
++    cpld_write_orig = strtol(i2c_cpld_read_cmd, NULL, 16);
++
++    set_value=(cpld_write_orig) & (~SYS_EEPROM_WP_CPLD_REG_BIT4);
++
++    /*disable write protection
++
++    System ID EEPROM write protect
++    0= EEPROM write operation is disabled
++    1= EEPROM write operation is enabled.
++    */
++    memset(i2c_cpld_read_cmd, 0, SYS_EEPROM_I2C_SW_CMD_SZ);
++    snprintf(i2c_cpld_read_cmd, SYS_EEPROM_I2C_SW_CMD_SZ, "i2cset -y %d 0x%x 0x%x 0x%x ",
++        SYS_EEPROM_I2C_SW_I2C_BUS, SYS_EEPROM_WP_CPLD_ADDR, SYS_EEPROM_WP_CPLD_REG_OFFSET,
++        set_value);
++    system (i2c_cpld_read_cmd);
++
+     ret = write_sys_eeprom(eeprom, eeprom_len);
+     if (ret) {
+ 	printf("Programming failed.\n");
+ 	return -1;
+     }
+ 
++    /*set back original value*/
++    memset(i2c_cpld_read_cmd, 0, SYS_EEPROM_I2C_SW_CMD_SZ);
++    snprintf(i2c_cpld_read_cmd, SYS_EEPROM_I2C_SW_CMD_SZ, "i2cset -y %d 0x%x 0x%x 0x%x ",
++        SYS_EEPROM_I2C_SW_I2C_BUS, SYS_EEPROM_WP_CPLD_ADDR, SYS_EEPROM_WP_CPLD_REG_OFFSET,
++        cpld_write_orig);
++    system (i2c_cpld_read_cmd);
++
+     /* After writing the HW contents are valid */
+     hw_eeprom_valid = 1;
+ 
