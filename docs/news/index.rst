@@ -9,6 +9,12 @@
 ************
 Project News
 ************
+Nov 15, 2023
+  Released version `2023.11
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/301>`_
+
+  Add support of 10 new Accton platforms.
+
 Aug 16, 2023
   Released version `2023.08
   <https://ocp-all.groups.io/g/OCP-ONIE/message/291>`_
