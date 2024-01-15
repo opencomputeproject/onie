@@ -1,0 +1,29 @@
+# -*- shell-script -*-
+
+# Demonstration of the init-platform functionality
+
+# This script fragment is sourced by /etc/init.d/init-arch.sh, which
+# in turn executes the init_platform_pre_arch() and
+# init_platform_post_arch() functions.
+
+# A machine can use this feature to run any early boot scripts needed
+# by the machine.  A typical usage would be to initialize specific
+# hardware devices.
+
+# Use this function to perform any initializations required by the
+# architecture specific initialization.  This function executes before
+# the architecture initializations.
+init_platform_pre_arch()
+{
+    local cnt=0
+    local max_cnt=20
+    while [ $cnt -lt $max_cnt ] ; do
+        if ipmitool mc info >/dev/null 2>&1 ; then
+            break
+        fi
+        echo "remove,kcs,i/o,0xca2" > /sys/module/ipmi_si/parameters/hotmod
+        echo "add,kcs,i/o,0xca2" > /sys/module/ipmi_si/parameters/hotmod
+        cnt=$(( $cnt + 1 ))
+        sleep 3
+    done
+}
