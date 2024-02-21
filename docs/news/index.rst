@@ -9,6 +9,12 @@
 ************
 Project News
 ************
+Feb 20, 2024
+  Released version `2024.02
+  <https://ocp-all.groups.io/g/OCP-ONIE/message/309>`_
+
+  Add support of 1 new Netberg platform.
+
 Nov 15, 2023
   Released version `2023.11
   <https://ocp-all.groups.io/g/OCP-ONIE/message/301>`_
