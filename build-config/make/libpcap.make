@@ -9,8 +9,8 @@
 # This is a makefile fragment that defines the build of libpcap
 #
 
-LIBPCAP_VERSION			= 1.10.4
-LIBPCAP_TARBALL			= libpcap-$(LIBPCAP_VERSION).tar.gz
+LIBPCAP_VERSION		= 1.10.4
+LIBPCAP_TARBALL		= libpcap-$(LIBPCAP_VERSION).tar.gz
 LIBPCAP_TARBALL_URLS	+= $(ONIE_MIRROR) \
 			   https://www.tcpdump.org/release
 LIBPCAP_BUILD_DIR	=  $(USER_BUILDDIR)/libpcap
@@ -91,7 +91,7 @@ libpcap-install: $(LIBPCAP_INSTALL_STAMP)
 $(LIBPCAP_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(LIBPCAP_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing libpcap in $(SYSROOTDIR) ===="
-	$(Q) mkdir -p $(SYSROSYSROOTDIROT)/usr/lib/
+	$(Q) mkdir -p $(SYSROOTDIR)/usr/lib/
 	$(Q) cp -av $(DEV_SYSROOT)/usr/lib/libpcap.so $(SYSROOTDIR)/usr/lib/
 	$(Q) cp -av $(DEV_SYSROOT)/usr/lib/libpcap.so.1 $(SYSROOTDIR)/usr/lib/
 	$(Q) cp -av $(DEV_SYSROOT)/usr/lib/libpcap.so.$(LIBPCAP_VERSION) $(SYSROOTDIR)/usr/lib/
