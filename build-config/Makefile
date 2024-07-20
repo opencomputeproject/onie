@@ -386,6 +386,8 @@ include make/busybox.make
 include make/zlib.make
 include make/lzo.make
 include make/util-linux.make
+include make/tree.make
+include make/rsync.make
 ifeq ($(MTDUTILS_ENABLE),yes)
   include make/mtdutils.make
 endif
@@ -500,10 +502,6 @@ endif
 #  as it has definitions that shim will use.
 ifeq ($(SHIM_ENABLE),yes)
   include make/shim.make
-endif
-
-ifeq ($(LIBPCAP_ENABLE),yes)
-  include make/libpcap.make
 endif
 
 ifeq ($(TCPDUMP_ENABLE),yes)

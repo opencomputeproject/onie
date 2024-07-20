@@ -10,7 +10,7 @@
 # This is a makefile fragment that defines the build of openssl
 #
 
-OPENSSL_VERSION		= 1.1.1g
+OPENSSL_VERSION		?= 1.1.1g
 OPENSSL_TARBALL		= openssl-$(OPENSSL_VERSION).tar.gz
 OPENSSL_TARBALL_URLS	+= $(ONIE_MIRROR) \
 			   https://www.openssl.org/source
@@ -31,10 +31,26 @@ PHONY += openssl openssl-download openssl-source \
 	 openssl-configure openssl-build openssl-install openssl-clean \
 	 openssl-download-clean
 
+ifeq ($(OPENSSL_VERSION),1.1.1g)
+OPENSSL_ARCH	=
 OPENSSL_LIBS	= \
 	engines-1.1 \
 	libcrypto.so libcrypto.so.1.1 \
 	libssl.so libssl.so.1.1
+else ifeq ($(OPENSSL_VERSION),3.4.0)
+ifeq ($(ARCH),arm64)
+OPENSSL_ARCH	= linux-aarch64
+else
+OPENSSL_ARCH	= linux-$(ARCH)
+endif
+
+OPENSSL_LIBS	= \
+	engines \
+	libcrypto.so libcrypto.so.3 \
+	libssl.so libssl.so.3
+else
+  $(error OPENSSL_LIBS: Unsupported OpenSSL version: $(OPENSSL_VERSION))
+endif
 
 OPENSSL_BINS	= openssl
 
@@ -63,7 +79,9 @@ $(OPENSSL_CONFIGURE_STAMP): $(OPENSSL_SOURCE_STAMP) $(ZLIB_BUILD_STAMP) \
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure openssl-$(OPENSSL_VERSION) ===="
 	$(Q) cd $(OPENSSL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		MACHINE=$(TARGET) RELEASE=$(LINUX_RELEASE)	\
 		$(OPENSSL_DIR)/config				\
+		$(OPENSSL_ARCH)					\
 		--prefix=/usr					\
 		--cross-compile-prefix=$(CROSSPREFIX)		\
 		shared						\
