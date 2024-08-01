@@ -1,0 +1,1608 @@
+From 47f4c82edbc6e3c91e6a6fce44b0c9b17c3e62a2 Mon Sep 17 00:00:00 2001
+From: nicwu-cel <nicwu@celestica.com>
+Date: Mon, 30 Oct 2023 12:59:24 +0000
+Subject: [PATCH] add Celestica fpga xiic ocores for DS4101
+
+---
+ drivers/misc/Kconfig         |  15 +
+ drivers/misc/Makefile        |   3 +
+ drivers/misc/fpga-device.c   | 439 +++++++++++++++++++++++++
+ drivers/misc/fpga-i2c-xiic.c | 740 +++++++++++++++++++++++++++++++++++++++++++
+ drivers/misc/fpga-sys.c      | 355 +++++++++++++++++++++
+ 5 files changed, 1552 insertions(+)
+ create mode 100644 drivers/misc/fpga-device.c
+ create mode 100644 drivers/misc/fpga-i2c-xiic.c
+ create mode 100644 drivers/misc/fpga-sys.c
+
+diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
+index b31fcff..a51e5de 100644
+--- a/drivers/misc/Kconfig
++++ b/drivers/misc/Kconfig
+@@ -471,6 +471,21 @@ config CLS_LPC_CPLD
+         ---help---
+           This module enable Celestica LPC CPLD support.
+ 
++config CLS_FPGA_DEVICE
++        tristate "Celestica FPGA DEVICE"
++        ---help---
++          This module enable Celestica FPGA DEVICE support.
++
++config CLS_FPGA_SYSTEM
++        tristate "Celestica FPGA SYSTEM"
++        ---help---
++          This module enable Celestica FPGA SYSTEM support.
++
++config CLS_FPGA_XIIC
++        tristate "Celestica FPGA XIIC OCORES"
++        ---help---
++          This module enable Celestica FPGA XIIC OCORES support.
++
+ source "drivers/misc/c2port/Kconfig"
+ source "drivers/misc/eeprom/Kconfig"
+ source "drivers/misc/cb710/Kconfig"
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index fb10a1b..bd10583 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -58,3 +58,6 @@ obj-$(CONFIG_PVPANIC)   	+= pvpanic.o
+ obj-$(CONFIG_HABANA_AI)		+= habanalabs/
+ obj-$(CONFIG_XILINX_SDFEC)	+= xilinx_sdfec.o
+ obj-$(CONFIG_CLS_LPC_CPLD)	+= lpc_basecpld.o
++obj-$(CONFIG_CLS_FPGA_DEVICE)   += fpga-device.o
++obj-$(CONFIG_CLS_FPGA_SYSTEM)   += fpga-sys.o
++obj-$(CONFIG_CLS_FPGA_XIIC)     += fpga-i2c-xiic.o
+diff --git a/drivers/misc/fpga-device.c b/drivers/misc/fpga-device.c
+new file mode 100644
+index 0000000..c9e78c6
+--- /dev/null
++++ b/drivers/misc/fpga-device.c
+@@ -0,0 +1,439 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * fpga-device.c - PCI device driver for DS4101 Switch board FPGA.
++ *
++ * Author: Nicholas Wu <nicwu@celestica.com>
++ *
++ * Copyright (C) 2022-2024 Celestica Corp.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ */
++
++#include <linux/module.h>
++#include <linux/moduleparam.h>
++#include <linux/pci.h>
++#include <linux/kernel.h>
++#include <linux/stddef.h>
++#include <linux/acpi.h>
++#include <linux/interrupt.h>
++#include <linux/i2c.h>
++#include <linux/platform_device.h>
++
++#define MOD_VERSION "0.0.2"
++#define DRV_NAME "fpga"
++
++#define PCI_VENDOR_ID_CELESTICA		0x18d4
++#define FPGA_PCIE_DEVICE_ID		0x100a
++
++#define FPGA_OTHER_CR_ADDR		0x14
++
++#define BMC_PRESENT_BIT	  		0x08
++
++/* FPGA_OTHER_CR_ADDR bit8 0-bmc present 1-bmc absent*/
++#define BMC_PRESENT		  0x00
++
++#define MMIO_BAR		  0
++
++/* I2C ocore configurations */
++#define OCORE_REGSHIFT		2
++#define OCORE_IP_CLK_khz	62500
++#define OCORE_BUS_CLK_khz	100
++#define OCORE_REG_IO_WIDTH	1
++
++/* i2c_bus_config - an i2c-core resource and platform data
++ *	@id - I2C bus device ID, for identification.
++ *	@res - resources for an i2c-core device.
++ *	@num_res - size of the resources.
++ */
++struct i2c_bus_config {
++	int id;
++	struct resource *res;
++	ssize_t num_res;
++};
++
++/* switchbrd_priv - switchboard private data */
++struct switchbrd_priv {
++	void __iomem *iomem;
++	unsigned long base;
++	int num_i2c_bus;
++	const char *i2c_devname;
++	const char *fpga_devname;
++	struct platform_device **i2cbuses_pdev;
++	struct platform_device *regio_pdev;
++	struct platform_device *spiflash_pdev;
++	struct platform_device *fpga_pdev;
++};
++
++/* RESOURCE SEPERATES BY FUNCTION */
++/* Resource IOMEM for FPGA extended i2c bus 0 */
++static struct resource cls_i2c_res_0[] = {
++	{
++		.start = 0x00010000, .end = 0x00010FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 1 */
++static struct resource	cls_i2c_res_1[] = {
++	{
++		.start = 0x00011000, .end = 0x00011FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 2 */
++static struct resource	cls_i2c_res_2[] = {
++	{
++		.start = 0x00012000, .end = 0x00012FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 3 */
++static struct  resource cls_i2c_res_3[] = {
++	{
++		.start = 0x00013000, .end = 0x00013FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 4 */
++static struct resource	cls_i2c_res_4[] = {
++	{
++		.start = 0x00014000, .end = 0x00014FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 5 */
++static struct resource	cls_i2c_res_5[] = {
++	{
++		.start = 0x00015000, .end = 0x00015FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 6 */
++static struct resource	cls_i2c_res_6[] = {
++	{
++		.start = 0x00016000, .end = 0x00016FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 7 */
++static struct resource	cls_i2c_res_7[] = {
++	{
++		.start = 0x00017000, .end = 0x00017FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 8 */
++static struct resource	cls_i2c_res_8[] = {
++	{
++		.start = 0x00018000, .end = 0x00018FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 9 */
++static struct resource	cls_i2c_res_9[] = {
++	{
++		.start = 0x00019000, .end = 0x00019FFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 10 */
++static struct resource	cls_i2c_res_10[] = {
++	{
++		.start = 0x0001A000, .end = 0x0001AFFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 11 */
++static struct resource	cls_i2c_res_11[] = {
++	{
++		.start = 0x0001B000, .end = 0x0001BFFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 12 */
++static struct resource	cls_i2c_res_12[] = {
++	{
++		.start = 0x0001C000, .end = 0x0001CFFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for FPGA extended i2c bus 13 */
++static struct resource	cls_i2c_res_13[] = {
++	{
++		.start = 0x0001D000, .end = 0x0001DFFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++/* Resource IOMEM for the whole FPGA */
++static struct resource fpga_res[] = {
++	{
++		.start = 0x00000000, .end = 0x01FFFFFF,
++		.flags = IORESOURCE_MEM,},
++};
++
++static struct i2c_bus_config i2c_bus_configs[] = {
++	{
++		.id = 0,
++		.res = cls_i2c_res_0,
++		.num_res = ARRAY_SIZE(cls_i2c_res_0),
++	},
++	{
++		.id = 1,
++		.res = cls_i2c_res_1,
++		.num_res = ARRAY_SIZE(cls_i2c_res_1),
++	},
++	{
++		.id = 2,
++		.res = cls_i2c_res_2,
++		.num_res = ARRAY_SIZE(cls_i2c_res_2),
++	},
++	{
++		.id = 3,
++		.res = cls_i2c_res_3,
++		.num_res = ARRAY_SIZE(cls_i2c_res_3),
++	},
++	{
++		.id = 4,
++		.res = cls_i2c_res_4,
++		.num_res = ARRAY_SIZE(cls_i2c_res_4),
++	},
++	{
++		.id = 5,
++		.res = cls_i2c_res_5,
++		.num_res = ARRAY_SIZE(cls_i2c_res_5),
++	},
++	{
++		.id = 6,
++		.res = cls_i2c_res_6,
++		.num_res = ARRAY_SIZE(cls_i2c_res_6),
++	},
++	{
++		.id = 7,
++		.res = cls_i2c_res_7,
++		.num_res = ARRAY_SIZE(cls_i2c_res_7),
++	},
++	{
++		.id = 8,
++		.res = cls_i2c_res_8,
++		.num_res = ARRAY_SIZE(cls_i2c_res_8),
++	},
++	{
++		.id = 9,
++		.res = cls_i2c_res_9,
++		.num_res = ARRAY_SIZE(cls_i2c_res_9),
++	},
++	{
++		.id = 10,
++		.res = cls_i2c_res_10,
++		.num_res = ARRAY_SIZE(cls_i2c_res_10),
++	},
++	{
++		.id = 11,
++		.res = cls_i2c_res_11,
++		.num_res = ARRAY_SIZE(cls_i2c_res_11),
++	},
++	{
++		.id = 12,
++		.res = cls_i2c_res_12,
++		.num_res = ARRAY_SIZE(cls_i2c_res_12),
++	},
++	{
++		.id = 13,
++		.res = cls_i2c_res_13,
++		.num_res = ARRAY_SIZE(cls_i2c_res_13),
++	},
++};
++
++
++static int cls_fpga_probe(struct pci_dev *dev, const struct pci_device_id *id)
++{
++	int err;
++	int num_i2c_bus, i = 0, ret;
++	int bmc_present = 0;   /* 0-present 1-absent */
++	unsigned long rstart;
++	void __iomem *base_addr;
++	struct switchbrd_priv *priv;
++	struct platform_device **i2cbuses_pdev;
++	struct platform_device *fpga_pdev;
++
++	err = pci_enable_device(dev);
++	if (err) {
++		dev_err(&dev->dev,	"Failed to enable PCI device\n");
++		goto err_exit;
++	}
++	pci_set_master(dev);
++
++	/* Check for valid MMIO address */
++	base_addr = pci_iomap(dev, MMIO_BAR, 0);
++	if (!base_addr) {
++		dev_err(&dev->dev,	"Failed to map PCI device mem\n");
++		err = -ENODEV;
++		goto err_disable_device;
++	}
++
++	ret = pci_enable_msi(dev);
++	if (ret) {
++		dev_err(&dev->dev,	"failed to allocate MSI entry\n");
++		goto err_unmap;
++	}
++
++	bmc_present = (ioread32(base_addr + FPGA_OTHER_CR_ADDR)
++						>> BMC_PRESENT_BIT) & 0x01;
++
++	if (bmc_present == BMC_PRESENT)
++		dev_dbg(&dev->dev, "BMC present\n");
++	else
++		dev_dbg(&dev->dev, "BMC absent\n");
++
++	rstart = pci_resource_start(dev, MMIO_BAR);
++	if (!rstart) {
++		dev_err(&dev->dev,
++			"Switchboard base address uninitialized, check FPGA\n");
++		err = -ENODEV;
++		goto err_disable_msi;
++	}
++
++	dev_dbg(&dev->dev, "BAR%d res: 0x%lx-0x%llx\n", MMIO_BAR,
++		rstart, pci_resource_end(dev, MMIO_BAR));
++
++	dev_dbg(&dev->dev, "BAR%d res: 0x%lx-0x%llx\n", MMIO_BAR,
++		rstart, pci_resource_end(dev, MMIO_BAR));
++
++
++	priv = devm_kzalloc(&dev->dev,
++				sizeof(struct switchbrd_priv),
++				GFP_KERNEL);
++
++	if (!priv) {
++		err = -ENOMEM;
++		goto err_disable_msi;
++	}
++
++	pci_set_drvdata(dev, priv);
++	num_i2c_bus = ARRAY_SIZE(i2c_bus_configs);
++	i2cbuses_pdev = devm_kzalloc(
++				&dev->dev,
++				num_i2c_bus * sizeof(struct platform_device *),
++				GFP_KERNEL);
++
++	fpga_res[0].start += rstart;
++	fpga_res[0].end += rstart;
++
++	dev_dbg(&dev->dev, "num_i2c_bus = %x,fpga_res start/end %llx/%llx,restart=%lx\n",
++					num_i2c_bus,
++					fpga_res[0].start,
++					fpga_res[0].end,
++					rstart);
++
++	priv->i2c_devname = "fpga-xiic-i2c";
++	priv->fpga_devname = "fpga-sys";
++
++	fpga_pdev = platform_device_register_resndata(
++			NULL,
++			priv->fpga_devname,
++			-1,
++			fpga_res,
++			ARRAY_SIZE(fpga_res),
++			NULL,
++			0);
++	if (IS_ERR(fpga_pdev)) {
++		dev_err(&dev->dev, "Failed to register fpga node\n");
++		err = PTR_ERR(fpga_pdev);
++		goto err_unmap;
++	}
++	dev_dbg(&dev->dev, "register fpga node\n");
++
++	for (; i < num_i2c_bus; i++) {
++		/* override resource with MEM/IO resource offset */
++		i2c_bus_configs[i].res[0].start += rstart;
++		i2c_bus_configs[i].res[0].end += rstart;
++
++		dev_dbg(&dev->dev, "i2c-bus.%d: 0x%llx - 0x%llx\n",
++						i2c_bus_configs[i].id,
++						i2c_bus_configs[i].res[0].start,
++						i2c_bus_configs[i].res[0].end);
++		dev_dbg(&dev->dev, "bus id:%d, i2c_bus_configs[%d].res[0].start/end=%llx:%llx\n",
++						i2c_bus_configs[i].id,
++						i,
++						i2c_bus_configs[i].res[0].start,
++						i2c_bus_configs[i].res[0].end);
++
++		i2cbuses_pdev[i] = platform_device_register_resndata(
++								&dev->dev,
++								priv->i2c_devname,
++								i2c_bus_configs[i].id,
++								i2c_bus_configs[i].res,
++								i2c_bus_configs[i].num_res,
++								NULL,
++								0);
++		if (IS_ERR(i2cbuses_pdev[i])) {
++			dev_err(&dev->dev, "Failed to register cls-i2c-xiic.%d\n",
++				i2c_bus_configs[i].id);
++			err = PTR_ERR(i2cbuses_pdev[i]);
++			goto err_unregister_ocore;
++		}
++	}
++
++	priv->iomem = base_addr;
++	priv->base = rstart;
++	priv->num_i2c_bus = num_i2c_bus;
++	priv->i2cbuses_pdev = i2cbuses_pdev;
++	priv->fpga_pdev = fpga_pdev;
++	return 0;
++
++err_unregister_ocore:
++	for (i = 0; i < num_i2c_bus; i++) {
++		if (priv->i2cbuses_pdev[i])
++			platform_device_unregister(priv->i2cbuses_pdev[i]);
++	}
++err_unregister_fpga_dev:
++	platform_device_unregister(fpga_pdev);
++err_disable_msi:
++	pci_disable_msi(dev);
++err_unmap:
++	pci_iounmap(dev, base_addr);
++err_disable_device:
++	pci_disable_device(dev);
++err_exit:
++	return err;
++}
++
++static void cls_fpga_remove(struct pci_dev *dev)
++{
++	int i;
++	struct switchbrd_priv *priv = pci_get_drvdata(dev);
++
++	for (i = 0; i < priv->num_i2c_bus; i++) {
++		if (priv->i2cbuses_pdev[i])
++			platform_device_unregister(priv->i2cbuses_pdev[i]);
++	}
++	platform_device_unregister(priv->fpga_pdev);
++	pci_disable_msi(dev);
++	pci_iounmap(dev, priv->iomem);
++	pci_disable_device(dev);
++	return;
++};
++
++static const struct pci_device_id pci_clsswbrd[] = {
++	{  PCI_VDEVICE(CELESTICA, FPGA_PCIE_DEVICE_ID) },
++	{0, }
++};
++
++MODULE_DEVICE_TABLE(pci, pci_clsswbrd);
++
++static struct pci_driver cls_pci_driver = {
++	.name = DRV_NAME,
++	.id_table = pci_clsswbrd,
++	.probe = cls_fpga_probe,
++	.remove = cls_fpga_remove,
++};
++
++module_pci_driver(cls_pci_driver);
++
++MODULE_AUTHOR("Nicholas Wu<nicwu@celestica.com>");
++MODULE_DESCRIPTION("Celestica DS4101 FPGA driver");
++MODULE_VERSION(MOD_VERSION);
++MODULE_LICENSE("GPL");
++
+diff --git a/drivers/misc/fpga-i2c-xiic.c b/drivers/misc/fpga-i2c-xiic.c
+new file mode 100644
+index 0000000..3776e3b
+--- /dev/null
++++ b/drivers/misc/fpga-i2c-xiic.c
+@@ -0,0 +1,740 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * fpga-i2c-xiic.c
++ * Copyright (c) 2002-2007 Xilinx Inc.
++ * Copyright (c) 2009-2010 Intel Corporation
++ * Copyright (c) 2022-2024 Celestica Corporation
++ *
++ * This code was implemented by nicwu@celestica.com
++ * to port linux xiic driver to suit Celestica ds4101 platform.
++ * The copyright holder as seen in the header is Celestica corporation.
++ *
++ */
++
++/* Supports:
++ * Xilinx IIC
++ */
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/errno.h>
++#include <linux/err.h>
++#include <linux/delay.h>
++#include <linux/platform_device.h>
++#include <linux/i2c.h>
++#include <linux/interrupt.h>
++#include <linux/wait.h>
++#include <linux/platform_data/i2c-xiic.h>
++#include <linux/io.h>
++#include <linux/slab.h>
++#include <linux/of.h>
++#include <linux/clk.h>
++#include <linux/pm_runtime.h>
++
++#define DRIVER_NAME "fpga-xiic-i2c"
++
++enum xilinx_i2c_state {
++	STATE_DONE,
++	STATE_ERROR,
++	STATE_START,
++	STATE_WRITE,
++	STATE_READ,
++	STATE_BB,
++};
++
++enum xiic_endian {
++	LITTLE,
++	BIG
++};
++
++enum xiic_mode {
++	POLLING,
++	INT
++};
++/**
++ * struct xiic_i2c - Internal representation of the XIIC I2C bus
++ * @dev:	Pointer to device structure
++ * @base:   Memory base of the HW registers
++ * @wait:   Wait queue for callers
++ * @adap:   Kernel adapter representation
++ * @tx_msg: Messages from above to be sent
++ * @lock:   Mutual exclusion
++ * @tx_pos: Current pos in TX message
++ * @nmsgs:  Number of messages in tx_msg
++ * @state:  See STATE_
++ * @rx_msg: Current RX message
++ * @rx_pos: Position within current RX message
++ * @endianness: big/little-endian byte order
++ * @clk:	Pointer to struct clk
++ * @dynamic: Mode of controller
++ * @prev_msg_tx: Previous message is Tx
++ * @smbus_block_read: Flag to handle block read
++ */
++struct xiic_i2c {
++	struct device	   *dev;
++	int				 id;
++	void __iomem		*base;
++	void __iomem		*gl_int_base;
++	wait_queue_head_t   wait;
++	struct i2c_adapter  adap;
++	struct i2c_msg	  *tx_msg;
++	struct mutex		lock;
++	unsigned int		tx_pos;
++	unsigned int		nmsgs;
++	enum xilinx_i2c_state   state;
++	struct i2c_msg	  *rx_msg;
++	int		 rx_pos;
++
++	enum xiic_endian	endianness;
++	struct clk *clk;
++	bool dynamic;
++	bool prev_msg_tx;
++	bool smbus_block_read;
++
++	/*polling variable*/
++	unsigned int		 pos;
++	spinlock_t  process_lock;
++	unsigned int		flag;
++	int		   nack_retry;
++	struct i2c_msg	  *msg;
++};
++
++#define XIIC_MSB_OFFSET 0
++#define XIIC_REG_OFFSET (0x100 + XIIC_MSB_OFFSET)
++
++/*
++ * Register offsets in bytes from RegisterBase. Three is added to the
++ * base offset to access LSB (IBM style) of the word
++ */
++#define XIIC_CR_REG_OFFSET   (0x00 + XIIC_REG_OFFSET) /* Control Register   */
++#define XIIC_SR_REG_OFFSET   (0x04 + XIIC_REG_OFFSET) /* Status Register	*/
++#define XIIC_DTR_REG_OFFSET  (0x08 + XIIC_REG_OFFSET) /* Data Tx Register   */
++#define XIIC_DRR_REG_OFFSET  (0x0C + XIIC_REG_OFFSET) /* Data Rx Register   */
++#define XIIC_ADR_REG_OFFSET  (0x10 + XIIC_REG_OFFSET) /* Address Register   */
++#define XIIC_TFO_REG_OFFSET  (0x14 + XIIC_REG_OFFSET) /* Tx FIFO Occupancy  */
++#define XIIC_RFO_REG_OFFSET  (0x18 + XIIC_REG_OFFSET) /* Rx FIFO Occupancy  */
++#define XIIC_TBA_REG_OFFSET  (0x1C + XIIC_REG_OFFSET) /* 10 Bit Address reg */
++#define XIIC_RFD_REG_OFFSET  (0x20 + XIIC_REG_OFFSET) /* Rx FIFO Depth reg  */
++#define XIIC_GPO_REG_OFFSET  (0x24 + XIIC_REG_OFFSET) /* Output Register	*/
++
++/* Control Register masks */
++#define XIIC_CR_ENABLE_DEVICE_MASK		0x01  /* Device enable = 1	  */
++#define XIIC_CR_TX_FIFO_RESET_MASK		0x02  /* Transmit FIFO reset=1  */
++#define XIIC_CR_MSMS_MASK				 0x04  /* Master starts Txing=1  */
++#define XIIC_CR_DIR_IS_TX_MASK			0x08  /* Dir of tx. Txing=1	 */
++#define XIIC_CR_NO_ACK_MASK			   0x10  /* Tx Ack. NO ack = 1	 */
++#define XIIC_CR_REPEATED_START_MASK	   0x20  /* Repeated start = 1	 */
++#define XIIC_CR_GENERAL_CALL_MASK		 0x40  /* Gen Call enabled = 1   */
++
++/* Status Register masks */
++#define XIIC_SR_GEN_CALL_MASK			 0x01  /* 1=a mstr issued a GC   */
++#define XIIC_SR_ADDR_AS_SLAVE_MASK		0x02  /* 1=when addr as slave   */
++#define XIIC_SR_BUS_BUSY_MASK			 0x04  /* 1 = bus is busy		*/
++#define XIIC_SR_MSTR_RDING_SLAVE_MASK	 0x08  /* 1=Dir: mstr <-- slave  */
++#define XIIC_SR_TX_FIFO_FULL_MASK		 0x10  /* 1 = Tx FIFO full	   */
++#define XIIC_SR_RX_FIFO_FULL_MASK		 0x20  /* 1 = Rx FIFO full	   */
++#define XIIC_SR_RX_FIFO_EMPTY_MASK		0x40  /* 1 = Rx FIFO empty	  */
++#define XIIC_SR_TX_FIFO_EMPTY_MASK		0x80  /* 1 = Tx FIFO empty	  */
++
++/* Interrupt Status Register masks	Interrupt occurs when...	   */
++#define XIIC_INTR_ARB_LOST_MASK		   0x01  /* 1 = arbitration lost   */
++#define XIIC_INTR_TX_ERROR_MASK		   0x02  /* 1=Tx error/msg complete */
++#define XIIC_INTR_TX_EMPTY_MASK		   0x04  /* 1 = Tx FIFO/reg empty  */
++#define XIIC_INTR_RX_FULL_MASK			0x08  /* 1=Rx FIFO/reg=OCY level */
++#define XIIC_INTR_BNB_MASK				0x10  /* 1 = Bus not busy	   */
++#define XIIC_INTR_AAS_MASK				0x20  /* 1 = when addr as slave */
++#define XIIC_INTR_NAAS_MASK			   0x40  /* 1 = not addr as slave  */
++#define XIIC_INTR_TX_HALF_MASK			0x80  /* 1 = TX FIFO half empty */
++
++/* The following constants specify the depth of the FIFOs */
++#define IIC_RX_FIFO_DEPTH		 16	/* Rx fifo capacity			   */
++#define IIC_TX_FIFO_DEPTH		 16	/* Tx fifo capacity			   */
++
++/*
++ * Tx Fifo upper bit masks.
++ */
++#define XIIC_TX_DYN_START_MASK			0x0100 /* 1 = Set dynamic start */
++#define XIIC_TX_DYN_STOP_MASK			 0x0200 /* 1 = Set dynamic stop */
++
++/*
++ * The following constants define the register offsets for the Interrupt
++ * registers. There are some holes in the memory map for reserved addresses
++ * to allow other registers to be added and still match the memory map of the
++ * interrupt controller registers
++ */
++#define XIIC_IISR_OFFSET	 0x20 /* Interrupt Status Register */
++#define XIIC_RESETR_OFFSET   0x40 /* Reset Register */
++
++#define XIIC_RESET_MASK			 0xAUL
++
++#define XIIC_PM_TIMEOUT	 1000	/* ms */
++/* timeout waiting for the controller to respond */
++#define XIIC_I2C_TIMEOUT	(msecs_to_jiffies(1000))
++
++/*
++ * For the register read and write functions, a little-endian and big-endian
++ * version are necessary. Endianness is detected during the probe function.
++ * Only the least significant byte [doublet] of the register are ever
++ * accessed. This requires an offset of 3 [2] from the base address for
++ * big-endian systems.
++ */
++
++static inline void xiic_setreg8(struct xiic_i2c *i2c, int reg, u8 value)
++{
++	if (i2c->endianness == LITTLE)
++		iowrite8(value, i2c->base + reg);
++	else
++		iowrite8(value, i2c->base + reg + 3);
++}
++
++static inline u8 xiic_getreg8(struct xiic_i2c *i2c, int reg)
++{
++	u8 ret;
++
++	if (i2c->endianness == LITTLE)
++		ret = ioread8(i2c->base + reg);
++	else
++		ret = ioread8(i2c->base + reg + 3);
++	return ret;
++}
++
++static inline void xiic_setreg16(struct xiic_i2c *i2c, int reg, u16 value)
++{
++	if (i2c->endianness == LITTLE)
++		iowrite16(value, i2c->base + reg);
++	else
++		iowrite16be(value, i2c->base + reg + 2);
++}
++
++static inline void xiic_setreg32(struct xiic_i2c *i2c, int reg, int value)
++{
++	if (i2c->endianness == LITTLE)
++		iowrite32(value, i2c->base + reg);
++	else
++		iowrite32be(value, i2c->base + reg);
++}
++
++static inline int xiic_getreg32(struct xiic_i2c *i2c, int reg)
++{
++	u32 ret;
++
++	if (i2c->endianness == LITTLE)
++		ret = ioread32(i2c->base + reg);
++	else
++		ret = ioread32be(i2c->base + reg);
++
++	return ret;
++}
++
++static inline void xiic_irq_clr(struct xiic_i2c *i2c, u32 mask)
++{
++	u32 isr = xiic_getreg32(i2c, XIIC_IISR_OFFSET);
++
++	xiic_setreg32(i2c, XIIC_IISR_OFFSET, isr & mask);
++}
++
++static int xiic_clear_rx_fifo(struct xiic_i2c *i2c)
++{
++	u8 sr;
++	unsigned long timeout;
++
++	timeout = jiffies + XIIC_I2C_TIMEOUT;
++	for (sr = xiic_getreg8(i2c, XIIC_SR_REG_OFFSET);
++		!(sr & XIIC_SR_RX_FIFO_EMPTY_MASK);
++		sr = xiic_getreg8(i2c, XIIC_SR_REG_OFFSET)) {
++		xiic_getreg8(i2c, XIIC_DRR_REG_OFFSET);
++		if (time_after(jiffies, timeout)) {
++			dev_err(i2c->dev, "Failed to clear rx fifo\n");
++			return -ETIMEDOUT;
++		}
++	}
++
++	return 0;
++}
++
++static int xiic_reinit(struct xiic_i2c *i2c)
++{
++	int ret;
++
++	/* Soft reset IIC controller. */
++	xiic_setreg32(i2c, XIIC_RESETR_OFFSET, XIIC_RESET_MASK);
++
++	/* Set receive Fifo depth to maximum (zero based). */
++	xiic_setreg8(i2c, XIIC_RFD_REG_OFFSET, IIC_RX_FIFO_DEPTH - 1);
++
++	/* Reset Tx Fifo. */
++	xiic_setreg8(i2c, XIIC_CR_REG_OFFSET, XIIC_CR_TX_FIFO_RESET_MASK);
++
++	/* Enable IIC Device, remove Tx Fifo reset & disable general call. */
++	xiic_setreg8(i2c, XIIC_CR_REG_OFFSET, XIIC_CR_ENABLE_DEVICE_MASK);
++
++	/* make sure RX fifo is empty */
++	ret = xiic_clear_rx_fifo(i2c);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++static void xiic_deinit(struct xiic_i2c *i2c)
++{
++	u8 cr;
++
++	xiic_setreg32(i2c, XIIC_RESETR_OFFSET, XIIC_RESET_MASK);
++
++	/* Disable IIC Device. */
++	cr = xiic_getreg8(i2c, XIIC_CR_REG_OFFSET);
++	xiic_setreg8(i2c, XIIC_CR_REG_OFFSET, cr & ~XIIC_CR_ENABLE_DEVICE_MASK);
++}
++
++static void ocores_process(struct xiic_i2c *i2c)
++{
++	struct i2c_msg *msg = i2c->msg;
++	u16 val;
++
++	/*
++	 * If we spin here because we are in timeout, so we are going
++	 * to be in STATE_ERROR. See ocores_process_timeout()
++	 */
++	mutex_lock(&i2c->lock);
++	dev_dbg(&i2c->adap.dev, "STATE: %d\n", i2c->state);
++
++	if (i2c->state == STATE_START) {
++		i2c->state = (msg->flags & I2C_M_RD) ? STATE_READ : STATE_WRITE;
++		/* if it's the time sequence is 'start bit + address + read bit + stop bit' */
++		if (i2c->state == STATE_READ) {
++			/* it's the last message so we include dynamic stop bit with length */
++			val = msg->len | XIIC_TX_DYN_STOP_MASK;
++			xiic_setreg16(i2c, XIIC_DTR_REG_OFFSET, val);
++			goto out;
++		}
++	}
++	if (i2c->state == STATE_READ) {
++		/* suit for I2C_FUNC_SMBUS_BLOCK_DATA */
++		if (msg->flags & I2C_M_RECV_LEN) {
++			val = xiic_getreg32(i2c, XIIC_DRR_REG_OFFSET);
++			msg->buf[i2c->pos++] = val;
++			/* msg len includes 1 byte smbus block count and data bytes */
++			msg->len = val + 1;
++			if (msg->len > I2C_SMBUS_BLOCK_MAX + 2) {
++				dev_err(&i2c->adap.dev,
++					"Invalid block write size %d\n",
++					val);
++				goto out;
++			}
++			msg->flags &= ~I2C_M_RECV_LEN;
++		} else
++			msg->buf[i2c->pos++] = xiic_getreg32(i2c, XIIC_DRR_REG_OFFSET);
++	} else if (i2c->state == STATE_WRITE) {
++		/* if it reaches the last byte data to be sent */
++		if ((i2c->pos == msg->len - 1) && (i2c->nmsgs == 1)) {
++			val = msg->buf[i2c->pos++] | XIIC_TX_DYN_STOP_MASK;
++			xiic_setreg16(i2c, XIIC_DTR_REG_OFFSET, val);
++			i2c->state = STATE_DONE;
++			goto out;
++		/* if it is not the last byte data to be sent */
++		} else if (i2c->pos < msg->len) {
++			xiic_setreg16(i2c, XIIC_DTR_REG_OFFSET, msg->buf[i2c->pos++]);
++			goto out;
++		}
++	}
++
++	/* end of msg? */
++	if (i2c->pos == msg->len) {
++		i2c->nmsgs--;
++		i2c->pos = 0;
++		if (i2c->nmsgs) {
++			i2c->msg++;
++			msg = i2c->msg;
++			if (!(msg->flags & I2C_M_NOSTART)) {  /* send start? */
++				i2c->state = STATE_START;
++				xiic_setreg16(i2c, XIIC_DTR_REG_OFFSET,
++							i2c_8bit_addr_from_msg(msg)
++							| XIIC_TX_DYN_START_MASK);
++				goto out;
++			}
++		} else { /* end? */
++			i2c->state = STATE_DONE;
++			goto out;
++		}
++	}
++
++out:
++	mutex_unlock(&i2c->lock);
++}
++
++/**
++ * Wait until something change in a given register
++ * @i2c: ocores I2C device instance
++ * @reg: register to query
++ * @mask: bitmask to apply on register value
++ * @val: expected result
++ * @timeout: timeout in jiffies
++ *
++ * Timeout is necessary to avoid to stay here forever when the chip
++ * does not answer correctly.
++ *
++ * Return: 0 on success, -ETIMEDOUT on timeout
++ */
++static int ocores_wait(struct xiic_i2c *i2c,
++			   int reg, u8 mask, u8 val,
++			   const unsigned long timeout)
++{
++	unsigned long j;
++	u8 status = 0;
++
++	j = jiffies + timeout;
++	while (1) {
++		mutex_lock(&i2c->lock);
++		status = xiic_getreg32(i2c, reg);
++
++		mutex_unlock(&i2c->lock);
++		if ((status & mask) == val)
++			break;
++		if (time_after(jiffies, j))
++			return -ETIMEDOUT;
++		cpu_relax();
++		cond_resched();
++	}
++
++	return 0;
++}
++
++/**
++ * Wait until is possible to process some data
++ * @i2c: ocores I2C device instance
++ *
++ * Used when the device is in polling mode (interrupts disabled).
++ *
++ * Return: 0 on success, -ETIMEDOUT on timeout
++ */
++static int ocores_poll_wait(struct xiic_i2c *i2c)
++{
++	u8 mask = 0, status = 0;
++	int err = 0;
++
++	if (i2c->state == STATE_DONE) {
++		/* transfer is over */
++		mask = XIIC_SR_BUS_BUSY_MASK;
++	} else if (i2c->state == STATE_WRITE || i2c->state == STATE_START) {
++		/* on going transfer */
++		if (i2c->msg->len == 0)
++			mask = XIIC_INTR_TX_ERROR_MASK;
++		else
++			mask = XIIC_SR_TX_FIFO_FULL_MASK;
++	} else if (i2c->state == STATE_READ)
++		/* on going receive */
++		mask = XIIC_SR_TX_FIFO_EMPTY_MASK | XIIC_SR_RX_FIFO_EMPTY_MASK;
++
++	dev_dbg(&i2c->adap.dev, "Wait for: 0x%x\n", mask);
++
++	/*
++	 * once we are here we expect to get the expected result immediately
++	 * so if after 50ms we timeout then something is broken.
++	 */
++
++	if (1 == i2c->nmsgs && 0 == i2c->msg->len && i2c->state == STATE_START &&
++				!(i2c->msg->flags & I2C_M_RD)) {  /* for i2cdetect I2C_SMBUS_QUICK mode*/
++		err = ocores_wait(i2c, XIIC_IISR_OFFSET, mask, mask, msecs_to_jiffies(50));
++		mutex_lock(&i2c->lock);
++		status = xiic_getreg32(i2c, XIIC_SR_REG_OFFSET);
++		mutex_unlock(&i2c->lock);
++		/* AXI IIC as an transceiver ,
++		 * if ever an XIIC_INTR_TX_ERROR_MASK interrupt happens, means no such i2c device
++		 */
++		if (err != 0)
++			err = 0;
++		else
++			err = -ETIMEDOUT;
++	} else {
++		if (mask & XIIC_SR_TX_FIFO_EMPTY_MASK) {
++			err = ocores_wait(i2c, XIIC_SR_REG_OFFSET, mask,
++							XIIC_SR_TX_FIFO_EMPTY_MASK, msecs_to_jiffies(50));
++			mask &= ~XIIC_SR_TX_FIFO_EMPTY_MASK;
++		}
++		if (err == 0)
++			err = ocores_wait(i2c, XIIC_SR_REG_OFFSET, mask, 0, msecs_to_jiffies(50));
++
++		mutex_lock(&i2c->lock);
++		status = xiic_getreg32(i2c, XIIC_IISR_OFFSET);
++		mutex_unlock(&i2c->lock);
++
++		/* AXI IIC as an transceiver,
++		 * if ever an XIIC_INTR_TX_ERROR_MASK interrupt happens, return
++		 */
++		if ((status & XIIC_INTR_ARB_LOST_MASK) ||
++			((status & XIIC_INTR_TX_ERROR_MASK) &&
++			!(i2c->msg->flags & I2C_M_RD))) {
++			err = -ETIMEDOUT;
++			/* Soft reset IIC controller. */
++			xiic_setreg32(i2c, XIIC_RESETR_OFFSET, XIIC_RESET_MASK);
++			if (status & XIIC_INTR_ARB_LOST_MASK) {
++				dev_warn(i2c->adap.dev.parent,
++					 "%s: TRANSFER STATUS ERROR, ISR: bit 0x%x happens\n",
++					 __func__, XIIC_INTR_ARB_LOST_MASK);
++			}
++			if (status & XIIC_INTR_TX_ERROR_MASK) {
++				dev_warn(i2c->adap.dev.parent,
++					 "%s: TRANSFER STATUS ERROR, ISR: bit 0x%x happens\n",
++					 __func__, XIIC_INTR_TX_ERROR_MASK);
++			}
++			return err;
++		}
++	}
++
++	if (err)
++		dev_dbg(i2c->adap.dev.parent,
++			 "%s: STATUS timeout, bit 0x%x did not clear in 50ms\n",
++			 __func__, mask);
++
++	return err;
++}
++
++static void ocores_process_polling(struct xiic_i2c *i2c)
++{
++	while (1) {
++		int err;
++
++		err = ocores_poll_wait(i2c);
++		if (err) {
++			i2c->state = STATE_ERROR;
++			break;
++		} else if (i2c->state == STATE_DONE)
++			break;
++
++		ocores_process(i2c);
++	}
++}
++
++static int ocores_xfer_core(struct xiic_i2c *i2c,
++				struct i2c_msg *msgs, int num)
++{
++	int ret = 0;
++
++	mutex_lock(&i2c->lock);
++	/* Soft reset IIC controller. */
++	xiic_setreg32(i2c, XIIC_RESETR_OFFSET, XIIC_RESET_MASK);
++	/* Set receive Fifo depth to maximum (zero based). */
++	xiic_setreg8(i2c, XIIC_RFD_REG_OFFSET, IIC_RX_FIFO_DEPTH - 1);
++
++	/* Reset Tx Fifo. */
++	xiic_setreg8(i2c, XIIC_CR_REG_OFFSET, XIIC_CR_TX_FIFO_RESET_MASK);
++
++	/* Enable IIC Device, remove Tx Fifo reset & disable general call. */
++	xiic_setreg8(i2c, XIIC_CR_REG_OFFSET, XIIC_CR_ENABLE_DEVICE_MASK);
++
++	/* set i2c clock as 100Hz. */
++	//xiic_setreg8(i2c, 0x13c, 0x7C);
++
++	/* make sure RX fifo is empty */
++	ret = xiic_clear_rx_fifo(i2c);
++	if (ret)
++		return ret;
++
++	i2c->msg = msgs;
++	i2c->pos = 0;
++	i2c->nmsgs = num;
++	i2c->state = STATE_START;
++
++	dev_dbg(&i2c->adap.dev, "STATE: %d\n", i2c->state);
++
++	if (msgs->len == 0 && num == 1) { /* suit for i2cdetect time sequence */
++		u8 status = xiic_getreg32(i2c, XIIC_IISR_OFFSET);
++
++		xiic_irq_clr(i2c, status);
++		/* send out the 1st byte data and stop bit */
++		xiic_setreg16(i2c, XIIC_DTR_REG_OFFSET,
++						i2c_8bit_addr_from_msg(msgs)
++						| XIIC_TX_DYN_START_MASK
++						| XIIC_TX_DYN_STOP_MASK);
++	} else
++		/* send out the 1st byte data */
++		xiic_setreg16(i2c, XIIC_DTR_REG_OFFSET,
++						i2c_8bit_addr_from_msg(msgs)
++						| XIIC_TX_DYN_START_MASK);
++
++	mutex_unlock(&i2c->lock);
++	ocores_process_polling(i2c);
++
++	return (i2c->state == STATE_DONE) ? num : -EIO;
++}
++
++/**
++ * interface for host computer calling on
++ * @adapter: ocores I2C adapter
++ * @msgs   : messages to send out
++ * @num	: numbers of messages to send out
++ * set iic working mode, call xiic_start_xfer to receive and send messages,
++ * wait for interrupt process waiting up queue and return process status.
++ *
++ * Return: 0 on bus idle, non 0 on bus busy
++ */
++
++static int xiic_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
++{
++	struct xiic_i2c *i2c = i2c_get_adapdata(adap);
++	int err = -EIO;
++	int retry = 0;
++	int max_retry = 0;
++
++	dev_dbg(adap->dev.parent, "%s entry SR: 0x%x\n", __func__,
++		xiic_getreg8(i2c, XIIC_SR_REG_OFFSET));
++
++	//polling mode
++	/* quick to respond i2cdetect command, so not retry here,
++	 *I2C_SMBUS_QUICK or I2C_SMBUS_BYTE
++	 */
++	if (((msgs->len == 1 && (msgs->flags & I2C_M_RD))
++				|| (msgs->len == 0
++				&& !(msgs->flags & I2C_M_RD)))
++				&& num == 1)
++		max_retry = 1;
++	else
++		/* retry 5 times if receive a NACK or other errors */
++		max_retry = 5;
++
++	while ((-EIO == err) && (retry < max_retry)) {
++		err = ocores_xfer_core(i2c, msgs, num);
++		retry++;
++	}
++
++	return err;
++}
++
++static u32 xiic_func(struct i2c_adapter *adap)
++{
++	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL | I2C_FUNC_SMBUS_BLOCK_DATA;
++}
++
++static const struct i2c_algorithm xiic_algorithm = {
++	.master_xfer = xiic_xfer,
++	.functionality = xiic_func,
++};
++
++static const struct i2c_adapter xiic_adapter = {
++	.owner = THIS_MODULE,
++	.name = DRIVER_NAME,
++	.class = I2C_CLASS_DEPRECATED,
++	.algo = &xiic_algorithm,
++};
++
++static int xiic_i2c_probe(struct platform_device *pdev)
++{
++	struct xiic_i2c *i2c;
++	struct resource *res;
++	int ret;
++	u32 sr;
++
++	dev_dbg(&pdev->dev, "probe xiic i2c\n");
++	i2c = devm_kzalloc(&pdev->dev, sizeof(*i2c), GFP_KERNEL);
++	if (!i2c)
++		return -ENOMEM;
++
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	i2c->base = devm_ioremap_resource(&pdev->dev, res);
++	dev_dbg(&pdev->dev, "bus id: %d, i2c->base: %p\n", pdev->id, i2c->base);
++
++	if (IS_ERR(i2c->base))
++		return PTR_ERR(i2c->base);
++
++	/* hook up driver to tree */
++	platform_set_drvdata(pdev, i2c);
++	i2c->adap = xiic_adapter;
++
++	/*
++	 *set pdev id and transfer it to interrupt base
++	 *using specific formula in isr function
++	 */
++	i2c->id = pdev->id;
++
++	/* pass some flags or parameters to xiic_xfer to deal with*/
++	i2c_set_adapdata(&i2c->adap, i2c);
++
++	i2c->adap.dev.parent = &pdev->dev;
++	i2c->adap.dev.of_node = pdev->dev.of_node;
++	i2c->adap.nr = i2c->id + 1; // reserve smbus as bus 0	
++	spin_lock_init(&i2c->process_lock);
++	mutex_init(&i2c->lock);
++	init_waitqueue_head(&i2c->wait);
++
++	i2c->dev = &pdev->dev;
++	pm_runtime_set_autosuspend_delay(i2c->dev, XIIC_PM_TIMEOUT);
++	pm_runtime_use_autosuspend(i2c->dev);
++	pm_runtime_set_active(i2c->dev);
++	pm_runtime_enable(i2c->dev);
++
++	ret = xiic_reinit(i2c);
++	if (ret < 0) {
++		dev_err(&pdev->dev, "Cannot xiic_reinit\n");
++		goto err_clk_dis;
++	}
++	/*
++	 * Detect endianness
++	 * Try to reset the TX FIFO. Then check the EMPTY flag. If it is not
++	 * set, assume that the endianness was wrong and swap.
++	 */
++	i2c->endianness = LITTLE;
++	xiic_setreg32(i2c, XIIC_CR_REG_OFFSET, XIIC_CR_TX_FIFO_RESET_MASK);
++	/* Reset is cleared in xiic_reinit */
++	sr = xiic_getreg32(i2c, XIIC_SR_REG_OFFSET);
++	if (!(sr & XIIC_SR_TX_FIFO_EMPTY_MASK))
++		i2c->endianness = BIG;
++
++	/* add i2c adapter to i2c tree */
++	ret = i2c_add_numbered_adapter(&i2c->adap);
++	if (ret) {
++		xiic_deinit(i2c);
++		goto err_clk_dis;
++	}
++
++	return 0;
++
++err_clk_dis:
++	pm_runtime_set_suspended(&pdev->dev);
++	pm_runtime_disable(&pdev->dev);
++	return ret;
++}
++
++static int xiic_i2c_remove(struct platform_device *pdev)
++{
++	struct xiic_i2c *i2c = platform_get_drvdata(pdev);
++	int ret;
++
++	/* remove adapter & data */
++	i2c_del_adapter(&i2c->adap);
++
++	ret = pm_runtime_get_sync(i2c->dev);
++	if (ret < 0)
++		return ret;
++
++	xiic_deinit(i2c);
++	pm_runtime_put_sync(i2c->dev);
++	pm_runtime_disable(&pdev->dev);
++	pm_runtime_set_suspended(&pdev->dev);
++	pm_runtime_dont_use_autosuspend(&pdev->dev);
++
++	return 0;
++}
++
++#if defined(CONFIG_OF)
++static const struct of_device_id xiic_of_match[] = {
++	{ .compatible = "xlnx,xps-iic-2.00.a", },
++	{},
++};
++MODULE_DEVICE_TABLE(of, xiic_of_match);
++#endif
++
++static struct platform_driver xiic_i2c_driver = {
++	.probe   = xiic_i2c_probe,
++	.remove  = xiic_i2c_remove,
++	.driver  = {
++		.name = DRIVER_NAME,
++		.of_match_table = of_match_ptr(xiic_of_match),
++	},
++};
++
++module_platform_driver(xiic_i2c_driver);
++
++MODULE_AUTHOR("info@mocean-labs.com; nicwu@celestica.com");
++MODULE_VERSION("0.0.2");
++MODULE_DESCRIPTION("Celestica I2C bus driver based on Xilinx I2C bus driver");
++MODULE_LICENSE("GPL v2");
+diff --git a/drivers/misc/fpga-sys.c b/drivers/misc/fpga-sys.c
+new file mode 100644
+index 0000000..f5e5c81
+--- /dev/null
++++ b/drivers/misc/fpga-sys.c
+@@ -0,0 +1,355 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * fpga-sys.c - driver to access FPGA registers.
++ *
++ * Pradchaya Phucharoen <pphuchar@celestica.com>
++ * Nicholas Wu <nicwu@celestica.com>
++ *
++ * Copyright (C) 2022-2024 Celestica Corp.
++ */
++
++#include <linux/errno.h>
++#include <linux/io.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/spinlock.h>
++#include <linux/hwmon.h>
++#include <linux/acpi.h>
++
++#define FPGA_VERSION			0x0000
++#define FPGA_SCRATCH			0x0004
++#define FPGA_SW_TEMP                    0x002C
++#define FPGA_REGISTER_SIZE		0x2000000
++
++
++/*
++ * fpga_priv - port fpga private data
++ * @dev: device for reference
++ * @base: virtual base address
++ * @num_ports: number of front panel ports
++ * @fp_devs: list of front panel port devices
++ */
++struct fpga_priv {
++	void __iomem *base;
++	struct mutex fpga_lock;
++	void __iomem *fpga_read_addr;
++};
++
++
++
++/**
++ * Show the value of the register set by 'set_fpga_reg_address'
++ * If the address is not set by 'set_fpga_reg_address' first,
++ * The version register is selected by default.
++ * @param  buf	 register value in hextring
++ * @return		 number of bytes read, or an error code
++ */
++static ssize_t get_fpga_reg_value(struct device *dev,
++				struct device_attribute *devattr,
++				char *buf)
++{
++	uint32_t data;
++	struct fpga_priv *fpga = dev_get_drvdata(dev);
++
++	data = ioread32(fpga->fpga_read_addr);
++
++	return sprintf(buf, "0x%8.8x\n", data);
++}
++/**
++ * Store the register address
++ * @param  buf	 address wanted to be read value of
++ * @return		 number of bytes stored, or an error code
++ */
++static ssize_t set_fpga_reg_address(struct device *dev,
++			struct device_attribute *devattr,
++			const char *buf, size_t count)
++{
++	int ret = 0;
++	unsigned long addr;
++	struct fpga_priv *fpga = dev_get_drvdata(dev);
++
++	ret = kstrtoul(buf, 0, &addr);
++	if (ret != 0)
++		return ret;
++	fpga->fpga_read_addr = fpga->base + addr;
++
++	return count;
++}
++/**
++ * Show value of fpga scratch register
++ * @param  buf	 register value in hexstring
++ * @return		 number of bytes read, or an error code
++ */
++static ssize_t get_fpga_scratch(struct device *dev,
++				struct device_attribute *devattr,
++				char *buf)
++{
++	struct fpga_priv *fpga = dev_get_drvdata(dev);
++
++	return sprintf(buf, "0x%8.8x\n",
++					ioread32(fpga->base + FPGA_SCRATCH) & 0xffffffff);
++}
++/**
++ * Store value of fpga scratch register
++ * @param  buf	 scratch register value passing from user space
++ * @return		 number of bytes stored, or an error code
++ */
++static ssize_t set_fpga_scratch(struct device *dev,
++				struct device_attribute *devattr,
++				const char *buf, size_t count)
++{
++	int ret = 0;
++	unsigned long data;
++	struct fpga_priv *fpga = dev_get_drvdata(dev);
++
++	ret = kstrtoul(buf, 0, &data);
++	if (ret != 0)
++		return ret;
++	iowrite32(data, fpga->base + FPGA_SCRATCH);
++
++	return count;
++}
++
++/**
++ * Show value of fpga version register
++ * @param  buf	 register value in hexstring
++ * @return		 number of bytes read, or an error code
++ */
++static ssize_t get_fpga_version(struct device *dev,
++					struct device_attribute *devattr,
++					char *buf)
++{
++	struct fpga_priv *fpga = dev_get_drvdata(dev);
++
++	return sprintf(buf, "0x%8.8x\n",
++					ioread32(fpga->base + FPGA_VERSION) & 0xffffffff);
++}
++
++/**
++ * Show switch temperature
++ * @param  buf   register value in hexstring
++ * @return       number of bytes read, or an error code
++ */
++static ssize_t get_temp_sw_internal(struct device *dev,
++					struct device_attribute *devattr,
++					char *buf)
++{
++	struct fpga_priv *fpga = dev_get_drvdata(dev);
++	uint32_t value = 0;
++
++	value = ioread32(fpga->base + FPGA_SW_TEMP) & 0x3ffff;
++
++	return sprintf(buf, "%d\n", value);
++}
++
++/**
++ * Store a value in a specific register address
++ * @param  buf	 the value and address in format '0xhhhh 0xhhhhhhhh'
++ * @return		 number of bytes sent by user space, or an error code
++ */
++static ssize_t set_fpga_reg_value(struct device *dev,
++					struct device_attribute *devattr,
++					const char *buf, size_t count)
++{
++	int ret = 0;
++	unsigned long addr;
++	unsigned long value;
++	unsigned long mode = 8;
++	char *tok;
++	char clone[20];
++	char *pclone = clone;
++	struct fpga_priv *fpga = dev_get_drvdata(dev);
++
++	strcpy(clone, buf);
++	mutex_lock(&fpga->fpga_lock);
++	tok = strsep((char **)&pclone, " ");
++	if (tok == NULL) {
++		mutex_unlock(&fpga->fpga_lock);
++		return -EINVAL;
++	}
++	ret = kstrtoul(tok, 0, &addr);
++	if (ret != 0) {
++		mutex_unlock(&fpga->fpga_lock);
++		return ret;
++	}
++	tok = strsep((char **)&pclone, " ");
++	if (tok == NULL) {
++		mutex_unlock(&fpga->fpga_lock);
++		return -EINVAL;
++	}
++	ret = kstrtoul(tok, 0, &value);
++	if (ret != 0) {
++		mutex_unlock(&fpga->fpga_lock);
++		return ret;
++	}
++	tok = strsep((char **)&pclone, " ");
++	if (tok == NULL)
++		mode = 32;
++	else {
++		ret = kstrtoul(tok, 10, &mode);
++		if (ret != 0) {
++			mutex_unlock(&fpga->fpga_lock);
++			return ret;
++		}
++	}
++	if (mode == 32)
++		iowrite32(value, fpga->base + addr);
++	else if (mode == 8)
++		iowrite8(value, fpga->base + addr);
++	else {
++		mutex_unlock(&fpga->fpga_lock);
++		return -EINVAL;
++	}
++	mutex_unlock(&fpga->fpga_lock);
++
++	return count;
++}
++
++/**
++ * Read all FPGA  register in binary mode.
++ * @param  buf   Raw transceivers port startus and control register values
++ * @return	   number of bytes read, or an error code
++ */
++static ssize_t dump_read(struct file *filp, struct kobject *kobj,
++					 struct bin_attribute *attr, char *buf,
++					 loff_t off, size_t count)
++{
++	unsigned long i = 0;
++	ssize_t status;
++	u8 read_reg;
++	struct device *dev = kobj_to_dev(kobj);
++	struct fpga_priv *fpga = dev_get_drvdata(dev);
++
++	if (off + count > FPGA_REGISTER_SIZE)
++		return -EINVAL;
++
++	mutex_lock(&fpga->fpga_lock);
++	while (i < count) {
++		read_reg = ioread8(fpga->base + off + i);
++		buf[i++] = read_reg;
++	}
++	status = count;
++	mutex_unlock(&fpga->fpga_lock);
++
++	return status;
++}
++
++
++/* FPGA attributes */
++static DEVICE_ATTR(getreg, 0600, get_fpga_reg_value, set_fpga_reg_address);
++static DEVICE_ATTR(setreg, 0200, NULL, set_fpga_reg_value);
++static DEVICE_ATTR(scratch, 0600, get_fpga_scratch, set_fpga_scratch);
++static DEVICE_ATTR(version, 0400, get_fpga_version, NULL);
++static DEVICE_ATTR(temp_sw_internal, 0400, get_temp_sw_internal, NULL);
++static BIN_ATTR_RO(dump, FPGA_REGISTER_SIZE);
++
++static struct bin_attribute *fpga_bin_attrs[] = {
++	&bin_attr_dump,
++	NULL,
++};
++
++static struct attribute *fpga_attrs[] = {
++	&dev_attr_getreg.attr,
++	&dev_attr_scratch.attr,
++	&dev_attr_version.attr,
++	&dev_attr_temp_sw_internal.attr,
++	&dev_attr_setreg.attr,
++	NULL,
++};
++
++static struct attribute_group fpga_attr_grp = {
++	.attrs = fpga_attrs,
++	.bin_attrs = fpga_bin_attrs,
++};
++
++
++static int cls_fpga_probe(struct platform_device *pdev)
++{
++
++	struct fpga_priv *fpga;
++	struct resource *res;
++	int ret;
++
++	fpga = devm_kzalloc(&pdev->dev, sizeof(struct fpga_priv), GFP_KERNEL);
++	if (!fpga) {
++		ret = -ENOMEM;
++		goto err_exit;
++	}
++	mutex_init(&fpga->fpga_lock);
++	dev_set_drvdata(&pdev->dev, fpga);
++
++	/* mmap resource */
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (res) {
++		/* use devm_ioremap_resource to map overall FPGA resource
++		 * will be conflict since it's been taken in ocores devm_ioremap
++		 */
++		fpga->base = ioremap_nocache(res->start, res->end - res->start);
++		if (IS_ERR(fpga->base)) {
++			ret = PTR_ERR(fpga->base);
++			goto mem_unmap;
++		}
++	}
++	dev_dbg(&pdev->dev, "FPGA version: 0x%x\n",
++						ioread32(fpga->base + FPGA_VERSION));
++
++	ret = sysfs_create_group(&pdev->dev.kobj, &fpga_attr_grp);
++	if (ret != 0) {
++		dev_err(&pdev->dev, "Cannot create FPGA system sysfs attributes\n");
++		goto err_remove_fpga;
++	}
++
++	return 0;
++
++err_remove_fpga:
++	sysfs_remove_group(&pdev->dev.kobj, &fpga_attr_grp);
++mem_unmap:
++	iounmap(fpga->base);
++err_exit:
++	return ret;
++
++}
++
++static int cls_fpga_remove(struct platform_device *pdev)
++{
++	struct fpga_priv *fpga = dev_get_drvdata(&pdev->dev);
++
++	sysfs_remove_group(&pdev->dev.kobj, &fpga_attr_grp);
++	iounmap(fpga->base);
++
++	return 0;
++}
++
++
++static struct platform_driver cls_fpga_driver = {
++	.probe = cls_fpga_probe,
++	.remove = cls_fpga_remove,
++	.driver = {
++		.name = "fpga-sys",
++	},
++};
++
++static int __init drv_init(void)
++{
++	int rc = 0;
++
++	rc = platform_driver_register(&cls_fpga_driver);
++
++	return rc;
++}
++
++static void __exit drv_exit(void)
++{
++	platform_driver_unregister(&cls_fpga_driver);
++}
++
++module_init(drv_init);
++module_exit(drv_exit);
++
++MODULE_AUTHOR("Nicholas Wu<nicwu@celestica.com>");
++MODULE_DESCRIPTION("Celestica fpga control driver");
++MODULE_VERSION("0.0.2");
++MODULE_LICENSE("GPL");
++MODULE_ALIAS("platform:cls-fpga");
++
+-- 
+2.7.4
+

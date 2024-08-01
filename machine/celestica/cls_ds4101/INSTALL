@@ -1,0 +1,180 @@
+=============================================
+Installing ONIE on KVM x86_64 Virtual Machine
+=============================================
+
+Cross-Compiling ONIE
+====================
+
+Change directories to ``build-config`` to compile ONIE.
+
+To compile ONIE first change directories to ``build-config`` and then
+type ``"make MACHINE=kvm_x86_64 all"``.  For example::
+
+  $ cd build-config
+  $ make -j4 MACHINE=kvm_x86_64 all recovery-iso
+
+When complete, the ONIE binaries are located in
+``build/images``::
+
+-rw-r--r-- 1 3963992 Jan 30 16:38 kvm_x86_64-r0.initrd
+-rw-r--r-- 1 3091328 Jan 30 10:58 kvm_x86_64-r0.vmlinuz
+-rw-r--r-- 1 7067253 Jan 30 16:38 onie-updater-x86_64-kvm_x86_64-r0
+-rw-r--r-- 1 17825792 Apr 25 09:56 onie-recovery-x86_64-kvm_x86_64-r0.iso
+
+kvm_x86_64-r0.vmlinuz -- This is the ONIE kernel image
+
+kvm_x86_64-r0.initrd  -- This is the ONIE initramfs (filesystem)
+
+onie-updater-x86_64-kvm_x86_64-r0 -- This is the ONIE self-update
+image.  This image is a self-extracting archive used for installing
+ONIE.
+
+onie-recovery-x86_64-kvm_x86_64-r0.iso -- This is a recovery ISO image
+that can be install as a CDROM image.
+
+Creating a New x86_64 Virtual Machine Using the ISO Image
+=========================================================
+
+The ISO image can be used with both legacy BIOS and UEFI firmware
+machines.
+
+In order to boot qemu with UEFI firmware you need to download the OVMF
+firmware from http://www.tianocore.org/ovmf/ .
+
+To create the VM:
+
+1. Create a 1 GB blank disk image to use as the "hard drive" for your VM.
+   Name the file onie-x86-demo.img, putting it somewhere in your home
+   directory::
+
+     $ qemu-img create -f qcow2 onie-x86-demo.img 1G
+
+2. edit mk-vm.sh and:
+
+   - set the "DISK" variable to point at the path you used in step 1.
+
+   - set the "CDROM" variable to point at the
+     onie-recovery-x86_64-kvm_x86_64-r0.iso ISO image.
+
+   - set the "mode" variable to "cdrom".  This will boot off the ISO
+     image.
+
+   [ For Booting with UEFI Firmware ]
+
+   - set the "OVMF" variable to point at the path of the OVMF.fd
+     firmware file.
+
+   - set the "firmware" variable to "uefi".
+
+3. run mk-vm.sh
+
+4. From the boot menu select the "embed" option to install ONIE to the
+   blank VM disk.
+
+5. After the install is complete kill the virtual machine and edit
+   mk-vm.sh, setting "mode" to "disk".  This will boot the VM from the
+   disk image.
+
+  This will create and launch a VM called "onie-x86-test".
+
+Creating a New x86_64 Virtual Machine Using iPXE
+================================================
+
+This example assumes you have configured a DHCP server and a HTTP
+server.  The DHCP server is nice to have, but not required.  The HTTP
+server is required.
+
+First copy the above build products to the root of your web server.
+Here we assume the root of the web server is /var/www::
+
+  $ cp kvm_x86_64-r0.vmlinuz kvm_x86_64-r0.initrd onie-updater-x86_64-kvm_x86_64-r0 /var/www
+
+Next copy the provided ipxe installer script to the same directory::
+
+  $ cp install.ipxe /var/www
+
+.. note:: You will need to edit install.ipxe and change the
+          onie-updater URL for your environment.  In the setting of
+          the ``onie_url`` variable replace the string "<image-base>" with
+          the IP address of your webserver.
+
+When running under QEMU the virtual machine initially boots into
+SeaBIOS, which has ipxe installed.  See http://www.ipxe.org/ for
+complete details about ipxe.
+
+1. Create a 256MB blank disk image to use as the "hard drive" for your VM.
+   Name the file onie-x86-demo.img, putting it somewhere in your home
+   directory::
+
+     $ dd if=/dev/zero of=$HOME/kvm/onie-x86-demo.img bs=1M count=256
+
+2. edit mk-vm.sh and:
+
+   - set the "DISK" variable to point at the path you used in step 1.
+
+   - set the "mode" variable to "disk".  This will try to boot off the
+     unitialized hard disk.
+
+3. run mk-vm.sh -- NOTE: After starting this script you need to be
+   *fast* (5 seconds) to complete steps 4 and 5.
+
+4. connect to the vnc output of the VM::
+
+   vncviewer :0  (you can change the VNC_PORT in mk-vm.sh)
+
+5.  On the vnc console you wil see the SeaBIOS splash screen, followed
+    by the ipxe splash screen.  Type <ctrl>-B now.
+
+6.  That should drop you to iPXE prompt
+
+7.  Configure the network interface.  This example assumes you have a
+    DHCP server configured.  If not, use the ipxe ``config`` command
+    to set up the network parameters.  At the ipxe prompt type::
+
+    iPXE> dhcp
+
+7.  Download and run the install.ipxe script.  The URL of the
+    install.ipxe depends on your environment.  Use the IP address of
+    your HTTP server::
+
+    iPXE> chain http://<web-server-IP-address>/install.ipxe
+
+The install.ipxe should now download and commence running.  The ipxe
+script will do the following:
+
+1.  Download kvm_x86_64-r0.vmlinuz
+
+2.  Download kvm_x86_64-r0.initrd
+
+3.  Boot into ONIE using the "ONIE update" mode, passing the URL of
+    the ONIE self-update image in the ``install_url`` kernel command
+    line arguemt.
+
+Once ONIE has booted it will:
+
+1.  Detect that it is running in "ONIE update" mode
+
+2.  Find the ``install_url`` command line argument
+
+3.  Proceed to perform the update using the
+    onie-updater-x86_64-kvm_x86_64-r0 image.  This update procedure
+    will install ONIE on the virtual hard drive.
+
+Once the ONIE update is complete the machine reboots.  This time you
+will see the GRUB menu and the machine will boot of the hard drive.
+The default GRUB entry boots the machine into "ONIE install" mode.
+
+Testing EEPROM Access
+=====================
+
+The virtual machine implementation includes a simulation of a system
+EEPROM device, using some unused space in the primary disk block
+device.  See the busybox configuration in busybox/conf/config.  This
+block device is hardcoded at compile and must match the
+CONFIG_SYS_EEPROM_DISK_DEVICE configuration parameter.
+
+Configure your hypervisor accordingly, or recompile ONIE to use a disk
+configuration that matches your hypervisor.
+
+Once that is straightened out use the demonstration EEPROM helper,
+/lib/onie/init-eeprom, to set some initial values in the EEPROM.
