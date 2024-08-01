@@ -1,0 +1,383 @@
+===============================
+Notes: Booting with Secure Boot
+===============================
+
+Secure Boot Scenario
+====================
+
+The goal is to have ONIE boot with Secure Boot enabled.
+
+The keys and build architecture described here model *one* possible
+use of the Secure Boot primitives.  Other use cases are possible, but
+the one presented here is typical of what is seen today.
+
+In this scenario we have three actors:
+
+- Trusted Hardware Supplier
+- Trusted OS Software Supplier
+- Trusted ONIE Software Supplier
+
+Each of these entities have private/public key pairs of different
+types that play a role in the "chain of trust" signature verification
+strategy of UEFI Secure Boot.
+
+UEFI Variables
+==============
+
+This scenario makes use of the following Secure Boot variables.
+
+- PK -- "platform key".  The `PK` is the master key of the entire
+  system, used to verify all the other keys and variables.  This
+  variable contains the public x509 certificate of the hardware
+  supplier.
+
+- KEK -- "key exchange key".  The `KEK` is a key, signed by the `PK`, that
+  is used to verify modifications to the "signature database" (see
+  next).  This is a way for the platform owner (PK) to extend trust to
+  a 3rd party, allowing that party to make updates to the "signature
+  database".
+
+- db -- "signature database".  When loading an UEFI binary, the
+  firmware checks that the binary is signed by at least one key from
+  the `db`.  The `db` can contain multiple keys.  Updates to the `db` must
+  be signed by either the `PK` or the `KEK`.
+
+- dbx -- "black listed signature database".  This database contains
+  revoked keys.  No binaries signed by these keys can be loaded.
+
+Keys, Keys and more Keys
+========================
+
+Secure Boot signature verification involves a lot of private/public
+key pairs as well as x509 certificates.  Each actor in this scenario
+has a few key sets, leading to lots of key pairs.
+
+Hardware Supplier
+-----------------
+
+The hardware supplier creates the hardware platform and is responsible
+for the UEFI firmware.  This actor *owns* the hardware platform
+design.  For example, consider an Intel NUC device.  Intel Inc. is the
+hardware supplier and is responsible for the UEFI firmware on the
+device.
+
+In this scenario the hardware supplier creates 3 key pairs:
+
+- PK
+- KEK
+- db    
+
+The platform key is obvious, but the others perhaps not.  Consider a
+hardware company that also produces software, perhaps their own OS or
+a diagnostic executable.  In either case, to load the application
+securely requires a key in the `db`.  Hence the need for a `db` key.
+
+Once you need a key in the `db`, you also need a key in the `KEK`.  The
+`KEK` key might be managed by a different organizational unit within the
+company to facilitate updates to the `db`.
+
+OS Software Supplier
+--------------------
+
+The OS software supplier is an organization that is *trusted* not only
+by the hardware supplier, but also by the computing community at
+large.  Typically this is a very large, well established corporation,
+such as Microsoft Inc.
+
+In this scenario the software supplier creates 2 key pairs:
+
+- KEK
+- db    
+
+Having a `KEK` key allows the software supplier to make trusted updates
+to the `db`.  Having a key in the `db` allows the software supplier to sign
+their OS.  Additionally, for a well trust organization, they can
+extend that trust to a vetted 3rd party by signing a 3rd party boot
+loader.
+
+This is the model today, where Microsoft signs the `shimx64.efi` binary
+of a ONIE software supplier.
+
+ONIE Software Supplier
+----------------------
+
+The ONIE software supplier is an organization that produces the ONIE
+software and is *trusted* by the OS software supplier or the hardware
+supplier.  Often times the hardware supplier is also the ONIE software
+supplier.
+
+The ONIE software supplier has a single key pair.  At build time, the
+public key is compiled into the `shimx64.efi` binary.  Also at build
+time, the private key is used to sign the `grubx64.efi` and Linux kernel
+binaries.
+
+At runtime, the public key (inside shim) is used to verify the
+signatures on `grubx64.efi` and the Linux kernel.
+
+Contents of UEFI Variables
+==========================
+
+Initializing the UEFI variables in a blank system is specific to the
+firmware.  This example use the OVMF (Tianocore) UEFI implementation.
+The interfaces for other UEFI firmware implementations will vary.
+
+** DO NOT FOLLOW THESE INSTRUCTIONS FOR A PRODUCTION SYSTEM **
+
+Updating the keys is easiest with secure boot disabled and with no
+`PK` enrolled.  Start by removing the `PK` by navigating the OVMF
+menus.
+
+In all of what follows we use a USB thumb drive to contain the various
+keys and any required .efi binaries.  The utilities from the
+efitools[1] package are quite helpful here.
+
+1 - https://git.kernel.org/pub/scm/linux/kernel/git/jejb/efitools.git
+
+db Initialization
+-----------------
+
+We want the `db` to contain *both* the hardware supplier `db` key and the
+software supplier `db` key.  This requires updating the `db` variable with
+a "signature list".
+
+The `cert-to-efi-sig-list` tool is used to convert PEM encoded x509
+certificates into signature lists.  Then the `sign-efi-sig-list` tool
+is used to sign the resulting list by the `PK`.  Both of these tools
+are available in the `efitools` package.
+
+Next load the `UpdateVar.efi` binary and the signed signature list on
+a USB thumb drive.  Then boot the system into the EFI shell and
+navigate to the thumb drive.  Finally perform the update::
+
+  FS1:\EFI\> UpdateVars.efi db db-all.auth
+
+When complete, the `db` contents looks like:
+
+- hardware supplier public DB certificate
+- software supplier public DB certificate
+  
+
+KEK Initialization
+------------------
+
+The `KEK` initialization proceeds much like the `db`, except use the
+`KEK` keys.  We want the `KEK` to contain *both* the hardware supplier
+`KEK` key and the software supplier `KEK` key.
+
+Load the USB thumb drive as before and run::
+
+  FS1:\EFI\> UpdateVars.efi KEK kek-all.auth
+
+When complete, the `KEK` contents looks like:
+
+- hardware supplier public KEK certificate
+- software supplier public KEK certificate
+  
+PK Initialization
+-----------------
+
+The DER encoded hardware supplier `PK` certificate is used to initialize
+the `PK`.  First put the `PK` certificate on a USB thumb drive.  Then
+navigate the OVMF secure boot menus to add the `PK`.
+
+Do not enable Secure Boot in the OVMF just yet.
+
+When complete, the `PK` contents looks like:
+
+- hardware supplier public PK certificate
+
+Now, with the `PK` enrolled, enable Secure Boot in the OVMF firmware
+menus.
+
+Building A Secure Boot ONIE .ISO
+================================
+
+Building ONIE with Secure Boot enabled, containing various signed
+binaries is a little more involved than usual.  The first order of
+business is to create a `shimx64.efi` binary that is signed by the
+software supplier.
+
+Building a Signed Shim
+----------------------
+
+First build the regular, unsigned shim.  This binary will contain the
+ONIE software vendor's public certificate in .DER format.  For the
+kvm_x86_64 machine this is specified in machine.make as follows::
+
+  ONIE_VENDOR_CERT_DER = $(MACHINEDIR)/x509/onie-vendor-SHIM-cert.der
+
+For a physical product the `ONIE_VENDOR_CERT_DER` variable can be set
+on the command line, instead of placing it in `machine.make`.
+
+To compile shim, run this command::
+
+  build:~/onie/build-config$ make -j8 MACHINE=kvm_x86_64 shim
+
+This puts the compiled (unsigned) shim binaries into
+`../build/kvm_x86_64-r0/shim/install`::
+
+  build:~/onie/build-config$ ls -l ../build/kvm_x86_64-r0/shim/install/
+  -rw-r--r-- 1 build Development   80296 Feb  5 10:33 fbx64.efi
+  -rw-r--r-- 1 build Development 1152760 Feb  5 10:33 mmx64.efi
+  -rw-r--r-- 1 build Development 1198040 Feb  5 10:33 shimx64.efi
+
+At this point we would send `shimx64.efi` off to be signed by a trusted
+software supplier.  In practice that takes on the order of weeks.
+However, for this example we can sign it ourselves by running this
+target::
+
+  build:~/onie/build-config$ make -j8 MACHINE=kvm_x86_64 shim-self-sign
+
+This creates a signed version of `shimx64.efi`::
+
+  build:~/onie/build-config$ ls -l ../build/kvm_x86_64-r0/shim/install/
+  -rw-r--r-- 1 build Development   80296 Feb  5 10:33 fbx64.efi
+  -rw-r--r-- 1 build Development 1152760 Feb  5 10:33 mmx64.efi
+  -rw-r--r-- 1 build Development 1198040 Feb  5 10:33 shimx64.efi
+  -rw-r--r-- 1 build Development 1199920 Feb  5 10:40 shimx64.efi.signed
+
+Now the signed `shimx64.efi` binary is *very* valuable.  It took a lot
+of effort and time to create it, especially in the real case where
+Microsoft had to sign it.  Save all of these binaries somewhere safe,
+outside of the ONIE build tree::
+
+  build:~/onie/build-config$ cp ../build/kvm_x86_64-r0/shim/install/* /mnt/safe-place
+  
+Note: The signed shim binary could be used on several different
+hardware platforms from the *same* hardware supplier.  There is no
+need to have shim signed for each platform.  The requirement is to
+have one signed shim per hardware supplier.
+
+Also, to make the build system and installer a little easier, rename
+the signed and unsigned shim binaries a little bit::
+
+  build:~/onie/build-config$ mv /mnt/safe-place/shimx64.efi /mnt/safe-place/shimx64.efi.unsigned
+  build:~/onie/build-config$ mv /mnt/safe-place/shimx64.efi.signed /mnt/safe-place/shimx64.efi
+  
+The signed binary is now `shimx64.efi`.
+
+Build an ONIE installer .ISO with  a Signed Shim
+------------------------------------------------
+
+Now we can build an ONIE installer .ISO that contains the signed shim.
+This proceeds as usual, with the addition one extra command line
+argument::
+
+  build:~/onie/build-config$ make -j8 MACHINE=kvm_x86_64 all SHIM_PREBUILT_DIR=/mnt/safe-place
+
+This builds ONIE, using the pre-built and signed `shimx64.efi`.  At the
+end we have our ONIE installer .ISO ready to go::
+    
+  build:~/onie-cbrune/build-config$ ls -l ../build/images/
+  -rw-r--r-- 1 build Development  7552472 Feb  2 13:09 kvm_x86_64-r0.initrd
+  -rw-r--r-- 1 build Development  3917760 Feb  5 10:55 kvm_x86_64-r0.vmlinuz
+  -rw-r--r-- 1 build Development  3915856 Feb  5 10:55 kvm_x86_64-r0.vmlinuz.unsigned
+  -rw-r--r-- 1 build Development 28704768 Feb  5 10:55 onie-recovery-x86_64-kvm_x86_64-r0.iso
+  -rw-r--r-- 1 build Development 12330871 Feb  5 10:55 onie-updater-x86_64-kvm_x86_64-r0
+
+Copy the .ISO to a USB thumb drive in the usual way (see the INSTALL
+file) and you should be off and running.
+
+What is Signed by What?
+=======================
+
+It gets a little confusing to know what is signed by what, and where
+the different keys live.  Remember *private* keys are used to sign
+binary objects, while *public* keys (certificates) are used to verify
+those signature.
+
+shimx64.efi
+-----------
+
+The first step of the signed boot process is the `shimx64.efi` binary.
+This binary is signed by the trusted software supplier's `db`
+*private* key.  After verifying the signature, the UEFI firmware hands
+off control to the `shimx64.efi` binary.
+
+In practice getting `shimx64.efi` signed is a semi-complicated process
+involving Microsoft and their image signing authority.  However, for
+testing purposes we use `sbsign` to sign the `shimx64.efi` binary with a
+testing key.
+
+Remember, the entire point of shim, is to contain a copy of the ONIE
+software supplier's *public* key.  This is specified by the Makefile
+variables `ONIE_VENDOR_CERT_DER` and `ONIE_VENDOR_CERT_PEM`.
+
+Side Note: different signing tools require the x509 certificate in
+either the "DER" (binary format) or "PEM" (ASCII armoured) formats.
+The content of the certificate is the same in either case, just the
+data format differs.
+
+grubx64.efi
+-----------
+
+The next step of the signed boot process is the `grubx64.efi` binary.
+This binary is signed by the ONIE software suppliers *private* key.
+
+This key is specified by the Makefile variable
+`ONIE_VENDOR_SECRET_KEY_PEM`.
+
+This key is very sensitive and should be protected.  In practice, this
+key should never be checked into the ONIE code repository.  Set
+`ONIE_VENDOR_SECRET_KEY_PEM` on the `make` command line at build time.
+
+The `shimx64.efi` binary will first attempt to verify the signature on
+`grubx64.efi` by using the UEFI `db` signature database.  If that fails,
+shim goes on to check the signature against the compiled in public
+certificate.  That is the method that works here.
+
+`grubx64.efi`, in turn, attempts to verify the signature on the Linux
+kernel.  GRUB uses an API exported by shim for the verification, using
+the exact same method that shim uses.
+
+Linux Kernel
+------------
+
+The Linux kernel is compiled with an UEFI stub, making it appear as an
+UEFI binary for the purposes of the signature verification.  Just like
+`grubx64.efi`, the Linux kernel is signed by the ONIE software
+supplier's *private* key.
+
+This allows `grubx64.efi` to verify the signature on the kernel, after
+which the kernel is loaded and executed.
+
+The Linux kernel is now booted and the system is running with secure
+boot enable.
+
+Debugging
+=========
+
+Turn off Secure Boot
+--------------------
+
+Enter the OVMF menus and disable secure boot.  That will allow you
+boot into ONIE and poke around.
+
+The EFI shell application can also be helpful for poking around.
+
+mokutil
+-------
+
+The `mokutil` command is quite useful to inspect the contents of the
+various UEFI variables.  Here are some useful commands for dumping the
+`PK`, `KEK` and `db`::
+
+  ONIE:/ # mokutil --pk
+  [ dumps the certificate ]
+   
+  ONIE:/ # mokutil --kek
+  [ dumps all the KEK certificates ]
+   
+  ONIE:/ # mokutil --db
+  [ dumps all the db certificates ]
+
+To check the state of the secure boot use the `--sb` option.  When all
+is working well you should see this::
+
+  ONIE:/ # mokutil --sb
+  SecureBoot enabled
+
+With secure boot disabled you will see this::
+
+  ONIE:/ # mokutil --sb
+  SecureBoot disabled

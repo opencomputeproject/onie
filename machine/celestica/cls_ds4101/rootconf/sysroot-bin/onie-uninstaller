@@ -1,0 +1,59 @@
+#!/bin/sh
+
+#  Copyright (C) 2014,2018 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+##
+## Uninstall the system.
+##
+## This assumes the shell is ash/dash.
+##
+
+this_script=$(basename $(realpath $0))
+lib_dir="$(dirname $(realpath $0))/../lib/onie"
+
+. $lib_dir/functions
+syslog_tag=onie-uninstaller
+
+import_cmdline
+
+if [ "$onie_boot_reason" != "uninstall" -a \
+    "$onie_boot_reason" != "rescue" ] ; then
+    log_failure_msg "$0: OS uninstall unavailable in current ONIE mode: $onie_boot_reason"
+    printf "$0: this operation is available in 'uninstall' and 'rescue' modes only.\n"
+    return 1
+fi
+
+log_pre=
+if [ "$onie_testing" = "y" ] ; then
+    log_pre="Testing: "
+fi
+
+uninstall_system()
+{
+    printf "${log_pre}ERROR:  No uninstall_system handler found.\n"
+    return 1
+}
+
+[ -r $lib_dir/uninstall-arch ]     && . $lib_dir/uninstall-arch
+[ -r $lib_dir/uninstall-platform ] && . $lib_dir/uninstall-platform
+
+uninstall_system || {
+    printf "${log_pre}ERROR: Problems uninstalling system..."
+    exit 1
+}
+
+# Clear the NOS mode
+onie-nos-mode -c
+
+printf "${log_pre}Uninstall complete.  Rebooting...\n"
+
+if [ "$onie_testing" != "y" ] ; then
+    reboot
+fi
+
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:
