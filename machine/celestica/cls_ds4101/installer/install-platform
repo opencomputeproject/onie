@@ -1,0 +1,35 @@
+# KVM x86_64 Virtual Machine custom installer file
+# These files will add to/override existing installer functions
+
+# Copyright (C) 2021 Alex Doyle <adoyle@nvidia.com>
+# Copyright (C) 2016 Curt Brune <curt@cumulusnetworks.com>
+
+test_install_sharing()
+{
+    # Default message
+    echo "ERROR: test_install_sharing include mechanism failed"
+    exit 1
+}
+
+
+set_default_passwd()
+{
+	# Use the platform specific passwd-secured file to
+	# set the ONIE password. Store this file in
+	# /mnt/onie-boot/config/etc/passwd and link to it
+    if [ ! -e $onie_config_dir/etc/passwd ]; then
+        mkdir -p $onie_config_dir/etc
+        cp /etc/passwd-secured $onie_config_dir/etc/passwd || {
+		echo "ERROR! $0 failed to find /etc/passwd-secured"
+		exit 1
+		}
+    fi
+    rm -f /etc/passwd
+    ln -s $onie_config_dir/etc/passwd /etc/passwd
+
+}
+
+# Test of the installer file sharing mechanism
+[ -r ./test-install-sharing ] && . ./test-install-sharing
+
+test_install_sharing

@@ -1,0 +1,48 @@
+# KVM x86_64 Virtual Machine
+#
+# Copyright (C) 2017 Curt Brune <curt@cumulusnetworks.com>
+#
+# Test of the runtime config generation mechanism
+
+# /etc/init.d/gen-config.sh sources this file and executes
+# gen_live_config() to generate runtime ONIE variables.
+
+# Two variables of interest to set here:
+#
+# onie_machine     -- runtime ONIE platform string
+# onie_switch_asic -- runtime switch ASIC vendor
+
+# Use kernel command line parameters to test the dynamic generation.
+# The default is to not generate anything dynamically.
+
+gen_live_config()
+{
+    # Parse kernel command line options
+    for x in $(cat /proc/cmdline); do
+        parm=${x%%=*}
+        val=${x#*=}
+        case $parm in
+            live_machine)
+                local live_machine="$val"
+                ;;
+            live_asic)
+                local live_asic="$val"
+                ;;
+        esac
+    done
+
+    if [ -n "$live_machine" ] ; then
+        cat<<EOF
+# Runtime ONIE Machine
+onie_machine="$live_machine"
+EOF
+    fi
+
+    if [ -n "$live_asic" ] ; then
+        cat<<EOF
+# Runtime ONIE ASIC
+onie_switch_asic="$live_asic"
+EOF
+    fi
+
+}

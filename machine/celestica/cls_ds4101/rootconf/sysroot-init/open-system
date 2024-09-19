@@ -1,0 +1,47 @@
+#!/bin/sh
+
+#  Copyright (C) 2021 Alex Doyle <adoyle@nvida.com>
+#  Copyright (C) 2021 Michael Shych <michaelsh@nvidia.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+#  Disable ONIE password if Secure Boot is not active in the BIOS
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+
+# Assume Secure boot is off
+secure_boot=0
+
+
+# Startup script to enable/disable passwords only if:
+#  this system has a UEFI BIOS
+#  this ONIE was built with SECURE_BOOT_EXT active, and has an onie-console file
+#    that uses /bin/login, rather than /bin/sh
+if [ -d "/sys/firmware/efi/efivars/" ] && [  -e "/bin/onie-console-secure" ]; then
+    # Read the state of the Secure Boot EFI varaible
+    if [ -e /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c ]; then
+        secure_boot="$(efivar -d -n 8be4df61-93ca-11d2-aa0d-00e098032b8c-SecureBoot)"
+    fi
+
+    # Is secure boot active ?
+    if [ "$secure_boot" -eq 1 ]; then
+        # Is the ONIE password file available?
+        if [ -e "/mnt/onie-boot/onie/config/etc/passwd" ];then
+            # Use the ONIE password file
+            rm -f /etc/passwd
+            ln -s /mnt/onie-boot/onie/config/etc/passwd /etc/passwd
+            # swtich the login program
+            rm -f /bin/onie-console
+            ln -s /bin/onie-console-secure /bin/onie-console
+        fi
+        # If password does not exist, this is a rescue iso. Leave the password file unchanged.
+    else
+        # Switch passwd file and onie-console login to not ask for a password.
+        rm -f /bin/onie-console
+        ln -s /bin/onie-console-open /bin/onie-console
+        rm -f /etc/passwd
+        ln -s /etc/passwd-open /etc/passwd
+    fi
+fi
+
+exit 0
