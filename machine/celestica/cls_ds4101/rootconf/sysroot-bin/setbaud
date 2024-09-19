@@ -1,0 +1,57 @@
+#!/bin/sh
+usage()
+{
+    echo "usage: $0 [-hb]"
+    cat <<EOF
+Set ONIE serial baud.
+
+COMMAND LINE OPTIONS
+
+        -b
+                Set the ONIE serial baud.
+                Example:
+                setbaud -b 115200 # set ONIE seril baud to 115200
+
+        -h
+                Help.  Print this message. This is the default.
+
+EOF
+}
+
+grub_varible_file=/mnt/onie-boot/onie/grub/grub-variables
+function set_baud()
+{
+    local baud=$1
+    local grub_varible_file=$2
+    sed -i "/^# override by baud.*/d" $grub_varible_file 
+    sed -i "/^GRUB_SERIAL_COMMAND=\".*/d"  $grub_varible_file 
+    sed -i "/^GRUB_CMDLINE_LINUX=\".*/d" $grub_varible_file 
+    sed -i "/export GRUB_SERIAL_COMMAND/i\# override by baud \$baud" $grub_varible_file
+    sed -i "/export GRUB_SERIAL_COMMAND/i\GRUB_SERIAL_COMMAND=\"serial --port=0x3f8 --speed=$baud --word=8 --parity=no --stop=1\"" $grub_varible_file
+    sed -i "/export GRUB_SERIAL_COMMAND/i\GRUB_CMDLINE_LINUX=\"console=tty0 console=ttyS0,${baud}n8\"" $grub_varible_file
+    echo "Reboot to make baud $baud effect"
+
+}
+
+args="b:h"
+while getopts "$args" a ; do
+    case $a in
+        h)
+            usage
+            exit 0
+            ;;
+        b)
+            baud="$OPTARG"
+            ;;
+        *)
+            echo "Unknown argument: $a"
+            usage
+            exit 1
+    esac
+done
+[ $# -ne 0 ] || {
+    usage
+    exit 1
+}
+set_baud $baud $grub_varible_file
+/mnt/onie-boot/onie/grub.d/50_onie_grub >> /dev/null
