@@ -18,7 +18,7 @@ endif
 # string.  HW vendors can use this to appended their own versioning
 # information to the base ONIE version string.
 # ONIE Version = onie-release version + VENDOR_VERSION
-VENDOR_VERSION = v01
+VENDOR_VERSION = v05
 
 # Enable UEFI support
 UEFI_ENABLE = yes
@@ -38,6 +38,9 @@ IPMITOOL_ENABLE = yes
 # Enable ioget/ioset tools
 IOACCESS_ENABLE = yes
 
+# Enable OpenSSL
+OPENSSL_ENABLE = yes
+
 #
 # Console parameters can be defined here (default values are in
 # build-config/arch/x86_64.make).
@@ -46,11 +49,11 @@ CONSOLE_SPEED = 115200
 CONSOLE_DEV = 0
 
 # Set Linux kernel version
-LINUX_VERSION       = 4.9
-LINUX_MINOR_VERSION = 95
+LINUX_VERSION       = 5.4
+LINUX_MINOR_VERSION = 86
 
 # Older GCC required for older 3.2 kernel
-GCC_VERSION = 4.9.2
+GCC_VERSION = 8.3.0
 
 #-------------------------------------------------------------------------------
 #
