@@ -1,0 +1,527 @@
+##
+## Useful functions and variables for boot time.
+
+#  Copyright (C) 2014-2015 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+##
+## This assumes the shell is ash/dash.
+##
+
+[ -r /etc/machine.conf ] && . /etc/machine.conf
+
+export onie_installer="/var/tmp/installer"
+
+ONIE_RUN_DIR="/var/run/onie"
+
+tee_log_file=/dev/console
+if [ "$onie_boot_reason" = "update" -o "$onie_boot_reason" = "embed" ] ; then
+    filename_prefix="onie-updater"
+    onie_operation="onie-update"
+else
+    filename_prefix="onie-installer"
+    onie_operation="os-install"
+fi
+
+# Primary default filename is most specific
+onie_default_filename="${filename_prefix}-${onie_platform}"
+# Default file name list in decreasing order of precision
+onie_default_filenames="\
+$onie_default_filename
+${filename_prefix}-${onie_arch}-${onie_machine}
+${filename_prefix}-${onie_machine}
+${filename_prefix}-${onie_arch}-${onie_switch_asic}
+${filename_prefix}-${onie_arch}
+${filename_prefix}
+"
+
+# Possible image suffixes.  A space separated list of suffixes to
+# append to the default file names during image discovery.
+onie_image_suffixes=".bin"
+
+# get_default_filenames() - function returning a space separated list
+# of default image file names, with the most specific file name first.
+get_default_filenames() {
+    local f
+    local s
+    local paths
+    for f in $onie_default_filenames ; do
+        paths="$paths $f"
+        for s in $onie_image_suffixes ; do
+            paths="$paths ${f}$s"
+        done
+    done
+    echo -n "$paths"
+}
+
+# Define USB directory for mountpoint
+ONIE_USB_DIR="/mnt/usb"
+
+# Default ONIE server name
+onie_server_name="onie-server"
+
+syslog_onie="local0"
+syslog_tag="onie"
+
+_log_msg()
+{
+	printf "$@" | tee $tee_log_file | logger -t $syslog_tag -p ${syslog_onie}.info
+}
+
+_log_console_msg()
+{
+	printf "$@" | tee /dev/console | logger -t $syslog_tag -p ${syslog_onie}.info
+}
+
+_log_info_msg()
+{
+	printf "$@" | tee $tee_log_file | logger -t $syslog_tag -p ${syslog_onie}.info
+}
+
+_log_warn_msg()
+{
+	printf "$@" | tee $tee_log_file | logger -t ${syslog_tag}-warn -p ${syslog_onie}.warn
+}
+
+_log_err_msg()
+{
+	printf "$@" | tee $tee_log_file | logger -t ${syslog_tag}-error -p ${syslog_onie}.err
+}
+
+log_debug_msg()
+{
+	if [ "$onie_verbose" = "y" ]; then 
+	    printf "$@" | tee $tee_log_file | logger -t ${syslog_tag}-debug -p ${syslog_onie}.debug
+        fi
+}
+
+log_success_msg()
+{
+	_log_info_msg "Success: $@\n"
+}
+
+log_console_msg()
+{
+	_log_console_msg "ONIE: $@\n"
+}
+
+log_info_msg()
+{
+	_log_info_msg "Info: $@\n"
+}
+
+log_failure_msg()
+{
+	_log_err_msg "Failure: $@\n"
+}
+
+log_warning_msg()
+{
+	_log_warn_msg "Warning: $@\n"
+}
+
+log_begin_msg()
+{
+	_log_info_msg "$@..."
+}
+
+log_end_msg()
+{
+	_log_info_msg " done.\n"
+}
+
+## Import kernel's /proc/cmdline variables
+import_cmdline()
+{
+
+    ONIE_REQUIRED_ARGS=$(cat <<EOF
+serial_num
+eth_addr
+sec_key
+EOF
+    )
+
+    ONIE_OPTIONAL_ARGS=$(cat <<EOF
+verbose
+boot_reason
+testing
+ip
+install_url
+bootfile
+dhcp
+EOF
+    )
+
+    # Parse kernel command line options
+    for x in $(cat /proc/cmdline); do
+        parm=${x%%=*}
+        val=${x#*=}
+        case $parm in
+            # onie required args
+	    serial_num)
+		true ${onie_serial_num="$val"}
+		;;
+	    eth_addr|eth_addr0)
+		true ${onie_eth_addr="$val"}
+		;;
+	    fw_env)
+		true ${onie_fw_env="$val"}
+		;;
+	    sec_key)
+		true ${onie_sec_key="$val"}
+		;;
+
+            # onie optional args
+            ip)
+		true ${onie_ip="$val"}
+                ;;
+            serverip)
+		true ${onie_serverip="$val"}
+                ;;
+            bootfile)
+		true ${onie_bootfile="$val"}
+                ;;
+            dhcp)
+		true ${onie_dhcp="$val"}
+                ;;
+	    init)
+		true ${onie_init="$val"}
+		;;
+	    verbose)
+		true ${onie_verbose=y}
+		;;
+            boot_reason)
+		true ${onie_boot_reason="$val"}
+                ;;
+            install_url)
+		true ${onie_install_url="$val"}
+                ;;
+	    testing)
+		true ${onie_testing=y}
+		;;
+	esac
+    done
+
+    # default to install mode if none specified
+    true ${onie_boot_reason="install"}
+
+    for p in $ONIE_REQUIRED_ARGS $ONIE_OPTIONAL_ARGS ; do
+        eval export onie_$p
+    done
+
+}
+
+##
+## Run command and log failures
+##
+cmd_run()
+{
+    if [ "$onie_verbose" = "y" ] ; then
+        echo "Running command: $@" > /dev/stderr
+    fi
+    eval "$@" || {
+        log_failure_msg "$@ failed."
+        return 1
+    }
+}
+
+mounttmpfs()
+{
+    dir=$1
+    opts=$2
+
+    cmd_run mount -o "$opts" -t tmpfs tmpfs $dir || {
+            log_failure_msg "Could not mount tmpfs on $dir"
+            /sbin/boot-failure 1
+    }
+    cmd_run touch $dir/.ramfs
+}
+
+# IANA Enterprise Number used for ONIE vendor specific DHCP options.
+# Open Compute Project
+onie_iana_enterprise=42623
+
+# Decode onie specific DHCP vendor options (RFC 2132, option 125)
+# The input is an ASCII encoded binary string
+#
+# The onie vendor option format is specified in isc-dhcp config speak
+# as:
+#
+#  option space onie code width 1 length width 1;
+#  option onie.installer_url code 1 = text;
+#  option onie.updater_url code 2 = text;
+#
+# Skip IANA numbers that are not ours
+#
+import_vendoropts()
+{
+    local opts="$1"
+
+    # consume opts string as TLV:
+    #   type - 1 byte
+    #   len  - 1 byte, num bytes in val
+
+    local cnt=0
+    while [ ${#opts} -gt 0 ] ; do
+        local type=$(printf %d 0x$(echo $opts | head -c 2))
+        local len=$(printf %d 0x$(echo $opts | head -c 4 | tail -c 2))
+        local tot_len=$(( ( $len * 2 ) + 4 ))
+        local val=$(echo -n $opts | head -c $tot_len | tail -c $(( $len * 2 )))
+        # echo "Looking at type: $type, len: $len, val: $val"
+        local tmpstr=
+        case "$type" in
+            1|2)
+                # String data types
+                # 1 - ONIE INSTALLER URL
+                # 2 - ONIE UPDATER URL
+                while [ ${#val} -gt 0 ] ; do
+                    byte=$(echo -n $val | head -c 2)
+                    char=$(printf %b \\x"$byte")
+                    tmpstr="${tmpstr}${char}"
+                    val=$(echo -n $val | tail -c $(( ${#val} - 2 )))
+                done
+                ;;
+            *)
+                log_warning_msg "Unknown onie vendor option type: $type"
+        esac
+        if [ "$type" = "2" ] && [ "$onie_boot_reason" = "update" -o "$onie_boot_reason" = "embed" ] ; then
+            export onie_disco_onie_url="$tmpstr"
+        elif [ "$type" = "1" ] ; then
+            export onie_disco_onie_url="$tmpstr"
+        fi
+        opts=$(echo -n $opts | tail -c $(( ${#opts} - $tot_len )))
+        cnt=$(( $cnt + 1 ))
+        [ $cnt -gt 100 ] && {
+            log_failure_msg "Malformed ONIE VIVSO option, looping detected."
+            break
+        }
+    done
+
+}
+
+import_vivso()
+{
+    local opts="$1"
+    # consume opts per RFC 3925, option 125.  The first two bytes,
+    # code=125 and length are already removed.
+    
+    local cnt=0
+    while [ ${#opts} -gt 0 ] ; do
+        local enterprise_num=$(printf %d 0x$(echo $opts | head -c 8))
+        local len=$(printf %d 0x$(echo $opts | head -c 10 | tail -c 2))
+        local tot_len=$(( ( $len * 2 ) + 10 ))
+        local val=$(echo -n $opts | head -c $tot_len | tail -c $(( $len * 2 )))
+        #echo "Looking at enterprise_num: $enterprise_num, len: $len, val: $val"
+        if [ "$enterprise_num" = "$onie_iana_enterprise" ] ; then
+            import_vendoropts "$val"
+        fi
+        opts=$(echo -n $opts | tail -c $(( ${#opts} - $tot_len )))
+        cnt=$(( $cnt + 1 ))
+        [ $cnt -gt 100 ] && {
+            log_failure_msg "Malformed DHCP option 125, looping detected."
+            break
+        }
+    done
+}
+
+# Import encoded name/val pairs into environment
+# The pairs are encoded into a single string as follow:
+#   name1@@val1##name2@@val2##..nameX@@valX##
+#
+import_parms()
+{
+    parms="$1"
+    while [ ${#parms} -gt 0 ] ; do
+        nv=${parms%%##*}
+        name="${nv%@@*}"
+        val=${nv#*@@}
+        parms=${parms#*##}
+        eval "export $name"=\""$val"\"
+    done
+
+    [ -n "$onie_disco_vivso" ] && import_vivso "$onie_disco_vivso"
+}
+
+# remove parm
+remove_parm()
+{
+    parms="$1"
+    name="$2"
+    echo "$parms" | sed -e "s/${name}@@[^#]*##//g"
+}
+
+# add parm
+add_parm()
+{
+    parms="$1"
+    name="$2"
+    val="$3"
+
+    # first remove name from parms
+    parms=$(remove_parm "$parms" "$name")
+    parms="${parms}${name}@@${val}##"
+    echo "$parms"
+}
+
+# network interface list
+net_intf()
+{
+    # Find eth interface to use for DHCP
+    intf=
+    if [ -n "$onie_dhcp" ] ; then
+        intf="$onie_dhcp"
+    elif [ -n "$onie_ip" ] ; then
+        # Try ip=:::::${netdev}:dhcp
+        intf=$(echo $onie_ip | awk -F: '{print $6}')
+    fi
+    if [ -z "$intf" ] ; then
+        if [ "$1" = "all" ]; then
+            #Ufi: Do not set MAC for these interfaces
+            intf_no_func="usb|eth1|eth2|eth3|eth4"
+        else
+            #Ufi: Do not try DHCP for these interfaces
+            intf_no_func="usb|eth1|eth2|eth3|eth4"
+        fi
+        intf_list=$(ifconfig -a | grep Ethernet| sed -e '/dummy/d'| awk '{print $1}'| grep -v -E $intf_no_func)
+    else
+        intf_list="$intf"
+    fi
+    echo $intf_list
+}
+
+str2hex()
+{
+    echo -n "$1" | hexdump -ve '1/1 "%.2x"'
+}
+
+# turn string into hex with prefixed length (as hex byte)
+str2lenhex()
+{
+    local str="$1"
+    printf "%02X%s" ${#str} $(str2hex $str)
+}
+
+make_str_opt()
+{
+    local code="$1"
+    local str="$2"
+    printf %02X%02X%s $code ${#str} $(str2hex $str)
+}
+
+# generic udhcpc args
+udhcpc_args()
+{
+    local udhcp_args="-q -S -V onie_vendor:${onie_platform}"
+    # user_class - option 77 - string in hex
+    local udhcp_user_class="-x 77:$(str2lenhex onie_dhcp_user_class)"
+	
+    # client id - option 61 - serial number in hex
+    local udhcp_client_id="-x 61:00$(str2hex $(onie-sysinfo -s))"
+
+    # vendor specific options - option 125 - string in hex
+    # code 3 - machine
+    # code 4 - CPU architecture
+    # code 5 - machine revision
+    local udhcp_vivso_machine="$(make_str_opt 3 $onie_machine)"
+    local udhcp_vivso_arch="$(make_str_opt 4 $onie_arch)"
+    local udhcp_vivso_machine_rev="$(make_str_opt 5 $onie_machine_rev)"
+    local payload="${udhcp_vivso_machine}${udhcp_vivso_arch}${udhcp_vivso_machine_rev}"
+    local len=$(( ${#payload} / 2 ))
+    local udhcp_vivso="-x 125:$(printf %08X%02X%s $onie_iana_enterprise $len $payload)"
+    echo "$udhcp_args" "$udhcp_user_class" "$udhcp_client_id" "$udhcp_vivso"
+}
+
+# Increment a MAC address by the specified integer
+# $1 -- base MAC address in AA:BB:CC:DD:EE:FF format
+# $2 -- amount to increment
+mac_add()
+{
+    base="$1"
+    inc="$2"
+
+    # Convert MAC string to integer and increment
+    a=$(( 0x$(echo $base | sed -e 's/://g') + $inc ))
+
+    # Sanitize the resulting  MAC address
+
+    # check if MAC is >= FF:FF:FF:FF:FF:FF
+    if [ $a -ge $(( 0xFFFFFFFFFFFF )) ] ; then
+        log_console_msg "ERROR: MAC address too large: Base MAC: $base, inc: $inc"
+        echo "bad_mac"
+        return 1
+    fi
+
+    # check if multicast MAC
+    if [ $(( $a & 0x010000000000 )) -ne 0 ] ; then
+        log_console_msg "ERROR: Multicast MAC address: Base MAC: $base, inc: $inc"
+        echo "bad_mac"
+        return 1
+    fi
+
+    # check if MAC == 0
+    if [ $a -eq 0 ] ; then
+        log_console_msg "ERROR: MAC address is zero: Base MAC: $base, inc: $inc"
+        echo "bad_mac"
+        return 1
+    fi
+
+    # Convert integer to HEX string
+    a=$(printf "%012x" $a)
+    b=
+    for x in $(seq 5 -1 0) ; do
+        b="$(echo $a|cut -b $(( ($x * 2) + 1 ))-$(( ($x * 2) + 2 )))":"$b"
+    done
+    echo $b | cut -b 1-17
+    return 0
+}
+
+# Magic cookie required to be present in the header of all ONIE update
+# images.
+onie_updater_cookie="ONIE-UPDATER-COOKIE"
+
+# ONIE image types
+onie_image_type_update="update"
+onie_image_type_nos="nos"
+
+# Return the type of installer image, either a firmware update or NOS
+# installer.
+get_image_type()
+{
+    # ONIE updater images *must* contain the string
+    # "ONIE-UPDATER-COOKIE" within the first 100 lines of the image.
+    if head -n 100 $1 | grep -q "$onie_updater_cookie" ; then
+        echo -n $onie_image_type_update
+    else
+        echo -n $onie_image_type_nos
+    fi
+}
+
+# Prompt the user for a yes/no confirmation question
+prompt_yes_no()
+{
+    msg_str="$1"
+    echo -n "$msg_str (y/N)? "
+    read ans
+    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+	return 0
+    fi
+    return 1
+}
+
+# Determines if the second parameter string begins with the first parameter
+beginswith()
+{
+    case "$2" in
+        "$1"*)
+            true
+            ;;
+        *)
+            false
+            ;;
+    esac
+}
+# Local Variables:
+# mode: shell-script
+# eval: (sh-set-shell "/bin/sh" t nil)
+# End:

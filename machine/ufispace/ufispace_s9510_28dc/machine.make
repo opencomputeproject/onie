@@ -18,7 +18,7 @@ endif
 # string.  HW vendors can use this to appended their own versioning
 # information to the base ONIE version string.
 # ONIE Version = onie-release version + VENDOR_VERSION
-VENDOR_VERSION = v01
+VENDOR_VERSION = v05
 
 # Enable UEFI support
 UEFI_ENABLE = yes
@@ -39,6 +39,8 @@ IPMITOOL_ENABLE = yes
 IOACCESS_ENABLE = yes
 
 EXTRA_CMDLINE_LINUX = earlycon=uart8250,io,0x3f8 acpi_osi="Linux"
+# Enable OpenSSL
+OPENSSL_ENABLE = yes
 
 #
 # Console parameters can be defined here (default values are in

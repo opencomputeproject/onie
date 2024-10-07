@@ -1,0 +1,91 @@
+#!/bin/sh
+# Busybox udhcpc4 reactor script.
+
+#  Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+#
+# Based on the busybox example scripts
+# Copyright (C) 2009 by Axel Beckert.
+#
+
+RESOLV_CONF="/etc/resolv.conf"
+PROG="DHCP"
+
+. /lib/onie/functions
+LOGSRV_CONF="${ONIE_RUN_DIR}/dhcp.logsrv"
+NTPSRV_CONF="${ONIE_RUN_DIR}/dhcp.ntpsrv"
+
+case $1 in
+    bound|renew)
+        [ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+        [ -n "$subnet" ] && NETMASK="netmask $subnet"
+        
+        /sbin/ifconfig $interface $ip $BROADCAST $NETMASK
+        
+        if [ -n "$router" ]; then
+            
+            while /sbin/route del default gw 0.0.0.0 dev $interface >& /dev/null ; do :; done
+            
+            metric=0
+            for i in $router; do
+                /sbin/route add default gw $i dev $interface metric $metric
+                metric=$(($metric + 1))
+            done
+        fi
+        
+        # Update resolver configuration file
+        rm -f "$RESOLV_CONF"
+        touch "$RESOLV_CONF"
+        if [ -n "$domain" ]; then
+            echo "domain $domain" >> "$RESOLV_CONF"
+        fi
+        if [ -n "$search" ]; then
+            echo "search $search" >> "$RESOLV_CONF"
+        fi
+
+        for i in $dns; do
+            echo "nameserver $i" >> "$RESOLV_CONF"
+        done
+
+        if [ -n "$hostname" ]; then
+            echo "$hostname" > /etc/hostname
+            $(hostname "$hostname")
+        fi
+
+        rm -f $LOGSRV_CONF
+        touch $LOGSRV_CONF
+        if [ -n "$logsrv" ]; then
+            echo "$logsrv" > $LOGSRV_CONF
+        fi
+
+        #Ufi: Add NTP config
+        if [ -n "$ntpsrv" ]; then
+            echo "$ntpsrv" > $NTPSRV_CONF
+            if [ -x /usr/sbin/ntpd ];then
+                echo "==" >> /tmp/ntp_log
+                echo "Synchrozing time with: $ntpsrv" >> /tmp/ntp_log
+                timeout -t 30 ntpd -p $ntpsrv -qNn -ddd >> /tmp/ntp_log 2>&1
+                [ $? = 0 ] && echo "Done." >> /tmp/ntp_log || echo "FAIL." >> /tmp/ntp_log
+            fi
+        fi
+        ;;
+
+    deconfig)
+        /sbin/ifconfig $interface 0.0.0.0
+        ;;
+
+    leasefail)
+        echo "$PROG: Lease failed: $message"
+        ;;
+
+    nak)
+        echo "$PROG: Received a NAK: $message"
+        ;;
+
+    *)
+        echo "$PROG: Unknown udhcpc command: $1";
+        exit 1;
+        ;;
+esac

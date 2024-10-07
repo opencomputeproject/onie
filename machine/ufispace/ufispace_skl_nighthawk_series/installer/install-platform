@@ -1,0 +1,79 @@
+########################### WARNING ##############################
+#           Please do NOT build it with onie image.              #
+##################################################################
+. /lib/onie/functions
+. /lib/onie/onie-blkdev-common
+. /lib/onie/exec-installer-arch
+
+# If $image_version contains "UFV", it means it's a ufi-fw-version tool. Otherwise it should be a MU.
+tmp=`echo $image_version | grep UFV`
+[ -n "$tmp" ] && IS_UFV=y || IS_UFV=n
+
+if [ "$IS_UFV" = "n" ];then
+    fw_image=`/mnt/onie-boot/onie/tools/bin/onie-fwpkg | grep $image_version | head -n 1 | awk '{print $1}'`
+    #Ex. onie-firmware-x86_64-ufispace_s97XX_YY-rZ_v0.1.0.bin
+    fw_url="/mnt/onie-boot/onie/update/pending/$fw_image"
+fi
+
+# Replace below code in install.sh to reboot the system if Machine mismatch
+
+check_machine_image()
+{
+    if [ "$onie_machine" != "ufispace_s9600_32x" ] && [ "$onie_machine" != "ufispace_s9600_64x" ] && [ "$onie_build_machine" != "ufispace_skl_nighthawk_series" ]; then
+        fail=yes
+        log_fw_update "INFO: onie_machine: $onie_machine is not supported by image_build_machine: $image_build_machine"
+    fi
+    if [ "$onie_machine_rev" != "$image_machine_rev" ] ; then
+        log_fw_update "INFO: onie_machine_rev: r$onie_machine_rev does not match image_machine_rev: r$image_machine_rev"
+    fi
+    if [ "$onie_arch" != "$image_arch" ] ; then
+        fail=yes
+    fi
+}
+
+fail=
+check_machine_image
+
+if [ "$fail" = "yes" ] && [ "$force" = "no" ] ; then
+    log_fw_update "ERROR:$update_label: Machine mismatch"
+    log_fw_update "Running platform     : ${onie_arch}-${onie_machine}-r${onie_machine_rev}"
+    log_fw_update "Update Image machine: ${image_arch}-${image_build_machine}-r${image_machine_rev}"
+    log_fw_update "Source URL: $onie_exec_url"
+
+    if [ "$IS_UFV" = "n" ];then
+        echo "fw_url=$fw_url"
+        echo "onie_installer=$onie_installer"
+
+        finish_update_install 1 "$fw_url" "$onie_installer"
+        log_fw_update "NOTICE: Rebooting the system in 3 seconds."
+        onie-boot-mode -o install 
+        sync
+
+        sleep 3
+        reboot
+        sleep 30
+        ### Should not go down here ###
+        log_fw_update "ERROR: Failed to reboot the system."
+        onie-discovery-stop
+    else
+        exit 1
+    fi
+fi
+
+[ "$quiet" = "no" ] && echo "$update_label: Version       : $image_version"
+[ "$quiet" = "no" ] && echo "$update_label: Architecture  : $image_arch"
+[ "$quiet" = "no" ] && echo "$update_label: Machine       : $image_build_machine"
+[ "$quiet" = "no" ] && echo "$update_label: Machine Rev   : $image_machine_rev"
+[ "$quiet" = "no" ] && echo "$update_label: Config Version: $image_config_version"
+[ "$quiet" = "no" ] && echo "$update_label: Build Date    : $image_build_date"
+
+# arch specific install method
+install_image "$@"
+ret=$?
+if [ $ret -ne 0 ] ; then
+    echo "ERROR:$update_label: update failed."
+fi
+
+cd /
+
+exit $ret
