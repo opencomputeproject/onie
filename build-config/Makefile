@@ -386,6 +386,7 @@ include make/busybox.make
 include make/zlib.make
 include make/lzo.make
 include make/util-linux.make
+include make/rsync.make
 ifeq ($(MTDUTILS_ENABLE),yes)
   include make/mtdutils.make
 endif

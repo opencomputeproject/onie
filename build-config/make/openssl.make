@@ -63,6 +63,7 @@ $(OPENSSL_CONFIGURE_STAMP): $(OPENSSL_SOURCE_STAMP) $(ZLIB_BUILD_STAMP) \
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure openssl-$(OPENSSL_VERSION) ===="
 	$(Q) cd $(OPENSSL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		MACHINE=$(TARGET) RELEASE=$(LINUX_RELEASE)	\
 		$(OPENSSL_DIR)/config				\
 		--prefix=/usr					\
 		--cross-compile-prefix=$(CROSSPREFIX)		\
