@@ -6,6 +6,10 @@
 
 FROM debian:9
 
+RUN echo "deb [trusted=yes] http://archive.debian.org/debian stretch main non-free contrib" > /etc/apt/sources.list
+RUN echo "deb-src [trusted=yes] http://archive.debian.org/debian stretch main non-free contrib" >> /etc/apt/sources.list
+RUN echo "deb [trusted=yes] http://archive.debian.org/debian-security stretch/updates main non-free contrib" >> /etc/apt/sources.list
+
 # Add initial development packages
 RUN apt-get update && apt-get install -y \
     build-essential stgit u-boot-tools util-linux \
