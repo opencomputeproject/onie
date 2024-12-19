@@ -506,6 +506,10 @@ ifeq ($(TCPDUMP_ENABLE),yes)
   include make/tcpdump.make
 endif
 
+ifeq ($(RSYNC_ENABLE),yes)
+include make/rsync.make
+endif
+
 include make/images.make
 include make/demo.make
 

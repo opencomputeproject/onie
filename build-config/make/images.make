@@ -126,6 +126,10 @@ ifeq ($(TCPDUMP_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(TCPDUMP_STAMP)
 endif
 
+ifeq ($(RSYNC_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(RSYNC_STAMP)
+endif
+
 ifndef MAKE_CLEAN
 SYSROOT_NEW_FILES = $(shell \
 			test -d $(ROOTCONFDIR)/default && \
