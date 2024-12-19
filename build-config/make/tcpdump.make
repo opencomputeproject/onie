@@ -9,6 +9,9 @@
 # This is a makefile fragment that defines the build of tcpdump
 #
 
+include make/libpcap.make
+include make/openssl.make
+
 TCPDUMP_VERSION		= 4.99.4
 TCPDUMP_TARBALL		= tcpdump-$(TCPDUMP_VERSION).tar.gz
 TCPDUMP_TARBALL_URLS	+= $(ONIE_MIRROR) \
@@ -66,15 +69,16 @@ TCPDUMP_NEW_FILES = $( \
 endif
 
 tcpdump-configure: $(TCPDUMP_CONFIGURE_STAMP)
-$(TCPDUMP_CONFIGURE_STAMP): $(TCPDUMP_SOURCE_STAMP) $(LIBPCAP_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(TCPDUMP_CONFIGURE_STAMP): $(TCPDUMP_SOURCE_STAMP) $(LIBPCAP_INSTALL_STAMP) $(OPENSSL_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure tcpdump-$(TCPDUMP_VERSION) ===="
-	$(Q) cd $(TCPDUMP_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
-		$(TCPDUMP_DIR)/configure			\
-		--host=$(TARGET)				\
-		--prefix=/usr					\
-		CC=$(CROSSPREFIX)gcc				\
-		LDFLAGS=$(ONIE_LDFLAGS)
+	$(Q) cd $(TCPDUMP_DIR) && PATH='$(CROSSBIN):$(PATH)'		\
+		$(TCPDUMP_DIR)/configure				\
+		--host=$(TARGET)					\
+		--prefix=/usr						\
+		CC=$(CROSSPREFIX)gcc					\
+		LDFLAGS=$(ONIE_LDFLAGS)					\
+		CFLAGS="$(ONIE_CFLAGS) -I $(DEV_SYSROOT)/usr/include"
 	$(Q) touch $@
 
 tcpdump-build: $(TCPDUMP_BUILD_STAMP)
