@@ -502,10 +502,6 @@ ifeq ($(SHIM_ENABLE),yes)
   include make/shim.make
 endif
 
-ifeq ($(LIBPCAP_ENABLE),yes)
-  include make/libpcap.make
-endif
-
 ifeq ($(TCPDUMP_ENABLE),yes)
   include make/tcpdump.make
 endif
