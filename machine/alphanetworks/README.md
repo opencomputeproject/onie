@@ -26,6 +26,7 @@ The following table shows the supported model and its latest development ONIE li
 | SNJ-60D0-320F | [alphanetworks_snj60d0_320f](https://github.com/opencomputeproject/onie/tree/master/machine/alphanetworks/alphanetworks_snj60d0_320f) |
 | SNJ-61D0-320F | [alphanetworks_snj61d0_320f](https://github.com/opencomputeproject/onie/tree/master/machine/alphanetworks/alphanetworks_snj61d0_320f) |
 | SNJ-62D0-640F | [alphanetworks_snj62d0_640f](https://github.com/opencomputeproject/onie/tree/master/machine/alphanetworks/alphanetworks_snj62d0_640f) |
+| SNK-60I0-320F | [alphanetworks_snk60i0_320f](https://github.com/opencomputeproject/onie/tree/master/machine/alphanetworks/alphanetworks_snk60i0_320f) |
 | SNQ-6070-320F | [alphanetworks_snq6070_320f](https://github.com/opencomputeproject/onie/tree/master/machine/alphanetworks/alphanetworks_snq6070_320f) |
 | SNQ-60A0-320F | [alphanetworks_snq60a0_320f](https://github.com/opencomputeproject/onie/tree/master/machine/alphanetworks/alphanetworks_snq60a0_320f) |
 | SNX-6070-486F | [alphanetworks_snx6070_486f](https://github.com/opencomputeproject/onie/tree/master/machine/alphanetworks/alphanetworks_snx6070_486f) |
