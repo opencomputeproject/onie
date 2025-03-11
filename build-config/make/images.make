@@ -122,12 +122,12 @@ ifeq ($(SECURE_GRUB),no)
   GPG_SIGN_SECRING = ''
 endif
 
-ifeq ($(LIBPCAP_ENABLE),yes)
-  PACKAGES_INSTALL_STAMPS += $(LIBPCAP_STAMP)
-endif
-
 ifeq ($(TCPDUMP_ENABLE),yes)
   PACKAGES_INSTALL_STAMPS += $(TCPDUMP_STAMP)
+endif
+
+ifeq ($(RSYNC_ENABLE),yes)
+  PACKAGES_INSTALL_STAMPS += $(RSYNC_STAMP)
 endif
 
 ifndef MAKE_CLEAN
