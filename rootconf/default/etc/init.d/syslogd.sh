@@ -12,6 +12,14 @@ ARGS="-b 3 -D -L"
 
 . /lib/onie/functions
 
+# Source blkdev functions for update directory variables
+[ -r /lib/onie/onie-blkdev-common ] && . /lib/onie/onie-blkdev-common
+
+# Ensure update log directory exists for syslog
+if [ -n "$onie_update_dir" ]; then
+    mkdir -p "$onie_update_dir"
+fi
+
 ARG_FILE="${ONIE_RUN_DIR}/syslogd.args"
 [ -r "${ONIE_RUN_DIR}/dhcp.logsrv" ] && LOGSRVS=$(cat "${ONIE_RUN_DIR}/dhcp.logsrv")
 for r in $LOGSRVS ; do
