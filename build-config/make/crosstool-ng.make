@@ -24,7 +24,7 @@ XTOOLS_LIBC_VERSION 		?= 1.0.38
 
 # http://crosstool-ng.github.io/
 CROSSTOOL_NG_DESC		= crosstool-NG
-CROSSTOOL_NG_VERSION		= 1.24.0
+CROSSTOOL_NG_VERSION		?= 1.24.0
 CROSSTOOL_NG_TARBALL		= crosstool-ng-$(CROSSTOOL_NG_VERSION).tar.xz
 CROSSTOOL_NG_URLS		+= $(ONIE_MIRROR) https://github.com/crosstool-ng/crosstool-ng/releases/download/crosstool-ng-$(CROSSTOOL_NG_VERSION)/
 CROSSTOOL_NG_BUILD_DIR		= $(BUILDDIR)/crosstool-ng
