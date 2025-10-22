@@ -43,6 +43,15 @@ PHONY += xtools xtools-prep xtools-download xtools-config \
 	 xtools-build xtools-clean xtools-distclean uclibc-menuconfig
 
 # List of common packages needed by crosstool-NG
+ifeq ($(CROSSTOOL_NG_VERSION),1.28.0)
+CT_NG_COMPONENTS =	\
+	autoconf-2.72.tar.xz		\
+	automake-1.17.tar.xz		\
+	libelf-0.8.13.tar.gz		\
+	libtool-2.5.4.tar.xz		\
+	m4-1.4.20.tar.xz		\
+	make-4.4.1.tar.gz
+else
 CT_NG_COMPONENTS =	\
 	autoconf-2.69.tar.xz		\
 	automake-1.15.1.tar.xz		\
@@ -55,8 +64,21 @@ CT_NG_COMPONENTS =	\
 	m4-1.4.18.tar.xz		\
 	make-4.2.1.tar.bz2		\
 	ncurses-6.0.tar.gz
+endif
 
-ifeq ($(GCC_VERSION),8.3.0)
+ifeq ($(GCC_VERSION),8.5.0)
+CT_NG_COMPONENTS +=	\
+	binutils-2.32.tar.bz2		\
+	expat-2.2.6.tar.bz2		\
+	gcc-8.5.0.tar.xz		\
+	gmp-6.3.0.tar.xz		\
+	isl-0.27.tar.xz			\
+	mpc-1.3.1.tar.gz		\
+	mpfr-4.2.2.tar.xz		\
+	strace-6.16.tar.xz      	\
+	zlib-1.3.1.tar.xz		\
+	zstd-1.5.7.tar.gz
+else ifeq ($(GCC_VERSION),8.3.0)
 CT_NG_COMPONENTS +=	\
 	binutils-2.32.tar.bz2 \
 	expat-2.2.6.tar.bz2	    \
