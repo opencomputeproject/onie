@@ -196,6 +196,9 @@ xtools-distclean:
 #  The new .config will need to be merged (or upgraded) 
 #  with the existing one to actually be applied, though.
 uclibc-menuconfig:
+# TODO: after crosstool-NG 1.24.0 uClibc is called uClibc-ng so the code below
+#       needs to adapt to use src/uClibc or src/uClibc-ng based on the ctng
+#       version
 # The rest of the path can be hardcodeed since only x86 uses uClibc
 	$(Q)  cd  $(XTOOLS_BUILD_DIR)/build/x86_64-onie-linux-uclibc/src/uClibc \
 			&& make menuconfig
