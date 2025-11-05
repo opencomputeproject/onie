@@ -28,11 +28,9 @@ Since the KVM has Secure Boot enabled by default, encryption keys and a signed s
     `cd onie/build-config`  
 ### 2 Generate cryptographic signing keys in ./encryption  
     `make MACHINE=kvm_x86_64 signing-keys-generate`  
-### 3 Copy the keys to ./emulation for run time use  
-    `make MACHINE=kvm_x86_64 signing-keys-generate`  
-### 4 Build a self-signed shim efi bootloader  
+### 3 Build a self-signed shim efi bootloader  
     `make MACHINE=kvm_x86_64 -j4 shim-self-sign`  
-### 5 Build ONIE, the boot iso, and the Demo OS  
+### 4 Build ONIE, the boot iso, and the Demo OS  
     `make MACHINE=kvm_x86_64 -j4 all demo recovery-iso`  
     ...and do something else while it builds.  ``
 
