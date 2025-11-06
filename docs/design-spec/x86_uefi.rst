@@ -564,7 +564,7 @@ to load and boot another boot loader is called *chainloading*.
 An ONIE implementation *must* provide a GRUB helper script that
 creates an appropriate ONIE GRUB chainload entry for the NOS GRUB
 configuration.  The ONIE repo provides the script `50_onie_grub
-<https://github.com/opencomputeproject/onie/blob/master/installer/x86_64/grub.d/50_onie_grub>`_
+<https://github.com/opencomputeproject/onie/blob/master/installer/grub-arch/grub.d/50_onie_grub>`_
 for this purpose.
 
 This script is suitable for placement into the ``/etc/grub.d`` directory
@@ -760,7 +760,7 @@ The UEFI BootOrder and BootCurrent variables contain::
 
 An ONIE compliant HDOS *should* use the provided GRUB helper script,
 `50_onie_grub
-<https://github.com/opencomputeproject/onie/blob/master/installer/x86_64/grub.d/50_onie_grub>`_,
+<https://github.com/opencomputeproject/onie/blob/master/installer/grub-arch/grub.d/50_onie_grub>`_,
 to create the appropriate ONIE GRUB chainload entry for the HDOS GRUB
 configuration.  This adds an ``ONIE`` GRUB menu entry to the HDOS GRUB
 menu *and* adds a ``DIAG`` GRUB menu to the ONIE GRUB menu.
