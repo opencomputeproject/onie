@@ -25,7 +25,7 @@ def decimalIPToDotted(ip):
     while (decimal > 0):
           octet,ip = divmod(ip,decimal)
           octets.append(str(octet))
-          decimal = decimal/256
+          decimal = decimal//256
     return '.'.join(octets)
 
 # Init global variables
@@ -128,33 +128,33 @@ def parseoptions(options_in_hex):
     options = {}
 
     while (options_in_hex):
-        option = int(options_in_hex[0:2], 16)
+        option = int(options_in_hex[0:2].decode('latin-1'), 16)
 
         # END
         if (option == 255):
             # print "END OPTIONs"
             return options
 
-        length = int(options_in_hex[2:4], 16)
+        length = int(options_in_hex[2:4].decode('latin-1'), 16)
         last_character = (length * 2) + 4
         value = options_in_hex[4:last_character]
         options_in_hex = options_in_hex[last_character:]
         # print "OPTION %s, LENGTH %s, VALUE %s" % (option, length, value)
 
         if (option == 53):
-            options['type'] = int(value, 16)
+            options['type'] = int(value.decode('latin-1'), 16)
             # print "TYPE: %s" % (options['type'])
         elif (option == 1):
-            options['subnet_mask'] = int(value, 16)
+            options['subnet_mask'] = int(value.decode('latin-1'), 16)
             # print "MASK: %s" % (options['subnet_mask'])
         elif (option == 50):
-            options['requested_ip'] = decimalIPToDotted(int(value, 16))
+            options['requested_ip'] = decimalIPToDotted(int(value.decode('latin-1'), 16))
             # print "REQUEST_IP: %s" % (options['requested_ip'])
         elif (option == 61):
             id_type = value[:2]
             id_mac = value[2:]
-            options['client_id_type'] = int(id_type, 16)
-            options['client_id_mac'] = int(id_mac, 16)
+            options['client_id_type'] = int(id_type.decode('latin-1'), 16)
+            options['client_id_mac'] = int(id_mac.decode('latin-1'), 16)
 
         # Some option that we haven't implemented yet
         else:
@@ -175,7 +175,7 @@ def reqparse(s, message): #handles either DHCPDiscover or DHCPRequest
     # Some clients want the reply broadcast to them but most will set this
     # flag to 0x0000 which means they want you to unicast it to them.
     broadcast_reply = False
-    flags = int(messagesplit[6], 16)
+    flags = int(messagesplit[6].decode('latin-1'), 16)
     if (flags == 32768):
         broadcast_reply = True
 
@@ -195,65 +195,65 @@ def reqparse(s, message): #handles either DHCPDiscover or DHCPRequest
         lease = get_lease(client_mac)
         sys.stderr.write("RX Discover\n")
         sys.stderr.write("TX Offer %s\n" % (lease))
-        data='\x02\x01\x06\x00'
+        data=b'\x02\x01\x06\x00'
 
 	# XID
         data+=binascii.unhexlify(messagesplit[4])
 
 	# SECS
-        data+='\x00\x04'
+        data+=b'\x00\x04'
 
         # FLAGS
         if (broadcast_reply):
-            data+='\x80\x00'
+            data+=b'\x80\x00'
         else:
-            data+='\x00\x00'
+            data+=b'\x00\x00'
 
         # Address for client
-        data+='\x00'*4+socket.inet_aton(lease)
+        data+=b'\x00'*4+socket.inet_aton(lease)
 
         # Server IP
         data+=socket.inet_aton(server_host)
 
         # Gateway IP?
-        data+='\x00'*4
+        data+=b'\x00'*4
 
         # Client MAC Address
         data+=binascii.unhexlify(client_mac)
 
         # 10 octets of 0s
-        data+='\x00'*10
+        data+=b'\x00'*10
 
         # 192 octets of 0s for BOOTP legacy
-        data+='\x00'*192
+        data+=b'\x00'*192
 
         # Magic Cookie
-        data+='\x63\x82\x53\x63'
+        data+=b'\x63\x82\x53\x63'
 
         # DHCP Options...
         # 53 = DHCP Offer
-        data+='\x35\x01\x02'
+        data+=b'\x35\x01\x02'
 
         # 54 = DHCP Server
-        data+='\x36\x04'+socket.inet_aton(server_host)
+        data+=b'\x36\x04'+socket.inet_aton(server_host)
 
         # 51 = Lease Time
-        data+='\x33\x04'+binascii.unhexlify(hex(leasetime)[2:].rjust(8,'0'))
+        data+=b'\x33\x04'+binascii.unhexlify(hex(leasetime)[2:].rjust(8,'0'))
 
         #  1 = Subnet Mask
-        data+='\x01\x04'+socket.inet_aton(subnet_mask)
+        data+=b'\x01\x04'+socket.inet_aton(subnet_mask)
 
         # 28 = Broadcast Address
-        data+='\x1c\x04'+socket.inet_aton(broadcast)
+        data+=b'\x1c\x04'+socket.inet_aton(broadcast)
 
         #  3 = Router
-        data+='\x03\x04'+socket.inet_aton(gw)
+        data+=b'\x03\x04'+socket.inet_aton(gw)
 
         #  6 = DNS Server
-        data+='\x06\x04'+socket.inet_aton(dnsserver)
+        data+=b'\x06\x04'+socket.inet_aton(dnsserver)
 
         # End
-        data+='\xff'
+        data+=b'\xff'
 
     # DHCP Request
     elif (options['type'] == 3 and 'requested_ip' in options):
@@ -263,47 +263,47 @@ def reqparse(s, message): #handles either DHCPDiscover or DHCPRequest
         sys.stderr.write("RX Request %s, lease %s\n" %
 			 (options['requested_ip'], lease))
         sys.stderr.write("TX Ack\n\n")
-        data='\x02\x01\x06\x00'
+        data=b'\x02\x01\x06\x00'
         data+=binascii.unhexlify(messagesplit[4]) # XID
-        data+='\x00\x00'# SECS
+        data+=b'\x00\x00'# SECS
 
         # FLAGS
         if (broadcast_reply):
-            data+='\x80\x00'
+            data+=b'\x80\x00'
         else:
-            data+='\x00\x00'
+            data+=b'\x00\x00'
 
         # Client IP
-        data+='\x00'*4
+        data+=b'\x00'*4
 
 	# Your (Client) IP
         data+=binascii.unhexlify(messagesplit[15][messagesplit[15].\
-			         find('3204')+4:messagesplit[15].\
-				 find('3204')+12])
-        data+=socket.inet_aton(server_host)+'\x00'*4
-        data+=binascii.unhexlify(client_mac)+'\x00'*202
+			         find(b'3204')+4:messagesplit[15].\
+				 find(b'3204')+12])
+        data+=socket.inet_aton(server_host)+b'\x00'*4
+        data+=binascii.unhexlify(client_mac)+b'\x00'*202
 
         # Magic Cookie
-        data+='\x63\x82\x53\x63'
+        data+=b'\x63\x82\x53\x63'
 
         # DHCP Options...
         # 53 = DHCP Offer
-        data+='\x35\x01\05'
+        data+=b'\x35\x01\05'
 
         # 54 = DHCP Server
-        data+='\x36\x04'+socket.inet_aton(server_host)
+        data+=b'\x36\x04'+socket.inet_aton(server_host)
 
         #  1 = Subnet Mask
-        data+='\x01\x04'+socket.inet_aton(subnet_mask)
+        data+=b'\x01\x04'+socket.inet_aton(subnet_mask)
 
 	#  3 = Router
-        data+='\x03\x04'+socket.inet_aton(server_host)
+        data+=b'\x03\x04'+socket.inet_aton(server_host)
 
 	# 51 = Lease Time
-        data+='\x33\x04'+binascii.unhexlify(hex(leasetime)[2:].rjust(8,'0'))
+        data+=b'\x33\x04'+binascii.unhexlify(hex(leasetime)[2:].rjust(8,'0'))
 
         # End
-        data+='\xff'
+        data+=b'\xff'
 
     if (data):
         if (broadcast_reply):
@@ -326,7 +326,7 @@ def reqparse(s, message): #handles either DHCPDiscover or DHCPRequest
                                  client_mac[6:8],
                                  client_mac[8:10],
                                  client_mac[10:12])
-            print "arp -s %s %s %s" % (lease, client_mac_pretty, gw)
+            print("arp -s %s %s %s" % (lease, client_mac_pretty, gw))
             subprocess.Popen(["arp", "-s", lease, client_mac_pretty, gw],
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
@@ -340,7 +340,7 @@ while 1:
     try:
         (message, address) = rxs.recvfrom(8192)
         # only serve if a dhcp request
-        if not message.startswith('\x01') and not address[0] == '0.0.0.0':
+        if not message.startswith(b'\x01') and not address[0] == '0.0.0.0':
             continue
         reqparse(rxs, message)
         release()

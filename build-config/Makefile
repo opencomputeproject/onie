@@ -515,13 +515,11 @@ ifeq ($(FIRMWARE_UPDATE_ENABLE),yes)
   include make/firmware-update.make
 endif
 
-# Pre Debian 11 environments just had /usr/bin/python
-# Now the environment distinguishes between python2 and python3
-# If 'python' is not present, default to python2
-ifeq (, $(shell which python ))
-  export PYTHON=python2
-endif
-
+# Some sub-package build scripts (notably grub's autogen.sh) invoke the
+# interpreter as "${PYTHON:-python}".  A bare "python" no longer exists on
+# modern systems now that python2 is gone, so point $(PYTHON) at python3.
+# (grub's build scripts -- gentpl.py, import_gcry.py -- are python3-safe.)
+export PYTHON ?= python3
 
 #-------------------------------------------------------------------------------
 #
@@ -594,11 +592,11 @@ machine-prefix:
 # The onie/build-config/scripts/onie-build-targets.json file lists
 #  platforms and known working build environments.
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
-				  gperf device-tree-compiler python-all-dev xorriso \
+				  gperf device-tree-compiler python3-all-dev xorriso \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
 				  gawk libncurses5 libncurses5-dev bc \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
-				  libexpat1-dev fakeroot python-sphinx rst2pdf \
+				  libexpat1-dev fakeroot python3-sphinx rst2pdf \
 				  libefivar-dev libnss3-tools libnss3-dev libpopt-dev \
 				  libssl-dev sbsigntool uuid-runtime uuid-dev cpio \
 				  bsdmainutils unzip
