@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # -----------------------------------------------------------------------------
 # Copyright (C) 2014-2015 Carlos Cardenas <carlos@cumulusnetworks.com>
@@ -129,10 +129,10 @@ def list_all():
                                      key=lambda t: t[0]))
 
     for key, values in sorted_dict.items():
-        print key
+        print(key)
         for v in values:
-            print '\t{0}'.format(v)
-        print '\n'
+            print('\t{0}'.format(v))
+        print('\n')
 
 
 def build(machine_or_vendor, dry_run=True, args='', targets=None):
@@ -142,14 +142,14 @@ def build(machine_or_vendor, dry_run=True, args='', targets=None):
 
     if is_vendor(machine_or_vendor):
         # build everything under that vendor
-        print 'Building everything for vendor: {0}'.format(machine_or_vendor)
+        print('Building everything for vendor: {0}'.format(machine_or_vendor))
         machines = VENDOR_MACHINES[machine_or_vendor]
         for machine in machines:
             build(machine, dry_run, args, targets)
 
     elif is_machine(machine_or_vendor):
         vendor = get_vendor(machine_or_vendor)
-        print 'Building {0} / {1}'.format(vendor, machine_or_vendor)
+        print('Building {0} / {1}'.format(vendor, machine_or_vendor))
         machine_root = os.path.join(MACHINE_ROOT_PATH, vendor)
         add_targets = ''
         if targets is not None and len(targets) > 0:
@@ -161,12 +161,12 @@ def build(machine_or_vendor, dry_run=True, args='', targets=None):
         else:
             cmd = 'make {0} MACHINE={1} all {2}'.\
                   format(args, machine_or_vendor, add_targets)
-        print cmd
+        print(cmd)
         if not dry_run:
             subprocess.check_call(cmd, shell=True)
 
     else:
-        print 'Invalid Target: {0}'.format(machine_or_vendor)
+        print('Invalid Target: {0}'.format(machine_or_vendor))
 
 
 def main():
@@ -199,10 +199,10 @@ def main():
         sys.exit(0)
 
     if args.build:
-        print 'cd {0}'.format(BUILD_CONFIG_PATH)
+        print('cd {0}'.format(BUILD_CONFIG_PATH))
         os.chdir(BUILD_CONFIG_PATH)
         if 'all' in args.build:
-            for vendor in VENDOR_MACHINES.keys():
+            for vendor in list(VENDOR_MACHINES.keys()):
                 build(vendor, args.dry_run, args.make_args, args.target)
         else:
             for b in args.build:

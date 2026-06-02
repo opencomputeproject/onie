@@ -1,5 +1,5 @@
 
-import ipaddr
+import ipaddress
 
 DEFAULT_LEASE_TIME = 600
 DEFAULT_MAX_LEASE_TIME = 7200
@@ -111,15 +111,15 @@ sudo {{ binary }} {{ options }}
 def add_subnet(subnets, subnet_cidr_str, gateway_str=None,
                next_server_str=None):
     value = {}
-    subnet = ipaddr.IPv4Network(subnet_cidr_str)
-    value['network'] = subnet.network
+    subnet = ipaddress.IPv4Network(subnet_cidr_str, strict=False)
+    value['network'] = subnet.network_address
     value['netmask'] = subnet.netmask
-    value['broadcast'] = subnet.broadcast
+    value['broadcast'] = subnet.broadcast_address
     if gateway_str is not None and gateway_str != '':
-        gateway = ipaddr.IPv4Address(gateway_str)
+        gateway = ipaddress.IPv4Address(gateway_str)
         value['gateway'] = gateway
     if next_server_str is not None and next_server_str != '':
-        next_server = ipaddr.IPv4Address(next_server_str)
+        next_server = ipaddress.IPv4Address(next_server_str)
         value['next_server'] = next_server
 
     subnets.append(value)
