@@ -398,6 +398,8 @@ ifeq ($(GPT_ENABLE),yes)
   include make/gptfdisk.make
 endif
 ifeq ($(LVM2_ENABLE),yes)
+  # lvm2 >= 2.03 requires libaio for its bcache I/O engine.
+  include make/libaio.make
   include make/lvm2.make
 endif
 ifeq ($(PARTED_ENABLE),yes)
