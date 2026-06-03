@@ -287,10 +287,8 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
 	zfscrypt
 	zfsinfo
 "
-	# linuxefi is an x86 specific
-    if [ ${ARCH} != "arm64" ]; then
-        GRUB_MODULES=$GRUB_MODULES" linuxefi"
-    fi
+    # grub 2.12+ unified linuxefi into the standard linux/initrd commands;
+    # the linuxefi module no longer exists.
     # Generate UEFI format GRUB image
     mkdir -p $RECOVERY_EFI_BOOT_DIR
     $GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \
