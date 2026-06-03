@@ -420,6 +420,8 @@ ifeq ($(DMIDECODE_ENABLE),yes)
   include make/dmidecode.make
 endif
 ifeq ($(ETHTOOL_ENABLE),yes)
+  # ethtool's netlink interface needs libmnl.
+  include make/libmnl.make
   include make/ethtool.make
 endif
 ifeq ($(MTREE_ENABLE),yes)
