@@ -1,0 +1,302 @@
+name: Build ONIE (kvm_x86_64)
+
+# Builds the generic amd64 ONIE image for the kvm_x86_64 target, intended
+# to run as a VM under KVM/QEMU.  The build follows the upstream-recommended
+# containerized flow (see contrib/build-env and machine/kvm_x86_64/INSTALL),
+# with secure boot enabled: the workflow generates demonstration signing
+# keys and self-signs the shim before building.
+
+# Run on every push and pull request: the point of this workflow is to
+# confirm the change still builds, and the kvm_x86_64 image depends on far
+# more than the build files (installer/, rootconf/, patches/, ...), so path
+# filtering would risk skipping validation on build-affecting changes.
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+# Cancel an in-progress run when a newer commit is pushed to the same ref,
+# so stacked pushes don't pile up concurrent builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build kvm_x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Determine host UID/GID
+        id: ids
+        run: |
+          echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
+          echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the ONIE build-environment image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .github/onie-build
+          tags: onie-build-env:latest
+          build-args: |
+            UID=${{ steps.ids.outputs.uid }}
+            GID=${{ steps.ids.outputs.gid }}
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Cache the crosstool-NG cross toolchain -- the long pole of a cold
+      # build.  We cache the whole stamp chain (so make does not rebuild on a
+      # missing root stamp) but only the parts the warm, no-op path actually
+      # needs -- NOT the multi-GB crosstool-NG build scratch or ct-ng source
+      # tree, which are only used while building the toolchain.  On a cache
+      # hit "make xtools" is a no-op and the real build only uses the
+      # installed toolchain, so dropping the scratch keeps the cache blob
+      # small and fast/reliable to restore.
+      #
+      #   build/stamp-project          -- top-of-chain project stamp
+      #   build/download               -- toolchain tarballs + download stamps
+      #   build/crosstool-ng/stamp     -- crosstool-NG build stamps
+      #   build/x-tools/*/stamp        -- xtools build stamps
+      #   build/x-tools/*/install      -- the installed cross toolchain
+      #   build/x-tools/*/build/.config -- xtools config (an xtools-build prereq)
+      #
+      # The key is tied to every input that can change the toolchain --
+      # including the Dockerfile, since it defines the compiler/host
+      # environment the toolchain is built in.  No loose restore-keys: any
+      # input change forces a clean rebuild rather than restoring a
+      # mismatched toolchain.
+      - name: Restore cross-toolchain cache
+        id: xtools-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            build/stamp-project
+            build/download
+            build/crosstool-ng/stamp
+            build/x-tools/*/stamp
+            build/x-tools/*/install
+            build/x-tools/*/build/.config
+          key: onie-xtools-kvm_x86_64-${{ hashFiles('build-config/make/xtools.make', 'build-config/make/crosstool-ng.make', 'build-config/make/compiler.make', 'build-config/conf/crosstool/**', 'patches/crosstool-NG/**', '.github/onie-build/Dockerfile') }}
+
+      # ONIE drives its build with stamp files compared by mtime.  A fresh
+      # checkout gives every repo source file a current mtime, which is newer
+      # than the restored stamps -- so make would consider the toolchain
+      # stale and rebuild it (e.g. build/.../.config depends on the
+      # checked-out conf/crosstool config).  A cache hit means the key
+      # matched, i.e. every toolchain input is unchanged and the restored
+      # toolchain is valid, so bump the restored artifacts ahead of the
+      # checkout to make "make xtools" a genuine no-op.
+      - name: Mark restored toolchain up to date
+        if: steps.xtools-cache.outputs.cache-hit == 'true'
+        # Restoring build/stamp-project makes make skip the project-stamp
+        # recipe, which is what normally creates the project output dirs --
+        # so recreate them (build/images is an output, not part of the
+        # cache, and the kernel install copies vmlinuz into it).
+        #
+        # Then touch only the files make compares -- the stamp files and the
+        # toolchain .config.  Do NOT touch the toolchain tree itself: it
+        # contains read-only binaries and symlinks to host tools (bash,
+        # make, ...) that touch would follow and fail to update.
+        #
+        # Touch them all to ONE identical timestamp (-t), not "now" per file.
+        # The xtools build stamp depends on .config (xtools.make), and a bare
+        # `find -exec touch {} +` batches files across calls that can straddle a
+        # one-second boundary -- leaving .config (touched last) newer than the
+        # build stamp.  make then re-runs `ct-ng build`, which fails because the
+        # ct-ng binary is intentionally not in the cache.  Equal mtimes mean no
+        # cached target is ever "newer-than" a cached prerequisite, so `make
+        # xtools` is a reliable no-op; the timestamp is "now" (after checkout),
+        # so it's also newer than the just-checked-out toolchain config sources.
+        run: |
+          mkdir -p build build/images build/download
+          ts="$(date +%Y%m%d%H%M.%S)"
+          find build/stamp-project build/download \
+               build/crosstool-ng/stamp \
+               build/x-tools/*/stamp \
+               build/x-tools/*/build/.config \
+               -type f -exec touch -t "$ts" {} +
+
+      - name: Build cross toolchain
+        run: |
+          docker run --rm --privileged \
+            -v "${PWD}:/onie" \
+            onie-build-env \
+            bash -lc 'cd build-config && make -j"$(nproc)" \
+              MACHINE=kvm_x86_64 \
+              xtools'
+
+      # Save only on a cache miss, and only after the toolchain build above
+      # succeeded (default if: success()), so a broken toolchain is never
+      # cached.  Running before the full build means a later-stage failure
+      # still preserves the toolchain for the next run.
+      - name: Save cross-toolchain cache
+        if: steps.xtools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            build/stamp-project
+            build/download
+            build/crosstool-ng/stamp
+            build/x-tools/*/stamp
+            build/x-tools/*/install
+            build/x-tools/*/build/.config
+          key: ${{ steps.xtools-cache.outputs.cache-primary-key }}
+
+      - name: Build ONIE
+        run: |
+          docker run --rm --privileged \
+            -v "${PWD}:/onie" \
+            onie-build-env \
+            bash -lc 'cd build-config && \
+              make MACHINE=kvm_x86_64 signing-keys-generate && \
+              make MACHINE=kvm_x86_64 shim-self-sign && \
+              make -j"$(nproc)" MACHINE=kvm_x86_64 all recovery-iso demo'
+
+      - name: Upload kvm recovery image
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: onie-kvm-recovery-iso
+          path: build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso
+          retention-days: 7
+
+      # The demonstration PK/KEK/db that signed this build's shim/grub/kernel.
+      # The boot-test job enrolls them into an OVMF varstore to validate the
+      # secure-boot signature chain.  These are the SAME keys this run signed
+      # with, so the enrolled db matches the shipped image (regenerating would
+      # not).  Demo keys only -- non-sensitive (see machine-security.make).
+      - name: Upload secure-boot demo keys
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: onie-kvm-sb-keys
+          # Exclude the gpg-agent sockets that signing-keys-generate leaves in
+          # the gpg-keys dirs -- upload-artifact can't zip sockets and warns
+          # ENTRYNOTSUPPORTED; only the .pem/.der key material is needed.
+          path: |
+            encryption/machines/kvm_x86_64/keys
+            !encryption/machines/kvm_x86_64/keys/**/S.gpg-agent*
+          retention-days: 7
+
+      # Artifacts for the install-test job: the recovery kernel/initrd (booted
+      # directly in install mode), the ONIE updater (to embed ONIE on a blank
+      # disk first), and the demo OS installer (the NOS discovery installs).
+      - name: Upload install-test images
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: onie-kvm-install-images
+          path: |
+            build/images/kvm_x86_64-r0.vmlinuz
+            build/images/kvm_x86_64-r0.initrd
+            build/images/onie-updater-x86_64-kvm_x86_64-r0
+            build/images/demo-installer-x86_64-kvm_x86_64-r0.bin
+          retention-days: 7
+
+  # Boot the built recovery ISO headlessly under QEMU+OVMF and assert ONIE gets
+  # past GRUB into the OS (serial-console milestones, no kernel panic).  ONIE is
+  # serial end-to-end (GRUB+kernel+userspace on ttyS0) so a serial capture
+  # suffices -- no screen scraping/OCR.  See emulation/ci-boot-test.sh.
+  boot-test:
+    name: Boot test kvm_x86_64
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Enable KVM (grant /dev/kvm access)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install QEMU + OVMF
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils ovmf python3-virt-firmware
+      - name: Download kvm recovery image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: onie-kvm-recovery-iso
+          path: build/images
+      - name: Download secure-boot demo keys
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: onie-kvm-sb-keys
+          path: encryption/machines/kvm_x86_64/keys
+      # SB-relaxed smoke: plain OVMF on the default 'pc' machine -- proves the
+      # image boots past GRUB into the OS independent of the SB signature chain.
+      - name: Boot ONIE (SB-relaxed) and assert it reaches the OS
+        run: |
+          SERIAL_LOG="$PWD/onie-boot-serial.log" BOOT_MODE=relaxed \
+            emulation/ci-boot-test.sh \
+              build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso 300
+      # SB-enforced: enroll the demo PK/KEK/db, boot the secboot OVMF on
+      # q35,smm=on, and assert the shim/grub/kernel chain verifies (plus a
+      # negative control with db omitted that MUST be rejected).  This is the
+      # signal that catches a broken signing chain in the grub/shim/kernel
+      # modernization PRs even when the image otherwise builds and boots.
+      - name: Boot ONIE (SB-enforced) and assert the signing chain verifies
+        run: |
+          SERIAL_LOG="$PWD/onie-boot-serial-secureboot.log" BOOT_MODE=secureboot \
+          KEYS_DIR="$PWD/encryption/machines/kvm_x86_64/keys" \
+            emulation/ci-boot-test.sh \
+              build/images/onie-recovery-x86_64-kvm_x86_64-r0.iso 300
+      - name: Upload serial logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: onie-boot-serial-log
+          path: onie-boot-serial*.log
+          retention-days: 7
+
+  # Functional discovery-install: prove ONIE actually installs an OS and boots
+  # it, not just that it reaches rescue.  Embed ONIE onto a blank disk, then in
+  # install mode point discovery (install_url=) at the locally-served demo
+  # installer, install it, and boot the resulting demo OS -- all headless via
+  # the serial console.  This exercises the real installer path (download,
+  # exec_installer, the NOS writing GRUB + the OS to disk, the OS booting) that
+  # the boot-smoke jobs do not.  Runs Secure-Boot-relaxed (legacy BIOS) -- the
+  # signing chain is covered by boot-test.  See emulation/ci-install-test.sh.
+  install-test:
+    name: Install test kvm_x86_64
+    # Chained after boot-test (not parallel) so only one VM-heavy job runs at a
+    # time, keeping CI resource use low.
+    needs: boot-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Enable KVM (grant /dev/kvm access)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils
+      - name: Download install-test images
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: onie-kvm-install-images
+          path: build/images
+      - name: Install demo OS via discovery and boot it
+        run: |
+          SERIAL_PREFIX="$PWD/onie-install" \
+            emulation/ci-install-test.sh \
+              build/images/kvm_x86_64-r0.vmlinuz \
+              build/images/kvm_x86_64-r0.initrd \
+              build/images/demo-installer-x86_64-kvm_x86_64-r0.bin 600
+      - name: Upload install serial logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: onie-install-serial-log
+          path: onie-install-*.log
+          retention-days: 7
