@@ -56,41 +56,7 @@ CT_NG_COMPONENTS =	\
 	make-4.2.1.tar.bz2		\
 	ncurses-6.0.tar.gz
 
-ifeq ($(GCC_VERSION),8.3.0)
-CT_NG_COMPONENTS +=	\
-	binutils-2.32.tar.bz2 \
-	expat-2.2.6.tar.bz2	    \
-	gcc-8.3.0.tar.xz		\
-	gdb-7.12.1.tar.xz       \
-	gmp-6.1.2.tar.xz		\
-	isl-0.20.tar.xz		\
-	mpc-1.1.0.tar.gz        \
-	mpfr-4.1.0.tar.xz		\
-	strace-4.26.tar.xz      \
-	zlib-1.2.11.tar.xz      
-else ifeq ($(GCC_VERSION),6.3.0)
-CT_NG_COMPONENTS +=	\
-	gcc-6.3.0.tar.bz2		\
-	binutils-2.28.tar.bz2		\
-	gdb-7.12.1.tar.xz		\
-	gmp-6.1.2.tar.xz		\
-	mpfr-3.1.5.tar.xz		\
-	isl-0.16.1.tar.xz		\
-	mpc-1.0.3.tar.gz		\
-	expat-2.2.0.tar.bz2		\
-	strace-4.16.tar.xz
-else ifeq ($(GCC_VERSION),4.9.2)
-CT_NG_COMPONENTS +=	\
-	gcc-4.9.2.tar.bz2		\
-	binutils-2.24.tar.bz2		\
-	gdb-7.11.1.tar.xz		\
-	gmp-6.0.0a.tar.xz		\
-	mpfr-3.1.2.tar.xz		\
-	isl-0.12.2.tar.bz2		\
-	mpc-1.0.2.tar.gz		\
-	expat-2.1.1.tar.bz2		\
-	strace-4.9.tar.xz
-else ifeq ($(GCC_VERSION),14.3.0)
+ifeq ($(GCC_VERSION),14.3.0)
 # crosstool-NG 1.28.0 fetches the GCC 14.3.0 toolchain component set itself
 # (the generated crosstool config enables downloads) using its own pinned
 # per-component checksums, so no component tarballs are pre-fetched here.

@@ -24,9 +24,6 @@ XTOOLS_ENABLE = yes
 ifeq ($(XTOOLS_ENABLE),no)
   TARGET = aarch64-linux-gnu
   CROSSBIN = $(HOME)/gcc-linaro-5.3-2016.02-x86_64_aarch64-linux-gnu/bin
-  GCC_VERSION = 5.3.1
-  XTOOLS_LIBC = glibc
-  XTOOLS_LIBC_VERSION = 2.21
   LINUX_VERSION = 4.1.23
   STRACE_ENABLE = no
   XTOOLS_BUILD_STAMP = $(CROSSBIN)/$(TARGET)-gcc
