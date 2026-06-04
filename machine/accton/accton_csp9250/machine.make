@@ -28,9 +28,6 @@ IPMITOOL_ENABLE = yes
 # Console parameters
 SERIAL_CONSOLE_ENABLE = no
 
-# Set Linux kernel version
-LINUX_VERSION = 5.4
-LINUX_MINOR_VERSION = 86
 
 
 #-------------------------------------------------------------------------------

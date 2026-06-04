@@ -48,9 +48,6 @@ UEFI_ENABLE = yes
 # Console parameters
 CONSOLE_DEV = 1
 
-# Set Linux kernel version
-LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
 
 
 #-------------------------------------------------------------------------------
