@@ -13,8 +13,8 @@
 
 # Default GCC version to build for the toolchain.
 #  Tip: Reference a Debian install for related component versions.
-#  To upgrade sha1 for new package:
-#     sha1sum ./gcc-8.3.0.tar.xz > ./upstream/gcc-8.3.0.tar.xz.sha1
+#  To upgrade the sha256 pin for a new package:
+#     sha256sum ./gcc-8.3.0.tar.xz > ./upstream/gcc-8.3.0.tar.xz.sha256
 #     https://ftp.gnu.org/pub/gnu/gcc/gcc-8.3.0/gcc-8.3.0.tar.xz
 GCC_VERSION 			?= 14.3.0
 
