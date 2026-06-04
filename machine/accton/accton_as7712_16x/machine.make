@@ -28,9 +28,6 @@ I2CTOOLS_SYSEEPROM = no
 # Console parameters
 CONSOLE_DEV = 1
 
-# Specify Linux kernel version -- comment out to use the default
-LINUX_VERSION = 5.4
-LINUX_MINOR_VERSION = 86
 
 
 #-------------------------------------------------------------------------------

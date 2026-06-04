@@ -51,9 +51,6 @@ UEFI_ENABLE = yes
 # Enable UEFI PXE
 PXE_EFI64_ENABLE = yes
 
-# Set the desired kernel version.
-LINUX_VERSION		= 4.1
-LINUX_MINOR_VERSION	= 38
 
 #
 # Console parameters can be defined here (default values are in

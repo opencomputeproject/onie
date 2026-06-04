@@ -34,9 +34,6 @@ CONSOLE_DEV = 0
 UEFI_ENABLE = yes
 PXE_EFI64_ENABLE = yes
 
-# Set Linux kernel version
-LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
 
 # ONIE defaults the serial console baud rate to 115200
 CONSOLE_SPEED = 9600

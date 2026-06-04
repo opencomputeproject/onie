@@ -40,9 +40,6 @@ CONSOLE_DEV = 0
 # Enable UEFI support
 UEFI_ENABLE = yes
 
-# Set Linux kernel version
-LINUX_VERSION = 5.4
-LINUX_MINOR_VERSION = 86
 
 
 # Set uClibc-ng version
