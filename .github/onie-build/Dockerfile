@@ -9,7 +9,8 @@
 # This image builds the generic kvm_x86_64 target with secure boot
 # enabled.  It includes the secure-boot tooling needed to exercise the SB
 # build path -- pesign, efitools, sbsigntool and gnupg2 (for key
-# generation and EFI signing).
+# generation and EFI signing) -- and meson/ninja, which flashrom 1.x
+# requires to build.
 FROM debian:13
 WORKDIR /onie
 
@@ -49,7 +50,9 @@ RUN apt-get update && apt-get install -y \
     libtool \
     libtool-bin \
     locales \
+    meson \
     mtools \
+    ninja-build \
     pesign \
     pkgconf \
     python3-all-dev \
