@@ -31,9 +31,6 @@ CONSOLE_FLAG = 0
 
 EXTRA_CMDLINE_LINUX = i2c-ismt.bus_speed=100 acpi=off dhcp=eth0
 
-# Set Linux kernel version
-LINUX_VERSION		= 3.2
-LINUX_MINOR_VERSION	= 69
 
 
 #-------------------------------------------------------------------------------
