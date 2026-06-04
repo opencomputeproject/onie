@@ -20,9 +20,9 @@
 #   CT_DEBUG_CT_SAVE_STEPS_GZIP=y
 #
 
-XTOOLS_CONFIG		?= conf/crosstool/gcc-$(GCC_VERSION)/$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)/crosstool.$(ONIE_ARCH).config
+XTOOLS_CONFIG		?= conf/crosstool/gcc-$(GCC_VERSION)/$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)/crosstool.$(ONIE_ARCH).defconfig
 XTOOLS_ROOT		= $(BUILDDIR)/x-tools
-XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(LINUX_RELEASE)-$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)
+XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(XTOOLS_LINUX_VERSION)-$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)
 XTOOLS_DIR		= $(XTOOLS_ROOT)/$(XTOOLS_VERSION)
 XTOOLS_BUILD_DIR	= $(XTOOLS_DIR)/build
 XTOOLS_INSTALL_DIR	= $(XTOOLS_DIR)/install
@@ -90,6 +90,10 @@ CT_NG_COMPONENTS +=	\
 	mpc-1.0.2.tar.gz		\
 	expat-2.1.1.tar.bz2		\
 	strace-4.9.tar.xz
+else ifeq ($(GCC_VERSION),14.3.0)
+# crosstool-NG 1.28.0 fetches the GCC 14.3.0 toolchain component set itself
+# (the generated crosstool config enables downloads) using its own pinned
+# per-component checksums, so no component tarballs are pre-fetched here.
 else
   $(error CT_NG_COMPONENTS download: Unsupported GCC version: $(GCC_VERSION))
 endif
@@ -122,12 +126,12 @@ $(XTOOLS_DOWNLOAD_STAMP): $(XTOOLS_PREP_STAMP) | $(KERNEL_DOWNLOAD_STAMP) $(UCLI
 #
 # Set CT_LINUX_VERSION and CT_LINUX_V_a_b=y in the new uClibc config.
 #
-CT_LINUX_V = $(subst .,_,$(LINUX_VERSION))
-$(XTOOLS_BUILD_DIR)/.config: $(XTOOLS_CONFIG) $(XTOOLS_PREP_STAMP)
-	$(Q) echo "==== Copying $(XTOOLS_CONFIG) to $@ ===="
-	$(Q) cp -v $< $(XTOOLS_BUILD_DIR)/.config
-	$(Q) echo "==== Setting kernel version to $(LINUX_VERSION).$(LINUX_MINOR_VERSION) in .config ===="
-	$(Q) sed -i 's/CT_LINUX_VERSION=.*"/CT_LINUX_VERSION="$(LINUX_VERSION).$(LINUX_MINOR_VERSION)"/g' $(XTOOLS_BUILD_DIR)/.config
+CT_LINUX_V = $(subst .,_,$(XTOOLS_LINUX_VERSION))
+$(XTOOLS_BUILD_DIR)/.config: $(XTOOLS_CONFIG) $(XTOOLS_PREP_STAMP) $(CROSSTOOL_NG_BUILD_STAMP)
+	$(Q) echo "==== Expanding $(XTOOLS_CONFIG) into $@ via ct-ng defconfig ===="
+	$(Q) cd $(XTOOLS_BUILD_DIR) && DEFCONFIG=$(abspath $(XTOOLS_CONFIG)) $(CROSSTOOL_NG_DIR)/ct-ng defconfig
+	$(Q) echo "==== Setting toolchain kernel-headers version to $(XTOOLS_LINUX_VERSION) in .config ===="
+	$(Q) sed -i 's/CT_LINUX_VERSION=.*"/CT_LINUX_VERSION="$(XTOOLS_LINUX_VERSION)"/g' $(XTOOLS_BUILD_DIR)/.config
 	$(Q) sed -i 's/CT_LINUX_V_$(CT_LINUX_V) is not set/CT_LINUX_V_$(CT_LINUX_V)=y/g' $(XTOOLS_BUILD_DIR)/.config
 
 xtools-config: $(XTOOLS_BUILD_DIR)/.config $(CROSSTOOL_NG_BUILD_STAMP)
