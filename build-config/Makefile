@@ -508,6 +508,7 @@ endif
 
 include make/images.make
 include make/demo.make
+include make/sbom.make
 
 # By default do not enable building firmware updates
 FIRMWARE_UPDATE_ENABLE ?= no
@@ -535,7 +536,7 @@ download: $(DOWNLOAD)
 	$(Q) echo "=== Finished making $@ ==="
 
 PHONY += all
-all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE)
+all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE) $(SBOM_STAMP)
 	$(Q) echo "=== Finished making onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
 
 PHONY += demo
