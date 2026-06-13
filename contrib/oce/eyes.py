@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # -----------------------------------------------------------------------------
 # Copyright (C) 2015-2016 Carlos Cardenas <carlos@cumulusnetworks.com>
@@ -8,7 +8,7 @@
 # -----------------------------------------------------------------------------
 
 
-from cStringIO import StringIO
+from io import StringIO
 import logging
 import os
 import os.path
@@ -324,7 +324,7 @@ def validate_eyes_url():
 def validate_options(options):
     # check all keys in args.option to ensure they are supported
     # while checking, type convert
-    for key, value in options.iteritems():
+    for key, value in options.items():
         if key in OPTIONS.keys():
             options[key] = OPTIONS[key](value)
         else:

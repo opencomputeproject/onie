@@ -5,48 +5,38 @@ Copyright (C) 2014 david_yang <david_yang@accton.com>
 Copyright (C) 2014 Curt Brune <curt@cumulusnetworks.com>
 
 diff --git a/Makefile b/Makefile
-index 0c859b3..144e1bc 100644
+index 566bc2a..7446ae7 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -34,4 +34,9 @@ KERNELVERSION	:= $(shell uname -r)
+@@ -55,4 +55,9 @@ endif
  all:
  
- SRCDIRS	:= include tools
+ SRCDIRS	:= include lib
 +
 +ifeq ($(SYSEEPROM_ENABLE),yes)
 +SRCDIRS	:= $(SRCDIRS) sys_eeprom
 +endif
 +
  include $(SRCDIRS:%=%/Module.mk)
-
-diff --git a/sys_eeprom/24cXX.c b/sys_eeprom/24cXX.c
-index 54c6342..be194ad 100644
---- a/sys_eeprom/24cXX.c
-+++ b/sys_eeprom/24cXX.c
-@@ -44,7 +44,7 @@ static int i2c_write_2b(struct eeprom *e, __u8 buf[2])
- 	r = i2c_smbus_write_byte_data(e->fd, buf[0], buf[1]);
- 	if(r < 0)
- 		fprintf(stderr, "Error i2c_write_2b: %s\n", strerror(errno));
--	usleep(10);
-+	usleep(1000);
- 	return r;
- }
- 
 diff --git a/sys_eeprom/Module.mk b/sys_eeprom/Module.mk
 new file mode 100644
-index 0000000..5b59b5a
+index 0000000..0cfd439
 --- /dev/null
 +++ b/sys_eeprom/Module.mk
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,36 @@
 +#sys_eeprom Makefile
 +
 +SYS_EEPROM_DIR := sys_eeprom
-+SYS_EEPROM_FLAGS :=  -O2 -Iinclude -lz
++SYS_EEPROM_FLAGS :=  -O2 -Iinclude
++SYS_EEPROM_LIBS  :=  $(LIB_DIR)/$(LIB_STLIBNAME) -lz
 +SYS_EEPROM_TARGETS:= onie-syseeprom
 +
 +$(SYS_EEPROM_DIR)/onie-syseeprom: $(SYS_EEPROM_DIR)/sys_eeprom.o \
-+	$(SYS_EEPROM_DIR)/onie_tlvinfo.o $(SYS_EEPROM_DIR)/24cXX.o
-+	$(CC) $(CFLAGS) $(SYS_EEPROM_FLAGS) $(LDFLAGS) -o $@ $^
++	$(SYS_EEPROM_DIR)/onie_tlvinfo.o $(SYS_EEPROM_DIR)/24cXX.o \
++	$(LIB_DIR)/$(LIB_STLIBNAME)
++	$(CC) $(CFLAGS) $(SYS_EEPROM_FLAGS) $(LDFLAGS) -o $@ \
++	$(SYS_EEPROM_DIR)/sys_eeprom.o $(SYS_EEPROM_DIR)/onie_tlvinfo.o \
++	$(SYS_EEPROM_DIR)/24cXX.o $(SYS_EEPROM_LIBS)
 +
 +$(SYS_EEPROM_DIR)/sys_eeprom.o: $(SYS_EEPROM_DIR)/sys_eeprom.c \
 +	$(SYS_EEPROM_DIR)/onie_tlvinfo.c $(SYS_EEPROM_DIR)/onie_tlvinfo.h \
@@ -59,7 +49,7 @@ index 0000000..5b59b5a
 +	$(CC) $(CFLAGS) $(LD_FLAGS) $(SYS_EEPROM_FLAGS) -c $< -o $@
 +
 +$(SYS_EEPROM_DIR)/24cXX.o: $(SYS_EEPROM_DIR)/24cXX.c \
-+	$(INCLUDE_DIR)/linux/i2c-dev.h $(SYS_EEPROM_DIR)/24cXX.h
++	$(INCLUDE_DIR)/i2c/smbus.h $(SYS_EEPROM_DIR)/24cXX.h
 +	$(CC) $(CFLAGS) $(SYS_EEPROM_FLAGS) -c $< -o $@
 +
 +all-sys_eeproms: $(addprefix $(SYS_EEPROM_DIR)/,$(SYS_EEPROM_TARGETS))

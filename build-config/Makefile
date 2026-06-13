@@ -398,6 +398,8 @@ ifeq ($(GPT_ENABLE),yes)
   include make/gptfdisk.make
 endif
 ifeq ($(LVM2_ENABLE),yes)
+  # lvm2 >= 2.03 requires libaio for its bcache I/O engine.
+  include make/libaio.make
   include make/lvm2.make
 endif
 ifeq ($(PARTED_ENABLE),yes)
@@ -420,6 +422,8 @@ ifeq ($(DMIDECODE_ENABLE),yes)
   include make/dmidecode.make
 endif
 ifeq ($(ETHTOOL_ENABLE),yes)
+  # ethtool's netlink interface needs libmnl.
+  include make/libmnl.make
   include make/ethtool.make
 endif
 ifeq ($(MTREE_ENABLE),yes)
@@ -508,6 +512,7 @@ endif
 
 include make/images.make
 include make/demo.make
+include make/sbom.make
 
 # By default do not enable building firmware updates
 FIRMWARE_UPDATE_ENABLE ?= no
@@ -515,13 +520,11 @@ ifeq ($(FIRMWARE_UPDATE_ENABLE),yes)
   include make/firmware-update.make
 endif
 
-# Pre Debian 11 environments just had /usr/bin/python
-# Now the environment distinguishes between python2 and python3
-# If 'python' is not present, default to python2
-ifeq (, $(shell which python ))
-  export PYTHON=python2
-endif
-
+# Some sub-package build scripts (notably grub's autogen.sh) invoke the
+# interpreter as "${PYTHON:-python}".  A bare "python" no longer exists on
+# modern systems now that python2 is gone, so point $(PYTHON) at python3.
+# (grub's build scripts -- gentpl.py, import_gcry.py -- are python3-safe.)
+export PYTHON ?= python3
 
 #-------------------------------------------------------------------------------
 #
@@ -537,7 +540,7 @@ download: $(DOWNLOAD)
 	$(Q) echo "=== Finished making $@ ==="
 
 PHONY += all
-all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE)
+all: $(KERNEL) $(UBOOT) $(SYSROOT) $(IMAGE) $(SBOM_STAMP)
 	$(Q) echo "=== Finished making onie-$(PLATFORM) $(LSB_RELEASE_TAG) ==="
 
 PHONY += demo
@@ -594,11 +597,11 @@ machine-prefix:
 # The onie/build-config/scripts/onie-build-targets.json file lists
 #  platforms and known working build environments.
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
-				  gperf device-tree-compiler python-all-dev xorriso \
+				  gperf device-tree-compiler python3-all-dev xorriso \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
 				  gawk libncurses5 libncurses5-dev bc \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
-				  libexpat1-dev fakeroot python-sphinx rst2pdf \
+				  libexpat1-dev fakeroot python3-sphinx rst2pdf \
 				  libefivar-dev libnss3-tools libnss3-dev libpopt-dev \
 				  libssl-dev sbsigntool uuid-runtime uuid-dev cpio \
 				  bsdmainutils unzip

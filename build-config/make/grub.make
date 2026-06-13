@@ -13,9 +13,9 @@
 # This is a makefile fragment that defines the build of grub
 #
 
-GRUB_VERSION		= 2.04
+GRUB_VERSION		= 2.14
 GRUB_TARBALL		= grub-$(GRUB_VERSION).tar.xz
-GRUB_TARBALL_URLS	+= $(ONIE_MIRROR) http://git.savannah.gnu.org/cgit/grub.git/snapshot/ ftp://alpha.gnu.org/gnu/grub/
+GRUB_TARBALL_URLS	+= $(ONIE_MIRROR) https://ftp.gnu.org/gnu/grub ftp://alpha.gnu.org/gnu/grub/
 GRUB_BUILD_DIR		= $(USER_BUILDDIR)/grub
 GRUB_DIR		= $(GRUB_BUILD_DIR)/grub-$(GRUB_VERSION)
 GRUB_I386_DIR		= $(GRUB_BUILD_DIR)/grub-i386-pc
@@ -123,12 +123,15 @@ $(GRUB_SOURCE_STAMP): $(USER_TREE_STAMP) | $(GRUB_DOWNLOAD_STAMP)
 	$(Q) $(SCRIPTDIR)/extract-package $(GRUB_BUILD_DIR) $(DOWNLOADDIR)/$(GRUB_TARBALL)
 	$(Q) touch $@
 
+# grub 2.14 needs no ONIE patches and its release tarball ships a generated
+# ./configure, so this step applies no patch series and does not run
+# autogen.sh.  (The i386-pc link fix for binutils >= 2.39 / GCC 14, which
+# requires patches + autogen + autoconf-archive, lives with the toolchain
+# upgrade, not here.)
 grub-patch: $(GRUB_PATCH_STAMP)
 $(GRUB_PATCH_STAMP): $(GRUB_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "====  Patching grub-$(GRUB_VERSION) ===="
-	$(Q) $(SCRIPTDIR)/apply-patch-series $(GRUB_SRCPATCHDIR)/series $(GRUB_DIR)
-	$(Q) cd $(GRUB_DIR) && ./autogen.sh
+	$(Q) echo "====  grub-$(GRUB_VERSION): no ONIE patches to apply ===="
 	$(Q) touch $@
 
 $(GRUB_CONFIGURE_I386_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)

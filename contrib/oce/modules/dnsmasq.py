@@ -1,5 +1,5 @@
 
-import ipaddr
+import ipaddress
 
 DEFAULT_LEASE_TIME = 600
 DEFAULT_MAX_LEASE_TIME = 7200
@@ -89,12 +89,12 @@ sudo {{ binary }} {{ options }}
 
 def add_subnet(subnets, subnet_cidr_str, gateway_str=None):
     value = {}
-    subnet = ipaddr.IPv4Network(subnet_cidr_str)
-    value['network'] = subnet.network
+    subnet = ipaddress.IPv4Network(subnet_cidr_str, strict=False)
+    value['network'] = subnet.network_address
     value['netmask'] = subnet.netmask
-    value['broadcast'] = subnet.broadcast
+    value['broadcast'] = subnet.broadcast_address
     if gateway_str is not None and gateway_str != '':
-        gateway = ipaddr.IPv4Address(gateway_str)
+        gateway = ipaddress.IPv4Address(gateway_str)
         value['gateway'] = gateway
 
     subnets.append(value)
@@ -132,14 +132,14 @@ def build_config(output, test_args):
 
     hosts_filename = os.path.join(test_args['test_dir'],
                                   DEFAULT_HOSTS_FILENAME)
-    temp = ipaddr.IPv4Network(test_args['ip_cidr'])
-    values['subnet_cidr'] = '{0}/{1}'.format(temp.network, temp.prefixlen)
+    temp = ipaddress.IPv4Network(test_args['ip_cidr'], strict=False)
+    values['subnet_cidr'] = '{0}/{1}'.format(temp.network_address, temp.prefixlen)
     gateway_addr = None
 
     if 'dhcp_gateway' in test_args:
         gateway_addr = test_args['dhcp_gateway']
     if 'dhcp_next_server' in test_args:
-        next_server = ipaddr.IPv4Address(test_args['dhcp_next_server'])
+        next_server = ipaddress.IPv4Address(test_args['dhcp_next_server'])
         values['dhcp_next_server'] = next_server
 
     if 'enable_dns' in test_args:
