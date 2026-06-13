@@ -44,12 +44,7 @@ CONSOLE_DEV = 0
 # FIXME: do not commit to github
 EXTRA_CMDLINE_LINUX = i2c-i801.disable_features=0x10
 
-# Set Linux kernel version
-LINUX_VERSION       = 4.1
-LINUX_MINOR_VERSION = 38
 
-# Older GCC required for older 3.2 kernel
-GCC_VERSION = 4.9.2
 
 #-------------------------------------------------------------------------------
 #

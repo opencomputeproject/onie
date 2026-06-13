@@ -40,15 +40,9 @@ CONSOLE_DEV = 0
 # Enable UEFI support
 UEFI_ENABLE = yes
 
-# Set Linux kernel version
-LINUX_VERSION = 5.4
-LINUX_MINOR_VERSION = 86
 
-# Set GCC version
-GCC_VERSION = 8.3.0
 
 # Set uClibc-ng version
-XTOOLS_LIBC_VERSION = 1.0.38
 
 include $(MACHINEDIR)/rootconf/grub-machine.make
 

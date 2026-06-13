@@ -25,7 +25,7 @@ try:
     import argparse
     import logging
     from dut import DUT
-except ImportError, e:
+except ImportError as e:
     raise ImportError (str(e) + "- required module not found")
 
 class fsl_p2020rdbpca_dut(DUT):
