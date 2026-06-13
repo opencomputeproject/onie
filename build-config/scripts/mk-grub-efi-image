@@ -66,7 +66,6 @@ GRUB_MODULES="
 	loadenv
 	loopback
 	linux
-	linuxefi
 	lsefi
 	lsefimmap
 	lsefisystab
@@ -114,7 +113,6 @@ GRUB_ENCRYPTION_MODULES=" 	fshelp
 	crypto
 	bufio
 	archelp
-	is_sb_enabled
 "
 
 
@@ -189,11 +187,31 @@ EOF
 fi
 
 
+# SBAT (Secure Boot Advanced Targeting) metadata.
+#
+# shim >= 15 enforces SBAT: before chainloading this GRUB image it reads the
+# image's .sbat section and rejects it unless every component's generation
+# (the integer 2nd field) meets the policy in the firmware's SbatLevel
+# variable -- otherwise the boot fails with "Verification failed: (0x1A)
+# Security Violation" before the GRUB menu ever appears.  GRUB built without
+# an .sbat section is rejected outright.  grub-mkimage embeds the section when
+# given --sbat.  ONIE's shim (16.1) enforces a baseline of grub generation 4,
+# so declare a grub generation that meets it.  The "version" fields are
+# informational; only the generation integers are compared by shim.
+grub_version="$("$grub_mkimage" --version 2>/dev/null | awk '{print $NF}')"
+sbat_csv="$(mktemp)"
+cat <<EOF > "$sbat_csv"
+sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md
+grub,4,Free Software Foundation,grub,${grub_version},https://www.gnu.org/software/grub/
+grub.onie,1,Open Compute Project,grub,${grub_version},https://github.com/opencomputeproject/onie
+EOF
+
 "$grub_mkimage" --format="${ARCH}-efi" \
 				--directory="$GRUB_TARGET_LIB_UEFI_DIR" \
 	            --prefix="/bogus" \
 				--config="$tmp_config" ${GPG_PUB_KEY} \
+				--sbat="$sbat_csv" \
 				--output="$OUTPUT_IMAGE" \
 				$GRUB_MODULES
 
-rm -f $tmp_config
+rm -f $tmp_config $sbat_csv

@@ -34,15 +34,10 @@ CONSOLE_DEV = 0
 UEFI_ENABLE = yes
 PXE_EFI64_ENABLE = yes
 
-# Set Linux kernel version
-LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
 
 # ONIE defaults the serial console baud rate to 115200
 CONSOLE_SPEED = 9600
 
-# Older GCC required for older 3.14.27 kernel
-GCC_VERSION = 4.9.2
 
 RECOVERY_DEFAULT_ENTRY = embed
 

@@ -1,0 +1,128 @@
+============================================
+Software Bill of Materials (SBOM) for ONIE
+============================================
+
+Every ONIE image is built with a Software Bill of Materials describing the
+third-party software it ships.  The SBOM is generated automatically as part of
+``make all`` and written next to the image, so a fresh build always produces a
+matching SBOM.
+
+What the SBOM describes
+=======================
+
+The SBOM lists the third-party software that is **compiled from source and
+installed into that machine's image** -- nothing that is merely a build-time
+host tool.  Concretely, for the machine being built it covers:
+
+- every package whose make fragment installs into the image sysroot
+  (``$(SYSROOTDIR)``) -- e.g. busybox, e2fsprogs, lvm2, util-linux, dropbear,
+  ... ; and
+- the boot / runtime components that are not ordinary sysroot packages: the
+  Linux kernel, the uClibc-ng C library, the GCC runtime, and the bootloader
+  (shim / U-Boot).
+
+Build-only tooling (the crosstool-NG cross compiler, binutils, gdb, autoconf,
+ncurses, the SBOM tools themselves, ...) is intentionally **excluded** -- it is
+not present in the shipped image.
+
+For each component the SBOM records the name, the exact version actually built,
+the upstream (canonical, non-mirror) source URL, the source tarball's SHA-256,
+the list of ONIE patches applied (as CycloneDX *pedigree*), and the SPDX
+license.
+
+Output
+======
+
+Two files are written to ``build/images/`` per machine::
+
+    <machine-prefix>.sbom.cdx.json     CycloneDX 1.6   (source of truth)
+    <machine-prefix>.sbom.spdx.json    SPDX 2.3        (derived via cyclonedx-cli)
+
+CycloneDX 1.6 is the authoritative document; the SPDX 2.3 file is converted
+from it.  This matches the formats published by the SONiC project.
+
+How it is invoked
+=================
+
+The SBOM is part of the default ``all`` target, so an ordinary build emits it::
+
+    make -j$(nproc) MACHINE=kvm_x86_64 all
+
+To (re)generate just the SBOM for an already-built image::
+
+    make MACHINE=kvm_x86_64 sbom
+
+To remove the SBOM artifacts::
+
+    make MACHINE=kvm_x86_64 sbom-clean
+
+The generator is ``build-config/scripts/gen-sbom.py``.  It is fully
+machine-agnostic: it introspects the build system to discover the enabled
+packages and their final versions, and detects licenses from the package
+sources, which are already extracted on disk by the time the sysroot is
+assembled.  There is nothing machine-specific to maintain.
+
+Tooling
+=======
+
+``gen-sbom.py`` uses three external tools:
+
+============== ============================================= ==========
+Tool           Purpose                                       Required?
+============== ============================================= ==========
+askalono       SPDX license detection from package sources   for licenses
+cyclonedx-cli  CycloneDX -> SPDX 2.3 conversion               for SPDX output
+grype          vulnerability scan (optional helper, below)    optional
+============== ============================================= ==========
+
+If these tools are not already on ``PATH``, the build provisions them
+automatically -- pinned to specific versions and verified against hard-coded
+SHA-256 hashes -- into a build-local prefix (``build/sbom-tools/bin``).  This
+requires no root and works in any build environment, so a full-fidelity SBOM is
+produced whether you build in the ONIE Docker environment, natively, or in CI.
+
+The provisioning is performed by ``build-config/scripts/install-sbom-tools.sh``,
+which you can also run by hand to pre-populate the tools, optionally choosing
+the install directory::
+
+    # system-wide (needs root)
+    sudo build-config/scripts/install-sbom-tools.sh
+
+    # or into a chosen prefix, no root required
+    build-config/scripts/install-sbom-tools.sh /path/to/bin
+
+**Offline / air-gapped builds:** the tools are fetched over the network the
+first time they are needed.  Pre-install them with the script above (while
+online) so the build finds them on ``PATH`` and downloads nothing.
+
+**Graceful degradation:** if the tools are unavailable and cannot be
+provisioned (e.g. no network), the build still succeeds and still emits a
+CycloneDX SBOM -- but license fields fall back to ``NOASSERTION`` and the SPDX
+file is skipped.  A warning is printed in that case.
+
+License detection and overrides
+===============================
+
+Licenses are detected automatically by askalono scanning the
+``COPYING`` / ``LICENSE`` / ``COPYRIGHT`` files in each extracted source tree.
+A handful of components are genuinely multi-licensed or have no single
+top-level license file where automatic detection is ambiguous; those carry a
+declared SPDX expression in::
+
+    build-config/conf/sbom/license-overrides.json
+
+The override is keyed by make-fragment name and always wins over detection.
+Add an entry there if a component reports ``NOASSERTION`` but its license is
+known.
+
+Vulnerability scanning (optional)
+=================================
+
+An optional helper scans the generated SBOM against the grype vulnerability
+database, suppressing CVEs that ONIE has already fixed by patch (recorded as
+OpenVEX)::
+
+    make MACHINE=kvm_x86_64 sbom-vuln-scan
+
+This writes ``<machine-prefix>.sbom.vulns.json`` to ``build/images/``.  It is
+not part of ``all`` -- run it explicitly when you want a vulnerability report.

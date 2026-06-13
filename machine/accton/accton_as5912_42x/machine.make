@@ -29,11 +29,7 @@ PXE_EFI64_ENABLE = yes
 # Console parameters
 CONSOLE_DEV = 1
 
-# Specify Linux kernel version -- comment out to use the default
-LINUX_VERSION = 5.4
-LINUX_MINOR_VERSION = 86
 
-GCC_VERSION = 8.3.0
 
 #-------------------------------------------------------------------------------
 #

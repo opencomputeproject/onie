@@ -9,10 +9,11 @@
 # This is a makefile fragment that defines the build of zlib
 #
 
-ZLIB_VERSION		= 1.2.11
+ZLIB_VERSION		= 1.3.2
 ZLIB_TARBALL		= zlib-$(ZLIB_VERSION).tar.xz
-ZLIB_TARBALL_URLS	+= $(ONIE_MIRROR) http://zlib.net \
-			   http://softlayer-dal.dl.sourceforge.net/project/libpng/zlib/$(ZLIB_VERSION)
+ZLIB_TARBALL_URLS	+= $(ONIE_MIRROR) \
+			   https://github.com/madler/zlib/releases/download/v$(ZLIB_VERSION) \
+			   https://zlib.net
 ZLIB_BUILD_DIR		= $(USER_BUILDDIR)/zlib
 ZLIB_DIR		= $(ZLIB_BUILD_DIR)/zlib-$(ZLIB_VERSION)
 

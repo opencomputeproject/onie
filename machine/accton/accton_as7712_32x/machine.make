@@ -31,11 +31,7 @@ I2CTOOLS_SYSEEPROM = no
 # Console parameters
 CONSOLE_DEV = 1
 
-# Set Linux kernel version
-LINUX_VERSION = 5.4
-LINUX_MINOR_VERSION = 86
 
-GCC_VERSION = 8.3.0
 
 #-------------------------------------------------------------------------------
 #
