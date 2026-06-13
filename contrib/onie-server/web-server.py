@@ -3,8 +3,8 @@
 #
 #  SPDX-License-Identifier:     GPL-2.0
 
-import SimpleHTTPServer
-import SocketServer
+import http.server
+import socketserver
 import sys
 
 if (len(sys.argv) <= 1):
@@ -14,10 +14,10 @@ if (len(sys.argv) <= 1):
 
 inside_ip = sys.argv[1]
 web_port = 80
-Handler = SimpleHTTPServer.SimpleHTTPRequestHandler
+Handler = http.server.SimpleHTTPRequestHandler
 
 try:
-    httpd = SocketServer.TCPServer((inside_ip, web_port), Handler)
+    httpd = socketserver.TCPServer((inside_ip, web_port), Handler)
 except:
     sys.stderr.write("We were unable to start the web server. Normally when " \
                      "this happens it is because there is some other process " \

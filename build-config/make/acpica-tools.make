@@ -10,9 +10,12 @@
 # This is a makefile fragment that defines the build of acpica-tools
 #
 
-ACPICA_TOOLS_VERSION	= 20150410
+ACPICA_TOOLS_VERSION	= 20260408
+# acpica.org's old download area was retired (it redirects to an Intel
+# page).  The ACPICA project now publishes the official acpica-unix
+# tarball as a GitHub release asset.
 ACPICA_TOOLS_TARBALL	= acpica-unix-$(ACPICA_TOOLS_VERSION).tar.gz
-ACPICA_TOOLS_TARBALL_URLS	+= $(ONIE_MIRROR) https://acpica.org/sites/acpica/files/
+ACPICA_TOOLS_TARBALL_URLS	+= $(ONIE_MIRROR) https://github.com/acpica/acpica/releases/download/$(ACPICA_TOOLS_VERSION)
 ACPICA_TOOLS_BUILD_DIR	= $(USER_BUILDDIR)/acpica-tools
 ACPICA_TOOLS_DIR		= $(ACPICA_TOOLS_BUILD_DIR)/acpica-unix-$(ACPICA_TOOLS_VERSION)
 
