@@ -15,6 +15,13 @@ Building ONIE
 The recommended way to set up an ONIE build environment is to use a Docker image, as described
 in the ONIE Documentation under `Preparing An ONIE Build Environment <https://opencomputeproject.github.io/onie/developers/building.html#preparing-an-onie-build-environment>`_.
 
+Software Bill of Materials
+==========================
+
+Every build emits a Software Bill of Materials (CycloneDX 1.6 and SPDX 2.3)
+describing the third-party software shipped in the image.  See `README.sbom
+<README.sbom>`_ for details.
+
 ******************************
 Mailing List and Collaboration
 ******************************

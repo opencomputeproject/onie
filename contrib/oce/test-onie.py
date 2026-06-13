@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # -----------------------------------------------------------------------------
 # Copyright (C) 2014-2016 Carlos Cardenas <carlos@cumulusnetworks.com>
@@ -107,19 +107,19 @@ def validate_mac_address(mac_address_str):
 
 def validate_ip_cidr(ip_cidr_str):
     try:
-        import ipaddr
-        return ipaddr.IPv4Network(ip_cidr_str) is not None
+        import ipaddress
+        return ipaddress.IPv4Network(ip_cidr_str, strict=False) is not None
     except ImportError:
-        logger.critical('ipaddr module is not in path')
+        logger.critical('ipaddress module is not in path')
         return False
-    except ipaddr.AddressValueError:
+    except ipaddress.AddressValueError:
         return False
 
 
 def validate_options(options):
     # check all keys in args.option to ensure they are supported
     # while checking, type convert
-    for key, value in options.iteritems():
+    for key, value in options.items():
         if key in OPTIONS.keys():
             options[key] = OPTIONS[key](value)
         else:
@@ -186,7 +186,7 @@ def list_tests():
     tests = TEST_DEFINE['tests']
     sorted_keys = sorted(tests.keys(), key=lambda k: int(k))
     for k in sorted_keys:
-        print 'Test {0} => {1}'.format(k, tests[k]['name'])
+        print('Test {0} => {1}'.format(k, tests[k]['name']))
 
 
 def test_case_file_name(test_args):
@@ -197,7 +197,7 @@ def test_case_file_name(test_args):
     '''
     # we need to get the name template and return the new name
     # return None if not required
-    s_name = map(lambda x: x.strip(), test_args['test']['name'].split('-'))
+    s_name = list(map(lambda x: x.strip(), test_args['test']['name'].split('-')))
     if s_name[-1] in TEST_DEFINE['names']:
         from jinja2 import Template
         template = Template(TEST_DEFINE['names'][s_name[-1]])
@@ -274,7 +274,7 @@ def test_case_file_name(test_args):
 
 
 def validate_network_info(test_args):
-    import ipaddr
+    import ipaddress
     import netifaces
     import socket
 
@@ -302,22 +302,24 @@ def validate_network_info(test_args):
 
     # Get first INET address
     inet = net_addrs[netifaces.AF_INET][0]
-    ipv4_network = ipaddr.IPv4Network('{0[addr]}/{0[netmask]}'.format(inet))
-    dut_address = ipaddr.IPv4Address(test_args['ip_address'])
-    dut_cidr = ipaddr.IPv4Network(test_args['ip_cidr'])
+    ipv4_network = ipaddress.IPv4Network('{0[addr]}/{0[netmask]}'.format(inet),
+                                         strict=False)
+    dut_address = ipaddress.IPv4Address(test_args['ip_address'])
+    dut_cidr = ipaddress.IPv4Network(test_args['ip_cidr'], strict=False)
 
     test_args['host_ipv4_addr'] = inet['addr']
     test_args['host_local_name'] = socket.gethostname()
 
     # Check dut_address
-    if ipv4_network.Contains(dut_address) is False:
+    if (dut_address in ipv4_network) is False:
         logger.critical('Interface {0} cannot support DUT address {1}'.
                         format(test_args['interface'], dut_address))
         sys.exit(-3)
     # Check dut_cidr
-    temp_cidr = ipaddr.IPv4Network('{0}/{1}'.format(
-                                   dut_address, dut_cidr.prefixlen))
-    if ipv4_network.Contains(temp_cidr) is False:
+    temp_cidr = ipaddress.IPv4Network('{0}/{1}'.format(
+                                      dut_address, dut_cidr.prefixlen),
+                                      strict=False)
+    if temp_cidr.subnet_of(ipv4_network) is False:
         logger.critical('Interface {0} cannot support DUT cidr {1}'.
                         format(test_args['interface'], test_args['ip_cidr']))
         sys.exit(-3)
@@ -427,7 +429,7 @@ def prepare_test_case(test_args):
 def configure_test(args):
     import shutil
     import stat
-    import ipaddr
+    import ipaddress
     test = TEST_DEFINE['tests'][str(args.test)]
     out = 'Configuring for Test {0} - {1[name]}'.format(args.test, test)
     logger.info(out)
@@ -435,11 +437,11 @@ def configure_test(args):
 
     # update ip_cidr and mac_address, CLI args take precendence
     if 'ip_cidr' in DUT_CONFIG:
-        ip_address = ipaddr.IPv4Network(DUT_CONFIG['ip_cidr'])
+        ip_address = ipaddress.IPv4Interface(DUT_CONFIG['ip_cidr'])
         test_args['ip_cidr'] = DUT_CONFIG['ip_cidr']
 
     if args.ip_cidr:
-        ip_address = ipaddr.IPv4Network(args.ip_cidr)
+        ip_address = ipaddress.IPv4Interface(args.ip_cidr)
         test_args['ip_cidr'] = args.ip_cidr
 
     if 'mac_address' in DUT_CONFIG:
@@ -713,18 +715,18 @@ def main():
                 running_procs[svc] = proc
         # wait on user input
         try:
-            raw_input('\n\nPress enter to stop all services\n\n')
+            input('\n\nPress enter to stop all services\n\n')
         except:
             pass
 
-        for svc, proc in running_procs.iteritems():
+        for svc, proc in running_procs.items():
             logger.info('Sending SIGTERM to {0}'.format(svc))
             child_procs = proc.children(recursive=True)
             for p in child_procs:
                 psutil.Popen('sudo kill -9 {0}'.format(p.pid), shell=True)
             proc.terminate()
 
-        for svc, proc in running_procs.iteritems():
+        for svc, proc in running_procs.items():
             logger.info('Waiting for {0} to cleanup'.format(svc))
             proc.wait()
 
