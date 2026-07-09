@@ -31,18 +31,51 @@ else
     exit 1
 fi
 
-# gitdm executable
+# gitdm executable.
+#
+# gitdm is no longer vendored in this tree.  Unless $GITDM already points
+# at a usable gitdm, auto-install a python3 port of gitdm (pinned) into a
+# local, git-ignored cache directory and run that.  Override the source
+# with $GITDM_REPO / $GITDM_REF, or set $GITDM to use your own copy.
+GITDM_REPO="${GITDM_REPO:-https://github.com/OSSystems/gitdm.git}"
+GITDM_REF="${GITDM_REF:-b7b1f8e7d567fc41dcfc249de5e967a6a30aa9b5}"
+
+script_dir="$(dirname "$(realpath "$0")")"
+
 if [ -z "$GITDM" ] ; then
-    GITDM="$(dirname $(realpath $0))/gitdm/gitdm"
+    gitdm_dir="$script_dir/.gitdm"
+    GITDM="$gitdm_dir/gitdm"
+    if [ ! -e "$GITDM" ] ; then
+        command -v git >/dev/null 2>&1 || {
+            echo "Error: git is required to auto-install gitdm"
+            exit 1
+        }
+        echo "gitdm not found -- installing python3 gitdm from $GITDM_REPO@$GITDM_REF ..."
+        rm -rf "$gitdm_dir"
+        git clone -q "$GITDM_REPO" "$gitdm_dir" || {
+            echo "Error: failed to clone gitdm from $GITDM_REPO"
+            exit 1
+        }
+        git -C "$gitdm_dir" checkout -q "$GITDM_REF" || {
+            echo "Error: failed to check out gitdm $GITDM_REF"
+            rm -rf "$gitdm_dir"
+            exit 1
+        }
+    fi
 fi
-[ -x "$GITDM" ] || {
-    echo "Error: Unable to find gitdm executable"
+[ -e "$GITDM" ] || {
+    echo "Error: Unable to find gitdm ($GITDM)"
+    exit 1
+}
+
+command -v python3 >/dev/null 2>&1 || {
+    echo "Error: python3 is required to run gitdm"
     exit 1
 }
 
 # gitdm configuration
 if [ -z "$GITDM_CFG_DIR" ] ; then
-    GITDM_CFG_DIR="$(dirname $(realpath $0))/gitdm-config"
+    GITDM_CFG_DIR="$script_dir/gitdm-config"
 fi
 [ -d "$GITDM_CFG_DIR" ] || {
     echo "Error: Unable to find gitdm configuration directory"
@@ -83,11 +116,13 @@ output_txt="/tmp/${prefix}-results.txt"
 output_html="/tmp/${prefix}-results.html"
 
 echo "Generating stats for range: $range ..."
+# PYTHONWARNINGS: the pinned upstream gitdm trips python3 SyntaxWarnings for
+# unescaped regex sequences in its own source; silence that upstream noise.
 git log -p -M "$range" | \
-    python $GITDM \
+    PYTHONWARNINGS="ignore::SyntaxWarning" python3 "$GITDM" \
            -o "$output_txt" \
            -h "$output_html" \
-           -c $gitdm_cfg
+           -c "$gitdm_cfg"
 
 echo "Stats available here:"
 echo "  $output_txt"

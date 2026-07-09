@@ -5,6 +5,51 @@ statistics, based on gitdm by Jonathan Corbet <corbet@lwn.net>.
 
 Original source: `git://git.lwn.net/gitdm.git`
 
+# gitdm
+
+gitdm itself is **no longer vendored in this tree**.  The upstream
+gitdm is python2 and is effectively unmaintained; rather than carry a
+copy here, `onie-git-stats` obtains a python3 port of gitdm on demand.
+
+By default the script auto-installs a pinned python3 gitdm the first
+time it is run, so in the common case you can just run it as-is (see
+[Running](#running) below).  This requires `git` and `python3` on your
+`PATH`.
+
+## Where gitdm comes from
+
+On first run, `onie-git-stats` clones a python3 port of gitdm into a
+local, git-ignored cache directory next to the script
+(`contrib/git-stats/.gitdm/`) and reuses it on subsequent runs.  The
+source and revision are pinned and can be overridden with environment
+variables:
+
+| Variable     | Default                                    | Meaning                                 |
+| ------------ | ------------------------------------------ | --------------------------------------- |
+| `GITDM_REPO` | `https://github.com/OSSystems/gitdm.git`   | git URL to clone gitdm from             |
+| `GITDM_REF`  | `b7b1f8e7d567fc41dcfc249de5e967a6a30aa9b5` | commit/tag/branch of gitdm to check out |
+
+To refresh the cache (e.g. after changing `GITDM_REF`), delete the
+cache directory and re-run:
+
+```
+  $ rm -rf contrib/git-stats/.gitdm
+```
+
+## Using a pre-existing gitdm (skip the auto-install)
+
+If you already have a python3-capable gitdm installed, set the `GITDM`
+environment variable to point at its `gitdm` executable.  When `GITDM`
+is set, `onie-git-stats` uses it directly and does **not** clone or
+install anything:
+
+```
+  $ GITDM=/path/to/your/gitdm ./onie-git-stats 2024.05..HEAD quarterly
+```
+
+Note that gitdm must be a python3 port -- `onie-git-stats` invokes it
+with `python3`.
+
 # Running
 
 The script takes two arguments.
@@ -52,4 +97,5 @@ changes are controlled by the gitdm configuration files in the
 
 The most common changes are mapping an email domain name to a
 corporate name for the report.  This is controlled by the `domain-map`
-file.  See `gitdm/README` for complete configuration details.
+file.  See the documentation of the gitdm the script installs (or that
+`GITDM_REPO` points at) for complete configuration details.
