@@ -79,7 +79,7 @@ $(MOKUTIL_CONFIGURE_STAMP): $(MOKUTIL_PATCH_STAMP) $(EFIVAR_BUILD_STAMP) | $(DEV
 		--host=$(TARGET)				\
 		EFIVAR_CFLAGS=-I$(DEV_SYSROOT)/usr/include/efivar \
 		CC=$(CROSSPREFIX)gcc				\
-		CFLAGS="$(ONIE_CFLAGS)"				\
+		CFLAGS="$(ONIE_CFLAGS) -Wno-error=deprecated-declarations"				\
 		LDFLAGS="$(ONIE_LDFLAGS)"			\
 		$(ONIE_PKG_CONFIG)
 	$(Q) touch $@

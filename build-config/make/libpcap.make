@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of libpcap
 #
 
-LIBPCAP_VERSION		= 1.10.4
+LIBPCAP_VERSION		= 1.10.6
 LIBPCAP_TARBALL		= libpcap-$(LIBPCAP_VERSION).tar.gz
 LIBPCAP_TARBALL_URLS	+= $(ONIE_MIRROR) \
 			   https://www.tcpdump.org/release
