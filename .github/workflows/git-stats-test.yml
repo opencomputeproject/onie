@@ -1,0 +1,58 @@
+name: git-stats (gitdm)
+
+# Validate the contrib/git-stats tooling.  gitdm is no longer vendored in the
+# tree: onie-git-stats auto-installs a pinned python3 gitdm on first run, and
+# honors $GITDM to use a pre-existing install instead.  This check exercises
+# both paths end-to-end (a report is actually generated), so the change can be
+# trusted without manual testing.  Scoped to contrib/git-stats (and this
+# workflow file) since nothing else affects it.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'contrib/git-stats/**'
+      - '.github/workflows/git-stats-test.yml'
+  pull_request:
+    paths:
+      - 'contrib/git-stats/**'
+      - '.github/workflows/git-stats-test.yml'
+
+# Cancel an in-progress run when a newer commit is pushed to the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  git-stats:
+    name: onie-git-stats
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # onie-git-stats runs "git log <range>"; fetch enough history for it.
+          fetch-depth: 50
+
+      - name: Auto-install path (clone a python3 gitdm, generate a report)
+        working-directory: contrib/git-stats
+        run: |
+          set -eu
+          ./onie-git-stats HEAD~10..HEAD ci
+          test -d .gitdm                    # auto-install actually happened
+          test -s /tmp/ci-results.txt       # non-empty text report
+          test -s /tmp/ci-results.html      # non-empty html report
+          grep -q "Processed" /tmp/ci-results.txt
+          echo "auto-install path OK"
+
+      - name: Override path ($GITDM bypasses the auto-install)
+        working-directory: contrib/git-stats
+        run: |
+          set -eu
+          # Reuse the gitdm cloned above as a "pre-existing" install, drop the
+          # auto-install cache, and confirm the override does NOT re-clone it.
+          mv .gitdm "$RUNNER_TEMP/gitdm"
+          GITDM="$RUNNER_TEMP/gitdm/gitdm" ./onie-git-stats HEAD~10..HEAD ci2
+          test ! -e .gitdm                  # override must skip the clone
+          test -s /tmp/ci2-results.txt
+          grep -q "Processed" /tmp/ci2-results.txt
+          echo "override path OK"
