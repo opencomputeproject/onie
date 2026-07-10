@@ -12,6 +12,17 @@ name: Build ONIE (kvm_x86_64)
 # filtering would risk skipping validation on build-affecting changes.
 on:
   workflow_dispatch:
+    inputs:
+      oce_scope:
+        description: >-
+          OCE compliance test scope: "default" (a fast representative
+          subset, also what push/PR runs) or "full" (the entire OCE
+          installer+updater sweep, tests 3-121 -- slow, many VM boots).
+        type: choice
+        default: default
+        options:
+          - default
+          - full
   push:
   pull_request:
 
@@ -28,6 +39,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # The GCC 14 / Debian 13 toolchain build plus the full image (restored
+      # x-tools cache + every package + kernel + recovery ISO) exceeds the
+      # ~14 GB free on a stock ubuntu-latest runner.  Reclaim ~25 GB of
+      # preinstalled toolchains we do not use so the build has headroom.
+      - name: Free up runner disk space
+        run: |
+          echo "Disk before cleanup:"; df -h /
+          sudo rm -rf /usr/local/lib/android /opt/hostedtoolcache /usr/share/dotnet \
+                      /usr/local/.ghcup /usr/share/swift /usr/local/share/powershell \
+                      /usr/local/lib/node_modules || true
+          echo "Disk after cleanup:"; df -h /
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
@@ -299,4 +322,64 @@ jobs:
         with:
           name: onie-install-serial-log
           path: onie-install-*.log
+          retention-days: 7
+
+  # Run ONIE's own OCE (ONIE Compliance Environment, contrib/oce) compliance
+  # suite against the image.  Where install-test hands ONIE the installer URL
+  # directly (install_url=), OCE exercises the REAL OCP discovery path: it
+  # stands up isc-dhcp-server advertising the ONIE VIVSO vendor option (DHCP
+  # option 125) plus an nginx HTTP server, and ONIE must DHCP, read the VIVSO
+  # installer URL, and fetch+install the image itself.  OCE needs L2 to the DUT
+  # (it validates the DUT shares the host interface's subnet), so the VM is on a
+  # tap interface rather than user-mode SLIRP.  contrib/oce is python3 (it was
+  # ported in the python2-to-3 PR this is stacked on).  See
+  # emulation/ci-oce-test.sh.
+  oce-test:
+    name: OCE compliance kvm_x86_64
+    # Chained after install-test (not parallel) so only one VM-heavy job runs
+    # at a time, keeping CI resource use low.
+    needs: install-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Enable KVM (grant /dev/kvm access)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install QEMU + OCE service backends + python deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils isc-dhcp-server nginx-light tftpd-hpa \
+            dnsmasq dosfstools python3-venv
+          python3 -m venv /tmp/oce-venv
+          /tmp/oce-venv/bin/pip install --quiet jinja2 netifaces psutil
+      - name: Download install-test images
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: onie-kvm-install-images
+          path: build/images
+      - name: Run OCE compliance test (full install/update via OCP discovery)
+        run: |
+          # On push/PR (no dispatch input) run the fast "default" subset; a
+          # human can manually dispatch this workflow with oce_scope=full to
+          # run the entire OCE installer+updater sweep.
+          SCOPE="${{ inputs.oce_scope }}"
+          [ -z "$SCOPE" ] && SCOPE=default
+          OCE_PYTHON=/tmp/oce-venv/bin/python SERIAL_PREFIX="$PWD/onie-oce" \
+            emulation/ci-oce-test.sh \
+              build/images/kvm_x86_64-r0.vmlinuz \
+              build/images/kvm_x86_64-r0.initrd \
+              build/images/demo-installer-x86_64-kvm_x86_64-r0.bin \
+              build/images/onie-updater-x86_64-kvm_x86_64-r0 \
+              "$SCOPE"
+      - name: Upload OCE serial logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: onie-oce-serial-log
+          path: onie-oce-*.log
           retention-days: 7

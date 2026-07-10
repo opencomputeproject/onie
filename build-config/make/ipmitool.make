@@ -9,9 +9,14 @@
 # This is a makefile fragment that defines the build of ipmitool
 #
 
-IPMITOOL_VERSION		= 1.8.18
-IPMITOOL_TARBALL		= ipmitool-$(IPMITOOL_VERSION).tar.bz2
-IPMITOOL_TARBALL_URLS	+= $(ONIE_MIRROR) https://github.com/ipmitool/ipmitool/releases/download/IPMITOOL_$(subst .,_,$(IPMITOOL_VERSION))/
+IPMITOOL_VERSION		= 1.8.19
+# 1.8.19 ships no release dist tarball, so use the upstream GitHub source
+# tag archive.  It unpacks to ipmitool-$(IPMITOOL_TAG)/ and has no
+# generated configure, so the source step renames the dir and the
+# configure step runs ./bootstrap (autoreconf) first.
+IPMITOOL_TAG			= IPMITOOL_$(subst .,_,$(IPMITOOL_VERSION))
+IPMITOOL_TARBALL		= $(IPMITOOL_TAG).tar.gz
+IPMITOOL_TARBALL_URLS	+= $(ONIE_MIRROR) https://github.com/ipmitool/ipmitool/archive/refs/tags
 IPMITOOL_BUILD_DIR	= $(USER_BUILDDIR)/ipmitool
 IPMITOOL_DIR		= $(IPMITOOL_BUILD_DIR)/ipmitool-$(IPMITOOL_VERSION)
 
@@ -47,12 +52,16 @@ $(IPMITOOL_SOURCE_STAMP): $(USER_TREE_STAMP) | $(IPMITOOL_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Extracting upstream ipmitool ===="
 	$(Q) $(SCRIPTDIR)/extract-package $(IPMITOOL_BUILD_DIR) $(DOWNLOADDIR)/$(IPMITOOL_TARBALL)
+	$(Q) if [ -d "$(IPMITOOL_BUILD_DIR)/ipmitool-$(IPMITOOL_TAG)" ] ; then \
+		mv "$(IPMITOOL_BUILD_DIR)/ipmitool-$(IPMITOOL_TAG)" $(IPMITOOL_DIR) ; \
+	fi
 	$(Q) touch $@
 
 ipmitool-configure: $(IPMITOOL_CONFIGURE_STAMP)
 $(IPMITOOL_CONFIGURE_STAMP): $(IPMITOOL_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure ipmitool-$(IPMITOOL_VERSION) ===="
+	$(Q) cd $(IPMITOOL_DIR) && PATH='$(CROSSBIN):$(PATH)' ./bootstrap
 	$(Q) cd $(IPMITOOL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(IPMITOOL_DIR)/configure			\
 		--prefix=/usr					\
