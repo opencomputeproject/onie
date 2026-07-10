@@ -44,8 +44,6 @@ LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
 #LINUX_VERSION		= fsl-sdk-v1.7
 #LINUX_MINOR_VERSION	= 27
 
-# Older GCC required for older fsl-sdk kernel
-GCC_VERSION = 4.9.2
 
 #Add EXT 3 support
 EXT3_4_ENABLE = yes

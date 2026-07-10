@@ -123,17 +123,12 @@ $(GRUB_SOURCE_STAMP): $(USER_TREE_STAMP) | $(GRUB_DOWNLOAD_STAMP)
 	$(Q) $(SCRIPTDIR)/extract-package $(GRUB_BUILD_DIR) $(DOWNLOADDIR)/$(GRUB_TARBALL)
 	$(Q) touch $@
 
-# grub 2.14's release tarball ships a generated ./configure, so this step
-# applies the ONIE patch series but does not run autogen.sh: the only ONIE
-# patch here (SBAT-optional kernel verification for shim 16.1) is a
-# source-only change to grub-core/kern/efi/sb.c.  (The i386-pc link fix for
-# binutils >= 2.39 / GCC 14, which needs patches + autogen + autoconf-archive,
-# lives with the toolchain upgrade, not here.)
 grub-patch: $(GRUB_PATCH_STAMP)
 $(GRUB_PATCH_STAMP): $(GRUB_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Patching grub-$(GRUB_VERSION) ===="
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(GRUB_SRCPATCHDIR)/series $(GRUB_DIR)
+	$(Q) cd $(GRUB_DIR) && ./autogen.sh
 	$(Q) touch $@
 
 $(GRUB_CONFIGURE_I386_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
