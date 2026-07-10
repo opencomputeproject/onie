@@ -53,7 +53,6 @@ LINUX_MINOR_VERSION	= 95
 
 # Specify uClibc version
 #UCLIBC_VERSION = 0.9.32.1
-GCC_VERSION = 6.3.0
 
 #Extra kernel command line
 EXTRA_CMDLINE_LINUX ?= quiet

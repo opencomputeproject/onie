@@ -15,10 +15,58 @@ PROG="DHCP"
 case $1 in
     bound|renew)
 
-        # Print responses usable by onie, prefixed with "onie_disco"
-        # Translate '=' into '@', e.g. name=val => name@@val
-        # Separate name@val pairs with '##'
-        onie_parms=$(printenv | sed -e '/.*=$/d' -e '/^[A-Z_]/d' -e '/^onie.*/d' -e 's/=/@@/' -e 's/$/#/' -e 's/^/onie_disco_/' | tr '\n' '#')
+        # busybox's udhcpc exports a RECEIVED option as a friendly typed
+        # "<name>=<value>" env var only if that option is in its built-in table;
+        # options it doesn't know are exported generically as "opt<code>=<hex>"
+        # -- RAW HEX, untyped.  busybox trims rarely-used options from that table
+        # for size (it dropped vivso/125 after ~1.25 and never carried
+        # tftpsiaddr/150), so several options ONIE's discovery consumes by name
+        # arrive as opt<code> in hex.  Rather than carry a busybox source patch
+        # to re-add them (which upstream is unlikely to take back), decode those
+        # here -- the one place that turns the udhcpc env into onie_disco_* --
+        # to the typed value and name ONIE expects:
+        #    72 -> wwwsrv      (WWW_SERVER,     IPv4 list)
+        #   114 -> url         (DEFAULT_URL,    string)
+        #   125 -> vivso       (VIVSO, binary -- left as hex; import_vivso decodes)
+        #   150 -> tftpsiaddr  (TFTP_SERVER_IP, IPv4)
+        # Each is a no-op on a busybox that already knows the name (the opt<code>
+        # var is absent), so this stays correct across busybox versions.
+
+        # hex string -> ASCII, byte-by-byte via octal escapes so a '%' or '\'
+        # in (e.g.) a percent-encoded URL is never interpreted by printf.
+        hex2str() {
+            local h="$1" out=
+            while [ ${#h} -ge 2 ]; do
+                local b=${h%${h#??}}; h=${h#??}
+                out="$out$(printf "\\$(printf '%03o' "0x$b")")"
+            done
+            printf '%s' "$out"
+        }
+        # hex of one or more 4-byte IPv4 addresses -> "a.b.c.d ..."
+        hex2ip() {
+            local h="$1" out=
+            while [ ${#h} -ge 8 ]; do
+                local a=$((0x${h%${h#??}})); h=${h#??}
+                local b=$((0x${h%${h#??}})); h=${h#??}
+                local c=$((0x${h%${h#??}})); h=${h#??}
+                local d=$((0x${h%${h#??}})); h=${h#??}
+                out="$out $a.$b.$c.$d"
+            done
+            printf '%s' "${out# }"
+        }
+        [ -n "$opt114" ] && export url="$(hex2str "$opt114")"
+        [ -n "$opt72"  ] && export wwwsrv="$(hex2ip "$opt72")"
+        [ -n "$opt150" ] && export tftpsiaddr="$(hex2ip "$opt150")"
+        [ -n "$opt125" ] && export vivso="$opt125"
+
+        # Print responses usable by onie, prefixed with "onie_disco".
+        # Translate '=' into '@', e.g. name=val => name@@val; separate name@val
+        # pairs with '##'.  Drop the raw opt<code> vars (superseded by the
+        # decoded names above) so they don't also leak through.
+        onie_parms=$(printenv | sed \
+            -e '/^opt[0-9]/d' \
+            -e '/.*=$/d' -e '/^[A-Z_]/d' -e '/^onie.*/d' \
+            -e 's/=/@@/' -e 's/$/#/' -e 's/^/onie_disco_/' | tr '\n' '#')
         echo "ONIE_PARMS:$onie_parms"
 
         ;;

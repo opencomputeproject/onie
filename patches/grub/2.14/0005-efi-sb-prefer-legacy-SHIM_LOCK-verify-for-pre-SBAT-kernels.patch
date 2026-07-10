@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Brad House <bhouse@nexthop.ai>
+Date: Fri, 10 Jul 2026 00:00:00 +0000
+Subject: [PATCH] efi/sb: prefer legacy SHIM_LOCK verify so pre-SBAT kernels
+ boot under shim >= 15
+
+ONIE supports platforms that still build older (pre-6.x) Linux kernels.
+Those kernels' EFI stub predates SBAT and carries no .sbat section.
+
+grub 2.14 verifies the images it loads (including the kernel) using shim's
+newer image-loader protocol when shim provides it (shim >= 15/16).  That
+path makes an .sbat section MANDATORY, so shim rejects a pre-SBAT kernel
+("No .sbat section data" -> grub "bad shim loader signature") even though
+the kernel's Authenticode signature is valid.
+
+shim also still installs the legacy SHIM_LOCK verify protocol, which
+enforces the signature but treats SBAT as optional for images verified
+through the protocol (shim's verify_sbat_section() returns success on a
+missing .sbat when in_protocol).  Prefer that protocol when it is present
+so a validly-signed old kernel boots.  shim and grub keep full SBAT
+enforcement in the boot chain up to grub itself; only the kernel is then
+verified by signature alone -- which is how ONIE (signing its own kernels)
+verified kernels before the shim/grub modernization.
+
+Signed-off-by: Brad House <bhouse@nexthop.ai>
+---
+ grub-core/kern/efi/sb.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+--- a/grub-core/kern/efi/sb.c
++++ b/grub-core/kern/efi/sb.c
+@@ -236,6 +236,20 @@
+   shim_loader = grub_efi_locate_protocol (&shim_loader_guid, 0);
+   shim_lock = grub_efi_locate_protocol (&shim_lock_guid, 0);
+ 
++  /*
++   * ONIE: when the legacy SHIM_LOCK verify protocol is available, prefer it
++   * over shim's newer image-loader protocol.  shim's load_image path makes an
++   * .sbat section MANDATORY in every image it loads, which rejects ONIE's
++   * older (pre-6.x) kernels whose EFI stub predates SBAT -- "No .sbat section
++   * data" -> "bad shim loader signature" -- even though the kernel signature
++   * is valid.  The SHIM_LOCK->verify path still enforces the signature but
++   * treats SBAT as optional (in_protocol), so a validly-signed old kernel
++   * boots.  shim and grub keep full SBAT enforcement in the boot chain up to
++   * grub itself; only the kernel is verified by signature alone.
++   */
++  if (shim_lock != NULL)
++    shim_loader = NULL;
++
+   /* shim is missing, check if GRUB image is built with --disable-shim-lock. */
+   if (shim_loader == NULL && shim_lock == NULL)
+     {
