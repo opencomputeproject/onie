@@ -51,9 +51,6 @@ UEFI_ENABLE = yes
 # Enable UEFI PXE
 PXE_EFI64_ENABLE = yes
 
-# Set the desired kernel version.
-LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
 
 
 #

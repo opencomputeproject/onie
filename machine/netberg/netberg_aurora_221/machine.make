@@ -35,9 +35,6 @@ EXTRA_CMDLINE_LINUX = earlycon=uart8250,io,0x3f8 acpi_osi="Linux"
 UEFI_ENABLE = yes
 RECOVERY_DEFAULT_ENTRY = embed
 
-# Set Linux kernel version
-LINUX_VERSION = 4.9
-LINUX_MINOR_VERSION = 95
 
 
 # Set uClibc-ng version

@@ -31,9 +31,6 @@ CONSOLE_SPEED = 115200
 CONSOLE_DEV = 0
 UEFI_ENABLE = yes
 
-# Specify Linux kernel version -- comment out to use the default
-LINUX_VERSION = 4.9
-LINUX_MINOR_VERSION = 95
 
 EXTRA_CMDLINE_LINUX = acpi_osi=Linux
 

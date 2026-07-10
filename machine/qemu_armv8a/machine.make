@@ -24,7 +24,6 @@ XTOOLS_ENABLE = yes
 ifeq ($(XTOOLS_ENABLE),no)
   TARGET = aarch64-linux-gnu
   CROSSBIN = $(HOME)/gcc-linaro-5.3-2016.02-x86_64_aarch64-linux-gnu/bin
-  LINUX_VERSION = 4.1.23
   STRACE_ENABLE = no
   XTOOLS_BUILD_STAMP = $(CROSSBIN)/$(TARGET)-gcc
 endif
@@ -43,8 +42,6 @@ RECOVERY_DEFAULT_ENTRY = embed
 
 PXE_EFI64_ENABLE = yes
 
-LINUX_VERSION = 5.4
-LINUX_MINOR_VERSION = 86
 KERNEL_DTB = arm/vexpress-v2f-1xv7-ca53x2.dtb
 KERNEL_DTB_PATH = dts/$(KERNEL_DTB)
 

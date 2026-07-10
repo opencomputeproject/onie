@@ -45,9 +45,6 @@ IOACCESS_ENABLE = yes
 CONSOLE_SPEED = 115200
 CONSOLE_DEV = 0
 
-# Set Linux kernel version
-LINUX_VERSION       = 4.9
-LINUX_MINOR_VERSION = 95
 
 
 #-------------------------------------------------------------------------------

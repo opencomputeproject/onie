@@ -33,9 +33,6 @@ VENDOR_ID = 259
 UEFI_ENABLE = yes
 PXE_EFI64_ENABLE = yes
 
-# Set Linux kernel version
-LINUX_VERSION = 5.4
-LINUX_MINOR_VERSION = 86
 
 
 #-------------------------------------------------------------------------------
