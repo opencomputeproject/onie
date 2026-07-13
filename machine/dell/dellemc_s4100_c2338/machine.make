@@ -29,9 +29,6 @@ EXTRA_CMDLINE_LINUX = i2c-ismt.bus_speed=100
 # Enable UEFI support
 UEFI_ENABLE = yes
 
-# Set Linux kernel version
-LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
 
 #-------------------------------------------------------------------------------
 #

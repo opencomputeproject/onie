@@ -36,8 +36,6 @@ I2CTOOLS_ENABLE = yes
 # Set the desired kernel version.
 LINUX_VERSION		= 3.14
 LINUX_MINOR_VERSION	= 27
-# Older GCC required for older 3.14.27 kernel
-GCC_VERSION = 4.9.2
 
 UEFI_ENABLE = yes
 PXE_EFI64_ENABLE = yes

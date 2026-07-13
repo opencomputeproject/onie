@@ -14,7 +14,12 @@
 
 #-------------------------------------------------------------------------------
 
-LINUX_CONFIG 		?= conf/kernel/$(LINUX_RELEASE)/linux.$(ONIE_ARCH).config
+# Prefer a version-specific kernel config if a platform ships one (the legacy
+# per-version configs under conf/kernel/<release>/ are kept for the older
+# machine kernels), otherwise fall back to the shared, non-versioned base.
+# olddefconfig (see the .config recipe below) reconciles whichever base to the
+# kernel actually being built, so a kernel bump needs no new committed config.
+LINUX_CONFIG 		?= $(firstword $(wildcard conf/kernel/$(LINUX_RELEASE)/linux.$(ONIE_ARCH).config) conf/kernel/linux.$(ONIE_ARCH).config)
 KERNELDIR   		= $(MBUILDDIR)/kernel
 LINUXDIR   		= $(KERNELDIR)/linux
 
@@ -82,12 +87,25 @@ $(KERNEL_PATCH_STAMP): $(KERNEL_SRCPATCHDIR)/* $(MACHINE_KERNEL_PATCHDIR)/* $(KE
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(KERNEL_PATCHDIR)/series $(LINUXDIR)
 	$(Q) touch $@
 
-$(LINUXDIR)/.config : $(LINUX_CONFIG) $(KERNEL_PATCH_STAMP)
+# olddefconfig (below) runs the kernel kconfig, which probes the cross
+# compiler via scripts/Kconfig.include, so the toolchain must already be
+# built.  Order-only so a toolchain rebuild does not force a config regen.
+$(LINUXDIR)/.config : $(LINUX_CONFIG) $(KERNEL_PATCH_STAMP) | $(XTOOLS_BUILD_STAMP)
 	$(Q) echo "==== Copying $(LINUX_CONFIG) to $(LINUXDIR)/.config ===="
 	$(Q) cp -v $< $@
 #	$(Q) cat $(MACHINE_KERNEL_PATCHDIR)/config >> $(LINUXDIR)/.config
 	$(Q) echo "==== Merging patches from $(MACHINE_KERNEL_PATCHDIR)/config to $(LINUXDIR)/.config ===="
 	$(Q) $(LINUXDIR)/scripts/kconfig/merge_config.sh -r -m -O  $(LINUXDIR) $(LINUXDIR)/.config $(MACHINE_KERNEL_PATCHDIR)/config
+	$(Q) echo "==== Reconciling kernel config to $(LINUX_RELEASE) (olddefconfig) ===="
+	$(Q) PATH='$(CROSSBIN):$(PATH)' $(MAKE) -C $(LINUXDIR) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(CROSSPREFIX) olddefconfig
+	# Modern kernels resolve CONFIG_MODULE_SIG_KEY relative to the build tree
+	# and dropped the MODULE_SIG_KEY_SRCPREFIX mechanism, so rewrite a
+	# configured module-signing key to the absolute path of the generated key.
+	$(Q) if grep -q '^CONFIG_MODULE_SIG_KEY=' $(LINUXDIR)/.config && [ -n "$(ONIE_MODULE_SIG_KEY_SRCPREFIX)" ]; then \
+		k=$$(sed -n 's/^CONFIG_MODULE_SIG_KEY="\(.*\)"/\1/p' $(LINUXDIR)/.config) ; \
+		sed -i "s|^CONFIG_MODULE_SIG_KEY=.*|CONFIG_MODULE_SIG_KEY=\"$(abspath $(ONIE_MODULE_SIG_KEY_SRCPREFIX))/$$(basename $$k)\"|" $(LINUXDIR)/.config ; \
+		echo "==== Set CONFIG_MODULE_SIG_KEY to $(abspath $(ONIE_MODULE_SIG_KEY_SRCPREFIX))/$$(basename $$k) ====" ; \
+	fi
 
 
 # Interactive update. User selects options, or not
@@ -109,6 +127,18 @@ LINUX_NEW_FILES	= \
 	    -type f -print -quit 2>/dev/null)
 endif
 
+# Pre-6.x kernels do not build cleanly with the modern GCC 14 toolchain: their
+# in-tree objtool cannot parse the objects emitted by the toolchain's binutils
+# (e.g. "arch/x86/entry/thunk_64.o: objtool: missing symbol table"), and GCC 14
+# promotes several new warnings to errors.  For those old kernels only, skip the
+# objtool stack-validation pass and relax warnings-as-errors.  Passing
+# CONFIG_STACK_VALIDATION= on the command line overrides the value from .config
+# in every (sub-)make, so objtool is not invoked, WITHOUT having to disable the
+# RETPOLINE/ORC kconfig options that select it.  Modern kernels (6.x+) keep full
+# stack validation.
+KERNEL_OLD_GCC_COMPAT = $(if $(shell [ "$(LINUX_MAJOR_VERSION)" -lt 6 ] 2>/dev/null && echo old),\
+	CONFIG_STACK_VALIDATION= KBUILD_HOSTCFLAGS=-Wno-error KCFLAGS=-Wno-error)
+
 kernel-build: $(KERNEL_BUILD_STAMP)
 $(KERNEL_BUILD_STAMP): $(KERNEL_SOURCE_STAMP) $(LINUX_NEW_FILES) $(LINUXDIR)/.config | $(XTOOLS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
@@ -117,7 +147,7 @@ $(KERNEL_BUILD_STAMP): $(KERNEL_SOURCE_STAMP) $(LINUX_NEW_FILES) $(LINUXDIR)/.co
 	    $(MAKE) -C $(LINUXDIR)		\
 		ARCH=$(KERNEL_ARCH)		\
 		CROSS_COMPILE=$(CROSSPREFIX)	\
-		MODULE_SIG_KEY_SRCPREFIX=$(ONIE_MODULE_SIG_KEY_SRCPREFIX)/ \
+		$(KERNEL_OLD_GCC_COMPAT)	\
 		V=$(V) 				\
 		all
 	$(Q) touch $@
