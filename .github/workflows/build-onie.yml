@@ -158,6 +158,22 @@ jobs:
               make MACHINE=kvm_x86_64 shim-self-sign && \
               make -j"$(nproc)" MACHINE=kvm_x86_64 all recovery-iso demo'
 
+      # Scan the SBOM (produced by `make all`) for known vulnerabilities and
+      # publish the table to the job log and the run summary.  This is a
+      # report, not a gate: sbom-vuln-scan.py always exits 0 (CVEs already
+      # fixed by ONIE patches are suppressed via OpenVEX), so it never fails
+      # the build.  The SBOM tools (incl. grype) were provisioned by the SBOM
+      # step of `make all`.
+      - name: SBOM vulnerability scan
+        run: |
+          docker run --rm \
+            -v "${PWD}:/onie" \
+            onie-build-env \
+            bash -lc 'cd build-config && make MACHINE=kvm_x86_64 sbom-vuln-scan'
+          for f in build/images/*.sbom.vulns.md; do
+            [ -f "$f" ] || continue
+            cat "$f" >> "$GITHUB_STEP_SUMMARY"
+          done
       - name: Upload kvm recovery image
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
