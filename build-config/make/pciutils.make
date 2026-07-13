@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of pciutils
 #
 
-PCIUTILS_VERSION		= 3.2.1
+PCIUTILS_VERSION		= 3.15.0
 PCIUTILS_TARBALL		= pciutils-$(PCIUTILS_VERSION).tar.xz
 PCIUTILS_TARBALL_URLS		+= $(ONIE_MIRROR) https://www.kernel.org/pub/software/utils/pciutils
 PCIUTILS_BUILD_DIR		= $(USER_BUILDDIR)/pciutils
@@ -70,9 +70,9 @@ $(PCIUTILS_BUILD_STAMP): $(PCIUTILS_PATCH_STAMP) $(PCIUTILS_NEW_FILES) $(ZLIB_BU
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building pciutils-$(PCIUTILS_VERSION) ===="
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(PCIUTILS_DIR) lib/libpci.so.$(PCIUTILS_VERSION) CROSS_COMPILE=$(CROSSPREFIX) \
-		HOST=onie-$(ARCH)-linux ZLIB=yes DNS=no SHARED=yes LIBKMOD=no PREFIX=/usr DESTDIR=$(DEV_SYSROOT)
+		HOST=$(ARCH)-linux ZLIB=yes DNS=no SHARED=yes LIBKMOD=no PREFIX=/usr DESTDIR=$(DEV_SYSROOT)
 	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(PCIUTILS_DIR) install-lib CROSS_COMPILE=$(CROSSPREFIX) \
-		HOST=onie-$(ARCH)-linux ZLIB=yes DNS=no SHARED=yes LIBKMOD=no PREFIX=/usr DESTDIR=$(DEV_SYSROOT)
+		HOST=$(ARCH)-linux ZLIB=yes DNS=no SHARED=yes LIBKMOD=no PREFIX=/usr DESTDIR=$(DEV_SYSROOT)
 	$(Q) touch $@
 
 pciutils-install: $(PCIUTILS_INSTALL_STAMP)

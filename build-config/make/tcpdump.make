@@ -12,7 +12,7 @@
 include make/libpcap.make
 include make/openssl.make
 
-TCPDUMP_VERSION		= 4.99.4
+TCPDUMP_VERSION		= 4.99.6
 TCPDUMP_TARBALL		= tcpdump-$(TCPDUMP_VERSION).tar.gz
 TCPDUMP_TARBALL_URLS	+= $(ONIE_MIRROR) \
 			   https://www.tcpdump.org/release

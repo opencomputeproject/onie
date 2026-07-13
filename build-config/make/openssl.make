@@ -10,9 +10,13 @@
 # This is a makefile fragment that defines the build of openssl
 #
 
-OPENSSL_VERSION		?= 1.1.1g
+OPENSSL_VERSION		?= 3.5.7
 OPENSSL_TARBALL		= openssl-$(OPENSSL_VERSION).tar.gz
+# openssl.org/source/ only keeps the newest release of each line (older
+# ones move to /source/old/), so prefer the stable per-version GitHub
+# release asset and keep openssl.org as a fallback.
 OPENSSL_TARBALL_URLS	+= $(ONIE_MIRROR) \
+			   https://github.com/openssl/openssl/releases/download/openssl-$(OPENSSL_VERSION) \
 			   https://www.openssl.org/source
 OPENSSL_BUILD_DIR	= $(USER_BUILDDIR)/openssl
 OPENSSL_DIR		= $(OPENSSL_BUILD_DIR)/openssl-$(OPENSSL_VERSION)
@@ -31,13 +35,7 @@ PHONY += openssl openssl-download openssl-source \
 	 openssl-configure openssl-build openssl-install openssl-clean \
 	 openssl-download-clean
 
-ifeq ($(OPENSSL_VERSION),1.1.1g)
-OPENSSL_ARCH	=
-OPENSSL_LIBS	= \
-	engines-1.1 \
-	libcrypto.so libcrypto.so.1.1 \
-	libssl.so libssl.so.1.1
-else ifeq ($(OPENSSL_VERSION),3.4.0)
+# ONIE standardizes on OpenSSL 3.x (SONAME major 3, "engines" dir).
 ifeq ($(ARCH),arm64)
 OPENSSL_ARCH	= linux-aarch64
 else
@@ -48,9 +46,6 @@ OPENSSL_LIBS	= \
 	engines \
 	libcrypto.so libcrypto.so.3 \
 	libssl.so libssl.so.3
-else
-  $(error OPENSSL_LIBS: Unsupported OpenSSL version: $(OPENSSL_VERSION))
-endif
 
 OPENSSL_BINS	= openssl
 

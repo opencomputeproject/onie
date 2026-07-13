@@ -39,10 +39,8 @@ RECOVERY_DEFAULT_ENTRY = embed
 LINUX_VERSION = 4.9
 LINUX_MINOR_VERSION = 95
 
-GCC_VERSION = 8.3.0
 
 # Set uClibc-ng version
-XTOOLS_LIBC_VERSION = 1.0.35
 
 #-------------------------------------------------------------------------------
 #

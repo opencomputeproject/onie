@@ -9,9 +9,9 @@
 # This is a makefile fragment that defines the build of dosfstools
 #
 
-DOSFSTOOLS_VERSION		= 3.0.26
-DOSFSTOOLS_TARBALL		= dosfstools-$(DOSFSTOOLS_VERSION).tar.xz
-DOSFSTOOLS_TARBALL_URLS		+= $(ONIE_MIRROR) http://daniel-baumann.ch/files/software/dosfstools
+DOSFSTOOLS_VERSION		= 4.2
+DOSFSTOOLS_TARBALL		= dosfstools-$(DOSFSTOOLS_VERSION).tar.gz
+DOSFSTOOLS_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/dosfstools/dosfstools/releases/download/v$(DOSFSTOOLS_VERSION)
 DOSFSTOOLS_BUILD_DIR		= $(USER_BUILDDIR)/dosfstools
 DOSFSTOOLS_DIR			= $(DOSFSTOOLS_BUILD_DIR)/dosfstools-$(DOSFSTOOLS_VERSION)
 
@@ -19,19 +19,25 @@ DOSFSTOOLS_SRCPATCHDIR		= $(PATCHDIR)/dosfstools
 DOSFSTOOLS_DOWNLOAD_STAMP		= $(DOWNLOADDIR)/dosfstools-download
 DOSFSTOOLS_SOURCE_STAMP		= $(USER_STAMPDIR)/dosfstools-source
 DOSFSTOOLS_PATCH_STAMP		= $(USER_STAMPDIR)/dosfstools-patch
+DOSFSTOOLS_CONFIGURE_STAMP	= $(USER_STAMPDIR)/dosfstools-configure
 DOSFSTOOLS_BUILD_STAMP		= $(USER_STAMPDIR)/dosfstools-build
 DOSFSTOOLS_INSTALL_STAMP	= $(STAMPDIR)/dosfstools-install
 DOSFSTOOLS_STAMP		= $(DOSFSTOOLS_SOURCE_STAMP) \
 				  $(DOSFSTOOLS_PATCH_STAMP) \
+				  $(DOSFSTOOLS_CONFIGURE_STAMP) \
 				  $(DOSFSTOOLS_BUILD_STAMP) \
 				  $(DOSFSTOOLS_INSTALL_STAMP)
 
+# As of 4.x dosfstools installs three programs (mkfs.fat, fsck.fat and
+# fatlabel).  The legacy program names (dosfsck, mkdosfs, ...) are
+# provided as compatibility symlinks via --enable-compat-symlinks.
 DOSFSTOOLS_PROGRAMS	= fsck.fat dosfsck fsck.msdos fsck.vfat \
 				mkfs.fat mkdosfs mkfs.msdos mkfs.vfat \
 				fatlabel dosfslabel
 
 PHONY += dosfstools dosfstools-download dosfstools-source dosfstools-patch \
-	dosfstools-build dosfstools-install dosfstools-clean dosfstools-download-clean
+	dosfstools-configure dosfstools-build dosfstools-install \
+	dosfstools-clean dosfstools-download-clean
 
 dosfstools: $(DOSFSTOOLS_STAMP)
 
@@ -59,25 +65,36 @@ $(DOSFSTOOLS_PATCH_STAMP): $(DOSFSTOOLS_SRCPATCHDIR)/* $(DOSFSTOOLS_SOURCE_STAMP
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(DOSFSTOOLS_SRCPATCHDIR)/series $(DOSFSTOOLS_DIR)
 	$(Q) touch $@
 
+dosfstools-configure: $(DOSFSTOOLS_CONFIGURE_STAMP)
+$(DOSFSTOOLS_CONFIGURE_STAMP): $(DOSFSTOOLS_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
+	$(Q) echo "====  Configure dosfstools-$(DOSFSTOOLS_VERSION) ===="
+	$(Q) cd $(DOSFSTOOLS_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
+		$(DOSFSTOOLS_DIR)/configure			\
+		--prefix=/usr					\
+		--host=$(TARGET)				\
+		--without-iconv					\
+		--enable-compat-symlinks			\
+		CC=$(CROSSPREFIX)gcc				\
+		CFLAGS="$(ONIE_CFLAGS)"				\
+		LDFLAGS="$(ONIE_LDFLAGS)"			\
+		$(ONIE_PKG_CONFIG)
+	$(Q) touch $@
+
 ifndef MAKE_CLEAN
 DOSFSTOOLS_NEW_FILES = $(shell test -d $(DOSFSTOOLS_DIR) && test -f $(DOSFSTOOLS_BUILD_STAMP) && \
-	              find -L $(DOSFSTOOLS_DIR) -newer $(DOSFSTOOLS_BUILD_STAMP) -type f \
+		              find -L $(DOSFSTOOLS_DIR) -newer $(DOSFSTOOLS_BUILD_STAMP) -type f \
 			\! -name filelist-rpm -print -quit)
 endif
 
-DOSFSTOOLS_MAKE_VARS = \
-	CC=$(CROSSPREFIX)gcc LD=$(CROSSPREFIX)ld \
-	CFLAGS="$(ONIE_CFLAGS)" LDFLAGS="$(ONIE_LDFLAGS)" \
-	DESTDIR=$(DEV_SYSROOT) PREFIX=/usr
-
 dosfstools-build: $(DOSFSTOOLS_BUILD_STAMP)
-$(DOSFSTOOLS_BUILD_STAMP): $(DOSFSTOOLS_PATCH_STAMP) $(DOSFSTOOLS_NEW_FILES) \
+$(DOSFSTOOLS_BUILD_STAMP): $(DOSFSTOOLS_CONFIGURE_STAMP) $(DOSFSTOOLS_NEW_FILES) \
 				| $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building dosfstools-$(DOSFSTOOLS_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DOSFSTOOLS_DIR) $(DOSFSTOOLS_MAKE_VARS)
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DOSFSTOOLS_DIR) $(DOSFSTOOLS_MAKE_VARS) \
-		install-symlinks
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DOSFSTOOLS_DIR)
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(DOSFSTOOLS_DIR) \
+		DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 
 dosfstools-install: $(DOSFSTOOLS_INSTALL_STAMP)
