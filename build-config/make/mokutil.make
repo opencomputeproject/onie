@@ -10,7 +10,7 @@
 # This is a makefile fragment that defines the build of mokutil
 #
 
-MOKUTIL_VERSION			= 0.4.0
+MOKUTIL_VERSION			= 0.7.2
 MOKUTIL_TARBALL			= $(MOKUTIL_VERSION).tar.gz
 MOKUTIL_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/lcp/mokutil/archive
 MOKUTIL_BUILD_DIR		= $(USER_BUILDDIR)/mokutil
@@ -57,11 +57,15 @@ $(MOKUTIL_SOURCE_STAMP): $(USER_TREE_STAMP) $(MOKUTIL_DOWNLOAD_STAMP)
 	$(Q) touch $@
 
 mokutil-patch: $(MOKUTIL_PATCH_STAMP)
-$(MOKUTIL_PATCH_STAMP): $(EFIVAR_BUILD_STAMP) $(OPENSSL_BUILD_STAMP) $(MOKUTIL_SRCPATCHDIR)/* $(MOKUTIL_SOURCE_STAMP)
+$(MOKUTIL_PATCH_STAMP): $(EFIVAR_BUILD_STAMP) $(OPENSSL_BUILD_STAMP) $(KEYUTILS_INSTALL_STAMP) $(MOKUTIL_SRCPATCHDIR)/* $(MOKUTIL_SOURCE_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Patching mokutil ===="
 	$(Q) $(SCRIPTDIR)/apply-patch-series $(MOKUTIL_SRCPATCHDIR)/series $(MOKUTIL_DIR)
-	$(Q) cd $(MOKUTIL_DIR) && ./autogen.sh
+	# NOCONFIGURE: autoreconf only.  autogen.sh would otherwise run an
+	# unconfigured ./configure that lacks ONIE's pkg-config sysroot env and
+	# fails mokutil's new libkeyutils check; the real configure step below
+	# runs it with $(ONIE_PKG_CONFIG) set.
+	$(Q) cd $(MOKUTIL_DIR) && NOCONFIGURE=1 ./autogen.sh
 	$(Q) touch $@
 
 ifndef MAKE_CLEAN
@@ -70,7 +74,7 @@ MOKUTIL_NEW_FILES = $(shell test -d $(MOKUTIL_DIR) && test -f $(MOKUTIL_BUILD_ST
 endif
 
 mokutil-configure: $(MOKUTIL_CONFIGURE_STAMP)
-$(MOKUTIL_CONFIGURE_STAMP): $(MOKUTIL_PATCH_STAMP) $(EFIVAR_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(MOKUTIL_CONFIGURE_STAMP): $(MOKUTIL_PATCH_STAMP) $(EFIVAR_BUILD_STAMP) $(KEYUTILS_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure mokutil-$(MOKUTIL_VERSION) ===="
 	$(Q) cd $(MOKUTIL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\

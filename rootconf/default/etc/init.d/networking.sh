@@ -54,7 +54,12 @@ config_ethmgmt_dhcp4()
         udhcp_args="$udhcp_args -t 15 -T 3"
     fi
     udhcp_request_opts=
-    for o in subnet broadcast router domain hostname ntpsrv dns logsrv search ; do
+    # Request by name for options in busybox's built-in udhcpc table, but use
+    # the numeric code for logsrv (option 7): busybox trims it from the stock
+    # table for size, and "-O logsrv" would abort udhcpc with "unknown option"
+    # -- a numeric "-O 7" is accepted with no table entry.  When received it
+    # surfaces as $opt7, which udhcp4_net aliases back to $logsrv.
+    for o in subnet broadcast router domain hostname ntpsrv dns 7 search ; do
         udhcp_request_opts="$udhcp_request_opts -O $o"
     done
 
