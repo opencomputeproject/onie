@@ -287,19 +287,32 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
 	zfscrypt
 	zfsinfo
 "
-	# linuxefi is an x86 specific
-    if [ ${ARCH} != "arm64" ]; then
-        GRUB_MODULES=$GRUB_MODULES" linuxefi"
-    fi
+    # grub 2.12+ unified linuxefi into the standard linux/initrd commands;
+    # the linuxefi module no longer exists.
     # Generate UEFI format GRUB image
     mkdir -p $RECOVERY_EFI_BOOT_DIR
+    # SBAT metadata: shim (>= 15) enforces SBAT and refuses to chainload a GRUB
+    # image lacking a .sbat section (or below the firmware's SbatLevel policy),
+    # failing with "Verification failed: (0x1A) Security Violation" before the
+    # menu appears.  grub-mkimage embeds the section when given --sbat.  ONIE's
+    # shim (16.1) enforces grub generation 4; only the generation integers are
+    # compared by shim -- the version strings are informational.
+    grub_version="$($GRUB_HOST_BIN_UEFI_DIR/grub-mkimage --version 2>/dev/null | awk '{print $NF}')"
+    sbat_csv="$(mktemp)"
+    cat <<EOF > "$sbat_csv"
+sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md
+grub,4,Free Software Foundation,grub,${grub_version},https://www.gnu.org/software/grub/
+grub.onie,1,Open Compute Project,grub,${grub_version},https://github.com/opencomputeproject/onie
+EOF
     $GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \
         --format=${ARCH}-efi \
         --directory=$GRUB_TARGET_LIB_UEFI_DIR \
         --prefix=/boot/grub \
         --config=$RECOVERY_CONF_DIR/grub-uefi.cfg \
+        --sbat="$sbat_csv" \
         --output=$RECOVERY_GRUBX86_IMG \
         $GRUB_MODULES
+    rm -f "$sbat_csv"
 
     # For UEFI, the GRUB loader image is embedded inside a UEFI ESP
     # (fat16) disk partition image.  Create that here and copy the

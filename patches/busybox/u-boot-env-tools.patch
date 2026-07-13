@@ -4,22 +4,9 @@ Copyright (C) 2013 Curt Brune <curt@cumulusnetworks.com>
 
 SPDX-License-Identifier:     GPL-2.0
 
-diff --git a/include/applets.src.h b/include/applets.src.h
-index 6e1b02fc399c..caf3c8259eae 100644
---- a/include/applets.src.h
-+++ b/include/applets.src.h
-@@ -321,6 +321,8 @@ IF_TRUE(APPLET_NOFORK(true, true, BB_DIR_BIN, BB_SUID_DROP, true))
- IF_TTY(APPLET(tty, BB_DIR_USR_BIN, BB_SUID_DROP))
- IF_TTYSIZE(APPLET(ttysize, BB_DIR_USR_BIN, BB_SUID_DROP))
- IF_TUNCTL(APPLET(tunctl, BB_DIR_SBIN, BB_SUID_DROP))
-+IF_UBOOT_ENV(APPLET(fw_setenv, BB_DIR_USR_SBIN, BB_SUID_DROP))
-+IF_UBOOT_ENV(APPLET(fw_printenv, BB_DIR_USR_SBIN, BB_SUID_DROP))
- IF_UDHCPC(APPLET(udhcpc, BB_DIR_SBIN, BB_SUID_DROP))
- IF_UDHCPD(APPLET(udhcpd, BB_DIR_USR_SBIN, BB_SUID_DROP))
- IF_UDPSVD(APPLET_ODDNAME(udpsvd, tcpudpsvd, BB_DIR_USR_BIN, BB_SUID_DROP, udpsvd))
 diff --git a/include/fw_env.h b/include/fw_env.h
 new file mode 100644
-index 000000000000..ffec527b4f2e
+index 0000000..ffec527
 --- /dev/null
 +++ b/include/fw_env.h
 @@ -0,0 +1,52 @@
@@ -75,41 +62,12 @@ index 000000000000..ffec527b4f2e
 +extern int   fw_printenv(int argc, char *argv[]);
 +extern char *fw_getenv  (char *name);
 +extern int fw_setenv  (int argc, char *argv[]);
-diff --git a/miscutils/Config.src b/miscutils/Config.src
-index 06f1c52ba053..682173640853 100644
---- a/miscutils/Config.src
-+++ b/miscutils/Config.src
-@@ -513,6 +513,13 @@ config TTYSIZE
- 	  error, but returns default 80x24.
- 	  Usage in shell scripts: width=`ttysize w`.
- 
-+config UBOOT_ENV
-+	bool "uboot environment"
-+	default n
-+	help
-+	  Enables setting and printing u-boot environment varaibles.
-+	  The fw_printenv and fw_setenv tools are included.
-+
- config VOLNAME
- 	bool "volname"
- 	default y
-diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 503f549047b6..5d42ede9f252 100644
---- a/miscutils/Kbuild.src
-+++ b/miscutils/Kbuild.src
-@@ -47,5 +47,6 @@ lib-$(CONFIG_STRINGS)     += strings.o
- lib-$(CONFIG_TIME)        += time.o
- lib-$(CONFIG_TIMEOUT)     += timeout.o
- lib-$(CONFIG_TTYSIZE)     += ttysize.o
-+lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
- lib-$(CONFIG_VOLNAME)     += volname.o
- lib-$(CONFIG_WATCHDOG)    += watchdog.o
 diff --git a/miscutils/fw_env.c b/miscutils/fw_env.c
 new file mode 100644
-index 000000000000..f6f0d2743c36
+index 0000000..93ea868
 --- /dev/null
 +++ b/miscutils/fw_env.c
-@@ -0,0 +1,1259 @@
+@@ -0,0 +1,1270 @@
 +/*
 + * u-boot flash environment variable get/set commands
 + *
@@ -137,6 +95,17 @@ index 000000000000..f6f0d2743c36
 + * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 + * MA 02111-1307 USA
 + */
++//config:config UBOOT_ENV
++//config:	bool "uboot environment"
++//config:	default n
++//config:	help
++//config:	Enables setting and printing u-boot environment varaibles.
++//config:	The fw_printenv and fw_setenv tools are included.
++
++//applet:IF_UBOOT_ENV(APPLET(fw_setenv, BB_DIR_USR_SBIN, BB_SUID_DROP))
++//applet:IF_UBOOT_ENV(APPLET(fw_printenv, BB_DIR_USR_SBIN, BB_SUID_DROP))
++
++//kbuild:lib-$(CONFIG_UBOOT_ENV) += fw_env.o
 +
 +#include "libbb.h"
 +#include "common_bufsiz.h"
