@@ -1,0 +1,36 @@
+#!/bin/sh
+# Busybox udhcpc6 service discovery script.
+#
+#  Based on udhcp4_sd
+#
+
+PROG="DHCPv6"
+
+case $1 in
+    bound|renew)
+
+        # Print responses usable by onie, prefixed with "onie_disco"
+        # Translate '=' into '@', e.g. name=val => name@@val
+        # Separate name@val pairs with '##'
+        
+        # We need to map standard DHCPv6 variables to ONIE expected parameters.
+        # The Busybox udhcpc6 script exports variables like:
+        # ipv6, dns, search, lease, bootfile (opt 59), interface
+        
+        # Filter and format
+        onie_parms=$(printenv | sed -e '/.*=$/d' -e '/^[A-Z_]/d' -e '/^onie.*/d' -e 's/=/@@/' -e 's/$/#/' -e 's/^/onie_disco_/' | tr '
+' '#')
+        # Busybox udhcpc6 exports DHCPv6 Boot File URL (Option 59) as 'bootfile'.
+        # The generic printenv pipeline above captures it as onie_disco_bootfile.
+        # Add explicit fallback in case the variable name differs across versions.
+        if [ -n "$bootfile" ] && ! echo "$onie_parms" | grep -q 'onie_disco_bootfile@@'; then
+            onie_parms="${onie_parms}onie_disco_bootfile@@${bootfile}##"
+        fi
+        
+        echo "ONIE_PARMS:$onie_parms"
+
+        ;;
+
+    *)
+        ;;
+esac

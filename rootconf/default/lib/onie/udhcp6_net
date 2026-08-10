@@ -1,0 +1,85 @@
+#!/bin/sh
+# Busybox udhcpc6 reactor script.
+#
+#  Based on udhcp4_net
+#
+
+RESOLV_CONF="/etc/resolv.conf"
+PROG="DHCPv6"
+
+. /lib/onie/functions
+LOGSRV_CONF="${ONIE_RUN_DIR}/dhcp6.logsrv"
+DHCP6_ADDR_STATE="${ONIE_RUN_DIR}/dhcp6.addr"
+
+# Function to parse IPv6 address and prefix length
+# Input: "2001:db8::1/64" or "2001:db8::1"
+# Output: sets global vars $addr and $prefix_len
+parse_addr_prefix() {
+    local input=$1
+    addr=${input%%/*}
+    if echo "$input" | grep -q "/"; then
+        prefix_len=${input##*/}
+    else
+        prefix_len=128
+    fi
+}
+
+case $1 in
+    bound|renew)
+        [ -n "$ipv6" ] && {
+            parse_addr_prefix "$ipv6"
+            /sbin/ip -6 addr add $addr/$prefix_len dev $interface
+            echo "$addr/$prefix_len" > "$DHCP6_ADDR_STATE"
+        }
+
+        # Handle routes if provided (not standard in basic busybox udhcpc6 env,
+        # but if script emits them or through RA)
+        # Busybox udhcpc6 typically relies on RA for routes, but let's check vars
+        
+        # Update resolver configuration file
+        # Note: This might overwrite IPv4 DNS. We should merge or append.
+        # For now, let's append to ensure dual stack if possible, or rewrite if exclusive.
+        # But /etc/resolv.conf is a single file.
+        # We will append IPv6 nameservers.
+        
+        if [ -n "$dns" ]; then
+             for i in $dns; do
+                echo "nameserver $i" >> "$RESOLV_CONF"
+            done
+        fi
+        
+        if [ -n "$hostname" ]; then
+            echo "$hostname" > /etc/hostname
+            hostname "$hostname"
+        fi
+
+        # Search list
+        if [ -n "$search" ]; then
+            echo "search $search" >> "$RESOLV_CONF"
+        fi
+
+        ;;
+
+    deconfig)
+        if [ -r "$DHCP6_ADDR_STATE" ]; then
+            last_addr=$(cat "$DHCP6_ADDR_STATE")
+            if [ -n "$last_addr" ]; then
+                /sbin/ip -6 addr del "$last_addr" dev $interface 2>/dev/null
+            fi
+            rm -f "$DHCP6_ADDR_STATE"
+        fi
+        ;;
+
+    leasefail)
+        echo "$PROG: Lease failed: $message"
+        ;;
+
+    nak)
+        echo "$PROG: Received a NAK: $message"
+        ;;
+
+    *)
+        echo "$PROG: Unknown udhcpc6 command: $1";
+        exit 1;
+        ;;
+esac
