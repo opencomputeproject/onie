@@ -1,0 +1,91 @@
+<!--
+  onie-vm.xml.in - libvirt domain template for the ONIE DHCPv6 boot test.
+
+  Rendered by substituting the @VARS@ below (e.g. with sed) into onie-vm.xml,
+  then `virsh define onie-vm.xml`. Derived from the bench's switch-vm.xml.
+
+  The guest attaches to the pre-existing tap (managed='no') created by
+  setup-dhcp6-test.sh, so it sits on the deterministic DHCPv6 L2 segment.
+
+  Substitution variables:
+    @NAME@        domain name              (e.g. onie-dhcp6)
+    @VCPUS@       vCPU count               (e.g. 2)
+    @MEM_KIB@     memory in KiB            (e.g. 2097152 for 2 GiB)
+    @QCOW2@       absolute path to the guest disk qcow2
+    @TAP@         host tap device name     (e.g. tap-onie)
+    @MAC@         guest NIC MAC            (e.g. 00:11:22:33:44:55)
+    @RECOVERY_ISO@ absolute path to onie-recovery-*.iso (phase-a only)
+    @BOOT_DEV@    'cdrom' (phase a, embed) or 'hd' (phase b, run from disk)
+
+  ============================ TWO-PHASE BOOT ============================
+  Phase (a) - EMBED ONIE onto the disk (run once):
+    * Uncomment the <disk device='cdrom'> block below and point @RECOVERY_ISO@
+      at onie-recovery-x86_64-kvm_x86_64-r0.iso.
+    * Set @BOOT_DEV@ = cdrom.
+    * Boot, then from the ONIE recovery shell embed the OS to disk, e.g.:
+        onie-self-update -e http://[2001:db8::1]:8080/onie-updater-x86_64-kvm_x86_64-r0
+      (or run the recovery installer's embed path).
+  Phase (b) - RUN FROM DISK (the actual DHCPv6 discovery test):
+    * Re-comment the cdrom block.
+    * Set @BOOT_DEV@ = hd.
+    * Boot; ONIE runs `discover` -> `sd_dhcp6`, requests option 59, and fetches
+      the installer over HTTP from the tap network.
+  =======================================================================
+-->
+<domain type='kvm'>
+  <name>@NAME@</name>
+  <memory unit='KiB'>@MEM_KIB@</memory>
+  <currentMemory unit='KiB'>@MEM_KIB@</currentMemory>
+  <vcpu placement='static'>@VCPUS@</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc'>hvm</type>
+    <boot dev='@BOOT_DEV@'/>
+    <bootmenu enable='no'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough' check='none'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+
+    <!-- Primary disk: the built qcow2. -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='@QCOW2@'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+
+    <!-- Phase-(a) ONLY: recovery ISO for embedding. Uncomment for phase a. -->
+    <!--
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='@RECOVERY_ISO@'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+    </disk>
+    -->
+
+    <!-- NIC bound to the pre-created tap (managed='no' = libvirt won't create/destroy it). -->
+    <interface type='ethernet'>
+      <mac address='@MAC@'/>
+      <target dev='@TAP@' managed='no'/>
+      <model type='virtio'/>
+    </interface>
+
+    <!-- Serial console for `virsh console @NAME@` (capture to a log for verify). -->
+    <serial type='pty'>
+      <target type='isa-serial' port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+
+    <memballoon model='virtio'/>
+  </devices>
+</domain>
