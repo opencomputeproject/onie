@@ -18,21 +18,6 @@ LOGSRV_CONF="${ONIE_RUN_DIR}/dhcp.logsrv"
 
 case $1 in
     bound|renew)
-        # busybox trims logsrv (option 7) from udhcpc's built-in table, so a
-        # received option 7 arrives as $opt7 in raw hex rather than $logsrv as a
-        # decoded IPv4 address; decode + alias it (no-op on a busybox that still
-        # knows the name, where $logsrv is already set and $opt7 is absent).
-        if [ -z "$logsrv" ] && [ -n "$opt7" ] ; then
-            _h="$opt7"
-            while [ ${#_h} -ge 8 ] ; do
-                _a=$((0x${_h%${_h#??}})); _h=${_h#??}
-                _b=$((0x${_h%${_h#??}})); _h=${_h#??}
-                _c=$((0x${_h%${_h#??}})); _h=${_h#??}
-                _d=$((0x${_h%${_h#??}})); _h=${_h#??}
-                logsrv="$logsrv $_a.$_b.$_c.$_d"
-            done
-            logsrv="${logsrv# }"
-        fi
         [ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
         [ -n "$subnet" ] && NETMASK="netmask $subnet"
         
