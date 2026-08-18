@@ -10,21 +10,96 @@ name: Build ONIE (kvm_x86_64)
 # confirm the change still builds, and the kvm_x86_64 image depends on far
 # more than the build files (installer/, rootconf/, patches/, ...), so path
 # filtering would risk skipping validation on build-affecting changes.
+#
+# A push to a branch that already has an open pull request IN THIS repository
+# fires both events and ran the whole pipeline twice; the concurrency group
+# below cannot collapse them, because the two events carry different refs
+# (refs/heads/<branch> vs refs/pull/<n>/merge).  The "gate" job below drops the
+# duplicate push run.  See the comment there for why this is a query rather
+# than a branch filter on "push:".
 on:
   workflow_dispatch:
   push:
   pull_request:
 
-# Cancel an in-progress run when a newer commit is pushed to the same ref,
-# so stacked pushes don't pile up concurrent builds.
+# Cancel an in-progress run when a newer commit is pushed to the same ref, so
+# stacked pushes don't pile up concurrent builds.  Runs on the long-lived
+# branches are never cancelled -- those results are the integration signal.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: >-
+    ${{ github.ref != 'refs/heads/master'
+    && github.ref != 'refs/heads/onie-modernization-2026' }}
+
+# Nothing here writes to the repository; without this the workflow inherits
+# the repository default token scope, which is read/write in many repos.
+permissions:
+  contents: read
 
 jobs:
+  # Skip a push-triggered run when an open pull request in this repository
+  # already covers the commit -- the pull_request run is the one that reports
+  # on the PR, so the push run is pure duplicate cost.
+  #
+  # Deliberately a query rather than restricting "push:" to the long-lived
+  # branches.  A branch filter also removes CI from every topic branch in a
+  # FORK, and that is where this workflow does most of its pre-submit work: a
+  # fork's pull requests are opened against the upstream repository, so they
+  # raise no pull_request event in the fork, and workflow_dispatch is not
+  # available there either unless the workflow is also on the fork's default
+  # branch.  A branch filter would leave such a branch with no CI at all.  The
+  # query has no such blind spot: in a fork it simply finds no pull request and
+  # the push run proceeds.
+  #
+  # Only "build" needs to depend on this -- the other jobs chain from it, and a
+  # skipped job skips its dependents.
+  gate:
+    name: Check for a duplicate run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Job-level permissions replace the workflow-level block rather than adding
+    # to it; this job reads pull requests and checks out nothing.
+    permissions:
+      pull-requests: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Decide whether this run is needed
+        id: check
+        # Everything from the event context is passed via env rather than
+        # interpolated into the script body, so a branch name can never be
+        # parsed as shell.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" != push ]; then
+            echo "$EVENT is not a push; running."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          open="$(gh api --method GET "repos/$REPO/pulls" \
+                    -f state=open -f head="$OWNER:$BRANCH" --jq 'length')"
+          if [ "${open:-0}" -gt 0 ]; then
+            echo "An open pull request in $REPO already covers $BRANCH;" \
+                 "its pull_request run reports on it.  Skipping the push run."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "No open pull request in $REPO for $BRANCH; running."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build kvm_x86_64
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
+    # A cold build (toolchain + full image) is roughly 45-60 min; cap it so a
+    # wedged build fails here instead of burning the 6-hour GitHub default.
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -71,6 +146,17 @@ jobs:
       # environment the toolchain is built in.  No loose restore-keys: any
       # input change forces a clean rebuild rather than restoring a
       # mismatched toolchain.
+      #
+      # kernel-download.make and the arch/machine makefiles are hashed because
+      # xtools.make derives
+      #   XTOOLS_VERSION = $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(LINUX_RELEASE)-...
+      # (and seds CT_LINUX_VERSION into the generated toolchain .config), while
+      # LINUX_RELEASE lives in kernel-download.make and ONIE_ARCH in
+      # machine/kvm_x86_64/machine.make.  With those omitted a kernel bump kept
+      # HITTING this key while the build/x-tools/<XTOOLS_VERSION> directory name
+      # changed underneath it: the restored toolchain was the wrong one, "make
+      # xtools" rebuilt from scratch, and the save step -- gated on a cache miss
+      # -- skipped it, so every later run paid the same rebuild forever.
       - name: Restore cross-toolchain cache
         id: xtools-cache
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -82,7 +168,17 @@ jobs:
             build/x-tools/*/stamp
             build/x-tools/*/install
             build/x-tools/*/build/.config
-          key: onie-xtools-kvm_x86_64-${{ hashFiles('build-config/make/xtools.make', 'build-config/make/crosstool-ng.make', 'build-config/make/compiler.make', 'build-config/conf/crosstool/**', 'patches/crosstool-NG/**', '.github/onie-build/Dockerfile') }}
+          key: >-
+            onie-xtools-kvm_x86_64-${{ hashFiles(
+            'build-config/make/xtools.make',
+            'build-config/make/crosstool-ng.make',
+            'build-config/make/compiler.make',
+            'build-config/make/kernel-download.make',
+            'build-config/arch/x86_64.make',
+            'machine/kvm_x86_64/machine.make',
+            'build-config/conf/crosstool/**',
+            'patches/crosstool-NG/**',
+            '.github/onie-build/Dockerfile') }}
 
       # ONIE drives its build with stamp files compared by mtime.  A fresh
       # checkout gives every repo source file a current mtime, which is newer
@@ -122,14 +218,52 @@ jobs:
                build/x-tools/*/build/.config \
                -type f -exec touch -t "$ts" {} +
 
+      # Record which toolchains the cache restored, so the check after the
+      # build can tell whether "make xtools" had to build one the cache did not
+      # contain -- the symptom of a key that is still missing an input.
+      - name: Record restored toolchain set
+        id: xtools-before
+        if: steps.xtools-cache.outputs.cache-hit == 'true'
+        run: |
+          echo "dirs=$(ls -d build/x-tools/*/install 2>/dev/null | sort | tr '\n' ' ')" \
+            >> "$GITHUB_OUTPUT"
+
+      # No --privileged: the Dockerfile ends with "USER build", so the build
+      # runs unprivileged and cannot use any capability --privileged grants.
+      # It was ineffective as well as an unnecessary escalation -- the
+      # documented flow (contrib/build-env) builds unprivileged with fakeroot,
+      # and the image build uses mtools/fakeroot rather than loop mounts.
       - name: Build cross toolchain
         run: |
-          docker run --rm --privileged \
+          docker run --rm \
             -v "${PWD}:/onie" \
             onie-build-env \
             bash -lc 'cd build-config && make -j"$(nproc)" \
               MACHINE=kvm_x86_64 \
               xtools'
+
+      # A cache hit that nonetheless had to build a new toolchain means the key
+      # did not cover something that changed XTOOLS_VERSION.  The save step
+      # cannot rescue that run -- the primary key already exists and GitHub
+      # will not overwrite it -- so warn instead of rebuilding silently forever.
+      - name: Check whether the cached toolchain was actually reused
+        if: steps.xtools-cache.outputs.cache-hit == 'true'
+        # Passed via env rather than interpolated into the script body, so the
+        # step output can never be parsed as shell.
+        env:
+          RESTORED_DIRS: ${{ steps.xtools-before.outputs.dirs }}
+        run: |
+          now="$(ls -d build/x-tools/*/install 2>/dev/null | sort | tr '\n' ' ')"
+          if [ "$now" != "$RESTORED_DIRS" ]; then
+            echo "::warning title=Stale cross-toolchain cache key::" \
+                 "Cache key hit but 'make xtools' built a toolchain the cache" \
+                 "did not contain (restored: [$RESTORED_DIRS], now: [$now])." \
+                 "XTOOLS_VERSION changed without changing the cache key, so this" \
+                 "toolchain cannot be saved and every run will rebuild it." \
+                 "Add the changed input to the 'Restore cross-toolchain cache' key."
+          else
+            echo "Cached toolchain reused as-is: $now"
+          fi
 
       # Save only on a cache miss, and only after the toolchain build above
       # succeeded (default if: success()), so a broken toolchain is never
@@ -148,9 +282,10 @@ jobs:
             build/x-tools/*/build/.config
           key: ${{ steps.xtools-cache.outputs.cache-primary-key }}
 
+      # No --privileged, as above.
       - name: Build ONIE
         run: |
-          docker run --rm --privileged \
+          docker run --rm \
             -v "${PWD}:/onie" \
             onie-build-env \
             bash -lc 'cd build-config && \
@@ -204,6 +339,9 @@ jobs:
     name: Boot test kvm_x86_64
     needs: build
     runs-on: ubuntu-latest
+    # Three boots at up to 300s each plus package install and artifact
+    # download; this catches a QEMU that outlives the harness's own TIMEOUT.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -268,6 +406,9 @@ jobs:
     # time, keeping CI resource use low.
     needs: boot-test
     runs-on: ubuntu-latest
+    # Three boot stages at up to 600s each, plus the embed and install work in
+    # between.
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

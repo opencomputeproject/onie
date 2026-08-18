@@ -87,14 +87,35 @@ RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
 #       (https://github.com/moby/moby/issues/5419#issuecomment-41478290)
 ARG UID=1000
 ARG GID=1000
-RUN groupadd -g $GID build && \
-    useradd -l -m -u $UID -g $GID -s /bin/bash build && \
-    chown -R build:build /onie
+# Reuse the host's primary group when that GID is already taken in the
+# image.  Debian fills the low GID range with system groups (30 dip, 50
+# staff, 100 users), so insisting on creating our own group makes the image
+# unbuildable for anyone whose primary group lands there -- common with
+# central/NFS accounts, and the norm on macOS hosts (GID 20 = dialout here).
+# When the group is reused, "build" no longer exists as a group name, so
+# chown by numeric id.
+RUN if getent group "$GID" >/dev/null; then \
+        echo "GID $GID is $(getent group "$GID" | cut -d: -f1); reusing it"; \
+    else \
+        groupadd -g "$GID" build; \
+    fi && \
+    useradd -l -m -u "$UID" -g "$GID" -s /bin/bash build && \
+    chown -R "$UID:$GID" /onie
+
+# /sbin and /usr/sbin hold tools the build invokes.  Set this in two places
+# so it holds however the image is invoked:
+#   ENV        -- non-login shells (docker run <cmd>, bash -c)
+#   profile.d  -- login shells.  Debian's /etc/profile *replaces* PATH for
+#                 non-root users with one that omits both sbin dirs, and it
+#                 does so before sourcing profile.d, so the snippet wins.
+# ~/.bashrc, which this used to use, works for neither: Debian's default
+# .bashrc returns early when the shell is not interactive, so under the
+# workflow's "bash -lc" the PATH line was never reached.
+ENV PATH="/sbin:/usr/sbin:${PATH}"
+RUN printf '%s\n' 'export PATH="/sbin:/usr/sbin:$PATH"' \
+        > /etc/profile.d/00-onie-sbin.sh
 
 USER build
-
-# /sbin and /usr/sbin hold tools the build invokes.
-RUN echo 'export PATH="/sbin:/usr/sbin:$PATH"' >> ~/.bashrc
 
 # The build runs git commands; give it a default identity.
 RUN git config --global user.email "build@example.com" && \
