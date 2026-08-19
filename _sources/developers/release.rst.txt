@@ -79,11 +79,11 @@ without any formal commitment.
   :header: "Version", "Merge Window Closes", "Approx. Release Date"
   :delim: |
 
-  2026.02 | Wed, Jan 21, 2026 | Wed, Feb 18, 2026
-  2026.05 | Wed, Apr 15, 2026 | Wed, May 20, 2026
-  2026.08 | Wed, Jul 15, 2026 | Wed, Aug 19, 2026
   2026.11 | Wed, Oct 21, 2026 | Wed, Nov 18, 2026
   2027.02 | Wed, Jan 20, 2026 | Wed, Feb 17, 2026
+  2027.05 | Wed, Apr 21, 2027 | Wed, May 19, 2027
+  2027.08 | Wed, Jul 21, 2027 | Wed, Aug 18, 2027
+  2027.11 | Wed, Oct 20, 2027 | Wed, Nov 17, 2027
 
 Making a Release
 ----------------
