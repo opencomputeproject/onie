@@ -395,11 +395,25 @@ str2lenhex()
     printf "%02X%s" ${#str} $(str2hex $str)
 }
 
+# turn string into hex with prefixed length (as 16-bit hex word)
+str2lenhex16()
+{
+    local str="$1"
+    printf "%04X%s" ${#str} $(str2hex $str)
+}
+
 make_str_opt()
 {
     local code="$1"
     local str="$2"
     printf %02X%02X%s $code ${#str} $(str2hex $str)
+}
+
+make_str_opt16()
+{
+    local code="$1"
+    local str="$2"
+    printf %04X%04X%s $code ${#str} $(str2hex $str)
 }
 
 # generic udhcpc args
@@ -422,6 +436,48 @@ udhcpc_args()
     local payload="${udhcp_vivso_machine}${udhcp_vivso_arch}${udhcp_vivso_machine_rev}"
     local len=$(( ${#payload} / 2 ))
     local udhcp_vivso="-x 125:$(printf %08X%02X%s $onie_iana_enterprise $len $payload)"
+    echo "$udhcp_args" "$udhcp_user_class" "$udhcp_client_id" "$udhcp_vivso"
+}
+
+# generic udhcpc6 args
+udhcpc6_args()
+{
+    local udhcp_args="-q -S -V onie_vendor:${onie_platform}"
+    # user_class - option 15 - string in hex
+    local user_class="${onie_dhcp_user_class:-onie_dhcp_user_class}"
+    local udhcp_user_class="-x 15:$(str2lenhex16 "$user_class")"
+
+    # client id - option 1 - serial number in hex
+    # DUID type 2 - Vendor-assigned unique ID based on Enterprise Number
+    # 2 bytes type (0002) + 4 bytes Enterprise Number + Identifier (variable length)
+    #
+    # Enterprise Number (4 bytes)
+    local enterprise_hex=$(printf "%08X" $(onie-sysinfo -i))
+    # Identifier (Serial Number)
+    local identifier_hex=$(str2hex $(onie-sysinfo -s))
+    
+    # Construct DUID-EN (Type 2)
+    local duid_type="0002"
+    local duid_en="${enterprise_hex}${identifier_hex}"
+    local client_id="${duid_type}${duid_en}"
+    
+    local udhcp_client_id="-x 1:${client_id}"
+
+    # vendor specific information - option 17
+    # Enterprise Number (4 bytes)
+    # Sub-option 1 - machine
+    # Sub-option 2 - architecture
+    # Sub-option 3 - machine revision
+    
+    local sub_opt_machine=$(make_str_opt16 1 $onie_machine)
+    local sub_opt_arch=$(make_str_opt16 2 $onie_arch)
+    local sub_opt_rev=$(make_str_opt16 3 $onie_machine_rev)
+    
+    local payload="${sub_opt_machine}${sub_opt_arch}${sub_opt_rev}"
+    
+    local vendor_spec="${enterprise_hex}${payload}"
+    local udhcp_vivso="-x 17:${vendor_spec}"
+
     echo "$udhcp_args" "$udhcp_user_class" "$udhcp_client_id" "$udhcp_vivso"
 }
 

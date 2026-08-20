@@ -1,0 +1,58 @@
+# Dockerfile.build - IPv6-only host / Debian stretch EOL workaround
+#
+# Debian 9 (stretch) reached end-of-life in 2022. Its packages were moved to
+# archive.debian.org. On modern hosts the base image's /etc/apt/sources.list
+# still points at deb.debian.org (which 404s for stretch). This Dockerfile
+# extends the upstream ONIE build environment image definition but rewrites
+# the apt sources to the archive mirror BEFORE attempting any apt-get.
+#
+# On IPv6-only hosts, pass --network host so the container inherits the host's
+# IPv6 stack (build-onie-kvm.sh does this automatically when using podman/docker
+# on an IPv6-only host).
+
+FROM debian:9
+
+# Redirect to archive (stretch is EOL — deb.debian.org/security.debian.org 404)
+RUN sed -i \
+    -e 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' \
+    -e 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' \
+    -e '/stretch-updates/d' \
+    /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid
+
+# Add initial development packages (same as contrib/build-env/Dockerfile)
+# + gettext (provides autopoint, required by grub autoreconf)
+# + locales + en_US.UTF-8 (required by uClibc locale table generation in crosstool-ng)
+RUN apt-get update && apt-get install -y \
+    build-essential stgit u-boot-tools util-linux \
+    gperf device-tree-compiler python-all-dev xorriso \
+    autoconf automake bison flex texinfo libtool libtool-bin \
+    realpath gawk libncurses5 libncurses5-dev bc \
+    dosfstools mtools pkg-config git wget help2man libexpat1 \
+    libexpat1-dev fakeroot python-sphinx rst2pdf \
+    libefivar-dev libnss3-tools libnss3-dev libpopt-dev \
+    libssl-dev sbsigntool uuid-runtime uuid-dev cpio \
+    bsdmainutils curl sudo unzip \
+    gettext autopoint locales libelf-dev && \
+    sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen en_US.UTF-8
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Create build user (same as contrib/build-env/Dockerfile)
+RUN useradd -m -s /bin/bash build && \
+        adduser build sudo && \
+        echo "build:build" | chpasswd
+
+WORKDIR /home/build
+
+RUN echo export PATH="/sbin:/usr/sbin:\$PATH" >> .bashrc
+
+RUN mkdir src
+
+RUN chown -R build:build .
+
+USER build
+
+CMD ["/bin/bash", "--login"]

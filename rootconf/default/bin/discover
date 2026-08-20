@@ -139,8 +139,27 @@ sd_localubifs()
 # DHCPv6 service discovery
 sd_dhcp6()
 {
-    # TODO
-    # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
+    intf_list=$(net_intf)
+    udhcp_args="$(udhcpc6_args) -t 2 -T 2 -n"
+
+    # Request Boot File URL (Option 59)
+    udhcp_request_opts="-O 59"
+
+    # Initate DHCP request on every interface in the list.  Stop after
+    # one works.
+
+    for i in $intf_list ; do
+        log_debug_msg "Trying DHCPv6 on interface: $i"
+        tmp=$(udhcpc6 $udhcp_args $udhcp_request_opts -i $i -s /lib/onie/udhcp6_sd 2>&1) && break
+        tmp=
+    done
+
+    sleep 3
+    onie_disco="${onie_disco}${tmp##*ONIE_PARMS:}"
+    if [ -n "$onie_disco" ] ; then
+        return 0
+    fi
+
     return 1
 }
 

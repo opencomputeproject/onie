@@ -34,10 +34,34 @@ config_ethmgmt_dhcp6()
     intf=$1
     shift
 
-    # TODO
-    # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
+    # no default args
+    udhcp_args="$(udhcpc6_args) -n -o"
+    if [ "$1" = "discover" ] ; then
+        udhcp_args="$udhcp_args -t 5 -T 3"
+    else
+        udhcp_args="$udhcp_args -t 15 -T 3"
+    fi
+    
+    # Request options:
+    # 23: DNS recursive name server
+    # 24: Domain Search List
+    # 39: Client FQDN
+    # 
+    # udhcpc6 supports -O <option_code>
+    udhcp_request_opts="-O 23 -O 24 -O 39"
 
-    return 1
+    log_info_msg "Trying DHCPv6 on interface: $intf"
+    udhcpc6 $udhcp_args $udhcp_request_opts \
+           -i $intf -s /lib/onie/udhcp6_net
+    if [ "$?" = "0" ] ; then
+        local ipaddr=$(ifconfig $intf |grep 'inet6 '|sed -e 's/:/ /g'|awk '{ print $3 " / " $7 }')
+        log_console_msg "Using DHCPv6 addr: ${intf}: $ipaddr"
+    else
+        log_warning_msg "Unable to configure interface using DHCPv6: $intf"
+        return 1
+    fi
+
+    return 0
 }
 
 # DHCPv4 ethernet management configuration
@@ -60,7 +84,7 @@ config_ethmgmt_dhcp4()
 
     log_info_msg "Trying DHCPv4 on interface: $intf"
     udhcpc $udhcp_args $udhcp_request_opts $udhcp_user_class \
-           -i $intf -s /lib/onie/udhcp4_net > /dev/null 2>&1
+           -i $intf -s /lib/onie/udhcp4_net
     if [ "$?" = "0" ] ; then
         local ipaddr=$(ifconfig $intf |grep 'inet '|sed -e 's/:/ /g'|awk '{ print $3 " / " $7 }')
         log_console_msg "Using DHCPv4 addr: ${intf}: $ipaddr"
@@ -162,7 +186,10 @@ config_ethmgmt()
 
     # Bring up all the interfaces for the subsequent methods.
     for intf in $intf_list ; do
-        cmd_run ifconfig $intf up
+        cmd_run ip link set $intf down
+        sleep 3
+        cmd_run ip link set $intf up
+        sleep 5
         params="$intf $*"
         eval "result_${intf}=0"
         check_link_up $intf || {
@@ -170,6 +197,8 @@ config_ethmgmt()
             eval "result_${intf}=1"
             continue
         }
+        # Allow time for IPv6 DAD to complete
+        sleep 5
         config_ethmgmt_static    $params || \
             config_ethmgmt_dhcp6 $params || \
             config_ethmgmt_dhcp4 $params || \

@@ -302,10 +302,8 @@ $(get_onie_neighs)
         }
     done
 
-    # Try bootfile as a URL, supress warnings
-    if [ -n "$onie_disco_bootfile" ] ; then
-        url_run "$onie_disco_bootfile" quiet && return 0
-    fi
+    # Bootfile URL is now tried earlier in the main flow (before http_download)
+    # to avoid being delayed by neighbor discovery on real hardware.
 
     return 1
 }
@@ -331,6 +329,8 @@ $onie_disco_serverid
 $onie_disco_bootfile
 $onie_disco_boot_file
 ")
+
+    log_debug_msg "TFTP bootfiles: $tftp_bootfiles"
 
     for server in $tftp_servers ; do
         for f in $tftp_bootfiles ; do
@@ -511,6 +511,13 @@ fi
 
 if [ -n "$onie_disco_url" ] ; then
     url_run "$onie_disco_url" && exit 0
+fi
+
+# Next try bootfile URL from DHCP (option 67 or DHCPv6 option 59)
+if [ -n "$onie_disco_bootfile" ] ; then
+    log_info_msg "Trying bootfile URL: $onie_disco_bootfile"
+    url_run "$onie_disco_bootfile" && exit 0
+    log_info_msg "Bootfile URL failed: $onie_disco_bootfile"
 fi
 
 # Try HTTP discovery methods next
