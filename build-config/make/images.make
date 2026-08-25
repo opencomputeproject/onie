@@ -201,6 +201,8 @@ ifeq ($(REQUIRE_CXX_LIBS),yes)
     SYSROOT_LIBS += libstdc++.so.6.0.20
   else ifeq ($(GCC_VERSION),8.3.0)
     SYSROOT_LIBS += libstdc++.so.6.0.25
+  else ifeq ($(GCC_VERSION),8.5.0)
+    SYSROOT_LIBS += libstdc++.so.6.0.25
   else
     $(error C++ support: Unsupported GCC version: $(GCC_VERSION))
   endif
