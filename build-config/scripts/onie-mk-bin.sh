@@ -74,7 +74,7 @@ MACHINE_CONFIG="$uboot_src/include/configs/${uboot_machine}.h"
 
 if [ -z "$env_sector_size" ] ; then
     # try to figure it out from the $MACHINE_CONIFG
-    env_sector_size=$(grep CONFIG_ENV_SECT_SIZE $MACHINE_CONFIG | awk '{print $3}')
+    env_sector_size=$(grep -m 1 CONFIG_ENV_SECT_SIZE $MACHINE_CONFIG | awk '{print $3}')
 fi
 
 env_sector_size=$(( $env_sector_size + 0 ))
