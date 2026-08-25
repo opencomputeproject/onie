@@ -1,0 +1,35 @@
+Subject: [PATCH] fix do_version declaration
+
+With gcc 15 compile fails with the below error, update the
+do_version declaration to match the header in command.h
+
+parted.c: In function '_init_commands':
+parted.c:1954:9: error: passing argument 2 of 'command_create' from incompatible pointer type [-Wincompatible-pointer-types]
+ 1954 |         do_version,
+      |         ^~~~~~~~~~
+      |         |
+      |         int (*)(PedDevice **, PedDisk **) {aka int (*)(struct _PedDevice **, struct _PedDisk **)}
+command.h:34:39: note: expected 'int (*)(PedDevice **)' {aka 'int (*)(struct _PedDevice **)'} but argument is of type 'int (*)(PedDevice **, PedDisk **)' {aka 'int (*)(struct _PedDevice **, struct _PedDisk **)'}
+   34 |                                 int (*method) (PedDevice** dev),
+      |                                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+parted.c:1696:1: note: 'do_version' declared here
+ 1696 | do_version (PedDevice** dev, PedDisk** diskp)
+      | ^~~~~~~~~~
+---
+ parted/parted.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/parted/parted.c b/parted/parted.c
+index 789030a..0cb6bc1 100644
+--- a/parted/parted.c
++++ b/parted/parted.c
+@@ -1693,7 +1693,7 @@ do_unit (PedDevice** dev)
+ }
+ 
+ static int
+-do_version ()
++do_version (PedDevice** dev)
+ {
+     printf ("\n%s\n%s",
+             prog_name,
+

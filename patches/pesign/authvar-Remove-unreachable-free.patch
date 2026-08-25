@@ -1,0 +1,53 @@
+From 43c3873cbbd773357606b5d3f1eeba229dcfe98d Mon Sep 17 00:00:00 2001
+From: Chris Packham <chris.packham@alliedtelesis.co.nz>
+Date: Tue, 4 Nov 2025 13:49:03 +1300
+Subject: [PATCH] authvar: Remove unreachable free()
+
+When building using GCC 15 the following error is hit
+
+  authvar.c: In function 'main':
+  authvar.c:450:17: error: 'free' called on a pointer to an unallocated object '"NSS Certificate DB"' [-Werror=free-nonheap-object]
+    450 |                 free(tokenname);
+        |                 ^
+  authvar.c:270:15: note: assigned here
+    270 |         char *tokenname = "NSS Certificate DB";
+        |               ^
+  lto1: all warnings being treated as errors
+  lto-wrapper: fatal error: gcc returned 1 exit status
+
+This might be a false positive since the tokenname != origtoken
+condition should never be satisfied but it might also be an indication
+that lto or other optimisations have elided some code that they
+shouldn't have. Regardless tokenname is allocated on the stack and never
+modified so the call to free() and the origtoken local aren't needed and
+can be dropped.
+
+Signed-off-by: Chris Packham <chris.packham@alliedtelesis.co.nz>
+---
+ src/authvar.c | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/src/authvar.c b/src/authvar.c
+index f9a7dce..ad13c1d 100644
+--- a/src/authvar.c
++++ b/src/authvar.c
+@@ -268,7 +268,6 @@ main(int argc, char *argv[])
+ 	authvar_context *ctxp = &ctx;
+ 	char *time_str = NULL;
+ 	char *tokenname = "NSS Certificate DB";
+-	char *origtoken = tokenname;
+ 	char *certdir = "/etc/pki/pesign";
+ 	SECStatus status;
+ 
+@@ -446,8 +445,6 @@ main(int argc, char *argv[])
+ 			PORT_ErrorToString(PORT_GetError()));
+ 		exit(1);
+ 	}
+-	if (tokenname != origtoken)
+-		free(tokenname);
+ 
+ 	if (action & SIGN) {
+ 		rc = find_certificate(ctx.cms_ctx, 1);
+-- 
+2.51.2
+

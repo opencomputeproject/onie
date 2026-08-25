@@ -1,0 +1,82 @@
+From 1ca7ec0b23bac89fa403353c13defb6247842680 Mon Sep 17 00:00:00 2001
+From: Petr Vorel <pvorel@suse.cz>
+Date: Mon, 30 Aug 2021 11:53:17 +0200
+Subject: [PATCH] autogen.sh: Detect python
+
+It helps to avoid an error on distros which has only python3 binary:
+  ./autogen.sh: line 20: python: command not found
+
+Use python3 as the default as python2 is EOL since Jan 2020. However,
+check also for python which is on most distros, if not all, python2
+because code still works on python2.
+
+Although it should not be needed keep the possibility to define PYTHON
+variable.
+
+For detection use "command -v" which is POSIX and supported on all
+common shells (bash, zsh, dash, busybox sh, mksh) instead requiring
+"which" as an extra dependency (usable on containers).
+
+Update the INSTALL file too.
+
+Signed-off-by: Petr Vorel <pvorel@suse.cz>
+Reviewed-by: Daniel Kiper <daniel.kiper@oracle.com>
+(cherry picked from commit 8f35208db4154ede690a18e408375815bbf320b7)
+---
+ INSTALL    |  7 +++----
+ autogen.sh | 17 +++++++++++++++--
+ 2 files changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/INSTALL b/INSTALL
+index 991479b52..4c88f8fbe 100644
+--- a/INSTALL
++++ b/INSTALL
+@@ -46,7 +46,7 @@ To build GRUB's graphical terminal (gfxterm), you need:
+ If you use a development snapshot or want to hack on GRUB you may
+ need the following.
+ 
+-* Python 2.6 or later
++* Python 3 (NOTE: python 2.6 should still work, but it's not tested)
+ * Autoconf 2.63 or later
+ * Automake 1.11 or later
+ 
+@@ -91,9 +91,8 @@ The simplest way to compile this package is:
+   
+   3. Type `./bootstrap'.
+ 
+-     * autogen.sh (called by bootstrap) uses python. By default the
+-       invocation is "python", but it can be overridden by setting the
+-       variable $PYTHON.
++     The autogen.sh (called by bootstrap) uses python. By default autodetect
++     it, but it can be overridden by setting the PYTHON variable.
+ 
+   4. Type `./configure' to configure the package for your system.
+      If you're using `csh' on an old version of System V, you might
+diff --git a/autogen.sh b/autogen.sh
+index ef43270fc..46508e942 100755
+--- a/autogen.sh
++++ b/autogen.sh
+@@ -7,8 +7,21 @@ if [ ! -e grub-core/lib/gnulib/stdlib.in.h ]; then
+   exit 1
+ fi
+ 
+-# Set ${PYTHON} to plain 'python' if not set already
+-: ${PYTHON:=python}
++# Detect python
++if [ -z "$PYTHON" ]; then
++  for i in python3 python; do
++    if command -v "$i" > /dev/null 2>&1; then
++      PYTHON="$i"
++      echo "Using $PYTHON..."
++      break
++    fi
++  done
++
++  if [ -z "$PYTHON" ]; then
++    echo "python not found." >&2
++    exit 1
++  fi
++fi
+ 
+ export LC_COLLATE=C
+ unset LC_ALL

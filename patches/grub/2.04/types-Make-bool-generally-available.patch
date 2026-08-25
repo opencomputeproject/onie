@@ -1,0 +1,80 @@
+From ec1f2ae6e8e12095ede19b596ee58b332b955bff Mon Sep 17 00:00:00 2001
+From: Robbie Harwood <rharwood@redhat.com>
+Date: Fri, 4 Nov 2022 12:13:34 -0400
+Subject: [PATCH] types: Make bool generally available
+
+Add an include on stdbool.h, making the bool type generally available
+within the GRUB without needing to add a file-specific include every
+time it would be used.
+
+Signed-off-by: Robbie Harwood <rharwood@redhat.com>
+Reviewed-by: Daniel Kiper <daniel.kiper@oracle.com>
+[upstream commit 229b23a017f2faae632730b7f240ee57cfdff0f9]
+---
+ grub-core/commands/parttool.c  | 2 +-
+ grub-core/parttool/msdospart.c | 4 ++--
+ include/grub/parttool.h        | 2 +-
+ include/grub/types.h           | 1 +
+ 4 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/grub-core/commands/parttool.c b/grub-core/commands/parttool.c
+index 051e31320..ff45c65e6 100644
+--- a/grub-core/commands/parttool.c
++++ b/grub-core/commands/parttool.c
+@@ -315,7 +315,7 @@ grub_cmd_parttool (grub_command_t cmd __attribute__ ((unused)),
+ 		    switch (curarg->type)
+ 		      {
+ 		      case GRUB_PARTTOOL_ARG_BOOL:
+-			pargs[curarg - ptool->args].bool
++			pargs[curarg - ptool->args].b
+ 			  = (args[j][grub_strlen (curarg->name)] != '-');
+ 			break;
+ 
+diff --git a/grub-core/parttool/msdospart.c b/grub-core/parttool/msdospart.c
+index dcbf74e3b..a92669e5a 100644
+--- a/grub-core/parttool/msdospart.c
++++ b/grub-core/parttool/msdospart.c
+@@ -61,7 +61,7 @@ static grub_err_t grub_pcpart_boot (const grub_device_t dev,
+       return grub_errno;
+     }
+ 
+-  if (args[0].set && args[0].bool)
++  if (args[0].set && args[0].b)
+     {
+       for (i = 0; i < 4; i++)
+ 	mbr.entries[i].flag = 0x0;
+@@ -116,7 +116,7 @@ static grub_err_t grub_pcpart_type (const grub_device_t dev,
+ 
+   if (args[1].set)
+     {
+-      if (args[1].bool)
++      if (args[1].b)
+ 	type |= GRUB_PC_PARTITION_TYPE_HIDDEN_FLAG;
+       else
+ 	type &= ~GRUB_PC_PARTITION_TYPE_HIDDEN_FLAG;
+diff --git a/include/grub/parttool.h b/include/grub/parttool.h
+index 4e8f8d5e5..4799a22c5 100644
+--- a/include/grub/parttool.h
++++ b/include/grub/parttool.h
+@@ -32,7 +32,7 @@ struct grub_parttool_args
+   int set;
+   union
+   {
+-    int bool;
++    int b;
+     char *str;
+   };
+ };
+diff --git a/include/grub/types.h b/include/grub/types.h
+index dbbe672b4..24b041b4a 100644
+--- a/include/grub/types.h
++++ b/include/grub/types.h
+@@ -20,6 +20,7 @@
+ #define GRUB_TYPES_HEADER	1
+ 
+ #include <config.h>
++#include <stdbool.h>
+ #ifndef GRUB_UTIL
+ #include <grub/cpu/types.h>
+ #endif
+
