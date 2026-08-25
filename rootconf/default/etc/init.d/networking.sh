@@ -198,6 +198,10 @@ if [ "$1" = "start" ] ; then
 
     # Set MAC addr for all interfaces, but leave the interfaces down.
     base_mac=$(onie-sysinfo -e)
+    if [ "$base_mac" = "ERROR:" ] ; then
+        log_warning_msg "Unable to retrieve management Ethernet MAC address"
+        onie_skip_ethmgmt_macs=yes
+    fi
     for intf in $intf_list ; do
         if [ "$onie_skip_ethmgmt_macs" = "no" ] ; then
             mac="$(mac_add $base_mac $intf_counter)"
