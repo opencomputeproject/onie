@@ -1,0 +1,39 @@
+dhcp-logsrv-option patch
+
+Copyright (C) 2026 Brad House <bhouse@nexthop.ai>
+
+SPDX-License-Identifier:     GPL-2.0
+
+Re-add DHCP option 7 (log server) to udhcpc's built-in option table.
+
+busybox trims rarely-used options from the table for size, and option 7
+is one of them.  ONIE cannot decode it in a single caller instead: it is
+requested BY NAME ("-O logsrv") in config_ethmgmt_dhcp4(), and consumed
+as $logsrv in the udhcp4_net action script -- including in the
+per-machine copies of both that many platforms carry.  udhcpc treats an
+unknown "-O <name>" as fatal (bb_error_msg_and_die), so without the name
+in the table those platforms lose DHCP entirely rather than just losing
+the log server.
+
+diff --git a/networking/udhcp/common.c b/networking/udhcp/common.c
+index ad580f3..1cc6da6 100644
+--- a/networking/udhcp/common.c
++++ b/networking/udhcp/common.c
+@@ -27,7 +27,7 @@ const struct dhcp_optflag dhcp_optflags[] ALIGN2 = {
+ //	{ OPTION_IP | OPTION_LIST                 , 0x04 }, /* DHCP_TIME_SERVER   */
+ //	{ OPTION_IP | OPTION_LIST                 , 0x05 }, /* DHCP_NAME_SERVER   */
+ 	{ OPTION_IP | OPTION_LIST     | OPTION_REQ, 0x06 }, /* DHCP_DNS_SERVER    */
+-//	{ OPTION_IP | OPTION_LIST                 , 0x07 }, /* DHCP_LOG_SERVER    */
++	{ OPTION_IP | OPTION_LIST                 , 0x07 }, /* DHCP_LOG_SERVER    */
+ //	{ OPTION_IP | OPTION_LIST                 , 0x08 }, /* DHCP_COOKIE_SERVER */
+ 	{ OPTION_IP | OPTION_LIST                 , 0x09 }, /* DHCP_LPR_SERVER    */
+ 	{ OPTION_STRING_HOST          | OPTION_REQ, 0x0c }, /* DHCP_HOST_NAME     */
+@@ -101,7 +101,7 @@ const char dhcp_option_strings[] ALIGN1 =
+ //	"timesrv" "\0"          /* DHCP_TIME_SERVER     */
+ //	"namesrv" "\0"          /* DHCP_NAME_SERVER     */
+ 	"dns" "\0"              /* DHCP_DNS_SERVER      */
+-//	"logsrv" "\0"           /* DHCP_LOG_SERVER      */
++	"logsrv" "\0"           /* DHCP_LOG_SERVER      */
+ //	"cookiesrv" "\0"        /* DHCP_COOKIE_SERVER   */
+ 	"lprsrv" "\0"           /* DHCP_LPR_SERVER      */
+ 	"hostname" "\0"         /* DHCP_HOST_NAME       */
