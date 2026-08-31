@@ -358,8 +358,6 @@ SECURE_GRUB ?= no
 
 ifeq ($(SECURE_BOOT_ENABLE),yes)
   SHIM_ENABLE = yes
-  PESIGN_ENABLE = yes
-  GNU_EFI_ENABLE = yes
   OPENSSL_ENABLE = yes
   MOKUTIL_ENABLE = yes
   KEYUTILS_ENABLE = yes
@@ -374,9 +372,6 @@ ifeq ($(XTOOLS_ENABLE),yes)
   include make/xtools.make
 endif
 include make/sysroot.make
-ifeq ($(GNU_EFI_ENABLE),yes)
-  include make/gnu-efi.make
-endif
 include make/kernel.make
 ifeq ($(UBOOT_ENABLE),yes)
   include make/u-boot.make
@@ -440,9 +435,6 @@ ifeq ($(FLASHROM_ENABLE),yes)
 endif
 ifeq ($(IPMITOOL_ENABLE),yes)
   include make/ipmitool.make
-endif
-ifeq ($(PESIGN_ENABLE),yes)
-  include make/pesign.make
 endif
 ifeq ($(OPENSSL_ENABLE),yes)
   include make/openssl.make
