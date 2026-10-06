@@ -1,0 +1,168 @@
+#!/bin/bash
+
+#  Copyright (C) 2026 Brad House <bhouse@nexthop.ai>
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+# Check that every machine's busybox customizations still apply to the
+# current busybox: its patch series applies on top of ONIE's base
+# series, and its config overrides, merged into the base config the
+# same way the build does it, pass "make silentoldconfig" with no
+# input.  A config that silentoldconfig would prompt for (a new symbol,
+# or a value outside its Kconfig range) aborts the real build when the
+# console is redirected, so it fails here too.
+#
+# The kvm_x86_64 CI build only exercises one machine, which has neither
+# busybox patches nor i2c EEPROM symbols visible, so problems in the
+# other machines' busybox setups are otherwise invisible until someone
+# builds for that platform.
+#
+# Patches are applied with "git apply", which is as strict as the
+# "stg import" the build uses: no fuzz, exact context.
+
+usage()
+{
+    echo "Usage: $0 <busybox tarball> <base patch series> <base config> <machine dir> <known failures> [machine-dir-filter]"
+    echo
+    echo "  <machine dir> is the top of the machine tree (onie/machine)."
+    echo "  <known failures> lists machine busybox directories, relative to"
+    echo "  <machine dir>, that are already broken; they are reported but"
+    echo "  do not fail the check.  A listed directory that passes does"
+    echo "  fail it, so the list is kept current."
+    echo "  [machine-dir-filter], if given, only checks machine busybox"
+    echo "  directories whose path contains that string."
+    exit 1
+}
+
+[ $# -ge 5 ] || usage
+
+TARBALL="$(realpath "$1")"
+SERIES="$(realpath "$2")"
+BASECONF="$(realpath "$3")"
+MACHDIR="$(realpath "$4")"
+KNOWN="$(realpath "$5")"
+FILTER="${6:-}"
+SCRIPTDIR="$(dirname "$(realpath "$0")")"
+
+for f in "$TARBALL" "$SERIES" "$BASECONF" "$KNOWN" ; do
+    [ -f "$f" ] || { echo "ERROR: $f not found" ; exit 1 ; }
+done
+[ -d "$MACHDIR" ] || { echo "ERROR: $MACHDIR not found" ; exit 1 ; }
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+git_q()
+{
+    git -c user.name=onie -c user.email=onie@localhost -c advice.detachedHead=false "$@"
+}
+
+# Print the patch names listed in a series file, without comments.
+series_patches()
+{
+    sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$1"
+}
+
+# Base tree: pristine busybox plus ONIE's base series, committed so each
+# machine can be reset to it cheaply.  The kconfig "conf" tool is built
+# once up front and survives the resets (git clean leaves ignored files).
+echo "==== Preparing busybox base tree ===="
+tar -C "$WORK" -xf "$TARBALL" || exit 1
+SRC="$(find "$WORK" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+cd "$SRC" || exit 1
+git_q init -q && git_q add -A && git_q commit -q -m base || exit 1
+PATCHROOT="$(dirname "$SERIES")"
+for p in $(series_patches "$SERIES") ; do
+    git_q apply --whitespace=nowarn "$PATCHROOT/$p" || {
+        echo "ERROR: base patch $p does not apply" ; exit 1 ; }
+done
+cp "$BASECONF" .config
+make -s silentoldconfig < /dev/null > "$WORK/base.log" 2>&1 || {
+    echo "ERROR: the base config fails silentoldconfig:" ; cat "$WORK/base.log" ; exit 1 ; }
+git_q add -A && git_q commit -q -m onie && git_q tag onie-base || exit 1
+
+# A machine's busybox directory is normally <machine>/busybox, or
+# <machine>/busybox/r<rev> for machines that vary by revision.  Patches
+# named in its series come from <dir>/patches or from the vendor-wide
+# <vendor>/busybox directory, as in cp-machine-patches.
+BBDIRS="$(find "$MACHDIR" \( -path '*/busybox/conf/config' -o -path '*/busybox/patches/series' \
+                             -o -path '*/busybox/r*/conf/config' -o -path '*/busybox/r*/patches/series' \) |
+          sed -E 's#/(conf/config|patches/series)$##' | sort -u)"
+
+is_known()
+{
+    sed -e 's/#.*//' -e 's/[[:space:]]*$//' "$KNOWN" | grep -qxF "$1"
+}
+
+pass=0
+fail=0
+known=0
+dirty=""
+for bbdir in $BBDIRS ; do
+    rel="${bbdir#$MACHDIR/}"
+    [ -n "$FILTER" ] && [ "${rel#*$FILTER}" = "$rel" ] && continue
+    machinedir="${bbdir%%/busybox*}"
+    vendordir="$(dirname "$machinedir")/busybox"
+
+    # Only machines with patches dirty the tree; reset it before the
+    # next machine that needs a clean one.
+    if [ -n "$dirty" ] ; then
+        git_q reset -q --hard onie-base
+        git_q clean -q -f -d
+        dirty=""
+    fi
+    result=""
+
+    if [ -r "$bbdir/patches/series" ] ; then
+        dirty=y
+        for p in $(series_patches "$bbdir/patches/series") ; do
+            if [ -r "$bbdir/patches/$p" ] ; then
+                pf="$bbdir/patches/$p"
+            elif [ -r "$vendordir/$p" ] ; then
+                pf="$vendordir/$p"
+            else
+                result="patch $p not found"
+                break
+            fi
+            if ! git_q apply --whitespace=nowarn "$pf" 2> "$WORK/apply.log" ; then
+                result="patch $p does not apply: $(grep -m 1 '^error:' "$WORK/apply.log")"
+                break
+            fi
+        done
+    fi
+
+    if [ -z "$result" ] ; then
+        cp "$BASECONF" .config
+        [ -r "$bbdir/conf/config" ] && "$SCRIPTDIR/apply-config-patch" .config "$bbdir/conf/config"
+        # The base tree already has its generated Config.in files and a
+        # built conf, so unpatched machines can run conf directly (what
+        # "make silentoldconfig" does, minus regenerating everything);
+        # patched ones may have changed Kconfig and go through make.
+        if [ -n "$dirty" ] ; then
+            make -s silentoldconfig < /dev/null > "$WORK/conf.log" 2>&1
+        else
+            ./scripts/kconfig/conf -s Config.in < /dev/null > "$WORK/conf.log" 2>&1
+        fi
+        if [ $? -ne 0 ] ; then
+            result="silentoldconfig: $(grep -m 1 -E 'NEW|aborted|rror' "$WORK/conf.log")"
+        fi
+    fi
+
+    if [ -z "$result" ] ; then
+        if is_known "$rel" ; then
+            fail=$((fail + 1))
+            echo "FAIL: $rel: passes now, remove it from $(basename "$KNOWN")"
+        else
+            pass=$((pass + 1))
+        fi
+    elif is_known "$rel" ; then
+        known=$((known + 1))
+        echo "KNOWN: $rel: $result"
+    else
+        fail=$((fail + 1))
+        echo "FAIL: $rel: $result"
+    fi
+done
+
+echo "==== busybox machine check: $pass passed, $known known failures, $fail failed ===="
+[ $fail -eq 0 ]

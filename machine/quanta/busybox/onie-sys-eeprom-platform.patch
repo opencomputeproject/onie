@@ -1,19 +1,6 @@
 Add support for onie-syseeprom and mb_detect
 Alias mbdetect from mb_detect for backward compatible
 
-diff --git a/include/applets.src.h b/include/applets.src.h
-index 71b8cbd..736a31b 100644
---- a/include/applets.src.h
-+++ b/include/applets.src.h
-@@ -345,6 +345,8 @@ IF_WHOAMI(APPLET_NOFORK(whoami, whoami, BB_DIR_USR_BIN, BB_SUID_DROP, whoami))
- IF_YES(APPLET_NOFORK(yes, yes, BB_DIR_USR_BIN, BB_SUID_DROP, yes))
- IF_ZCIP(APPLET(zcip, BB_DIR_SBIN, BB_SUID_DROP))
- IF_SYS_EEPROM(APPLET_ODDNAME(onie-syseeprom, onie_syseeprom, BB_DIR_USR_BIN, BB_SUID_DROP, onie_syseeprom))
-+APPLET_ODDNAME(mb_detect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
-+APPLET_ODDNAME(mbdetect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
- 
- #if !defined(PROTOTYPES) && !defined(NAME_MAIN) && !defined(MAKE_USAGE) \
- 	&& !defined(MAKE_LINKS) && !defined(MAKE_SUID)
 diff --git a/include/i2c-dev.h b/include/i2c-dev.h
 index 23f7c2c..828e198 100644
 --- a/include/i2c-dev.h
@@ -179,7 +166,7 @@ index 23f7c2c..828e198 100644
  #endif /* _LINUX_I2C_DEV_H */
 diff --git a/include/mb_detect.h b/include/mb_detect.h
 new file mode 100644
-index 0000000..f0c6191
+index 0000000..a223396
 --- /dev/null
 +++ b/include/mb_detect.h
 @@ -0,0 +1,57 @@
@@ -240,21 +227,16 @@ index 0000000..f0c6191
 +extern s32 sys_board_info_get(SysBoardInfo *bdinfo);
 +
 +#endif	/* __MB_DETECT_H */
-diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 72ddcd1..7f9c2b4 100644
---- a/miscutils/Kbuild.src
-+++ b/miscutils/Kbuild.src
-@@ -56,3 +56,4 @@ lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
- lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
- lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
- lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
-+lib-y                     += mb_detect.o
 diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
 new file mode 100644
-index 0000000..d47489e
+index 0000000..3a83f42
 --- /dev/null
 +++ b/miscutils/mb_detect.c
-@@ -0,0 +1,283 @@
+@@ -0,0 +1,287 @@
++//applet:APPLET_ODDNAME(mb_detect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
++//applet:APPLET_ODDNAME(mbdetect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
++//kbuild:lib-y += mb_detect.o
++
 +#include "libbb.h"
 +#include <i2c-dev.h>
 +#include <getopt.h>
@@ -539,7 +521,7 @@ index 0000000..d47489e
 +	return -1;
 +}
 diff --git a/miscutils/onie_tlvinfo.c b/miscutils/onie_tlvinfo.c
-index 5cf6463..45af1bd 100644
+index 26b6ec5..1bdac9e 100644
 --- a/miscutils/onie_tlvinfo.c
 +++ b/miscutils/onie_tlvinfo.c
 @@ -260,12 +260,18 @@ static void decode_tlv_value(tlvinfo_tlv_t * tlv, char* value)
@@ -563,7 +545,7 @@ index 5cf6463..45af1bd 100644
  	sprintf(value, "%02X:%02X:%02X:%02X:%02X:%02X",
  		tlv->value[0], tlv->value[1], tlv->value[2],
  		tlv->value[3], tlv->value[4], tlv->value[5]);
-@@ -638,12 +644,17 @@ bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval)
+@@ -649,12 +655,17 @@ bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval)
      case TLV_CODE_MANUF_NAME:
      case TLV_CODE_MANUF_COUNTRY:
      case TLV_CODE_VENDOR_NAME:
@@ -583,7 +565,7 @@ index 5cf6463..45af1bd 100644
  	value = strtoul(strval, NULL, 0);
  	if (value >= 256) {
  	    printf("ERROR: Device version must be 255 or less. Value " \
-@@ -664,12 +675,12 @@ bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval)
+@@ -675,12 +686,12 @@ bool tlvinfo_add_tlv(u_int8_t * eeprom, int tcode, char * strval)
  	data[1] = value & 0xFF;
  	new_tlv_len = 2;
  	break;
@@ -602,7 +584,7 @@ index 5cf6463..45af1bd 100644
  	if (set_mac(data, strval) != 0) {
  	    return(FALSE);
 diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
-index 3003bd6..1c92f68 100644
+index c07585e..254a5d1 100644
 --- a/miscutils/sys_eeprom.c
 +++ b/miscutils/sys_eeprom.c
 @@ -1,5 +1,6 @@

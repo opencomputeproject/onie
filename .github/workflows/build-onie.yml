@@ -253,6 +253,19 @@ jobs:
               MACHINE=kvm_x86_64 \
               xtools'
 
+      # kvm_x86_64 builds one busybox configuration, with no machine busybox
+      # patches and no i2c EEPROM symbols visible, so a busybox update or a
+      # base-config change that breaks another platform would pass the build
+      # below.  Check every machine's busybox patch series and config
+      # overrides against the current busybox instead (a few minutes; needs
+      # only the busybox tarball, not the toolchain).
+      - name: Check every machine's busybox patches and config
+        run: |
+          docker run --rm \
+            -v "${PWD}:/onie" \
+            onie-build-env \
+            bash -lc 'cd build-config && make MACHINE=kvm_x86_64 busybox-config-check'
+
       # A cache hit that nonetheless had to build a new toolchain means the key
       # did not cover something that changed XTOOLS_VERSION.  The save step
       # cannot rescue that run -- the primary key already exists and GitHub
