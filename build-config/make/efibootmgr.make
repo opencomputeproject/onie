@@ -12,7 +12,7 @@
 EFIBOOTMGR_VERSION		= 16
 EFIBOOTMGR_TARBALL		= efibootmgr-$(EFIBOOTMGR_VERSION).tar.bz2
 EFIBOOTMGR_TARBALL_URLS		+= $(ONIE_MIRROR) \
-	https://github.com/rhboot/efibootmgr/releases/download/$(EFIBOOTMGR_VERSION)/$(EFIBOOTMGR_TARBALL)
+	http://github.com/rhboot/efibootmgr/releases/download/$(EFIBOOTMGR_VERSION)
 
 EFIBOOTMGR_BUILD_DIR		= $(USER_BUILDDIR)/efibootmgr
 EFIBOOTMGR_DIR			= $(EFIBOOTMGR_BUILD_DIR)/efibootmgr-$(EFIBOOTMGR_VERSION)

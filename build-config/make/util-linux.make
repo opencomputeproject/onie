@@ -13,7 +13,7 @@ UTILLINUX_MAJOR_VERSION = 2.37
 UTILLINUX_VERSION		= $(UTILLINUX_MAJOR_VERSION).2
 UTILLINUX_TARBALL		= util-linux-$(UTILLINUX_VERSION).tar.xz
 UTILLINUX_TARBALL_URLS		+= $(ONIE_MIRROR) \
-					https://www.kernel.org/pub/linux/utils/util-linux/v$(UTILLINUX_VERSION)/
+					http://www.kernel.org/pub/linux/utils/util-linux/v$(UTILLINUX_MAJOR_VERSION)
 
 ifneq ($(filter yes, $(EXT3_4_ENABLE) $(LVM2_ENABLE)),)
   UTILLINUX_FLAVOR	= util-linux
