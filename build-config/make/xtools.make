@@ -99,6 +99,38 @@ ifeq ($(XTOOLS_LIBC),glibc)
   CT_NG_COMPONENTS += glibc-$(XTOOLS_LIBC_VERSION).tar.xz
 endif
 
+# Upstream locations for the crosstool-NG components, tried in order
+# after $(CROSSTOOL_ONIE_MIRROR) so a toolchain can still be built when
+# the ONIE mirror is unavailable.  Every tarball is still verified
+# against its SHA1 in $(UPSTREAMDIR).
+CT_NG_GNU_MIRRORS = http://ftp.gnu.org/gnu http://mirrors.kernel.org/gnu
+
+# Packages found at $(CT_NG_GNU_MIRRORS)/<package>
+CT_NG_GNU_PKGS = autoconf automake binutils gdb gettext glibc gmp libiconv \
+		 libtool m4 make mpc mpfr ncurses
+
+# Helpers that split a tarball name such as gcc-8.3.0.tar.xz:
+#   ct_ng_stem -> gcc-8.3.0
+#   ct_ng_name -> gcc
+#   ct_ng_ver  -> 8.3.0
+ct_ng_stem = $(basename $(basename $(1)))
+ct_ng_name = $(firstword $(subst _, ,$(subst -, ,$(1))))
+ct_ng_ver  = $(patsubst $(call ct_ng_name,$(1))-%,%,$(call ct_ng_stem,$(1)))
+
+CT_NG_URLS_gcc    = $(addsuffix /gcc/$(call ct_ng_stem,$(1)),$(CT_NG_GNU_MIRRORS))
+CT_NG_URLS_duma   = http://downloads.sourceforge.net/project/duma/duma/$(subst _,.,$(patsubst duma_%,%,$(call ct_ng_stem,$(1))))
+CT_NG_URLS_expat  = http://github.com/libexpat/libexpat/releases/download/R_$(subst .,_,$(call ct_ng_ver,$(1)))
+CT_NG_URLS_isl    = http://libisl.sourceforge.io
+CT_NG_URLS_libelf = http://fossies.org/linux/misc/old
+CT_NG_URLS_ltrace = http://deb.debian.org/debian/pool/main/l/ltrace
+CT_NG_URLS_strace = http://strace.io/files/$(call ct_ng_ver,$(1))
+CT_NG_URLS_zlib   = http://downloads.sourceforge.net/project/libpng/zlib/$(call ct_ng_ver,$(1))
+
+# $(call ct_ng_urls,tarball) -> upstream URL list for that tarball
+ct_ng_urls = $(if $(filter $(call ct_ng_name,$(1)),$(CT_NG_GNU_PKGS)),\
+		$(addsuffix /$(call ct_ng_name,$(1)),$(CT_NG_GNU_MIRRORS)),\
+		$(call CT_NG_URLS_$(call ct_ng_name,$(1)),$(1)))
+
 xtools: $(XTOOLS_STAMP)
 
 xtools-prep: $(XTOOLS_PREP_STAMP)
@@ -113,10 +145,9 @@ xtools-download: $(XTOOLS_DOWNLOAD_STAMP)
 $(XTOOLS_DOWNLOAD_STAMP): $(XTOOLS_PREP_STAMP) | $(KERNEL_DOWNLOAD_STAMP) $(UCLIBC_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Getting upstream crosstool-NG component libraries ===="
-	$(Q) for F in ${CT_NG_COMPONENTS} ; do	echo "==== Getting upstream $${F} ====" ;\
+	$(Q) $(foreach F,$(CT_NG_COMPONENTS),echo "==== Getting upstream $(F) ====" && \
 		$(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
-		$${F} $(CROSSTOOL_ONIE_MIRROR) || exit 1 ; \
-		done
+		$(F) $(CROSSTOOL_ONIE_MIRROR) $(call ct_ng_urls,$(F)) && ) true
 	$(Q) touch $@
 
 #
