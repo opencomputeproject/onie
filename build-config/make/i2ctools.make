@@ -11,9 +11,9 @@
 # This is a makefile fragment that defines the build of i2ctools
 #
 
-I2CTOOLS_VERSION	= 3.1.1
-I2CTOOLS_TARBALL	= i2c-tools-$(I2CTOOLS_VERSION).tar.bz2
-I2CTOOLS_TARBALL_URLS	+= $(ONIE_MIRROR) http://jdelvare.nerim.net/mirror/i2c-tools
+I2CTOOLS_VERSION	= 4.4
+I2CTOOLS_TARBALL	= i2c-tools-$(I2CTOOLS_VERSION).tar.gz
+I2CTOOLS_TARBALL_URLS	+= $(ONIE_MIRROR) https://mirrors.edge.kernel.org/pub/software/utils/i2c-tools
 I2CTOOLS_BUILD_DIR	= $(MBUILDDIR)/i2c-tools
 I2CTOOLS_DIR		= $(I2CTOOLS_BUILD_DIR)/i2c-tools-$(I2CTOOLS_VERSION)
 
@@ -65,8 +65,8 @@ $(I2CTOOLS_PATCH_STAMP): $(I2CTOOLS_SRCPATCHDIR)/* $(MACHINE_I2CTOOLS_PATCHDIR_F
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Patching i2ctools ===="
 	$(Q) mkdir -p $(I2CTOOLS_DIR)/sys_eeprom
-	$(Q) cp $(I2CTOOLS_DIR)/eepromer/24cXX.c $(I2CTOOLS_DIR)/sys_eeprom/24cXX.c
-	$(Q) cp $(I2CTOOLS_DIR)/eepromer/24cXX.h $(I2CTOOLS_DIR)/sys_eeprom/24cXX.h
+	$(Q) cp $(I2CTOOLS_DIR)/eeprog/24cXX.c $(I2CTOOLS_DIR)/sys_eeprom/24cXX.c
+	$(Q) cp $(I2CTOOLS_DIR)/eeprog/24cXX.h $(I2CTOOLS_DIR)/sys_eeprom/24cXX.h
 	$(Q) mkdir -p $(I2CTOOLS_PATCHDIR)
 	$(Q) cp $(I2CTOOLS_SRCPATCHDIR)/* $(I2CTOOLS_PATCHDIR)
 ifneq ($(MACHINE_I2CTOOLS_PATCHDIR),)
