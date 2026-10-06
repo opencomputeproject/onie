@@ -11,7 +11,7 @@
 
 POPT_VERSION		= 1.16
 POPT_TARBALL		= popt-$(POPT_VERSION).tar.gz
-POPT_TARBALL_URLS	+= $(ONIE_MIRROR) http://rpm5.org/files/popt/
+POPT_TARBALL_URLS	+= $(ONIE_MIRROR) http://ftp.rpm.org/popt/releases/historical
 POPT_BUILD_DIR		= $(USER_BUILDDIR)/popt
 POPT_DIR		= $(POPT_BUILD_DIR)/popt-$(POPT_VERSION)
 

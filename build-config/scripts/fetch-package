@@ -58,11 +58,22 @@ shift 3
     exit 1
 }
 
+SHA1DIR=$(cd "$SHA1DIR" && pwd)
+
+verify_sha1() {
+    (cd "$OUTDIR" && sha1sum -c "${SHA1DIR}/${FILE}.sha1")
+}
+
 [ $# -ge 1 ] || {
     echo "Error: URL list not specified"
     usage
     exit 1
 }
+
+if [ -r "${OUTDIR}/${FILE}" ] && ! verify_sha1 > /dev/null 2>&1 ; then
+    echo "Removing cached ${OUTDIR}/${FILE} with mismatched SHA1"
+    rm -f "${OUTDIR}/${FILE}"
+fi
 
 if [ -r "${OUTDIR}/${FILE}" ] ; then
     echo "Using cached ${OUTDIR}/${FILE}"
@@ -77,9 +88,11 @@ else
 		while [ $# -ge 1 ] ; do
 			URL="$1/$FILE"
 			echo "  Downloading $FILE from: $URL"
-			wget --no-verbose --no-check-certificate -O "${OUTDIR}/${FILE}" $URL
-			if [ $? -eq 0 ] ; then
-				# stop
+			wget --no-verbose --no-check-certificate --timeout=60 --tries=3 \
+				-O "${OUTDIR}/${FILE}" $URL
+			# A server can answer with an error page instead of the
+			# file, so only stop once the SHA1 matches.
+			if [ $? -eq 0 ] && verify_sha1 ; then
 				download=yes
 				break
 			else
@@ -110,7 +123,7 @@ else
 fi
 
 # Verify SHA1
-cd $OUTDIR && sha1sum -c ${SHA1DIR}/${FILE}.sha1 || {
+verify_sha1 || {
         echo " ERROR: Unable to verify sha1 for ${FILE}"
         exit 1
     }

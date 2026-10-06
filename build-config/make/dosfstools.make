@@ -10,8 +10,10 @@
 #
 
 DOSFSTOOLS_VERSION		= 3.0.26
-DOSFSTOOLS_TARBALL		= dosfstools-$(DOSFSTOOLS_VERSION).tar.xz
-DOSFSTOOLS_TARBALL_URLS		+= $(ONIE_MIRROR) http://daniel-baumann.ch/files/software/dosfstools
+# Debian's orig tarball is the upstream release tarball, byte for byte
+DOSFSTOOLS_TARBALL		= dosfstools_$(DOSFSTOOLS_VERSION).orig.tar.xz
+DOSFSTOOLS_TARBALL_URLS		+= $(ONIE_MIRROR) \
+				   http://snapshot.debian.org/archive/debian/20140307T220401Z/pool/main/d/dosfstools
 DOSFSTOOLS_BUILD_DIR		= $(USER_BUILDDIR)/dosfstools
 DOSFSTOOLS_DIR			= $(DOSFSTOOLS_BUILD_DIR)/dosfstools-$(DOSFSTOOLS_VERSION)
 

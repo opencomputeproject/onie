@@ -16,6 +16,17 @@ WORKDIR /onie
 # Tolerate transient Debian mirror hiccups (connection resets mid-fetch).
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 
+# Debian 11 (bullseye) reached the end of its LTS support in August 2026
+# and its packages are moving off deb.debian.org (bullseye-security
+# already returns 404 for packages its index still lists), so install
+# from archive.debian.org, where the release is kept permanently.
+RUN printf '%s\n' \
+      'deb http://archive.debian.org/debian bullseye main' \
+      'deb http://archive.debian.org/debian bullseye-updates main' \
+      'deb http://archive.debian.org/debian-security bullseye-security main' \
+      > /etc/apt/sources.list && \
+    rm -f /etc/apt/sources.list.d/*
+
 # Build dependencies for crosstool-NG and the ONIE image.
 RUN apt-get update && apt-get install -y \
     autoconf \

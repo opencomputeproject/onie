@@ -11,7 +11,9 @@
 
 DMIDECODE_VERSION		= 3.1
 DMIDECODE_TARBALL		= dmidecode-$(DMIDECODE_VERSION).tar.xz
-DMIDECODE_TARBALL_URLS		+= $(ONIE_MIRROR) http://download.savannah.gnu.org/releases/dmidecode/
+DMIDECODE_TARBALL_URLS		+= $(ONIE_MIRROR) \
+				   http://download.savannah.gnu.org/releases/dmidecode \
+				   http://mirror.csclub.uwaterloo.ca/nongnu/dmidecode
 DMIDECODE_BUILD_DIR		= $(USER_BUILDDIR)/dmidecode
 DMIDECODE_DIR			= $(DMIDECODE_BUILD_DIR)/dmidecode-$(DMIDECODE_VERSION)
 

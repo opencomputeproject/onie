@@ -12,7 +12,7 @@
 ZLIB_VERSION		= 1.2.11
 ZLIB_TARBALL		= zlib-$(ZLIB_VERSION).tar.xz
 ZLIB_TARBALL_URLS	+= $(ONIE_MIRROR) http://zlib.net \
-			   http://softlayer-dal.dl.sourceforge.net/project/libpng/zlib/$(ZLIB_VERSION)
+			   http://downloads.sourceforge.net/project/libpng/zlib/$(ZLIB_VERSION)
 ZLIB_BUILD_DIR		= $(USER_BUILDDIR)/zlib
 ZLIB_DIR		= $(ZLIB_BUILD_DIR)/zlib-$(ZLIB_VERSION)
 
