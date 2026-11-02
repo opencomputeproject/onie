@@ -195,14 +195,17 @@ fi
 # variable -- otherwise the boot fails with "Verification failed: (0x1A)
 # Security Violation" before the GRUB menu ever appears.  GRUB built without
 # an .sbat section is rejected outright.  grub-mkimage embeds the section when
-# given --sbat.  ONIE's shim (16.1) enforces a baseline of grub generation 4,
-# so declare a grub generation that meets it.  The "version" fields are
+# given --sbat.  Declare the generation of the upstream fixes this GRUB
+# carries: grub 2.14 includes the February 2025 CVE fixes, which upstream
+# assigns grub generation 5 (SbatLevel 2025021800 and later).  Declaring less
+# would make shim refuse this image once a box's SbatLevel is raised to that
+# policy, although the binary is not vulnerable.  The "version" fields are
 # informational; only the generation integers are compared by shim.
 grub_version="$("$grub_mkimage" --version 2>/dev/null | awk '{print $NF}')"
 sbat_csv="$(mktemp)"
 cat <<EOF > "$sbat_csv"
 sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md
-grub,4,Free Software Foundation,grub,${grub_version},https://www.gnu.org/software/grub/
+grub,5,Free Software Foundation,grub,${grub_version},https://www.gnu.org/software/grub/
 grub.onie,1,Open Compute Project,grub,${grub_version},https://github.com/opencomputeproject/onie
 EOF
 
