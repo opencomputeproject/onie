@@ -294,14 +294,15 @@ if [ "$UEFI_ENABLE" = "yes" ] ; then
     # SBAT metadata: shim (>= 15) enforces SBAT and refuses to chainload a GRUB
     # image lacking a .sbat section (or below the firmware's SbatLevel policy),
     # failing with "Verification failed: (0x1A) Security Violation" before the
-    # menu appears.  grub-mkimage embeds the section when given --sbat.  ONIE's
-    # shim (16.1) enforces grub generation 4; only the generation integers are
-    # compared by shim -- the version strings are informational.
+    # menu appears.  grub-mkimage embeds the section when given --sbat.  grub
+    # 2.14 carries the February 2025 CVE fixes, so declare grub generation 5
+    # (see mk-grub-efi-image); only the generation integers are compared by
+    # shim -- the version strings are informational.
     grub_version="$($GRUB_HOST_BIN_UEFI_DIR/grub-mkimage --version 2>/dev/null | awk '{print $NF}')"
     sbat_csv="$(mktemp)"
     cat <<EOF > "$sbat_csv"
 sbat,1,SBAT Version,sbat,1,https://github.com/rhboot/shim/blob/main/SBAT.md
-grub,4,Free Software Foundation,grub,${grub_version},https://www.gnu.org/software/grub/
+grub,5,Free Software Foundation,grub,${grub_version},https://www.gnu.org/software/grub/
 grub.onie,1,Open Compute Project,grub,${grub_version},https://github.com/opencomputeproject/onie
 EOF
     $GRUB_HOST_BIN_UEFI_DIR/grub-mkimage \
