@@ -6,10 +6,10 @@
 #
 # This image builds the generic kvm_x86_64 target with secure boot
 # enabled.  It includes the secure-boot key-generation and EFI signing
-# tooling (gnupg2, efitools, sbsigntool), the NSS command-line tools the
-# shim signing step shells out to (libnss3-tools: pk12util/certutil), and
-# the build dependencies for the pesign that ONIE compiles from source
-# (NSS/NSPR dev packages).
+# tooling (gnupg2, efitools, sbsigntool, pesign), and the NSS command-line
+# tools the shim signing step shells out to (libnss3-tools:
+# pk12util/certutil).  shim's ENABLE_SHIM_HASH step uses the host pesign
+# (Debian 11 ships pesign 0.112).
 FROM debian:11
 WORKDIR /onie
 
@@ -49,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     libnss3-dev \
     libnss3-tools \
     libpopt-dev \
+    pesign \
     libssl-dev \
     libtool \
     libtool-bin \
