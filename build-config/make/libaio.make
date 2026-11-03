@@ -11,7 +11,11 @@
 
 LIBAIO_VERSION		= 0.3.113
 LIBAIO_TARBALL		= libaio-$(LIBAIO_VERSION).tar.gz
-LIBAIO_TARBALL_URLS	+= $(ONIE_MIRROR) https://releases.pagure.org/libaio
+# releases.pagure.org no longer serves the 0.3.113 tarball.  Fedora's
+# lookaside cache keeps it, keyed by the tarball's SHA-512, so update
+# the hash below together with LIBAIO_VERSION.
+LIBAIO_TARBALL_URLS	+= $(ONIE_MIRROR) https://releases.pagure.org/libaio \
+			   https://src.fedoraproject.org/repo/pkgs/libaio/$(LIBAIO_TARBALL)/sha512/65c30a102433bf8386581b03fc706d84bd341be249fbdee11a032b237a7b239e8c27413504fef15e2797b1acd67f752526637005889590ecb380e2e120ab0b71
 LIBAIO_BUILD_DIR	= $(USER_BUILDDIR)/libaio
 LIBAIO_DIR		= $(LIBAIO_BUILD_DIR)/libaio-$(LIBAIO_VERSION)
 
