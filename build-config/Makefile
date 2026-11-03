@@ -398,6 +398,8 @@ ifeq ($(GPT_ENABLE),yes)
   include make/gptfdisk.make
 endif
 ifeq ($(LVM2_ENABLE),yes)
+  # lvm2 >= 2.03 requires libaio for its bcache I/O engine.
+  include make/libaio.make
   include make/lvm2.make
 endif
 ifeq ($(PARTED_ENABLE),yes)
@@ -420,6 +422,8 @@ ifeq ($(DMIDECODE_ENABLE),yes)
   include make/dmidecode.make
 endif
 ifeq ($(ETHTOOL_ENABLE),yes)
+  # ethtool's netlink interface needs libmnl.
+  include make/libmnl.make
   include make/ethtool.make
 endif
 ifeq ($(MTREE_ENABLE),yes)
