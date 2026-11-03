@@ -115,6 +115,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # The GCC 14 / Debian 13 toolchain build plus the full image (restored
+      # x-tools cache + every package + kernel + recovery ISO) exceeds the
+      # ~14 GB free on a stock ubuntu-latest runner.  Reclaim ~25 GB of
+      # preinstalled toolchains we do not use so the build has headroom.
+      - name: Free up runner disk space
+        run: |
+          echo "Disk before cleanup:"; df -h /
+          sudo rm -rf /usr/local/lib/android /opt/hostedtoolcache /usr/share/dotnet \
+                      /usr/local/.ghcup /usr/share/swift /usr/local/share/powershell \
+                      /usr/local/lib/node_modules || true
+          echo "Disk after cleanup:"; df -h /
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
@@ -252,6 +264,19 @@ jobs:
             bash -lc 'cd build-config && make -j"$(nproc)" \
               MACHINE=kvm_x86_64 \
               xtools'
+
+      # kvm_x86_64 builds one busybox configuration, with no machine busybox
+      # patches and no i2c EEPROM symbols visible, so a busybox update or a
+      # base-config change that breaks another platform would pass the build
+      # below.  Check every machine's busybox patch series and config
+      # overrides against the current busybox instead (a few minutes; needs
+      # only the busybox tarball, not the toolchain).
+      - name: Check every machine's busybox patches and config
+        run: |
+          docker run --rm \
+            -v "${PWD}:/onie" \
+            onie-build-env \
+            bash -lc 'cd build-config && make MACHINE=kvm_x86_64 busybox-config-check'
 
       # A cache hit that nonetheless had to build a new toolchain means the key
       # did not cover something that changed XTOOLS_VERSION.  The save step

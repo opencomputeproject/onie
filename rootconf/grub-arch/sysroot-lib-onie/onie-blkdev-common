@@ -194,12 +194,24 @@ onie_getenv()
     echo -n $val
 }
 
+# Matches a Boot#### line from 'efibootmgr -v' whose device path ends in a
+# loader file. efivar >= 38 prints that node bare (.../\EFI\...), older
+# versions as .../File(\EFI\...).
+UEFI_LOADER_RE='\)/(File\()?\\'
+
+# Print the loader path of the 'efibootmgr -v' lines on stdin, with '/'
+# separators.
+uefi_loader_path()
+{
+    sed -E -e 's/.*\)\/(File\()?(\\[^)[:space:]]*).*/\2/' -e 's/\\/\//g'
+}
+
 # Set the UEFI BootOrder variable such that $1 is the current OS
 uefi_boot_first()
 {
     # Step 1 - Determine the Boot number.
     local os="$1"
-    local boot_num=$(efibootmgr -v | grep "$os" | grep ')/File(' | tail -n 1 | awk '{ print $1 }')
+    local boot_num=$(efibootmgr -v | grep "$os" | grep -E "$UEFI_LOADER_RE" | tail -n 1 | awk '{ print $1 }')
     boot_num=${boot_num#Boot}
     # Remove trailing '*'
     boot_num=${boot_num%\*}
@@ -287,9 +299,9 @@ uefi_boot_onie_install()
 # Remove UEFI Boot numbers that reference non-existent files
 uefi_rm_stale_bootnum()
 {
-    efibootmgr -v | grep ')/File(' | awk '{ print $1 }' | while read boot_num ; do
+    efibootmgr -v | grep -E "$UEFI_LOADER_RE" | awk '{ print $1 }' | while read boot_num ; do
         local boot_num=${boot_num%\*}
-        local boot_path=$(efibootmgr -v | grep $boot_num | sed -e 's/.*)\/File(//' -e 's/).*//' -e 's/\\/\//g')
+        local boot_path=$(efibootmgr -v | grep "^$boot_num" | uefi_loader_path)
         [ -f "$uefi_esp_mnt/$boot_path" ] || {
             boot_num=${boot_num#Boot}
             efibootmgr --quiet -b $boot_num -B

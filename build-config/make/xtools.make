@@ -20,9 +20,9 @@
 #   CT_DEBUG_CT_SAVE_STEPS_GZIP=y
 #
 
-XTOOLS_CONFIG		?= conf/crosstool/gcc-$(GCC_VERSION)/$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)/crosstool.$(ONIE_ARCH).config
+XTOOLS_CONFIG		?= conf/crosstool/gcc-$(GCC_VERSION)/$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)/crosstool.$(ONIE_ARCH).defconfig
 XTOOLS_ROOT		= $(BUILDDIR)/x-tools
-XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(LINUX_RELEASE)-$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)
+XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(XTOOLS_LINUX_VERSION)-$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)
 XTOOLS_DIR		= $(XTOOLS_ROOT)/$(XTOOLS_VERSION)
 XTOOLS_BUILD_DIR	= $(XTOOLS_DIR)/build
 XTOOLS_INSTALL_DIR	= $(XTOOLS_DIR)/install
@@ -56,40 +56,11 @@ CT_NG_COMPONENTS =	\
 	make-4.2.1.tar.bz2		\
 	ncurses-6.0.tar.gz
 
-ifeq ($(GCC_VERSION),8.3.0)
-CT_NG_COMPONENTS +=	\
-	binutils-2.32.tar.bz2 \
-	expat-2.2.6.tar.bz2	    \
-	gcc-8.3.0.tar.xz		\
-	gdb-7.12.1.tar.xz       \
-	gmp-6.1.2.tar.xz		\
-	isl-0.20.tar.xz		\
-	mpc-1.1.0.tar.gz        \
-	mpfr-4.1.0.tar.xz		\
-	strace-4.26.tar.xz      \
-	zlib-1.2.11.tar.xz      
-else ifeq ($(GCC_VERSION),6.3.0)
-CT_NG_COMPONENTS +=	\
-	gcc-6.3.0.tar.bz2		\
-	binutils-2.28.tar.bz2		\
-	gdb-7.12.1.tar.xz		\
-	gmp-6.1.2.tar.xz		\
-	mpfr-3.1.5.tar.xz		\
-	isl-0.16.1.tar.xz		\
-	mpc-1.0.3.tar.gz		\
-	expat-2.2.0.tar.bz2		\
-	strace-4.16.tar.xz
-else ifeq ($(GCC_VERSION),4.9.2)
-CT_NG_COMPONENTS +=	\
-	gcc-4.9.2.tar.bz2		\
-	binutils-2.24.tar.bz2		\
-	gdb-7.11.1.tar.xz		\
-	gmp-6.0.0a.tar.xz		\
-	mpfr-3.1.2.tar.xz		\
-	isl-0.12.2.tar.bz2		\
-	mpc-1.0.2.tar.gz		\
-	expat-2.1.1.tar.bz2		\
-	strace-4.9.tar.xz
+ifeq ($(GCC_VERSION),14.3.0)
+# crosstool-NG 1.28.0 fetches the GCC 14.3.0 toolchain component set itself
+# (the generated crosstool config enables downloads) using its own pinned
+# per-component checksums, so no component tarballs are pre-fetched here.
+# The defconfig points it at mirrors.kernel.org/gnu before the GNU hosts.
 else
   $(error CT_NG_COMPONENTS download: Unsupported GCC version: $(GCC_VERSION))
 endif
@@ -98,6 +69,38 @@ ifeq ($(XTOOLS_LIBC),glibc)
 # https://ftp.gnu.org/gnu/glibc/glibc-2.34.tar.xz
   CT_NG_COMPONENTS += glibc-$(XTOOLS_LIBC_VERSION).tar.xz
 endif
+
+# Upstream locations for the crosstool-NG components, tried in order
+# after $(CROSSTOOL_ONIE_MIRROR) so a toolchain can still be built when
+# the ONIE mirror is unavailable.  Every tarball is still verified
+# against its SHA1 in $(UPSTREAMDIR).
+CT_NG_GNU_MIRRORS = http://ftp.gnu.org/gnu http://mirrors.kernel.org/gnu
+
+# Packages found at $(CT_NG_GNU_MIRRORS)/<package>
+CT_NG_GNU_PKGS = autoconf automake binutils gdb gettext glibc gmp libiconv \
+		 libtool m4 make mpc mpfr ncurses
+
+# Helpers that split a tarball name such as gcc-8.3.0.tar.xz:
+#   ct_ng_stem -> gcc-8.3.0
+#   ct_ng_name -> gcc
+#   ct_ng_ver  -> 8.3.0
+ct_ng_stem = $(basename $(basename $(1)))
+ct_ng_name = $(firstword $(subst _, ,$(subst -, ,$(1))))
+ct_ng_ver  = $(patsubst $(call ct_ng_name,$(1))-%,%,$(call ct_ng_stem,$(1)))
+
+CT_NG_URLS_gcc    = $(addsuffix /gcc/$(call ct_ng_stem,$(1)),$(CT_NG_GNU_MIRRORS))
+CT_NG_URLS_duma   = http://downloads.sourceforge.net/project/duma/duma/$(subst _,.,$(patsubst duma_%,%,$(call ct_ng_stem,$(1))))
+CT_NG_URLS_expat  = http://github.com/libexpat/libexpat/releases/download/R_$(subst .,_,$(call ct_ng_ver,$(1)))
+CT_NG_URLS_isl    = http://libisl.sourceforge.io
+CT_NG_URLS_libelf = http://fossies.org/linux/misc/old
+CT_NG_URLS_ltrace = http://deb.debian.org/debian/pool/main/l/ltrace
+CT_NG_URLS_strace = http://strace.io/files/$(call ct_ng_ver,$(1))
+CT_NG_URLS_zlib   = http://downloads.sourceforge.net/project/libpng/zlib/$(call ct_ng_ver,$(1))
+
+# $(call ct_ng_urls,tarball) -> upstream URL list for that tarball
+ct_ng_urls = $(if $(filter $(call ct_ng_name,$(1)),$(CT_NG_GNU_PKGS)),\
+		$(addsuffix /$(call ct_ng_name,$(1)),$(CT_NG_GNU_MIRRORS)),\
+		$(call CT_NG_URLS_$(call ct_ng_name,$(1)),$(1)))
 
 xtools: $(XTOOLS_STAMP)
 
@@ -113,21 +116,20 @@ xtools-download: $(XTOOLS_DOWNLOAD_STAMP)
 $(XTOOLS_DOWNLOAD_STAMP): $(XTOOLS_PREP_STAMP) | $(KERNEL_DOWNLOAD_STAMP) $(UCLIBC_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Getting upstream crosstool-NG component libraries ===="
-	$(Q) for F in ${CT_NG_COMPONENTS} ; do	echo "==== Getting upstream $${F} ====" ;\
+	$(Q) $(foreach F,$(CT_NG_COMPONENTS),echo "==== Getting upstream $(F) ====" && \
 		$(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
-		$${F} $(CROSSTOOL_ONIE_MIRROR) || exit 1 ; \
-		done
+		$(F) $(CROSSTOOL_ONIE_MIRROR) $(call ct_ng_urls,$(F)) && ) true
 	$(Q) touch $@
 
 #
 # Set CT_LINUX_VERSION and CT_LINUX_V_a_b=y in the new uClibc config.
 #
-CT_LINUX_V = $(subst .,_,$(LINUX_VERSION))
-$(XTOOLS_BUILD_DIR)/.config: $(XTOOLS_CONFIG) $(XTOOLS_PREP_STAMP)
-	$(Q) echo "==== Copying $(XTOOLS_CONFIG) to $@ ===="
-	$(Q) cp -v $< $(XTOOLS_BUILD_DIR)/.config
-	$(Q) echo "==== Setting kernel version to $(LINUX_VERSION).$(LINUX_MINOR_VERSION) in .config ===="
-	$(Q) sed -i 's/CT_LINUX_VERSION=.*"/CT_LINUX_VERSION="$(LINUX_VERSION).$(LINUX_MINOR_VERSION)"/g' $(XTOOLS_BUILD_DIR)/.config
+CT_LINUX_V = $(subst .,_,$(XTOOLS_LINUX_VERSION))
+$(XTOOLS_BUILD_DIR)/.config: $(XTOOLS_CONFIG) $(XTOOLS_PREP_STAMP) $(CROSSTOOL_NG_BUILD_STAMP)
+	$(Q) echo "==== Expanding $(XTOOLS_CONFIG) into $@ via ct-ng defconfig ===="
+	$(Q) cd $(XTOOLS_BUILD_DIR) && DEFCONFIG=$(abspath $(XTOOLS_CONFIG)) $(CROSSTOOL_NG_DIR)/ct-ng defconfig
+	$(Q) echo "==== Setting toolchain kernel-headers version to $(XTOOLS_LINUX_VERSION) in .config ===="
+	$(Q) sed -i 's/CT_LINUX_VERSION=.*"/CT_LINUX_VERSION="$(XTOOLS_LINUX_VERSION)"/g' $(XTOOLS_BUILD_DIR)/.config
 	$(Q) sed -i 's/CT_LINUX_V_$(CT_LINUX_V) is not set/CT_LINUX_V_$(CT_LINUX_V)=y/g' $(XTOOLS_BUILD_DIR)/.config
 
 xtools-config: $(XTOOLS_BUILD_DIR)/.config $(CROSSTOOL_NG_BUILD_STAMP)

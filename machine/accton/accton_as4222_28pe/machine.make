@@ -37,7 +37,6 @@ PXE_EFI64_ENABLE = yes
 LINUX_VERSION = 5.4
 LINUX_MINOR_VERSION = 86
 
-GCC_VERSION = 8.3.0
 
 #-------------------------------------------------------------------------------
 #

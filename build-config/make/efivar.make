@@ -11,26 +11,27 @@
 # This is a makefile fragment that defines the build of efivar
 #
 
-EFIVAR_VERSION			= 37
-EFIVAR_TARBALL			= efivar-$(EFIVAR_VERSION).tar.bz2
-EFIVAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/rhboot/efivar/releases/download/${EFIVAR_VERSION}/${EFIVAR_TARBALL}
+EFIVAR_VERSION			= 39
+# efivar stopped publishing dist tarballs after v37; use the GitHub source
+# archive (unpacks to efivar-$(EFIVAR_VERSION)/).  efivar 39's build system
+# is fully cross-compile aware (derives CC/AR/HOSTCC from CROSS_COMPILE), so
+# none of the old ONIE efivar patches are needed any longer.
+EFIVAR_TARBALL			= $(EFIVAR_VERSION).tar.gz
+EFIVAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://github.com/rhboot/efivar/archive
 EFIVAR_BUILD_DIR		= $(USER_BUILDDIR)/efivar
 EFIVAR_DIR			= $(EFIVAR_BUILD_DIR)/efivar-$(EFIVAR_VERSION)
 
-EFIVAR_SRCPATCHDIR		= $(PATCHDIR)/efivar/$(EFIVAR_VERSION)/
 EFIVAR_DOWNLOAD_STAMP		= $(DOWNLOADDIR)/efivar-$(EFIVAR_VERSION)-download
 EFIVAR_SOURCE_STAMP		= $(USER_STAMPDIR)/efivar-source
-EFIVAR_PATCH_STAMP		= $(USER_STAMPDIR)/efivar-patch
 EFIVAR_BUILD_STAMP		= $(USER_STAMPDIR)/efivar-build
 EFIVAR_INSTALL_STAMP		= $(STAMPDIR)/efivar-install
 EFIVAR_STAMP			= $(EFIVAR_SOURCE_STAMP) \
-				  $(EFIVAR_PATCH_STAMP) \
 				  $(EFIVAR_BUILD_STAMP) \
 				  $(EFIVAR_INSTALL_STAMP)
 
 EFIVAR_PROGRAMS		= efivar
 
-PHONY += efivar efivar-download efivar-source efivar-patch \
+PHONY += efivar efivar-download efivar-source \
 	efivar-build efivar-install efivar-clean efivar-download-clean
 
 EFIVAR_BINS = efivar
@@ -61,26 +62,19 @@ $(EFIVAR_SOURCE_STAMP): $(USER_TREE_STAMP) $(EFIVAR_DOWNLOAD_STAMP)
 	$(Q) $(SCRIPTDIR)/extract-package $(EFIVAR_BUILD_DIR) $(DOWNLOADDIR)/$(EFIVAR_TARBALL)
 	$(Q) touch $@
 
-efivar-patch: $(EFIVAR_PATCH_STAMP)
-$(EFIVAR_PATCH_STAMP): $(EFIVAR_SRCPATCHDIR)/* $(EFIVAR_SOURCE_STAMP)
-	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
-	$(Q) echo "==== Patching efivar ===="
-	$(Q) $(SCRIPTDIR)/apply-patch-series $(EFIVAR_SRCPATCHDIR)/series $(EFIVAR_DIR)
-	$(Q) touch $@
-
 ifndef MAKE_CLEAN
 EFIVAR_NEW_FILES = $(shell test -d $(EFIVAR_DIR) && test -f $(EFIVAR_BUILD_STAMP) && \
 	              find -L $(EFIVAR_DIR) -newer $(EFIVAR_BUILD_STAMP) -type f -print -quit)
 endif
 
 efivar-build: $(EFIVAR_BUILD_STAMP)
-$(EFIVAR_BUILD_STAMP): $(EFIVAR_PATCH_STAMP) $(EFIVAR_NEW_FILES) $(POPT_BUILD_STAMP) \
+$(EFIVAR_BUILD_STAMP): $(EFIVAR_SOURCE_STAMP) $(EFIVAR_NEW_FILES) $(POPT_BUILD_STAMP) \
 				| $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building efivar-$(EFIVAR_VERSION) ===="
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) \
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) SUBDIRS=src \
 		CROSS_COMPILE=$(CROSSPREFIX) PKG_CONFIG=pkg-config $(ONIE_PKG_CONFIG) DESTDIR=$(DEV_SYSROOT)
-	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) \
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	$(MAKE) -C $(EFIVAR_DIR) SUBDIRS=src \
 		CROSS_COMPILE=$(CROSSPREFIX) PKG_CONFIG=pkg-config $(ONIE_PKG_CONFIG) DESTDIR=$(DEV_SYSROOT) install
 	$(Q) touch $@
 

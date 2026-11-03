@@ -48,8 +48,6 @@ EXTRA_CMDLINE_LINUX = i2c-i801.disable_features=0x10
 LINUX_VERSION       = 4.1
 LINUX_MINOR_VERSION = 38
 
-# Older GCC required for older 3.2 kernel
-GCC_VERSION = 4.9.2
 
 #-------------------------------------------------------------------------------
 #
