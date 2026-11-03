@@ -33,12 +33,7 @@ I2CTOOLS_SYSEEPROM = no
 CONSOLE_DEV = 0
 CONSOLE_SPEED ?= 115200
 
-# Set Linux kernel version
 #LINUX_VERSION		= 4.1
-#LINUX_MINOR_VERSION = 38
-LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
-GCC_VERSION = 4.9.2
 #EXTRA_CMDLINE_LINUX = acpi_osi=Linux
 #GCC_VERSION = 4.9.2
 #-------------------------------------------------------------------------------

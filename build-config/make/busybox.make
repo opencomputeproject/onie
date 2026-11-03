@@ -14,7 +14,7 @@
 # This is a makefile fragment that defines the build of busybox
 #
 
-BUSYBOX_VERSION		= 1.25.1
+BUSYBOX_VERSION		= 1.38.0
 BUSYBOX_TARBALL		= busybox-$(BUSYBOX_VERSION).tar.bz2
 BUSYBOX_TARBALL_URLS	+= $(ONIE_MIRROR) https://www.busybox.net/downloads
 BUSYBOX_BUILD_DIR	= $(MBUILDDIR)/busybox
@@ -147,6 +147,15 @@ $(BUSYBOX_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(BUSYBOX_BUILD_STAMP)
 		install
 	$(Q) chmod 4755 $(SYSROOTDIR)/bin/busybox
 	$(Q) touch $@
+
+# Check every machine's busybox patches and config overrides against this
+# busybox and base config -- not just the current MACHINE's.  See
+# scripts/check-busybox-configs.
+PHONY += busybox-config-check
+busybox-config-check: $(BUSYBOX_DOWNLOAD_STAMP)
+	$(Q) $(SCRIPTDIR)/check-busybox-configs $(DOWNLOADDIR)/$(BUSYBOX_TARBALL) \
+		$(BUSYBOX_SRCPATCHDIR)/series $(BUSYBOX_CONFIG) $(PROJECTDIR)/machine \
+		conf/busybox-check-known-failures
 
 MACHINE_CLEAN += busybox-clean
 busybox-clean:

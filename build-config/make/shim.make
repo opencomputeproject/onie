@@ -9,10 +9,10 @@
 # This is a makefile fragment that defines the build of shim
 #
 
-SHIM_VERSION		= 15
+SHIM_VERSION		= 16.1
 SHIM_TARBALL		= shim-$(SHIM_VERSION).tar.bz2
 SHIM_TARBALL_URLS	+= $(ONIE_MIRROR) \
-				https://github.com/rhinstaller/shim/releases/download/$(SHIM_VERSION)
+				https://github.com/rhboot/shim/releases/download/$(SHIM_VERSION)
 SHIM_BUILD_DIR		= $(MBUILDDIR)/shim
 SHIM_DIR		= $(SHIM_BUILD_DIR)/shim-$(SHIM_VERSION)
 
@@ -100,22 +100,19 @@ SHIM_BUILD_ARGS = \
 	VENDOR_CERT_FILE=$(ONIE_VENDOR_CERT_DER) \
 	ARCH=$(ARCH) \
 	TOPDIR=$(SHIM_DIR) \
-	LIB_PATH="$(DEV_SYSROOT)/usr/lib" \
-	EFI_PATH="$(GNU_EFI_LIB_PATH)" \
-	EFI_INCLUDE="$(GNU_EFI_INCLUDE)"
+	LIB_PATH="$(DEV_SYSROOT)/usr/lib"
 
 # Note that ONIE_VENDOR_CERT_DIR must reference the key to be
 #  embedded in the shim
 shim-build: $(SHIM_BUILD_STAMP)
-$(SHIM_BUILD_STAMP): $(SHIM_PATCH_STAMP) $(SHIM_NEW_FILES) $(GNU_EFI_INSTALL_STAMP) \
-			$(PESIGN_INSTALL_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(SHIM_BUILD_STAMP): $(SHIM_PATCH_STAMP) $(SHIM_NEW_FILES) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Building shim-$(SHIM_VERSION) ===="
 	$(Q) echo "Using ONIE vendor certificate: $(ONIE_VENDOR_CERT_DER)"
 	$(Q) openssl x509 -in "$(ONIE_VENDOR_CERT_DER)" -inform der -text -noout
-	$(Q) PATH='$(CROSSBIN):$(PESIGN_BIN_DIR):$(PATH)'	\
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	\
 		$(MAKE) -C $(SHIM_DIR) $(SHIM_BUILD_ARGS)
-	$(Q) PATH='$(CROSSBIN):$(PESIGN_BIN_DIR):$(PATH)'	\
+	$(Q) PATH='$(CROSSBIN):$(PATH)'	\
 		$(MAKE) -C $(SHIM_DIR) $(SHIM_BUILD_ARGS) \
 			DESTDIR="$(DEV_SYSROOT)" \
 			DATATARGETDIR="usr/share/shim" \
@@ -146,6 +143,9 @@ shim-self-sign: $(SHIM_SELF_SIGN_STAMP)
 $(SHIM_SELF_SIGN_STAMP): $(SHIM_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 # Save copies of unsigned binaries as *.unsigned if signing with
 # different keys is required.
+	# shim-self-sign is invoked standalone (before "make all") to populate
+	# safe-place/, so the machine stamp dir may not exist yet.
+	$(Q) mkdir -p $(dir $@)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Self signing shim-$(SHIM_VERSION) ===="
 	$(Q) echo " This is for testing purposes only."

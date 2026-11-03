@@ -63,9 +63,6 @@ PXE_EFI64_ENABLE = yes
  CONSOLE_SPEED = 115200
  CONSOLE_DEV = 0
 
-# Set the desired kernel version.
-LINUX_VERSION = 4.9
-LINUX_MINOR_VERSION = 95
 
 # Specify any extra parameters that you'd want to pass to the onie linux
 # kernel command line in EXTRA_CMDLINE_LINUX env variable. Eg:

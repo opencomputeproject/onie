@@ -7,54 +7,12 @@ SPDX-License-Identifier:     GPL-2.0
 Add the iorw command, which allows root to peek/poke arbitrary memory
 locations.
 
-diff --git a/include/applets.src.h b/include/applets.src.h
-index caf3c8259eae..267a8f3032c8 100644
---- a/include/applets.src.h
-+++ b/include/applets.src.h
-@@ -170,6 +170,7 @@ IF_INETD(APPLET(inetd, BB_DIR_USR_SBIN, BB_SUID_DROP))
- IF_INOTIFYD(APPLET(inotifyd, BB_DIR_SBIN, BB_SUID_DROP))
- IF_INSTALL(APPLET(install, BB_DIR_USR_BIN, BB_SUID_DROP))
- IF_IONICE(APPLET(ionice, BB_DIR_BIN, BB_SUID_DROP))
-+IF_IORW(APPLET(iorw, BB_DIR_USR_SBIN, BB_SUID_DROP))
- #if ENABLE_FEATURE_IP_ADDRESS \
-  || ENABLE_FEATURE_IP_ROUTE \
-  || ENABLE_FEATURE_IP_LINK \
-diff --git a/miscutils/Config.src b/miscutils/Config.src
-index 682173640853..e5bc7013bdf8 100644
---- a/miscutils/Config.src
-+++ b/miscutils/Config.src
-@@ -375,6 +375,13 @@ config FEATURE_HDPARM_HDIO_GETSET_DMA
- 	help
- 	  Enables the 'hdparm -d' option to get/set using_dma flag.
- 
-+config IORW
-+	bool "iorw"
-+	default n
-+	help
-+	  Enables the 'iorw' command, a way to peek/poke arbitrary
-+	  memory mapped locations.
-+
- config MAKEDEVS
- 	bool "makedevs"
- 	default y
-diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 5d42ede9f252..25382f57efc4 100644
---- a/miscutils/Kbuild.src
-+++ b/miscutils/Kbuild.src
-@@ -24,6 +24,7 @@ lib-$(CONFIG_FLASH_LOCK)     += flash_lock_unlock.o
- lib-$(CONFIG_FLASH_UNLOCK)   += flash_lock_unlock.o
- lib-$(CONFIG_IONICE)      += ionice.o
- lib-$(CONFIG_HDPARM)      += hdparm.o
-+lib-$(CONFIG_IORW)        += iorw.o
- lib-$(CONFIG_INOTIFYD)    += inotifyd.o
- 
- ifeq ($(CONFIG_FEATURE_LAST_FANCY),y)
 diff --git a/miscutils/iorw.c b/miscutils/iorw.c
 new file mode 100644
-index 000000000000..c397159d89c7
+index 0000000..93ff43c
 --- /dev/null
 +++ b/miscutils/iorw.c
-@@ -0,0 +1,255 @@
+@@ -0,0 +1,265 @@
 +/*
 +* Author:  Curt Brune, curt@cumulusnetworks.com
 +*
@@ -76,6 +34,16 @@ index 000000000000..c397159d89c7
 +* Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 +* MA 02111-1307 USA
 +*/
++//config:config IORW
++//config:	bool "iorw"
++//config:	default n
++//config:	help
++//config:	Enables the 'iorw' command, a way to peek/poke arbitrary
++//config:	memory mapped locations.
++
++//applet:IF_IORW(APPLET(iorw, BB_DIR_USR_SBIN, BB_SUID_DROP))
++
++//kbuild:lib-$(CONFIG_IORW) += iorw.o
 +
 +#include "libbb.h"
 +#include <stdint.h>

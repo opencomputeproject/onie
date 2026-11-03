@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of btrfs-progs
 #
 
-BTRFSPROGS_VERSION		= v4.9.1
+BTRFSPROGS_VERSION		= v7.0
 BTRFSPROGS_TARBALL		= btrfs-progs-$(BTRFSPROGS_VERSION).tar.xz
 BTRFSPROGS_TARBALL_URLS		+= $(ONIE_MIRROR) \
 				   https://www.kernel.org/pub/linux/kernel/people/kdave/btrfs-progs
@@ -37,11 +37,10 @@ PHONY += btrfs-progs btrfs-progs-download btrfs-progs-source \
 	 btrfs-progs-configure btrfs-progs-build btrfs-progs-install \
 	 btrfs-progs-clean btrfs-progs-download-clean
 
-BTRFSPROGS_LIBS = libbtrfs.so libbtrfs.so.0 libbtrfs.so.0.1
-BTRFSPROGS_SBIN = btrfs mkfs.btrfs btrfs-debug-tree btrfs-map-logical \
-		  btrfs-image btrfs-zero-log btrfs-find-root btrfstune \
-		  btrfs-show-super btrfs-select-super btrfs-convert \
-		  btrfsck
+BTRFSPROGS_LIBS = libbtrfs.so.0.1.5 libbtrfs.so libbtrfs.so.0 libbtrfs.so.0.1
+BTRFSPROGS_SBIN = btrfs mkfs.btrfs btrfs-map-logical \
+		  btrfs-image btrfs-find-root btrfstune \
+		  btrfs-select-super btrfsck
 
 btrfs-progs: $(BTRFSPROGS_STAMP)
 
@@ -81,6 +80,12 @@ $(BTRFSPROGS_CONFIGURE_STAMP): $(E2FSPROGS_BUILD_STAMP) \
 		--disable-documentation				\
 		--disable-backtrace				\
 		--disable-convert				\
+		--disable-zstd					\
+		--disable-libudev				\
+		--disable-python				\
+		--with-crypto=builtin				\
+		ac_cv_func_malloc_0_nonnull=yes			\
+		ac_cv_func_realloc_0_nonnull=yes		\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"				\
 		$(ONIE_PKG_CONFIG)

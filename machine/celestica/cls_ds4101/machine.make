@@ -101,8 +101,11 @@ CONSOLE_DEV = 0
 # Include additional files in the installer image.  This is useful to
 # share code between the ONIE run-time and the installer.
 UPDATER_IMAGE_PARTS_PLATFORM = $(MACHINEDIR)/rootconf/sysroot-lib-onie/test-install-sharing
-#LINUX_VERSION           = 4.9
-#LINUX_MINOR_VERSION     = 95 
+# This platform carries kernel patches written against the previous default
+# kernel, so pin it there explicitly (no behavior change) instead of letting
+# it float onto a newer default its patches would not apply to.
+LINUX_VERSION = 5.4
+LINUX_MINOR_VERSION = 86
 
 # Secure GRUB requires Secure Boot extensions
 ifeq ($(SECURE_GRUB),yes)

@@ -12,14 +12,14 @@
 usage() {
     cat <<EOF
 $0: Usage
-$0 <download dir> <SHA1 dir> <base file name> <URL1> [[URL2] .. [URLx]]
+$0 <download dir> <SHA512 dir> <base file name> <URL1> [[URL2] .. [URLx]]
 
 Download file into download directory using the list of base URLs.
 For example the following URL is attempted:
 
    \$URL1/\$base_file_name
 
-The <SHA1 dir> contains <base file name>.sha1, which is verified
+The <SHA512 dir> contains <base file name>.sha512, which is verified
 after downloading.
 EOF
 }
@@ -35,7 +35,7 @@ EOF
 DOWNLOAD_CACHE_DIR="/var/cache/onie/download"
 
 OUTDIR=$1
-SHA1DIR=$2
+SHA512DIR=$2
 FILE=$3
 
 shift 3
@@ -46,8 +46,8 @@ shift 3
     exit 1
 }
 
-[ -d "$SHA1DIR" ] || {
-    echo "Error: SHA1 directory does not exist: $SHA1DIR"
+[ -d "$SHA512DIR" ] || {
+    echo "Error: SHA512 directory does not exist: $SHA512DIR"
     usage
     exit 1
 }
@@ -58,11 +58,22 @@ shift 3
     exit 1
 }
 
+SHA512DIR=$(cd "$SHA512DIR" && pwd)
+
+verify_sha512() {
+    (cd "$OUTDIR" && sha512sum -c "${SHA512DIR}/${FILE}.sha512")
+}
+
 [ $# -ge 1 ] || {
     echo "Error: URL list not specified"
     usage
     exit 1
 }
+
+if [ -r "${OUTDIR}/${FILE}" ] && ! verify_sha512 > /dev/null 2>&1 ; then
+    echo "Removing cached ${OUTDIR}/${FILE} with mismatched SHA512"
+    rm -f "${OUTDIR}/${FILE}"
+fi
 
 if [ -r "${OUTDIR}/${FILE}" ] ; then
     echo "Using cached ${OUTDIR}/${FILE}"
@@ -77,9 +88,11 @@ else
 		while [ $# -ge 1 ] ; do
 			URL="$1/$FILE"
 			echo "  Downloading $FILE from: $URL"
-			wget --no-verbose --no-check-certificate -O "${OUTDIR}/${FILE}" $URL
-			if [ $? -eq 0 ] ; then
-				# stop
+			wget --no-verbose --no-check-certificate --timeout=60 --tries=3 \
+				-O "${OUTDIR}/${FILE}" $URL
+			# A server can answer with an error page instead of the
+			# file, so only stop once the SHA512 matches.
+			if [ $? -eq 0 ] && verify_sha512 ; then
 				download=yes
 				break
 			else
@@ -109,9 +122,9 @@ else
     echo ""
 fi
 
-# Verify SHA1
-cd $OUTDIR && sha1sum -c ${SHA1DIR}/${FILE}.sha1 || {
-        echo " ERROR: Unable to verify sha1 for ${FILE}"
+# Verify SHA512
+verify_sha512 || {
+        echo " ERROR: Unable to verify sha512 for ${FILE}"
         exit 1
     }
 

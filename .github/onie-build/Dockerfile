@@ -1,16 +1,17 @@
 # ONIE build environment for CI.
 #
-# Debian 11 is required: onie/build-config/Makefile still pulls in
-# python2-era tooling (python-all-dev) that is unavailable on newer
-# Debian releases.
+# Debian 13 (trixie) host for the modernized toolchain.  Required because
+# kernel 6.18's objtool needs a newer host libelf than Debian 11 ships
+# (0.183 fails with "elf_update: invalid section alignment"), and
+# crosstool-NG 1.28 / GCC 14 align with the trixie host toolchain.  (The
+# old crosstool-NG 1.24 / GCC 8.3 toolchain could NOT build on trixie.)
 #
 # This image builds the generic kvm_x86_64 target with secure boot
-# enabled.  It includes the secure-boot key-generation and EFI signing
-# tooling (gnupg2, efitools, sbsigntool), the NSS command-line tools the
-# shim signing step shells out to (libnss3-tools: pk12util/certutil), and
-# the build dependencies for the pesign that ONIE compiles from source
-# (NSS/NSPR dev packages).
-FROM debian:11
+# enabled.  It includes the secure-boot tooling needed to exercise the SB
+# build path -- pesign, efitools, sbsigntool and gnupg2 (for key
+# generation and EFI signing) -- and meson/ninja, which flashrom 1.x
+# requires to build.
+FROM debian:13
 WORKDIR /onie
 
 # Tolerate transient Debian mirror hiccups (connection resets mid-fetch).
@@ -24,7 +25,7 @@ RUN apt-get update && apt-get install -y \
     autopoint \
     bc \
     bison \
-    bsdmainutils \
+    bsdextrautils \
     build-essential \
     coreutils \
     cpio \
@@ -43,19 +44,17 @@ RUN apt-get update && apt-get install -y \
     libelf-dev \
     libexpat1 \
     libexpat1-dev \
-    libncurses5 \
-    libncurses5-dev \
-    libnspr4-dev \
-    libnss3-dev \
-    libnss3-tools \
+    libncurses-dev \
     libpopt-dev \
     libssl-dev \
     libtool \
     libtool-bin \
     locales \
+    meson \
     mtools \
+    ninja-build \
+    pesign \
     pkgconf \
-    python-all-dev \
     python3-all-dev \
     python3-sphinx \
     python3-venv \

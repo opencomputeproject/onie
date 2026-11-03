@@ -18,7 +18,6 @@ XTOOLS_ENABLE?=yes
 ifeq ($(XTOOLS_ENABLE),no)
   TARGET = aarch64-linux-gnu
   CROSSBIN = /local/store/projects/toolChain/gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu/bin
-  GCC_VERSION = 5.2.1
   XTOOLS_BUILD_STAMP = $(CROSSBIN)/$(TARGET)-gcc
   STRACE_ENABLE = no
 endif

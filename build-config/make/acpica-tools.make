@@ -10,9 +10,12 @@
 # This is a makefile fragment that defines the build of acpica-tools
 #
 
-ACPICA_TOOLS_VERSION	= 20150410
+ACPICA_TOOLS_VERSION	= 20260408
+# acpica.org's old download area was retired (it redirects to an Intel
+# page).  The ACPICA project now publishes the official acpica-unix
+# tarball as a GitHub release asset.
 ACPICA_TOOLS_TARBALL	= acpica-unix-$(ACPICA_TOOLS_VERSION).tar.gz
-ACPICA_TOOLS_TARBALL_URLS	+= $(ONIE_MIRROR) https://acpica.org/sites/acpica/files/
+ACPICA_TOOLS_TARBALL_URLS	+= $(ONIE_MIRROR) https://github.com/acpica/acpica/releases/download/$(ACPICA_TOOLS_VERSION)
 ACPICA_TOOLS_BUILD_DIR	= $(USER_BUILDDIR)/acpica-tools
 ACPICA_TOOLS_DIR		= $(ACPICA_TOOLS_BUILD_DIR)/acpica-unix-$(ACPICA_TOOLS_VERSION)
 
@@ -24,7 +27,7 @@ ACPICA_TOOLS_STAMP		= $(ACPICA_TOOLS_SOURCE_STAMP) \
 			  $(ACPICA_TOOLS_BUILD_STAMP) \
 			  $(ACPICA_TOOLS_INSTALL_STAMP)
 
-ACPIBINS = acpibin acpidump acpiexec acpihelp acpinames acpisrc acpixtract
+ACPIBINS = acpibin acpidump acpiexec acpihelp acpisrc acpixtract
 
 PHONY += acpica-tools acpica-tools-download acpica-tools-source acpica-tools-build \
 	 acpica-tools-install acpica-tools-clean acpica-tools-download-clean
@@ -77,7 +80,7 @@ $(ACPICA_TOOLS_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(ACPICA_TOOLS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing acpica-tools in $(SYSROOTDIR) ===="
 	$(Q) for file in $(ACPIBINS) ; do \
-		cp -av $(DEV_SYSROOT)/usr/bin/$$file $(SYSROOTDIR)/usr/bin/ ; \
+		cp -av $(DEV_SYSROOT)/usr/bin/$$file $(SYSROOTDIR)/usr/bin/ || exit 1 ; \
 	done
 	$(Q) touch $@
 
