@@ -1,7 +1,7 @@
 Add onie-syseeprom support for Celestica switch
 
 diff --git a/include/24cXX.h b/include/24cXX.h
-index 5fb4641379ea..14c6e377ecfb 100644
+index 5fb4641..14c6e37 100644
 --- a/include/24cXX.h
 +++ b/include/24cXX.h
 @@ -37,30 +37,4 @@ struct eeprom
@@ -37,7 +37,7 @@ index 5fb4641379ea..14c6e377ecfb 100644
  #endif
 diff --git a/include/cpld.h b/include/cpld.h
 new file mode 100755
-index 000000000000..12ccb44f1c95
+index 0000000..12ccb44
 --- /dev/null
 +++ b/include/cpld.h
 @@ -0,0 +1,57 @@
@@ -100,7 +100,7 @@ index 000000000000..12ccb44f1c95
 +#endif
 diff --git a/include/debug_util.h b/include/debug_util.h
 new file mode 100755
-index 000000000000..83b280185649
+index 0000000..83b2801
 --- /dev/null
 +++ b/include/debug_util.h
 @@ -0,0 +1,16 @@
@@ -122,7 +122,7 @@ index 000000000000..83b280185649
 +#endif  
 diff --git a/include/i2c_chips.h b/include/i2c_chips.h
 new file mode 100755
-index 000000000000..baa96ccd6cbc
+index 0000000..baa96cc
 --- /dev/null
 +++ b/include/i2c_chips.h
 @@ -0,0 +1,56 @@
@@ -184,7 +184,7 @@ index 000000000000..baa96ccd6cbc
 +#endif
 diff --git a/include/i2c_dev.h b/include/i2c_dev.h
 new file mode 100755
-index 000000000000..6b389a589c3a
+index 0000000..6b389a5
 --- /dev/null
 +++ b/include/i2c_dev.h
 @@ -0,0 +1,156 @@
@@ -344,22 +344,9 @@ index 000000000000..6b389a589c3a
 +													
 +#endif
 +
-diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 72ddcd1ce9bf..96742a587ec9 100644
---- a/miscutils/Kbuild.src
-+++ b/miscutils/Kbuild.src
-@@ -52,7 +52,7 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
- lib-$(CONFIG_VOLNAME)     += volname.o
- lib-$(CONFIG_WATCHDOG)    += watchdog.o
- lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
--lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
-+lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o cpld_ops.o i2c_chips.o i2c_dev.o
- lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
- lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
- lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
 diff --git a/miscutils/cpld_ops.c b/miscutils/cpld_ops.c
 new file mode 100755
-index 000000000000..bce009b46679
+index 0000000..bce009b
 --- /dev/null
 +++ b/miscutils/cpld_ops.c
 @@ -0,0 +1,816 @@
@@ -1181,7 +1168,7 @@ index 000000000000..bce009b46679
 +
 diff --git a/miscutils/i2c_chips.c b/miscutils/i2c_chips.c
 new file mode 100755
-index 000000000000..6d5b6823ddb2
+index 0000000..6d5b682
 --- /dev/null
 +++ b/miscutils/i2c_chips.c
 @@ -0,0 +1,655 @@
@@ -1842,7 +1829,7 @@ index 000000000000..6d5b6823ddb2
 +
 diff --git a/miscutils/i2c_dev.c b/miscutils/i2c_dev.c
 new file mode 100755
-index 000000000000..6170b08d376a
+index 0000000..6170b08
 --- /dev/null
 +++ b/miscutils/i2c_dev.c
 @@ -0,0 +1,502 @@
@@ -2349,7 +2336,7 @@ index 000000000000..6170b08d376a
 +	return i2c_write_3b(addr, buf);
 +}
 diff --git a/miscutils/sys_eeprom.c b/miscutils/sys_eeprom.c
-index e34abf59782e..1e1cb43bd908 100644
+index c07585e..453351d 100644
 --- a/miscutils/sys_eeprom.c
 +++ b/miscutils/sys_eeprom.c
 @@ -1,8 +1,31 @@
@@ -2384,7 +2371,16 @@ index e34abf59782e..1e1cb43bd908 100644
  /*
   *  This macro defines the onie-syseeprom command line command.
   */
-@@ -30,6 +53,8 @@ cmd_usage()
+@@ -21,7 +44,7 @@ static u_int8_t eeprom[SYS_EEPROM_SIZE];
+ //applet:IF_SYS_EEPROM(APPLET_ODDNAME(onie-syseeprom, onie_syseeprom, BB_DIR_USR_BIN, BB_SUID_DROP, onie_syseeprom))
+ 
+ //kbuild:lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
+-//kbuild:lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
++//kbuild:lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o cpld_ops.o i2c_chips.o i2c_dev.o
+ //kbuild:lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
+ 
+ static void cmd_usage(void)
+@@ -36,6 +59,8 @@ static void cmd_usage(void)
  	"      List the understood TLV codes and names.\n"
  	"   -e --erase\n"
  	"      Reset the EEPROM data.\n"
@@ -2393,7 +2389,7 @@ index e34abf59782e..1e1cb43bd908 100644
  	"   -g --get <code>\n"
  	"      Look up a TLV by code and write the value to stdout.\n"
  	"   -s --set <code>=<value>,<code>=<value>...\n"
-@@ -58,11 +83,12 @@ int onie_syseeprom_main(int argc, char **argv)
+@@ -65,11 +90,12 @@ int onie_syseeprom_main(int argc, char **argv)
  	sizeof(tlv_code_list[0]);
  
      char *tokens[(tlv_code_count*2) + 1];
@@ -2407,7 +2403,7 @@ index e34abf59782e..1e1cb43bd908 100644
  	{"set",     required_argument,    0,    's'},
  	{"get",     required_argument,    0,    'g'},
  	{0,         0,                    0,      0},
-@@ -102,6 +128,27 @@ int onie_syseeprom_main(int argc, char **argv)
+@@ -109,6 +135,27 @@ int onie_syseeprom_main(int argc, char **argv)
  	    update = 1;
  	    break;
  
@@ -2436,7 +2432,7 @@ index e34abf59782e..1e1cb43bd908 100644
  	    subopts = optarg;
  	    while (*subopts != '\0' && !err) {
 diff --git a/miscutils/sys_eeprom_i2c.c b/miscutils/sys_eeprom_i2c.c
-index ed3235bcc1c8..207f93d023c4 100644
+index ed3235b..207f93d 100644
 --- a/miscutils/sys_eeprom_i2c.c
 +++ b/miscutils/sys_eeprom_i2c.c
 @@ -1,8 +1,17 @@

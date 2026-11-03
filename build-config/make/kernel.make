@@ -109,6 +109,18 @@ LINUX_NEW_FILES	= \
 	    -type f -print -quit 2>/dev/null)
 endif
 
+# Pre-6.x kernels do not build cleanly with the modern GCC 14 toolchain: their
+# in-tree objtool cannot parse the objects emitted by the toolchain's binutils
+# (e.g. "arch/x86/entry/thunk_64.o: objtool: missing symbol table"), and GCC 14
+# promotes several new warnings to errors.  For those old kernels only, skip the
+# objtool stack-validation pass and relax warnings-as-errors.  Passing
+# CONFIG_STACK_VALIDATION= on the command line overrides the value from .config
+# in every (sub-)make, so objtool is not invoked, WITHOUT having to disable the
+# RETPOLINE/ORC kconfig options that select it.  Modern kernels (6.x+) keep full
+# stack validation.
+KERNEL_OLD_GCC_COMPAT = $(if $(shell [ "$(LINUX_MAJOR_VERSION)" -lt 6 ] 2>/dev/null && echo old),\
+	CONFIG_STACK_VALIDATION= KBUILD_HOSTCFLAGS=-Wno-error KCFLAGS=-Wno-error)
+
 kernel-build: $(KERNEL_BUILD_STAMP)
 $(KERNEL_BUILD_STAMP): $(KERNEL_SOURCE_STAMP) $(LINUX_NEW_FILES) $(LINUXDIR)/.config | $(XTOOLS_BUILD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
@@ -118,6 +130,7 @@ $(KERNEL_BUILD_STAMP): $(KERNEL_SOURCE_STAMP) $(LINUX_NEW_FILES) $(LINUXDIR)/.co
 		ARCH=$(KERNEL_ARCH)		\
 		CROSS_COMPILE=$(CROSSPREFIX)	\
 		MODULE_SIG_KEY_SRCPREFIX=$(ONIE_MODULE_SIG_KEY_SRCPREFIX)/ \
+		$(KERNEL_OLD_GCC_COMPAT)	\
 		V=$(V) 				\
 		all
 	$(Q) touch $@

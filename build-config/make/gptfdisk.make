@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of gptfdisk
 #
 
-GPTFDISK_VERSION		= 0.8.8
+GPTFDISK_VERSION		= 1.0.10
 GPTFDISK_TARBALL		= gptfdisk-$(GPTFDISK_VERSION).tar.gz
 GPTFDISK_TARBALL_URLS		+= $(ONIE_MIRROR) http://sourceforge.net/projects/gptfdisk/files/gptfdisk/$(GPTFDISK_VERSION)/
 GPTFDISK_BUILD_DIR		= $(USER_BUILDDIR)/gptfdisk

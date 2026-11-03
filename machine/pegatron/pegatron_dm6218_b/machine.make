@@ -13,8 +13,6 @@ MACHINE_REV = 0
 ifeq ($(XTOOLS_ENABLE),no)
   TARGET = aarch64-marvell-linux-gnu
   CROSSBIN = /opt/toolchains/mvl/armv8/cn91xx/bin
-  GCC_VERSION = 7.3.0
-  XTOOLS_LIBC_VERSION = 2.27
   XTOOLS_BUILD_STAMP = $(CROSSBIN)/$(TARGET)-gcc
   STRACE_ENABLE = no
 endif

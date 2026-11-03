@@ -1,0 +1,236 @@
+From 86283bfd4ed056fba15fcbfb90b9ad91016d838a Mon Sep 17 00:00:00 2001
+From: Nicholas Vinson <nvinson234@gmail.com>
+Date: Tue, 3 Mar 2026 21:41:18 -0500
+Subject: [PATCH] configure: Drop -Ttext checks for i386-pc
+
+The i386-pc target now uses a linker script, so -Ttext is no longer
+required. However, a new variable TARGET_IMG_BASE_LDOPT_ARG_SEP is
+introduced to handle the fact that when using --defsym the argument
+separator must be "=". The space character is a syntax error.
+
+Finally, EXTRA_DIST is updated to track the linker script used.
+
+Signed-off-by: Nicholas Vinson <nvinson234@gmail.com>
+Reviewed-by: Daniel Kiper <daniel.kiper@oracle.com>
+---
+ acinclude.m4                | 13 ++++++++++++-
+ conf/Makefile.extra-dist    |  1 +
+ configure.ac                | 29 ++++++++++++++++++++++++++---
+ grub-core/Makefile.core.def | 31 ++++++++++++++++---------------
+ 4 files changed, 55 insertions(+), 19 deletions(-)
+
+diff --git a/acinclude.m4 b/acinclude.m4
+index fa7840f09..478aab6d3 100644
+--- a/acinclude.m4
++++ b/acinclude.m4
+@@ -93,7 +93,18 @@ else
+ fi
+ grub_cv_prog_objcopy_absolute=yes
+ for link_addr in 0x2000 0x8000 0x7C00; do
+-  if AC_TRY_COMMAND([${CC-cc} ${TARGET_CFLAGS} ${TARGET_LDFLAGS} -nostdlib ${TARGET_IMG_LDFLAGS_AC} ${TARGET_IMG_BASE_LDOPT},$link_addr conftest.o -o conftest.exec]); then :
++
++  target_img_base_ld="${TARGET_IMG_BASE_LDOPT}"
++  case "$target_img_base_ld" in
++    *_grub_text_base)
++      target_img_base_ld="${target_img_base_ld}=$link_addr"
++    ;;
++    *)
++      target_img_base_ld="${target_img_base_ld},$link_addr"
++    ;;
++  esac
++
++  if AC_TRY_COMMAND([${CC-cc} ${TARGET_CFLAGS} ${TARGET_LDFLAGS} -nostdlib ${TARGET_IMG_LDFLAGS_AC} ${target_img_base_ld} conftest.o -o conftest.exec]); then :
+   else
+     AC_MSG_ERROR([${CC-cc} cannot link at address $link_addr])
+   fi
+diff --git a/conf/Makefile.extra-dist b/conf/Makefile.extra-dist
+index d22b6c862..892df8208 100644
+--- a/conf/Makefile.extra-dist
++++ b/conf/Makefile.extra-dist
+@@ -17,6 +17,7 @@ EXTRA_DIST += docs/grub.cfg
+ EXTRA_DIST += docs/osdetect.cfg
+ 
+ EXTRA_DIST += conf/i386-cygwin-img-ld.sc
++EXTRA_DIST += conf/i386-pc-kernel.lds
+ 
+ EXTRA_DIST += grub-core/Makefile.core.def
+ EXTRA_DIST += grub-core/Makefile.gcry.def
+diff --git a/configure.ac b/configure.ac
+index 209c0fb11..470a26b0f 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1454,6 +1454,7 @@ if test x$grub_cv_target_cc_link_format = x-arch,i386 || test x$grub_cv_target_c
+    TARGET_IMG_LDFLAGS='-nostdlib -static -Wl,-preload -Wl,-segalign,20'
+    TARGET_IMG_LDFLAGS_AC='-nostdlib -static -Wl,-preload -Wl,-segalign,20'
+    TARGET_IMG_BASE_LDOPT="-Wl,-image_base"
++   TARGET_IMG_BASE_LDOPT_ARG_SEP=","
+    TARGET_LDFLAGS_OLDMAGIC=""
+ elif test x$grub_cv_target_cc_link_format = x-mi386pe || test x$grub_cv_target_cc_link_format = x-mi386pep ; then
+   TARGET_APPLE_LINKER=0
+@@ -1461,7 +1462,8 @@ elif test x$grub_cv_target_cc_link_format = x-mi386pe || test x$grub_cv_target_c
+   TARGET_IMG_LDSCRIPT='$(top_srcdir)'"/conf/i386-cygwin-img-ld.sc"
+   TARGET_IMG_LDFLAGS="-Wl,-T${TARGET_IMG_LDSCRIPT}"
+   TARGET_IMG_LDFLAGS_AC="-Wl,-T${srcdir}/conf/i386-cygwin-img-ld.sc"
+-  TARGET_IMG_BASE_LDOPT="-Wl,-Ttext"
++  TARGET_IMG_BASE_LDOPT=
++  TARGET_IMG_BASE_LDOPT_ARG_SEP=","
+   TARGET_IMG_CFLAGS=
+ else
+   TARGET_APPLE_LINKER=0
+@@ -1469,7 +1471,16 @@ else
+   TARGET_IMG_LDSCRIPT=
+   TARGET_IMG_LDFLAGS='-Wl,-N'
+   TARGET_IMG_LDFLAGS_AC='-Wl,-N'
+-  TARGET_IMG_BASE_LDOPT="-Wl,-Ttext"
++  if test "x$target_cpu-$platform" != "xi386-pc"; then
++    TARGET_IMG_BASE_LDOPT="-Wl,-Ttext"
++    TARGET_IMG_BASE_LDOPT_ARG_SEP=","
++  else
++    TARGET_IMG_BASE_LDOPT="-Wl,--defsym=_grub_text_base"
++    TARGET_IMG_BASE_LDOPT_ARG_SEP="="
++    TARGET_IMG_LDSCRIPT='$(top_srcdir)'"/conf/i386-pc-kernel.lds"
++    TARGET_IMG_LDFLAGS="${TARGET_IMG_LDFLAGS} -Wl,-T${TARGET_IMG_LDSCRIPT}"
++    TARGET_IMG_LDFLAGS_AC="-Wl,-T${srcdir}/conf/i386-pc-kernel.lds"
++  fi
+   TARGET_IMG_CFLAGS=
+ fi
+ 
+@@ -1802,7 +1813,18 @@ if test "x$target_cpu" = xi386; then
+   if test "$platform" != emu && test "x$TARGET_APPLE_LINKER" != x1 ; then
+     if test ! -z "$TARGET_IMG_LDSCRIPT"; then
+       # Check symbols provided by linker script.
+-      CFLAGS="$TARGET_CFLAGS -nostdlib ${TARGET_IMG_LDFLAGS_AC} ${TARGET_IMG_BASE_LDOPT},0x8000"
++      target_img_base_ld="${TARGET_IMG_BASE_LDOPT}"
++      case "$target_img_base_ld" in
++        *_grub_text_base)
++          target_img_base_ld="${target_img_base_ld}="
++        ;;
++        *)
++          target_img_base_ld="${target_img_base_ld},"
++        ;;
++      esac
++      target_img_base_ld="${target_img_base_ld}0x8000"
++      CFLAGS="$TARGET_CFLAGS -nostdlib ${TARGET_IMG_LDFLAGS_AC} ${target_img_base_ld}"
++      target_img_base_ld=""
+     fi
+     grub_CHECK_BSS_START_SYMBOL
+     grub_CHECK_END_SYMBOL
+@@ -2404,6 +2426,7 @@ AC_SUBST(TARGET_CCASFLAGS)
+ AC_SUBST(TARGET_IMG_LDFLAGS)
+ AC_SUBST(TARGET_IMG_CFLAGS)
+ AC_SUBST(TARGET_IMG_BASE_LDOPT)
++AC_SUBST(TARGET_IMG_BASE_LDOPT_ARG_SEP)
+ AC_SUBST(TARGET_APPLE_LINKER)
+ 
+ AC_SUBST(HOST_CFLAGS)
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index 0cf155128..1a91e53d6 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -10,6 +10,7 @@ transform_data = {
+   installdir = noinst;
+   name = genmod.sh;
+   common = genmod.sh.in;
++  i386_pc_ldflags = '$(TARGET_IMG_LDFLAGS)';
+ };
+ 
+ transform_data = {
+@@ -82,21 +83,21 @@ kernel = {
+   riscv64_efi_stripflags   = '--strip-unneeded -K start -R .note -R .comment -R .note.gnu.gold-version -R .eh_frame';
+ 
+   i386_pc_ldflags          = '$(TARGET_IMG_LDFLAGS)';
+-  i386_pc_ldflags          = '$(TARGET_IMG_BASE_LDOPT),0x9000';
++  i386_pc_ldflags          = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x9000';
+   i386_qemu_ldflags        = '$(TARGET_IMG_LDFLAGS)';
+-  i386_qemu_ldflags        = '$(TARGET_IMG_BASE_LDOPT),0x9000';
++  i386_qemu_ldflags        = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x9000';
+   i386_coreboot_ldflags    = '$(TARGET_IMG_LDFLAGS)';
+-  i386_coreboot_ldflags    = '$(TARGET_IMG_BASE_LDOPT),0x9000';
++  i386_coreboot_ldflags    = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x9000';
+   i386_multiboot_ldflags   = '$(TARGET_IMG_LDFLAGS)';
+-  i386_multiboot_ldflags   = '$(TARGET_IMG_BASE_LDOPT),0x9000';
++  i386_multiboot_ldflags   = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x9000';
+   i386_ieee1275_ldflags    = '$(TARGET_IMG_LDFLAGS)';
+-  i386_ieee1275_ldflags    = '$(TARGET_IMG_BASE_LDOPT),0x10000';
++  i386_ieee1275_ldflags    = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x10000';
+   i386_xen_ldflags         = '$(TARGET_IMG_LDFLAGS)';
+-  i386_xen_ldflags         = '$(TARGET_IMG_BASE_LDOPT),0';
++  i386_xen_ldflags         = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0';
+   x86_64_xen_ldflags       = '$(TARGET_IMG_LDFLAGS)';
+   x86_64_xen_ldflags       = '$(TARGET_IMG_BASE_LDOPT),0';
+   i386_xen_pvh_ldflags     = '$(TARGET_IMG_LDFLAGS)';
+-  i386_xen_pvh_ldflags     = '$(TARGET_IMG_BASE_LDOPT),0x100000';
++  i386_xen_pvh_ldflags     = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x100000';
+ 
+   mips_loongson_ldflags    = '-Wl,-Ttext,0x80200000';
+   powerpc_ieee1275_ldflags = '-Wl,-Ttext,0x200000';
+@@ -450,10 +451,10 @@ image = {
+   sparc64_ieee1275 = boot/sparc64/ieee1275/boot.S;
+ 
+   i386_pc_ldflags = '$(TARGET_IMG_LDFLAGS)';
+-  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT),0x7C00';
++  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x7C00';
+ 
+   i386_qemu_ldflags = '$(TARGET_IMG_LDFLAGS)';
+-  i386_qemu_ldflags = '$(TARGET_IMG_BASE_LDOPT),$(GRUB_BOOT_MACHINE_LINK_ADDR)';
++  i386_qemu_ldflags = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)$(GRUB_BOOT_MACHINE_LINK_ADDR)';
+   i386_qemu_ccasflags = '-DGRUB_BOOT_MACHINE_LINK_ADDR=$(GRUB_BOOT_MACHINE_LINK_ADDR)';
+ 
+   /* The entry point for a.out binaries on sparc64 starts
+@@ -478,7 +479,7 @@ image = {
+   cppflags = '-DHYBRID_BOOT=1';
+   
+   i386_pc_ldflags = '$(TARGET_IMG_LDFLAGS)';
+-  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT),0x7C00';
++  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x7C00';
+ 
+   objcopyflags = '-O binary';
+   enable = i386_pc;
+@@ -489,7 +490,7 @@ image = {
+ 
+   i386_pc = boot/i386/pc/cdboot.S;
+   i386_pc_ldflags = '$(TARGET_IMG_LDFLAGS)';
+-  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT),0x7C00';
++  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x7C00';
+ 
+   sparc64_ieee1275 = boot/sparc64/ieee1275/boot.S;
+ 
+@@ -509,7 +510,7 @@ image = {
+   i386_pc = boot/i386/pc/pxeboot.S;
+ 
+   i386_pc_ldflags = '$(TARGET_IMG_LDFLAGS)';
+-  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT),0x7C00';
++  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x7C00';
+ 
+   objcopyflags = '-O binary';
+   enable = i386_pc;
+@@ -520,7 +521,7 @@ image = {
+   i386_pc = boot/i386/pc/diskboot.S;
+ 
+   i386_pc_ldflags = '$(TARGET_IMG_LDFLAGS)';
+-  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT),0x8000';
++  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x8000';
+ 
+   sparc64_ieee1275 = boot/sparc64/ieee1275/diskboot.S;
+   sparc64_ieee1275_ldflags = '-Wl,-Ttext=0x4200';
+@@ -536,7 +537,7 @@ image = {
+   i386_pc = boot/i386/pc/lnxboot.S;
+ 
+   i386_pc_ldflags = '$(TARGET_IMG_LDFLAGS)';
+-  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT),0x6000';
++  i386_pc_ldflags = '$(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x6000';
+ 
+   objcopyflags = '-O binary';
+   enable = i386_pc;
+@@ -578,7 +579,7 @@ image = {
+   i386_pc_nodist = rs_decoder.h;
+ 
+   objcopyflags = '-O binary';
+-  ldflags = '$(TARGET_IMG_LDFLAGS) $(TARGET_IMG_BASE_LDOPT),0x8200';
++  ldflags = '$(TARGET_IMG_LDFLAGS) $(TARGET_IMG_BASE_LDOPT)$(TARGET_IMG_BASE_LDOPT_ARG_SEP)0x8200';
+   enable = i386_pc;
+ };
+ 
+-- 
+GitLab
+
