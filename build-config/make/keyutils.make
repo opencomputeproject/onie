@@ -9,10 +9,13 @@
 # This is a makefile fragment that defines the build of keyutils
 #
 
-KEYUTILS_VERSION	= 1.5.10
-KEYUTILS_TARBALL	= keyutils-$(KEYUTILS_VERSION).tar.bz2
+KEYUTILS_VERSION	= 1.6.3
+KEYUTILS_TARBALL	= keyutils-$(KEYUTILS_VERSION).tar.gz
+# Upstream tarballs used to live at people.redhat.com/~dhowells, which was
+# retired.  The maintainer's git tree on kernel.org serves a reproducible
+# snapshot tarball (keyutils-<ver>.tar.gz) instead.
 KEYUTILS_TARBALL_URLS	+= $(ONIE_MIRROR) \
-			   https://people.redhat.com/~dhowells/keyutils
+			   https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git/snapshot
 KEYUTILS_BUILD_DIR	= $(USER_BUILDDIR)/keyutils
 KEYUTILS_DIR		= $(KEYUTILS_BUILD_DIR)/keyutils-$(KEYUTILS_VERSION)
 
@@ -29,7 +32,7 @@ PHONY += keyutils keyutils-download keyutils-source \
 	 keyutils-download-clean
 
 KEYUTILS_BIN = keyctl
-KEYUTILS_LIB = libkeyutils.so libkeyutils.so.1 libkeyutils.so.1.6
+KEYUTILS_LIB = libkeyutils.so libkeyutils.so.1 libkeyutils.so.1.10
 
 keyutils: $(KEYUTILS_STAMP)
 

@@ -47,12 +47,7 @@ EXTRA_CMDLINE_LINUX = earlycon=uart8250,io,0x3f8 acpi_osi="Linux"
 CONSOLE_SPEED = 115200
 CONSOLE_DEV = 0
 
-# Set Linux kernel version
-LINUX_VERSION       = 4.9
-LINUX_MINOR_VERSION = 95
 
-# Older GCC required for older 3.2 kernel
-GCC_VERSION = 8.3.0
 
 #-------------------------------------------------------------------------------
 #

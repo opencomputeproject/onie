@@ -9,7 +9,7 @@
 # This is a makefile fragment that defines the build of ethtool
 #
 
-ETHTOOL_VERSION		= 3.14
+ETHTOOL_VERSION		= 6.15
 ETHTOOL_TARBALL		= ethtool-$(ETHTOOL_VERSION).tar.xz
 ETHTOOL_TARBALL_URLS	+= $(ONIE_MIRROR) https://www.kernel.org/pub/software/network/ethtool
 ETHTOOL_BUILD_DIR	= $(USER_BUILDDIR)/ethtool
@@ -50,7 +50,7 @@ $(ETHTOOL_SOURCE_STAMP): $(USER_TREE_STAMP) | $(ETHTOOL_DOWNLOAD_STAMP)
 	$(Q) touch $@
 
 ethtool-configure: $(ETHTOOL_CONFIGURE_STAMP)
-$(ETHTOOL_CONFIGURE_STAMP): $(ETHTOOL_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
+$(ETHTOOL_CONFIGURE_STAMP): $(ETHTOOL_SOURCE_STAMP) $(LIBMNL_BUILD_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "====  Configure ethtool-$(ETHTOOL_VERSION) ===="
 	$(Q) cd $(ETHTOOL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
@@ -58,7 +58,8 @@ $(ETHTOOL_CONFIGURE_STAMP): $(ETHTOOL_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 		--prefix=/usr					\
 		--host=$(TARGET)				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
-		LDFLAGS="$(ONIE_LDFLAGS)"
+		LDFLAGS="$(ONIE_LDFLAGS)"			\
+		$(ONIE_PKG_CONFIG)
 	$(Q) touch $@
 
 ethtool-build: $(ETHTOOL_BUILD_STAMP)
@@ -70,7 +71,7 @@ $(ETHTOOL_BUILD_STAMP): $(ETHTOOL_CONFIGURE_STAMP)
 	$(Q) touch $@
 
 ethtool-install: $(ETHTOOL_INSTALL_STAMP)
-$(ETHTOOL_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(ETHTOOL_BUILD_STAMP)
+$(ETHTOOL_INSTALL_STAMP): $(SYSROOT_INIT_STAMP) $(ETHTOOL_BUILD_STAMP) $(LIBMNL_INSTALL_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Installing ethtool in $(SYSROOTDIR) ===="
 	$(Q) cp -av $(DEV_SYSROOT)/usr/sbin/$(ETHTOOL_BIN) $(SYSROOTDIR)/usr/sbin

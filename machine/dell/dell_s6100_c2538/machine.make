@@ -29,12 +29,7 @@ CONSOLE_SPEED = 115200
 CONSOLE_DEV = 1
 CONSOLE_FLAG = 0
 
-# Set Linux kernel version
-LINUX_VERSION		= 3.2
-LINUX_MINOR_VERSION	= 69
 
-# Older GCC required for older 3.2 kernel
-GCC_VERSION = 4.9.2
 
 EXTRA_CMDLINE_LINUX = i2c-ismt.bus_speed=100
 

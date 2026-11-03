@@ -48,7 +48,6 @@ LINUX_TARBALL		= linux-$(LINUX_RELEASE).tar.bz2
 
 # Specify uClibc version
 #UCLIBC_VERSION = 0.9.32.1
-GCC_VERSION = 4.9.2
 
 # Set the desired u-boot version.
 UBOOT_TARBALL_URLS	= http://git.freescale.com/git/cgit.cgi/ppc/sdk/u-boot.git/snapshot

@@ -1,0 +1,105 @@
+From ba2f3511452484710c27cad10160943d98cdc351 Mon Sep 17 00:00:00 2001
+From: Nicholas Vinson <nvinson234@gmail.com>
+Date: Tue, 3 Mar 2026 21:41:14 -0500
+Subject: [PATCH] build/i386-pc: Update kernel image generation
+
+The i386-pc kernel image fails to build because of changes made to
+address ld.lld-21 and newer linking issues. Specifically, with
+ld.lld-21, if you try to set the text section address below image base
+address when linking a non-relocatable binary, ld.lld wil fail to link.
+
+Switching to using a customized linker script solves the issue and is
+a more robust solution to supporting multiple linkers than attempting to
+find a set of command-line flags that satisfied all supported linkers
+and links the kernel properly. In the worst case, continued use of
+command-line flags could result in having to create code branches to
+support various linkers.
+
+For example, when dealing with just ld.bfd and ld.lld, the behavioral
+differences between the two made finding a proper subset of flags that
+worked impossible. The previous attempt dropped -Ttext for --image-base,
+which has been proven not to work. The simplest correction,
+"-Wl,--image-base=0 -Wl,-Ttext", did not work because that option resulted
+in a GRUB kernel that entered into a tight infinite refresh loop.
+
+Moreover, ld.lld does not order the sections the same way ld.bfd does,
+and that results in object files with gaps or holes when sections are
+stripped. I suspect, but did not investigate, that this plays a role in
+the infinite refresh loop I mentioned earlier.
+
+The easiest way to resolve all this is to use customized linker scripts.
+These scripts, by default, override any default configuration the linker
+would otherwise impose, allow for complete control in aligning sections,
+and allows GRUB to specify where in the load segment each section goes.
+
+This patch series does require linkers to support the --defsym flag,
+which requires its argument to be of the form "sym=address" as
+"sym address" is not supported.
+
+Signed-off-by: Nicholas Vinson <nvinson234@gmail.com>
+Reviewed-by: Daniel Kiper <daniel.kiper@oracle.com>
+---
+ conf/i386-pc-kernel.lds | 51 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 51 insertions(+)
+ create mode 100644 conf/i386-pc-kernel.lds
+
+diff --git a/conf/i386-pc-kernel.lds b/conf/i386-pc-kernel.lds
+new file mode 100644
+index 000000000..b580414c7
+--- /dev/null
++++ b/conf/i386-pc-kernel.lds
+@@ -0,0 +1,51 @@
++ENTRY(_start)
++
++/*
++ * Align sections to a 16-byte boundary. This guarantees ABI compatibility with
++ * C generated code.
++ */
++SECTION_ALIGN = 0x10;
++
++PHDRS {
++    text PT_LOAD FLAGS(7) /* PF_R | PF_W | PF_X */;
++}
++
++SECTIONS
++{
++    /*
++     * Set section alignment to 1. This allows sections to be aligned without
++     * creating holes in the VMA space or gaps in the file.
++     */
++    . = _grub_text_base;
++    .text ALIGN(0x1) : {
++        _start = .;
++        *(.text .text.*)
++        . = ALIGN(SECTION_ALIGN);
++    } :text
++    .rodata ALIGN(0x1) : {
++        *(.rodata .rodata.*)
++        . = ALIGN(SECTION_ALIGN);
++    } :text
++    .module_license ALIGN(0x1) : {
++        *(.module_license)
++        . = ALIGN(SECTION_ALIGN);
++    } :text
++    .data ALIGN(0x1) : {
++        *(.data .data.*)
++        . = ALIGN(SECTION_ALIGN);
++        _edata = .;
++    } :text
++    .bss ALIGN(0x1) : {
++        __bss_start = .;
++        *(.bss .bss.*)
++        *(COMMON)
++        . = ALIGN(SECTION_ALIGN);
++        _end = .;
++    } :text
++    /DISCARD/ : {
++        *(.interp)
++        *(.note*)
++        *(.comment)
++        *(.build-id)
++    }
++}
+-- 
+GitLab
+

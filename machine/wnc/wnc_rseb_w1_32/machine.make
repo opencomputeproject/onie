@@ -31,15 +31,10 @@ CONSOLE_SPEED = 115200
 CONSOLE_DEV = 0
 UEFI_ENABLE = yes
 
-# Specify Linux kernel version -- comment out to use the default
-LINUX_VERSION = 4.9
-LINUX_MINOR_VERSION = 95
 
 EXTRA_CMDLINE_LINUX = acpi_osi=Linux
 
 
-# Older GCC required for older 3.14.27 kernel
-GCC_VERSION = 4.9.2
 #-------------------------------------------------------------------------------
 #
 # Local Variables:

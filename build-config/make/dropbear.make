@@ -10,7 +10,7 @@
 # This is a makefile fragment that defines the build of dropbear
 #
 
-DROPBEAR_VERSION		= 2020.81
+DROPBEAR_VERSION		= 2026.91
 DROPBEAR_TARBALL		= dropbear-$(DROPBEAR_VERSION).tar.bz2
 DROPBEAR_TARBALL_URLS		+= $(ONIE_MIRROR) https://matt.ucc.asn.au/dropbear/releases
 DROPBEAR_BUILD_DIR		= $(USER_BUILDDIR)/dropbear

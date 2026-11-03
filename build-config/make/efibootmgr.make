@@ -9,10 +9,13 @@
 # This is a makefile fragment that defines the build of efibootmgr
 #
 
-EFIBOOTMGR_VERSION		= 16
-EFIBOOTMGR_TARBALL		= efibootmgr-$(EFIBOOTMGR_VERSION).tar.bz2
+EFIBOOTMGR_VERSION		= 18
+# efibootmgr (like efivar) no longer ships dist tarballs; use the GitHub
+# source archive (unpacks to efibootmgr-$(EFIBOOTMGR_VERSION)/).  v18
+# matches efivar 39's efidp_format_device_path() signature.
+EFIBOOTMGR_TARBALL		= $(EFIBOOTMGR_VERSION).tar.gz
 EFIBOOTMGR_TARBALL_URLS		+= $(ONIE_MIRROR) \
-	https://github.com/rhboot/efibootmgr/releases/download/$(EFIBOOTMGR_VERSION)/$(EFIBOOTMGR_TARBALL)
+	https://github.com/rhboot/efibootmgr/archive
 
 EFIBOOTMGR_BUILD_DIR		= $(USER_BUILDDIR)/efibootmgr
 EFIBOOTMGR_DIR			= $(EFIBOOTMGR_BUILD_DIR)/efibootmgr-$(EFIBOOTMGR_VERSION)

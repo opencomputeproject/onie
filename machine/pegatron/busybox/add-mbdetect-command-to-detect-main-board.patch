@@ -17,18 +17,6 @@ Subject: [PATCH] Add 'mbdetect' command to detect main board.
  create mode 100644 miscutils/gpio.c
  create mode 100644 miscutils/mb_detect.c
 
-diff --git a/include/applets.src.h b/include/applets.src.h
-index 71b8cbd..04097dd 100644
---- a/include/applets.src.h
-+++ b/include/applets.src.h
-@@ -345,6 +345,7 @@ IF_WHOAMI(APPLET_NOFORK(whoami, whoami, BB_DIR_USR_BIN, BB_SUID_DROP, whoami))
- IF_YES(APPLET_NOFORK(yes, yes, BB_DIR_USR_BIN, BB_SUID_DROP, yes))
- IF_ZCIP(APPLET(zcip, BB_DIR_SBIN, BB_SUID_DROP))
- IF_SYS_EEPROM(APPLET_ODDNAME(onie-syseeprom, onie_syseeprom, BB_DIR_USR_BIN, BB_SUID_DROP, onie_syseeprom))
-+APPLET_ODDNAME(mbdetect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
- 
- #if !defined(PROTOTYPES) && !defined(NAME_MAIN) && !defined(MAKE_USAGE) \
- 	&& !defined(MAKE_LINKS) && !defined(MAKE_SUID)
 diff --git a/include/gpio.h b/include/gpio.h
 new file mode 100644
 index 0000000..ef07b6e
@@ -281,25 +269,14 @@ index 0000000..b852983
 +extern s32 sys_board_info_get(SysBoardInfo *bdinfo);
 +
 +#endif	/* __MB_DETECT_H */
-diff --git a/miscutils/Kbuild.src b/miscutils/Kbuild.src
-index 72ddcd1..d45fd4e 100644
---- a/miscutils/Kbuild.src
-+++ b/miscutils/Kbuild.src
-@@ -52,7 +52,7 @@ lib-$(CONFIG_UBOOT_ENV)   += fw_env.o
- lib-$(CONFIG_VOLNAME)     += volname.o
- lib-$(CONFIG_WATCHDOG)    += watchdog.o
- lib-$(CONFIG_SYS_EEPROM)  += sys_eeprom.o onie_tlvinfo.o
--lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o
-+lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += sys_eeprom_i2c.o 24cXX.o mb_detect.o gpio.o
- lib-$(CONFIG_SYS_EEPROM_DEVICE_MTD) += sys_eeprom_mtd.o
- lib-$(CONFIG_SYS_EEPROM_DEVICE_DISK) += sys_eeprom_disk.o
- lib-$(CONFIG_SYS_EEPROM_SYSFS_FILE) += sys_eeprom_sysfs_file.o
 diff --git a/miscutils/gpio.c b/miscutils/gpio.c
 new file mode 100644
-index 0000000..b2cdcda
+index 0000000..43f0d66
 --- /dev/null
 +++ b/miscutils/gpio.c
-@@ -0,0 +1,188 @@
+@@ -0,0 +1,190 @@
++//kbuild:lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += gpio.o
++
 +#include <stdio.h>
 +#include <stdlib.h>
 +#include <string.h>
@@ -490,10 +467,13 @@ index 0000000..b2cdcda
 +}
 diff --git a/miscutils/mb_detect.c b/miscutils/mb_detect.c
 new file mode 100644
-index 0000000..c4621bb
+index 0000000..240411a
 --- /dev/null
 +++ b/miscutils/mb_detect.c
-@@ -0,0 +1,208 @@
+@@ -0,0 +1,211 @@
++//applet:APPLET_ODDNAME(mbdetect, mbdetect, BB_DIR_USR_BIN, BB_SUID_DROP, mbdetect)
++//kbuild:lib-$(CONFIG_SYS_EEPROM_DEVICE_I2C) += mb_detect.o
++
 +#include "libbb.h"
 +#include <i2c-dev.h>
 +#include <gpio.h>
@@ -702,6 +682,3 @@ index 0000000..c4621bb
 +
 +	return 0;
 +}
--- 
-2.17.1
-

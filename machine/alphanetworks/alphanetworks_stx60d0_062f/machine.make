@@ -32,9 +32,6 @@ CONSOLE_DEV = 1
 # Enable UEFI support
 UEFI_ENABLE = yes
 
-# Set Linux kernel version
-LINUX_VERSION		= 4.9
-LINUX_MINOR_VERSION	= 95
 
 # Older GCC required for older 3.14.27 kernel
 #GCC_VERSION = 4.9.2

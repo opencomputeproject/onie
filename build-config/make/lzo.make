@@ -10,7 +10,7 @@
 # This is a makefile fragment that defines the build of lzo
 #
 
-LZO_VERSION		= 2.09
+LZO_VERSION		= 2.10
 LZO_TARBALL		= lzo-$(LZO_VERSION).tar.gz
 LZO_TARBALL_URLS	+= $(ONIE_MIRROR) http://www.oberhumer.com/opensource/lzo/download
 LZO_BUILD_DIR		= $(USER_BUILDDIR)/lzo

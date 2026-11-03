@@ -9,9 +9,11 @@
 # This is a makefile fragment that defines the build of popt
 #
 
-POPT_VERSION		= 1.16
+POPT_VERSION		= 1.19
 POPT_TARBALL		= popt-$(POPT_VERSION).tar.gz
-POPT_TARBALL_URLS	+= $(ONIE_MIRROR) http://rpm5.org/files/popt/
+# popt's old home rpm5.org is defunct; it is maintained under
+# rpm-software-management and released on ftp.rpm.org.
+POPT_TARBALL_URLS	+= $(ONIE_MIRROR) http://ftp.rpm.org/popt/releases/popt-1.x
 POPT_BUILD_DIR		= $(USER_BUILDDIR)/popt
 POPT_DIR		= $(POPT_BUILD_DIR)/popt-$(POPT_VERSION)
 
@@ -32,7 +34,7 @@ PHONY += popt popt-download popt-source popt-patch \
 	 popt-configure popt-build popt-install popt-clean \
 	 popt-download-clean
 
-POPT_LIBS = libpopt.so libpopt.so.0 libpopt.so.0.0.0
+POPT_LIBS = libpopt.so libpopt.so.0 libpopt.so.0.0.2
 
 popt: $(POPT_STAMP)
 

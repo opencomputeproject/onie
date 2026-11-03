@@ -1,0 +1,56 @@
+timeout: accept the pre-1.30 "-t SECS" syntax
+
+Copyright (C) 2026 Brad House <bhouse@nexthop.ai>
+
+SPDX-License-Identifier:     GPL-2.0
+
+busybox 1.30 changed timeout to the coreutils syntax, "timeout SECS
+PROG", and dropped the old "timeout -t SECS PROG" form.  With 1.38 an
+old-style call does not run PROG at all: getopt rejects -t, timeout
+prints its usage and exits 1.
+
+Platform scripts in machine trees still use the old form, e.g. the NTP
+step in udhcp4_net and PHY init in link_phy.sh, so accept -t again.
+Neither syntax defines -t otherwise (coreutils timeout has no -t
+either), so the two cannot be confused, and the leading '+' in the
+getopt string stops option parsing at PROG, so PROG's own -t arguments
+are untouched.  New scripts should use "timeout SECS PROG".
+
+diff --git a/coreutils/timeout.c b/coreutils/timeout.c
+index 84299a0..03d5f4f 100644
+--- a/coreutils/timeout.c
++++ b/coreutils/timeout.c
+@@ -81,12 +81,15 @@ int timeout_main(int argc UNUSED_PARAM, char **argv)
+ #endif
+ 	const char *opt_s = "TERM";
+ 	char *opt_k = NULL;
++	char *opt_t = NULL;
+ 
+ 	/* -p option is not documented, it is needed to support NOMMU. */
+ 
+ 	/* -t SECONDS; -p PARENT_PID */
+ 	/* '+': stop at first non-option */
+-	getopt32(argv, "+s:k:" USE_FOR_NOMMU("p:+"), &opt_s, &opt_k, &parent);
++	/* -t SECS: pre-1.30 syntax, kept for compatibility with existing
++	 * scripts. SECS then comes from -t instead of the first argument. */
++	getopt32(argv, "+s:k:t:" USE_FOR_NOMMU("p:+"), &opt_s, &opt_k, &opt_t, &parent);
+ 	/*argv += optind; - no, wait for bb_daemonize_or_rexec! */
+ 
+ 	signo = get_signum(opt_s);
+@@ -97,9 +100,13 @@ int timeout_main(int argc UNUSED_PARAM, char **argv)
+ 	if (opt_k)
+ 		kill_timeout = parse_duration_str(opt_k);
+ 
+-	if (!argv[optind])
+-		bb_show_usage();
+-	timeout = parse_duration_str(argv[optind++]);
++	if (opt_t) {
++		timeout = parse_duration_str(opt_t);
++	} else {
++		if (!argv[optind])
++			bb_show_usage();
++		timeout = parse_duration_str(argv[optind++]);
++	}
+ 	if (!argv[optind]) /* no PROG? */
+ 		bb_show_usage();
+ 
