@@ -6,8 +6,13 @@
 
 FROM debian:9
 
-# Add initial development packages
-RUN apt-get update && apt-get install -y \
+# Stretch is EOL; official mirrors no longer serve it.
+# Use archive.debian.org and disable Valid-Until checks.
+RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until && \
+    rm -rf /etc/apt/sources.list.d/* && \
+    printf "deb http://archive.debian.org/debian/ stretch main\n\
+deb http://archive.debian.org/debian-security stretch/updates main\n" > /etc/apt/sources.list && \
+    apt-get update && apt-get install -y \
     build-essential stgit u-boot-tools util-linux \
     gperf device-tree-compiler python-all-dev xorriso \
     autoconf automake bison flex texinfo libtool libtool-bin \
