@@ -12,7 +12,8 @@
 
 UBOOT_VERSION		?= 2013.01.01
 UBOOT_TARBALL		= u-boot-$(UBOOT_VERSION).tar.bz2
-UBOOT_TARBALL_URLS	+= $(ONIE_MIRROR) ftp://ftp.denx.de/pub/u-boot
+UBOOT_TARBALL_URLS	+= $(ONIE_MIRROR) http://mirror.cyberbits.eu/u-boot \
+			   ftp://ftp.denx.de/pub/u-boot
 UBOOT_BUILD_DIR		= $(MBUILDDIR)/u-boot
 UBOOT_DIR		= $(UBOOT_BUILD_DIR)/u-boot-$(UBOOT_VERSION)
 

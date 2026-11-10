@@ -13,7 +13,10 @@
 
 I2CTOOLS_VERSION	= 3.1.1
 I2CTOOLS_TARBALL	= i2c-tools-$(I2CTOOLS_VERSION).tar.bz2
-I2CTOOLS_TARBALL_URLS	+= $(ONIE_MIRROR) http://jdelvare.nerim.net/mirror/i2c-tools
+# jdelvare.nerim.net is gone; the "id_" marker makes the Wayback Machine return
+# the original bytes rather than a rewritten page.
+I2CTOOLS_TARBALL_URLS	+= $(ONIE_MIRROR) \
+			   https://web.archive.org/web/2016id_/http://jdelvare.nerim.net/mirror/i2c-tools
 I2CTOOLS_BUILD_DIR	= $(MBUILDDIR)/i2c-tools
 I2CTOOLS_DIR		= $(I2CTOOLS_BUILD_DIR)/i2c-tools-$(I2CTOOLS_VERSION)
 
