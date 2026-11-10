@@ -139,14 +139,42 @@ sd_localubifs()
 # DHCPv6 service discovery
 sd_dhcp6()
 {
-    # TODO
-    # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
+    # Gated by onie_dhcp_type: default (ipv4_only) returns 1 fast.
+    onie_dhcp_type_v6_enabled || return 1
+
+    # Machines with an older local /lib/onie/functions may not have
+    # udhcpc6_args; skip DHCPv6 discovery on those.
+    command -v udhcpc6_args > /dev/null 2>&1 || return 1
+
+    intf_list=$(net_intf)
+    udhcp_args="$(udhcpc6_args) -t 2 -T 2 -n"
+
+    # Request Boot File URL (Option 59)
+    udhcp_request_opts="-O 59"
+
+    # Initate DHCP request on every interface in the list.  Stop after
+    # one works.
+
+    for i in $intf_list ; do
+        log_debug_msg "Trying DHCPv6 on interface: $i"
+        tmp=$(udhcpc6 $udhcp_args $udhcp_request_opts -i $i -s /lib/onie/udhcp6_sd) && break
+        tmp=
+    done
+
+    onie_disco="${onie_disco}${tmp##*ONIE_PARMS:}"
+    if [ -n "$onie_disco" ] ; then
+        return 0
+    fi
+
     return 1
 }
 
 # DHCPv4 service discovery
 sd_dhcp4()
 {
+    # Gated by onie_dhcp_type: v4 default is enabled.
+    onie_dhcp_type_v4_enabled || return 1
+
     intf_list=$(net_intf)
     udhcp_args="$(udhcpc_args) -t 2 -T 2 -n"
 
@@ -197,6 +225,9 @@ service_discovery()
     sd_static  && return
     sd_localfs
     sd_localubifs
+    # sd_dhcp6 runs before sd_dhcp4.  In dual-stack where both option 59
+    # (v6) and option 67 (v4) are advertised, sd_dhcp4's later append to
+    # $onie_disco wins -- v4 takes precedence for installer URL.
     sd_dhcp6
     sd_dhcp4
     sd_mdns

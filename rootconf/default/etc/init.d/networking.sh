@@ -29,15 +29,60 @@ config_ethmgmt_static()
 }
 
 # DHCPv6 ethernet management configuration
+# IPv6 configuration is additive: IPv4 is configured independently by
+# config_ethmgmt(), so a successful (or failing) DHCPv6 exchange never
+# affects the IPv4 result.
 config_ethmgmt_dhcp6()
 {
     intf=$1
     shift
 
-    # TODO
-    # log_info_msg "TODO: Checking for DHCPv6 ethmgmt configuration."
+    # Gated by onie_dhcp_type: default (ipv4_only)
+    onie_dhcp_type_v6_enabled || return 1
 
-    return 1
+    # Numerous machines ship their own copy of /lib/onie/functions that
+    # may predate udhcpc6_args; skip DHCPv6 gracefully on those.
+    if ! command -v udhcpc6_args > /dev/null 2>&1 ; then
+        log_info_msg "Skipping DHCPv6 on $intf: udhcpc6_args not available"
+        return 1
+    fi
+
+    # Solicits are sent with a link-local source address (busybox
+    # udhcpc6), so the link-local address must have completed DAD.
+    # Same polling pattern as neigh_discovery() in bin/discover.
+    # If DAD never settles, skip DHCPv6 for this interface rather than
+    # letting udhcpc6 fall back to the unspecified source.
+    wait_dad $intf || {
+        log_warning_msg "Skipping DHCPv6 on $intf: no non-tentative link-local address"
+        return 1
+    }
+
+    # no default args
+    udhcp_args="$(udhcpc6_args) -n -o"
+    if [ "$1" = "discover" ] ; then
+        udhcp_args="$udhcp_args -t 2 -T 2"
+    else
+        udhcp_args="$udhcp_args -t 3 -T 2"
+    fi
+
+    # Request options:
+    # 23: DNS recursive name server
+    # 24: Domain Search List
+    # 39: Client FQDN
+    udhcp_request_opts="-O 23 -O 24 -O 39"
+
+    log_info_msg "Trying DHCPv6 on interface: $intf"
+    udhcpc6 $udhcp_args $udhcp_request_opts \
+           -i $intf -s /lib/onie/udhcp6_net > /dev/null 2>&1
+    if [ "$?" = "0" ] ; then
+        local ipaddr=$(ip -6 addr show dev $intf scope global | awk '/inet6 / { split($2, a, "/"); print a[1] }')
+        log_console_msg "Using DHCPv6 addr: ${intf}: $ipaddr"
+    else
+        log_warning_msg "Unable to configure interface using DHCPv6: $intf"
+        return 1
+    fi
+
+    return 0
 }
 
 # DHCPv4 ethernet management configuration
@@ -45,6 +90,9 @@ config_ethmgmt_dhcp4()
 {
     intf=$1
     shift
+
+    # Gated by onie_dhcp_type: v4 default is enabled.
+    onie_dhcp_type_v4_enabled || return 1
 
     # no default args
     udhcp_args="$(udhcpc_args) -n -o"
@@ -148,12 +196,10 @@ check_link_up()
     return 1
 }
 
-# Configure the management interface
-# Try these methods in order:
-# 1. static, from kernel command line parameters
-# 2. DHCPv6
-# 3. DHCPv4
-# 4. Fall back to well known IP address
+# Configure the management interface.  IPv4 and IPv6 are independent:
+# IPv4 chain short-circuits (static via onie_ip= || DHCPv4 || link-local
+# fallback); DHCPv6 then runs additively and never affects the v4 result.
+# Both families are gated by onie_dhcp_type (default ipv4_only).
 config_ethmgmt()
 {
     intf_list=$(net_intf)
@@ -171,10 +217,13 @@ config_ethmgmt()
             continue
         }
         config_ethmgmt_static    $params || \
-            config_ethmgmt_dhcp6 $params || \
             config_ethmgmt_dhcp4 $params || \
             config_ethmgmt_fallback $intf_counter $params || \
             eval "result_${intf}=1"
+        # DHCPv6 runs regardless of which v4 step succeeded above (including
+        # static via onie_ip=).  Return value is ignored; self-gated by
+        # onie_dhcp_type -- returns 1 immediately when v6 is disabled.
+        config_ethmgmt_dhcp6 $params
         intf_counter=$(( $intf_counter + 1))
     done
     for intf in $intf_list ; do

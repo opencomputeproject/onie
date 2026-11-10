@@ -150,6 +150,7 @@ ip
 install_url
 bootfile
 dhcp
+dhcp_type
 EOF
     )
 
@@ -185,6 +186,9 @@ EOF
             dhcp)
 		true ${onie_dhcp="$val"}
                 ;;
+            dhcp_type)
+		true ${onie_dhcp_type="$val"}
+                ;;
 	    init)
 		true ${onie_init="$val"}
 		;;
@@ -205,6 +209,9 @@ EOF
 
     # default to install mode if none specified
     true ${onie_boot_reason="install"}
+
+    # default to ipv4_only so v4-only deployments pay zero DHCPv6 cost
+    true ${onie_dhcp_type="ipv4_only"}
 
     for p in $ONIE_REQUIRED_ARGS $ONIE_OPTIONAL_ARGS ; do
         eval export onie_$p
@@ -402,6 +409,21 @@ make_str_opt()
     printf %02X%02X%s $code ${#str} $(str2hex $str)
 }
 
+# turn string into hex with prefixed length (as 16-bit hex word),
+# needed by DHCPv6 options whose length field is 16 bits
+str2lenhex16()
+{
+    local str="$1"
+    printf "%04X%s" ${#str} $(str2hex $str)
+}
+
+make_str_opt16()
+{
+    local code="$1"
+    local str="$2"
+    printf %04X%04X%s $code ${#str} $(str2hex $str)
+}
+
 # generic udhcpc args
 udhcpc_args()
 {
@@ -422,6 +444,85 @@ udhcpc_args()
     local payload="${udhcp_vivso_machine}${udhcp_vivso_arch}${udhcp_vivso_machine_rev}"
     local len=$(( ${#payload} / 2 ))
     local udhcp_vivso="-x 125:$(printf %08X%02X%s $onie_iana_enterprise $len $payload)"
+    echo "$udhcp_args" "$udhcp_user_class" "$udhcp_client_id" "$udhcp_vivso"
+}
+
+# onie_dhcp_type gates: single source of truth for which DHCP family
+# runs.  Unknown values preserve the default v4 behavior (safe) and
+# disable v6 with a warning (fail-closed on the newer path).
+onie_dhcp_type_v4_enabled()
+{
+    case "$onie_dhcp_type" in
+        ipv4_only|ipv4_ipv6) return 0 ;;
+        no|ipv6_only)        return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+onie_dhcp_type_v6_enabled()
+{
+    case "$onie_dhcp_type" in
+        ipv6_only|ipv4_ipv6) return 0 ;;
+        no|ipv4_only)        return 1 ;;
+        *) log_warning_msg "unknown onie_dhcp_type: $onie_dhcp_type"; return 1 ;;
+    esac
+}
+
+# Wait for IPv6 DAD on $intf.  Returns 0 once a non-tentative
+# link-local address exists, 1 after 3s.
+wait_dad()
+{
+    local intf=$1
+    local cnt=30
+    while [ $cnt -gt 0 ] ; do
+        if ip -6 addr show dev "$intf" scope link | grep -q 'inet6 fe80' && \
+           ! ip -6 addr show dev "$intf" | grep -q tentative ; then
+            return 0
+        fi
+        cnt=$(( $cnt - 1 ))
+        sleep 0.1
+    done
+    log_warning_msg "wait_dad: $intf has no non-tentative link-local address after 3s"
+    return 1
+}
+
+# generic udhcpc6 args
+udhcpc6_args()
+{
+    # vendor class - DHCPv6 option 16 - format <enterprise>:<string>,
+    # parsed by busybox d6_alloc_vendor_option().  Use ONIE's IANA
+    # enterprise number, like the DHCPv4 option 125 encoding above.
+    local udhcp_args="-q -S -V ${onie_iana_enterprise}:onie_vendor:${onie_platform}"
+
+    # user class - option 15 - string in hex
+    local user_class="${onie_dhcp_user_class:-onie_dhcp_user_class}"
+    local udhcp_user_class="-x 15:$(str2lenhex16 "$user_class")"
+
+    # client id - option 1 - DUID-EN (RFC 3315 §9.3):
+    # type 0x0002 + 4-byte vendor PEN + identifier.  Vendor PEN here
+    # (onie-sysinfo -i) plus device serial give each switch a
+    # globally unique DUID.
+    local duid_enterprise_hex=$(printf "%08X" $(onie-sysinfo -i))
+    local identifier_hex=$(str2hex $(onie-sysinfo -s))
+    local udhcp_client_id="-x 1:0002${duid_enterprise_hex}${identifier_hex}"
+
+    # vendor specific info - DHCPv6 option 17 (RFC 3315 §22.17):
+    # 4-byte ONIE PEN + sub-options.  Using ONIE's own IANA number
+    # (42623, $onie_iana_enterprise) keeps the on-wire namespace
+    # consistent with option 16 above (-V vendor class) and DHCPv4
+    # option 125, so VIVSO decoders match either option and either
+    # family.  Sub-option codes 3/4/5 are also aligned with option
+    # 125:
+    #   sub-option 3 - machine
+    #   sub-option 4 - CPU architecture
+    #   sub-option 5 - machine revision
+    local vivso_enterprise_hex=$(printf "%08X" $onie_iana_enterprise)
+    local sub_opt_machine=$(make_str_opt16 3 $onie_machine)
+    local sub_opt_arch=$(make_str_opt16 4 $onie_arch)
+    local sub_opt_rev=$(make_str_opt16 5 $onie_machine_rev)
+    local payload="${sub_opt_machine}${sub_opt_arch}${sub_opt_rev}"
+    local udhcp_vivso="-x 17:${vivso_enterprise_hex}${payload}"
+
     echo "$udhcp_args" "$udhcp_user_class" "$udhcp_client_id" "$udhcp_vivso"
 }
 

@@ -1,0 +1,95 @@
+#!/bin/sh
+# Busybox udhcpc6 reactor script.
+#
+#  Based on udhcp4_net
+#
+#  SPDX-License-Identifier:     GPL-2.0
+
+RESOLV_CONF="/etc/resolv.conf"
+PROG="DHCPv6"
+
+. /lib/onie/functions
+# Per-interface state file: avoids cross-interface clobbering on renew/deconfig.
+DHCP6_ADDR_STATE="${ONIE_RUN_DIR}/dhcp6.addr.${interface}"
+
+# The IPv6 nameserver/search entries added by this script live in a
+# marked block, so a renewal replaces the previous block instead of
+# accumulating duplicates.  IPv4 entries are owned by udhcp4_net,
+# which manages the rest of the file.
+RESOLV6_BEGIN="# BEGIN entries from udhcpc6"
+RESOLV6_END="# END entries from udhcpc6"
+
+# delete our previously added block, if any
+dns6_purge()
+{
+    [ -r $RESOLV_CONF ] && sed -i "/^${RESOLV6_BEGIN}\$/,/^${RESOLV6_END}\$/d" $RESOLV_CONF
+}
+
+case $1 in
+    bound|renew)
+        # Remove any previously recorded address first so a renewal
+        # that returns a different lease does not accumulate stale /128s.
+        if [ -r "$DHCP6_ADDR_STATE" ]; then
+            prev=$(cat "$DHCP6_ADDR_STATE")
+            [ -n "$prev" ] && /sbin/ip -6 addr del "$prev" dev $interface 2>/dev/null
+            rm -f "$DHCP6_ADDR_STATE"
+        fi
+        # busybox udhcpc6 exports the leased address as 'ipv6' without
+        # a prefix length; install it as a host address.  DHCPv6 does
+        # not carry prefix or route information, so the installer
+        # server must be on-link.
+        [ -n "$ipv6" ] && {
+            /sbin/ip -6 addr add ${ipv6}/128 dev $interface
+            echo "${ipv6}/128" > "$DHCP6_ADDR_STATE"
+        }
+
+        # busybox udhcpc6 exports DHCPv6 option 39 (Client FQDN) as
+        # 'hostname'.
+        if [ -n "$hostname" ]; then
+            echo "$hostname" > /etc/hostname
+            hostname "$hostname"
+        fi
+
+        # Update resolver configuration: replace our previous IPv6
+        # block, if there is anything to add.
+        dns6_purge
+        if [ -n "$dns" ] || [ -n "$search" ]; then
+            touch $RESOLV_CONF
+            echo "$RESOLV6_BEGIN" >> $RESOLV_CONF
+            if [ -n "$dns" ]; then
+                for i in $dns; do
+                    echo "nameserver $i" >> $RESOLV_CONF
+                done
+            fi
+            if [ -n "$search" ]; then
+                echo "search $search" >> $RESOLV_CONF
+            fi
+            echo "$RESOLV6_END" >> $RESOLV_CONF
+        fi
+
+        ;;
+
+    deconfig)
+        if [ -r "$DHCP6_ADDR_STATE" ]; then
+            last_addr=$(cat "$DHCP6_ADDR_STATE")
+            if [ -n "$last_addr" ]; then
+                /sbin/ip -6 addr del "$last_addr" dev $interface 2>/dev/null
+            fi
+            rm -f "$DHCP6_ADDR_STATE"
+        fi
+        dns6_purge
+        ;;
+
+    leasefail)
+        echo "$PROG: Lease failed: $message"
+        ;;
+
+    nak)
+        echo "$PROG: Received a NAK: $message"
+        ;;
+
+    *)
+        echo "$PROG: Unknown udhcpc6 command: $1";
+        exit 1;
+        ;;
+esac
