@@ -22,7 +22,16 @@
 
 XTOOLS_CONFIG		?= conf/crosstool/gcc-$(GCC_VERSION)/$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)/crosstool.$(ONIE_ARCH).config
 XTOOLS_ROOT		= $(BUILDDIR)/x-tools
-XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(LINUX_RELEASE)-$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)
+# Kernel headers for the toolchain. Defaults to the machine's kernel; a
+# machine can pin an older release that the crosstool-NG version supports
+# while building a newer kernel (headers are backwards compatible).
+XTOOLS_LINUX_VERSION		?= $(LINUX_VERSION)
+XTOOLS_LINUX_MINOR_VERSION	?= $(LINUX_MINOR_VERSION)
+XTOOLS_LINUX_RELEASE		= $(XTOOLS_LINUX_VERSION).$(XTOOLS_LINUX_MINOR_VERSION)
+XTOOLS_VERSION		= $(ONIE_ARCH)-g$(GCC_VERSION)-lnx$(XTOOLS_LINUX_RELEASE)-$(XTOOLS_LIBC)-$(XTOOLS_LIBC_VERSION)
+XTOOLS_LINUX_TARBALL	= linux-$(XTOOLS_LINUX_RELEASE).tar.xz
+XTOOLS_LINUX_TARBALL_URLS = $(ONIE_MIRROR) \
+	https://www.kernel.org/pub/linux/kernel/v$(firstword $(subst ., ,$(XTOOLS_LINUX_VERSION))).x
 XTOOLS_DIR		= $(XTOOLS_ROOT)/$(XTOOLS_VERSION)
 XTOOLS_BUILD_DIR	= $(XTOOLS_DIR)/build
 XTOOLS_INSTALL_DIR	= $(XTOOLS_DIR)/install
@@ -145,6 +154,9 @@ xtools-download: $(XTOOLS_DOWNLOAD_STAMP)
 $(XTOOLS_DOWNLOAD_STAMP): $(XTOOLS_PREP_STAMP) | $(KERNEL_DOWNLOAD_STAMP) $(UCLIBC_DOWNLOAD_STAMP)
 	$(Q) rm -f $@ && eval $(PROFILE_STAMP)
 	$(Q) echo "==== Getting upstream crosstool-NG component libraries ===="
+	$(Q) [ "$(XTOOLS_LINUX_RELEASE)" = "$(LINUX_RELEASE)" ] || \
+		$(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
+		$(XTOOLS_LINUX_TARBALL) $(XTOOLS_LINUX_TARBALL_URLS)
 	$(Q) $(foreach F,$(CT_NG_COMPONENTS),echo "==== Getting upstream $(F) ====" && \
 		$(SCRIPTDIR)/fetch-package $(DOWNLOADDIR) $(UPSTREAMDIR) \
 		$(F) $(CROSSTOOL_ONIE_MIRROR) $(call ct_ng_urls,$(F)) && ) true
@@ -153,12 +165,12 @@ $(XTOOLS_DOWNLOAD_STAMP): $(XTOOLS_PREP_STAMP) | $(KERNEL_DOWNLOAD_STAMP) $(UCLI
 #
 # Set CT_LINUX_VERSION and CT_LINUX_V_a_b=y in the new uClibc config.
 #
-CT_LINUX_V = $(subst .,_,$(LINUX_VERSION))
+CT_LINUX_V = $(subst .,_,$(XTOOLS_LINUX_VERSION))
 $(XTOOLS_BUILD_DIR)/.config: $(XTOOLS_CONFIG) $(XTOOLS_PREP_STAMP)
 	$(Q) echo "==== Copying $(XTOOLS_CONFIG) to $@ ===="
 	$(Q) cp -v $< $(XTOOLS_BUILD_DIR)/.config
-	$(Q) echo "==== Setting kernel version to $(LINUX_VERSION).$(LINUX_MINOR_VERSION) in .config ===="
-	$(Q) sed -i 's/CT_LINUX_VERSION=.*"/CT_LINUX_VERSION="$(LINUX_VERSION).$(LINUX_MINOR_VERSION)"/g' $(XTOOLS_BUILD_DIR)/.config
+	$(Q) echo "==== Setting kernel version to $(XTOOLS_LINUX_RELEASE) in .config ===="
+	$(Q) sed -i 's/CT_LINUX_VERSION=.*"/CT_LINUX_VERSION="$(XTOOLS_LINUX_RELEASE)"/g' $(XTOOLS_BUILD_DIR)/.config
 	$(Q) sed -i 's/CT_LINUX_V_$(CT_LINUX_V) is not set/CT_LINUX_V_$(CT_LINUX_V)=y/g' $(XTOOLS_BUILD_DIR)/.config
 
 xtools-config: $(XTOOLS_BUILD_DIR)/.config $(CROSSTOOL_NG_BUILD_STAMP)
