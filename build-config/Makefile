@@ -230,7 +230,10 @@ PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
 # aarch64.
 BUILD_TRIPLET ?= $(shell gcc -dumpmachine)
 
-ifeq ($(UBOOT_ENABLE),yes)
+# UBOOT_EXTERNAL = yes: a U-Boot platform whose U-Boot is not built by ONIE
+# (e.g. started by TF-A from the SoC vendor's BSP); ONIE still uses its
+# U-Boot runtime and installer (fw_env, boot modes, uninstall, updater).
+ifeq ($(filter yes,$(UBOOT_ENABLE) $(UBOOT_EXTERNAL)),yes)
 	ROOTFS_ARCH = u-boot-arch
 else ifeq ($(GRUB_ENABLE),yes)
 	ROOTFS_ARCH = grub-arch
