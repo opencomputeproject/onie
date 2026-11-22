@@ -139,7 +139,7 @@ $(GRUB_CONFIGURE_I386_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) | $(DEV_SY
 	$(Q) cd $(GRUB_I386_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		grub_build_mkfont_excuse="explicitly disabled"	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--with-platform=pc				\
 		CC=$(CROSSPREFIX)gcc				\
 		CPPFLAGS="$(ONIE_CPPFLAGS)"			\
@@ -154,7 +154,7 @@ $(GRUB_CONFIGURE_UEFI_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) | $(DEV_SY
 	$(Q) cd $(GRUB_UEFI_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		grub_build_mkfont_excuse="explicitly disabled"	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--with-platform=efi				\
 		CC=$(CROSSPREFIX)gcc				\
 		CPPFLAGS="$(ONIE_CPPFLAGS)"			\
@@ -169,7 +169,7 @@ $(GRUB_CONFIGURE_I386_COREBOOT_STAMP): $(GRUB_PATCH_STAMP) $(LVM2_BUILD_STAMP) |
 	$(Q) zcat $(GRUB_DIR)/unifont-5.1.20080820.bdf.gz > $(GRUB_I386_COREBOOT_DIR)/unifont.bdf
 	$(Q) cd $(GRUB_I386_COREBOOT_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(GRUB_DIR)/configure $(GRUB_COMMON_CONFIG)	\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--with-platform=coreboot				\
 		CC=$(CROSSPREFIX)gcc				\
 		CPPFLAGS="$(ONIE_CPPFLAGS)"			\

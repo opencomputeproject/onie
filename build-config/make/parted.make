@@ -66,7 +66,7 @@ $(PARTED_CONFIGURE_STAMP): $(PARTED_SOURCE_STAMP) $(E2FSPROGS_BUILD_STAMP) $(LVM
 	$(Q) cd $(PARTED_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(PARTED_DIR)/configure				\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--enable-device-mapper				\
 		--disable-mtrace				\
 		--disable-selinux				\

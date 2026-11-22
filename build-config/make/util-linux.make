@@ -92,7 +92,7 @@ $(UTILLINUX_CONFIGURE_STAMP): $(UTILLINUX_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STA
 		$(UTILLINUX_DIR)/configure			\
 		--enable-shared					\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"				\
 		--disable-tls					\

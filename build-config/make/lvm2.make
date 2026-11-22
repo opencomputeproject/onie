@@ -131,7 +131,7 @@ $(LVM2_CONFIGURE_STAMP): $(LVM2_SOURCE_STAMP) $(LVM2_PATCH_STAMP)\
 		$(LVM2_CONFIGURE_OVERRIDES)			\
 		$(LVM2_DIR)/configure				\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--with-clvmd=none				\
 		--disable-nls					\
 		--disable-selinux				\

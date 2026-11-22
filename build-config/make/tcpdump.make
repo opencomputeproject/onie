@@ -74,7 +74,7 @@ $(TCPDUMP_CONFIGURE_STAMP): $(TCPDUMP_SOURCE_STAMP) $(LIBPCAP_INSTALL_STAMP) $(O
 	$(Q) echo "====  Configure tcpdump-$(TCPDUMP_VERSION) ===="
 	$(Q) cd $(TCPDUMP_DIR) && PATH='$(CROSSBIN):$(PATH)'		\
 		$(TCPDUMP_DIR)/configure				\
-		--host=$(TARGET)					\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)					\
 		--prefix=/usr						\
 		CC=$(CROSSPREFIX)gcc					\
 		LDFLAGS=$(ONIE_LDFLAGS)					\

@@ -56,7 +56,7 @@ $(ETHTOOL_CONFIGURE_STAMP): $(ETHTOOL_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) cd $(ETHTOOL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(ETHTOOL_DIR)/configure			\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
 		LDFLAGS="$(ONIE_LDFLAGS)"
 	$(Q) touch $@

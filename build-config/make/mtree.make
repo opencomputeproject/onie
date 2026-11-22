@@ -57,7 +57,7 @@ $(MTREE_CONFIGURE_STAMP): $(MTREE_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) cd $(MTREE_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(MTREE_DIR)/configure			\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
 		LDFLAGS="$(ONIE_LDFLAGS)"

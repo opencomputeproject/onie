@@ -225,6 +225,11 @@ endif
 
 PLATFORM  = $(ARCH)-$(MACHINE_PREFIX)
 
+# The build machine, passed to configure as --build: the config.guess bundled
+# with older packages (popt 1.16, ...) cannot guess newer build hosts such as
+# aarch64.
+BUILD_TRIPLET ?= $(shell gcc -dumpmachine)
+
 ifeq ($(UBOOT_ENABLE),yes)
 	ROOTFS_ARCH = u-boot-arch
 else ifeq ($(GRUB_ENABLE),yes)

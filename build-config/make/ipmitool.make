@@ -56,7 +56,7 @@ $(IPMITOOL_CONFIGURE_STAMP): $(IPMITOOL_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP
 	$(Q) cd $(IPMITOOL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(IPMITOOL_DIR)/configure			\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
 		LDFLAGS="$(ONIE_LDFLAGS)"
 	$(Q) echo "#undef malloc" >> $(IPMITOOL_DIR)/config.h

@@ -71,7 +71,7 @@ $(DROPBEAR_CONFIGURE_STAMP): $(DROPBEAR_SOURCE_STAMP) $(ZLIB_BUILD_STAMP) \
 	$(Q) cd $(DROPBEAR_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(DROPBEAR_DIR)/configure			\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--disable-harden				\
 		CFLAGS="$(ONIE_CFLAGS)" 			\
 		LDFLAGS="$(ONIE_LDFLAGS)"
