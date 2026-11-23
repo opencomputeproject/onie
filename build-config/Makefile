@@ -594,11 +594,11 @@ machine-prefix:
 # The onie/build-config/scripts/onie-build-targets.json file lists
 #  platforms and known working build environments.
 DEBIAN_BUILD_HOST_PACKAGES	= build-essential stgit u-boot-tools util-linux \
-				  gperf device-tree-compiler python-all-dev xorriso \
+				  gperf device-tree-compiler python3-dev xorriso \
 				  autoconf automake bison flex texinfo libtool libtool-bin \
 				  gawk libncurses5 libncurses5-dev bc \
 				  dosfstools mtools pkg-config git wget help2man libexpat1 \
-				  libexpat1-dev fakeroot python-sphinx rst2pdf \
+				  libexpat1-dev fakeroot python3-sphinx rst2pdf \
 				  libefivar-dev libnss3-tools libnss3-dev libpopt-dev \
 				  libssl-dev sbsigntool uuid-runtime uuid-dev cpio \
 				  bsdmainutils unzip
