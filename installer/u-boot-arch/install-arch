@@ -18,6 +18,12 @@ install_onie_kernel()
 # Default implementation for updating u-boot
 install_onie_uboot()
 {
+    # Machines with UBOOT_EXTERNAL=yes (U-Boot from the SoC vendor's BSP,
+    # not built by ONIE) ship no U-Boot in the update: leave it alone.
+    if [ -z "%%UPDATER_UBOOT_NAME%%" ] || [ ! -f "%%UPDATER_UBOOT_NAME%%" ] ; then
+        echo "No ONIE U-Boot in this update (U-Boot is not built by ONIE), skipping."
+        return 0
+    fi
     # install u-boot
     echo "Updating ONIE U-Boot ..."
     flashcp -v %%UPDATER_UBOOT_NAME%% /dev/mtd-uboot || {
@@ -45,6 +51,9 @@ update_uboot_env()
     # - update the onie_bootcmd variable as this command may have changed
     #   from one version to the next.  Use the value found in the update
     #   image.
+    if [ ! -f u-boot.bin ] ; then
+        ver="external"
+    else
     case "$onie_arch" in
         powerpc)
             ver=$(dd if=u-boot.bin bs=1 skip=4 count=256 2>/dev/null | awk -F\x00 '{ print $1; exit }')
@@ -57,7 +66,9 @@ update_uboot_env()
             echo "ERROR: Setting U-Boot env 'onie_uboot_version' to 'unknown'"
             ver="unknown"
     esac
-    bootcmd=$(awk -F\x00 '{print $1}' u-boot.bin | awk -F= '{ if ($1 == "onie_bootcmd") { print $2 } }')
+    fi
+    bootcmd=
+    [ -f u-boot.bin ] && bootcmd=$(awk -F\x00 '{print $1}' u-boot.bin | awk -F= '{ if ($1 == "onie_bootcmd") { print $2 } }')
     if [ -z "$bootcmd" ] ; then
     # do not update this var
         bootvar=

@@ -21,7 +21,7 @@ deb http://archive.debian.org/debian-security stretch/updates main\n" > /etc/apt
     libexpat1-dev fakeroot python-sphinx rst2pdf \
     libefivar-dev libnss3-tools libnss3-dev libpopt-dev \
     libssl-dev sbsigntool uuid-runtime uuid-dev cpio \
-    bsdmainutils curl sudo unzip
+    bsdmainutils curl sudo unzip python3
 
 # Create build user
 RUN useradd -m -s /bin/bash build && \

@@ -71,7 +71,7 @@ $(LIBPCAP_CONFIGURE_STAMP): $(LIBPCAP_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) echo "====  Configure libpcap-$(LIBPCAP_VERSION) ===="
 	$(Q) cd $(LIBPCAP_DIR) &&		\
 		$(LIBPCAP_DIR)/configure	\
-		--host=$(TARGET)		\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)		\
 		--prefix=/usr
 	$(Q) touch $@
 

@@ -1,0 +1,113 @@
+=========================================
+Installing ONIE on NXP LX2160ARDB
+=========================================
+
+The LX2160ARDB boots TF-A, then U-Boot from FlexSPI NOR chip 0 (NXP Linux
+Factory BSP, lf-6.18.37-2.1.0 or later). ONIE does not build U-Boot for this
+machine (``UBOOT_EXTERNAL = yes``). It uses NXP's U-Boot with an ONIE default
+environment, and lives in NOR as a FIT image.
+
+NOR chip 0 layout
+=================
+
+==========  =========  ========================================
+Offset      Size       Content
+==========  =========  ========================================
+0x0000000   0x100000   RCW + BL2 (PBL)
+0x0100000   0x400000   FIP (BL31 + U-Boot)
+0x0500000   0x20000    U-Boot environment (CONFIG_ENV_SIZE 0x10000)
+0x0800000   0x200000   DDR firmware FIP
+0x0a00000   0x300000   MC firmware
+0x0d00000   0x100000   DPL (DPAA2 layout)
+0x0e00000   0x100000   DPC
+0x1000000   0xfe0000   ONIE FIT image (``onie`` partition)
+0x1fe0000   0x20000    TlvInfo system EEPROM (``hw-info``; the RDB has no EEPROM chip)
+0x2000000   0x2000000  ``open`` (network OS use; erased by ONIE uninstall)
+==========  =========  ========================================
+
+Building ONIE
+=============
+
+Use the build environment in ``contrib/build-env`` (Debian 9, with
+python3 for the glibc 2.29 toolchain)::
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/nxp MACHINE=nxp_lx2160ardb all
+
+The images in ``build/images`` are ``nxp_lx2160ardb-r0.itb`` (the ONIE FIT
+image) and ``onie-updater-arm64-nxp_lx2160ardb-r0``. This machine does not
+use the ONIE ROM image (``image-bin``).
+
+U-Boot with the ONIE environment
+================================
+
+Build NXP's U-Boot (``lx2160ardb_tfa_defconfig``) with these changes, then
+build the FIP with TF-A as usual (``BOOT_MODE=flexspi_nor``):
+
+- ``CONFIG_ENV_SIZE=0x10000``
+- ``CONFIG_BOOTCOMMAND="if test -z \"${onie_env_saved}\"; then setenv onie_env_saved 1; saveenv; fi; run check_boot_reason; run nos_bootcmd; run onie_bootcmd"``
+- ``CONFIG_ENV_SOURCE_FILE="lx2160ardb_onie"``, with
+  ``board/nxp/lx2160a/lx2160ardb_onie.env`` containing::
+
+    fsl_bootcmd_mcinitcmd_set=y
+    mcinitcmd=sf probe 0:0 && sf read 0x80640000 0x640000 0x80000 && sf read $fdt_addr_r 0xf00000 0x100000 && env exists secureboot && esbc_validate 0x80640000 && esbc_validate 0x80680000; sf read 0x80a00000 0xa00000 0x300000 && sf read 0x80e00000 0xe00000 0x100000; fsl_mc start mc 0x80a00000 0x80e00000
+    
+    consoledev=ttyAMA0
+    onie_platform=arm64-nxp_lx2160ardb-r0
+    onie_machine=nxp_lx2160ardb
+    onie_machine_rev=0
+    onie_arch=arm64
+    onie_start=0x1000000
+    onie_sz.b=0xfe0000
+    loadaddr=0xa0000000
+    /* DPAA2 layout from NOR, applied at bootm (kernel loads above it) */
+    lx2160_dpl=sf probe 0:0; sf read 0x80d00000 0xd00000 0x100000; fsl_mc lazyapply dpl 0x80d00000
+    
+    nos_bootcmd=echo
+    onie_bootcmd=echo Loading Open Network Install Environment ...; echo Platform: $onie_platform; echo Version : $onie_version; sf probe 0:0 && sf read $loadaddr $onie_start ${onie_sz.b} && run lx2160_dpl && run onie_args && bootm ${loadaddr}
+    onie_initargs=setenv bootargs quiet console=$consoledev,$baudrate earlycon
+    onie_platformargs=setenv bootargs $bootargs serial_num=${serial#} eth_addr=$ethaddr $onie_bootargs $onie_debugargs
+    onie_args=run onie_initargs onie_platformargs
+    check_boot_reason=if test -n $onie_boot_reason; then setenv onie_bootargs boot_reason=$onie_boot_reason; run onie_bootcmd; fi;
+    onie_rescue=setenv onie_boot_reason rescue && boot
+    onie_update=setenv onie_boot_reason update && boot
+    onie_uninstall=setenv onie_boot_reason uninstall && boot
+    debian_boot=sf probe 0:0; sf read 0x806c0000 0x6c0000 0x40000; env exists mcinitcmd && env exists secureboot && esbc_validate 0x806c0000; sf read 0x80d00000 0xd00000 0x100000; env exists mcinitcmd && fsl_mc lazyapply dpl 0x80d00000; run distro_bootcmd;run xspi_bootcmd; env exists secureboot && esbc_halt;
+
+The board code normally replaces ``bootcmd`` and ``mcinitcmd`` at start-up.
+``fsl_bootcmd_mcinitcmd_set=y`` stops that, which is why ``mcinitcmd`` (NXP's
+``XSPI_MC_INIT_CMD``) is part of the environment. The bootcmd saves the
+default environment once, the first time or after an ONIE uninstall erased
+it, so ``fw_setenv`` works from ONIE and from the network OS. ONIE's kernel
+loads at 0x82000000, above the DPL that U-Boot stages at 0x80d00000.
+
+Installing ONIE
+===============
+
+Write the FIP at 0x100000 (from U-Boot with ``sf``, or from Linux with
+``flashcp``/``dd`` on the whole-chip MTD device). Then write the ONIE FIT
+image from U-Boot::
+
+  => tftp 0xa0000000 nxp_lx2160ardb-r0.itb
+  => sf probe 0:0
+  => sf erase 0x1000000 +$filesize && sf write 0xa0000000 0x1000000 $filesize
+
+Alternatively, boot ``nxp_lx2160ardb-r0.itb`` from RAM (``run lx2160_dpl``,
+load it to 0xa0000000, ``bootm 0xa0000000``) in rescue mode and run
+``onie-self-update`` with the updater image.
+
+Program the system EEPROM once from ONIE, for example::
+
+  ONIE:/ # onie-syseeprom -s 0x21="LX2160ARDB",0x24="<base MAC>",0x2A=8,0x2B="NXP"
+
+Tested
+======
+
+On an LX2160ARDB rev2 (LX2160A rev2):
+
+- ONIE boots from NOR; DPAA2 networking (RGMII and 10GBASE-T ports) works
+- install over HTTP and from a local disk partition, plus rescue and update modes
+- ``onie-self-update`` and ``onie-syseeprom``
+- a network OS installed onto the eMMC that boots via ``nos_bootcmd``
+
+The demo network OS installer has not been tested on this machine.

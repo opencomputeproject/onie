@@ -1,0 +1,87 @@
+From: wrouwet <37880342+wrouwet@users.noreply.github.com>
+Subject: [PATCH] arm64: dts: lx2160a-rdb: NOR partitions and env_size for ONIE
+
+Fixed partitions for FlexSPI NOR chip 0 (firmware, U-Boot env, hw-info
+TLV system EEPROM, ONIE, open) and the U-Boot env size ONIE reads.
+---
+--- a/arch/arm64/boot/dts/freescale/fsl-lx2160a-rdb.dts	2026-11-22 11:30:08.175446812 -0600
++++ b/arch/arm64/boot/dts/freescale/fsl-lx2160a-rdb.dts	2026-11-22 11:30:08.201567521 -0600
+@@ -153,6 +153,78 @@
+ 		reg = <0>;
+ 		spi-rx-bus-width = <8>;
+ 		spi-tx-bus-width = <8>;
++		/* U-Boot CONFIG_ENV_SIZE, read by ONIE to build fw_env.config */
++		env_size = <0x10000>;
++
++		/*
++		 * NOR chip 0 layout (NXP LX2160ARDB XSPI boot, lf-6.18 BSP):
++		 * firmware as placed by U-Boot's XSPI_MC_INIT_CMD and bootcmd,
++		 * then ONIE. 0x600000-0x700000 holds secure boot headers.
++		 */
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				label = "rcw-bl2";
++				reg = <0x00000000 0x00100000>;
++				read-only;
++			};
++
++			partition@100000 {
++				label = "fip";
++				reg = <0x00100000 0x00400000>;
++				read-only;
++			};
++
++			partition@500000 {
++				label = "uboot-env";
++				reg = <0x00500000 0x00020000>;
++			};
++
++			partition@800000 {
++				label = "fip-ddr";
++				reg = <0x00800000 0x00200000>;
++				read-only;
++			};
++
++			partition@a00000 {
++				label = "mc";
++				reg = <0x00a00000 0x00300000>;
++			};
++
++			partition@d00000 {
++				label = "dpl";
++				reg = <0x00d00000 0x00100000>;
++			};
++
++			partition@e00000 {
++				label = "dpc";
++				reg = <0x00e00000 0x00100000>;
++			};
++
++			partition@f00000 {
++				label = "dtb";
++				reg = <0x00f00000 0x00100000>;
++			};
++
++			partition@1000000 {
++				label = "onie";
++				reg = <0x01000000 0x00fe0000>;
++			};
++
++			/* ONIE TlvInfo system EEPROM (no EEPROM chip on the RDB) */
++			partition@1fe0000 {
++				label = "hw-info";
++				reg = <0x01fe0000 0x00020000>;
++			};
++
++			partition@2000000 {
++				label = "open";
++				reg = <0x02000000 0x02000000>;
++			};
++		};
+ 	};
+ 
+ 	mt35xu512aba1: flash@1 {

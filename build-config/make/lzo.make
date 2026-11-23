@@ -63,7 +63,7 @@ $(LZO_CONFIGURE_STAMP): $(LZO_SOURCE_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 		$(LZO_DIR)/configure				\
 		--enable-shared					\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"
 	$(Q) touch $@

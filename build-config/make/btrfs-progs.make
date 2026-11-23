@@ -77,7 +77,7 @@ $(BTRFSPROGS_CONFIGURE_STAMP): $(E2FSPROGS_BUILD_STAMP) \
 	$(Q) cd $(BTRFSPROGS_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(BTRFSPROGS_DIR)/configure			\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--disable-documentation				\
 		--disable-backtrace				\
 		--disable-convert				\

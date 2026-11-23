@@ -73,7 +73,7 @@ $(KEXEC_CONFIGURE_STAMP): $(ZLIB_BUILD_STAMP) \
 	$(Q) cd $(KEXEC_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(KEXEC_DIR)/configure				\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		$($(ARCH)_KEXEC_CONFIG_OPTS)			\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"

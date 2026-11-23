@@ -76,7 +76,7 @@ $(MOKUTIL_CONFIGURE_STAMP): $(MOKUTIL_PATCH_STAMP) $(EFIVAR_BUILD_STAMP) | $(DEV
 	$(Q) cd $(MOKUTIL_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(MOKUTIL_DIR)/configure			\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		EFIVAR_CFLAGS=-I$(DEV_SYSROOT)/usr/include/efivar \
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"				\

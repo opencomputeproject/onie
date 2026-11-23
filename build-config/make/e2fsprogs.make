@@ -84,7 +84,7 @@ $(E2FSPROGS_CONFIGURE_STAMP): $(ZLIB_BUILD_STAMP) $(LZO_BUILD_STAMP) \
 		$(E2FSPROGS_DIR)/configure			\
 		--enable-elf-shlibs				\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--disable-tls					\
 		--disable-defrag				\
 		--enable-symlink-build				\

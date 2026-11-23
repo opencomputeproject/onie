@@ -67,7 +67,7 @@ $(POPT_CONFIGURE_STAMP): $(POPT_PATCH_STAMP) | $(DEV_SYSROOT_INIT_STAMP)
 	$(Q) cd $(POPT_DIR) && PATH='$(CROSSBIN):$(PATH)'	\
 		$(POPT_DIR)/configure				\
 		--prefix=/usr					\
-		--host=$(TARGET)				\
+		--build=$(BUILD_TRIPLET) --host=$(TARGET)				\
 		--disable-nls					\
 		CC=$(CROSSPREFIX)gcc				\
 		CFLAGS="$(ONIE_CFLAGS)"				\
