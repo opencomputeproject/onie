@@ -78,6 +78,7 @@ do_stop() {
     log_begin_msg "Stopping: $daemon"
     start-stop-daemon -q -K -s TERM -p /var/run/${daemon}.pid
     killall -q $onie_installer exec_installer wget tftp 
+    pkill -P $(cat /var/run/${daemon}.pid)
     log_end_msg
 }
 
