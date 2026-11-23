@@ -112,8 +112,12 @@ ifeq ($(SECURE_BOOT_EXT),yes)
 	SECURE_BOOT_ENABLE = yes
 endif
 
+# Specify the version of crosstool-NG. 1.28.0 gives access to newer compiler
+# versions
+CROSSTOOL_NG_VERSION = 1.28.0
 
-
+# Specify the version of GCC
+GCC_VERSION = 8.5.0
 
 #-------------------------------------------------------------------------------
 #
